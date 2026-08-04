@@ -369,8 +369,10 @@ class _PickAuthoredIO:
     def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
         del render
         self.pauses.append(dict(point))
-        if not self._fired and point.get("steer_point") == self._at and point.get(
-            "authored_options"
+        if (
+            not self._fired
+            and point.get("steer_point") == self._at
+            and point.get("authored_options")
         ):
             self._fired = True
             option = point["authored_options"][0]
@@ -463,9 +465,16 @@ def test_clean_boundary_emits_event_and_makes_no_backend_call(
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=runner_module.NullIO(), orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
+            orchestrator=stub,
         )
         assert outcome.status == "succeeded"
         judged = _judgement_events(engine, project_id)
@@ -499,9 +508,16 @@ def test_trigger_fired_boundary_triages_not_notable(
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=runner_module.NullIO(), orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
+            orchestrator=stub,
         )
         judged = _judgement_events(engine, project_id)
         # P2 (evidence_base_coverage) fires in minimal → it pauses → decision point.
@@ -537,9 +553,16 @@ def test_anomalous_check_in_triages(engine: Engine) -> None:
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=backends, io=io, orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=backends,
+            io=io,
+            orchestrator=stub,
         )
         judged = _judgement_events(engine, project_id)
         assert any(p["verdict"] == "promoted" for p in judged), judged
@@ -578,9 +601,16 @@ def test_attended_pause_carries_authored_options(engine: Engine) -> None:
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io, orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=orch,
         )
         p3_pause = next(p for p in io.pauses if p.get("steer_point") == "deepening_selection")
         assert p3_pause["authored_by"] == "orchestrator"
@@ -604,9 +634,16 @@ def test_authoring_failure_leaves_canonical_menu_unchanged(engine: Engine) -> No
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io, orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=orch,
         )
         assert outcome.status == "succeeded"
         p3_pause = next(p for p in io.pauses if p.get("steer_point") == "deepening_selection")
@@ -631,16 +668,22 @@ def test_watch_authored_replacement_applies_only_after_user_pick_and_confirm(
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io, orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=orch,
         )
         assert outcome.status == "succeeded"
         # The FIX-C gate was rendered (mode declaration + bounded delta) before applying.
         assert io.confirm_renders
         assert any(
-            "REDO selection, replacing the current one" in render
-            for render in io.confirm_renders
+            "REDO selection, replacing the current one" in render for render in io.confirm_renders
         )
         assert any('"weight_emphasis"' in render for render in io.confirm_renders)
         # The reselect applied: a new plan version was minted.
@@ -678,9 +721,16 @@ def test_watch_authored_replacement_fails_closed_without_confirm(
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io, orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=orch,
         )
         assert outcome.status == "succeeded"
         # Nothing applied: no reselect version, no confirmed replacement decision.
@@ -704,13 +754,13 @@ def test_attended_floor_pause_not_suppressible_by_not_notable_watch(
 ) -> None:
     """FIX E2: a fired lattice trigger forces an attended (moderate) pause even when
     the watch triages the boundary not-notable — the watch adds pauses (promote),
-    never removes the floor's. The fired P1 (search_exception, 'fired' in moderate)
+    never removes the floor's. P1 (search_review, 'always' in moderate)
     pauses despite the stub watch's default not-notable triage."""
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
-        # Force a fired P1 coverage trigger; moderate P1 policy is 'fired', so the
-        # trigger — not an 'always' policy — is what drives should_pause.
+        # Preserve a coverage trigger while asserting the owner-ruled P1 always
+        # review cannot be suppressed by the watch.
         monkeypatch.setattr(
             runner_module,
             "p1_coverage_triggers",
@@ -721,13 +771,19 @@ def test_attended_floor_pause_not_suppressible_by_not_notable_watch(
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io, orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=stub,
         )
         assert outcome.status == "succeeded"
-        # The fired-trigger P1 pause fired despite the not-notable watch verdict.
-        assert any(p.get("steer_point") == "search_exception" for p in io.pauses)
+        assert any(p.get("steer_point") == "search_review" for p in io.pauses)
     finally:
         _cleanup_project(engine, project_id)
 
@@ -752,9 +808,15 @@ def test_backend_error_degrades_to_deterministic_floor(engine: Engine) -> None:
         # Baseline with no orchestrator.
         plan_id_a = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         baseline = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id_a, plan_version=1, plan_row_id=plan_id_a,
-            backends=_runner_backends(), io=runner_module.NullIO(),
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id_a,
+            plan_version=1,
+            plan_row_id=plan_id_a,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
         )
     finally:
         _cleanup_project(engine, project_id)
@@ -765,9 +827,16 @@ def test_backend_error_degrades_to_deterministic_floor(engine: Engine) -> None:
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id_b = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         raised = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id_b, plan_version=1, plan_row_id=plan_id_b,
-            backends=_runner_backends(), io=runner_module.NullIO(), orchestrator=_Raises(),
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id_b,
+            plan_version=1,
+            plan_row_id=plan_id_b,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
+            orchestrator=_Raises(),
         )
         # Same terminal status and same set of completed components — the run never
         # depended on the judgement layer.
@@ -794,9 +863,16 @@ def test_unattended_decide_applies_via_hook(engine: Engine) -> None:
         plan = _base_plan(steering_mode="unattended", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=runner_module.NullIO(), orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
+            orchestrator=orch,
         )
         assert outcome.status == "succeeded"
         with engine.connect() as conn:
@@ -805,11 +881,14 @@ def test_unattended_decide_applies_via_hook(engine: Engine) -> None:
                     select(selection_result.c.run_id).where(
                         selection_result.c.project_id == project_id
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
         assert len(selection_run_ids) == 2  # the reselect ran (reference moved)
         reselect_decision = next(
-            p for p in _orchestrator_decisions(engine, project_id)
+            p
+            for p in _orchestrator_decisions(engine, project_id)
             if p.get("rerun_mode") == "replacement"
         )
         assert reselect_decision["authored_by"] == "orchestrator"
@@ -832,17 +911,25 @@ def test_unattended_hook_not_consulted_when_pinned_rule(engine: Engine) -> None:
         plan = _base_plan(
             steering_mode="unattended",
             steer_point_defaults=[
-                {"steer_point": "search_exception", "action": "proceed_flag"},
+                {"steer_point": "search_review", "action": "proceed_flag"},
                 {"steer_point": "evidence_base_coverage", "action": "proceed_flag"},
                 {"steer_point": "deepening_selection", "action": "proceed_flag"},
+                {"steer_point": "finding_groups", "action": "proceed_flag"},
                 {"steer_point": "synthesis_shape", "action": "proceed_flag"},
             ],
         )
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=runner_module.NullIO(), orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
+            orchestrator=orch,
         )
         assert orch.decide_calls == 0  # every point had a rule → the watch decided nothing
     finally:
@@ -865,9 +952,16 @@ def test_author_blind_out_of_grammar_delta_rejected_and_floor(engine: Engine) ->
         plan = _base_plan(steering_mode="unattended", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=runner_module.NullIO(), orchestrator=orch,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=runner_module.NullIO(),
+            orchestrator=orch,
         )
         assert outcome.status in {"succeeded", "degraded"}  # never crashed
         with engine.connect() as conn:
@@ -910,9 +1004,7 @@ class _RecordingIO:
 
 def _after_pause(io: _RecordingIO, component: str) -> dict[str, Any]:
     return next(
-        p
-        for p in io.pauses
-        if p["boundary"] == "after_component" and p["component"] == component
+        p for p in io.pauses if p["boundary"] == "after_component" and p["component"] == component
     )
 
 
@@ -946,9 +1038,15 @@ def test_fix1_after_screen_floor_pauses_minimal(
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
         )
         assert outcome.status == "succeeded"
         pause = next(
@@ -977,9 +1075,15 @@ def test_fix1_after_extract_floor_pauses_moderate(
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
         )
         assert outcome.status == "succeeded"
         pause = _after_pause(io, "extract")
@@ -1007,15 +1111,21 @@ def test_fix1_failed_component_fires_class9_at_boundary(engine: Engine) -> None:
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=backends, io=io,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=backends,
+            io=io,
         )
         assert outcome.status == "degraded"  # extract failed; the run continued
         pause = _after_pause(io, "extract")
-        assert any(
-            t["trigger"] == "downstream_capability_reduced" for t in pause["triggers"]
-        ), pause["triggers"]
+        assert any(t["trigger"] == "downstream_capability_reduced" for t in pause["triggers"]), (
+            pause["triggers"]
+        )
     finally:
         _cleanup_project(engine, project_id)
 
@@ -1034,9 +1144,16 @@ def test_fix1_unattended_fired_floor_triages_and_collates_without_pause(
         plan = _base_plan(steering_mode="unattended", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io, orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=stub,
         )
         assert outcome.status == "succeeded"
         # Unattended never pauses — not at the fired after-screen boundary.
@@ -1060,7 +1177,7 @@ def test_fix1_healthy_moderate_pauses_exactly_at_lattice(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """(e) Regression guard: a healthy Moderate run (nothing fires) still pauses
-    exactly at P2/P3/P4 — the non-lattice floor adds no new pause."""
+    exactly at P1/P4 — the fired middle points add no healthy-run pause."""
     project_id: uuid.UUID | None = None
     try:
         project_id, scope_id = _seed_project(engine)
@@ -1069,15 +1186,20 @@ def test_fix1_healthy_moderate_pauses_exactly_at_lattice(
         plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=_runner_backends(), io=io,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
         )
         assert outcome.status == "succeeded"
         boundaries = [(p["boundary"], p["component"]) for p in io.pauses]
         assert boundaries == [
-            ("before_component", "select"),
-            ("after_component", "select"),
+            ("after_component", "acquire"),
             ("before_component", "synthesise"),
         ]
         assert all(p["kind"] == "steer_point" for p in io.pauses)
@@ -1123,14 +1245,19 @@ def test_fix2_promotion_escalates_anomalous_boundary_to_pause(
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=backends, io=io, orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=backends,
+            io=io,
+            orchestrator=stub,
         )
         assert outcome.status == "degraded"  # extract failed; scripted continue proceeded
-        promoted_renders = [
-            r for r in io.renders if "The orchestrator flagged this boundary" in r
-        ]
+        promoted_renders = [r for r in io.renders if "The orchestrator flagged this boundary" in r]
         assert promoted_renders, io.renders
         assert any("a boundary worth your judgment" in r for r in promoted_renders)
         extract_pause = _after_pause(io, "extract")
@@ -1161,9 +1288,16 @@ def test_fix2_not_notable_triage_does_not_pause(
         plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
-            engine, project_id=project_id, evidence_scope_id=scope_id, plan=plan,
-            plan_id=plan_id, plan_version=1, plan_row_id=plan_id,
-            backends=backends, io=io, orchestrator=stub,
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=backends,
+            io=io,
+            orchestrator=stub,
         )
         assert outcome.status == "degraded"
         assert stub.triage_calls >= 1

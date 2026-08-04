@@ -620,10 +620,17 @@ export interface components {
          *         requires_user_input: Whether picking this option requires an
          *             additional `params` fill-in on the response.
          *         suggested: Whether the server highlights this as the suggested pick.
+         *         why: Visible reason for a run-specific suggestion.
+         *         endorsement: Visible reason when the run endorses this canonical option.
          */
         CheckInOption: {
             /** Description */
             description: string;
+            /**
+             * Endorsement
+             * @default null
+             */
+            endorsement: string | null;
             /** Id */
             id: string;
             /** Label */
@@ -635,6 +642,11 @@ export interface components {
              * @default false
              */
             suggested: boolean;
+            /**
+             * Why
+             * @default null
+             */
+            why: string | null;
         };
         /**
          * CheckInOut
@@ -651,6 +663,7 @@ export interface components {
          *         options: Server-supplied options. The client must never invent
          *             options.
          *         triggers: Fired floor triggers, if any.
+         *         bundle: Scrubbed per-point display data, or ``None`` for legacy pauses.
          *         segment_reentry_allowed: Whether an additive segment re-entry is
          *             available at this boundary.
          *         rerun_component: Component a replacement re-run would target, or
@@ -665,6 +678,13 @@ export interface components {
              * @enum {string}
              */
             boundary: "after_component" | "before_component";
+            /**
+             * Bundle
+             * @default null
+             */
+            bundle: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Check In Id
              * Format: uuid

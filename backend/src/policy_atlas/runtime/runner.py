@@ -75,6 +75,7 @@ from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
     EVIDENCE_BASE_COVERAGE,
+    FINDING_GROUPS,
     SEARCH_EXCEPTION,
     SHIPPED_SEGMENT_START,
     SYNTHESIS_SHAPE,
@@ -88,7 +89,9 @@ from policy_atlas.runtime.steering import (
     ReEnterSegment,
     RerunSurface,
     SteeringAdjustmentError,
+    SteeringDeltaInvalid,
     SteeringResponse,
+    SteeringValidationCtx,
     apply_adjustment,
     apply_replacement_rerun,
     apply_segment_reentry,
@@ -106,8 +109,15 @@ from policy_atlas.runtime.steering import (
     render_fanout_confirmation,
     render_refused_fragment,
     steer_point_triggers,
+    validate_steering_delta,
 )
-from policy_atlas.runtime.steering_bundles import p2_bundle, p3_bundle, p4_bundle
+from policy_atlas.runtime.steering_bundles import (
+    groups_bundle,
+    p1_bundle,
+    p2_bundle,
+    p3_bundle,
+    p4_bundle,
+)
 from policy_atlas.runtime.steering_triggers import (
     FLOOR_BOUNDARY_FOR_COMPONENT,
     FloorBoundary,
@@ -270,14 +280,12 @@ class CheckInIO(Protocol):
 
 @runtime_checkable
 class _PauseCapable(Protocol):
-    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse:
-        ...
+    def pause(self, point: dict[str, Any], render: str) -> SteeringResponse: ...
 
 
 @runtime_checkable
 class _ConfirmCapable(Protocol):
-    def confirm(self, render: str) -> bool:
-        ...
+    def confirm(self, render: str) -> bool: ...
 
 
 class NullIO:
@@ -705,12 +713,20 @@ def _run_plan_impl(
             if resume_decision.component is None or resume_decision.directive_delta is None:
                 raise ValueError("rerun continuation requires component and directive_delta")
             last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
-                engine, io_sink, project_id=project_id, evidence_scope_id=evidence_scope_id,
-                state=steering_state, component=resume_decision.component,
-                directive_delta=resume_decision.directive_delta, backends=backend_bundle,
-                session_id=session_id, successful_runs=successful_runs,
-                attempted_runs=attempted_runs, blocked_discretionary=blocked_discretionary,
-                step_outcomes=step_outcomes, flagged_events=flagged_events,
+                engine,
+                io_sink,
+                project_id=project_id,
+                evidence_scope_id=evidence_scope_id,
+                state=steering_state,
+                component=resume_decision.component,
+                directive_delta=resume_decision.directive_delta,
+                backends=backend_bundle,
+                session_id=session_id,
+                successful_runs=successful_runs,
+                attempted_runs=attempted_runs,
+                blocked_discretionary=blocked_discretionary,
+                step_outcomes=step_outcomes,
+                flagged_events=flagged_events,
                 capability_run_id=capability_run_id,
             )
         elif resume_decision.response == "segment_reentry":
@@ -722,7 +738,8 @@ def _run_plan_impl(
             ):
                 raise ValueError("segment continuation requires its complete boundary payload")
             boundary_step = next(
-                step for step in steering_state.chain.steps
+                step
+                for step in steering_state.chain.steps
                 if step.component == resume_decision.component
             )
             segment_reentry = {
@@ -732,32 +749,56 @@ def _run_plan_impl(
             }
             if resume_decision.boundary == "after_component":
                 segment_result = _run_plan_segment_reentry(
-                    engine, io_sink, project_id=project_id, evidence_scope_id=evidence_scope_id,
-                    boundary_step=boundary_step, segment_reentry=segment_reentry,
-                    state=steering_state, backends=backend_bundle, session_id=session_id,
-                    successful_runs=successful_runs, attempted_runs=attempted_runs,
+                    engine,
+                    io_sink,
+                    project_id=project_id,
+                    evidence_scope_id=evidence_scope_id,
+                    boundary_step=boundary_step,
+                    segment_reentry=segment_reentry,
+                    state=steering_state,
+                    backends=backend_bundle,
+                    session_id=session_id,
+                    successful_runs=successful_runs,
+                    attempted_runs=attempted_runs,
                     blocked_discretionary=blocked_discretionary,
-                    completed_components=completed_components, step_outcomes=step_outcomes,
-                    flagged_events=flagged_events, capability_run_id=capability_run_id,
+                    completed_components=completed_components,
+                    step_outcomes=step_outcomes,
+                    flagged_events=flagged_events,
+                    capability_run_id=capability_run_id,
                 )
             else:
                 segment_result = _run_plan_before_segment_reentry(
-                    engine, io_sink, project_id=project_id, evidence_scope_id=evidence_scope_id,
-                    boundary_step=boundary_step, segment_reentry=segment_reentry,
-                    state=steering_state, backends=backend_bundle, session_id=session_id,
-                    successful_runs=successful_runs, attempted_runs=attempted_runs,
+                    engine,
+                    io_sink,
+                    project_id=project_id,
+                    evidence_scope_id=evidence_scope_id,
+                    boundary_step=boundary_step,
+                    segment_reentry=segment_reentry,
+                    state=steering_state,
+                    backends=backend_bundle,
+                    session_id=session_id,
+                    successful_runs=successful_runs,
+                    attempted_runs=attempted_runs,
                     blocked_discretionary=blocked_discretionary,
-                    completed_components=completed_components, step_outcomes=step_outcomes,
-                    flagged_events=flagged_events, capability_run_id=capability_run_id,
-                    orchestrator=orchestrator, discretion_hook=discretion,
+                    completed_components=completed_components,
+                    step_outcomes=step_outcomes,
+                    flagged_events=flagged_events,
+                    capability_run_id=capability_run_id,
+                    orchestrator=orchestrator,
+                    discretion_hook=discretion,
                 )
             steering_state = segment_result.state
             last_check_in_payload = segment_result.last_check_in_payload
             most_recent_attempted_run_id = segment_result.most_recent_attempted_run_id
             if segment_result.run_status is not None:
-                return _finish_run(engine, step_outcomes, flagged_events,
-                    status=segment_result.run_status, capability_run_id=capability_run_id,
-                    project_id=project_id)
+                return _finish_run(
+                    engine,
+                    step_outcomes,
+                    flagged_events,
+                    status=segment_result.run_status,
+                    capability_run_id=capability_run_id,
+                    project_id=project_id,
+                )
         elif (
             resume_decision.response in {"continue", "adjust", "mode_change"}
             and resume_from.parked_boundary == "before_component"
@@ -1025,9 +1066,7 @@ def _run_plan_impl(
                 most_recent_attempted_run_id=most_recent_attempted_run_id,
                 attempted_runs=attempted_runs,
                 boundary_run_id=final_attempt.run_id,
-                selection_run_id=(
-                    final_attempt.run_id if step.component == "select" else None
-                ),
+                selection_run_id=(final_attempt.run_id if step.component == "select" else None),
                 allow_segment_reentry=True,
                 discretion_hook=discretion,
                 orchestrator=orchestrator,
@@ -1085,9 +1124,7 @@ def _run_plan_impl(
                 if segment_result.last_check_in_payload is not None:
                     last_check_in_payload = segment_result.last_check_in_payload
                 if segment_result.most_recent_attempted_run_id is not None:
-                    most_recent_attempted_run_id = (
-                        segment_result.most_recent_attempted_run_id
-                    )
+                    most_recent_attempted_run_id = segment_result.most_recent_attempted_run_id
                 if segment_result.run_status is not None:
                     return _finish_run(
                         engine,
@@ -1362,8 +1399,8 @@ def _handle_after_component_boundary(
     anomalous: bool = False,
 ) -> _PauseApplied:
     point = PausePoint("after_component", step.component)
-    floor_run_ids = attempted_runs if attempted_runs is not None else _registry_run_ids(
-        successful_runs
+    floor_run_ids = (
+        attempted_runs if attempted_runs is not None else _registry_run_ids(successful_runs)
     )
     # Unattended = discretion-is-the-mode: at every lattice boundary the walk
     # never pauses — a pinned standing rule decides, else the discretion floor
@@ -1390,9 +1427,7 @@ def _handle_after_component_boundary(
             selection_run_id=selection_run_id,
             allow_segment_reentry=allow_segment_reentry,
             rerun_component=(
-                "select"
-                if name == DEEPENING_SELECTION and selection_run_id is not None
-                else None
+                "select" if name == DEEPENING_SELECTION and selection_run_id is not None else None
             ),
             discretion_hook=discretion_hook,
             backends=backends,
@@ -1445,9 +1480,7 @@ def _handle_after_component_boundary(
     # substance"). Unattended never pauses (mode table), so a promotion there is
     # recorded only. A promotion cannot add a pause where one already happens.
     promoted_escalation = (
-        observation.promoted
-        and not should_pause
-        and state.plan.steering_mode != "unattended"
+        observation.promoted and not should_pause and state.plan.steering_mode != "unattended"
     )
     if not should_pause and not promoted_escalation:
         # FIX 1: a fired non-lattice floor trigger that did not pause (Unattended)
@@ -1456,11 +1489,8 @@ def _handle_after_component_boundary(
             flagged_events.append(_trigger_fired_flag(point, triggers))
         return _PauseApplied(state=state)
     if promoted_escalation:
-        # Escalate as a generic non-lattice floor pause (FIX 2): the canonical
-        # floor menu, the promotion surfaced in the render, no decision-point
-        # bundle/re-run surface (steer_point_name dropped to None).
-        steer_point_name = None
-        triggers = None
+        # A promoted lattice boundary keeps its identity: its canonical floor
+        # and bundle are the actual decision surface, not a generic substitute.
         render = f"{render}\nThe orchestrator flagged this boundary: {observation.promoted_reason}"
     options, bundle = _pause_options_and_bundle(
         engine,
@@ -1470,6 +1500,7 @@ def _handle_after_component_boundary(
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
+        triggers=triggers,
         prebuilt_bundle=observation.bundle,
     )
     # Only the P3 select steer point wires a replacement re-run from the pause
@@ -1591,8 +1622,8 @@ def _handle_before_component_boundary(
     machinery), else the discretion floor (Task 12).
     """
     point = PausePoint("before_component", step.component)
-    floor_run_ids = attempted_runs if attempted_runs is not None else _registry_run_ids(
-        successful_runs
+    floor_run_ids = (
+        attempted_runs if attempted_runs is not None else _registry_run_ids(successful_runs)
     )
     name = lattice_name_for(point)
     rerun_component, segment_reentry_allowed = _before_boundary_surface(
@@ -1647,19 +1678,13 @@ def _handle_before_component_boundary(
         )
     authored_options = observation.authored_options
     promoted_escalation = (
-        observation.promoted
-        and not should_pause
-        and state.plan.steering_mode != "unattended"
+        observation.promoted and not should_pause and state.plan.steering_mode != "unattended"
     )
     if not should_pause and not promoted_escalation:
         if triggers:
             flagged_events.append(_trigger_fired_flag(point, triggers))
         return _PauseApplied(state=state)
     if promoted_escalation:
-        steer_point_name = None
-        triggers = None
-        rerun_component = None
-        segment_reentry_allowed = False
         render = f"{render}\nThe orchestrator flagged this boundary: {observation.promoted_reason}"
     options, bundle = _pause_options_and_bundle(
         engine,
@@ -1669,6 +1694,7 @@ def _handle_before_component_boundary(
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
+        triggers=triggers,
         prebuilt_bundle=observation.bundle,
     )
     return _handle_pause(
@@ -1810,9 +1836,7 @@ def _lattice_triggers(
             acquire_run_id = successful_runs.get("acquire")
             if acquire_run_id is None:
                 return []
-            return p1_coverage_triggers(
-                conn, project_id=project_id, acquire_run_id=acquire_run_id
-            )
+            return p1_coverage_triggers(conn, project_id=project_id, acquire_run_id=acquire_run_id)
         if name == EVIDENCE_BASE_COVERAGE:
             return floor_triggers(
                 conn,
@@ -1831,13 +1855,11 @@ def _lattice_triggers(
                 selection_run_id=selection_run_id,
                 plan=state.plan,
             )
-        if name == SYNTHESIS_SHAPE:
+        if name == FINDING_GROUPS:
             group_run_id = successful_runs.get("group")
             if group_run_id is None:
                 return []
-            return grouping_flag_triggers(
-                conn, project_id=project_id, group_run_id=group_run_id
-            )
+            return grouping_flag_triggers(conn, project_id=project_id, group_run_id=group_run_id)
     return []
 
 
@@ -1850,6 +1872,7 @@ def _pause_options_and_bundle(
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
+    triggers: list[dict[str, Any]] | None = None,
     prebuilt_bundle: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return the canonical options + (P2/P3/P4) bundle for a pause.
@@ -1866,6 +1889,15 @@ def _pause_options_and_bundle(
     if steer_point_name is None:
         return generic_floor_options(), None
     options = build_steer_point_options(plan=state.plan, point=steer_point_name)
+    if steer_point_name == SEARCH_EXCEPTION and triggers:
+        for option in options:
+            if option.get("id") == "deepen_search":
+                option["label"] = "Search harder"
+            if option.get("id") == "continue":
+                option["label"] = "Continue with what came back"
+                option["description"] = (
+                    "Proceed with the available results; the report will flag what was incomplete."
+                )
     bundle = (
         prebuilt_bundle
         if prebuilt_bundle is not None
@@ -1879,6 +1911,21 @@ def _pause_options_and_bundle(
             section_budget=state.plan.section_budget,
         )
     )
+    if steer_point_name == SYNTHESIS_SHAPE and isinstance(bundle, dict):
+        proposal = bundle.get("proposal")
+        sections = proposal.get("proposed_sections") if isinstance(proposal, dict) else None
+        if isinstance(sections, list):
+            displayed = [
+                {"title": row.get("title"), "focus": row.get("focus")}
+                for row in sections
+                if isinstance(row, dict)
+                and isinstance(row.get("title"), str)
+                and isinstance(row.get("focus"), str)
+            ]
+            for option in options:
+                if option.get("id") == "as_proposed":
+                    option["delta"] = {"synthesise": {"synthesis": {"sections": displayed}}}
+                    break
     return options, bundle
 
 
@@ -1895,6 +1942,8 @@ def _build_bundle(
     """Build the decision-point bundle for a lattice pause, fail-safe to None."""
     try:
         with engine.connect() as conn:
+            if name == SEARCH_EXCEPTION:
+                return p1_bundle(conn, project_id=project_id, evidence_scope_id=evidence_scope_id)
             if name == EVIDENCE_BASE_COVERAGE:
                 return p2_bundle(
                     conn,
@@ -1906,8 +1955,13 @@ def _build_bundle(
                 selection_run_id = successful_runs.get("select")
                 if selection_run_id is None:
                     return None
-                return p3_bundle(
-                    conn, project_id=project_id, selection_run_id=selection_run_id
+                return p3_bundle(conn, project_id=project_id, selection_run_id=selection_run_id)
+            if name == FINDING_GROUPS:
+                group_run_id = successful_runs.get("group")
+                return (
+                    groups_bundle(conn, project_id=project_id, group_run_id=group_run_id)
+                    if group_run_id is not None
+                    else None
                 )
             if name == SYNTHESIS_SHAPE:
                 context = _synthesise_context(
@@ -1921,9 +1975,7 @@ def _build_bundle(
                 # Mirror the harness's synthesis default so the proposal uses the
                 # same backend the synthesise component will (harness.py:731).
                 synthesis_backend = (
-                    backends.synthesis
-                    if backends.synthesis is not None
-                    else StubSynthesisBackend()
+                    backends.synthesis if backends.synthesis is not None else StubSynthesisBackend()
                 )
                 return p4_bundle(
                     conn,
@@ -2121,10 +2173,7 @@ def _handle_pause(
             # steer-point's own component means re-run it (it has already run);
             # everywhere else naming an already-run component is a rejected
             # adjustment via the generic path below.
-            if (
-                rerun_component is not None
-                and set(response.directive_deltas) == {rerun_component}
-            ):
+            if rerun_component is not None and set(response.directive_deltas) == {rerun_component}:
                 # FIX C: a picked watch-AUTHORED option whose delta re-runs the
                 # steer point's component takes the same replacement-re-run apply
                 # path a confirmed router fan-out does — so it gets the same
@@ -2493,9 +2542,7 @@ def _apply_fanout(
             )
 
     return _FreeTextResult(
-        _PauseApplied(
-            state=state, changed=changed, rerun=rerun, segment_reentry=segment_reentry
-        )
+        _PauseApplied(state=state, changed=changed, rerun=rerun, segment_reentry=segment_reentry)
     )
 
 
@@ -2720,14 +2767,40 @@ def _pause_payload(
         payload["kind"] = "steer_point"
         payload["steer_point"] = steer_point_name
     if options is not None:
-        payload["options"] = options
+        projected = [dict(option) for option in options]
+        for authored in authored_options or []:
+            endorsed = authored.get("endorses_option_id")
+            why = authored.get("why")
+            if isinstance(endorsed, str):
+                canonical = next((item for item in projected if item.get("id") == endorsed), None)
+                if canonical is not None:
+                    canonical["endorsement"] = why if isinstance(why, str) else None
+                    continue
+            component, delta = authored.get("component"), authored.get("delta")
+            if not isinstance(component, str) or not isinstance(delta, dict):
+                continue
+            projected.append(
+                {
+                    "id": authored.get("id"),
+                    "label": authored.get("label"),
+                    "description": why if isinstance(why, str) else "",
+                    "why": why,
+                    "suggested": True,
+                    "authored": True,
+                    "delta": {component: delta},
+                    "requires_user_input": False,
+                }
+            )
+        payload["options"] = projected
     if triggers is not None:
         payload["triggers"] = triggers
     if bundle is not None:
         payload["bundle"] = bundle
     if authored_options is not None:
-        payload["authored_options"] = authored_options
         payload["authored_by"] = "orchestrator"
+        # Retained for the terminal adapter's compatibility; HTTP reads the
+        # projected ``options`` list above.
+        payload["authored_options"] = authored_options
     return payload
 
 
@@ -2930,9 +3003,7 @@ def _apply_runner_adjustment(
         raise SteeringAdjustmentError("plan_row_id is required to persist an adjustment")
     with engine.begin() as conn:
         plan_row = conn.execute(
-            select(orchestration_plan).where(
-                orchestration_plan.c.plan_id == state.plan_row_id
-            )
+            select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
         ).one()
         amended_plan, amended_plan_id, amended_version = apply_adjustment(
             conn,
@@ -3025,9 +3096,7 @@ def _apply_replacement_rerun(
     option_delta = adjustment.directive_deltas[component]
     option_value = option_delta.get(key) if isinstance(option_delta, dict) else None
     if not isinstance(option_value, dict) or not isinstance(base_directive, dict):
-        raise SteeringAdjustmentError(
-            f"{component} re-run directive must contain a {key!r} object"
-        )
+        raise SteeringAdjustmentError(f"{component} re-run directive must contain a {key!r} object")
     merged_directive = {key: {**base_directive, **option_value}}
     with engine.begin() as conn:
         plan_row = conn.execute(
@@ -4068,15 +4137,11 @@ def _apply_standing_proceed(
             standing_rule=echo,
             triggers=triggers,
         )
-        flagged_events.append(
-            _standing_flag(point.component, name, rule=name, action="rejected")
-        )
+        flagged_events.append(_standing_flag(point.component, name, rule=name, action="rejected"))
         return _PauseApplied(state=state)
 
 
-def _standing_flag(
-    component: str, steer_point: str, *, rule: str, action: str
-) -> dict[str, Any]:
+def _standing_flag(component: str, steer_point: str, *, rule: str, action: str) -> dict[str, Any]:
     """One auto-resolution flag for the Unattended collation (loudest-first)."""
     return {
         "component": component,
@@ -4231,15 +4296,19 @@ def _watch_observe_boundary(
     digest = _watch_digest(engine, project_id=project_id, capability_run_id=capability_run_id)
 
     if verdict == "decision_point":
-        bundle = _build_bundle(
-            engine,
-            name=steer_point_name,
-            project_id=project_id,
-            evidence_scope_id=evidence_scope_id,
-            successful_runs=successful_runs,
-            backends=backends,
-            section_budget=state.plan.section_budget,
-        ) if steer_point_name is not None else None
+        bundle = (
+            _build_bundle(
+                engine,
+                name=steer_point_name,
+                project_id=project_id,
+                evidence_scope_id=evidence_scope_id,
+                successful_runs=successful_runs,
+                backends=backends,
+                section_budget=state.plan.section_budget,
+            )
+            if steer_point_name is not None
+            else None
+        )
         try:
             result = run_watch_decision(
                 orchestrator,
@@ -4270,8 +4339,15 @@ def _watch_observe_boundary(
             )
             # The bundle still rides back so the pause reuses it (FIX 2b).
             return _WatchObservation(bundle=bundle)
-        authored_dicts = (
-            [option.model_dump() for option in authored] if authored else None
+        authored_dicts = _validated_authored_options(
+            engine,
+            authored=authored,
+            state=state,
+            point=point,
+            steer_point_name=steer_point_name,
+            project_id=project_id,
+            capability_run_id=capability_run_id,
+            run_id=event_run_id,
         )
         _emit_judgement_routed(
             engine,
@@ -4287,7 +4363,7 @@ def _watch_observe_boundary(
                 "authored_by": "orchestrator",
                 "authored_options": authored_dicts,
                 "execution_profile": {
-                    "prompt_version": "orchestrator_v1_watch",
+                    "prompt_version": "watch_authoring_v1",
                 },
             },
         )
@@ -4340,6 +4416,70 @@ def _watch_observe_boundary(
     return _WatchObservation()
 
 
+def _validated_authored_options(
+    engine: Engine,
+    *,
+    authored: list[Any] | None,
+    state: _SteeringState,
+    point: PausePoint,
+    steer_point_name: str | None,
+    project_id: uuid.UUID,
+    capability_run_id: uuid.UUID,
+    run_id: uuid.UUID | None,
+) -> list[dict[str, Any]] | None:
+    """Validate and cap watch suggestions before they enter a durable pause."""
+    if not authored:
+        return None
+    ctx = SteeringValidationCtx(
+        backend_scope=state.plan.backend_scope,
+        current_components=set(state.chain.components),
+        completed_components=set(),
+        rerun_surface=RerunSurface(replacement_component=None, segment_reentry_available=False),
+    )
+    kept: list[dict[str, Any]] = []
+    for index, wire in enumerate(authored):
+        raw = wire.model_dump() if hasattr(wire, "model_dump") else dict(wire)
+        if len(kept) >= 2:
+            reason = "authored option cap is two per pause"
+        else:
+            component, delta = raw.get("component"), raw.get("delta")
+            try:
+                if not isinstance(component, str) or not isinstance(delta, dict):
+                    raise SteeringDeltaInvalid(
+                        "authored option must name a component and object delta"
+                    )
+                validate_steering_delta(delta, component, ctx)
+                reason = None
+            except SteeringDeltaInvalid as exc:
+                reason = str(exc)
+        if reason is not None:
+            log.warning(
+                "steering.authored_option_dropped", steer_point=steer_point_name, reason=reason
+            )
+            if run_id is not None:
+                steering_events.emit_standalone(
+                    engine,
+                    project_id=project_id,
+                    run_id=run_id,
+                    event_type="authored_option_dropped",
+                    payload={
+                        **steering_events.base_payload(
+                            capability_run_id=capability_run_id,
+                            plan_id=state.plan_id,
+                            plan_version=state.plan_version,
+                            boundary=point.boundary,
+                            component=point.component,
+                        ),
+                        "reason": reason,
+                        "option_index": index,
+                    },
+                )
+            continue
+        raw["id"] = f"suggested_{index + 1}"
+        kept.append(raw)
+    return kept or None
+
+
 def _watch_header(state: _SteeringState) -> dict[str, Any]:
     """The orienting header the watch decides against (data, never instructions)."""
     plan = state.plan
@@ -4375,9 +4515,7 @@ def _watch_digest(
     return {"prior_decisions": prior}
 
 
-def _watch_flag(
-    component: str, steer_point: str, *, rule: str, action: str
-) -> dict[str, Any]:
+def _watch_flag(component: str, steer_point: str, *, rule: str, action: str) -> dict[str, Any]:
     """One auto-resolution flag for a watch (orchestrator) decision in the collation."""
     return {
         "component": component,
@@ -4552,10 +4690,9 @@ def _apply_watch_delta(
     # ({"selection": ...} / {"characterise": ...} / {"grouping": ...}); it is a
     # replacement re-run when it targets the point's re-run component's context
     # key (select at P3, characterise at P2, group at P4 — Task 15b).
-    watch_replacement = (
-        rerun_component is not None
-        and keys == {REPLACEMENT_RERUNS[rerun_component].context_key}
-    )
+    watch_replacement = rerun_component is not None and keys == {
+        REPLACEMENT_RERUNS[rerun_component].context_key
+    }
     try:
         if watch_replacement:
             assert rerun_component is not None
@@ -5252,9 +5389,7 @@ def _usage_totals(
         return None
     return {
         "prompt": usage["prompt"] if isinstance(usage.get("prompt"), int) else 0,
-        "completion": usage["completion"]
-        if isinstance(usage.get("completion"), int)
-        else 0,
+        "completion": usage["completion"] if isinstance(usage.get("completion"), int) else 0,
         "total": usage["total"] if isinstance(usage.get("total"), int) else 0,
         "cached": usage["cached"] if isinstance(usage.get("cached"), int) else 0,
     }

@@ -63,9 +63,10 @@ PUBLISHER_COUNTRY_MAX = 100
 # import cycle (steering.py imports this module). A guard test pins this tuple to
 # steering.LATTICE_POINTS so the two never drift.
 STEER_POINTS: tuple[str, ...] = (
-    "search_exception",
+    "search_review",
     "evidence_base_coverage",
     "deepening_selection",
+    "finding_groups",
     "synthesis_shape",
 )
 
@@ -85,9 +86,7 @@ DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "group",
 )
 ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
-DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(
-    ("select", "extract", "group")
-)
+DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
     "intervention",
     "outcome",
@@ -166,9 +165,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
 # at every compose() call.
 for _depth, _settings in ANALYSIS_DEPTH_TABLE.items():
     if _settings["findings_chain"] and not _settings["select"]:
-        raise AssertionError(
-            f"ANALYSIS_DEPTH_TABLE[{_depth!r}]: findings_chain requires select"
-        )
+        raise AssertionError(f"ANALYSIS_DEPTH_TABLE[{_depth!r}]: findings_chain requires select")
 del _depth, _settings
 
 NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
@@ -223,12 +220,17 @@ def time_band_for(
     Returns:
         The display time band, including the short-report row where applicable.
     """
-    if section_budget is not None and section_budget <= 4 and (
-        (effort in {"rapid", "standard"} and depth == "landscape")
-        or (effort == "standard" and depth == "standard")
+    if (
+        section_budget is not None
+        and section_budget <= 4
+        and (
+            (effort in {"rapid", "standard"} and depth == "landscape")
+            or (effort == "standard" and depth == "standard")
+        )
     ):
         return "~5-10 min"
     return TIME_BANDS[(effort, depth)]
+
 
 _DISCRETIONARY_COMPONENT_SET = set(DISCRETIONARY_COMPONENTS)
 # The screening harness component is keyed "screen" in COMPONENT_REGISTRY
@@ -293,9 +295,7 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 
 def _validate_registry() -> None:
-    missing = sorted(
-        {registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY)
-    )
+    missing = sorted({registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY))
     if missing:
         raise ValueError(f"orchestration references unknown registry component(s): {missing}")
 
@@ -463,9 +463,7 @@ class ScopeConstraints(BaseModel):
 
     @field_validator("author_affiliation_countries")
     @classmethod
-    def validate_author_affiliation_countries(
-        cls, value: list[str] | None
-    ) -> list[str] | None:
+    def validate_author_affiliation_countries(cls, value: list[str] | None) -> list[str] | None:
         """Validate the optional OpenAlex author-affiliation country filter.
 
         Args:
@@ -508,8 +506,7 @@ class ScopeConstraints(BaseModel):
         ):
             raise ValueError("published_after must not be later than published_before")
         if self.country_group is not None and (
-            self.publisher_country is not None
-            or self.author_affiliation_countries is not None
+            self.publisher_country is not None or self.author_affiliation_countries is not None
         ):
             raise ValueError(
                 "country_group is mutually exclusive with publisher_country "

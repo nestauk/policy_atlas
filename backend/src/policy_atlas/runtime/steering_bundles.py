@@ -55,6 +55,57 @@ DROPPED_DIGEST_CAP = 5
 # --- P2: evidence-base coverage --------------------------------------------
 
 
+def p1_bundle(
+    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+) -> dict[str, Any]:
+    """Build the scrubbed P1 search-review display bundle.
+
+    Args:
+        conn: Open read connection.
+        project_id: Owning project.
+        evidence_scope_id: Scope whose search records are displayed.
+
+    Returns:
+        Only backend counts, queries and sample titles for the API card.
+    """
+    coverage_rows = conn.execute(
+        sa_select(search_coverage_record.c.backends)
+        .where(search_coverage_record.c.project_id == project_id)
+        .where(search_coverage_record.c.evidence_scope_id == evidence_scope_id)
+    ).all()
+    counts: dict[str, int] = {}
+    for row in coverage_rows:
+        for backend in row.backends if isinstance(row.backends, list) else []:
+            if isinstance(backend, dict) and isinstance(backend.get("backend"), str):
+                count = backend.get("count")
+                counts[backend["backend"]] = counts.get(backend["backend"], 0) + (
+                    count if isinstance(count, int) else 0
+                )
+    queries, _ = _executed_queries(conn, project_id=project_id, evidence_scope_id=evidence_scope_id)
+    query_text = [entry["query"] for entry in queries if isinstance(entry.get("query"), str)]
+    title_rows = conn.execute(
+        sa_select(source_snapshot.c.metadata)
+        .join(
+            project_source_snapshot,
+            project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
+        )
+        .where(project_source_snapshot.c.project_id == project_id)
+        .order_by(project_source_snapshot.c.ingested_at.desc())
+        .limit(5)
+    ).all()
+    titles = [
+        row.metadata.get("title")
+        for row in title_rows
+        if isinstance(row.metadata, dict) and isinstance(row.metadata.get("title"), str)
+    ]
+    return {
+        "bundle_version": BUNDLE_VERSION,
+        "backends": [{"backend": key, "count": counts[key]} for key in sorted(counts)],
+        "queries": query_text,
+        "sample_titles": titles,
+    }
+
+
 def p2_bundle(
     conn: Connection,
     *,
@@ -95,7 +146,11 @@ def p2_bundle(
             raw_themes = themes_payload.get("themes")
             if isinstance(raw_themes, list):
                 reduced = [
-                    {"name": theme.get("name"), "size": theme.get("size")}
+                    {
+                        "theme_id": theme.get("theme_id"),
+                        "name": theme.get("name"),
+                        "size": theme.get("size"),
+                    }
                     for theme in raw_themes
                     if isinstance(theme, dict)
                 ]
@@ -242,6 +297,27 @@ def _source_screened_counts(
 # --- P3: deepening selection -----------------------------------------------
 
 
+def groups_bundle(
+    conn: Connection, *, project_id: uuid.UUID, group_run_id: uuid.UUID
+) -> dict[str, Any]:
+    """Build the scrubbed deep-run finding-groups card bundle."""
+    row = conn.execute(
+        sa_select(grouping_result.c.groups)
+        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.run_id == group_run_id)
+    ).first()
+    summary = _grouping_summary({"groups": row.groups}) if row is not None else None
+    groups = (
+        []
+        if summary is None
+        else [
+            {"name": item.get("label") or item.get("name"), "size": item.get("size")}
+            for item in summary["groups"]
+        ]
+    )
+    return {"bundle_version": BUNDLE_VERSION, "groups": groups}
+
+
 def p3_bundle(
     conn: Connection,
     *,
@@ -365,9 +441,7 @@ def p3_bundle(
     notable = excluded.get("notable")
     notable = notable if isinstance(notable, list) else []
     notable_pss_ids = [
-        str(item.get("pss_id"))
-        for item in notable[:DROPPED_DIGEST_CAP]
-        if isinstance(item, dict)
+        str(item.get("pss_id")) for item in notable[:DROPPED_DIGEST_CAP] if isinstance(item, dict)
     ]
     notable_metadata = _doc_metadata(
         conn, project_id=project_id, evidence_scope_id=scope_id, pss_ids=notable_pss_ids
@@ -471,9 +545,7 @@ def _doc_metadata(
         result[str(row.project_source_snapshot_id)] = {
             "title": title,
             "evidence_type": row.primary_evidence_type,
-            "quality_tier": (
-                str(row.quality_score) if row.quality_score is not None else None
-            ),
+            "quality_tier": (str(row.quality_score) if row.quality_score is not None else None),
             "full_text_status": row.full_text_status,
         }
     return result

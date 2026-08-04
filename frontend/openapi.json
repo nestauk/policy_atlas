@@ -246,11 +246,23 @@
         "type": "object"
       },
       "CheckInOption": {
-        "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.",
+        "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.\n    why: Visible reason for a run-specific suggestion.\n    endorsement: Visible reason when the run endorses this canonical option.",
         "properties": {
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "endorsement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Endorsement"
           },
           "id": {
             "title": "Id",
@@ -268,6 +280,18 @@
             "default": false,
             "title": "Suggested",
             "type": "boolean"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Why"
           }
         },
         "required": [
@@ -280,7 +304,7 @@
         "type": "object"
       },
       "CheckInOut": {
-        "description": "A pending or decided steering check-in.\n\nArgs:\n    check_in_id: The pause event id.\n    kind: Check-in kind.\n    boundary: Which side of the component boundary the pause sits at.\n    component: Composed-chain component the pause concerns, or `None`.\n    stage: Presentation stage key for the pause, or `None`.\n    render: The deterministic render \u2014 content of record; there is no\n        LLM prose wrap.\n    options: Server-supplied options. The client must never invent\n        options.\n    triggers: Fired floor triggers, if any.\n    segment_reentry_allowed: Whether an additive segment re-entry is\n        available at this boundary.\n    rerun_component: Component a replacement re-run would target, or\n        `None` if unavailable.\n    status: Whether the check-in is still pending or already decided.\n    created_at: When the pause was recorded.\n    sequence: The pause event's `event_log` sequence.",
+        "description": "A pending or decided steering check-in.\n\nArgs:\n    check_in_id: The pause event id.\n    kind: Check-in kind.\n    boundary: Which side of the component boundary the pause sits at.\n    component: Composed-chain component the pause concerns, or `None`.\n    stage: Presentation stage key for the pause, or `None`.\n    render: The deterministic render \u2014 content of record; there is no\n        LLM prose wrap.\n    options: Server-supplied options. The client must never invent\n        options.\n    triggers: Fired floor triggers, if any.\n    bundle: Scrubbed per-point display data, or ``None`` for legacy pauses.\n    segment_reentry_allowed: Whether an additive segment re-entry is\n        available at this boundary.\n    rerun_component: Component a replacement re-run would target, or\n        `None` if unavailable.\n    status: Whether the check-in is still pending or already decided.\n    created_at: When the pause was recorded.\n    sequence: The pause event's `event_log` sequence.",
         "properties": {
           "boundary": {
             "enum": [
@@ -289,6 +313,19 @@
             ],
             "title": "Boundary",
             "type": "string"
+          },
+          "bundle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bundle"
           },
           "check_in_id": {
             "format": "uuid",

@@ -34,6 +34,7 @@ function baseCheckIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
     stage: "screen",
     status: "pending",
     triggers: [],
+    bundle: null,
     ...overrides,
   };
 }
@@ -45,6 +46,8 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
     description: "",
     requires_user_input: false,
     suggested: false,
+    why: null,
+    endorsement: null,
     ...overrides,
   };
 }

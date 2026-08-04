@@ -26,6 +26,7 @@ from policy_atlas.runtime.runner import run_plan
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
     EVIDENCE_BASE_COVERAGE,
+    FINDING_GROUPS,
     SEARCH_EXCEPTION,
     SYNTHESIS_SHAPE,
     Adjust,
@@ -36,7 +37,13 @@ from policy_atlas.runtime.steering import (
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
 from tests.runtime.test_steering import ScriptedIO, _cleanup_project, _insert_plan_row
 
-_ALL_POINTS = [SEARCH_EXCEPTION, EVIDENCE_BASE_COVERAGE, DEEPENING_SELECTION, SYNTHESIS_SHAPE]
+_ALL_POINTS = [
+    SEARCH_EXCEPTION,
+    EVIDENCE_BASE_COVERAGE,
+    DEEPENING_SELECTION,
+    FINDING_GROUPS,
+    SYNTHESIS_SHAPE,
+]
 
 
 # --- Option grammar: every canonical delta compiles ------------------------
@@ -73,11 +80,11 @@ def test_every_canonical_option_delta_compiles() -> None:
             assert option["intent"] and option["description"]
             _compile_option_delta(option["delta"])  # raises on any non-compiling delta
             seen.add(f"{point}:{option['id']}")
-    # Spot-check the point-keyed inventory landed (P3 gains four; P2/P4 present).
-    assert "deepening_selection:add_extraction_profile" in seen
-    assert "deepening_selection:scope_strata" in seen
+    # The owner-ruled P2/P3 re-home and new Groups point are all present.
+    assert "deepening_selection:deepen_clusters" in seen
+    assert "evidence_base_coverage:scope_strata" in seen
     assert "evidence_base_coverage:adjust_criteria_rescreen" in seen
-    assert "synthesis_shape:regroup_granularity" in seen
+    assert "finding_groups:regroup_granularity" in seen
 
 
 def test_generic_floor_options_are_continue_change_mode_abort() -> None:

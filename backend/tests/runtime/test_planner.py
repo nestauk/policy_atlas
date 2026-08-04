@@ -79,7 +79,7 @@ def test_stub_second_turn_returns_complete_ready_draft() -> None:
     assert draft.components == ["characterise", "screen_full", "select", "extract", "group"]
     assert draft.component_rationale is not None
     assert set(draft.component_rationale) == set(draft.components)
-    assert draft.steering_mode == "moderate"
+    assert draft.steering_mode == "unattended"
     assert draft.grouping_facets == ["outcome"]
     assert draft.assumptions == ["Stub planner: deterministic fixture proposal."]
 

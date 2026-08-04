@@ -121,9 +121,7 @@ def _scrub_turn(turn: PlannerTurnWire) -> PlannerTurnWire:
     updates: dict[str, Any] = {"reply": scrub_nul(turn.reply)}
     if turn.question is not None:
         updates["question"] = scrub_nul(turn.question)
-    updates["plan_draft"] = PlanDraftWire.model_validate(
-        _scrub_nul(turn.plan_draft.model_dump())
-    )
+    updates["plan_draft"] = PlanDraftWire.model_validate(_scrub_nul(turn.plan_draft.model_dump()))
     return turn.model_copy(update=updates)
 
 
@@ -287,7 +285,7 @@ class StubPlannerBackend:
                     analysis_depth="landscape",
                     components=["characterise"],
                     component_rationale={"characterise": _STUB_COMPONENT_RATIONALE["characterise"]},
-                    steering_mode="moderate",
+                    steering_mode="unattended",
                     grouping_facets=None,
                     assumptions=list(_STUB_ASSUMPTIONS),
                 ),
@@ -313,7 +311,7 @@ class StubPlannerBackend:
                 component_rationale={
                     component: _STUB_COMPONENT_RATIONALE[component] for component in components
                 },
-                steering_mode="moderate",
+                steering_mode="unattended",
                 grouping_facets=["outcome"],
                 assumptions=list(_STUB_ASSUMPTIONS),
             ),

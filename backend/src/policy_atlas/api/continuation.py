@@ -22,7 +22,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.locks import project_lock
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, orchestration_plan
+from policy_atlas.core.schema import capability_run, characterisation_result, orchestration_plan
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
@@ -36,12 +36,15 @@ from policy_atlas.runtime.steering import (
     ReEnterSegment,
     RerunSurface,
     SteeringAdjustmentError,
+    SteeringDeltaInvalid,
+    SteeringValidationCtx,
     apply_adjustment,
     apply_replacement_rerun,
     apply_segment_reentry,
     compile_fanout,
     pause_points,
     render_fanout_confirmation,
+    validate_steering_delta,
 )
 
 log = structlog.get_logger()
@@ -185,9 +188,7 @@ def answer_check_in(
     with engine.begin() as conn:
         project_lock(conn, project_id)
         pause = _pending_pause(conn, project_id=project_id, check_in_id=check_in_id)
-        state = build(
-            engine, project_id=project_id, capability_run_id=pause.capability_run_id
-        )
+        state = build(engine, project_id=project_id, capability_run_id=pause.capability_run_id)
         kind = _field(response, "kind")
         if kind == "free_text":
             raise InvalidResponseError("free text must be compiled before it is confirmed")
@@ -202,9 +203,11 @@ def answer_check_in(
 
         option = _offered_option(pause.payload, _require_str(response, "option_id"))
         params = _field(response, "params")
+        _validate_offered_authored_delta(option, state=state, pause_payload=pause.payload)
         intent = _canonical_intent(option, params=params)
+        renames = _theme_renames(params, pause.payload)
         try:
-            return _persist_intent(
+            result = _persist_intent(
                 conn,
                 project_id=project_id,
                 pause=pause,
@@ -212,6 +215,11 @@ def answer_check_in(
                 intent=intent,
                 actor=actor,
             )
+            if renames:
+                _apply_theme_renames(
+                    conn, project_id=project_id, pause=pause, state=state, renames=renames
+                )
+            return result
         except SteeringAdjustmentError as exc:
             raise InvalidResponseError(str(exc)) from exc
 
@@ -245,9 +253,7 @@ def compile_free_text(
     with engine.begin() as conn:
         project_lock(conn, project_id)
         pause = _pending_pause(conn, project_id=project_id, check_in_id=check_in_id)
-        state = build(
-            engine, project_id=project_id, capability_run_id=pause.capability_run_id
-        )
+        state = build(engine, project_id=project_id, capability_run_id=pause.capability_run_id)
     point = PausePoint(
         cast(Literal["after_component", "before_component"], pause.payload["boundary"]),
         cast(str, pause.payload["component"]),
@@ -278,9 +284,7 @@ def compile_free_text(
         completed_components=state.completed_components,
         rerun_surface=RerunSurface(
             replacement_component=_optional_str(pause.payload.get("rerun_component")),
-            segment_reentry_available=_bool_affordance(
-                pause.payload, "segment_reentry_allowed"
-            ),
+            segment_reentry_available=_bool_affordance(pause.payload, "segment_reentry_allowed"),
         ),
     )
     token = uuid.uuid4().hex
@@ -341,9 +345,7 @@ def confirm_free_text(
         pause = _pending_pause(conn, project_id=project_id, check_in_id=check_in_id)
         if pause.capability_run_id != pending.capability_run_id:
             raise LookupError("free-text confirmation no longer matches the parked walk")
-        state = build(
-            engine, project_id=project_id, capability_run_id=pause.capability_run_id
-        )
+        state = build(engine, project_id=project_id, capability_run_id=pause.capability_run_id)
         try:
             return _persist_fanout(
                 conn,
@@ -379,11 +381,15 @@ def claim_continuation(
     """
     with engine.begin() as conn:
         project_lock(conn, project_id)
-        cap = conn.execute(
-            select(capability_run)
-            .where(capability_run.c.project_id == project_id)
-            .where(capability_run.c.capability_run_id == capability_run_id)
-        ).mappings().one_or_none()
+        cap = (
+            conn.execute(
+                select(capability_run)
+                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.capability_run_id == capability_run_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
         if cap is None or cap["status"] != "paused":
             return None
         requested = _unclaimed_requests(
@@ -461,11 +467,15 @@ def execute_continuation(
     """
     state = build(engine, project_id=project_id, capability_run_id=capability_run_id)
     with engine.connect() as conn:
-        cap = conn.execute(
-            select(capability_run)
-            .where(capability_run.c.project_id == project_id)
-            .where(capability_run.c.capability_run_id == capability_run_id)
-        ).mappings().one_or_none()
+        cap = (
+            conn.execute(
+                select(capability_run)
+                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.capability_run_id == capability_run_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
         if cap is None:
             raise LookupError("capability run does not exist")
         decision = _claimed_decision(
@@ -550,11 +560,15 @@ def startup_sweep(engine: Engine) -> SweepReport:
     interrupted: list[uuid.UUID] = []
     reexecute: list[ClaimedContinuation] = []
     with engine.begin() as conn:
-        running = conn.execute(
-            select(capability_run)
-            .where(capability_run.c.status == "running")
-            .order_by(capability_run.c.project_id, capability_run.c.capability_run_id)
-        ).mappings().all()
+        running = (
+            conn.execute(
+                select(capability_run)
+                .where(capability_run.c.status == "running")
+                .order_by(capability_run.c.project_id, capability_run.c.capability_run_id)
+            )
+            .mappings()
+            .all()
+        )
         for cap in running:
             project_lock(conn, cap["project_id"])
             claim = _claimed_without_progress(
@@ -941,7 +955,12 @@ def _canonical_intent(option: dict[str, Any], *, params: Any) -> tuple[str, Any]
         return "abort", None
     if option.get("requires_user_input") is True and not isinstance(params, Mapping):
         raise InvalidResponseError("this option requires parameters")
-    if option.get("requires_user_input") is not True and params is not None:
+    allowed_rename_params = isinstance(params, Mapping) and set(params) == {"renames"}
+    if (
+        option.get("requires_user_input") is not True
+        and params is not None
+        and not allowed_rename_params
+    ):
         raise InvalidResponseError("this option does not accept parameters")
     if option_id == "change_mode":
         mode = _optional_str(params.get("new_mode") if isinstance(params, Mapping) else None)
@@ -966,7 +985,42 @@ def _canonical_intent(option: dict[str, Any], *, params: Any) -> tuple[str, Any]
             return "rerun", (rerun_component, matched)
     if segment_allowed and set(delta) == {"acquire"}:
         return "segment_reentry", ReEnterSegment(directive_deltas=delta)
-    return "adjust", Adjust(directive_deltas=delta)
+    return "adjust", Adjust(
+        directive_deltas=delta,
+        authored_by="orchestrator" if option.get("authored") is True else None,
+    )
+
+
+def _validate_offered_authored_delta(
+    option: dict[str, Any], *, state: Any, pause_payload: dict[str, Any]
+) -> None:
+    """Revalidate a persisted authored option immediately before application."""
+    if option.get("authored") is not True:
+        return
+    delta = option.get("delta")
+    if not isinstance(delta, dict) or len(delta) != 1:
+        raise InvalidResponseError("authored option has malformed delta")
+    component, local = next(iter(delta.items()))
+    if not isinstance(component, str) or not isinstance(local, dict):
+        raise InvalidResponseError("authored option has malformed delta")
+    try:
+        validate_steering_delta(
+            local,
+            component,
+            SteeringValidationCtx(
+                backend_scope=state.plan.backend_scope,
+                current_components=set(state.chain.components),
+                completed_components=set(state.completed_components),
+                rerun_surface=RerunSurface(
+                    replacement_component=_optional_str(pause_payload.get("rerun_component")),
+                    segment_reentry_available=_bool_affordance(
+                        pause_payload, "segment_reentry_allowed"
+                    ),
+                ),
+            ),
+        )
+    except SteeringDeltaInvalid as exc:
+        raise InvalidResponseError(f"authored option refused: {exc}") from exc
 
 
 def _offered_option(pause_payload: dict[str, Any], option_id: str) -> dict[str, Any]:
@@ -991,6 +1045,79 @@ def _offered_option(pause_payload: dict[str, Any], option_id: str) -> dict[str, 
         pause_payload, "segment_reentry_allowed"
     )
     return selected
+
+
+def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str, str]]:
+    """Validate P2-only card-local theme-name edits from one option response."""
+    if not isinstance(params, Mapping) or "renames" not in params:
+        return []
+    if pause_payload.get("steer_point") != "evidence_base_coverage":
+        raise InvalidResponseError("rename_theme is only available at evidence_base_coverage")
+    raw = params["renames"]
+    if not isinstance(raw, list):
+        raise InvalidResponseError("rename_theme requires a renames list")
+    result: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, Mapping):
+            raise InvalidResponseError("each rename must be an object")
+        theme_id, name = item.get("theme_id"), item.get("name")
+        if not isinstance(theme_id, str) or not isinstance(name, str) or not name.strip():
+            raise InvalidResponseError("each rename requires theme_id and a non-empty name")
+        if theme_id in seen:
+            raise InvalidResponseError("each theme may be renamed once")
+        seen.add(theme_id)
+        result.append((theme_id, name.strip()))
+    return result
+
+
+def _apply_theme_renames(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    pause: _Pause,
+    state: Any,
+    renames: list[tuple[str, str]],
+) -> None:
+    """Update P2's persisted theme display names and append their audit event."""
+    row = (
+        conn.execute(
+            select(characterisation_result)
+            .where(characterisation_result.c.project_id == project_id)
+            .order_by(characterisation_result.c.created_at.desc())
+        )
+        .mappings()
+        .first()
+    )
+    if row is None or not isinstance(row["themes"], dict):
+        raise InvalidResponseError("rename_theme refused: no current theme map exists")
+    payload = dict(row["themes"])
+    themes = payload.get("themes")
+    if not isinstance(themes, list):
+        raise InvalidResponseError("rename_theme refused: current theme map is malformed")
+    by_id = {item.get("theme_id"): item for item in themes if isinstance(item, dict)}
+    for theme_id, name in renames:
+        target = by_id.get(theme_id)
+        if target is None:
+            raise InvalidResponseError("rename_theme refused: theme is not in this evidence base")
+        target["name"] = name
+    conn.execute(
+        update(characterisation_result)
+        .where(characterisation_result.c.characterisation_id == row["characterisation_id"])
+        .values(themes=payload)
+    )
+    events.append(
+        conn,
+        project_id=project_id,
+        run_id=pause.run_id,
+        event_type="steering.theme_renamed",
+        payload={
+            "capability_run_id": str(pause.capability_run_id),
+            "plan_id": str(state.plan_id),
+            "plan_version": state.plan_version,
+            "renames": [{"theme_id": theme_id, "name": name} for theme_id, name in renames],
+        },
+    )
 
 
 def _append_decision(
@@ -1205,9 +1332,7 @@ def _resume_decision(state: Any, decision: dict[str, Any]) -> ResumeDecision:
         return ResumeDecision(
             response="rerun",
             component=component,
-            directive_delta=_merged_rerun_directive(
-                state, component, {component: component_delta}
-            ),
+            directive_delta=_merged_rerun_directive(state, component, {component: component_delta}),
         )
     if rerun_mode == "additive":
         if not isinstance(action, dict):
@@ -1243,11 +1368,7 @@ def _fanout_rerun_fragment(action: dict[str, Any], mode: str) -> dict[str, Any] 
     if not isinstance(compiled, list):
         return None
     fragment = next(
-        (
-            item
-            for item in compiled
-            if isinstance(item, dict) and item.get("rerun_mode") == mode
-        ),
+        (item for item in compiled if isinstance(item, dict) and item.get("rerun_mode") == mode),
         None,
     )
     return fragment if isinstance(fragment, dict) else None
@@ -1258,9 +1379,8 @@ def _latest_attachment(
 ) -> uuid.UUID | None:
     """Find the latest non-null run attachment for a capability walk."""
     for row in reversed(events.read(conn, project_id)):
-        if (
-            _payload_uuid(row["payload"], "capability_run_id") == capability_run_id
-            and isinstance(row["run_id"], uuid.UUID)
+        if _payload_uuid(row["payload"], "capability_run_id") == capability_run_id and isinstance(
+            row["run_id"], uuid.UUID
         ):
             return row["run_id"]
     return None
@@ -1268,11 +1388,15 @@ def _latest_attachment(
 
 def _redispatchable_requests(conn: Connection) -> list[ClaimedContinuation]:
     """Return every unclaimed request on a still-parked walk deterministically."""
-    rows = conn.execute(
-        select(capability_run)
-        .where(capability_run.c.status == "paused")
-        .order_by(capability_run.c.project_id, capability_run.c.capability_run_id)
-    ).mappings().all()
+    rows = (
+        conn.execute(
+            select(capability_run)
+            .where(capability_run.c.status == "paused")
+            .order_by(capability_run.c.project_id, capability_run.c.capability_run_id)
+        )
+        .mappings()
+        .all()
+    )
     redispatch: list[ClaimedContinuation] = []
     for cap in rows:
         for request in _unclaimed_requests(
