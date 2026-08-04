@@ -15,7 +15,7 @@ describe("vocabLabel", () => {
     expect(vocabLabel(SEARCH_EFFORT_LABEL, "rapid")).toBe("Rapid — top sources, fast pass");
     expect(vocabLabel(ANALYSIS_DEPTH_LABEL, "landscape")).toBe("Landscape — mapping the terrain");
     expect(vocabLabel(SOURCES_LABEL, "both")).toBe("Academic + policy (OpenAlex, Overton)");
-    expect(vocabLabel(STEERING_MODE_LABEL, "unattended")).toBe("Unattended (no pauses)");
+    expect(vocabLabel(STEERING_MODE_LABEL, "unattended")).toBe("None — ask if you want them");
     expect(vocabLabel(COMPONENT_LABEL, "screen_full")).toBe("Screening for relevance");
     // The contract's ban: an unknown key must OMIT, not render key.replace(…).
     expect(vocabLabel(SEARCH_EFFORT_LABEL, "warp_speed")).toBeNull();

@@ -394,8 +394,9 @@ export function PlanningPane({
           transcript.optimisticTurns.length === 0 && (
             <div role="status" className="max-w-prose-measure text-caption leading-relaxed text-grey">
               <p>
-                Describe the policy question you need evidence for. The planner refines it with
-                you into an analysis plan you approve before anything runs.
+                Describe the policy question you need evidence for. The planner turns it into a
+                plan you approve — question, scope, thoroughness — then the analysis runs and
+                reports back here.
               </p>
               <p className="mt-2 text-caption">Your conversation is kept — it survives restarts.</p>
             </div>

@@ -1,14 +1,162 @@
+import { useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
+import { useArchiveProject, useUpdateProject } from "../api/mutations";
 import { useCheckIns, useProject } from "../api/queries";
 import { useAuth } from "../auth";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
+import { Button } from "../ui/brand/Button";
 import { StatusDot } from "../ui/brand/Card";
 import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
-import { ToastProvider } from "../ui/radix/Toast";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
+
+/** Project settings affordance (028 F.5): rename + archive, wired to the
+ *  existing project mutations — the LandingView.tsx ProjectCard pattern,
+ *  condensed into the header popover. Rename saves inline; archive takes an
+ *  explicit confirm step before the mutation fires. */
+function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; projectName: string }) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [confirmingArchive, setConfirmingArchive] = useState(false);
+  const [draftName, setDraftName] = useState(projectName);
+  const update = useUpdateProject(projectId);
+  const archive = useArchiveProject(projectId);
+  const toast = useToast();
+
+  const reset = () => {
+    setEditing(false);
+    setConfirmingArchive(false);
+    setDraftName(projectName);
+  };
+
+  const saveRename = () => {
+    const name = draftName.trim();
+    if (!name) return;
+    update.mutate(
+      { name },
+      {
+        onSuccess: () => setEditing(false),
+        onError: () =>
+          toast.toast({
+            title: "Rename failed",
+            description: "The project couldn't be renamed. Try again.",
+            tone: "error",
+          }),
+      },
+    );
+  };
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) reset();
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Project settings"
+          className="cursor-pointer text-meta text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+        >
+          Project settings
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 space-y-3">
+        {editing ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveRename();
+            }}
+          >
+            <label className="sr-only" htmlFor="project-settings-name">
+              Project name
+            </label>
+            <input
+              id="project-settings-name"
+              autoFocus
+              value={draftName}
+              onChange={(event) => setDraftName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") reset();
+              }}
+              className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy focus-visible:outline-2 focus-visible:outline-blue"
+            />
+            {update.isError && (
+              <p role="alert" className="mt-2 text-caption text-red">
+                The project couldn't be renamed. Try again.
+              </p>
+            )}
+            <div className="mt-3 flex gap-2">
+              <Button type="submit" size="sm" disabled={!draftName.trim() || update.isPending}>
+                Save name
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={reset}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
+            >
+              Rename
+            </button>
+            {archive.isError && (
+              <p role="alert" className="text-caption text-red">
+                The project couldn't be archived. Try again.
+              </p>
+            )}
+            {confirmingArchive ? (
+              <div className="space-y-2 text-caption text-grey">
+                <p>Archiving removes this project from your active projects.</p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    disabled={archive.isPending}
+                    onClick={() =>
+                      archive.mutate(undefined, {
+                        onSuccess: () => setOpen(false),
+                        onError: () =>
+                          toast.toast({
+                            title: "Archive failed",
+                            description: "The project couldn't be archived. Try again.",
+                            tone: "error",
+                          }),
+                      })
+                    }
+                  >
+                    Confirm archive
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingArchive(true)}
+                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
+              >
+                Archive
+              </button>
+            )}
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /** App chrome: brand group left, project-scoped nav right (growing underline). */
 export function AppShell() {
@@ -46,6 +194,7 @@ export function AppShell() {
                       /
                     </span>
                     <span className="truncate font-semibold text-navy">{scrub(project.data.name)}</span>
+                    <ProjectSettingsMenu projectId={project.data.project_id} projectName={project.data.name} />
                   </span>
                 )}
               </div>

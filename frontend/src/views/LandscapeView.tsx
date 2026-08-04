@@ -175,7 +175,7 @@ export function LandscapeView() {
 
       {landscape.data !== undefined && (landscape.data.themes ?? []).length > 0 && (
         <Card className="mt-4">
-          <PaneHeading>Themes in the evidence</PaneHeading>
+          <PaneHeading>Key themes</PaneHeading>
           <Divider />
           <ul role="list" className="space-y-2.5 p-4">
             {orderThemes(landscape.data.themes ?? []).map((theme) => (

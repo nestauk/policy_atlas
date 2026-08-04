@@ -913,24 +913,37 @@ export function ArtefactView() {
   const shownTypes = studyTypes.slice(0, 3);
   const sections = orderSections((data.sections ?? []) as SectionLike[]);
 
-  const snapshotCells: Array<[string, string]> = [];
+  // Sources and Screened out link into the sources view, filtered to match
+  // (028 F.5): `cited` and `status` are SourcesView's existing URL params —
+  // there is no `status=cited` value, so the cited count routes through the
+  // boolean `cited=true` param instead.
+  const snapshotCells: Array<[string, string, string | null]> = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
     // never "found".
-    snapshotCells.push(["Sources", `${snapshot.source_count} cited · ${snapshot.included} included`]);
+    snapshotCells.push([
+      "Sources",
+      `${snapshot.source_count} cited · ${snapshot.included} included`,
+      `/projects/${projectId}/sources?cited=true`,
+    ]);
   }
   if (shownTypes.length > 0) {
     snapshotCells.push([
       "Study types",
       shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
         (studyTypes.length > 3 ? ` · +${studyTypes.length - 3} more` : ""),
+      null,
     ]);
   }
   if (snapshot?.year_range !== null && snapshot?.year_range !== undefined) {
-    snapshotCells.push(["Years", `${snapshot.year_range[0]}–${snapshot.year_range[1]}`]);
+    snapshotCells.push(["Years", `${snapshot.year_range[0]}–${snapshot.year_range[1]}`, null]);
   }
   if (typeof snapshot?.screened_out === "number") {
-    snapshotCells.push(["Screened out", `${snapshot.screened_out} — all listed with reasons`]);
+    snapshotCells.push([
+      "Screened out",
+      `${snapshot.screened_out} — all listed with reasons`,
+      `/projects/${projectId}/sources?status=screened_out`,
+    ]);
   }
 
   const outlineEntries = [
@@ -961,12 +974,27 @@ export function ArtefactView() {
         )}
         {snapshotCells.length > 0 && (
           <div className="mt-5 grid grid-cols-2 border border-line sm:grid-cols-4">
-            {snapshotCells.map(([label, value]) => (
-              <div key={label} className="border-r border-line p-3 last:border-r-0">
-                <p className="text-caption font-bold uppercase tracking-wider text-grey">{label}</p>
-                <p className="mt-1 text-caption font-medium leading-snug text-navy">{scrub(value)}</p>
-              </div>
-            ))}
+            {snapshotCells.map(([label, value, href]) => {
+              const content = (
+                <>
+                  <p className="text-caption font-bold uppercase tracking-wider text-grey">{label}</p>
+                  <p className="mt-1 text-caption font-medium leading-snug text-navy">{scrub(value)}</p>
+                </>
+              );
+              return href !== null ? (
+                <Link
+                  key={label}
+                  to={href}
+                  className="border-r border-line p-3 last:border-r-0 hover:underline"
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={label} className="border-r border-line p-3 last:border-r-0">
+                  {content}
+                </div>
+              );
+            })}
           </div>
         )}
         {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict

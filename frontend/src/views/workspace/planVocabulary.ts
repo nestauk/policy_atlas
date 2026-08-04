@@ -30,7 +30,7 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
   frequent: "At every step",
   moderate: "When something needs your judgement",
   minimal: "Only if it can't proceed",
-  unattended: "Unattended (no pauses)",
+  unattended: "None — ask if you want them",
 };
 
 /** Pre-ready component labels: the same public stage vocabulary the server's

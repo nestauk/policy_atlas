@@ -489,7 +489,7 @@ export function FindingsView() {
                     >
                       {profile !== undefined || group !== undefined
                         ? "No findings match these filters."
-                        : "No findings yet — they appear once the close-reading stage has run."}
+                        : "Findings appear here when an analysis runs at the deep setting — every finding extracted into a browsable database."}
                     </td>
                   </tr>
                 )}
