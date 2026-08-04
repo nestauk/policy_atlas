@@ -15,7 +15,7 @@
 | `SectionOut` | `summary` + `summary_status` (`pending/verified/failed`) — the block summary projection | 13 |
 | Artefact read model | `summary` + `summary_status` (artefact grain) | 13 |
 | `ThemeOut` | `theme_id` — stable id; the sources `theme` filter binds to it (renames keep the id, bookmarks survive) | 8/14 |
-| `CheckInOut` | `bundle` — typed per-point projection (theme map · shortlist titles+strata · proposed sections · groups · coverage counts), scrubbed; today the runtime bundle is dropped by the projection | 14 |
+| `CheckInOut` | `bundle` — typed per-point projection, scrubbed: P1 {per-backend counts, queries, sample titles} · P2 {themes: [{theme_id, name, size}]} · P3 {shortlist: [{title, stratum}]} · Groups {groups: [{name, size}]} · P4 {proposed_sections: [{title, focus}] — ordinary only, structural rows are display-side} | 14 |
 | Check-in `options` | authored options exposed with assigned ids + `suggested: true` + `why` (today: not HTTP-selectable at all) | 14 |
 | `PlanDraft` / `PlanOut` | `section_budget` mirror (additive optional) | 3 |
 
@@ -25,6 +25,15 @@
 - `block.summary` — nullable text + `block.summary_status` marker (strand 13;
   excluded from `content_hash` per spec)
 - `artefact.summary` — nullable text + `artefact.summary_status` (strand 13)
+- theme tags: additive `theme_id` column (identity for rename-safe reads,
+  strand 8/14)
+
+Payload-level (no DDL): `orchestration_plan.payload.section_budget` ·
+`payload.source_turn_index` (the stale-start fence's turn linkage).
+
+Read-behaviour change (named, sign-off item): `GET /plan` serves a
+newer-than-approved draft with `status: draft`; `POST /runs` 409s
+`plan_stale` on a superseded approved plan.
 
 No backfill anywhere. Plan payload (`orchestration_plan.payload` JSONB) gains
 optional `section_budget` — model-level addition, no DDL.

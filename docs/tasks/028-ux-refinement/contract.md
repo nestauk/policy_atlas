@@ -134,10 +134,13 @@ PR landing, as strands:
      are typed {label, kind: text | date_range | country_list, value} so
      inline editors bind to structure; confirmed state rehydrates from the
      turn sequence (a part confirmed by turn N renders ✓ on replay).
-     **Start-safety pin** (lane finding 6): Start = approve-the-current-
-     draft + dispatch, atomically; reopening a part demotes the plan card
-     from ready (start disabled with honest copy); a run start never
-     consumes a draft older than the newest completed turn.
+     **Start-safety pin** (lane finding 6; mechanism corrected by the
+     plan lane F13 — approval is at-ready as-built): the approved plan
+     records its source turn; any newer completed turn supersedes
+     readiness — GET /plan serves the newer draft with honest status
+     (named read-behaviour change), the plan card demotes, and run-start
+     409s `plan_stale` when the approved plan predates the newest
+     completed turn.
    - **Frontend:** part cards in the thread (options → primary/secondary
      buttons; "Refine"-style options prefill the composer; confirmed state
      renders ✓ + Change); **scope chips edit directly** (owner, 2026-08-04:
@@ -508,8 +511,9 @@ conflicting frontend changes (rebase + reassess) · turn/token budget spent.
   Plus one key-findings cost/quality spot-check on the fork-B rev (same
   substrate re-run comparison) and the **per-run cost delta of the
   summariser + judge**, both named in verification.md. Plus one live
-  before/after section-list comparison for the strand-12 rev. No staging
-  deploy; no full live e2e.
+  before/after section-list comparison for the strand-12 rev. Wall
+  ≈45–60 min across the two legs (plan-lane F28/F29 correction). No
+  staging deploy; no full live e2e.
 - Browser checks: keyboard operation of part-card options, section toggles,
   sortable headers; `prefers-reduced-motion` quiets new animation; no
   horizontal body scroll at 1280/768; type scale holds at both widths.
