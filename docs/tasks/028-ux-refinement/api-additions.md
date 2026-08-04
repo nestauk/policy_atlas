@@ -14,7 +14,10 @@
 | Landscape endpoint | `scope=cited` variant param (cited-only distributions for the report's gathered section) | 10 |
 | `SectionOut` | `summary` + `summary_status` (`pending/verified/failed`) — the block summary projection | 13 |
 | Artefact read model | `summary` + `summary_status` (artefact grain) | 13 |
-| Theme/steering read surface | renamed labels serve through the existing theme refs (rename is a durable edit, not a new endpoint — the steering delta carries it) | 14 |
+| `ThemeOut` | `theme_id` — stable id; the sources `theme` filter binds to it (renames keep the id, bookmarks survive) | 8/14 |
+| `CheckInOut` | `bundle` — typed per-point projection (theme map · shortlist titles+strata · proposed sections · groups · coverage counts), scrubbed; today the runtime bundle is dropped by the projection | 14 |
+| Check-in `options` | authored options exposed with assigned ids + `suggested: true` + `why` (today: not HTTP-selectable at all) | 14 |
+| `PlanDraft` / `PlanOut` | `section_budget` mirror (additive optional) | 3 |
 
 ## Schema (one migration, additive, tested downgrade)
 

@@ -48,8 +48,12 @@ pane), information overload in the outputs, and text that is too small and too
 verbose. Plus a mechanics list: composer, sorting, navigation, naming.
 
 The owner's Claude Design mock-up (`mockup/policy-atlas-ux-v2.dc.html`) is the
-UX spec for the new planning flow and artefact navigation — same rule as 027's
-demo spec: interaction design and copy shape cross; its runtime never does.
+UX spec's starting point — same rule as 027's demo spec: interaction design
+and copy shape cross; its runtime never does. **Where it conflicts with the
+binding design records (`mockup/planning-stage.html`,
+`mockup/checkin-taxonomy.html`, `mockup/tab-ia-options.html`), the binding
+records win** — they encode later owner rulings (three parts, no check-in
+question, hybrid IA).
 
 ## Deliverable
 
@@ -92,8 +96,12 @@ PR landing, as strands:
      that moves the clock): an **additive optional section-budget field on
      the plan payload** (no migration — plan payload is versioned JSONB),
      honoured by the strand-12 sections-planning rev and enforced as the
-     synthesis section cap; Quick look compiles a short report (~4
-     sections, ~5–10 min). The `time_band` derivation extends to the new
+     synthesis section cap (`SECTION_CAP` becomes the ceiling; a
+     `_directive_delta` synthesis branch threads the budget — today none
+     exists); the budget counts ORDINARY sections — key findings and
+     conclusions are structural and excluded; the field mirrors additively
+     into `PlanDraft`/`PlanOut`. Quick look compiles a short report
+     (~3 ordinary sections, ~5–10 min). The `time_band` derivation extends to the new
      lever — internal rungs (rapid/deep, landscape) never render; free
      text compiles custom mixes. Four audit pins from the as-built prompt
      (2026-08-04): **the thoroughness card is intent-aware** (the findings
@@ -119,7 +127,16 @@ PR landing, as strands:
      untouched.
    - **API:** additive-only — the turn read model exposes the part;
      **confirmation is an ordinary planning turn** (the button submits a
-     canned message naming the option) — no new endpoints, no new SSE events.
+     canned message referencing part-id + option-id) — no new endpoints, no
+     new SSE events. **Part wire, enumerated** (lane finding 5): options
+     carry {id, label, sub (outcome + time band), primary, reason?}; chips
+     are typed {label, kind: text | date_range | country_list, value} so
+     inline editors bind to structure; confirmed state rehydrates from the
+     turn sequence (a part confirmed by turn N renders ✓ on replay).
+     **Start-safety pin** (lane finding 6): Start = approve-the-current-
+     draft + dispatch, atomically; reopening a part demotes the plan card
+     from ready (start disabled with honest copy); a run start never
+     consumes a draft older than the newest completed turn.
    - **Frontend:** part cards in the thread (options → primary/secondary
      buttons; "Refine"-style options prefill the composer; confirmed state
      renders ✓ + Change); **scope chips edit directly** (owner, 2026-08-04:
@@ -171,7 +188,8 @@ PR landing, as strands:
    Evidence strength · Status) as **additive server-side `sort`/`order` query
    params** on the existing paginated list (client-side sort of one page lies
    across pages — same logic as the 025 filters pin), with URL-addressable
-   state; "Strength" → **"Evidence strength"**; row cleanup per the mock-up
+   state; Origin is retained, non-sortable (lane finding 20); "Strength" →
+   **"Evidence strength"**; row cleanup per the mock-up
    (venue under title, chip tones, count footer); **additive `theme` filter
    query param** + a theme select in the filter row.
 8. **Themes → sources + naming.** Real artefacts have **no themes section**
@@ -196,16 +214,19 @@ PR landing, as strands:
     key themes with document links), with a pointer to the Landscape tab for
     the whole corpus; the **Landscape tab remains the whole-evidence-base
     view** (funnel spanning the full search + screened-in distributions).
-    Cited-scoped distributions may need an **additive scope variant on the
-    landscape read model** (e.g. `scope=cited` query param) — inside the
-    additive gate; enumerated at plan time.
+    Cited-scoped distributions ride the **additive `scope=cited` landscape
+    param** (api-additions.md). Per the binding record: the section carries
+    the compact whole-search found→included→cited line with its Landscape
+    pointer, and References renders as a collapsible entry with its own
+    always-visible summary line (it is the `ArtefactOut.references`
+    collection, not a synthesis section).
 11. **Small wins.** A bounded sweep listed at plan time and reviewed at the
     plan 🛑 (candidates from the mock-up: snapshot-cell navigation into
     filtered views where missing, findings-tab gated empty-state copy,
-    check-in card copy tightening; from the interview list's coverage
-    check: **project settings in the global header** — rename/archive
-    reachable from inside a project, not only from the landing cards).
-    Nothing lands unlisted.
+    check-in card copy tightening). **Committed (not a candidate): project
+    settings in the global header** — rename/archive reachable from inside
+    a project (interview hierarchy guidance, lane finding 21). Nothing
+    lands unlisted.
 12. **Section flow** (owner, 2026-08-03 — the interviews' root confusion:
     readers can't tell whether the overview "What the evidence shows…"
     section connects to the per-theme sections that follow; the transition
@@ -270,7 +291,10 @@ PR landing, as strands:
       machinery item: a durable edit-delta class (rename on the
       characterisation record) + steering audit event, **P2-only by
       constraint** (strata are name-keyed downstream; the plan pins the
-      mechanism and the constraint's enforcement).
+      mechanism and the constraint's enforcement). **Transport** (lane
+      finding 10): renames are card-local edits batched into the check-in's
+      SINGLE response as validated params on the chosen option — one
+      response, atomically applied; no second response, no new endpoint.
     - **P3 → the reading list**: the card shows the shortlist (titles +
       strata, browse-all); floor slimmed to proceed + change-count /
       ranking-emphasis / must-include (pool options moved to P2; "add ICF"
@@ -286,10 +310,14 @@ PR landing, as strands:
       interruption: two single-subject questions in sequence.
     - **P4 → the report plan**: shows the proposed sections; options are
       synthesis-directive only (write-as-planned primary · emphasis);
-      **inline per-section edit/✕ remove/+ add** compose the full edited
-      list into the existing `edit_sections` requires-input delta (grammar
-      unchanged, same confirm ladder); the retype-everything option
-      retires.
+      **the primary submits the DISPLAYED list as the sections directive**
+      (lane finding 8 — as-built, `as_proposed` carries an empty delta and
+      synthesis re-proposes at run time; what you saw must be what gets
+      written); **inline per-section edit/✕ remove/+ add** compose the full
+      edited list into the existing `edit_sections` requires-input delta
+      (grammar unchanged, same confirm ladder); **structural roles (key
+      findings, conclusions) are never editable/removable** (lane finding
+      9); the retype-everything option retires.
     - **Copy at source**: the static option strings in
       `runtime/steering.py` rewritten in plain reader language (the
       jargon leaks — `weight_emphasis x2.0`, `D3/D6/D7/D8/B3` — are code
@@ -316,7 +344,11 @@ PR landing, as strands:
     Behaviour-change inventory for the gates: lattice extension (Groups
     point) · mode-table changes incl. the unattended default · option
     re-homes + floor slimming + depth-conditional floors · the rename
-    edit-delta class + audit event · authored-delta validation. The
+    edit-delta class + audit event · authored-option exposure + validation
+    · **watch promotion keeps lattice identity** (lane finding 15 —
+    as-built, a promotion at a non-pausing lattice boundary drops
+    `steer_point_name` to None and renders the generic floor; a promoted
+    Groups boundary must show the Groups bundle). The
     024/025 invariants stay: server-supplied options, compile→confirm
     ladder, `confirm_token`, steering events on the durable record.
 
@@ -350,9 +382,14 @@ deferred.md updates · verification.md.
   gates; `docs/` artefacts.
 - **Out:** co-pilot Q&A · multi-thread chat/Chats library · artifact
   gallery/multi-artifact IA · comments · re-run/v1.1 · upload · share/export ·
-  dark mode / i18n / sub-`sm` mobile · auth changes · any chain behaviour
-  change beyond the two named prompt revs · steering/check-in *behaviour*
-  (render/copy only) · Bedrock/eval work. The 027 substrate invariants
+  dark mode / i18n / sub-`sm` mobile · auth changes · Bedrock/eval work ·
+  any chain/steering behaviour change beyond the **named inventory**: the
+  six gated prompt surfaces, the strand-14 behaviour-change inventory
+  (lattice extension · mode table + unattended default · option re-homes +
+  depth-conditional floors · rename delta · authored-option exposure +
+  validation · promotion keeps lattice identity) and the strand-3 pins
+  (Start = approve-current-draft + dispatch; P4 primary submits the
+  displayed list; section-budget threading). The 027 substrate invariants
   (auth seam · generated client + drift check · SSE reconnect · reducer
   idempotence · queryKeys · scrub()/safeHref() + lint ban · URL-addressable
   state · mock mode · pnpm supply-chain config · deploy assumptions) are
@@ -369,8 +406,12 @@ deferred.md updates · verification.md.
   reuses the internal decision prompt verbatim, so authored option labels
   arrive in machinery language; (ii) a live authored option carried an
   **invented delta** — intent `recover_full_text`, which exists nowhere in
-  the codebase: a button promising an impossible action. Owner ruling:
-  **fix the substrate, not frontend guardrails.** The rev gives authoring
+  the codebase. As-built correction (lane finding 12): authored options
+  are today NOT HTTP-selectable at all — no ids, stored under
+  `authored_options`, dropped by the check-in projection; only in-process
+  watch decisions consume them. Exposing them is itself an additive change:
+  ids assigned, projected into `options` with a `suggested` marker + why.
+  Owner ruling: **fix the substrate, not frontend guardrails.** The rev gives authoring
   its own reader-facing framing — plain-language labels, reasons citing
   visible facts, machinery vocabulary banned, endorse-existing-option
   signalling, a count cap — and the **backend delta pipeline closes the
@@ -392,9 +433,12 @@ deferred.md updates · verification.md.
   `planning_transcript` (fork A) + the block-summary column & marker and the
   artefact-summary field & marker (strand 13, per spec). One migration (+
   tested downgrade); no backfill anywhere; nothing else moves.
-- **Public interface:** additive-only — the turn read-model part field,
-  `sort`/`order`/`theme` query params on existing lists. Anything
-  non-additive reopens this gate.
+- **Public interface:** additive-only — **the enumerated list is
+  [api-additions.md](api-additions.md)** (turn part field · sort/order/theme
+  params · landscape `scope=cited` · summaries fields on `SectionOut`/
+  `ArtefactOut` · `CheckInOut.bundle` · authored-option exposure ·
+  `ThemeOut.theme_id` · `section_budget` mirrors). Anything non-additive
+  reopens this gate.
 - **No new dependencies · no CI changes · no prod-config/deploy changes ·
   no auth changes · no new SSE events.**
 - All model-authored strings render through `scrub()`; part-card option
@@ -424,8 +468,9 @@ not a quiet edit.
 - **Don't flatten status.** settled · 🟡 leaning · ❓ open · ⏸ deferred stay as-is.
 - **Model only what behaves** — the part payload carries only what the cards render.
 - **Flag, don't drop** — spans/sections that can't render the new way degrade honestly.
-- **Honest absence** — summaries come from durable text (focus/first sentence),
-  never invented; counts keep their base.
+- **Honest absence** — summaries are verified block summaries; the
+  first-sentence fallback renders WITH a failed/absent marker surfaced
+  (never as a summary); `focus` never renders; counts keep their base.
 - Deferred seams → [docs/deferred.md](../../deferred.md).
 
 ## Stop conditions
@@ -451,10 +496,14 @@ conflicting frontend changes (rebase + reassess) · turn/token budget spent.
   filtered sources → sort two columns (URL state, collection-true across
   pages) → composer: Enter/Shift+Enter, growth, disabled-during-run copy →
   **summaries** (strand 13): block summaries mint + verify during the run,
-  collapsed sections show them, a legacy artefact still renders on the
-  first-sentence fallback → **check-in salience** (strand 14): while paused,
-  every tab visibly says so and the banner jumps to the check-in; the
-  check-in card leads with the recommended action and discloses the rest.
+  collapsed sections show them (a failed/absent summary's fallback carries
+  its marker), a legacy artefact still renders on the fallback →
+  **check-in legs** (lane finding 16 — unattended is the default, so pause
+  assertions need an opt-in): leg A runs Quick look UNATTENDED end-to-end
+  (proves no-pause default + short report + honest band); leg B explicitly
+  requests check-ins ("review key stages", standard preset) and exercises
+  P1 + P4 cards, pause salience on every tab, free-text steer, and inline
+  section editing.
   Plus one key-findings cost/quality spot-check on the fork-B rev (same
   substrate re-run comparison) and the **per-run cost delta of the
   summariser + judge**, both named in verification.md. Plus one live
@@ -468,7 +517,8 @@ conflicting frontend changes (rebase + reassess) · turn/token budget spent.
 
 `verification.md` with: gate outputs · the live check narrated with
 timestamps + screenshots per uplifted surface (before/after where visual) ·
-the additive API list as approved vs landed · both prompt revs' diffs
+the additive API list (api-additions.md) as approved vs landed · all six
+prompt surfaces' diffs
 summarised + the fork-B cost spot-check numbers · substrate-invariant
 confirmation · copy-map/naming table as landed · diff summary ·
 public-safety confirmation · known gaps + deferred.md pointers.

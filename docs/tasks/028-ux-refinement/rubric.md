@@ -5,7 +5,8 @@ otherwise it is in progress, not done.
 
 1. [ ] Implementation satisfies [contract.md](contract.md), including the
        owner-resolved forks (A full sequential flow · B scoped prompt rev ·
-       C five-tab IA).
+       C six-tab hybrid IA) and the contract-lane adjudications
+       (adversarial-review-contract.md, 23/23 in).
 2. [ ] `make verify` passes; `pnpm e2e` + `make fe-api-smoke` pass; the pinned
        scoped live check ran and is narrated in verification.md.
 3. [ ] No approval-gated change snuck in unapproved — exactly the gate-listed
@@ -30,8 +31,9 @@ otherwise it is in progress, not done.
        capped ~66–72ch.
 10. [ ] Vocabulary honesty holds on every new surface: raw enum keys never
         render; part cards render only server-supplied labels; section
-        summaries come from durable text (focus/first sentence), never
-        generated.
+        summaries are verified block summaries (first-sentence fallback
+        carries its marker; `focus` never renders), never generated at
+        render time.
 11. [ ] Annotation spans verify on every changed render path (bulleted key
         findings, collapsed/expanded sections) — spans that can't render
         degrade honestly, with tests.
