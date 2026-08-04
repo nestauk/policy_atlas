@@ -13,6 +13,13 @@ import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
+import {
+  ContentsSidebar,
+  GatheredSection,
+  type OutlineSection,
+  SectionDisclosure,
+  sectionAnchor,
+} from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
 
@@ -606,6 +613,73 @@ export function AnnotatedProse({
     (claim) => claim.span === null || claim.span === undefined,
   );
 
+  // Key-findings bullets (028 fork B): prose whose non-empty lines all start
+  // "- " renders as a list. Segments regroup by line; a claim span crossing a
+  // bullet boundary degrades honestly to the trailing anchored list below —
+  // its popover survives, it is never mis-rendered across two bullets.
+  const lines = block.prose.split("\n").filter((line) => line.trim() !== "");
+  const isBulleted = lines.length > 0 && lines.every((line) => line.trimStart().startsWith("- "));
+  if (isBulleted) {
+    const bullets: Array<Array<(typeof segments)[number]>> = [];
+    const crossing: ClaimLike[] = [];
+    let current: Array<(typeof segments)[number]> = [];
+    for (const segment of segments) {
+      const pieces = segment.text.split("\n");
+      pieces.forEach((piece, pieceIndex) => {
+        if (pieceIndex > 0) {
+          if (current.length > 0) bullets.push(current);
+          current = [];
+        }
+        if (piece === "") return;
+        if (segment.kind === "claim" && pieces.filter((p) => p.trim() !== "").length > 1) {
+          // The span crosses a bullet boundary — degrade the whole claim.
+          if (!crossing.includes(segment.claim)) crossing.push(segment.claim);
+          current.push({ kind: "plain", text: piece });
+          return;
+        }
+        current.push(
+          segment.kind === "claim" ? { kind: "claim", text: piece, claim: segment.claim } : { kind: "plain", text: piece },
+        );
+      });
+    }
+    if (current.length > 0) bullets.push(current);
+    return (
+      <div className="max-w-prose-measure text-body text-ink">
+        <ul className="list-none space-y-1.5">
+          {bullets.map((bullet, bulletIndex) => (
+            <li key={bulletIndex} className="flex gap-2">
+              <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 bg-blue" />
+              <span>
+                {bullet.map((segment, index) =>
+                  segment.kind === "plain" ? (
+                    <span key={index}>{scrub(segment.text.replace(/^\s*- /, ""))}</span>
+                  ) : (
+                    <ClaimSpan
+                      key={index}
+                      claim={segment.claim}
+                      text={segment.text.replace(/^\s*- /, "")}
+                      onOpen={onOpenClaim}
+                    />
+                  ),
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {crossing.map((claim) => (
+          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+          </p>
+        ))}
+        {unspanned.map((claim) => (
+          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+          </p>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-prose-measure text-body text-ink">
       <p className="whitespace-pre-line">
@@ -859,8 +933,19 @@ export function ArtefactView() {
     snapshotCells.push(["Screened out", `${snapshot.screened_out} — all listed with reasons`]);
   }
 
+  const outlineEntries = [
+    ...sections.map((section, index) => ({
+      id: sectionAnchor(section.title, index),
+      title: section.title,
+    })),
+    ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
+    { id: "gathered", title: "How the evidence was gathered" },
+  ];
+
   return (
-    <main className="artefact-page anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+    <div className="mx-auto flex max-w-[1060px] justify-center gap-6 px-4">
+      <ContentsSidebar entries={outlineEntries} />
+      <main className="artefact-page anim-rise my-8 min-w-0 max-w-[780px] flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
       <header className="mb-8">
         <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
           Evidence base
@@ -869,6 +954,11 @@ export function ArtefactView() {
           {scrub(data.title)}
         </h1>
         <p className="mt-2 text-meta text-grey">{scrub(data.question)}</p>
+        {data.summary != null && data.summary !== "" && data.summary_status === "verified" && (
+          <p className="mt-3 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-3 py-2 text-body text-ink">
+            {scrub(data.summary)}
+          </p>
+        )}
         {snapshotCells.length > 0 && (
           <div className="mt-5 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value]) => (
@@ -884,46 +974,29 @@ export function ArtefactView() {
       </header>
 
       {sections.map((section, index) => (
-        <section
+        <SectionDisclosure
           key={index}
-          className={section.role === "conclusions" ? "mb-9 border-t border-line pt-6" : "mb-9"}
+          id={sectionAnchor(section.title, index)}
+          section={section as OutlineSection}
+          // Key findings is never collapsible (always in full); conclusions
+          // collapsible, default open; ordinary sections default collapsed.
+          collapsible={section.role !== "key_findings"}
+          defaultOpen={section.role !== "standard"}
         >
-          <h2 className="mb-3 font-display text-heading font-bold text-navy">{scrub(section.title)}</h2>
-          <div className="space-y-4">
-            {(section.blocks ?? []).map((block) => (
-              <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
-            ))}
-          </div>
-        </section>
+          {(section.blocks ?? []).map((block) => (
+            <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
+          ))}
+        </SectionDisclosure>
       ))}
 
       {(data.references ?? []).length > 0 && (
-        <section aria-label="References" className="mt-12 border-t border-line pt-6">
-          <h2 className="mb-3 font-display text-heading font-bold text-navy">References</h2>
-          <ol className="space-y-1.5 text-caption text-ink">
-            {(data.references ?? []).map((reference) => (
-              <li key={reference.n} className="flex gap-2">
-                <span className="font-bold text-blue">[{reference.n}]</span>
-                <span>
-                  <button
-                    type="button"
-                    className="cursor-pointer text-left hover:underline"
-                    onClick={() => openDossier(reference.title)}
-                  >
-                    {scrub(reference.title)}
-                  </button>
-                  {reference.year !== null && reference.year !== undefined && (
-                    <span className="text-grey"> ({reference.year})</span>
-                  )}
-                  {reference.venue !== null && reference.venue !== undefined && (
-                    <span className="text-grey"> · {scrub(reference.venue)}</span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </section>
+        <ReferencesSection
+          references={data.references ?? []}
+          onOpenReference={openDossier}
+        />
       )}
+
+      <GatheredSection projectId={projectId} id="gathered" />
 
       <ClaimPanel
         projectId={projectId}
@@ -938,6 +1011,65 @@ export function ArtefactView() {
       {dossierSource !== null && (
         <SourceDossier projectId={projectId} sourceRef={dossierSource} onClose={closeDossier} />
       )}
-    </main>
+      </main>
+    </div>
+  );
+}
+
+/** References as a collapsible entry with an always-visible summary line —
+ *  it is the ArtefactOut.references collection, not a synthesis section
+ *  (028 strand 10, binding record). */
+function ReferencesSection({
+  references,
+  onOpenReference,
+}: {
+  references: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  onOpenReference: (title: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section aria-label="References" id="references" className="mt-12 scroll-mt-20 border-t border-line pt-6">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full cursor-pointer items-baseline gap-2 text-left"
+      >
+        <h2 className="flex-1 font-display text-heading font-bold text-navy">References</h2>
+        <span aria-hidden="true" className="text-meta text-grey">
+          {open ? "−" : "+"}
+        </span>
+      </button>
+      {!open && (
+        <p className="mt-1.5 text-meta text-grey">
+          {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
+          in this report
+        </p>
+      )}
+      {open && (
+        <ol className="mt-3 space-y-1.5 text-caption text-ink">
+          {references.map((reference) => (
+            <li key={reference.n} className="flex gap-2">
+              <span className="font-bold text-blue">[{reference.n}]</span>
+              <span>
+                <button
+                  type="button"
+                  className="cursor-pointer text-left hover:underline"
+                  onClick={() => onOpenReference(reference.title)}
+                >
+                  {scrub(reference.title)}
+                </button>
+                {reference.year !== null && reference.year !== undefined && (
+                  <span className="text-grey"> ({reference.year})</span>
+                )}
+                {reference.venue !== null && reference.venue !== undefined && (
+                  <span className="text-grey"> · {scrub(reference.venue)}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }

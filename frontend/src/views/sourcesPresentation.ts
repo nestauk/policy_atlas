@@ -2,6 +2,43 @@ import type { components } from "../api/gen/types";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 
+export type EvidenceSortField = "title" | "year" | "type" | "strength" | "status";
+export type SortOrder = "asc" | "desc";
+
+/**
+ * Sortable sources-table columns: the visible header label (source of truth
+ * for "Strength" → "Evidence strength", 028 contract strand 7) and each
+ * column's own natural first-click direction — every column starts
+ * ascending except year, which starts descending (the server's own default
+ * direction when `sort=year` carries no explicit `order`).
+ */
+export const SOURCE_SORT_COLUMNS: ReadonlyArray<{
+  key: EvidenceSortField;
+  label: string;
+  defaultOrder: SortOrder;
+}> = [
+  { key: "title", label: "Source", defaultOrder: "asc" },
+  { key: "year", label: "Year", defaultOrder: "desc" },
+  { key: "type", label: "Evidence type", defaultOrder: "asc" },
+  { key: "strength", label: "Evidence strength", defaultOrder: "asc" },
+  { key: "status", label: "Status", defaultOrder: "asc" },
+];
+
+/** Cycle a sources-table header click: none → the column's own default
+ *  direction → the opposite direction → none. */
+export function nextEvidenceSort(
+  current: { sort: EvidenceSortField | null; order: SortOrder | null },
+  field: EvidenceSortField,
+): { sort: EvidenceSortField | null; order: SortOrder | null } {
+  const column = SOURCE_SORT_COLUMNS.find((candidate) => candidate.key === field);
+  if (column === undefined) return { sort: null, order: null };
+  if (current.sort !== field) return { sort: field, order: column.defaultOrder };
+  if (current.order === column.defaultOrder) {
+    return { sort: field, order: column.defaultOrder === "asc" ? "desc" : "asc" };
+  }
+  return { sort: null, order: null };
+}
+
 const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   found: "Found",
   screened_out: "Screened out",

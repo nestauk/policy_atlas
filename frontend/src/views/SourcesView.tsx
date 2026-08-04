@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
+import { useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
@@ -12,7 +12,15 @@ import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { abstractSourceLabel, screeningDetails, sourceStatusLabel } from "./sourcesPresentation";
+import {
+  abstractSourceLabel,
+  nextEvidenceSort,
+  screeningDetails,
+  sourceStatusLabel,
+  SOURCE_SORT_COLUMNS,
+  type EvidenceSortField,
+  type SortOrder,
+} from "./sourcesPresentation";
 
 const STATUS_TONE: Record<string, "default" | "blue" | "soft" | "green" | "yellow" | "red"> = {
   found: "soft",
@@ -37,6 +45,7 @@ const STATUS_FILTERS = [
 export function SourcesView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
+  const landscape = useLandscape(projectId);
   useDocumentTitle(project.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
@@ -45,11 +54,26 @@ export function SourcesView() {
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
   const sourceId = searchParams.get("source");
+  const requestedSort = searchParams.get("sort");
+  const sortField = SOURCE_SORT_COLUMNS.find((column) => column.key === requestedSort)?.key ?? null;
+  const requestedOrder = searchParams.get("order");
+  const sortOrder: SortOrder | null =
+    sortField !== null && (requestedOrder === "asc" || requestedOrder === "desc") ? requestedOrder : null;
+  const themeFilter = searchParams.get("theme") ?? undefined;
+  // Themes without a stable id predate 028 strand 8 and can't be filtered
+  // on (the `theme` param binds to `ThemeOut.theme_id`) — omit them rather
+  // than offer a selection that can never round-trip.
+  const themeOptions = (landscape.data?.themes ?? []).filter(
+    (theme): theme is typeof theme & { theme_id: string } => Boolean(theme.theme_id),
+  );
   const evidence = useEvidence(projectId, {
     page,
     page_size: 50,
     status: statusFilter === "all" ? undefined : [statusFilter],
     cited: citedFilter || undefined,
+    sort: sortField ?? undefined,
+    order: sortOrder ?? undefined,
+    theme: themeFilter,
   });
   const dossier = useSourceDossier(projectId, sourceId);
   const findings = useFindings(projectId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
@@ -62,6 +86,20 @@ export function SourcesView() {
       const next = new URLSearchParams(current);
       update(next);
       return next;
+    });
+  };
+
+  const handleSort = (field: EvidenceSortField) => {
+    const next = nextEvidenceSort({ sort: sortField, order: sortOrder }, field);
+    updateParams((params) => {
+      if (next.sort === null || next.order === null) {
+        params.delete("sort");
+        params.delete("order");
+      } else {
+        params.set("sort", next.sort);
+        params.set("order", next.order);
+      }
+      params.delete("page");
     });
   };
 
@@ -108,6 +146,24 @@ export function SourcesView() {
           >
             Cited
           </button>
+          <label className="flex items-center gap-1.5 text-caption font-semibold text-grey">
+            Key theme
+            <select
+              value={themeFilter ?? ""}
+              onChange={(event) => updateParams((next) => {
+                const value = event.target.value;
+                if (value) next.set("theme", value);
+                else next.delete("theme");
+                next.delete("page");
+              })}
+              className="cursor-pointer border border-line-2 bg-paper px-2 py-1 text-caption font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
+            >
+              <option value="">All themes</option>
+              {themeOptions.map((theme) => (
+                <option key={theme.theme_id} value={theme.theme_id}>{scrub(theme.name)}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </header>
 
@@ -133,11 +189,38 @@ export function SourcesView() {
           <table className="w-full min-w-[760px] text-left">
             <thead className="border-b border-line bg-paper-2 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
               <tr>
-                <th className="px-4 py-3">Source</th>
-                <th className="px-3 py-3">Year</th>
+                <SortableColumnHeader
+                  column={SOURCE_SORT_COLUMNS[0]}
+                  className="px-4 py-3"
+                  activeSort={sortField}
+                  activeOrder={sortOrder}
+                  onSort={handleSort}
+                />
+                <SortableColumnHeader
+                  column={SOURCE_SORT_COLUMNS[1]}
+                  activeSort={sortField}
+                  activeOrder={sortOrder}
+                  onSort={handleSort}
+                />
                 <th className="px-3 py-3">Origin</th>
-                <th className="px-3 py-3">Status</th>
-                <th className="px-3 py-3">Strength</th>
+                <SortableColumnHeader
+                  column={SOURCE_SORT_COLUMNS[2]}
+                  activeSort={sortField}
+                  activeOrder={sortOrder}
+                  onSort={handleSort}
+                />
+                <SortableColumnHeader
+                  column={SOURCE_SORT_COLUMNS[3]}
+                  activeSort={sortField}
+                  activeOrder={sortOrder}
+                  onSort={handleSort}
+                />
+                <SortableColumnHeader
+                  column={SOURCE_SORT_COLUMNS[4]}
+                  activeSort={sortField}
+                  activeOrder={sortOrder}
+                  onSort={handleSort}
+                />
                 <th className="px-3 py-3">Cited</th>
               </tr>
             </thead>
@@ -159,10 +242,13 @@ export function SourcesView() {
                     <td className="px-3 py-3 align-top text-caption text-navy">{item.year ?? ""}</td>
                     <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
                     <td className="px-3 py-3 align-top">
-                      {label !== undefined && <ScreeningTooltip item={item} label={label} />}
+                      {item.evidence_type && <Chip tone="soft">{scrub(item.evidence_type)}</Chip>}
                     </td>
                     <td className="px-3 py-3 align-top">
                       {item.appraisal_tier && <Chip tone="soft">{scrub(item.appraisal_tier)}</Chip>}
+                    </td>
+                    <td className="px-3 py-3 align-top">
+                      {label !== undefined && <ScreeningTooltip item={item} label={label} />}
                     </td>
                     <td className="px-3 py-3 align-top">
                       {item.cited && <Chip tone="green">Cited</Chip>}
@@ -173,6 +259,10 @@ export function SourcesView() {
             </tbody>
           </table>
         </Card>
+      )}
+
+      {evidence.data !== undefined && evidence.data.data.length > 0 && (
+        <p className="mt-2 text-caption text-grey">{evidence.data.pagination.total_items} sources</p>
       )}
 
       {evidence.data !== undefined && totalPages > 1 && (
@@ -217,6 +307,42 @@ function SourceLoading() {
         <div key={index} className="h-14 animate-pulse border border-line bg-paper-2" />
       ))}
     </div>
+  );
+}
+
+/** One sortable `<th>` in the sources table: a real button (accessible name
+ *  "Sort by <label>"), `aria-sort` on the header itself, and a ↑/↓
+ *  indicator once this column is the active sort. Clicking cycles
+ *  none → the column's default direction → the opposite → none, and the
+ *  caller re-derives `sort`/`order` URL params from that (no client-side
+ *  sort of the page — the 025 filters pattern). */
+function SortableColumnHeader({
+  column,
+  activeSort,
+  activeOrder,
+  onSort,
+  className = "px-3 py-3",
+}: {
+  column: (typeof SOURCE_SORT_COLUMNS)[number];
+  activeSort: EvidenceSortField | null;
+  activeOrder: SortOrder | null;
+  onSort: (field: EvidenceSortField) => void;
+  className?: string;
+}) {
+  const order = activeSort === column.key ? activeOrder : null;
+  const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
+  return (
+    <th className={className} aria-sort={ariaSort}>
+      <button
+        type="button"
+        aria-label={`Sort by ${column.label.toLowerCase()}`}
+        onClick={() => onSort(column.key)}
+        className="flex cursor-pointer items-center gap-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+      >
+        {column.label}
+        {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
+      </button>
+    </th>
   );
 }
 

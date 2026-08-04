@@ -1,6 +1,7 @@
 import type { SseFrame } from "../api/sseFrame";
 import type { AuthApi } from "../auth/types";
 import type { components } from "../api/gen/types";
+import type { EvidenceSortField } from "../views/sourcesPresentation";
 import {
   mockArtefact,
   mockArtefactSectionProse,
@@ -9,6 +10,7 @@ import {
   mockCoverage,
   mockDecisions,
   mockEvidence,
+  mockEvidenceThemeIds,
   mockFindings,
   mockFunnel,
   mockGroups,
@@ -25,6 +27,65 @@ import {
 
 type RunOut = components["schemas"]["RunOut"];
 type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
+type EvidenceItemOut = components["schemas"]["EvidenceItemOut"];
+
+const EVIDENCE_STATUS_SORT_RANK: Record<EvidenceItemOut["status"], number> = {
+  found: 0,
+  screened_out: 1,
+  relevant: 2,
+  not_selected: 3,
+  selected: 4,
+  read_in_full: 5,
+  findings_extracted: 6,
+  cited: 7,
+  unavailable: 8,
+};
+
+// Mock fixtures carry an appraisal *label*, not the backend's underlying
+// quality score — this rank mirrors the same three tiers the fixtures use
+// (`sourceDossier` details) well enough for an honest relative order.
+const APPRAISAL_TIER_SORT_RANK: Record<string, number> = {
+  "Low confidence": 0,
+  "Moderate confidence": 1,
+  "High confidence": 2,
+};
+
+/** Mirrors `repository._compare_evidence_sort`: nulls always sort last,
+ *  regardless of `direction`. */
+function compareMockEvidenceSort(
+  left: EvidenceItemOut,
+  right: EvidenceItemOut,
+  sort: EvidenceSortField,
+  direction: "asc" | "desc",
+): number {
+  let leftValue: string | number | null;
+  let rightValue: string | number | null;
+  if (sort === "title") {
+    leftValue = left.title.toLowerCase();
+    rightValue = right.title.toLowerCase();
+  } else if (sort === "year") {
+    leftValue = left.year ?? null;
+    rightValue = right.year ?? null;
+  } else if (sort === "type") {
+    leftValue = left.evidence_type ?? null;
+    rightValue = right.evidence_type ?? null;
+  } else if (sort === "strength") {
+    leftValue = left.appraisal_tier !== null && left.appraisal_tier !== undefined
+      ? APPRAISAL_TIER_SORT_RANK[left.appraisal_tier] ?? null
+      : null;
+    rightValue = right.appraisal_tier !== null && right.appraisal_tier !== undefined
+      ? APPRAISAL_TIER_SORT_RANK[right.appraisal_tier] ?? null
+      : null;
+  } else {
+    leftValue = EVIDENCE_STATUS_SORT_RANK[left.status];
+    rightValue = EVIDENCE_STATUS_SORT_RANK[right.status];
+  }
+  if (leftValue === null) return rightValue === null ? 0 : 1;
+  if (rightValue === null) return -1;
+  if (leftValue === rightValue) return 0;
+  const result = leftValue < rightValue ? -1 : 1;
+  return direction === "asc" ? result : -result;
+}
 
 /**
  * Scripted event-stream variants (contract strand 13 fixture requirement):
@@ -197,11 +258,23 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/evidence`)) {
     const statuses = url.searchParams.getAll("status");
     const cited = url.searchParams.get("cited");
-    const rows = mockEvidence.filter((item) => {
+    const theme = url.searchParams.get("theme");
+    const sort = url.searchParams.get("sort") as EvidenceSortField | null;
+    const order = url.searchParams.get("order") as "asc" | "desc" | null;
+    let rows = mockEvidence.filter((item) => {
       const included = ["relevant", "not_selected", "selected", "read_in_full", "findings_extracted", "cited", "unavailable"];
       const statusMatches = statuses.length === 0 || statuses.some((status) => status === item.status || (status === "Included" && included.includes(item.status)));
-      return statusMatches && (cited !== "true" || item.cited);
+      const themeMatches = theme === null || (mockEvidenceThemeIds[item.source_id] ?? []).includes(theme);
+      return statusMatches && (cited !== "true" || item.cited) && themeMatches;
     });
+    // Server-side-equivalent sort (collection-true, matches
+    // `repository._compare_evidence_sort`): `order` defaults to the
+    // column's own natural direction (desc for year, asc otherwise) and
+    // nulls always sort last regardless of direction.
+    if (sort !== null) {
+      const direction = order ?? (sort === "year" ? "desc" : "asc");
+      rows = [...rows].sort((left, right) => compareMockEvidenceSort(left, right, sort, direction));
+    }
     return json(page(rows));
   }
   if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/sources/`)) {
