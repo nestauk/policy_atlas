@@ -117,7 +117,7 @@
       <p class="step">Plan · 3 of 3 · thoroughness</p>
       <h3>How thorough should this be?</h3>
       <div class="opts">
-        <span class="b s">Quick look<small>a short cited overview (~4 sections) from a focused search · ~5–10 min</small></span>
+        <span class="b s">Quick look<small>a short cited overview from a focused search · ~5–10 min</small></span>
         <span class="b p">Standard review<small>a full cited report from a wider search · ~15–20 min</small></span>
         <span class="b s">Deep analysis<small>the full report, plus every finding extracted into a browsable database · ~45 min</small></span>
       </div>
@@ -162,7 +162,7 @@
     <b>The planner silently pins dates</b> — every plan got `published_after` ≈ 10 years and `published_before` = the plan date. The upper bound makes later re-runs exclude newer documents: <b>planner_v6 drops the default upper bound</b>, and the recency floor becomes a visible scope chip the user can veto. ·
     <b>The steer-point walk churned 11 plan versions</b> on one project — the same pathology, seen from the plan table. ·
     Real component timings (medians): <b>synthesise 580s</b> · ingest 131s · classify 45s · everything else ≤23s — <b>screen_full + select cost ~13s combined</b>, so skipping them (the old landscape "speed-up") saved nothing. ·
-    <b>The real speed lever is report length</b> (owner, 2026-08-04): synthesis scales with section count (~60–70s/section) — Quick look compiles a <b>short report (~4 sections)</b> and lands in ~5–10 min.
+    <b>The real speed lever is report length</b> (owner, 2026-08-04): synthesis scales with section count (~60–70s/section) — Quick look compiles a <b>short report (3 ordinary sections + key findings and conclusions)</b> and lands in ~5–10 min.
   </div>
   <p class="note"><b>Ruled (owner, 2026-08-04): thoroughness stays part 3</b> — its cost/time consequences warrant one question — with <b>outcome-first option copy</b>: each preset says what you get and what gets read, never method adjectives (a new user can't weigh "rapid" against "deep"). Internal rungs (rapid/standard/deep · landscape/standard/deep) never render.</p>
 
