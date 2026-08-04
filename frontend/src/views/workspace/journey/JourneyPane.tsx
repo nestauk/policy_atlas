@@ -81,11 +81,11 @@ export function JourneyPane({
   const runStatus = stream.run?.status;
   const hasLandscape = Object.keys(landscape?.evidence_types ?? {}).length > 0 || Object.keys(landscape?.years ?? {}).length > 0 || Object.keys(landscape?.geographies ?? {}).length > 0 || (landscape?.themes?.length ?? 0) > 0;
   const hasGroups = (groups?.facets?.length ?? 0) > 0;
-  const heading = runStatus === "succeeded" || runStatus === "degraded" ? "Analysis complete" : runStatus === "aborted" || runStatus === "failed" ? "Analysis stopped" : "Analysing the evidence…";
+  const heading = runStatus === "succeeded" || runStatus === "degraded" ? "Analysis complete" : runStatus === "aborted" || runStatus === "failed" ? "Analysis stopped" : runStatus === "paused" ? "Paused — waiting on you" : "Analysing the evidence…";
 
   return (
     <div className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto px-5 py-5" style={{ scrollbarGutter: "stable" }}>
-      {runStatus === "running" && <ProgressStrip stages={stream.stages} />}
+      {(runStatus === "running" || runStatus === "paused") && <ProgressStrip stages={stream.stages} paused={runStatus === "paused"} />}
       <PlanRecap plan={plan} />
 
       <nav aria-label="Journey sections" className="sticky top-0 z-20 -mx-5 mb-4 flex flex-wrap gap-x-3 gap-y-1 border-b border-line bg-ground/95 px-5 py-2 backdrop-blur-sm">
@@ -118,15 +118,19 @@ export function JourneyPane({
 }
 
 function StatusBanner({ status }: { status: string | undefined }) {
+  if (status === "paused") return <p className="mb-4 border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">Paused at a check-in — waiting on you. The run continues when you answer.</p>;
   if (status === "degraded") return <p className="mb-4 border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">Completed with some flagged events — recorded in the decision log, not hidden.</p>;
   if (status === "aborted") return <p className="mb-4 border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">You stopped this run. Everything completed so far is kept below.</p>;
   if (status === "failed") return <p className="mb-4 border-l-[3px] border-red bg-red-tint p-3 text-meta text-navy">This run failed. Whatever completed is kept and readable.</p>;
   return null;
 }
 
-function ProgressStrip({ stages }: { stages: StageEntry[] }) {
+function ProgressStrip({ stages, paused = false }: { stages: StageEntry[]; paused?: boolean }) {
   if (stages.length === 0) return null;
-  return <div className="mb-3 flex gap-1" aria-label="Run progress">{stages.map((stage, index) => <span key={`${stage.stage}-${index}`} className={`h-1 flex-1 ${stage.status === "completed" ? "bg-blue" : stage.status === "failed" || stage.status === "skipped" ? "bg-orange" : "anim-breathe bg-blue"}`} />)}</div>;
+  // Paused reads distinct from executing on every segment: the active segment
+  // holds solid orange (no motion) instead of the breathing blue (028 pause
+  // salience — the mock e2e asserts the distinction on every tab).
+  return <div className="mb-3 flex gap-1" aria-label={paused ? "Run progress — paused" : "Run progress"}>{stages.map((stage, index) => <span key={`${stage.stage}-${index}`} className={`h-1 flex-1 ${stage.status === "completed" ? "bg-blue" : stage.status === "failed" || stage.status === "skipped" ? "bg-orange" : paused ? "bg-orange" : "anim-breathe bg-blue"}`} />)}</div>;
 }
 
 function PlanRecap({ plan }: { plan: PlanDraft | null }) {

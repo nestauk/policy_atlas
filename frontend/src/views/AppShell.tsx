@@ -86,6 +86,18 @@ export function AppShell() {
                 )}
               </div>
             </NavBar>
+            {/* Cross-tab pause banner (028 strand 14 — pause salience): a
+                paused run must be unmissable from every tab; the banner jumps
+                straight to the waiting check-in. */}
+            {hasPendingCheckIn && base !== null && (
+              <div role="status" className="border-b border-orange bg-orange/10 px-5 py-2">
+                <NavItem to={base}>
+                  <span className="text-meta font-semibold text-navy">
+                    The analysis is paused — a check-in is waiting on you. Go to the check-in →
+                  </span>
+                </NavItem>
+              </div>
+            )}
             <ErrorBoundary key={location.pathname}>
               <Outlet />
             </ErrorBoundary>

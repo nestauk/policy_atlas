@@ -60,8 +60,10 @@ _GOLDEN_PAUSE_MENU = "\n".join(
         "to write the report.",
         "  3) Lean on the strongest evidence — The writing draws more heavily on "
         "the highest-quality studies.",
-        "  4) Change steering mode",
-        "  5) Abort",
+        "  4) Write the report with the edited sections — The sections as you "
+        "edited them are used to write the report.",
+        "  5) Change steering mode",
+        "  6) Abort",
         "  (or type your own steering instruction)",
     ]
 )
@@ -118,8 +120,8 @@ def test_cli_blocking_pause_header_and_options_substrings() -> None:
         "  covered_strata: 2",
         "Steering options:",
         "  1) Continue",
-        "  4) Change steering mode",
-        "  5) Abort",
+        "  5) Change steering mode",
+        "  6) Abort",
         "  (or type your own steering instruction)",
     ):
         assert expected_line in rendered, expected_line

@@ -958,6 +958,19 @@ def _p4_options() -> list[dict[str, Any]]:
             "delta": {"synthesis": {"retrieval_boosts": {"appraisal_tier": {"5": 2.0}}}},
             "requires_user_input": False,
         },
+        # The inline-editing SUBMISSION channel, not a button (028 strand 14):
+        # per-row ✎/×/+ on the card compose the full edited ordinary list into
+        # this requires-input delta — grammar unchanged ({title, focus} rows),
+        # same confirm ladder. The old retype-everything BUTTON retired; the
+        # card renders this option as its row-editing affordance instead.
+        {
+            "id": "edit_sections",
+            "intent": "Write the report with the edited sections",
+            "label": "Write the report with the edited sections",
+            "description": "The sections as you edited them are used to write the report.",
+            "delta": {"synthesis": {"sections": [{"title": _GUIDANCE_PLACEHOLDER, "focus": _GUIDANCE_PLACEHOLDER}]}},
+            "requires_user_input": True,
+        },
     ]
 
 
