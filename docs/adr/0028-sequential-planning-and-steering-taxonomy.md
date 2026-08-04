@@ -1,6 +1,6 @@
 # ADR 0028 — Sequential plan-building and the steering taxonomy rework
 
-- **Status:** Proposed (flips to Accepted at the 028 plan 🛑)
+- **Status:** Accepted — 2026-08-04 (owner, with the 028 plan approval)
 - **Date:** 2026-08-04
 - **Task:** 028-ux-refinement · contract approved 2026-08-04
 - **Binding design records:** `docs/tasks/028-ux-refinement/mockup/planning-stage.html`,

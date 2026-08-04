@@ -3,7 +3,12 @@
 > **Status:** rev 2 (2026-08-04) — plan-phase adversarial review DONE
 > (codex job `task-msdwl2bh-boncq5`: 39 findings, 35 MAJOR, **39/39
 > adjudicated in** — [adversarial-review-plan.md](adversarial-review-plan.md);
-> rev 2 is the full rewrite it demanded). Plan approved: _pending — owner 🛑_.
+> rev 2 is the full rewrite it demanded). **Plan APPROVED — 2026-08-04 · owner ("Accept"), incl. the three named
+> sign-off items: GET /plan draft-freshness read-behaviour change ·
+> live check ~45–60 min · sizing 24–29 days. ADR 0028 Accepted same date.
+> DESIGN PHASE COMPLETE — the build opens in a fresh conversation with
+> `task-cycle-build`** (re-ground from the list below; `make verify`
+> first, phase 0).
 > Contract: [contract.md](contract.md) (APPROVED 2026-08-04; two mechanism
 > corrections from this lane folded — approval-at-ready seam, live-check
 > estimate). ADR 0028 drafted (flips Accepted at this gate).
