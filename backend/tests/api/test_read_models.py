@@ -26,6 +26,8 @@ from policy_atlas.core.schema import (
     runs,
     search_coverage_record,
     selection_result,
+    source_appraisal_result,
+    source_classification_result,
     source_extraction_record,
     source_snapshot,
     source_tag,
@@ -726,7 +728,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                 delete_project_data(conn, project_id)
 
 
-def _seed_evidence_filter_fixture(engine: Engine, project_id: uuid.UUID) -> None:
+def _seed_evidence_filter_fixture(engine: Engine, project_id: uuid.UUID) -> uuid.UUID:
     """Seed evidence spanning found/screened_out/selected/not_selected for filter tests."""
     with engine.begin() as conn:
         run_id = uuid.uuid4()
@@ -763,6 +765,7 @@ def _seed_evidence_filter_fixture(engine: Engine, project_id: uuid.UUID) -> None
                 created_at=now(),
             )
         )
+    return scope_id
 
 
 def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: Engine) -> None:
@@ -817,7 +820,7 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
     """Evidence sorting is collection-wide, stable, and theme-id addressable."""
     with api_client(tmp_path) as (client, owner, _other):
         project_id = uuid.UUID(create_project(client, owner))
-        _seed_evidence_filter_fixture(engine, project_id)
+        scope_id = _seed_evidence_filter_fixture(engine, project_id)
         theme_id = uuid.uuid4()
         with engine.begin() as conn:
             rows = conn.execute(
@@ -858,6 +861,42 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             conn.execute(
                 insert(runs).values(
                     run_id=run_id, project_id=project_id, status="running", started_at=now()
+                )
+            )
+            conn.execute(
+                insert(source_classification_result).values(
+                    source_classification_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=title_rows["Found 0"].project_source_snapshot_id,
+                    project_id=project_id,
+                    classified_by_run_id=run_id,
+                    primary_evidence_type="RCTs and Quasi-Experimental Studies",
+                    classified_at=now(),
+                )
+            )
+            conn.execute(
+                insert(source_appraisal_result).values(
+                    source_appraisal_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=title_rows["Found 0"].project_source_snapshot_id,
+                    project_id=project_id,
+                    appraised_by_run_id=run_id,
+                    quality_score=4,
+                    rubric_version="test",
+                    appraised_at=now(),
+                )
+            )
+            conn.execute(
+                insert(source_tag).values(
+                    source_tag_id=uuid.uuid4(),
+                    project_id=project_id,
+                    project_source_snapshot_id=title_rows["Found 1"].project_source_snapshot_id,
+                    tag="Legacy Theme alpha",
+                    tag_type="topic_theme",
+                    asserted_by="characterise",
+                    created_by_run_id=run_id,
+                    created_at=now(),
+                    theme_id=None,
                 )
             )
             conn.execute(
@@ -907,10 +946,61 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             assert [ranks[item["status"]] for item in by_status] == sorted(
                 ranks[item["status"]] for item in by_status
             )
+            field_by_sort = {
+                "title": "title",
+                "year": "year",
+                "type": "evidence_type",
+                "strength": "appraisal_tier",
+                "status": "status",
+            }
+            for sort, field in field_by_sort.items():
+                for order in ("asc", "desc"):
+                    ordered = client.get(
+                        f"/api/v1/projects/{project_id}/evidence?sort={sort}&order={order}"
+                        "&page_size=20",
+                        headers=owner,
+                    ).json()["data"]
+                    values = [item[field] for item in ordered]
+                    first_null = next(
+                        (index for index, value in enumerate(values) if value is None), len(values)
+                    )
+                    assert all(value is None for value in values[first_null:])
+
+            # Sorting occurs before paging. Equal titles retain the source list's
+            # ingestion order, even when the tie crosses page boundaries.
+            with engine.begin() as conn:
+                for title in ("Found 0", "Found 1", "Found 2"):
+                    snapshot_id = title_rows[title].source_snapshot_id
+                    conn.execute(
+                        update(source_snapshot)
+                        .where(source_snapshot.c.source_snapshot_id == snapshot_id)
+                        .values(metadata={"title": "Tie"})
+                    )
+            unsorted = client.get(
+                f"/api/v1/projects/{project_id}/evidence?page_size=20", headers=owner
+            ).json()["data"]
+            expected_tie_order = [item["source_id"] for item in unsorted if item["title"] == "Tie"]
+            sorted_ties = [
+                item["source_id"]
+                for page in range(1, 5)
+                for item in client.get(
+                    f"/api/v1/projects/{project_id}/evidence?sort=title&page={page}&page_size=2",
+                    headers=owner,
+                ).json()["data"]
+                if item["title"] == "Tie"
+            ]
+            assert sorted_ties == expected_tie_order
             themed = client.get(
-                f"/api/v1/projects/{project_id}/evidence?theme={theme_id}", headers=owner
+                f"/api/v1/projects/{project_id}/evidence?theme={theme_id}&status=found&cited=false",
+                headers=owner,
             ).json()
-            assert [item["title"] for item in themed["data"]] == ["alpha"]
+            assert [item["title"] for item in themed["data"]] == ["Tie"]
+            assert (
+                client.get(
+                    f"/api/v1/projects/{project_id}/evidence?theme={uuid.uuid4()}", headers=owner
+                ).json()["pagination"]["total_items"]
+                == 0
+            )
             assert (
                 client.get(
                     f"/api/v1/projects/{project_id}/evidence?order=desc", headers=owner
@@ -920,6 +1010,13 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             assert (
                 client.get(
                     f"/api/v1/projects/{project_id}/evidence?sort=unknown", headers=owner
+                ).status_code
+                == 422
+            )
+            assert (
+                client.get(
+                    f"/api/v1/projects/{project_id}/evidence?sort=year&order=sideways",
+                    headers=owner,
                 ).status_code
                 == 422
             )

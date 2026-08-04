@@ -58,7 +58,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     SynthesisBackend,
     ThemePayloadWire,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
+from policy_atlas.evidence_base.synthesis.synthesis_tools import SECTION_CAP, ToolExchange
 from policy_atlas.evidence_base.synthesis.synthesise import (
     ChunkInfo,
     ClaimDraft,
@@ -847,6 +847,22 @@ def test_section_budget_rejects_an_over_budget_proposal_for_bounded_repair() -> 
         proposal, grouping_group_ids=None, section_budget=3
     )
     assert reasons == ["section_count_out_of_range: 1..3"]
+
+
+def test_section_budget_validator_never_exceeds_the_global_section_cap() -> None:
+    """A malformed above-cap budget clamps to ``SECTION_CAP`` rather than widening it."""
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(title=f"Evidence aspect {index}", focus="A focused evidence aspect.")
+            for index in range(SECTION_CAP + 1)
+        ]
+    )
+    _sections, reasons, _normalisations = _validate_sections(
+        proposal,
+        grouping_group_ids=None,
+        section_budget=SECTION_CAP + 10,
+    )
+    assert reasons == [f"section_count_out_of_range: 1..{SECTION_CAP}"]
 
 
 def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None:

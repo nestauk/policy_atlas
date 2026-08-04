@@ -439,6 +439,76 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         assert restarted.status_code == 201
 
 
+def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stale-plan fence is additive: pre-028 approved payloads retain their behaviour."""
+    _reset_turn_locks()
+    stub = CountingPlanner()
+    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+        project_id = create_project(client, owner)
+        first = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        approved = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
+        )
+        assert first.status_code == approved.status_code == 200
+        with engine.begin() as conn:
+            payload = conn.execute(
+                select(orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
+                .where(orchestration_plan.c.status == "approved")
+            ).scalar_one()
+            payload.pop("source_turn_index")
+            conn.execute(
+                orchestration_plan.update()
+                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
+                .where(orchestration_plan.c.status == "approved")
+                .values(payload=payload)
+            )
+            conn.execute(
+                planning_transcript.insert().values(
+                    id=uuid.uuid4(),
+                    project_id=uuid.UUID(project_id),
+                    client_turn_id=uuid.uuid4(),
+                    turn_index=2,
+                    user_message="A newer completed legacy turn",
+                    reply="A legacy reply.",
+                    planner_state=first.json()["plan"],
+                    response=first.json(),
+                    suggestions=[],
+                    status="completed",
+                    created_at=datetime.now(UTC),
+                    completed_at=datetime.now(UTC),
+                )
+            )
+        plan = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner).json()
+        assert plan["status"] == "approved"
+        monkeypatch.setattr(runs_router, "_dispatch_run", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            runs_router,
+            "_await_new_run",
+            lambda _engine, *, project_id, **_kwargs: RunOut(
+                capability_run_id=uuid.uuid4(),
+                project_id=project_id,
+                plan_id=uuid.uuid4(),
+                plan_version=1,
+                status="running",
+                started_at=datetime.now(UTC),
+            ),
+        )
+        started = client.post(f"/api/v1/projects/{project_id}/runs", headers=owner, json={})
+        assert started.status_code == 201
+
+
 def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
     engine: Engine, tmp_path: Path
 ) -> None:

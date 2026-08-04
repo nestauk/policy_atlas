@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
+from structlog.testing import capture_logs
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import orchestration_plan, selection_result
@@ -617,8 +618,166 @@ def test_attended_pause_carries_authored_options(engine: Engine) -> None:
         assert len(p3_pause["authored_options"]) == 2
         # The canonical floor is still present (authored options are additive).
         assert p3_pause["options"]
+        suggested = [option for option in p3_pause["options"] if option.get("suggested")]
+        assert [option["id"] for option in suggested] == ["suggested_1", "suggested_2"]
+        assert all(option["authored"] is True for option in suggested)
+        assert [option["why"] for option in suggested] == [
+            "budget dropped 14 documents",
+            "tilt to tier-1 UK sources",
+        ]
         judged = _judgement_events(engine, project_id)
         assert any(p["verdict"] == "decision_point" and p["authored"] for p in judged)
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_invalid_authored_option_is_dropped_before_the_pause(engine: Engine) -> None:
+    """A non-compiling watch suggestion logs and events, but never persists."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        authored = WatchDecisionWire(
+            action="proceed",
+            reasoning="authoring an invalid option",
+            authored_options=[
+                AuthoredOptionWire(
+                    label="Broken extraction change",
+                    why="This must be rejected before display.",
+                    component="extract",
+                    delta={"extraction": {"profiles": []}},
+                )
+            ],
+        )
+        orch = _SteerPointOrchestrator(at="deepening_selection", decide=authored)
+        io = _CapturingIO()
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        with capture_logs() as logs:
+            outcome = run_plan(
+                engine,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                plan=plan,
+                plan_id=plan_id,
+                plan_version=1,
+                plan_row_id=plan_id,
+                backends=_runner_backends(),
+                io=io,
+                orchestrator=orch,
+            )
+        assert outcome.status == "succeeded"
+        p3_pause = next(p for p in io.pauses if p.get("steer_point") == "deepening_selection")
+        assert "authored_options" not in p3_pause
+        assert not [option for option in p3_pause["options"] if option.get("suggested")]
+        assert any(entry["event"] == "steering.authored_option_dropped" for entry in logs)
+        with engine.connect() as conn:
+            drops = [
+                entry["payload"]
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "authored_option_dropped"
+            ]
+        assert len(drops) == 1
+        assert "must not be empty" in drops[0]["reason"]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_authored_option_cap_and_endorsement_keep_the_canonical_floor(engine: Engine) -> None:
+    """Only two suggestions persist; an endorsement annotates rather than duplicates."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        authored = WatchDecisionWire(
+            action="proceed",
+            reasoning="bounded authoring",
+            authored_options=[
+                AuthoredOptionWire(
+                    label="Suggestion one",
+                    why="first valid suggestion",
+                    component="select",
+                    delta={"selection": {"weight_emphasis": {"quality": 2.0}}},
+                ),
+                AuthoredOptionWire(
+                    label="Suggestion two",
+                    why="second valid suggestion",
+                    component="select",
+                    delta={"selection": {"weight_emphasis": {"screen_confidence": 2.5}}},
+                ),
+                AuthoredOptionWire(
+                    label="Suggestion three",
+                    why="must be capped",
+                    component="select",
+                    delta={"selection": {"budget": 10}},
+                ),
+            ],
+        )
+        orch = _SteerPointOrchestrator(at="deepening_selection", decide=authored)
+        io = _CapturingIO()
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=orch,
+        )
+        p3_pause = next(p for p in io.pauses if p.get("steer_point") == "deepening_selection")
+        assert [option["id"] for option in p3_pause["authored_options"]] == [
+            "suggested_1",
+            "suggested_2",
+        ]
+        with engine.connect() as conn:
+            cap_drops = [
+                entry["payload"]
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "authored_option_dropped"
+            ]
+        assert cap_drops[0]["reason"] == "authored option cap is two per pause"
+    finally:
+        _cleanup_project(engine, project_id)
+
+    project_id = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        endorsement = WatchDecisionWire(
+            action="proceed",
+            reasoning="endorse the existing choice",
+            authored_options=[
+                AuthoredOptionWire(
+                    label="Do not render me as another button",
+                    why="the current reading list is well balanced",
+                    endorses_option_id="as_proposed",
+                    component="select",
+                    delta={"selection": {"budget": 25}},
+                )
+            ],
+        )
+        orch = _SteerPointOrchestrator(at="deepening_selection", decide=endorsement)
+        io = _CapturingIO()
+        plan = _base_plan(steering_mode="moderate", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=orch,
+        )
+        p3_pause = next(p for p in io.pauses if p.get("steer_point") == "deepening_selection")
+        assert not [option for option in p3_pause["options"] if option.get("suggested")]
+        canonical = next(option for option in p3_pause["options"] if option["id"] == "as_proposed")
+        assert canonical["endorsement"] == "the current reading list is well balanced"
     finally:
         _cleanup_project(engine, project_id)
 
@@ -1263,6 +1422,88 @@ def test_fix2_promotion_escalates_anomalous_boundary_to_pause(
         extract_pause = _after_pause(io, "extract")
         assert extract_pause["kind"] == "check_in"  # generic non-lattice floor menu
         assert any(p["verdict"] == "promoted" for p in _judgement_events(engine, project_id))
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+@pytest.mark.parametrize(
+    ("steer_point", "boundary", "component", "expected_option_ids"),
+    [
+        (
+            "deepening_selection",
+            "after_component",
+            "select",
+            {
+                "deepen_clusters",
+                "strongest_evidence",
+                "most_relevant",
+                "adjust_budget",
+                "as_proposed",
+            },
+        ),
+        (
+            "evidence_base_coverage",
+            "before_component",
+            "select",
+            {
+                "continue",
+                "search_more",
+                "adjust_criteria_rescreen",
+                "recharacterise",
+                "scope_strata",
+                "exclude_docs",
+            },
+        ),
+    ],
+    ids=["after-boundary", "before-boundary"],
+)
+def test_fix2_promoted_lattice_boundary_keeps_its_own_floor(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    steer_point: str,
+    boundary: str,
+    component: str,
+    expected_option_ids: set[str],
+) -> None:
+    """Promotion on either runner path preserves the lattice decision surface."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _silence_floor(monkeypatch)
+
+        def _promote_target(*args: Any, **kwargs: Any) -> Any:
+            return runner_module._WatchObservation(
+                promoted=kwargs["steer_point_name"] == steer_point,
+                promoted_reason="targeted promotion",
+            )
+
+        monkeypatch.setattr(runner_module, "_watch_observe_boundary", _promote_target)
+        io = _CapturingIO()
+        plan = _base_plan(steering_mode="minimal", steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+            orchestrator=StubOrchestratorBackend(),
+        )
+        assert outcome.status == "succeeded"
+        pause = next(
+            point
+            for point in io.pauses
+            if point.get("steer_point") == steer_point
+            and point["boundary"] == boundary
+            and point["component"] == component
+        )
+        assert pause["kind"] == "steer_point"
+        assert {option["id"] for option in pause["options"]} == expected_option_ids
+        assert "change_mode" not in {option["id"] for option in pause["options"]}
     finally:
         _cleanup_project(engine, project_id)
 

@@ -82,6 +82,20 @@ def test_section_budget_threads_to_synthesis_and_shortens_only_named_time_bands(
     assert time_band_for("deep", "landscape", 3) == TIME_BANDS[("deep", "landscape")]
     assert time_band_for("rapid", "standard", 3) == TIME_BANDS[("rapid", "standard")]
     assert time_band_for("rapid", "landscape", None) == TIME_BANDS[("rapid", "landscape")]
+    short_report_cells = {
+        ("rapid", "landscape"),
+        ("standard", "landscape"),
+        ("standard", "standard"),
+    }
+    for effort in SEARCH_EFFORTS:
+        for depth in ANALYSIS_DEPTHS:
+            expected = (
+                "~5-10 min"
+                if (effort, depth) in short_report_cells
+                else TIME_BANDS[(effort, depth)]
+            )
+            assert time_band_for(effort, depth, 4) == expected
+            assert time_band_for(effort, depth, 5) == TIME_BANDS[(effort, depth)]
     no_budget_steps = {step.component: step for step in compose(_plan()).steps}
     assert no_budget_steps["synthesise"].directive_delta == {}
 

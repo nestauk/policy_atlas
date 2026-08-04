@@ -968,7 +968,13 @@ def _p4_options() -> list[dict[str, Any]]:
             "intent": "Write the report with the edited sections",
             "label": "Write the report with the edited sections",
             "description": "The sections as you edited them are used to write the report.",
-            "delta": {"synthesis": {"sections": [{"title": _GUIDANCE_PLACEHOLDER, "focus": _GUIDANCE_PLACEHOLDER}]}},
+            "delta": {
+                "synthesis": {
+                    "sections": [
+                        {"title": _GUIDANCE_PLACEHOLDER, "focus": _GUIDANCE_PLACEHOLDER}
+                    ]
+                }
+            },
             "requires_user_input": True,
         },
     ]

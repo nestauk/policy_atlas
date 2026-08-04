@@ -22,11 +22,13 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesis
 from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_bundles
+from policy_atlas.runtime.orchestration_plan import compose
 from policy_atlas.runtime.runner import run_plan
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
     EVIDENCE_BASE_COVERAGE,
     FINDING_GROUPS,
+    LATTICE_POINTS,
     SEARCH_EXCEPTION,
     SYNTHESIS_SHAPE,
     Adjust,
@@ -44,6 +46,131 @@ _ALL_POINTS = [
     FINDING_GROUPS,
     SYNTHESIS_SHAPE,
 ]
+
+
+@pytest.mark.parametrize(
+    ("mode", "floor_fired", "expected"),
+    [
+        ("frequent", False, set(_ALL_POINTS)),
+        ("frequent", True, set(_ALL_POINTS)),
+        ("moderate", False, {SEARCH_EXCEPTION, SYNTHESIS_SHAPE}),
+        ("moderate", True, set(_ALL_POINTS)),
+        ("minimal", False, set()),
+        ("minimal", True, set(_ALL_POINTS)),
+        ("unattended", False, set()),
+        ("unattended", True, set()),
+    ],
+    ids=[
+        "frequent-unfired",
+        "frequent-fired",
+        "moderate-unfired",
+        "moderate-fired",
+        "minimal-unfired",
+        "minimal-fired",
+        "unattended-unfired",
+        "unattended-fired",
+    ],
+)
+def test_lattice_mode_policy_is_applied_at_every_runner_boundary(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    floor_fired: bool,
+    expected: set[str],
+) -> None:
+    """Exercise every mode × lattice point through the runner boundary path.
+
+    This deliberately does not inspect ``_LATTICE_MODE_POLICY``: the observable
+    pause surfaces prove the policy after the runner has read the point, its
+    triggers, and the mode together.  A deep plan visits all five points.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        monkeypatch.setattr(
+            runner_module,
+            "_lattice_triggers",
+            lambda *args, **kwargs: (
+                [{"trigger": "test_floor", "detail": {}}] if floor_fired else []
+            ),
+        )
+        plan = _base_plan(steering_mode=mode, steer_point_defaults=[])
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO()
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+        assert outcome.status == "succeeded"
+        paused = {
+            point["steer_point"]
+            for point, _render in io.pauses
+            if point.get("kind") == "steer_point"
+        }
+        assert paused == expected
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_each_lattice_point_exposes_its_landed_floor_only() -> None:
+    """Pin point-specific option ids and exclude depth-inappropriate controls."""
+    plan = _base_plan(search_effort="standard", analysis_depth="deep")
+    expected_ids = {
+        SEARCH_EXCEPTION: {
+            "continue",
+            "deepen_search",
+            "rescope_filters",
+            "guide_queries",
+            "abort",
+        },
+        EVIDENCE_BASE_COVERAGE: {
+            "continue",
+            "search_more",
+            "adjust_criteria_rescreen",
+            "recharacterise",
+            "scope_strata",
+            "exclude_docs",
+        },
+        DEEPENING_SELECTION: {
+            "deepen_clusters",
+            "strongest_evidence",
+            "most_relevant",
+            "adjust_budget",
+            "as_proposed",
+        },
+        FINDING_GROUPS: {"as_proposed", "regroup_granularity", "regroup_guided"},
+        SYNTHESIS_SHAPE: {"as_proposed", "emphasis_boosts", "edit_sections"},
+    }
+    for point, ids in expected_ids.items():
+        assert {option["id"] for option in build_steer_point_options(plan=plan, point=point)} == ids
+
+    non_deep = _base_plan(
+        search_effort="standard",
+        analysis_depth="standard",
+        components=["characterise", "screen_full", "select"],
+        component_rationale={
+            "characterise": "Maps themes and coverage before deeper work",
+            "screen_full": "Full-text confirmation is useful for this run",
+            "select": "Guides synthesis emphasis at standard depth",
+        },
+        grouping_facets=None,
+        extract_profiles=None,
+    )
+    assert "group" not in compose(non_deep).components
+    group_component = LATTICE_POINTS[FINDING_GROUPS].component
+    assert group_component not in compose(non_deep).components
+    p3_ids = {
+        option["id"]
+        for option in build_steer_point_options(plan=plan, point=DEEPENING_SELECTION)
+    }
+    assert {"refresh_extraction", "enable_icf", "extract_icf"}.isdisjoint(p3_ids)
 
 
 # --- Option grammar: every canonical delta compiles ------------------------
