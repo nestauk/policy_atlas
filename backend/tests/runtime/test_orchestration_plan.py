@@ -58,6 +58,19 @@ def _plan(**overrides: Any) -> OrchestrationPlan:
     return OrchestrationPlan.model_validate(_payload(**overrides))
 
 
+@pytest.mark.parametrize("section_budget", [1, 12])
+def test_section_budget_accepts_the_pinned_bounds(section_budget: int) -> None:
+    """The inert Phase-A budget mirror accepts only 1 through 12."""
+    assert _plan(section_budget=section_budget).section_budget == section_budget
+
+
+@pytest.mark.parametrize("section_budget", [0, 13])
+def test_section_budget_rejects_outside_pinned_bounds(section_budget: int) -> None:
+    """The section budget remains fail-closed until later runtime threading."""
+    with pytest.raises(ValidationError):
+        _plan(section_budget=section_budget)
+
+
 def _valid_component_sets(depth: AnalysisDepth) -> list[list[str]]:
     if depth == "landscape":
         return [[], ["characterise"]]

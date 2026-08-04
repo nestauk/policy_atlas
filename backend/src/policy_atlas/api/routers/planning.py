@@ -168,6 +168,7 @@ def _transcript_out(row: RowMapping) -> PlanningTranscriptTurnOut:
         user_message=row["user_message"],
         reply=row["reply"],
         suggestions=row["suggestions"],
+        part=row["part"],
         status=row["status"],
         created_at=row["created_at"],
         completed_at=row["completed_at"],

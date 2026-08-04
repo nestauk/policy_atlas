@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.engine import Connection
@@ -58,10 +58,11 @@ def landscape(
     project_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    scope: Annotated[Literal["cited"] | None, Query()] = None,
 ) -> LandscapeOut:
-    """Return screened-in-only landscape distributions."""
+    """Return screened-in-only or cited-only landscape distributions."""
     _owned(conn, project_id, user)
-    return repository.landscape_out(conn, project_id)
+    return repository.landscape_out(conn, project_id, scope=scope)
 
 
 @router.get("/{project_id}/groups", response_model=GroupsOut)
@@ -84,11 +85,24 @@ def evidence(
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
     status: Annotated[list[EvidenceStatusFilter] | None, Query()] = None,
     cited: Annotated[bool | None, Query()] = None,
+    sort: Annotated[Literal["title", "year", "type", "strength", "status"] | None, Query()] = None,
+    order: Annotated[Literal["asc", "desc"] | None, Query()] = None,
+    theme: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Page[EvidenceItemOut]:
     """Return a bounded page from the evidence status ladder, optionally filtered."""
     _owned(conn, project_id, user)
+    if order is not None and sort is None:
+        raise HTTPException(status_code=422, detail="order requires sort")
     return repository.evidence_page(
-        conn, project_id, page, page_size, statuses=status, cited=cited
+        conn,
+        project_id,
+        page,
+        page_size,
+        statuses=status,
+        cited=cited,
+        sort=sort,
+        order=order,
+        theme=theme,
     )
 
 
@@ -108,9 +122,7 @@ def findings(
     """Return a bounded page of IOF and ICF findings, optionally filtered."""
     _owned(conn, project_id, user)
     if group_id is not None and (facet is not None or group is not None):
-        raise HTTPException(
-            status_code=422, detail="group_id cannot be combined with facet/group"
-        )
+        raise HTTPException(status_code=422, detail="group_id cannot be combined with facet/group")
     if (facet is None) != (group is None):
         raise HTTPException(status_code=422, detail="facet and group must be provided together")
     return repository.findings_page(

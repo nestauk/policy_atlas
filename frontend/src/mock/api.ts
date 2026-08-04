@@ -135,6 +135,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         user_message: message,
         reply,
         suggestions: [],
+        part: null,
         status: "completed",
         created_at: now,
         completed_at: now,

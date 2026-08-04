@@ -152,6 +152,7 @@ class PlanDraft(BaseModel):
         assumptions: Visible assumptions and open guesses.
         expected_artefact_shape: Deterministic forecast derived from components.
         time_band: Deterministic wall-clock band derived from the two axes.
+        section_budget: Optional future synthesis cap for ordinary sections.
         steps: The composed chain, presentation-labelled, in execution order.
         ready: Whether the draft has validated fail-closed into an
             executable plan.
@@ -173,6 +174,7 @@ class PlanDraft(BaseModel):
     assumptions: list[str] | None = None
     expected_artefact_shape: str | None = None
     time_band: str | None = None
+    section_budget: int | None = Field(default=None, ge=1, le=12)
     steps: list[PlanStep] = Field(default_factory=list)
     ready: bool = False
 
@@ -221,6 +223,7 @@ class PlanningTranscriptTurnOut(BaseModel):
         user_message: Submitted user message.
         reply: Planner reply, absent until a pending turn completes.
         suggestions: Planner quick-reply suggestions, if the turn completed.
+        part: Structured sequential-planning proposal, absent for legacy turns.
         status: Durable execution state for this turn.
         created_at: Receipt timestamp, retained as display metadata.
         completed_at: Terminal timestamp, absent while still pending.
@@ -231,6 +234,7 @@ class PlanningTranscriptTurnOut(BaseModel):
     user_message: str
     reply: str | None
     suggestions: list[str] = Field(default_factory=list)
+    part: dict[str, object] | None = None
     status: Literal["pending", "completed", "failed"]
     created_at: datetime
     completed_at: datetime | None

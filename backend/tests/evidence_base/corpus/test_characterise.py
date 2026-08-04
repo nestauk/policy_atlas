@@ -1810,6 +1810,34 @@ def test_judgment_instruction_shaped_theme_name_is_stored_as_data(
     assert tag == theme_name
 
 
+def test_characterise_persists_matching_theme_identity_on_result_and_tags(
+    conn: Connection,
+) -> None:
+    """Each persisted theme carries one UUID shared by its source-tag rows."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_doc(conn, pid, rid, scope_id, title="Report", abstract="Body. [stub-theme: Housing]")
+
+    characterise_scope(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
+
+    themes = conn.execute(
+        select(characterisation_result.c.themes).where(characterisation_result.c.project_id == pid)
+    ).scalar_one()
+    persisted_theme_id = themes["themes"][0]["theme_id"]
+    assert uuid.UUID(persisted_theme_id)
+    assert conn.execute(
+        select(source_tag.c.theme_id)
+        .where(source_tag.c.project_id == pid)
+        .where(source_tag.c.asserted_by == "characterise")
+    ).scalar_one() == uuid.UUID(persisted_theme_id)
+
+
 def test_judgment_socket_deny_characterise_harness_round_trip(
     conn: Connection,
     monkeypatch: pytest.MonkeyPatch,

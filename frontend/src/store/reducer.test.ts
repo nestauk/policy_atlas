@@ -26,6 +26,7 @@ function planDraft(overrides: Partial<PlanDraft> = {}): PlanDraft {
     scoping_notes: null,
     screening_criteria: null,
     search_effort: null,
+    section_budget: null,
     steering_mode: null,
     time_band: null,
     title: null,

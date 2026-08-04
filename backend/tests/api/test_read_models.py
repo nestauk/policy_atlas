@@ -365,9 +365,10 @@ def test_evidence_url_fallback_ladder() -> None:
         "https://landing.example"
     )
     assert repository._url({}, "https://locator.example") == "https://locator.example"
-    assert repository._url(
-        {"provider_fields": {"document_url": "https://provider.example"}}, None
-    ) == "https://provider.example"
+    assert (
+        repository._url({"provider_fields": {"document_url": "https://provider.example"}}, None)
+        == "https://provider.example"
+    )
     assert repository._url({"doi": "10.1234/example"}, None) == "https://doi.org/10.1234/example"
 
 
@@ -443,10 +444,7 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert decisions.json()["data"][0]["kind"] == "search.executed"
             assert decisions.json()["data"][0]["summary"] == "Executed a search query."
             coverage = client.get(f"/api/v1/projects/{project_id}/coverage", headers=owner).json()
-            assert (
-                coverage["sentence"]
-                == "Searching completed. Coverage was judged adequate."
-            )
+            assert coverage["sentence"] == "Searching completed. Coverage was judged adequate."
             assert coverage["base"]["counts"] == {"found": 3, "relevant": 1, "screened_out": 1}
             assert coverage["backends"] == []
             assert coverage["backends_detail"] == []
@@ -485,13 +483,17 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert dossier.json()["tags"] == [
                 {"tag": "School health", "tag_type": "topic_theme", "asserted_by": "openalex"}
             ]
-            assert dossier.json()["cited_in"] == [
-                {
-                    "claim": "evidence",
-                    "quote": "Cited evidence sentence.",
-                    "section_title": "Key findings",
-                }
-            ] * 3
+            assert (
+                dossier.json()["cited_in"]
+                == [
+                    {
+                        "claim": "evidence",
+                        "quote": "Cited evidence sentence.",
+                        "section_title": "Key findings",
+                    }
+                ]
+                * 3
+            )
             assert (
                 client.get(
                     f"/api/v1/projects/{project_id}/sources/{cited_source['source_id']}",
@@ -696,9 +698,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         "description": "Training findings",
                         "size": 2,
                         "facet": "intervention",
-                        "sources": [
-                            {"source_id": str(selected_pss), "title": "Selected trial"}
-                        ],
+                        "sources": [{"source_id": str(selected_pss), "title": "Selected trial"}],
                     }
                 ],
             }
@@ -808,6 +808,285 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
                 f"/api/v1/projects/{project_id}/evidence?status=bogus", headers=owner
             )
             assert invalid.status_code == 422
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
+def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engine) -> None:
+    """Evidence sorting is collection-wide, stable, and theme-id addressable."""
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_evidence_filter_fixture(engine, project_id)
+        theme_id = uuid.uuid4()
+        with engine.begin() as conn:
+            rows = conn.execute(
+                select(
+                    project_source_snapshot.c.project_source_snapshot_id,
+                    project_source_snapshot.c.source_snapshot_id,
+                    source_snapshot.c.metadata,
+                )
+                .select_from(
+                    project_source_snapshot.join(
+                        source_snapshot,
+                        project_source_snapshot.c.source_snapshot_id
+                        == source_snapshot.c.source_snapshot_id,
+                    )
+                )
+                .where(project_source_snapshot.c.project_id == project_id)
+            ).all()
+            title_rows = {
+                row.metadata["title"]: row
+                for row in rows
+                if isinstance(row.metadata, dict) and isinstance(row.metadata.get("title"), str)
+            }
+            conn.execute(
+                update(source_snapshot)
+                .where(
+                    source_snapshot.c.source_snapshot_id == title_rows["Found 0"].source_snapshot_id
+                )
+                .values(metadata={"title": "alpha", "year": 2010})
+            )
+            conn.execute(
+                update(source_snapshot)
+                .where(
+                    source_snapshot.c.source_snapshot_id == title_rows["Found 1"].source_snapshot_id
+                )
+                .values(metadata={"title": "Bravo", "year": 2025})
+            )
+            run_id = uuid.uuid4()
+            conn.execute(
+                insert(runs).values(
+                    run_id=run_id, project_id=project_id, status="running", started_at=now()
+                )
+            )
+            conn.execute(
+                insert(source_tag).values(
+                    source_tag_id=uuid.uuid4(),
+                    project_id=project_id,
+                    project_source_snapshot_id=title_rows["Found 0"].project_source_snapshot_id,
+                    tag="Theme alpha",
+                    tag_type="topic_theme",
+                    asserted_by="characterise",
+                    created_by_run_id=run_id,
+                    created_at=now(),
+                    theme_id=theme_id,
+                )
+            )
+        try:
+            by_title = client.get(
+                f"/api/v1/projects/{project_id}/evidence?sort=title", headers=owner
+            ).json()["data"]
+            assert by_title[0]["title"] == "alpha"
+            by_year = client.get(
+                f"/api/v1/projects/{project_id}/evidence?sort=year", headers=owner
+            ).json()["data"]
+            assert [item["year"] for item in by_year if item["year"] is not None][:2] == [
+                2025,
+                2010,
+            ]
+            by_status = client.get(
+                f"/api/v1/projects/{project_id}/evidence?sort=status", headers=owner
+            ).json()["data"]
+            ranks = {
+                status: index
+                for index, status in enumerate(
+                    [
+                        "found",
+                        "screened_out",
+                        "relevant",
+                        "not_selected",
+                        "selected",
+                        "read_in_full",
+                        "findings_extracted",
+                        "cited",
+                        "unavailable",
+                    ]
+                )
+            }
+            assert [ranks[item["status"]] for item in by_status] == sorted(
+                ranks[item["status"]] for item in by_status
+            )
+            themed = client.get(
+                f"/api/v1/projects/{project_id}/evidence?theme={theme_id}", headers=owner
+            ).json()
+            assert [item["title"] for item in themed["data"]] == ["alpha"]
+            assert (
+                client.get(
+                    f"/api/v1/projects/{project_id}/evidence?order=desc", headers=owner
+                ).status_code
+                == 422
+            )
+            assert (
+                client.get(
+                    f"/api/v1/projects/{project_id}/evidence?sort=unknown", headers=owner
+                ).status_code
+                == 422
+            )
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
+def test_artefact_summary_projection_and_multi_block_omission(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Single-block summaries project; multi-block sections honestly omit them."""
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                artefact_id = conn.execute(
+                    select(synthesis_result.c.artefact_id).where(
+                        synthesis_result.c.project_id == project_id
+                    )
+                ).scalar_one()
+                original_block_id = conn.execute(
+                    select(block.c.block_id).where(block.c.artefact_id == artefact_id)
+                ).scalar_one()
+                conn.execute(
+                    update(artefact)
+                    .where(artefact.c.artefact_id == artefact_id)
+                    .values(summary="Artefact takeaway.", summary_status="verified")
+                )
+                conn.execute(
+                    update(block)
+                    .where(block.c.block_id == original_block_id)
+                    .values(summary="Section takeaway.", summary_status="verified")
+                )
+            artefact_body = client.get(
+                f"/api/v1/projects/{project_id}/artefact", headers=owner
+            ).json()
+            assert artefact_body["summary"] == "Artefact takeaway."
+            assert artefact_body["summary_status"] == "verified"
+            assert artefact_body["sections"][0]["summary"] == "Section takeaway."
+            assert artefact_body["sections"][0]["summary_status"] == "verified"
+
+            with engine.begin() as conn:
+                second_block_id = uuid.uuid4()
+                conn.execute(
+                    insert(block).values(
+                        block_id=second_block_id,
+                        artefact_id=artefact_id,
+                        version=1,
+                        content="A second physical block.",
+                        content_hash="second-block",
+                        summary="Must not project.",
+                        summary_status="verified",
+                        created_at=now(),
+                    )
+                )
+                blocks = conn.execute(
+                    select(synthesis_result.c.blocks).where(
+                        synthesis_result.c.project_id == project_id
+                    )
+                ).scalar_one()
+                conn.execute(
+                    update(synthesis_result)
+                    .where(synthesis_result.c.project_id == project_id)
+                    .values(
+                        blocks=[
+                            *blocks,
+                            {
+                                "block_id": str(second_block_id),
+                                "title": "Key findings",
+                                "role": "key_findings",
+                                "focus": "Training uptake",
+                            },
+                        ]
+                    )
+                )
+            multi_block_section = client.get(
+                f"/api/v1/projects/{project_id}/artefact", headers=owner
+            ).json()["sections"][0]
+            assert len(multi_block_section["blocks"]) == 2
+            assert multi_block_section["summary"] is None
+            assert multi_block_section["summary_status"] is None
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
+def test_landscape_cited_scope_uses_only_latest_artefact_members(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """The cited landscape excludes screened-in but uncited sources and themes."""
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                synthesis = conn.execute(
+                    select(
+                        synthesis_result.c.evidence_scope_id,
+                        synthesis_result.c.run_id,
+                    ).where(synthesis_result.c.project_id == project_id)
+                ).one()
+                selected_pss = conn.execute(
+                    select(project_source_snapshot.c.project_source_snapshot_id)
+                    .select_from(
+                        project_source_snapshot.join(
+                            source_snapshot,
+                            project_source_snapshot.c.source_snapshot_id
+                            == source_snapshot.c.source_snapshot_id,
+                        )
+                    )
+                    .where(
+                        project_source_snapshot.c.project_id == project_id,
+                        source_snapshot.c.metadata["title"].astext == "Selected trial",
+                    )
+                ).scalar_one()
+                uncited_pss = seed_select_doc(
+                    conn,
+                    project_id,
+                    synthesis.run_id,
+                    synthesis.evidence_scope_id,
+                    title="Uncited relevant trial",
+                    year=2021,
+                )
+                conn.execute(
+                    insert(characterisation_result).values(
+                        characterisation_id=uuid.uuid4(),
+                        project_id=project_id,
+                        evidence_scope_id=synthesis.evidence_scope_id,
+                        run_id=synthesis.run_id,
+                        grouping_provenance={},
+                        coverage={},
+                        themes={
+                            "themes": [
+                                {
+                                    "theme_id": str(uuid.uuid4()),
+                                    "name": "Cited theme",
+                                    "description": "Contains the cited source.",
+                                    "member_ids": [str(selected_pss)],
+                                    "size": 1,
+                                },
+                                {
+                                    "theme_id": str(uuid.uuid4()),
+                                    "name": "Uncited theme",
+                                    "description": "Contains only the uncited source.",
+                                    "member_ids": [str(uncited_pss)],
+                                    "size": 1,
+                                },
+                            ]
+                        },
+                        created_at=now(),
+                    )
+                )
+            whole = client.get(f"/api/v1/projects/{project_id}/landscape", headers=owner).json()
+            cited = client.get(
+                f"/api/v1/projects/{project_id}/landscape?scope=cited", headers=owner
+            ).json()
+            assert whole["years"] == {"2020": 1, "2021": 1}
+            assert cited["years"] == {"2020": 1}
+            assert [theme["name"] for theme in cited["themes"]] == ["Cited theme"]
+            assert (
+                client.get(
+                    f"/api/v1/projects/{project_id}/landscape?scope=whole", headers=owner
+                ).status_code
+                == 422
+            )
         finally:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)

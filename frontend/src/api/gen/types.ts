@@ -304,7 +304,7 @@ export interface paths {
         };
         /**
          * Landscape
-         * @description Return screened-in-only landscape distributions.
+         * @description Return screened-in-only or cited-only landscape distributions.
          */
         get: operations["landscape_api_v1_projects__project_id__landscape_get"];
         put?: never;
@@ -491,6 +491,8 @@ export interface components {
          *         coverage_snapshot: Embedded coverage snapshot.
          *         sections: Artefact sections, in final page order.
          *         references: Numbered reference list.
+         *         summary: Artefact-level summary, if produced.
+         *         summary_status: Artefact-level summary production state.
          */
         ArtefactOut: {
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
@@ -500,6 +502,10 @@ export interface components {
             references?: components["schemas"]["ReferenceOut"][];
             /** Sections */
             sections?: components["schemas"]["SectionOut"][];
+            /** Summary */
+            summary?: string | null;
+            /** Summary Status */
+            summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
         };
@@ -1570,6 +1576,7 @@ export interface components {
          *         assumptions: Visible assumptions and open guesses.
          *         expected_artefact_shape: Deterministic forecast derived from components.
          *         time_band: Deterministic wall-clock band derived from the two axes.
+         *         section_budget: Optional future synthesis cap for ordinary sections.
          *         steps: The composed chain, presentation-labelled, in execution order.
          *         ready: Whether the draft has validated fail-closed into an
          *             executable plan.
@@ -1644,6 +1651,11 @@ export interface components {
              * @default null
              */
             search_effort: ("rapid" | "standard" | "deep") | null;
+            /**
+             * Section Budget
+             * @default null
+             */
+            section_budget: number | null;
             /**
              * Steering Mode
              * @default null
@@ -1731,6 +1743,7 @@ export interface components {
          *         user_message: Submitted user message.
          *         reply: Planner reply, absent until a pending turn completes.
          *         suggestions: Planner quick-reply suggestions, if the turn completed.
+         *         part: Structured sequential-planning proposal, absent for legacy turns.
          *         status: Durable execution state for this turn.
          *         created_at: Receipt timestamp, retained as display metadata.
          *         completed_at: Terminal timestamp, absent while still pending.
@@ -1748,6 +1761,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Part */
+            part?: {
+                [key: string]: unknown;
+            } | null;
             /** Reply */
             reply: string | null;
             /**
@@ -2055,6 +2072,8 @@ export interface components {
          *         title: Section title.
          *         role: Section role (determines page position).
          *         blocks: The section's prose blocks, in order.
+         *         summary: Verified summary for a single-block section, if available.
+         *         summary_status: Summary production state for a single-block section.
          */
         SectionOut: {
             /** Blocks */
@@ -2066,6 +2085,10 @@ export interface components {
              * @enum {string}
              */
             role: "key_findings" | "standard" | "conclusions";
+            /** Summary */
+            summary?: string | null;
+            /** Summary Status */
+            summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
         };
@@ -2245,6 +2268,7 @@ export interface components {
          *         name: Theme name.
          *         size: Number of items in the theme.
          *         description: Short theme description.
+         *         theme_id: Stable theme identity, absent for legacy characterisations.
          */
         ThemeOut: {
             /** Description */
@@ -2253,6 +2277,8 @@ export interface components {
             name: string;
             /** Size */
             size: number;
+            /** Theme Id */
+            theme_id?: string | null;
         };
         /**
          * ThemeRefItemOut
@@ -2770,6 +2796,9 @@ export interface operations {
                 page_size?: number;
                 status?: ("found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable" | "Included")[] | null;
                 cited?: boolean | null;
+                sort?: ("title" | "year" | "type" | "strength" | "status") | null;
+                order?: ("asc" | "desc") | null;
+                theme?: string | null;
             };
             header?: never;
             path: {
@@ -2902,7 +2931,9 @@ export interface operations {
     };
     landscape_api_v1_projects__project_id__landscape_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "cited" | null;
+            };
             header?: never;
             path: {
                 project_id: string;

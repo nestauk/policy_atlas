@@ -34,6 +34,7 @@ def insert_source_tags(
     now: datetime,
     assertions: list[tuple[uuid.UUID, str, str]],
     tag_type: str = TOPIC_THEME,
+    theme_id: uuid.UUID | None = None,
 ) -> None:
     """Insert tag assertion rows, idempotent on the assertion unique constraint.
 
@@ -45,6 +46,7 @@ def insert_source_tags(
         assertions: ``(project_source_snapshot_id, tag, asserted_by)`` triples.
         tag_type: The tag-assignment type; defaults to ``topic_theme`` so
             existing callers are untouched.
+        theme_id: Optional durable identity for a characterisation theme.
     """
     rows = [
         {
@@ -56,6 +58,7 @@ def insert_source_tags(
             "asserted_by": asserted_by,
             "created_by_run_id": run_id,
             "created_at": now,
+            "theme_id": theme_id,
         }
         for pss_id, tag, asserted_by in assertions
     ]
@@ -63,5 +66,8 @@ def insert_source_tags(
         conn.execute(
             pg_insert(source_tag)
             .values(rows)
-            .on_conflict_do_nothing(constraint="uq_source_tag_assertion")
+            .on_conflict_do_update(
+                constraint="uq_source_tag_assertion",
+                set_={"theme_id": theme_id},
+            )
         )

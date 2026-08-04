@@ -10,6 +10,7 @@ function turn(index: number, createdAt: string): PlanningThreadTurn {
     user_message: `Question ${index}`,
     reply: `Reply ${index}`,
     suggestions: [],
+    part: null,
     status: "completed",
     created_at: createdAt,
     completed_at: createdAt,

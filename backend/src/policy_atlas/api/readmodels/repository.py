@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from collections import Counter
 from collections.abc import Iterable, Mapping
+from functools import cmp_to_key
 from typing import Any, Literal, cast
 
 from sqlalchemy import func, select
@@ -218,9 +219,7 @@ def _cited_snapshot_ids(conn: Connection, artefact_id: uuid.UUID) -> set[uuid.UU
             select(chunk.c.source_snapshot_id)
             .distinct()
             .select_from(
-                citation.join(
-                    annotation, citation.c.annotation_id == annotation.c.annotation_id
-                )
+                citation.join(annotation, citation.c.annotation_id == annotation.c.annotation_id)
                 .join(chunk, citation.c.chunk_id == chunk.c.chunk_id)
                 .join(block, block.c.block_id == annotation.c.block_id)
             )
@@ -316,13 +315,44 @@ def funnel_out(conn: Connection, project_id: uuid.UUID) -> FunnelOut:
     )
 
 
-def landscape_out(conn: Connection, project_id: uuid.UUID) -> LandscapeOut:
-    """Return distributions computed only over effective screened-in rows."""
+def landscape_out(
+    conn: Connection, project_id: uuid.UUID, *, scope: Literal["cited"] | None = None
+) -> LandscapeOut:
+    """Return whole-screened-in or latest-artefact-cited distributions.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope: ``"cited"`` restricts distributions to latest-artefact citations.
+
+    Returns:
+        Landscape distributions for the requested corpus scope.
+    """
     relevant_ids = [
         key
         for key, value in _effective_screens(conn, project_id).items()
         if value.status == "relevant"
     ]
+    if scope == "cited":
+        synthesis = _latest_synthesis(conn, project_id)
+        cited_snapshots = (
+            _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
+        )
+        if cited_snapshots:
+            relevant_ids = list(
+                conn.execute(
+                    select(project_source_snapshot.c.project_source_snapshot_id).where(
+                        project_source_snapshot.c.project_id == project_id,
+                        project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids),
+                        (
+                            project_source_snapshot.c.source_snapshot_id.in_(cited_snapshots)
+                            | project_source_snapshot.c.full_text_snapshot_id.in_(cited_snapshots)
+                        ),
+                    )
+                ).scalars()
+            )
+        else:
+            relevant_ids = []
     if not relevant_ids:
         return LandscapeOut()
     base_rows = conn.execute(
@@ -376,12 +406,25 @@ def landscape_out(conn: Connection, project_id: uuid.UUID) -> LandscapeOut:
     if isinstance(characterisation, Mapping) and isinstance(characterisation.get("themes"), list):
         for item in characterisation["themes"]:
             if isinstance(item, Mapping) and isinstance(item.get("name"), str):
-                size = item.get("size")
+                member_ids = _uuid_members(item.get("member_ids"))
+                size: Any
+                if scope == "cited":
+                    size = sum(member_id in relevant_ids for member_id in member_ids)
+                    if size == 0:
+                        continue
+                else:
+                    size = item.get("size")
+                raw_theme_id = item.get("theme_id")
+                try:
+                    theme_id = uuid.UUID(raw_theme_id) if isinstance(raw_theme_id, str) else None
+                except ValueError:
+                    theme_id = None
                 themes.append(
                     ThemeOut(
                         name=item["name"],
                         description=cast(str, item.get("description") or ""),
                         size=size if isinstance(size, int) else 0,
+                        theme_id=theme_id,
                     )
                 )
     return LandscapeOut(
@@ -445,14 +488,19 @@ def evidence_page(
     *,
     statuses: Iterable[str] | None = None,
     cited: bool | None = None,
+    sort: Literal["title", "year", "type", "strength", "status"] | None = None,
+    order: Literal["asc", "desc"] | None = None,
+    theme: uuid.UUID | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status project-wide before paging.
 
-    `status`/`cited` filters are collection-true: status is derived for
+    `status`/`cited`/`theme` filters are collection-true: status is derived for
     every project source (bounded — one project's worth of rows, the
     `funnel_out` precedent) before filtering and paginating, so
     `total_items` reflects the filtered collection, never the unfiltered
-    project total or the page size.
+    project total or the page size. Sorting likewise runs over that complete
+    collection before pagination; ingestion order remains the
+    stable tie-breaker.
     """
     target_statuses = _expand_evidence_statuses(statuses) if statuses else None
     rows = conn.execute(
@@ -519,7 +567,19 @@ def evidence_page(
     cited_snapshots = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
-    items: list[EvidenceItemOut] = []
+    themed_sources = (
+        set(
+            conn.execute(
+                select(source_tag.c.project_source_snapshot_id).where(
+                    source_tag.c.project_id == project_id,
+                    source_tag.c.theme_id == theme,
+                )
+            ).scalars()
+        )
+        if theme is not None
+        else None
+    )
+    sortable_items: list[tuple[EvidenceItemOut, int | None]] = []
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
         screen = screens.get(row.project_source_snapshot_id)
@@ -551,34 +611,102 @@ def evidence_page(
             continue
         if cited is not None and row_cited != cited:
             continue
+        if themed_sources is not None and row.project_source_snapshot_id not in themed_sources:
+            continue
         classification = classifications.get(row.project_source_snapshot_id)
         appraisal = appraisals.get(row.project_source_snapshot_id)
-        items.append(
-            EvidenceItemOut(
-                source_id=row.project_source_snapshot_id,
-                title=_title(metadata, row.source_locator),
-                year=_year(metadata),
-                venue=_venue(metadata),
-                origin=_origin(row.origin, metadata),
-                status=cast(Any, status),
-                status_reason=reason,
-                evidence_type=classification.primary_evidence_type if classification else None,
-                appraisal_tier=SCORE_LABELS.get(appraisal.quality_score) if appraisal else None,
-                cited=row_cited,
-                url=_url(metadata, row.source_locator),
-                screen_confidence=screen.screen_decision_confidence if screen else None,
-                screen_basis=screen.screen_basis if screen else None,
-                screen_stage=screen.screen_stage if screen else None,
-                screen_status=cast(Any, screen.status)
-                if screen and screen.status in {"relevant", "not_relevant", "excluded_retracted"}
-                else None,
+        sortable_items.append(
+            (
+                EvidenceItemOut(
+                    source_id=row.project_source_snapshot_id,
+                    title=_title(metadata, row.source_locator),
+                    year=_year(metadata),
+                    venue=_venue(metadata),
+                    origin=_origin(row.origin, metadata),
+                    status=cast(Any, status),
+                    status_reason=reason,
+                    evidence_type=classification.primary_evidence_type if classification else None,
+                    appraisal_tier=SCORE_LABELS.get(appraisal.quality_score) if appraisal else None,
+                    cited=row_cited,
+                    url=_url(metadata, row.source_locator),
+                    screen_confidence=screen.screen_decision_confidence if screen else None,
+                    screen_basis=screen.screen_basis if screen else None,
+                    screen_stage=screen.screen_stage if screen else None,
+                    screen_status=cast(Any, screen.status)
+                    if screen
+                    and screen.status in {"relevant", "not_relevant", "excluded_retracted"}
+                    else None,
+                ),
+                appraisal.quality_score if appraisal is not None else None,
             )
         )
+    if sort is not None:
+        direction = order or ("desc" if sort == "year" else "asc")
+
+        def compare(
+            left: tuple[EvidenceItemOut, int | None],
+            right: tuple[EvidenceItemOut, int | None],
+        ) -> int:
+            return _compare_evidence_sort(left, right, sort=sort, direction=direction)
+
+        sortable_items.sort(key=cmp_to_key(compare))
+    items = [item for item, _score in sortable_items]
     total = len(items)
     page_items = items[(page - 1) * page_size : page * page_size]
     return Page(
         data=page_items, pagination=PageMeta(page=page, page_size=page_size, total_items=total)
     )
+
+
+_EVIDENCE_STATUS_SORT_RANK = {
+    "found": 0,
+    "screened_out": 1,
+    "relevant": 2,
+    "not_selected": 3,
+    "selected": 4,
+    "read_in_full": 5,
+    "findings_extracted": 6,
+    "cited": 7,
+    "unavailable": 8,
+}
+
+
+def _compare_evidence_sort(
+    left: tuple[EvidenceItemOut, int | None],
+    right: tuple[EvidenceItemOut, int | None],
+    *,
+    sort: Literal["title", "year", "type", "strength", "status"],
+    direction: Literal["asc", "desc"],
+) -> int:
+    """Compare two already-projected evidence rows with nulls always last."""
+    left_item, left_score = left
+    right_item, right_score = right
+    left_value: str | int | None
+    right_value: str | int | None
+    if sort == "title":
+        left_value, right_value = left_item.title.casefold(), right_item.title.casefold()
+    elif sort == "year":
+        left_value, right_value = left_item.year, right_item.year
+    elif sort == "type":
+        left_value, right_value = left_item.evidence_type, right_item.evidence_type
+    elif sort == "strength":
+        left_value, right_value = left_score, right_score
+    else:
+        left_value = _EVIDENCE_STATUS_SORT_RANK[left_item.status]
+        right_value = _EVIDENCE_STATUS_SORT_RANK[right_item.status]
+    if left_value is None:
+        return 0 if right_value is None else 1
+    if right_value is None:
+        return -1
+    if left_value == right_value:
+        return 0
+    if isinstance(left_value, str):
+        right_text = cast(str, right_value)
+        result = -1 if left_value < right_text else 1
+    else:
+        right_rank = cast(int, right_value)
+        result = -1 if left_value < right_rank else 1
+    return result if direction == "asc" else -result
 
 
 def _latest_relevance(conn: Connection, project_id: uuid.UUID) -> dict[str, str]:
@@ -933,11 +1061,16 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         if isinstance(item, Mapping) and isinstance(item.get("block_id"), str)
     ]
     ids = [entry[1] for entry in parsed_specs]
-    prose = (
+    block_rows = (
         {
-            row.block_id: row.content
+            row.block_id: row
             for row in conn.execute(
-                select(block.c.block_id, block.c.content).where(block.c.block_id.in_(ids))
+                select(
+                    block.c.block_id,
+                    block.c.content,
+                    block.c.summary,
+                    block.c.summary_status,
+                ).where(block.c.block_id.in_(ids))
             ).all()
         }
         if ids
@@ -1094,8 +1227,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                     evidence_type=(
                         classification_row.primary_evidence_type
                         if pss_id is not None
-                        and (classification_row := citation_classifications.get(pss_id))
-                        is not None
+                        and (classification_row := citation_classifications.get(pss_id)) is not None
                         else None
                     ),
                 )
@@ -1118,27 +1250,37 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
             )
         )
-    sections: list[SectionOut] = []
+    section_entries: dict[tuple[str, str, str | None], list[uuid.UUID]] = {}
     for spec, block_id in parsed_specs:
-        role = (
+        role: str = cast(
+            str,
             spec.get("role")
             if spec.get("role") in {"key_findings", "standard", "conclusions"}
-            else "standard"
+            else "standard",
         )
+        title = cast(str, spec.get("title") or "")
+        focus = cast(str | None, spec.get("focus")) if isinstance(spec.get("focus"), str) else None
+        section_entries.setdefault((title, role, focus), []).append(block_id)
+    sections: list[SectionOut] = []
+    for (title, role, focus), section_block_ids in section_entries.items():
+        single_block = block_rows.get(section_block_ids[0]) if len(section_block_ids) == 1 else None
         sections.append(
             SectionOut(
-                title=cast(str, spec.get("title") or ""),
+                title=title,
                 role=cast(Any, role),
-                focus=cast(str | None, spec.get("focus"))
-                if isinstance(spec.get("focus"), str)
-                else None,
+                focus=focus,
                 blocks=[
                     BlockOut(
                         block_id=block_id,
-                        prose=prose.get(block_id, ""),
+                        prose=block_rows[block_id].content if block_id in block_rows else "",
                         claims=claims_by_block.get(block_id, []),
                     )
+                    for block_id in section_block_ids
                 ],
+                summary=single_block.summary if single_block is not None else None,
+                summary_status=(
+                    cast(Any, single_block.summary_status) if single_block is not None else None
+                ),
             )
         )
     refs_out = []
@@ -1187,6 +1329,8 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     return ArtefactOut(
         title=artefact_row["title"],
         question=scope or "",
+        summary=cast(str | None, artefact_row["summary"]),
+        summary_status=cast(Any, artefact_row["summary_status"]),
         coverage_snapshot=CoverageSnapshotOut(
             source_count=len(refs_out),
             study_types=study_types,

@@ -21,6 +21,7 @@ const durableTurn: PlanningTranscriptTurn = {
   user_message: "Which interventions improve attendance?",
   reply: "I will focus the evidence search on attendance interventions.",
   suggestions: [],
+  part: null,
   status: "completed",
   created_at: "2026-07-28T10:00:00Z",
   completed_at: "2026-07-28T10:00:02Z",

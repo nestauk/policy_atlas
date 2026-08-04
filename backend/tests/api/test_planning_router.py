@@ -270,6 +270,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 "user_message": "Recoverable planner failure",
                 "reply": None,
                 "suggestions": [],
+                "part": None,
                 "status": "failed",
                 "created_at": listed.json()["data"][0]["created_at"],
                 "completed_at": listed.json()["data"][0]["completed_at"],

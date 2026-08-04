@@ -632,6 +632,7 @@ class OrchestrationPlan(BaseModel):
         expected_artefact_shape: Deterministic forecast derived from components.
         assumptions: Visible assumptions and open guesses.
         time_band: Deterministic wall-clock band derived from the two axes.
+        section_budget: Optional future synthesis cap for ordinary sections.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -653,6 +654,7 @@ class OrchestrationPlan(BaseModel):
     expected_artefact_shape: str = ""
     assumptions: list[str] = Field(default_factory=list)
     time_band: str = ""
+    section_budget: int | None = Field(default=None, ge=1, le=12)
 
     @field_validator("title", "question")
     @classmethod
