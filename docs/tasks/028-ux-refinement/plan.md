@@ -11,7 +11,7 @@
 > first, phase 0).
 > Contract: [contract.md](contract.md) (APPROVED 2026-08-04; two mechanism
 > corrections from this lane folded — approval-at-ready seam, live-check
-> estimate). ADR 0028 drafted (flips Accepted at this gate).
+> estimate).
 >
 > **Fresh build conversation re-grounds from:** contract.md · this plan ·
 > [api-additions.md](api-additions.md) · the three binding mock-ups ·
