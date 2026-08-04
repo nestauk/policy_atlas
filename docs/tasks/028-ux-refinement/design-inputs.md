@@ -52,13 +52,12 @@ grouped). These are the slice's requirements source.
 
 ## 2. Claude Design mock-up (owner-authored, 2026-08)
 
-`mockup/policy-atlas-ux-v2.dc.html` — copied from the claude.ai/design project
-"Policy Atlas UX improvements"
+The owner's claude.ai/design project "Policy Atlas UX improvements"
 (https://claude.ai/design/p/1ec48731-40e5-4c42-be0d-d0283dc6af8c, file
-`Policy Atlas UX v2.dc.html`). It is a **UX spec, not code to port** — same
-standing rule as the demo branch in 027: markup, copy and interaction design
-are the spec; its data/state layer (`support.js` dc-runtime, kept out of the
-repo) never crosses. Notable encoded decisions:
+`Policy Atlas UX v2.dc.html`). **Not committed** — it is a dc-runtime
+template that doesn't render standalone, and the binding design records in
+this folder supersede it wherever they conflict (owner, 2026-08-04). It was
+the requirements input; notable decisions it encoded:
 
 - Centred single-column planning chat (max-width ~680px), empty-state prompt,
   plan parts arriving as cards ("Plan · 1 of 4" … "4 of 4": question · scope ·

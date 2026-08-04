@@ -47,8 +47,9 @@ know where to look during planning (split attention between chat and plan
 pane), information overload in the outputs, and text that is too small and too
 verbose. Plus a mechanics list: composer, sorting, navigation, naming.
 
-The owner's Claude Design mock-up (`mockup/policy-atlas-ux-v2.dc.html`) is the
-UX spec's starting point — same rule as 027's demo spec: interaction design
+The owner's Claude Design mock-up (linked in design-inputs § 2; removed from
+the repo 2026-08-04 — a non-rendering dc-runtime template) was the UX spec's
+starting point — same rule as 027's demo spec: interaction design
 and copy shape cross; its runtime never does. **Where it conflicts with the
 binding design records (`mockup/planning-stage.html`,
 `mockup/checkin-taxonomy.html`, `mockup/tab-ia-options.html`), the binding
