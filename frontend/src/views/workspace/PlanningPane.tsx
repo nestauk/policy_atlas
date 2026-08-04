@@ -72,10 +72,68 @@ export function threadInputs(
   return { boundaries, runDecisions };
 }
 
+/**
+ * The message composer: a bounded auto-growing textarea (Enter sends,
+ * Shift+Enter inserts a newline) plus its keybinding hint. Split out from
+ * `PlanningPane` so the Enter/Shift+Enter/disabled behaviour is unit-testable
+ * without the transcript/run/decision store wiring.
+ */
+export function Composer({
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+  disabled,
+  sendDisabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  placeholder: string;
+  /** Textarea's own disabled state (027: honest-copy placeholder swap). */
+  disabled: boolean;
+  /** Send button's disabled state (027: also covers in-flight submission). */
+  sendDisabled: boolean;
+}) {
+  return (
+    <div>
+      <form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <label className="sr-only" htmlFor="planning-message">
+          Message the planner
+        </label>
+        <textarea
+          id="planning-message"
+          rows={3}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            onSubmit();
+          }}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="max-h-60 flex-1 resize-none overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-meta [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
+        />
+        <Button type="submit" variant="secondary" disabled={sendDisabled}>
+          Send
+        </Button>
+      </form>
+      <p className="mt-1 text-caption text-grey">Enter to send · Shift+Enter for a new line</p>
+    </div>
+  );
+}
+
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
-      <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">{scrub(text)}</p>
+      <p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p>
     </div>
   );
 }
@@ -83,7 +141,7 @@ function UserBubble({ text }: { text: string }) {
 function PlannerBubble({ text }: { text: string }) {
   return (
     <div className="anim-rise mr-8 border border-line bg-paper px-3.5 py-2.5">
-      <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-ink">{scrub(text)}</p>
+      <p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p>
     </div>
   );
 }
@@ -106,13 +164,13 @@ function DurableTurn({
       <UserBubble text={turn.user_message} />
       {turn.status === "completed" && turn.reply !== null && <PlannerBubble text={turn.reply} />}
       {turn.status === "pending" && (
-        <p role="status" className="mr-8 px-3.5 text-[12.5px] text-grey">
+        <p role="status" className="mr-8 px-3.5 text-caption text-grey">
           This turn didn't finish — it will retry or expire shortly.
         </p>
       )}
       {turn.status === "failed" && (
         <div className="mr-8 border border-red-tint bg-red-tint/40 px-3.5 py-2.5">
-          <p className="text-[12.5px] text-ink">This turn didn't complete.</p>
+          <p className="text-caption text-ink">This turn didn't complete.</p>
           {isLatest && (
             <Button
               size="sm"
@@ -210,7 +268,7 @@ function RunBlock({
   const presentedDecisions = presentRunDecisions(decisions, stages);
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 text-[11.5px] text-grey">
+      <div className="flex items-center gap-2 text-caption text-grey">
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
         <span>Analysis run{status !== null ? ` — ${status}` : ""}</span>
         <span aria-hidden="true" className="h-px flex-1 bg-line" />
@@ -220,7 +278,7 @@ function RunBlock({
           key={decision.sequence}
           className="mx-4 border-l-2 border-l-yellow bg-yellow-tint/50 px-3 py-2"
         >
-          <p className="text-[12px] text-ink">
+          <p className="text-caption text-ink">
             {scrub(decision.summary)}{decision.count > 1 ? ` × ${decision.count}` : ""}
           </p>
         </div>
@@ -288,7 +346,7 @@ export function PlanningPane({
       <Divider />
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {transcript.isPending && (
-          <div role="status" className="anim-breathe text-[12.5px] text-grey">
+          <div role="status" className="anim-breathe text-caption text-grey">
             Loading your planning conversation…
           </div>
         )}
@@ -296,7 +354,7 @@ export function PlanningPane({
           (errorCode(transcript.error) === "unauthenticated" ? (
             <ReauthRedirect />
           ) : (
-            <div role="status" className="text-[12.5px] text-grey">
+            <div role="status" className="text-caption text-grey">
               <p>Your planning conversation couldn't be loaded.</p>
               <Button
                 size="sm"
@@ -311,12 +369,12 @@ export function PlanningPane({
         {transcript.data !== undefined &&
           thread.length === 0 &&
           transcript.optimisticTurns.length === 0 && (
-            <div role="status" className="text-[12.5px] leading-relaxed text-grey">
+            <div role="status" className="max-w-prose-measure text-caption leading-relaxed text-grey">
               <p>
                 Describe the policy question you need evidence for. The planner refines it with
                 you into an analysis plan you approve before anything runs.
               </p>
-              <p className="mt-2 text-[11.5px]">Your conversation is kept — it survives restarts.</p>
+              <p className="mt-2 text-caption">Your conversation is kept — it survives restarts.</p>
             </div>
           )}
 
@@ -348,7 +406,7 @@ export function PlanningPane({
             <UserBubble text={turn.userMessage} />
             {turn.status === "failed" && (
               <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
-                <p className="text-[12.5px] text-ink">
+                <p className="text-caption text-ink">
                   {isConflictCode(turn.errorCode)
                     ? conflictSentences[turn.errorCode]
                     : "That turn couldn't be processed. Your draft so far is unchanged."}
@@ -381,7 +439,7 @@ export function PlanningPane({
         ))}
 
         {transcript.isSubmitting && (
-          <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-[12.5px] text-grey">
+          <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-caption text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
             Planning…
           </div>
@@ -394,7 +452,7 @@ export function PlanningPane({
                 key={suggestion}
                 type="button"
                 onClick={() => send({ message: suggestion, clientTurnId: crypto.randomUUID() })}
-                className="anim-rise cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-[11.5px] font-semibold text-blue hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
+                className="anim-rise cursor-pointer border border-blue-tint bg-blue-tint px-2.5 py-1 text-caption font-semibold text-blue hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
               >
                 {scrub(suggestion)}
               </button>
@@ -414,34 +472,20 @@ export function PlanningPane({
 
       <div className="border-t border-line px-4 py-3">
         {runActive && (
-          <p role="status" className="mb-2 text-[11.5px] leading-relaxed text-grey">
+          <p role="status" className="mb-2 text-caption leading-relaxed text-grey">
             {runStatus === "paused"
               ? "The analysis is paused at a check-in above. Replanning unlocks when the run finishes."
               : "The analysis is running — steer it from its check-ins. Replanning unlocks when it finishes."}
           </p>
         )}
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            send({ message, clientTurnId: crypto.randomUUID() });
-          }}
-        >
-          <label className="sr-only" htmlFor="planning-message">
-            Message the planner
-          </label>
-          <input
-            id="planning-message"
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            placeholder={runActive ? "Replanning is available after the run" : "What do you need evidence on?"}
-            disabled={runActive}
-            className="flex-1 border border-line-2 bg-paper px-3 py-2.5 text-[13px] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
-          />
-          <Button type="submit" variant="secondary" disabled={composerDisabled}>
-            Send
-          </Button>
-        </form>
+        <Composer
+          value={message}
+          onChange={setMessage}
+          onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
+          placeholder={runActive ? "Replanning is available after the run" : "What do you need evidence on?"}
+          disabled={runActive}
+          sendDisabled={composerDisabled}
+        />
       </div>
     </section>
   );

@@ -35,16 +35,16 @@ export function AnsweredCheckIn({
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone="green">Answered</Chip>
         {decidedBy !== undefined && decidedBy !== null && (
-          <span className="text-[11.5px] text-grey">{decidedBy}</span>
+          <span className="text-caption text-grey">{decidedBy}</span>
         )}
       </div>
       {sessionAnswer !== null && (
-        <p className="mt-2 text-[12.5px] text-ink">
+        <p className="mt-2 text-caption text-ink">
           You chose <span className="font-semibold">{scrub(sessionAnswer.chosenOptionLabel)}</span>
         </p>
       )}
       {sessionAnswer !== null && rejectedOptions.length > 0 && (
-        <details className="mt-2 text-[12px] text-grey">
+        <details className="mt-2 text-caption text-grey">
           <summary className="cursor-pointer">Other options</summary>
           <ul className="mt-1 list-disc pl-4">
             {rejectedOptions.map((label) => (
@@ -54,12 +54,12 @@ export function AnsweredCheckIn({
         </details>
       )}
       {prose !== null && (
-        <p className="mt-2 border-l-2 border-l-line pl-2.5 text-[12.5px] italic text-ink">
+        <p className="mt-2 max-w-prose-measure border-l-2 border-l-line pl-2.5 text-caption italic text-ink">
           “{scrub(prose)}”
         </p>
       )}
       {details.length > 0 && (
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[12px]">
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-caption">
           {details.map(({ label, value }) => (
             <div key={label} className="contents">
               <dt className="text-grey">{label}</dt>
@@ -69,7 +69,7 @@ export function AnsweredCheckIn({
         </dl>
       )}
       {sessionAnswer === null && prose === null && details.length === 0 && (
-        <p className="mt-1.5 text-[12px] text-grey">The run continued as suggested.</p>
+        <p className="mt-1.5 text-caption text-grey">The run continued as suggested.</p>
       )}
     </Card>
   );

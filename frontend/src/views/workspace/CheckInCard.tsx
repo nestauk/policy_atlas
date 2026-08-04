@@ -97,11 +97,11 @@ export function CheckInCard({
         <div className="flex items-center gap-2">
           <Chip tone="blue">Confirm your steer</Chip>
         </div>
-        <p className="mt-2 text-[12.5px] text-grey">
+        <p className="mt-2 text-caption text-grey">
           Here's how your instruction compiled into plan changes. Nothing applies until
           you confirm.
         </p>
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-caption leading-relaxed text-ink">
           {scrub(compiled.render)}
         </pre>
         <div className="mt-4 flex items-center gap-2">
@@ -145,7 +145,7 @@ export function CheckInCard({
           </Button>
         </div>
         {notice !== null && (
-          <p role="alert" className="mt-3 text-xs text-red">
+          <p role="alert" className="mt-3 text-caption text-red">
             {notice}
           </p>
         )}
@@ -159,7 +159,7 @@ export function CheckInCard({
   return (
     <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
       {orchestratorSuggested && (
-        <p className="mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-grey">
+        <p className="mb-1.5 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
           Suggested by the orchestrator
         </p>
       )}
@@ -168,16 +168,16 @@ export function CheckInCard({
         {stageLabel !== null && <Chip tone="soft">{scrub(stageLabel)}</Chip>}
       </div>
       {triggerLines.length > 0 && (
-        <p className="mt-2 text-[12px] leading-relaxed text-grey">{triggerLines.join(" ")}</p>
+        <p className="mt-2 max-w-prose-measure text-caption leading-relaxed text-grey">{triggerLines.join(" ")}</p>
       )}
       {presentedRender === null ? (
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-caption leading-relaxed text-ink">
           {scrub(checkIn.render)}
         </pre>
       ) : (
         <div className="mt-3 border border-line bg-paper-2 p-3">
-          <p className="text-[12.5px] font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
-          <p className="mt-0.5 text-[12px] text-grey">
+          <p className="text-caption font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
+          <p className="mt-0.5 text-caption text-grey">
             Completed in {presentedRender.seconds}s
           </p>
           {presentedRender.counts.length > 0 && (
@@ -189,9 +189,9 @@ export function CheckInCard({
               ))}
             </div>
           )}
-          <details className="mt-2 text-[11.5px] text-grey">
+          <details className="mt-2 text-caption text-grey">
             <summary className="cursor-pointer">Technical detail</summary>
-            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper p-2 font-sans text-[11.5px] leading-relaxed text-ink">
+            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper p-2 font-sans text-caption leading-relaxed text-ink">
               {scrub(checkIn.render)}
             </pre>
           </details>
@@ -228,7 +228,7 @@ export function CheckInCard({
               {option.suggested && <Chip tone="blue">Suggested</Chip>}
             </div>
             {option.description.length > 0 && (
-              <p className="text-xs leading-relaxed text-grey">{scrub(option.description)}</p>
+              <p className="text-caption leading-relaxed text-grey">{scrub(option.description)}</p>
             )}
             {option.id === "change_mode" && changeModeOpen && (
               <form
@@ -246,7 +246,7 @@ export function CheckInCard({
                   id="change-mode-select"
                   value={changeModeValue}
                   onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
-                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-blue"
+                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-caption focus-visible:outline-2 focus-visible:outline-blue"
                 >
                   {CHANGE_MODE_VALUES.flatMap((value) => {
                     const label = vocabLabel(STEERING_MODE_LABEL, value);
@@ -289,7 +289,7 @@ export function CheckInCard({
           );
         }}
       >
-        <label className="text-xs font-semibold text-navy" htmlFor="check-in-free-text">
+        <label className="text-caption font-semibold text-navy" htmlFor="check-in-free-text">
           Or steer in your own words
         </label>
         <div className="mt-1.5 flex items-center gap-2">
@@ -299,7 +299,7 @@ export function CheckInCard({
             value={freeText}
             onChange={(event) => setFreeText(event.target.value)}
             placeholder="e.g. prioritise UK school-based studies"
-            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-[12.5px] focus-visible:outline-2 focus-visible:outline-blue"
+            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-caption focus-visible:outline-2 focus-visible:outline-blue"
           />
           <Button
             type="submit"
@@ -310,7 +310,7 @@ export function CheckInCard({
             Compile
           </Button>
         </div>
-        <p className="mt-1.5 text-[11px] text-grey">
+        <p className="mt-1.5 text-caption text-grey">
           Your words compile into plan changes you confirm before they apply.
         </p>
       </form>
@@ -341,7 +341,7 @@ export function CheckInCard({
       </div>
 
       {notice !== null && (
-        <p role="alert" className="mt-3 text-xs text-red">
+        <p role="alert" className="mt-3 text-caption text-red">
           {notice}
         </p>
       )}

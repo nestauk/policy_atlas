@@ -68,10 +68,10 @@ export function LandscapeView() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
-      <h1 className="mb-1 font-display text-xl font-extrabold text-navy">
+      <h1 className="mb-1 font-display text-title font-extrabold text-navy">
         Evidence landscape
       </h1>
-      <p className="mb-5 text-[12.5px] text-grey">
+      <p className="mb-5 text-caption text-grey">
         Distributions describe the screened-in sources only; the funnel spans the whole
         flow.
       </p>
@@ -88,7 +88,7 @@ export function LandscapeView() {
         (isUnauthenticated ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="p-8 text-center text-[13px] text-navy">
+          <Card role="alert" className="p-8 text-center text-meta text-navy">
             The landscape couldn't be loaded.{" "}
             <button
               type="button"
@@ -104,7 +104,7 @@ export function LandscapeView() {
         ))}
 
       {noData && (
-        <Card role="status" className="p-8 text-center text-[13px] text-grey">
+        <Card role="status" className="p-8 text-center text-meta text-grey">
           The landscape appears once screening has run.
         </Card>
       )}
@@ -168,7 +168,7 @@ export function LandscapeView() {
                   <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
                 </div>
               </Card>
-              <p className="mt-2 text-[11.5px] text-grey">Where sources were published, not where the studies were conducted.</p>
+              <p className="mt-2 text-caption text-grey">Where sources were published, not where the studies were conducted.</p>
             </div>
           )}
       </div>
@@ -182,8 +182,8 @@ export function LandscapeView() {
               <li key={theme.name} className="flex items-baseline gap-2.5">
                 <Chip tone="blue">{theme.size}</Chip>
                 <div>
-                  <p className="text-[13px] font-semibold text-navy">{scrub(theme.name)}</p>
-                  <p className="text-[12px] text-grey">{scrub(theme.description)}</p>
+                  <p className="text-meta font-semibold text-navy">{scrub(theme.name)}</p>
+                  <p className="text-caption text-grey">{scrub(theme.description)}</p>
                 </div>
               </li>
             ))}
@@ -198,7 +198,7 @@ export function LandscapeView() {
           <div className="space-y-4 p-4">
             {(groups.data.facets ?? []).map((facet) => (
               <div key={facet.facet}>
-                <p className="text-[12px] font-bold uppercase tracking-wide text-grey">
+                <p className="text-caption font-bold uppercase tracking-wide text-grey">
                   {scrub(facet.facet)}
                 </p>
                 <ul role="list" className="mt-1.5 flex flex-wrap gap-1.5">

@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import type { ComponentProps } from "react";
+
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "../../store";
-import { presentRunDecisions, threadInputs } from "./PlanningPane";
+import { Composer, presentRunDecisions, threadInputs } from "./PlanningPane";
 
 function turn(index: number, createdAt: string): PlanningThreadTurn {
   return {
@@ -70,5 +74,64 @@ describe("presentRunDecisions", () => {
       { sequence: 1, summary: "Executed a search query", count: 2 },
       { sequence: 3, summary: "Completed: Screening for relevance", count: 1 },
     ]);
+  });
+});
+
+describe("Composer", () => {
+  function renderComposer(overrides: Partial<ComponentProps<typeof Composer>> = {}) {
+    const onChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <Composer
+        value=""
+        onChange={onChange}
+        onSubmit={onSubmit}
+        placeholder="What do you need evidence on?"
+        disabled={false}
+        sendDisabled={false}
+        {...overrides}
+      />,
+    );
+    return { onChange, onSubmit };
+  }
+
+  it("Enter sends: submits without inserting a newline", async () => {
+    const user = userEvent.setup();
+    const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
+
+    await user.click(screen.getByLabelText("Message the planner"));
+    await user.keyboard("{Enter}");
+
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("Shift+Enter breaks: inserts a newline instead of submitting", async () => {
+    const user = userEvent.setup();
+    const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
+
+    await user.click(screen.getByLabelText("Message the planner"));
+    await user.keyboard("{Shift>}{Enter}{/Shift}");
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenCalledWith("Map school-meal evidence.\n");
+  });
+
+  it("disabled-during-run: honest copy swaps in and both controls disable", () => {
+    renderComposer({
+      disabled: true,
+      sendDisabled: true,
+      placeholder: "Replanning is available after the run",
+    });
+
+    const textarea = screen.getByLabelText("Message the planner");
+    expect(textarea).toBeDisabled();
+    expect(textarea).toHaveAttribute("placeholder", "Replanning is available after the run");
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+  });
+
+  it("shows the Enter/Shift+Enter hint line", () => {
+    renderComposer();
+    expect(screen.getByText("Enter to send · Shift+Enter for a new line")).toBeInTheDocument();
   });
 });

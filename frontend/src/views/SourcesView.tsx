@@ -68,8 +68,8 @@ export function SourcesView() {
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
       <header className="mb-5">
-        <h1 className="font-display text-xl font-extrabold text-navy">Sources</h1>
-        <p className="mt-1 text-[12.5px] text-grey">
+        <h1 className="font-display text-title font-extrabold text-navy">Sources</h1>
+        <p className="mt-1 text-caption text-grey">
           Every source the analysis touched — what happened to it, and why.
         </p>
         <div role="group" aria-label="Filter sources" className="mt-4 flex flex-wrap gap-1.5">
@@ -83,7 +83,7 @@ export function SourcesView() {
                 else next.set("status", filter.key);
                 next.delete("page");
               })}
-              className={`cursor-pointer border px-2.5 py-1 text-[11.5px] font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
+              className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
                 statusFilter === filter.key
                   ? "border-blue bg-blue-tint text-blue"
                   : "border-line-2 bg-paper text-grey hover:text-navy"
@@ -100,7 +100,7 @@ export function SourcesView() {
               else next.set("cited", "true");
               next.delete("page");
             })}
-            className={`cursor-pointer border px-2.5 py-1 text-[11.5px] font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
+            className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
               citedFilter
                 ? "border-blue bg-blue-tint text-blue"
                 : "border-line-2 bg-paper text-grey hover:text-navy"
@@ -121,7 +121,7 @@ export function SourcesView() {
         ))}
 
       {evidence.data !== undefined && evidence.data.data.length === 0 && (
-        <Card role="status" className="p-8 text-center text-[13px] text-grey">
+        <Card role="status" className="p-8 text-center text-meta text-grey">
           {statusFilter === "all" && !citedFilter
             ? "No sources yet — they arrive as the analysis searches."
             : "No sources match these filters."}
@@ -131,7 +131,7 @@ export function SourcesView() {
       {evidence.data !== undefined && evidence.data.data.length > 0 && (
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left">
-            <thead className="border-b border-line bg-paper-2 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-grey">
+            <thead className="border-b border-line bg-paper-2 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
               <tr>
                 <th className="px-4 py-3">Source</th>
                 <th className="px-3 py-3">Year</th>
@@ -150,13 +150,13 @@ export function SourcesView() {
                       <button
                         type="button"
                         onClick={() => updateParams((next) => next.set("source", item.source_id))}
-                        className="cursor-pointer text-left text-[13px] font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+                        className="cursor-pointer text-left text-meta font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
                       >
                         {scrub(item.title)}
                       </button>
-                      {item.venue && <p className="mt-0.5 text-[11.5px] text-grey">{scrub(item.venue)}</p>}
+                      {item.venue && <p className="mt-0.5 text-caption text-grey">{scrub(item.venue)}</p>}
                     </td>
-                    <td className="px-3 py-3 align-top text-[12.5px] text-navy">{item.year ?? ""}</td>
+                    <td className="px-3 py-3 align-top text-caption text-navy">{item.year ?? ""}</td>
                     <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
                     <td className="px-3 py-3 align-top">
                       {label !== undefined && <ScreeningTooltip item={item} label={label} />}
@@ -181,16 +181,16 @@ export function SourcesView() {
             type="button"
             disabled={page <= 1}
             onClick={() => updateParams((next) => next.set("page", String(page - 1)))}
-            className="cursor-pointer border border-line-2 px-3 py-2 text-xs font-semibold text-navy disabled:cursor-default disabled:text-line-2"
+            className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
           >
             Previous
           </button>
-          <span className="text-xs text-grey">Page {page} of {totalPages}</span>
+          <span className="text-caption text-grey">Page {page} of {totalPages}</span>
           <button
             type="button"
             disabled={page >= totalPages}
             onClick={() => updateParams((next) => next.set("page", String(page + 1)))}
-            className="cursor-pointer border border-line-2 px-3 py-2 text-xs font-semibold text-navy disabled:cursor-default disabled:text-line-2"
+            className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
           >
             Next
           </button>
@@ -222,7 +222,7 @@ function SourceLoading() {
 
 function RetryCard({ copy, onRetry }: { copy: string; onRetry: () => void }) {
   return (
-    <Card role="alert" className="p-8 text-center text-[13px] text-navy">
+    <Card role="alert" className="p-8 text-center text-meta text-navy">
       {copy} <button type="button" className="cursor-pointer font-bold text-blue hover:underline" onClick={onRetry}>Retry</button>
     </Card>
   );
@@ -280,8 +280,8 @@ function SourceDossier({
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent title={source ? scrub(source.title) : "Source dossier"} description="Source dossier">
-        {isPending && <p role="status" className="animate-pulse text-[12.5px] text-grey">Loading the dossier…</p>}
-        {isError && <p role="alert" className="text-[12.5px] text-navy">This source dossier couldn't be loaded.</p>}
+        {isPending && <p role="status" className="animate-pulse text-caption text-grey">Loading the dossier…</p>}
+        {isError && <p role="alert" className="text-caption text-navy">This source dossier couldn't be loaded.</p>}
         {source && <SourceDossierBody source={source} findings={findings} findingsPending={findingsPending} />}
       </SheetContent>
     </Sheet>
@@ -313,14 +313,14 @@ export function SourceDossierBody({
     ["Field-weighted citation impact", source.fwci],
   ] as const;
   return (
-    <div className="space-y-6 text-[12.5px]">
+    <div className="space-y-6 text-caption">
       <header>
-        <p className="font-display text-[17px] font-bold leading-snug text-navy">{scrub(source.title)}</p>
+        <p className="font-display text-body font-bold leading-snug text-navy">{scrub(source.title)}</p>
         {(source.year || source.venue) && <p className="mt-1 text-grey">{[source.year, source.venue].filter(Boolean).map(String).map(scrub).join(" · ")}</p>}
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Chip tone="soft">{scrub(source.origin)}</Chip>
           {source.appraisal_tier && <Chip tone="soft">{scrub(source.appraisal_tier)}</Chip>}
-          {href && <a className="border border-blue px-2.5 py-1 text-[11.5px] font-semibold text-blue hover:underline" href={href} target="_blank" rel="noreferrer">Open original</a>}
+          {href && <a className="border border-blue px-2.5 py-1 text-caption font-semibold text-blue hover:underline" href={href} target="_blank" rel="noreferrer">Open original</a>}
         </div>
       </header>
       {source.abstract && (
@@ -352,10 +352,10 @@ export function SourceDossierBody({
       )}
       {byAsserter.size > 0 && (
         <DossierSection title="Tags">
-          <p className="mb-2 text-[11.5px] text-grey">Tags remain grouped by who asserted them.</p>
+          <p className="mb-2 text-caption text-grey">Tags remain grouped by who asserted them.</p>
           {[...byAsserter.entries()].map(([asserter, tags]) => (
             <div key={asserter} className="mb-3">
-              <p className="mb-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-grey">Asserted by {scrub(asserter)}</p>
+              <p className="mb-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">Asserted by {scrub(asserter)}</p>
               <div className="flex flex-wrap gap-1.5">{tags.map((tag) => <Chip key={`${tag.tag_type}-${tag.tag}`} tone="soft">{scrub(tag.tag)}</Chip>)}</div>
             </div>
           ))}
@@ -367,7 +367,7 @@ export function SourceDossierBody({
             <div key={`${citation.section_title}-${index}`} className="border-l-2 border-blue pl-3">
               <p className="leading-snug text-navy">{scrub(citation.claim)}</p>
               <p className="mt-1 italic text-grey">“{scrub(citation.quote)}”</p>
-              <p className="mt-1 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-grey">{scrub(citation.section_title)}</p>
+              <p className="mt-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">{scrub(citation.section_title)}</p>
             </div>
           ))}</div>
         </DossierSection>

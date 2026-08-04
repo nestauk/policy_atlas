@@ -45,11 +45,11 @@ export function DecisionsView() {
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-8">
-      <h1 className="font-display text-xl font-extrabold text-navy">Decision log</h1>
-      <p className="mb-5 mt-1 text-[12.5px] text-grey">The project audit trail — check-ins, run decisions and recorded outcomes.</p>
+      <h1 className="font-display text-title font-extrabold text-navy">Decision log</h1>
+      <p className="mb-5 mt-1 text-caption text-grey">The project audit trail — check-ins, run decisions and recorded outcomes.</p>
       {decisions.isPending && <DecisionLoading />}
-      {decisions.isError && (errorCode(decisions.error) === "unauthenticated" ? <ReauthRedirect /> : <Card role="alert" className="p-8 text-center text-[13px] text-navy">The decision log couldn't be loaded. <button type="button" className="cursor-pointer font-bold text-blue hover:underline" onClick={() => void decisions.refetch()}>Retry</button></Card>)}
-      {decisions.data !== undefined && entries.length === 0 && <Card role="status" className="p-8 text-center text-[13px] text-grey">Nothing decided yet — planning turns, steers and run events land here.</Card>}
+      {decisions.isError && (errorCode(decisions.error) === "unauthenticated" ? <ReauthRedirect /> : <Card role="alert" className="p-8 text-center text-meta text-navy">The decision log couldn't be loaded. <button type="button" className="cursor-pointer font-bold text-blue hover:underline" onClick={() => void decisions.refetch()}>Retry</button></Card>)}
+      {decisions.data !== undefined && entries.length === 0 && <Card role="status" className="p-8 text-center text-meta text-grey">Nothing decided yet — planning turns, steers and run events land here.</Card>}
       {entries.length > 0 && <ol className="overflow-hidden border border-line-2 bg-paper">{entries.map((entry) => {
         const details = friendlyDecisionDetails(entry.detail);
         const expandable = details.length > 0;
@@ -57,12 +57,12 @@ export function DecisionsView() {
         const checkIn = entry.kind === "steering.decision" || entry.kind === "steering.pause";
         return <li key={`${entry.kind}-${entry.sequence}`} className={`border-b border-line last:border-b-0 ${checkIn ? "border-l-2 border-l-yellow bg-yellow-tint" : ""}`}>
           <button type="button" disabled={!expandable} aria-expanded={expandable ? expanded : undefined} onClick={() => { if (expandable) setOpen(expanded ? null : entry.sequence); }} className={`flex w-full items-baseline gap-3 px-4 py-3 text-left ${expandable ? "cursor-pointer hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue" : "cursor-default"}`}>
-            <time dateTime={entry.occurred_at} className="w-32 shrink-0 text-[11px] tabular-nums text-grey">{new Date(entry.occurred_at).toLocaleString()}</time>
+            <time dateTime={entry.occurred_at} className="w-32 shrink-0 text-caption tabular-nums text-grey">{new Date(entry.occurred_at).toLocaleString()}</time>
             <Chip tone={KIND_TONE[entry.kind] ?? "default"}>{KIND_LABELS[entry.kind] ?? "Recorded"}</Chip>
-            <span className="min-w-0 flex-1 text-[12.5px] text-ink">{scrub(entry.summary)}</span>
-            {expandable && <span aria-hidden="true" className="text-[11px] text-grey">{expanded ? "▾" : "▸"}</span>}
+            <span className="min-w-0 flex-1 text-caption text-ink">{scrub(entry.summary)}</span>
+            {expandable && <span aria-hidden="true" className="text-caption text-grey">{expanded ? "▾" : "▸"}</span>}
           </button>
-          {expanded && <dl className="grid grid-cols-1 gap-x-8 gap-y-1 border-t border-line bg-paper-2 px-4 py-3 sm:grid-cols-2">{details.map((detail) => <div key={detail.label} className="flex items-baseline justify-between gap-3 text-[12px]"><dt className="text-grey">{detail.label}</dt><dd className="text-right font-medium text-navy">{scrub(String(detail.value))}</dd></div>)}</dl>}
+          {expanded && <dl className="grid grid-cols-1 gap-x-8 gap-y-1 border-t border-line bg-paper-2 px-4 py-3 sm:grid-cols-2">{details.map((detail) => <div key={detail.label} className="flex items-baseline justify-between gap-3 text-caption"><dt className="text-grey">{detail.label}</dt><dd className="text-right font-medium text-navy">{scrub(String(detail.value))}</dd></div>)}</dl>}
         </li>;
       })}</ol>}
     </main>

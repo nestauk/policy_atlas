@@ -41,7 +41,7 @@ export function AppShell() {
                   <NavLogo />
                 </NavItem>
                 {project.data !== undefined && (
-                  <span className="flex min-w-0 items-center gap-2 text-[13px] text-grey">
+                  <span className="flex min-w-0 items-center gap-2 text-meta text-grey">
                     <span aria-hidden="true" className="text-line-2">
                       /
                     </span>
@@ -74,11 +74,11 @@ export function AppShell() {
                     rendered it — Cognito users had no way out of a session. */}
                 {auth.user !== null && (
                   <span className="flex items-center gap-3">
-                    <span className="text-[12px] text-grey">{scrub(auth.user.sub)}</span>
+                    <span className="text-caption text-grey">{scrub(auth.user.sub)}</span>
                     <button
                       type="button"
                       onClick={() => auth.signOut()}
-                      className="cursor-pointer text-[13px] text-grey hover:text-navy"
+                      className="cursor-pointer text-meta text-grey hover:text-navy"
                     >
                       Sign out
                     </button>

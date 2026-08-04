@@ -41,7 +41,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
         <PaneHeading>Plan</PaneHeading>
         <Divider />
         <div className="flex flex-1 items-center justify-center px-6">
-          <p role="status" className="max-w-xs text-center text-[12.5px] text-grey">
+          <p role="status" className="max-w-xs text-center text-caption text-grey">
             Forms here as you talk. Nothing runs until you approve it.
           </p>
         </div>
@@ -78,7 +78,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
             aria-label="Toggle plan details"
           >
             <PaneHeading className="shrink-0 p-0">The plan</PaneHeading>
-            <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-navy">
+            <span className="min-w-0 flex-1 truncate text-meta font-medium text-navy">
               {plan.question !== null && plan.question !== "" ? scrub(plan.question) : "Not set yet"}
             </span>
             {plan.time_band !== null && plan.time_band !== "" && (
@@ -89,19 +89,19 @@ export function PlanPane({ projectId }: { projectId: string }) {
             <Chip className="shrink-0" tone={plan.ready ? "green" : "soft"}>
               {plan.ready ? "ready" : "forming…"}
             </Chip>
-            <span className="shrink-0 text-[11px] text-grey">{detailsOpen ? "Hide" : "Details"}</span>
+            <span className="shrink-0 text-caption text-grey">{detailsOpen ? "Hide" : "Details"}</span>
           </button>
           {detailsOpen && (
             <div className="min-w-0 border-t border-line px-4 pb-4 pt-3">
-              <p className="mb-3 text-[12.5px] text-grey">
+              <p className="mb-3 text-caption text-grey">
                 Agreed here before anything runs. The analysis follows it.
               </p>
               {knownSettings.length > 0 && (
                 <div className="grid gap-px border border-line bg-line sm:grid-cols-2">
                   {knownSettings.map(([label, value]) => (
                     <div key={label} className="min-w-0 bg-paper px-3 py-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-grey">{label}</p>
-                      <p className="break-words text-[12px] font-medium text-navy">{value}</p>
+                      <p className="text-caption font-bold uppercase tracking-wide text-grey">{label}</p>
+                      <p className="break-words text-caption font-medium text-navy">{value}</p>
                     </div>
                   ))}
                 </div>
@@ -119,7 +119,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
               {screeningCriteria.length > 0 && (
                 <div className="mt-3">
                   <PaneHeading className="p-0">Screening criteria</PaneHeading>
-                  <ul className="mt-1 space-y-1 text-[12px] text-navy">
+                  <ul className="mt-1 space-y-1 text-caption text-navy">
                     {screeningCriteria.map((criterion) => <li key={criterion} className="break-words">• {scrub(criterion)}</li>)}
                   </ul>
                 </div>
@@ -127,7 +127,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
               {steps.length > 0 && (
                 <div className="mt-3">
                   <PaneHeading className="p-0">Agreed steps</PaneHeading>
-                  <ol className="mt-1 space-y-1 text-[12px] text-navy">
+                  <ol className="mt-1 space-y-1 text-caption text-navy">
                     {steps.map((step, index) => (
                       <li key={step.stage} className="break-words">
                         {index + 1}. {scrub(step.label)}
@@ -140,7 +140,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
               {!plan.ready && componentLabels.length > 0 && (
                 <div className="mt-3">
                   <PaneHeading className="p-0">Planned components</PaneHeading>
-                  <ul className="mt-1 space-y-1 text-[12px] text-navy">
+                  <ul className="mt-1 space-y-1 text-caption text-navy">
                     {componentLabels.map((label) => <li key={label}>{label}</li>)}
                   </ul>
                 </div>
@@ -148,7 +148,7 @@ export function PlanPane({ projectId }: { projectId: string }) {
               {(plan.assumptions ?? []).length > 0 && (
                 <div className="mt-3">
                   <PaneHeading className="p-0">Assumptions</PaneHeading>
-                  <ul className="mt-1 space-y-1 text-[12px] text-grey">
+                  <ul className="mt-1 space-y-1 text-caption text-grey">
                     {plan.assumptions?.map((assumption) => <li key={assumption} className="break-words">• {scrub(assumption)}</li>)}
                   </ul>
                 </div>
@@ -180,11 +180,11 @@ export function PlanPane({ projectId }: { projectId: string }) {
             {starting ? "Starting…" : "Start the analysis"}
           </Button>
           {startNotice !== null && (
-            <p role="alert" className="mt-2 text-center text-xs text-red">
+            <p role="alert" className="mt-2 text-center text-caption text-red">
               {startNotice}
             </p>
           )}
-          <p className="mt-2 text-center text-[12px] text-grey">
+          <p className="mt-2 text-center text-caption text-grey">
             {plan.time_band !== null && plan.time_band !== "" ? `${scrub(plan.time_band)} · ` : ""}
             You can steer or pause at any check-in.
           </p>

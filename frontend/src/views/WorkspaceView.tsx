@@ -11,9 +11,9 @@ import { RunPane } from "./workspace/RunPane";
 
 /**
  * The workspace: planning conversation left, analysis right. The chat pane
- * holds the room while planning (55/45) and shrinks once an analysis exists
- * (35/65) — the RETRO §2.3 split, driven by run presence, not a toggle. The
- * left pane is a collapsible/resizable rail (027 strand 3); a user resize
+ * holds the room while planning (55/45) and settles to an even split once an
+ * analysis exists (50/50, 028 strand 4) — driven by run presence, not a
+ * toggle. The left pane is a collapsible/resizable rail (027 strand 3); a user resize
  * pins the width for the session, collapse leaves a slim re-open strip.
  */
 export function WorkspaceView() {
@@ -21,7 +21,7 @@ export function WorkspaceView() {
   const project = useProject(projectId);
   const stream = useRunStream(projectId);
   const hasRun = stream.run !== null;
-  const rail = useRail(hasRun ? "35%" : "55%");
+  const rail = useRail(hasRun ? "50%" : "55%");
   useDocumentTitle(project.data?.name, "Workspace");
 
   // Query errors are the raw envelope body ({error: {code}}), thrown as-is.
