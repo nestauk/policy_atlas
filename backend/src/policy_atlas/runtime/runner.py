@@ -13,7 +13,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, cast, runtime_checkable
 
 import structlog
 from langfuse import Langfuse
@@ -49,6 +49,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     StubSynthesisBackend,
     SynthesisBackend,
 )
+from policy_atlas.evidence_base.synthesis.synthesis_tools import DIRECTIVE_SECTION_TEXT_MAX
 from policy_atlas.evidence_base.synthesis.synthesise import (
     SynthesiseContext,
     write_summaries_after_commit,
@@ -1915,16 +1916,27 @@ def _pause_options_and_bundle(
         proposal = bundle.get("proposal")
         sections = proposal.get("proposed_sections") if isinstance(proposal, dict) else None
         if isinstance(sections, list):
-            displayed = [
-                {"title": row.get("title"), "focus": row.get("focus")}
+            # The proposal's focus bound (SECTION_FOCUS_MAX=300) exceeds the
+            # steering directive's (DIRECTIVE_SECTION_TEXT_MAX=200), so the
+            # displayed-list submit would 422 on any long focus (found live,
+            # 028 G.2). Clamp ONCE here — in the bundle the card displays AND
+            # the as_proposed delta — so displayed == submitted == valid.
+            clamped = [
+                {
+                    "title": cast(str, row.get("title")),
+                    "focus": cast(str, row.get("focus"))[:DIRECTIVE_SECTION_TEXT_MAX],
+                }
                 for row in sections
                 if isinstance(row, dict)
                 and isinstance(row.get("title"), str)
                 and isinstance(row.get("focus"), str)
             ]
+            proposal["proposed_sections"] = clamped  # type: ignore[index]
             for option in options:
                 if option.get("id") == "as_proposed":
-                    option["delta"] = {"synthesise": {"synthesis": {"sections": displayed}}}
+                    option["delta"] = {
+                        "synthesise": {"synthesis": {"sections": [dict(row) for row in clamped]}}
+                    }
                     break
     return options, bundle
 

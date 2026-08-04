@@ -236,7 +236,7 @@ export function PartCard({
   const sendsDirectly = (option: PartOption) => option.primary || option.sub != null;
 
   return (
-    <div className="anim-rise mr-8 border border-line-2 bg-paper px-4 py-3 shadow-sm">
+    <div data-testid="part-card" className="anim-rise mr-8 border border-line-2 bg-paper px-4 py-3 shadow-sm">
       <p className="text-caption font-bold uppercase tracking-wide text-grey">
         {scrub(part.step_label)}
       </p>
@@ -345,6 +345,8 @@ export function PartCard({
           {part.options.map((option) => (
             <Button
               key={option.id}
+              data-option-id={option.id}
+              data-part-option={option.primary ? "primary" : "secondary"}
               variant={option.primary ? "primary" : "secondary"}
               disabled={!interactive}
               onClick={() =>

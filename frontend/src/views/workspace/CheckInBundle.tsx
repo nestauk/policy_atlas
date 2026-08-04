@@ -264,12 +264,14 @@ export function CheckInBundle({
                   <span className="flex flex-1 flex-col gap-1">
                     <input
                       value={rowTitle}
+                      maxLength={200}
                       onChange={(event) => setRowTitle(event.target.value)}
                       aria-label="Section title"
                       className="border border-line-2 px-1.5 py-0.5 text-caption"
                     />
                     <input
                       value={rowFocus}
+                      maxLength={200}
                       onChange={(event) => setRowFocus(event.target.value)}
                       aria-label="What it covers"
                       className="border border-line-2 px-1.5 py-0.5 text-caption"
@@ -330,6 +332,7 @@ export function CheckInBundle({
             <span className="mt-1.5 flex flex-col gap-1">
               <input
                 value={rowTitle}
+                maxLength={200}
                 onChange={(event) => setRowTitle(event.target.value)}
                 aria-label="New section title"
                 placeholder="Section title"
@@ -337,6 +340,7 @@ export function CheckInBundle({
               />
               <input
                 value={rowFocus}
+                maxLength={200}
                 onChange={(event) => setRowFocus(event.target.value)}
                 aria-label="What the new section covers"
                 placeholder="What it covers"

@@ -366,10 +366,15 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit(stageStarted("characterise", "Characterising findings", "Extracting implementation conditions", nextSequence()));
       emit(stageCompleted("characterise", "Characterising findings", { findings: 34 }, nextSequence()));
       emit(stageStarted("synthesise", "Synthesising the evidence", "Preparing a decision-ready evidence base", nextSequence()));
+      // The run genuinely parks at this boundary (028 pause salience: paused
+      // must read distinct from executing on every tab) — an explicit
+      // `run.status` frame, not just the pending check-in itself.
+      emit(runStatus("paused", nextSequence()));
       emit({ type: "checkin.pending", check_in: mockCheckIn, occurred_at: FRAME_TIME, sequence: nextSequence() });
 
       await checkInAnswer.promise;
 
+      emit(runStatus("running", nextSequence()));
       emit({
         type: "checkin.resolved",
         check_in_id: MOCK_CHECK_IN_ID,
@@ -452,7 +457,7 @@ function finishRun(status: "succeeded" | "failed") {
   };
 }
 
-function runStatus(status: "running" | "succeeded" | "failed", sequence: number): SseFrame {
+function runStatus(status: "running" | "paused" | "succeeded" | "failed", sequence: number): SseFrame {
   return { type: "run.status", capability_run_id: MOCK_RUN_ID, status, occurred_at: FRAME_TIME, sequence };
 }
 

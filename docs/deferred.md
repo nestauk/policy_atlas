@@ -1108,9 +1108,24 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   applies flag-not-block; v1 honours the rule through the weakly-grounded mechanism only.
   Policy-conditioned flagging (below-policy support visibly flagged as such) lands with
   the policy surface.
-- **Block summaries / artefact summary / faithfulness judging** — the navigation layer
-  (provenance-grounding § Summaries): co-versioned block summary column, the artefact
-  summary field, flat faithfulness judging. Blocks ship summary-free at `version=1`.
+- **Block summaries / artefact summary / faithfulness judging** — DISCHARGED by task 028
+  (strand 13): co-versioned block summary column + marker, artefact summary field +
+  marker, flat LLM faithfulness judging with bounded regenerate-on-fail, written
+  post-commit in standalone transactions; legacy blocks stay summary-free (the
+  first-sentence fallback renders WITH its marker). Remaining sub-seams: **summary
+  export** (a summary never renders detached from its drill-down — export stays ⏸ per
+  spec) · **multi-block section summaries** (as-built one block per section; a
+  multi-block section omits its summary honestly — `SectionOut.summary` projects the
+  single block only) · **artefact-summary staleness machinery** (flag-and-propose is
+  trivially satisfied while blocks never regenerate — recorded, not built beyond the
+  marker) · **summary/judge calibration** (eval workstream, with the judge seams below).
+- **Theme rename beyond P2** — task 028's `rename_theme` delta is P2-only by constraint
+  (strata are name-keyed downstream; renames land before anything consumed the names).
+  Renaming after selection/grouping needs id-keyed strata plumbing end-to-end.
+- **P4 structural-section editing** — key findings and conclusions are display-only on
+  the report-plan card (never editable/removable, task 028 ruling); a future surface for
+  suppressing/steering structural blocks is a fresh design decision, not an extension of
+  `edit_sections`.
 - **Synthesis structure discovery** (contract rev 7.2 — declined-for-now bundle):
   recon-informed section proposal, structure-mismatch signals, a bounded revision
   checkpoint. Revisit with evidence if one-shot sectioning proves a real problem on live
