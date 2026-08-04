@@ -2739,8 +2739,8 @@
           "section_budget": {
             "anyOf": [
               {
-                "maximum": 12,
-                "minimum": 1,
+                "maximum": 8,
+                "minimum": 2,
                 "type": "integer"
               },
               {

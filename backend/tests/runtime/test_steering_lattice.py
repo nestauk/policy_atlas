@@ -304,17 +304,20 @@ def test_p4_bundle_wires_propose_synthesis_plan(engine: Engine) -> None:
                 successful_runs=runs_by,
             )
             assert context is not None
+            backend = StubSynthesisBackend()
             bundle = steering_bundles.p4_bundle(
                 conn,
                 project_id=project_id,
                 context=context,
-                synthesis_backend=StubSynthesisBackend(),
+                synthesis_backend=backend,
                 group_run_id=runs_by.get("group"),
+                section_budget=3,
             )
         assert bundle["bundle_version"] == "v1"
         assert set(bundle) == {"bundle_version", "proposal", "grouping_flags", "priority_counts"}
         # The proposal is the read-only propose_synthesis_plan payload.
         assert set(bundle["proposal"]) == {"proposed_sections", "available_groups", "boostable"}
+        assert backend.proposal_inputs[0]["section_budget"] == 3
         # Grouping flags read from the group run; B2' priority counts absent (None).
         assert isinstance(bundle["grouping_flags"], dict)
         assert bundle["priority_counts"] is None

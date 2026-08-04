@@ -174,7 +174,7 @@ class PlanDraft(BaseModel):
     assumptions: list[str] | None = None
     expected_artefact_shape: str | None = None
     time_band: str | None = None
-    section_budget: int | None = Field(default=None, ge=1, le=12)
+    section_budget: int | None = Field(default=None, ge=2, le=8)
     steps: list[PlanStep] = Field(default_factory=list)
     ready: bool = False
 

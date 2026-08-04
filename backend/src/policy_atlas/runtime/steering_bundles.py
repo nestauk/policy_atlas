@@ -508,6 +508,7 @@ def p4_bundle(
     context: SynthesiseContext,
     synthesis_backend: SynthesisBackend,
     group_run_id: uuid.UUID | None = None,
+    section_budget: int | None = None,
 ) -> dict[str, Any]:
     """Build the P4 synthesis-shape bundle (before synthesise).
 
@@ -523,6 +524,8 @@ def p4_bundle(
         synthesis_backend: The proposal backend seam (stub or live).
         group_run_id: The group run whose ``flags`` to read, or ``None`` when
             group did not run (grouping_flags then ``None``).
+        section_budget: Optional ordinary-section ceiling from the approved
+            plan, shared with the later synthesis call.
 
     Returns:
         The versioned P4 bundle dict. ``priority_counts`` reports the B2'
@@ -536,7 +539,11 @@ def p4_bundle(
         ``context.extraction_run_id`` is ``None`` (never fabricated).
     """
     proposal = propose_synthesis_plan(
-        conn, project_id=project_id, context=context, synthesis_backend=synthesis_backend
+        conn,
+        project_id=project_id,
+        context=context,
+        synthesis_backend=synthesis_backend,
+        section_budget=section_budget,
     )
     grouping_flags: Any = None
     grouping_groups: list[dict[str, Any]] | None = None

@@ -22,7 +22,8 @@ from typing import Any, cast
 import structlog
 from sqlalchemy import case as sa_case
 from sqlalchemy import select as sa_select
-from sqlalchemy.engine import Connection
+from sqlalchemy import update as sa_update
+from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import (
@@ -32,6 +33,7 @@ from policy_atlas.core.schema import (
     artefact,
     block,
     characterisation_result,
+    evidence_scope,
     extraction_result,
     grouping_result,
     implementation_context_finding,
@@ -60,6 +62,10 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     JUDGE_PROMPT_VERSION,
     GroundingJudgeBackend,
     build_envelope,
+)
+from policy_atlas.evidence_base.synthesis.summary_prompts import (
+    SUMMARISER_PROMPT_VERSION,
+    SUMMARY_JUDGE_PROMPT_VERSION,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     FORBIDDEN_SECTION_TITLES,
@@ -1717,6 +1723,7 @@ def _validate_sections(
     proposal: SectionProposalWire,
     *,
     grouping_group_ids: set[str] | None,
+    section_budget: int | None = None,
 ) -> tuple[list[SectionSpec], list[str], list[str]]:
     """Validate a section proposal into specs.
 
@@ -1732,8 +1739,9 @@ def _validate_sections(
     reasons: list[str] = []
     normalisations: list[str] = []
     sections = proposal.sections
-    if not 1 <= len(sections) <= SECTION_CAP:
-        reasons.append(f"section_count_out_of_range: 1..{SECTION_CAP}")
+    section_cap = min(SECTION_CAP, section_budget) if section_budget is not None else SECTION_CAP
+    if not 1 <= len(sections) <= section_cap:
+        reasons.append(f"section_count_out_of_range: 1..{section_cap}")
     forbidden = {title.casefold() for title in FORBIDDEN_SECTION_TITLES}
     seen_titles: set[str] = set()
     parsed: list[SectionSpec] = []
@@ -1816,6 +1824,7 @@ def propose_synthesis_plan(
     project_id: uuid.UUID,
     context: SynthesiseContext,
     synthesis_backend: SynthesisBackend,
+    section_budget: int | None = None,
 ) -> dict[str, Any]:
     """Propose a synthesis plan for a scope without minting anything (022 F5).
 
@@ -1838,6 +1847,8 @@ def propose_synthesis_plan(
             never drift from the run's.
         synthesis_backend: The proposal backend (stub or live) — the same seam
             ``synthesise_scope`` calls.
+        section_budget: Optional ordinary-section ceiling from the approved
+            plan, applied to this P4 preview as well as execution.
 
     Returns:
         The § Steer schemas payload: ``proposed_sections`` (raw backend
@@ -1856,7 +1867,7 @@ def propose_synthesis_plan(
     summaries = _substrate_summaries(refs, corpus)
 
     proposal, _usage = synthesis_backend.propose_sections(
-        intent=context.intent, substrate=summaries
+        intent=context.intent, substrate=summaries, section_budget=section_budget
     )
     proposed_sections = [
         {
@@ -4586,7 +4597,9 @@ def synthesise_scope(
         try:
             _reserve_generation(call_counts, "proposal")
             proposal, usage = synthesis_backend.propose_sections(
-                intent=context.intent, substrate=summaries
+                intent=context.intent,
+                substrate=summaries,
+                section_budget=directive.section_budget,
             )
             usage_totals.add(usage)
         except RuntimeError as exc:
@@ -4599,13 +4612,18 @@ def synthesise_scope(
             ) from exc
         grouping_group_ids = substrate.grouping_group_ids if substrate.grouping else None
         sections, reasons, proposal_normalisations = _validate_sections(
-            proposal, grouping_group_ids=grouping_group_ids
+            proposal,
+            grouping_group_ids=grouping_group_ids,
+            section_budget=directive.section_budget,
         )
         if reasons:
             try:
                 _reserve_generation(call_counts, "proposal_repair")
                 repaired, usage = synthesis_backend.propose_sections(
-                    intent=context.intent, substrate=summaries, rejection=reasons
+                    intent=context.intent,
+                    substrate=summaries,
+                    rejection=reasons,
+                    section_budget=directive.section_budget,
                 )
                 usage_totals.add(usage)
             except RuntimeError as exc:
@@ -4616,6 +4634,7 @@ def synthesise_scope(
             sections, reasons, proposal_normalisations = _validate_sections(
                 repaired,
                 grouping_group_ids=substrate.grouping_group_ids if substrate.grouping else None,
+                section_budget=directive.section_budget,
             )
             if reasons:
                 raise SynthesiseFailure(
@@ -5051,3 +5070,448 @@ def synthesise_scope(
         "substrate_profile": _substrate_profile(refs, corpus),
         "usage_totals": usage_totals.payload(),
     }
+
+
+SUMMARY_REGENERATE_CAP = 2
+
+
+def write_summaries_after_commit(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    synthesis_backend: SynthesisBackend,
+) -> dict[str, Any]:
+    """Write navigation summaries after the synthesise transaction commits.
+
+    Every summary operates over persisted raw prose and annotations, and every
+    status write owns a short transaction. This deliberately sits outside the
+    component transaction: provider or summary-storage failure cannot roll back
+    a grounded artefact or fail its run.
+
+    Args:
+        engine: Database engine used for independent summary transactions.
+        project_id: Owning project.
+        run_id: Completed synthesise run.
+        synthesis_backend: Shared live or stub writer/judge seam.
+
+    Returns:
+        Summary call/usage accounting suitable for the component event. Details
+        are persisted under ``synthesis_provenance.summaries``.
+    """
+    try:
+        source = _summary_source(engine, project_id=project_id, run_id=run_id)
+    except Exception as exc:  # noqa: BLE001 - summaries must never fail a run
+        log.warning(
+            "synthesise.summary_source_failed",
+            project_id=str(project_id),
+            run_id=str(run_id),
+            error=type(exc).__name__,
+        )
+        return _empty_summary_accounting(source_error=True)
+    if source is None:
+        return _empty_summary_accounting(source_error=False)
+
+    artefact_id, artefact_title, question, block_specs = source
+    records: list[dict[str, Any]] = []
+    totals = UsageAccumulator()
+    call_counts = {"writer": 0, "judge": 0}
+    consecutive_provider_failures = 0
+    provider_disabled = False
+    disabled_logged = False
+
+    for spec in block_specs:
+        if provider_disabled:
+            records.append(
+                {
+                    "kind": "block",
+                    "block_id": spec["block_id"],
+                    "status": "failed",
+                    "reason": "provider_disabled",
+                    "writer_calls": 0,
+                    "judge_calls": 0,
+                    "usage_totals": UsageAccumulator().payload(),
+                }
+            )
+            _safe_persist_summary_status(
+                engine, target="block", target_id=uuid.UUID(spec["block_id"]), status="failed"
+            )
+            continue
+        detail = _block_summary_detail(engine, spec)
+        result = _write_and_judge_summary(
+            synthesis_backend=synthesis_backend,
+            seed=detail,
+            detail=detail,
+        )
+        totals.add_payload(result["usage_totals"])
+        call_counts["writer"] += result["writer_calls"]
+        call_counts["judge"] += result["judge_calls"]
+        if result["provider_failure"]:
+            consecutive_provider_failures += 1
+            status = "failed"
+            summary = None
+            if consecutive_provider_failures >= 2:
+                provider_disabled = True
+                if not disabled_logged:
+                    log.warning(
+                        "synthesise.summary_provider_disabled",
+                        project_id=str(project_id),
+                        run_id=str(run_id),
+                    )
+                    disabled_logged = True
+        else:
+            consecutive_provider_failures = 0
+            status = result["status"]
+            summary = result["summary"]
+        record = {
+            "kind": "block",
+            "block_id": spec["block_id"],
+            "status": status,
+            "reason": result["reason"],
+            "writer_calls": result["writer_calls"],
+            "judge_calls": result["judge_calls"],
+            "usage_totals": result["usage_totals"],
+        }
+        records.append(record)
+        _safe_persist_summary_status(
+            engine,
+            target="block",
+            target_id=uuid.UUID(spec["block_id"]),
+            status=status,
+            summary=summary,
+        )
+
+    artefact_detail = _artefact_summary_detail(
+        title=artefact_title,
+        question=question,
+        block_specs=block_specs,
+        engine=engine,
+    )
+    if provider_disabled:
+        artefact_result = _disabled_summary_result("provider_disabled")
+    else:
+        artefact_seed = {"kind": "artefact", **artefact_detail}
+        artefact_result = _write_and_judge_summary(
+            synthesis_backend=synthesis_backend,
+            seed=artefact_seed,
+            detail=artefact_detail,
+        )
+        totals.add_payload(artefact_result["usage_totals"])
+        call_counts["writer"] += artefact_result["writer_calls"]
+        call_counts["judge"] += artefact_result["judge_calls"]
+        if artefact_result["provider_failure"]:
+            consecutive_provider_failures += 1
+            if consecutive_provider_failures >= 2 and not disabled_logged:
+                log.warning(
+                    "synthesise.summary_provider_disabled",
+                    project_id=str(project_id),
+                    run_id=str(run_id),
+                )
+                disabled_logged = True
+    artefact_status = "failed" if artefact_result["provider_failure"] else artefact_result["status"]
+    artefact_summary = None if artefact_status == "failed" else artefact_result["summary"]
+    records.append(
+        {
+            "kind": "artefact",
+            "artefact_id": str(artefact_id),
+            "status": artefact_status,
+            "reason": artefact_result["reason"],
+            "writer_calls": artefact_result["writer_calls"],
+            "judge_calls": artefact_result["judge_calls"],
+            "usage_totals": artefact_result["usage_totals"],
+        }
+    )
+    _safe_persist_summary_status(
+        engine,
+        target="artefact",
+        target_id=artefact_id,
+        status=artefact_status,
+        summary=artefact_summary,
+    )
+
+    accounting = {
+        "prompt_versions": {
+            "summariser": SUMMARISER_PROMPT_VERSION,
+            "judge": SUMMARY_JUDGE_PROMPT_VERSION,
+        },
+        "call_counts": call_counts,
+        "usage_totals": totals.payload(),
+        "per_summary": records,
+        "provider_disabled": provider_disabled,
+    }
+    _persist_summary_provenance(
+        engine, project_id=project_id, run_id=run_id, accounting=accounting
+    )
+    return accounting
+
+
+def _empty_summary_accounting(*, source_error: bool) -> dict[str, Any]:
+    return {
+        "prompt_versions": {
+            "summariser": SUMMARISER_PROMPT_VERSION,
+            "judge": SUMMARY_JUDGE_PROMPT_VERSION,
+        },
+        "call_counts": {"writer": 0, "judge": 0},
+        "usage_totals": UsageAccumulator().payload(),
+        "per_summary": [],
+        "provider_disabled": False,
+        "source_error": source_error,
+    }
+
+
+def _summary_source(
+    engine: Engine, *, project_id: uuid.UUID, run_id: uuid.UUID
+) -> tuple[uuid.UUID, str, str, list[dict[str, str]]] | None:
+    with engine.connect() as conn:
+        row = conn.execute(
+            sa_select(
+                synthesis_result.c.artefact_id,
+                artefact.c.title,
+                evidence_scope.c.intent,
+                synthesis_result.c.blocks,
+            )
+            .select_from(
+                synthesis_result.join(
+                    artefact, artefact.c.artefact_id == synthesis_result.c.artefact_id
+                ).join(
+                    evidence_scope,
+                    evidence_scope.c.evidence_scope_id == synthesis_result.c.evidence_scope_id,
+                )
+            )
+            .where(synthesis_result.c.project_id == project_id)
+            .where(synthesis_result.c.run_id == run_id)
+        ).first()
+    if row is None:
+        return None
+    raw_blocks = row.blocks if isinstance(row.blocks, list) else []
+    specs = [
+        {
+            "block_id": item["block_id"],
+            "title": item.get("title", ""),
+            "role": item.get("role", "standard"),
+        }
+        for item in raw_blocks
+        if isinstance(item, dict) and isinstance(item.get("block_id"), str)
+    ]
+    return row.artefact_id, row.title, row.intent, specs
+
+
+def _block_summary_detail(engine: Engine, spec: dict[str, str]) -> dict[str, Any]:
+    block_id = uuid.UUID(spec["block_id"])
+    with engine.connect() as conn:
+        prose = conn.execute(
+            sa_select(block.c.content).where(block.c.block_id == block_id)
+        ).scalar_one()
+        annotations = conn.execute(
+            sa_select(
+                addressable_unit.c.content,
+                annotation.c.annotation_type,
+                annotation.c.payload,
+            )
+            .select_from(
+                annotation.join(
+                    addressable_unit,
+                    (addressable_unit.c.block_id == annotation.c.block_id)
+                    & (addressable_unit.c.unit_id == annotation.c.unit_id),
+                )
+            )
+            .where(annotation.c.block_id == block_id)
+            .order_by(annotation.c.created_at, annotation.c.annotation_id)
+        ).all()
+    epistemic_annotations: list[dict[str, Any]] = []
+    for row in annotations:
+        payload = dict(row.payload) if isinstance(row.payload, dict) else {}
+        flags: list[str] = []
+        if payload.get("weakly_grounded"):
+            flags.append("weakly_grounded")
+        if payload.get("verdict") == "unsupported_mis_cited":
+            flags.append("unsupported_mis_cited")
+        if row.annotation_type == "gap" or payload.get("gap") is not None:
+            flags.append("gap")
+        epistemic_annotations.append(
+            {
+                "text": row.content,
+                "annotation_type": row.annotation_type,
+                "verdict": payload.get("verdict"),
+                "flags": flags,
+                "gap": payload.get("gap"),
+                "payload": payload,
+            }
+        )
+    return {
+        "title": spec["title"],
+        "role": spec["role"],
+        "prose": prose,
+        "epistemic_annotations": epistemic_annotations,
+    }
+
+
+def _artefact_summary_detail(
+    *,
+    title: str,
+    question: str,
+    block_specs: Sequence[dict[str, str]],
+    engine: Engine,
+) -> dict[str, Any]:
+    blocks = [_block_summary_detail(engine, spec) for spec in block_specs]
+    return {
+        "title": title,
+        "question": question,
+        "sections": [
+            {"title": spec["title"], "role": spec["role"]} for spec in block_specs
+        ],
+        "conclusion_bearing_blocks": [
+            detail for detail in blocks if detail["role"] in {"key_findings", "conclusions"}
+        ],
+    }
+
+
+def _write_and_judge_summary(
+    *,
+    synthesis_backend: SynthesisBackend,
+    seed: dict[str, Any],
+    detail: dict[str, Any],
+) -> dict[str, Any]:
+    totals = UsageAccumulator()
+    writer_calls = 0
+    judge_calls = 0
+    for attempt in range(SUMMARY_REGENERATE_CAP + 1):
+        try:
+            emitted, usage = synthesis_backend.write_block_summary(seed)
+            writer_calls += 1
+            totals.add(usage)
+            verdict, usage = synthesis_backend.judge_summary(
+                summary=emitted.summary, detail=detail
+            )
+            judge_calls += 1
+            totals.add(usage)
+        except Exception as exc:  # noqa: BLE001 - provider failure must degrade
+            log.warning("synthesise.summary_provider_failure", error=type(exc).__name__)
+            return {
+                "status": "failed",
+                "summary": None,
+                "reason": "provider_failure",
+                "provider_failure": True,
+                "writer_calls": writer_calls,
+                "judge_calls": judge_calls,
+                "usage_totals": totals.payload(),
+            }
+        if verdict.verdict == "pass":
+            return {
+                "status": "verified",
+                "summary": emitted.summary,
+                "reason": verdict.reason,
+                "provider_failure": False,
+                "writer_calls": writer_calls,
+                "judge_calls": judge_calls,
+                "usage_totals": totals.payload(),
+            }
+        if attempt < SUMMARY_REGENERATE_CAP:
+            continue
+        return {
+            "status": "failed",
+            "summary": None,
+            "reason": verdict.reason,
+            "provider_failure": False,
+            "writer_calls": writer_calls,
+            "judge_calls": judge_calls,
+            "usage_totals": totals.payload(),
+        }
+    raise AssertionError("summary retry loop must return")
+
+
+def _disabled_summary_result(reason: str) -> dict[str, Any]:
+    return {
+        "status": "failed",
+        "summary": None,
+        "reason": reason,
+        "provider_failure": False,
+        "writer_calls": 0,
+        "judge_calls": 0,
+        "usage_totals": UsageAccumulator().payload(),
+    }
+
+
+def _persist_summary_status(
+    engine: Engine,
+    *,
+    target: str,
+    target_id: uuid.UUID,
+    status: str,
+    summary: str | None = None,
+) -> None:
+    try:
+        with engine.begin() as conn:
+            table = block if target == "block" else artefact
+            identifier = table.c.block_id if target == "block" else table.c.artefact_id
+            conn.execute(
+                sa_update(table)
+                .where(identifier == target_id)
+                .values(summary=summary if status == "verified" else None, summary_status=status)
+            )
+    except Exception as exc:  # noqa: BLE001 - isolate one summary transaction
+        log.warning(
+            "synthesise.summary_persist_failed",
+            target=target,
+            target_id=str(target_id),
+            error=type(exc).__name__,
+        )
+
+
+def _safe_persist_summary_status(
+    engine: Engine,
+    *,
+    target: str,
+    target_id: uuid.UUID,
+    status: str,
+    summary: str | None = None,
+) -> None:
+    """Contain unexpected status-transaction faults to one summary target."""
+    try:
+        _persist_summary_status(
+            engine,
+            target=target,
+            target_id=target_id,
+            status=status,
+            summary=summary,
+        )
+    except Exception as exc:  # noqa: BLE001 - one summary cannot stop the rest
+        log.warning(
+            "synthesise.summary_persist_failed",
+            target=target,
+            target_id=str(target_id),
+            error=type(exc).__name__,
+        )
+
+
+def _persist_summary_provenance(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    run_id: uuid.UUID,
+    accounting: dict[str, Any],
+) -> None:
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(
+                sa_select(synthesis_result.c.synthesis_provenance)
+                .where(synthesis_result.c.project_id == project_id)
+                .where(synthesis_result.c.run_id == run_id)
+            ).first()
+            if row is None:
+                return
+            provenance = dict(row.synthesis_provenance)
+            provenance["summaries"] = accounting
+            conn.execute(
+                sa_update(synthesis_result)
+                .where(synthesis_result.c.project_id == project_id)
+                .where(synthesis_result.c.run_id == run_id)
+                .values(synthesis_provenance=provenance)
+            )
+    except Exception as exc:  # noqa: BLE001 - summary provenance cannot fail a run
+        log.warning(
+            "synthesise.summary_provenance_persist_failed",
+            project_id=str(project_id),
+            run_id=str(run_id),
+            error=type(exc).__name__,
+        )

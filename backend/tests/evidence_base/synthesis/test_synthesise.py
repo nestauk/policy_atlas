@@ -835,6 +835,20 @@ def _run_synthesise(
     )
 
 
+def test_section_budget_rejects_an_over_budget_proposal_for_bounded_repair() -> None:
+    """A five-section proposal is rejected when the plan ceiling is three."""
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(title=f"Evidence aspect {index}", focus="A focused evidence aspect.")
+            for index in range(5)
+        ]
+    )
+    _sections, reasons, _normalisations = _validate_sections(
+        proposal, grouping_group_ids=None, section_budget=3
+    )
+    assert reasons == ["section_count_out_of_range: 1..3"]
+
+
 def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -2019,7 +2033,7 @@ def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
 
     # Provenance records the key-findings prompt version and its call counts.
     provenance = row.synthesis_provenance
-    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v1"
+    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v2"
     call_counts = provenance["call_counts"]
     assert call_counts["key_findings"] == 1
     assert call_counts["key_findings_judge"] >= 1
@@ -2862,10 +2876,18 @@ class _SeedCapturingBackend:
         self.key_findings_seeds: list[dict[str, Any]] = []
 
     def propose_sections(
-        self, *, intent: str, substrate: dict[str, Any], rejection: list[str] | None = None
+        self,
+        *,
+        intent: str,
+        substrate: dict[str, Any],
+        rejection: list[str] | None = None,
+        section_budget: int | None = None,
     ) -> UsageResult[SectionProposalWire]:
         return self._inner.propose_sections(
-            intent=intent, substrate=substrate, rejection=rejection
+            intent=intent,
+            substrate=substrate,
+            rejection=rejection,
+            section_budget=section_budget,
         )
 
     def section_turn(
@@ -2885,6 +2907,12 @@ class _SeedCapturingBackend:
     def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
         self.key_findings_seeds.append(seed)
         return self._inner.write_key_findings(seed)
+
+    def write_block_summary(self, seed: dict[str, Any]):  # type: ignore[no-untyped-def]
+        return self._inner.write_block_summary(seed)
+
+    def judge_summary(self, *, summary: str, detail: dict[str, Any]):  # type: ignore[no-untyped-def]
+        return self._inner.judge_summary(summary=summary, detail=detail)
 
 
 def test_key_findings_seed_carries_only_cited_only_chunk_content(conn: Connection) -> None:

@@ -42,7 +42,6 @@ from policy_atlas.runtime.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
     EXTRACT_PROFILE_IDS,
     NAMED_PAIRINGS,
-    TIME_BANDS,
     AnalysisDepth,
     ComposedChain,
     OrchestrationPlan,
@@ -50,6 +49,7 @@ from policy_atlas.runtime.orchestration_plan import (
     SteeringMode,
     _enabled_components,
     compose,
+    time_band_for,
 )
 from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire
 
@@ -1873,7 +1873,9 @@ def _apply_nudge(payload: dict[str, Any], nudge: str | None) -> None:
     payload["search_effort"] = search_effort
     payload["analysis_depth"] = analysis_depth
     _clip_components_to_depth(payload, analysis_depth=analysis_depth)
-    payload["time_band"] = TIME_BANDS[(search_effort, analysis_depth)]
+    payload["time_band"] = time_band_for(
+        search_effort, analysis_depth, payload.get("section_budget")
+    )
 
 
 def _clip_components_to_depth(payload: dict[str, Any], *, analysis_depth: AnalysisDepth) -> None:
@@ -2105,7 +2107,9 @@ def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
     for depth, settings in ANALYSIS_DEPTH_TABLE.items():
         if settings["selection_budget"] == budget:
             payload["analysis_depth"] = depth
-            payload["time_band"] = TIME_BANDS[(payload["search_effort"], depth)]
+            payload["time_band"] = time_band_for(
+                payload["search_effort"], depth, payload.get("section_budget")
+            )
             _clip_components_to_depth(payload, analysis_depth=depth)
             return
     raise SteeringAdjustmentError("selection budget does not map to a plan analysis_depth")

@@ -28,6 +28,7 @@ from policy_atlas.evidence_base.sourcing.country_filters import (
     validate_iso_alpha2,
     validate_overton_display_name,
 )
+from policy_atlas.evidence_base.synthesis.synthesis_tools import SECTION_CAP
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY
 
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
@@ -205,6 +206,29 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("standard", "deep"): "~80-95 min",
     ("deep", "deep"): "~90-100 min",
 }
+
+
+def time_band_for(
+    effort: SearchEffort,
+    depth: AnalysisDepth,
+    section_budget: int | None,
+) -> str:
+    """Return the deterministic display time band for a compiled plan.
+
+    Args:
+        effort: The plan's acquisition effort.
+        depth: The plan's analysis depth.
+        section_budget: Optional ordinary-section report budget.
+
+    Returns:
+        The display time band, including the short-report row where applicable.
+    """
+    if section_budget is not None and section_budget <= 4 and (
+        (effort in {"rapid", "standard"} and depth == "landscape")
+        or (effort == "standard" and depth == "standard")
+    ):
+        return "~5-10 min"
+    return TIME_BANDS[(effort, depth)]
 
 _DISCRETIONARY_COMPONENT_SET = set(DISCRETIONARY_COMPONENTS)
 # The screening harness component is keyed "screen" in COMPONENT_REGISTRY
@@ -656,7 +680,7 @@ class OrchestrationPlan(BaseModel):
     expected_artefact_shape: str = ""
     assumptions: list[str] = Field(default_factory=list)
     time_band: str = ""
-    section_budget: int | None = Field(default=None, ge=1, le=12)
+    section_budget: int | None = Field(default=None, ge=2, le=SECTION_CAP)
     source_turn_index: int | None = None
 
     @field_validator("title", "question")
@@ -841,7 +865,9 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("expected_artefact_shape does not match the composed chain")
         self.expected_artefact_shape = expected_shape
 
-        expected_time_band = TIME_BANDS[(self.search_effort, self.analysis_depth)]
+        expected_time_band = time_band_for(
+            self.search_effort, self.analysis_depth, self.section_budget
+        )
         if self.time_band and self.time_band != expected_time_band:
             raise ValueError("time_band does not match search_effort and analysis_depth")
         self.time_band = expected_time_band
@@ -975,6 +1001,8 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
         if not facets:
             raise ValueError("group cannot compile without grouping facets")
         return {"grouping": {"facets": list(facets)}}
+    if component == "synthesise" and plan.section_budget is not None:
+        return {"synthesis": {"section_budget": plan.section_budget}}
     return {}
 
 

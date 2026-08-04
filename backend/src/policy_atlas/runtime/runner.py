@@ -30,6 +30,7 @@ from policy_atlas.core.schema import (
     orchestration_plan,
     runs,
 )
+from policy_atlas.core.usage import UsageAccumulator
 from policy_atlas.evidence_base.assess.classification_backend import ClassificationBackend
 from policy_atlas.evidence_base.assess.screening_backend import ScreeningBackend
 from policy_atlas.evidence_base.corpus.ranking import RankingBackend
@@ -48,7 +49,10 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     StubSynthesisBackend,
     SynthesisBackend,
 )
-from policy_atlas.evidence_base.synthesis.synthesise import SynthesiseContext
+from policy_atlas.evidence_base.synthesis.synthesise import (
+    SynthesiseContext,
+    write_summaries_after_commit,
+)
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
 from policy_atlas.runtime.harness import run_harness
@@ -1872,6 +1876,7 @@ def _pause_options_and_bundle(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
+            section_budget=state.plan.section_budget,
         )
     )
     return options, bundle
@@ -1885,6 +1890,7 @@ def _build_bundle(
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
+    section_budget: int | None,
 ) -> dict[str, Any] | None:
     """Build the decision-point bundle for a lattice pause, fail-safe to None."""
     try:
@@ -1925,6 +1931,7 @@ def _build_bundle(
                     context=context,
                     synthesis_backend=synthesis_backend,
                     group_run_id=successful_runs.get("group"),
+                    section_budget=section_budget,
                 )
     except Exception as exc:  # noqa: BLE001 — fail-safe to no bundle (watch discipline 5)
         log.warning("runner.bundle_build_failed", steer_point=name, error=_bounded_error(exc))
@@ -3826,6 +3833,7 @@ def _resolve_unattended_boundary(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
+            section_budget=state.plan.section_budget,
         )
         outcome = discretion_hook(
             _DiscretionContext(
@@ -4230,6 +4238,7 @@ def _watch_observe_boundary(
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
+            section_budget=state.plan.section_budget,
         ) if steer_point_name is not None else None
         try:
             result = run_watch_decision(
@@ -4886,6 +4895,36 @@ def _run_step_attempt(
                 )
                 summary = harness_outcome.get("summary")
                 component_summary = summary if isinstance(summary, dict) else None
+        if registry_component == "synthesise" and component_summary is not None:
+            try:
+                summary_accounting = write_summaries_after_commit(
+                    engine,
+                    project_id=project_id,
+                    run_id=run_id,
+                    synthesis_backend=(
+                        backends.synthesis
+                        if backends.synthesis is not None
+                        else StubSynthesisBackend()
+                    ),
+                )
+                component_usage = component_summary.get("usage_totals")
+                if isinstance(component_usage, dict):
+                    merged_usage = UsageAccumulator()
+                    merged_usage.add_payload(component_usage)
+                    summary_usage = summary_accounting.get("usage_totals")
+                    if isinstance(summary_usage, dict):
+                        merged_usage.add_payload(summary_usage)
+                    component_summary["usage_totals"] = merged_usage.payload()
+                component_summary["summary_usage_totals"] = summary_accounting.get(
+                    "usage_totals", UsageAccumulator().payload()
+                )
+            except Exception as exc:  # noqa: BLE001 - summaries never fail a component
+                log.warning(
+                    "runner.summaries_degraded",
+                    project_id=str(project_id),
+                    run_id=str(run_id),
+                    error=_bounded_error(exc),
+                )
         # A successful harness result has committed with the component work;
         # append its terminal lifecycle event separately so the payload remains
         # byte-identical to the former node-level append.

@@ -51,6 +51,13 @@ from policy_atlas.core.usage import (
     usage_metadata,
 )
 from policy_atlas.evidence_base.group.facet_values import FORBIDDEN_GROUP_LABELS
+from policy_atlas.evidence_base.synthesis.summary_prompts import (
+    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
+    BLOCK_SUMMARY_SYSTEM_PROMPT,
+    SUMMARISER_PROMPT_VERSION,
+    SUMMARY_JUDGE_PROMPT_VERSION,
+    SUMMARY_JUDGE_SYSTEM_PROMPT,
+)
 from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     REASONING_CLAIMS_MAX,
     SECTION_CAP,
@@ -62,7 +69,12 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
 
 log = structlog.get_logger()
 
-SECTIONS_PROMPT_VERSION = "synthesise_sections_v2"
+# v3 (task 028 strand 12): the section list must read as one coherent
+# narrative — the answer-shaped lead section explicitly frames the sections
+# it opens (or drops), titles form a visible hierarchy — and honours the
+# plan's ordinary-section budget (strand 3's report-length lever) via the
+# code-assembled budget clause.
+SECTIONS_PROMPT_VERSION = "synthesise_sections_v3"
 # v8 (task 024 B2′ / ADR 0023): the version is v8 ALWAYS — the section surface
 # changed the moment the priority-findings block became renderable. The block
 # itself renders CONDITIONALLY (only when the run carries relevance
@@ -92,7 +104,12 @@ Priority findings:
   mark never changes what the evidence says — only the order and prominence
   with which you treat it.
 """
-KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v1"
+# v2 (task 028 fork B, owner-ruled): the block emits a scannable bullet
+# list — one headline per "- " line — instead of a dense paragraph; claim
+# spans sit inside single bullet lines so annotation anchoring survives the
+# list rendering (spans crossing a bullet boundary degrade honestly
+# renderer-side, never mis-render).
+KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v2"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
@@ -148,6 +165,23 @@ class SectionProposalWire(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sections: list[SectionWire]
+
+
+class SummaryWire(BaseModel):
+    """One summary emitted for a block or whole artefact."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    summary: str
+
+
+class SummaryJudgeWire(BaseModel):
+    """The flat faithfulness verdict for one navigation summary."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    verdict: Literal["pass", "fail"]
+    reason: str
 
 
 class ChunkCitationWire(BaseModel):
@@ -552,9 +586,21 @@ Instructions:
   characters) saying what evidence the section will present. Sections must be
   led by the intent: name aspects of the question and of the available
   evidence, in the vocabulary of both.
+- The section list must read as ONE coherent narrative, not a pile of
+  parallel topics. The reader meets the sections in order: each section's
+  title should make sense given the titles before it, and together the
+  titles should form a visible arc from the question to what the evidence
+  shows about it. Titles form the report's table of contents — write them
+  as a hierarchy a reader can scan: the lead section answers, the following
+  sections each develop one named aspect of that answer.
 - Where the intent asks a direct question, an answer-shaped lead section
   ("what the evidence shows on <the question>" — descriptive, fully cited,
   synthesising across the substrate) is encouraged as the first section.
+  When you propose one, its focus MUST name the aspects the following
+  sections develop, in their order, so the lead section frames the sections
+  it opens and the transition from it into them cannot jar. If the lead
+  section would merely repeat what the other sections say with no framing
+  work to do, drop it rather than duplicate.
 - Beyond the question's own aspects, consider whether the evidence supports
   sections playing these roles, and propose them only when it does: the
   policy or delivery context the documents themselves describe (under a
@@ -580,6 +626,15 @@ Instructions:
   group unassigned rather than force it.
 - Do not invent sections the substrate cannot support: every section's focus
   must be answerable from the summarised evidence.
+"""
+
+# Appended to SECTIONS_SYSTEM_PROMPT (code-assembled) only when the plan
+# carries a section budget; SECTION_CAP stays the hard ceiling either way.
+SECTIONS_BUDGET_CLAUSE_TEMPLATE = """\
+- This report has a section budget: propose AT MOST {section_budget}
+  sections. The budget is the report's length lever — pick the
+  {section_budget} aspects that answer the question best and fold the rest
+  into them; never pad to reach it, and never exceed it.
 """
 
 SECTIONS_USER_TEMPLATE = """\
@@ -822,15 +877,22 @@ How to work:
   chunk text, that the section claims cite — sources only, never a section or
   the report itself.
 
+Form — a scannable bullet list, not a paragraph:
+- The prose is a bullet list: each headline is ONE line starting with "- "
+  and ending with a newline. No prose before the first bullet or after the
+  last; no nested bullets.
+- One headline per bullet, takeaway-first, in the same analyst register as
+  the sections: no pipeline vocabulary, numbers restated the way an analyst
+  would, descriptive never evaluative — no recommendations, no verdicts.
+- Each claim's "text" span must sit inside a single bullet line — a span
+  never crosses a bullet boundary.
+
 What makes the cut:
 - Only genuine headlines: the findings a decision-maker would repeat in a
   meeting about the intent. Prefer the strongest-grounded claims and carry
   their caveats and populations faithfully — a headline that drops a caveat
   is a misquote of your own report.
-- 3–7 claims, 60–180 words. One sentence per headline, takeaway-first, in the
-  same analyst register as the sections: no pipeline vocabulary, numbers
-  restated the way an analyst would, descriptive never evaluative — no
-  recommendations, no verdicts.
+- 3–7 bullets, 60–180 words in total.
 - When the sections support no headline evidence claims — a thin or
   landscape-shaped report — return empty "prose" and an empty "claims" list:
   an absent block is correct and expected; never force one.
@@ -889,6 +951,7 @@ def build_sections_messages(
     intent: str,
     substrate: dict[str, Any],
     rejection: list[str] | None = None,
+    section_budget: int | None = None,
 ) -> list[dict[str, Any]]:
     """Assemble the section-proposal messages.
 
@@ -897,6 +960,8 @@ def build_sections_messages(
         substrate: Id-keyed substrate summaries (deterministically assembled).
         rejection: Validation errors from a rejected first proposal, for the
             one bounded repair call; ``None`` for the initial call.
+        section_budget: Optional ordinary-section ceiling from the approved
+            plan. ``None`` preserves the historical prompt byte-for-byte.
 
     Returns:
         Chat messages ready for a schema-constrained completion.
@@ -909,9 +974,70 @@ def build_sections_messages(
         user += SECTIONS_REPAIR_SUFFIX.format(
             rejection_json=json.dumps(rejection, ensure_ascii=False)
         )
+    system_prompt = SECTIONS_SYSTEM_PROMPT
+    if section_budget is not None:
+        system_prompt += "\n" + SECTIONS_BUDGET_CLAUSE_TEMPLATE.format(
+            section_budget=section_budget
+        )
     return [
-        {"role": "system", "content": SECTIONS_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user},
+    ]
+
+
+def build_block_summary_messages(seed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Assemble the schema-constrained block-summary request.
+
+    Args:
+        seed: Persisted block prose, title, and epistemic annotations as data.
+
+    Returns:
+        Chat messages for one block-summary completion.
+    """
+    return [
+        {"role": "system", "content": BLOCK_SUMMARY_SYSTEM_PROMPT},
+        {"role": "user", "content": json.dumps(seed, ensure_ascii=False, sort_keys=True)},
+    ]
+
+
+def build_artefact_summary_messages(seed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Assemble the schema-constrained artefact-summary request.
+
+    Args:
+        seed: Artefact title/question, conclusion-bearing detail, and section
+            shape as data.
+
+    Returns:
+        Chat messages for one artefact-summary completion.
+    """
+    return [
+        {"role": "system", "content": ARTEFACT_SUMMARY_SYSTEM_PROMPT},
+        {"role": "user", "content": json.dumps(seed, ensure_ascii=False, sort_keys=True)},
+    ]
+
+
+def build_summary_judge_messages(
+    *, summary: str, detail: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Assemble the flat summary-faithfulness judgement request.
+
+    Args:
+        summary: Candidate navigation summary.
+        detail: Raw prose plus its epistemic annotations, as persisted.
+
+    Returns:
+        Chat messages for one summary-judge completion.
+    """
+    return [
+        {"role": "system", "content": SUMMARY_JUDGE_SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": json.dumps(
+                {"summary": summary, "detail": detail},
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        },
     ]
 
 
@@ -1074,6 +1200,7 @@ class SynthesisBackend(Protocol):
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
+        section_budget: int | None = None,
     ) -> UsageResult[SectionProposalWire]:
         """Propose the intent-led section list (``synthesise_sections_v1``).
 
@@ -1081,9 +1208,35 @@ class SynthesisBackend(Protocol):
             intent: The evidence scope's intent, verbatim.
             substrate: Id-keyed substrate summaries.
             rejection: Validation errors driving the one bounded repair call.
+            section_budget: Optional ordinary-section ceiling from the plan.
 
         Returns:
             Raw structurally parsed proposal plus token usage.
+        """
+        ...
+
+    def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
+        """Write one navigation summary for a persisted report block.
+
+        Args:
+            seed: Block title, prose, and epistemic annotations as data.
+
+        Returns:
+            Structurally parsed summary plus provider usage.
+        """
+        ...
+
+    def judge_summary(
+        self, *, summary: str, detail: dict[str, Any]
+    ) -> UsageResult[SummaryJudgeWire]:
+        """Judge a summary directly against its raw persisted detail.
+
+        Args:
+            summary: Candidate navigation summary.
+            detail: Raw detail and its epistemic annotations.
+
+        Returns:
+            Flat pass/fail verdict plus provider usage.
         """
         ...
 
@@ -1510,6 +1663,7 @@ class OpenAISynthesisBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
+        section_budget: int | None = None,
     ) -> UsageResult[SectionProposalWire]:
         """Propose sections through structured OpenAI output.
 
@@ -1517,6 +1671,7 @@ class OpenAISynthesisBackend:
             intent: Evidence-scope intent.
             substrate: Available substrate summaries.
             rejection: Optional rejected-proposal reasons for the bounded repair call.
+            section_budget: Optional ordinary-section ceiling from the plan.
 
         Returns:
             Raw structurally parsed section proposal plus token usage.
@@ -1528,6 +1683,7 @@ class OpenAISynthesisBackend:
             intent=intent,
             substrate=substrate,
             rejection=rejection,
+            section_budget=section_budget,
         )
 
         def _update(
@@ -1552,6 +1708,97 @@ class OpenAISynthesisBackend:
             update=_update,
         )
         return proposal, usage
+
+    def _write_summary_once(
+        self, messages: list[dict[str, Any]]
+    ) -> UsageResult[SummaryWire]:
+        completions: Any = self._client.chat.completions
+        response = completions.parse(
+            model=SYNTHESIS_MODEL,
+            messages=messages,
+            response_format=SummaryWire,
+        )
+        log_usage("synthesis.summary.usage", response.usage)
+        parsed = require_parsed(response, label="synthesis summary")
+        return parsed, token_usage_from_provider(response.usage)
+
+    def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
+        """Write a block navigation summary through structured OpenAI output.
+
+        Args:
+            seed: Block title, prose, and epistemic annotations as data.
+
+        Returns:
+            Structurally parsed summary plus provider usage.
+        """
+        messages = (
+            build_artefact_summary_messages(seed)
+            if seed.get("kind") == "artefact"
+            else build_block_summary_messages(seed)
+        )
+
+        def _update(span: Any, result: UsageResult[SummaryWire]) -> None:
+            summary, usage = result
+            span.update(
+                input={"messages": messages},
+                output=summary.model_dump(),
+                model=SYNTHESIS_MODEL,
+                metadata={"prompt_version": SUMMARISER_PROMPT_VERSION, **usage_metadata(usage)},
+            )
+
+        return tracing.traced_call(
+            self._langfuse_client,
+            name=(
+                "synthesise:artefact_summary"
+                if seed.get("kind") == "artefact"
+                else "synthesise:block_summary"
+            ),
+            as_type="generation",
+            call=lambda: self._write_summary_once(messages),
+            update=_update,
+        )
+
+    def judge_summary(
+        self, *, summary: str, detail: dict[str, Any]
+    ) -> UsageResult[SummaryJudgeWire]:
+        """Judge a summary through structured OpenAI output.
+
+        Args:
+            summary: Candidate navigation summary.
+            detail: Raw detail and its epistemic annotations.
+
+        Returns:
+            Flat pass/fail verdict plus provider usage.
+        """
+        messages = build_summary_judge_messages(summary=summary, detail=detail)
+
+        def _call() -> UsageResult[SummaryJudgeWire]:
+            completions: Any = self._client.chat.completions
+            response = completions.parse(
+                model=SYNTHESIS_MODEL,
+                messages=messages,
+                response_format=SummaryJudgeWire,
+            )
+            log_usage("synthesis.summary_judge.usage", response.usage)
+            parsed = require_parsed(response, label="synthesis summary judge")
+            return parsed, token_usage_from_provider(response.usage)
+
+        def _update(span: Any, result: UsageResult[SummaryJudgeWire]) -> None:
+            verdict, usage = result
+            span.update(
+                input={"messages": messages},
+                output=verdict.model_dump(),
+                model=SYNTHESIS_MODEL,
+                metadata={"prompt_version": SUMMARY_JUDGE_PROMPT_VERSION, **usage_metadata(usage)},
+            )
+
+        return tracing.traced_call(
+            self._langfuse_client,
+            name="synthesise:summary_judge",
+            as_type="generation",
+            call=_call,
+            update=_update,
+        )
 
     def _create_section_turn_once(
         self,
@@ -1844,6 +2091,8 @@ class StubSynthesisBackend:
         proposal: SectionProposalWire | None = None,
         repair: SectionRepairWire | None = None,
         fail: bool = False,
+        summary_fail: bool = False,
+        summary_judgements: list[SummaryJudgeWire] | None = None,
     ) -> None:
         """Create a stub synthesis backend.
 
@@ -1852,11 +2101,19 @@ class StubSynthesisBackend:
             proposal: Optional fixed section proposal.
             repair: Optional fixed repair response.
             fail: When true, every method raises the failure sentinel.
+            summary_fail: When true, summary-provider methods raise without
+                affecting ordinary synthesis methods.
+            summary_judgements: Optional verdict script consumed in order.
         """
         self._script = script
         self._proposal = proposal
         self._repair = repair
         self._fail = fail
+        self._summary_fail = summary_fail
+        self._summary_judgements = list(summary_judgements or [])
+        self.proposal_inputs: list[dict[str, Any]] = []
+        self.summary_seeds: list[dict[str, Any]] = []
+        self.summary_judge_inputs: list[dict[str, Any]] = []
 
     def _raise_if_failed(self) -> None:
         if self._fail:
@@ -1868,6 +2125,7 @@ class StubSynthesisBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
+        section_budget: int | None = None,
     ) -> UsageResult[SectionProposalWire]:
         """Return a fixed or deterministic two-section proposal.
 
@@ -1884,7 +2142,15 @@ class StubSynthesisBackend:
             RuntimeError: If the failure sentinel is enabled.
         """
         self._raise_if_failed()
-        del rejection
+        self.proposal_inputs.append(
+            {
+                "intent": intent,
+                "substrate": substrate,
+                "rejection": rejection,
+                "section_budget": section_budget,
+            }
+        )
+        del rejection, section_budget
         if self._proposal is not None:
             return self._proposal, None
 
@@ -1906,6 +2172,48 @@ class StubSynthesisBackend:
             ),
             None,
         )
+
+    def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
+        """Return a deterministic first-sentence navigation summary.
+
+        Args:
+            seed: Persisted block detail.
+
+        Returns:
+            A summary wire plus no token usage.
+
+        Raises:
+            RuntimeError: If the summary failure sentinel is enabled.
+        """
+        if self._summary_fail:
+            raise RuntimeError("Stub summary failure sentinel.")
+        self.summary_seeds.append(seed)
+        prose = str(seed.get("prose", "")).strip()
+        sentence = prose.split(".", 1)[0].strip()
+        summary = sentence + "." if sentence else "No summary available."
+        return SummaryWire(summary=summary[:200]), None
+
+    def judge_summary(
+        self, *, summary: str, detail: dict[str, Any]
+    ) -> UsageResult[SummaryJudgeWire]:
+        """Return the next scripted or default passing summary verdict.
+
+        Args:
+            summary: Candidate summary.
+            detail: Persisted raw detail.
+
+        Returns:
+            A flat verdict wire plus no token usage.
+
+        Raises:
+            RuntimeError: If the summary failure sentinel is enabled.
+        """
+        if self._summary_fail:
+            raise RuntimeError("Stub summary failure sentinel.")
+        self.summary_judge_inputs.append({"summary": summary, "detail": detail})
+        if self._summary_judgements:
+            return self._summary_judgements.pop(0), None
+        return SummaryJudgeWire(verdict="pass", reason="deterministic stub"), None
 
     def _scripted_turn(
         self,

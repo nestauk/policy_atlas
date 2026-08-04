@@ -35,10 +35,10 @@ from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTAT
 from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
 from policy_atlas.runtime.orchestrate import build_plan, persist_approved_plan
 from policy_atlas.runtime.orchestration_plan import (
-    TIME_BANDS,
     OrchestrationPlan,
     compose,
     registry_component_for,
+    time_band_for,
 )
 from policy_atlas.runtime.planner import PlannerBackend
 from policy_atlas.runtime.planner_prompt import PlanDraftWire
@@ -108,7 +108,9 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
     values.pop("steer_point_defaults", None)
     effort, depth = values.get("search_effort"), values.get("analysis_depth")
     if effort in {"rapid", "standard", "deep"} and depth in {"landscape", "standard", "deep"}:
-        values["time_band"] = TIME_BANDS[(effort, depth)]
+        values["time_band"] = time_band_for(
+            effort, depth, values.get("section_budget")
+        )
     values["ready"] = ready
     return PlanDraft.model_validate(values)
 
