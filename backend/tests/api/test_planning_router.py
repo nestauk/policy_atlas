@@ -7,11 +7,14 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
+from policy_atlas.api.contract import RunOut
 from policy_atlas.api.deps import get_planner_backend
 from policy_atlas.api.routers import planning
+from policy_atlas.api.routers import runs as runs_router
 from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core.schema import (
     capability_run,
@@ -21,7 +24,13 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.runtime.orchestration_plan import TIME_BANDS, OrchestrationPlan
 from policy_atlas.runtime.planner import StubPlannerBackend
-from policy_atlas.runtime.planner_prompt import PlanDraftWire, PlannerTurnWire
+from policy_atlas.runtime.planner_prompt import (
+    PartChipWire,
+    PartOptionWire,
+    PartProposalWire,
+    PlanDraftWire,
+    PlannerTurnWire,
+)
 from tests.api.resource_support import api_client, create_project
 
 
@@ -59,6 +68,25 @@ class FailOncePlanner(CountingPlanner):
             self.calls.append((turns, previous_draft))
             raise RuntimeError("planned test failure")
         return super().plan_turn(turns, previous_draft, session_id=session_id)
+
+
+class PartPlanner(CountingPlanner):
+    """Planner double that attaches a controlled part proposal to each turn."""
+
+    def __init__(self, part: PartProposalWire) -> None:
+        super().__init__()
+        self.part = part
+
+    def plan_turn(
+        self,
+        turns: list[dict[str, str]],
+        previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> PlannerTurnWire:
+        """Return the ordinary stub turn with the configured structured part."""
+        turn = super().plan_turn(turns, previous_draft, session_id=session_id)
+        return turn.model_copy(update={"part": self.part})
 
 
 def _reset_turn_locks() -> None:
@@ -193,6 +221,222 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
             ).one_or_none()
             is not None
         )
+
+
+def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_path: Path) -> None:
+    """Persist a valid card verbatim in both transcript and replay response shapes."""
+    _reset_turn_locks()
+    part = PartProposalWire(
+        id="scope",
+        step_label="Plan · 2 of 3 · scope",
+        title="Focus on the UK since 2016",
+        body="This keeps the search decision-relevant.",
+        chips=[
+            PartChipWire(label="Since 2016", kind="date_range", value='{"after": "2016"}'),
+            PartChipWire(
+                label="United Kingdom",
+                kind="country_list",
+                value='{"countries": ["GB"]}',
+            ),
+        ],
+        options=[
+            PartOptionWire(id="confirm", label="Use this scope", primary=True),
+            PartOptionWire(id="refine", label="Refine it", primary=False),
+        ],
+    )
+    stub = PartPlanner(part)
+    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+        project_id = create_project(client, owner)
+        turn_id = str(uuid.uuid4())
+        first = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
+        )
+        replay = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
+        )
+        transcript = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+    assert first.status_code == replay.status_code == transcript.status_code == 200
+    assert replay.json()["part"] == first.json()["part"]
+    assert transcript.json()["data"][0]["part"] == first.json()["part"]
+    with engine.connect() as conn:
+        stored = conn.execute(
+            select(planning_transcript.c.part, planning_transcript.c.response).where(
+                planning_transcript.c.project_id == uuid.UUID(project_id)
+            )
+        ).mappings().one()
+    assert stored["part"] == first.json()["part"]
+    assert stored["response"]["part"] == first.json()["part"]
+
+
+@pytest.mark.parametrize(
+    ("part", "reason"),
+    [
+        (
+            PartProposalWire(
+                id="question",
+                step_label="Plan · 1 of 3",
+                title="Question",
+                options=[
+                    PartOptionWire(id=f"option_{index}", label="Option", primary=index == 0)
+                    for index in range(5)
+                ],
+            ),
+            "invalid_option_count",
+        ),
+        (
+            PartProposalWire(
+                id="question",
+                step_label="Plan · 1 of 3",
+                title="Question",
+                options=[
+                    PartOptionWire(id="one", label="One", primary=False),
+                    PartOptionWire(id="two", label="Two", primary=False),
+                ],
+            ),
+            "invalid_primary_count",
+        ),
+        (
+            PartProposalWire(
+                id="scope",
+                step_label="Plan · 2 of 3",
+                title="Scope",
+                chips=[PartChipWire(label="Since 2016", kind="date_range", value="not json")],
+                options=[
+                    PartOptionWire(id="one", label="One", primary=True),
+                    PartOptionWire(id="two", label="Two", primary=False),
+                ],
+            ),
+            "invalid_chip_json",
+        ),
+    ],
+)
+def test_malformed_planning_part_degrades_to_prose_and_logs_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, part: PartProposalWire, reason: str
+) -> None:
+    """Drop invalid cards without failing their otherwise valid planner turn."""
+    _reset_turn_locks()
+    warnings: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    monkeypatch.setattr(
+        planning.log,
+        "warning",
+        lambda *args, **kwargs: warnings.append((args, kwargs)),
+    )
+    with api_client(tmp_path, {get_planner_backend: lambda: PartPlanner(part)}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = create_project(client, owner)
+        response = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["part"] is None
+    assert warnings == [(("planning_part_dropped",), {"reason": reason})]
+
+
+def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fence dispatch when a completed planning turn supersedes approval."""
+    _reset_turn_locks()
+    stub = CountingPlanner()
+    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+        project_id = create_project(client, owner)
+        first = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        approved = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
+        )
+        assert first.status_code == approved.status_code == 200
+        with engine.begin() as conn:
+            conn.execute(
+                planning_transcript.insert().values(
+                    id=uuid.uuid4(),
+                    project_id=uuid.UUID(project_id),
+                    client_turn_id=uuid.uuid4(),
+                    turn_index=2,
+                    user_message="One more planning detail",
+                    reply="A legacy completed reply.",
+                    planner_state=first.json()["plan"],
+                    response=first.json(),
+                    suggestions=[],
+                    status="completed",
+                    created_at=datetime.now(UTC),
+                    completed_at=datetime.now(UTC),
+                )
+            )
+            approved_payload = conn.execute(
+                select(orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
+                .where(orchestration_plan.c.status == "approved")
+            ).scalar_one()
+        assert approved_payload["source_turn_index"] == 1
+
+        plan_after_newer_turn = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        transcript = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        stale_start = client.post(f"/api/v1/projects/{project_id}/runs", headers=owner, json={})
+        assert plan_after_newer_turn.status_code == transcript.status_code == 200
+        assert plan_after_newer_turn.json() == {
+            "plan": first.json()["plan"],
+            "version": 0,
+            "status": "draft",
+        }
+        assert transcript.json()["data"][-1]["part"] is None
+        assert stale_start.status_code == 409
+        assert stale_start.json()["error"] == {
+            "code": "plan_stale",
+            "message": "the plan predates your latest planning message — review it, then start",
+        }
+
+        reapproved = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "Ready to proceed", "client_turn_id": str(uuid.uuid4())},
+        )
+        assert reapproved.status_code == 200
+        reapproved_plan = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        assert reapproved_plan.json()["status"] == "approved"
+        with engine.connect() as conn:
+            refreshed_payload = conn.execute(
+                select(orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
+                .where(orchestration_plan.c.status == "approved")
+            ).scalar_one()
+        assert refreshed_payload["source_turn_index"] == 3
+
+        monkeypatch.setattr(runs_router, "_dispatch_run", lambda *args, **kwargs: None)
+        monkeypatch.setattr(
+            runs_router,
+            "_await_new_run",
+            lambda _engine, *, project_id, **_kwargs: RunOut(
+                capability_run_id=uuid.uuid4(),
+                project_id=project_id,
+                plan_id=uuid.uuid4(),
+                plan_version=2,
+                status="running",
+                started_at=datetime.now(UTC),
+            ),
+        )
+        restarted = client.post(f"/api/v1/projects/{project_id}/runs", headers=owner, json={})
+        assert restarted.status_code == 201
 
 
 def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(

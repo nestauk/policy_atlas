@@ -1550,6 +1550,75 @@ export interface components {
             pagination: components["schemas"]["PageMeta"];
         };
         /**
+         * PartChipOut
+         * @description One typed, editable chip attached to a planning part.
+         *
+         *     Args:
+         *         label: Short user-visible chip label.
+         *         kind: Editor type for the chip value.
+         *         value: Machine-readable value consumed by that editor.
+         */
+        PartChipOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "date_range" | "country_list";
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * PartOptionOut
+         * @description One selectable option on a sequential planning part.
+         *
+         *     Args:
+         *         id: Stable option identifier within the part.
+         *         label: Short user-visible option label.
+         *         sub: Optional outcome and time-band sub-label.
+         *         primary: Whether this is the single recommended option.
+         *         reason: Optional explanation for the recommendation.
+         */
+        PartOptionOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Primary */
+            primary: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Sub */
+            sub?: string | null;
+        };
+        /**
+         * PartProposalOut
+         * @description One structured proposal in the sequential planning conversation.
+         *
+         *     Args:
+         *         id: The proposed planning part.
+         *         step_label: User-visible position and context for the proposal.
+         *         title: Plain-language proposal heading.
+         *         body: Optional supporting explanation.
+         *         chips: Optional typed scope chips.
+         *         options: The available response options.
+         */
+        PartProposalOut: {
+            /** Body */
+            body?: string | null;
+            /** Chips */
+            chips?: components["schemas"]["PartChipOut"][] | null;
+            /** Id */
+            id: string;
+            /** Options */
+            options: components["schemas"]["PartOptionOut"][];
+            /** Step Label */
+            step_label: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * PlanDraft
          * @description Draft or approved orchestration plan, as surfaced to the client.
          *
@@ -1761,10 +1830,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Part */
-            part?: {
-                [key: string]: unknown;
-            } | null;
+            part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
             /**
@@ -1807,8 +1873,10 @@ export interface components {
          *         plan: The full current draft plan.
          *         suggestions: The planner's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
+         *         part: Structured sequential-planning proposal, when this turn carries one.
          */
         PlanningTurnOut: {
+            part?: components["schemas"]["PartProposalOut"] | null;
             plan: components["schemas"]["PlanDraft"];
             /** Reply */
             reply: string;

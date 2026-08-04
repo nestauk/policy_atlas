@@ -32,6 +32,9 @@ _CONFLICT_CODES = {
     "capacity",
     "planning_turn_in_progress",
     "stale_turn",
+    # 028 strand 3: the approved plan predates the newest completed planning
+    # turn — review the demoted draft, re-approve, then start.
+    "plan_stale",
 }
 
 

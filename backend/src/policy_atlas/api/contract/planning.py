@@ -198,6 +198,58 @@ class PlanningTurnCreate(BaseModel):
     client_turn_id: uuid.UUID
 
 
+class PartOptionOut(BaseModel):
+    """One selectable option on a sequential planning part.
+
+    Args:
+        id: Stable option identifier within the part.
+        label: Short user-visible option label.
+        sub: Optional outcome and time-band sub-label.
+        primary: Whether this is the single recommended option.
+        reason: Optional explanation for the recommendation.
+    """
+
+    id: str
+    label: str
+    sub: str | None = None
+    primary: bool
+    reason: str | None = None
+
+
+class PartChipOut(BaseModel):
+    """One typed, editable chip attached to a planning part.
+
+    Args:
+        label: Short user-visible chip label.
+        kind: Editor type for the chip value.
+        value: Machine-readable value consumed by that editor.
+    """
+
+    label: str
+    kind: Literal["text", "date_range", "country_list"]
+    value: str
+
+
+class PartProposalOut(BaseModel):
+    """One structured proposal in the sequential planning conversation.
+
+    Args:
+        id: The proposed planning part.
+        step_label: User-visible position and context for the proposal.
+        title: Plain-language proposal heading.
+        body: Optional supporting explanation.
+        chips: Optional typed scope chips.
+        options: The available response options.
+    """
+
+    id: str
+    step_label: str
+    title: str
+    body: str | None = None
+    chips: list[PartChipOut] | None = None
+    options: list[PartOptionOut]
+
+
 class PlanningTurnOut(BaseModel):
     """Response body for one planner turn.
 
@@ -206,11 +258,13 @@ class PlanningTurnOut(BaseModel):
         plan: The full current draft plan.
         suggestions: The planner's suggested answers to its clarifying
             question, rendered as tappable quick replies. Empty when none.
+        part: Structured sequential-planning proposal, when this turn carries one.
     """
 
     reply: str
     plan: PlanDraft
     suggestions: list[str] = Field(default_factory=list)
+    part: PartProposalOut | None = None
 
 
 class PlanningTranscriptTurnOut(BaseModel):
@@ -234,7 +288,7 @@ class PlanningTranscriptTurnOut(BaseModel):
     user_message: str
     reply: str | None
     suggestions: list[str] = Field(default_factory=list)
-    part: dict[str, object] | None = None
+    part: PartProposalOut | None = None
     status: Literal["pending", "completed", "failed"]
     created_at: datetime
     completed_at: datetime | None

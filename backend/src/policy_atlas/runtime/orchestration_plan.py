@@ -633,6 +633,8 @@ class OrchestrationPlan(BaseModel):
         assumptions: Visible assumptions and open guesses.
         time_band: Deterministic wall-clock band derived from the two axes.
         section_budget: Optional future synthesis cap for ordinary sections.
+        source_turn_index: Planning turn that approved this payload, when it
+            was created through the planning API.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -655,6 +657,7 @@ class OrchestrationPlan(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
     time_band: str = ""
     section_budget: int | None = Field(default=None, ge=1, le=12)
+    source_turn_index: int | None = None
 
     @field_validator("title", "question")
     @classmethod

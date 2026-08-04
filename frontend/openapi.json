@@ -2386,6 +2386,138 @@
         "title": "Page[RunOut]",
         "type": "object"
       },
+      "PartChipOut": {
+        "description": "One typed, editable chip attached to a planning part.\n\nArgs:\n    label: Short user-visible chip label.\n    kind: Editor type for the chip value.\n    value: Machine-readable value consumed by that editor.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "text",
+              "date_range",
+              "country_list"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "value"
+        ],
+        "title": "PartChipOut",
+        "type": "object"
+      },
+      "PartOptionOut": {
+        "description": "One selectable option on a sequential planning part.\n\nArgs:\n    id: Stable option identifier within the part.\n    label: Short user-visible option label.\n    sub: Optional outcome and time-band sub-label.\n    primary: Whether this is the single recommended option.\n    reason: Optional explanation for the recommendation.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "primary": {
+            "title": "Primary",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "primary"
+        ],
+        "title": "PartOptionOut",
+        "type": "object"
+      },
+      "PartProposalOut": {
+        "description": "One structured proposal in the sequential planning conversation.\n\nArgs:\n    id: The proposed planning part.\n    step_label: User-visible position and context for the proposal.\n    title: Plain-language proposal heading.\n    body: Optional supporting explanation.\n    chips: Optional typed scope chips.\n    options: The available response options.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "chips": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PartChipOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chips"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PartOptionOut"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "step_label": {
+            "title": "Step Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "step_label",
+          "title",
+          "options"
+        ],
+        "title": "PartProposalOut",
+        "type": "object"
+      },
       "PlanDraft": {
         "description": "Draft or approved orchestration plan, as surfaced to the client.\n\nMirrors the runtime `OrchestrationPlan` field-by-field. Every field\nexcept `steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible title for the run.\n    question: Refined evidence question.\n    scoping_notes: User-expressed scoping notes.\n    screening_criteria: Visible inclusion/exclusion criteria for screening.\n    backend_scope: Search backend scope.\n    scope_constraints: Optional recency and publisher-geography constraints.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    components: Discretionary orchestration components only.\n    component_rationale: Visible intent-fit rationale keyed by\n        discretionary component.\n    grouping_facets: Optional grouping facets, valid only when `group`\n        runs.\n    extract_profiles: Optional finding profile short names, valid only\n        when `extract` runs.\n    steering_mode: Steering mode for the run.\n    assumptions: Visible assumptions and open guesses.\n    expected_artefact_shape: Deterministic forecast derived from components.\n    time_band: Deterministic wall-clock band derived from the two axes.\n    section_budget: Optional future synthesis cap for ordinary sections.\n    steps: The composed chain, presentation-labelled, in execution order.\n    ready: Whether the draft has validated fail-closed into an\n        executable plan.",
         "properties": {
@@ -2792,14 +2924,12 @@
           "part": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/PartProposalOut"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Part"
+            ]
           },
           "reply": {
             "anyOf": [
@@ -2873,8 +3003,18 @@
         "type": "object"
       },
       "PlanningTurnOut": {
-        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.",
+        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-planning proposal, when this turn carries one.",
         "properties": {
+          "part": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanDraft"
           },
