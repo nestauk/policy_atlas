@@ -135,8 +135,8 @@ export function SectionDisclosure({
           <h2 className="flex-1 font-display text-heading font-bold text-navy">
             {scrub(section.title)}
           </h2>
-          <span aria-hidden="true" className="text-meta text-grey">
-            {expanded ? "−" : "+"}
+          <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+            {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
       ) : (
@@ -199,8 +199,8 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
         <h2 className="flex-1 font-display text-heading font-bold text-navy">
           How the evidence was gathered
         </h2>
-        <span aria-hidden="true" className="text-meta text-grey">
-          {open ? "−" : "+"}
+        <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+          {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && funnelLine !== null && (

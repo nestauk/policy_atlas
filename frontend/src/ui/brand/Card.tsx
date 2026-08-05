@@ -23,7 +23,7 @@ export function PaneHeading({ className, ...props }: HTMLAttributes<HTMLDivEleme
     <div
       className={cn(
         "flex items-center justify-between px-4 pb-2.5 pt-3.5",
-        "text-[11px] font-extrabold uppercase tracking-[0.06em] text-grey",
+        "text-caption font-extrabold uppercase tracking-[0.06em] text-grey",
         className,
       )}
       {...props}

@@ -140,12 +140,12 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
   // manual retry instead.
   if (!oidc.isAuthenticated && oidc.error) {
     return (
-      <div role="alert" className="text-sm text-grey">
+      <div role="alert" className="text-meta text-grey">
         <p>Sign-in didn&apos;t complete: {oidc.error.message}</p>
         <button
           type="button"
           onClick={retrySignIn}
-          className="cursor-pointer text-[13px] text-grey underline hover:text-navy"
+          className="cursor-pointer text-meta text-grey underline hover:text-navy"
         >
           Sign in again
         </button>
@@ -157,7 +157,7 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
   // shell must not mount — its queries would fire tokenless and 401.
   if (!oidc.isAuthenticated) {
     return (
-      <p role="status" className="text-sm text-grey">
+      <p role="status" className="text-meta text-grey">
         Taking you to sign in…
       </p>
     );

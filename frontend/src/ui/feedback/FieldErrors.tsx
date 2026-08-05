@@ -5,7 +5,7 @@ export function FieldErrors({ field, errors }: { field: string; errors: FieldErr
   const messages = errors[field] ?? [];
   if (messages.length === 0) return null;
   return (
-    <ul id={`${field}-errors`} role="alert" className="mt-1 text-xs text-red">
+    <ul id={`${field}-errors`} role="alert" className="mt-1 text-caption text-red">
       {messages.map((message) => <li key={message}>{message}</li>)}
     </ul>
   );

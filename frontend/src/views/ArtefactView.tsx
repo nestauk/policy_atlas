@@ -1080,8 +1080,8 @@ function ReferencesSection({
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
         <h2 className="flex-1 font-display text-heading font-bold text-navy">References</h2>
-        <span aria-hidden="true" className="text-meta text-grey">
-          {open ? "−" : "+"}
+        <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+          {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && (

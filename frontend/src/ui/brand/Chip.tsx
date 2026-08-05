@@ -9,7 +9,7 @@ import { cn } from "./cn";
  * chip with its text label (labels-not-scores discipline).
  */
 const chipVariants = cva(
-  "inline-flex items-center gap-1.5 border px-2.5 py-1 text-[11.5px] font-semibold",
+  "inline-flex items-center gap-1.5 border px-2.5 py-1 text-caption font-semibold",
   {
     variants: {
       tone: {
