@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
@@ -821,6 +821,10 @@ export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const artefact = useArtefact(projectId);
+  // Cited-scoped distributions for the facts strip: study types and years
+  // count what the report CITES, not the whole included corpus (owner,
+  // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
+  const citedLandscape = useLandscape(projectId, "cited");
   const stream = useRunStream(projectId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
@@ -909,8 +913,15 @@ export function ArtefactView() {
   }
 
   const snapshot = data.coverage_snapshot;
-  const studyTypes = Object.entries(snapshot?.study_types ?? {}).sort(([, a], [, b]) => b - a);
-  const shownTypes = studyTypes.slice(0, 3);
+  // Study types and years count the CITED set (the live cited-scope
+  // landscape), not the whole included corpus.
+  const citedTypes = Object.entries(citedLandscape.data?.evidence_types ?? {}).sort(
+    ([, a], [, b]) => b - a,
+  );
+  const shownTypes = citedTypes.slice(0, 3);
+  const citedYears = Object.keys(citedLandscape.data?.years ?? {})
+    .map(Number)
+    .filter(Number.isInteger);
   const sections = orderSections((data.sections ?? []) as SectionLike[]);
 
   // Sources and Screened out link into the sources view, filtered to match
@@ -923,7 +934,7 @@ export function ArtefactView() {
     // never "found".
     snapshotCells.push([
       "Sources",
-      `${snapshot.source_count} cited · ${snapshot.included} included`,
+      `${snapshot.source_count} cited out of ${snapshot.included} included`,
       `/projects/${projectId}/sources?cited=true`,
     ]);
   }
@@ -931,17 +942,21 @@ export function ArtefactView() {
     snapshotCells.push([
       "Study types",
       shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
-        (studyTypes.length > 3 ? ` · +${studyTypes.length - 3} more` : ""),
+        (citedTypes.length > 3 ? ` · +${citedTypes.length - 3} more` : ""),
       null,
     ]);
   }
-  if (snapshot?.year_range !== null && snapshot?.year_range !== undefined) {
-    snapshotCells.push(["Years", `${snapshot.year_range[0]}–${snapshot.year_range[1]}`, null]);
+  if (citedYears.length > 0) {
+    snapshotCells.push([
+      "Years",
+      `${Math.min(...citedYears)}–${Math.max(...citedYears)}`,
+      null,
+    ]);
   }
   if (typeof snapshot?.screened_out === "number") {
     snapshotCells.push([
       "Screened out",
-      `${snapshot.screened_out} — all listed with reasons`,
+      `${snapshot.screened_out}`,
       `/projects/${projectId}/sources?status=screened_out`,
     ]);
   }
@@ -966,7 +981,7 @@ export function ArtefactView() {
         <h1 className="mt-1 font-display text-title font-extrabold leading-tight tracking-[-0.5px] text-navy">
           {scrub(data.title)}
         </h1>
-        <p className="mt-2 text-meta text-grey">{scrub(data.question)}</p>
+        {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
         {data.summary != null && data.summary !== "" && data.summary_status === "verified" && (
           <p className="mt-3 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-3 py-2 text-body text-ink">
             {scrub(data.summary)}
@@ -1006,10 +1021,11 @@ export function ArtefactView() {
           key={index}
           id={sectionAnchor(section.title, index)}
           section={section as OutlineSection}
-          // Key findings is never collapsible (always in full); conclusions
-          // collapsible, default open; ordinary sections default collapsed.
+          // Key findings is never collapsible (always in full); every other
+          // section — conclusions included — starts collapsed on its summary
+          // (owner, 2026-08-05).
           collapsible={section.role !== "key_findings"}
-          defaultOpen={section.role !== "standard"}
+          defaultOpen={false}
         >
           {(section.blocks ?? []).map((block) => (
             <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />

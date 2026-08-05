@@ -167,7 +167,9 @@ test.describe("mock evidence-base journey", () => {
 
     // Theme-referenced claims surface the named theme: the panel shows the
     // theme's name, description, size, and a deep link into the filtered
-    // findings view.
+    // findings view. Conclusions collapse to their summary by default —
+    // expand the section to reach its claims.
+    await page.getByRole("button", { name: /Implications for local action/ }).click();
     await page.getByRole("button", { name: "pattern" }).click();
     const themePanel = page.getByRole("dialog", { name: "Where this comes from" });
     await expect(themePanel.getByText("Active-travel offers")).toBeVisible();
