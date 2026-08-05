@@ -120,6 +120,19 @@
     0 100%
   );
 }
+/* Double cutout: the signature top-right cut plus its bottom-left mirror
+   (the composer's send button). */
+@utility cutout-2 {
+  --cut: 10px;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
 @utility cutout-sm {
   --cut: 8px;
   clip-path: polygon(

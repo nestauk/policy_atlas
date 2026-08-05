@@ -100,7 +100,7 @@ export function Composer({
   return (
     <div>
       <form
-        className="flex items-end gap-2"
+        className="flex items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
@@ -126,10 +126,22 @@ export function Composer({
         <Button
           type="submit"
           aria-label="Send"
-          className="h-14 text-heading"
+          className="cutout-2 h-10 w-12 justify-center p-0"
           disabled={sendDisabled || value.trim().length === 0}
         >
-          ↑
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 19V5" />
+            <path d="m5 12 7-7 7 7" />
+          </svg>
         </Button>
       </form>
       <p className="mt-1 text-caption text-grey">Enter to send · Shift+Enter for a new line</p>
