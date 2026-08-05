@@ -259,13 +259,19 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const statuses = url.searchParams.getAll("status");
     const cited = url.searchParams.get("cited");
     const theme = url.searchParams.get("theme");
+    const origin = url.searchParams.get("origin");
+    const evidenceType = url.searchParams.get("evidence_type");
+    const strength = url.searchParams.get("strength");
     const sort = url.searchParams.get("sort") as EvidenceSortField | null;
     const order = url.searchParams.get("order") as "asc" | "desc" | null;
     let rows = mockEvidence.filter((item) => {
       const included = ["relevant", "not_selected", "selected", "read_in_full", "findings_extracted", "cited", "unavailable"];
       const statusMatches = statuses.length === 0 || statuses.some((status) => status === item.status || (status === "Included" && included.includes(item.status)));
       const themeMatches = theme === null || (mockEvidenceThemeIds[item.source_id] ?? []).includes(theme);
-      return statusMatches && (cited !== "true" || item.cited) && themeMatches;
+      return statusMatches && (cited !== "true" || item.cited) && themeMatches
+        && (origin === null || item.origin === origin)
+        && (evidenceType === null || item.evidence_type === evidenceType)
+        && (strength === null || item.appraisal_tier === strength);
     });
     // Server-side-equivalent sort (collection-true, matches
     // `repository._compare_evidence_sort`): `order` defaults to the

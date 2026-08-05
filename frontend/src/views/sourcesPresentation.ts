@@ -39,6 +39,38 @@ export function nextEvidenceSort(
   return { sort: null, order: null };
 }
 
+/** Fixed vocabularies for the facet filters (the server's literal params). */
+export const ORIGIN_FILTER_OPTIONS = ["OpenAlex", "Overton", "Uploaded"] as const;
+export const STRENGTH_FILTER_OPTIONS = [
+  "Very strong",
+  "Strong",
+  "Moderate",
+  "Limited",
+  "Weak",
+] as const;
+
+/**
+ * Read depth — what of the source the analysis actually read (owner,
+ * 2026-08-05: the old ladder label collapsed this once a source was cited).
+ * Not read past screening → null (the cell stays empty).
+ */
+export function readDepthLabel(
+  item: Pick<EvidenceItem, "read_in_full" | "screen_status" | "status">,
+): string | null {
+  if (item.read_in_full) return "Read in full";
+  if (item.status === "unavailable" || item.screen_status === "relevant") return "Abstract only";
+  return null;
+}
+
+/** The strength hover, composed the same way as the citation sidebar's. */
+export function strengthHint(
+  item: Pick<EvidenceItem, "appraisal_tier" | "evidence_type">,
+): string {
+  return item.appraisal_tier && item.evidence_type
+    ? `${item.appraisal_tier} evidence strength — appraised from the document type: ${item.evidence_type}.`
+    : "The source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type.";
+}
+
 const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   found: "Found",
   screened_out: "Screened out",
@@ -61,10 +93,16 @@ export function sourceStatusLabel(item: Pick<EvidenceItem, "status" | "screen_st
 export function screeningDetails(
   item: Pick<
     EvidenceItem,
-    "screen_confidence" | "screen_basis" | "screen_stage" | "screen_status" | "status_reason"
+    | "screen_confidence"
+    | "screen_basis"
+    | "screen_stage"
+    | "screen_status"
+    | "screen_reason"
+    | "status_reason"
   >,
 ): Array<[string, string]> {
   const details: Array<[string, string]> = [];
+  if (item.screen_reason) details.push(["Reasoning", item.screen_reason]);
   if (item.screen_status !== "excluded_retracted" && item.screen_confidence !== null && item.screen_confidence !== undefined) {
     details.push(["Screening confidence", `${Math.round(item.screen_confidence * 100)}%`]);
   }

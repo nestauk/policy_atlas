@@ -205,6 +205,12 @@ class EvidenceItemOut(BaseModel):
     screen_basis: str | None = None
     screen_stage: int | None = None
     screen_status: Literal["relevant", "not_relevant", "excluded_retracted"] | None = None
+    # 028 refinement (additive): the LLMs' one-sentence reasons, recovered
+    # from the event log (they are event-payload-only, never result-row
+    # columns), and the read depth the status ladder otherwise collapses.
+    screen_reason: str | None = None
+    classification_reason: str | None = None
+    read_in_full: bool = False
 
 
 class FindingBaseOut(BaseModel):

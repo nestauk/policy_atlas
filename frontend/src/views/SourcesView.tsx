@@ -15,30 +15,21 @@ import { Tooltip } from "../ui/radix/Tooltip";
 import {
   abstractSourceLabel,
   nextEvidenceSort,
+  readDepthLabel,
   screeningDetails,
   sourceStatusLabel,
+  strengthHint,
+  ORIGIN_FILTER_OPTIONS,
   SOURCE_SORT_COLUMNS,
+  STRENGTH_FILTER_OPTIONS,
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
 
-const STATUS_TONE: Record<string, "default" | "blue" | "soft" | "green" | "yellow" | "red"> = {
-  found: "soft",
-  screened_out: "soft",
-  relevant: "blue",
-  not_selected: "soft",
-  selected: "blue",
-  read_in_full: "blue",
-  findings_extracted: "green",
-  cited: "green",
-  unavailable: "yellow",
-  excluded_retracted: "red",
-};
-
 const STATUS_FILTERS = [
-  { key: "all", label: "All" },
   { key: "Included", label: "Included" },
   { key: "screened_out", label: "Screened out" },
+  { key: "all", label: "All" },
 ] as const;
 
 /** Sources: collection-true server filters and a URL-addressable source dossier. */
@@ -49,8 +40,15 @@ export function SourcesView() {
   useDocumentTitle(project.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
-  const statusFilter = STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "all";
+  // Default view = Included (owner, 2026-08-05); "all" is the explicit opt-in.
+  const statusFilter =
+    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "Included";
   const citedFilter = searchParams.get("cited") === "true";
+  const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
+  const typeFilter = searchParams.get("type") ?? undefined;
+  const strengthFilter = STRENGTH_FILTER_OPTIONS.find(
+    (value) => value === searchParams.get("strength"),
+  );
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
   const sourceId = searchParams.get("source");
@@ -66,6 +64,9 @@ export function SourcesView() {
   const themeOptions = (landscape.data?.themes ?? []).filter(
     (theme): theme is typeof theme & { theme_id: string } => Boolean(theme.theme_id),
   );
+  // Evidence-type filter options come from the landscape distribution — the
+  // same closed set the classification wrote for this project.
+  const evidenceTypeOptions = Object.keys(landscape.data?.evidence_types ?? {}).sort();
   const evidence = useEvidence(projectId, {
     page,
     page_size: 50,
@@ -74,6 +75,9 @@ export function SourcesView() {
     sort: sortField ?? undefined,
     order: sortOrder ?? undefined,
     theme: themeFilter,
+    origin: originFilter,
+    evidence_type: typeFilter,
+    strength: strengthFilter,
   });
   const dossier = useSourceDossier(projectId, sourceId);
   const findings = useFindings(projectId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
@@ -117,7 +121,7 @@ export function SourcesView() {
               type="button"
               aria-pressed={statusFilter === filter.key}
               onClick={() => updateParams((next) => {
-                if (filter.key === "all") next.delete("status");
+                if (filter.key === "Included") next.delete("status");
                 else next.set("status", filter.key);
                 next.delete("page");
               })}
@@ -146,24 +150,50 @@ export function SourcesView() {
           >
             Cited
           </button>
-          <label className="flex items-center gap-1.5 text-caption font-semibold text-grey">
-            Key theme
-            <select
-              value={themeFilter ?? ""}
-              onChange={(event) => updateParams((next) => {
-                const value = event.target.value;
-                if (value) next.set("theme", value);
-                else next.delete("theme");
-                next.delete("page");
-              })}
-              className="cursor-pointer border border-line-2 bg-paper px-2 py-1 text-caption font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
-            >
-              <option value="">All themes</option>
-              {themeOptions.map((theme) => (
-                <option key={theme.theme_id} value={theme.theme_id}>{scrub(theme.name)}</option>
-              ))}
-            </select>
-          </label>
+          <FilterSelect
+            label="Origin"
+            allLabel="All origins"
+            value={originFilter ?? ""}
+            options={ORIGIN_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+            onChange={(value) => updateParams((next) => {
+              if (value) next.set("origin", value);
+              else next.delete("origin");
+              next.delete("page");
+            })}
+          />
+          <FilterSelect
+            label="Evidence type"
+            allLabel="All types"
+            value={typeFilter ?? ""}
+            options={evidenceTypeOptions.map((value) => ({ value, label: scrub(value) }))}
+            onChange={(value) => updateParams((next) => {
+              if (value) next.set("type", value);
+              else next.delete("type");
+              next.delete("page");
+            })}
+          />
+          <FilterSelect
+            label="Evidence strength"
+            allLabel="All strengths"
+            value={strengthFilter ?? ""}
+            options={STRENGTH_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+            onChange={(value) => updateParams((next) => {
+              if (value) next.set("strength", value);
+              else next.delete("strength");
+              next.delete("page");
+            })}
+          />
+          <FilterSelect
+            label="Key theme"
+            allLabel="All themes"
+            value={themeFilter ?? ""}
+            options={themeOptions.map((theme) => ({ value: theme.theme_id, label: scrub(theme.name) }))}
+            onChange={(value) => updateParams((next) => {
+              if (value) next.set("theme", value);
+              else next.delete("theme");
+              next.delete("page");
+            })}
+          />
         </div>
       </header>
 
@@ -215,6 +245,7 @@ export function SourcesView() {
                   activeOrder={sortOrder}
                   onSort={handleSort}
                 />
+                <th className="px-3 py-3">Relevant</th>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[4]}
                   activeSort={sortField}
@@ -225,37 +256,53 @@ export function SourcesView() {
               </tr>
             </thead>
             <tbody>
-              {evidence.data.data.map((item) => {
-                const label = sourceStatusLabel(item);
-                return (
-                  <tr key={item.source_id} className="border-b border-line last:border-b-0">
-                    <td className="max-w-md px-4 py-3 align-top">
-                      <button
-                        type="button"
-                        onClick={() => updateParams((next) => next.set("source", item.source_id))}
-                        className="cursor-pointer text-left text-meta font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
-                      >
-                        {scrub(item.title)}
-                      </button>
-                      {item.venue && <p className="mt-0.5 text-caption text-grey">{scrub(item.venue)}</p>}
-                    </td>
-                    <td className="px-3 py-3 align-top text-caption text-navy">{item.year ?? ""}</td>
-                    <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
-                    <td className="px-3 py-3 align-top">
-                      {item.evidence_type && <Chip tone="soft">{scrub(item.evidence_type)}</Chip>}
-                    </td>
-                    <td className="px-3 py-3 align-top">
-                      {item.appraisal_tier && <Chip tone="soft">{scrub(item.appraisal_tier)}</Chip>}
-                    </td>
-                    <td className="px-3 py-3 align-top">
-                      {label !== undefined && <ScreeningTooltip item={item} label={label} />}
-                    </td>
-                    <td className="px-3 py-3 align-top">
-                      {item.cited && <Chip tone="green">Cited</Chip>}
-                    </td>
-                  </tr>
-                );
-              })}
+              {evidence.data.data.map((item) => (
+                <tr key={item.source_id} className="border-b border-line last:border-b-0">
+                  <td className="max-w-md px-4 py-3 align-top">
+                    <button
+                      type="button"
+                      onClick={() => updateParams((next) => next.set("source", item.source_id))}
+                      className="cursor-pointer text-left text-meta font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+                    >
+                      {scrub(item.title)}
+                    </button>
+                    {item.venue && <p className="mt-0.5 text-caption text-grey">{scrub(item.venue)}</p>}
+                  </td>
+                  <td className="px-3 py-3 align-top text-caption text-navy">{item.year ?? ""}</td>
+                  <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
+                  <td className="px-3 py-3 align-top">
+                    {item.evidence_type && (
+                      item.classification_reason ? (
+                        <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
+                          <button type="button" aria-label={`${item.evidence_type}: why this type`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
+                            <Chip tone="soft">{scrub(item.evidence_type)}</Chip>
+                          </button>
+                        </Tooltip>
+                      ) : (
+                        <Chip tone="soft">{scrub(item.evidence_type)}</Chip>
+                      )
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {item.appraisal_tier && (
+                      <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
+                        <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
+                          <Chip tone="soft">{scrub(item.appraisal_tier)}</Chip>
+                        </button>
+                      </Tooltip>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top"><RelevantCell item={item} /></td>
+                  <td className="px-3 py-3 align-top">
+                    {readDepthLabel(item) !== null && (
+                      <Chip tone={item.read_in_full ? "blue" : "yellow"}>{readDepthLabel(item)}</Chip>
+                    )}
+                  </td>
+                  <td className="px-3 py-3 align-top">
+                    {item.cited && <Chip tone="green">Cited</Chip>}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </Card>
@@ -354,34 +401,72 @@ function RetryCard({ copy, onRetry }: { copy: string; onRetry: () => void }) {
   );
 }
 
-function ScreeningTooltip({
-  item,
+/** One facet dropdown in the sources filter row. */
+function FilterSelect({
   label,
+  allLabel,
+  value,
+  options,
+  onChange,
 }: {
-  item: Parameters<typeof screeningDetails>[0] & { status: string };
   label: string;
+  allLabel: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
 }) {
+  return (
+    <label className="flex items-center gap-1.5 text-caption font-semibold text-grey">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="cursor-pointer border border-line-2 bg-paper px-2 py-1 text-caption font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
+      >
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** The screening verdict: tick/cross + confidence, reasoning on hover. */
+function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }) {
+  if (item.screen_status === null || item.screen_status === undefined) return null;
+  const retracted = item.screen_status === "excluded_retracted";
+  const relevant = item.screen_status === "relevant";
+  const label = retracted ? "Excluded — retracted" : relevant ? "Relevant" : "Not relevant";
   const details = screeningDetails(item);
-  const content = details.length === 0 ? <p>No additional screening detail was recorded.</p> : (
+  const content = details.length === 0 ? (
+    <p>No additional screening detail was recorded.</p>
+  ) : (
     <dl className="space-y-1">
       {details.map(([detailLabel, value]) => (
         <div key={detailLabel} className="flex gap-2">
-          <dt className="font-semibold text-grey">{detailLabel}</dt>
+          <dt className="shrink-0 font-semibold text-grey">{detailLabel}</dt>
           <dd>{scrub(value)}</dd>
         </div>
       ))}
     </dl>
   );
-  const confidence = item.screen_status !== "excluded_retracted" ? item.screen_confidence : undefined;
   return (
-    <span className="flex flex-wrap items-center gap-1.5">
-      <Tooltip content={content}>
-        <button type="button" aria-label={`${label}: screening details`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
-          <Chip tone={STATUS_TONE[item.screen_status ?? item.status] ?? "default"}>{label}</Chip>
-        </button>
-      </Tooltip>
-      {confidence !== null && confidence !== undefined && <Chip tone="soft">{Math.round(confidence * 100)}% confidence</Chip>}
-    </span>
+    <Tooltip content={content}>
+      <button
+        type="button"
+        aria-label={`${label}: screening details`}
+        className="flex cursor-help items-baseline gap-1.5 focus-visible:outline-2 focus-visible:outline-blue"
+      >
+        <span aria-hidden="true" className={`text-meta font-bold ${relevant ? "text-green" : "text-red"}`}>
+          {relevant ? "✓" : "✕"}
+        </span>
+        {!retracted && item.screen_confidence !== null && item.screen_confidence !== undefined && (
+          <span className="text-caption text-grey">{Math.round(item.screen_confidence * 100)}%</span>
+        )}
+        {retracted && <span className="text-caption text-red">retracted</span>}
+      </button>
+    </Tooltip>
   );
 }
 
@@ -457,7 +542,12 @@ export function SourceDossierBody({
       )}
       {statusLabel && (
         <DossierSection title="What happened to it">
-          <ScreeningTooltip item={source} label={statusLabel} />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Chip tone="soft">{statusLabel}</Chip>
+            {readDepthLabel(source) !== null && (
+              <Chip tone={source.read_in_full ? "blue" : "yellow"}>{readDepthLabel(source)}</Chip>
+            )}
+          </div>
           <dl className="mt-3 space-y-1.5">
             {screeningDetails(source).map(([label, value]) => <DetailRow key={label} label={label} value={value} />)}
           </dl>
@@ -467,6 +557,9 @@ export function SourceDossierBody({
         <DossierSection title="Quality">
           <dl className="space-y-1.5">
             {source.evidence_type && <DetailRow label="Evidence type" value={source.evidence_type} />}
+            {source.classification_reason && (
+              <DetailRow label="Why this type" value={source.classification_reason} />
+            )}
             {source.appraisal_tier && <DetailRow label="Appraised strength" value={source.appraisal_tier} />}
           </dl>
         </DossierSection>

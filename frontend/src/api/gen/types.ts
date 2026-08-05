@@ -1074,6 +1074,8 @@ export interface components {
             appraisal_tier?: string | null;
             /** Cited */
             cited: boolean;
+            /** Classification Reason */
+            classification_reason?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
             /**
@@ -1081,10 +1083,17 @@ export interface components {
              * @enum {string}
              */
             origin: "OpenAlex" | "Overton" | "Uploaded";
+            /**
+             * Read In Full
+             * @default false
+             */
+            read_in_full: boolean;
             /** Screen Basis */
             screen_basis?: string | null;
             /** Screen Confidence */
             screen_confidence?: number | null;
+            /** Screen Reason */
+            screen_reason?: string | null;
             /** Screen Stage */
             screen_stage?: number | null;
             /** Screen Status */
@@ -2197,6 +2206,8 @@ export interface components {
             cited_by_count?: number | null;
             /** Cited In */
             cited_in?: components["schemas"]["CitedInOut"][];
+            /** Classification Reason */
+            classification_reason?: string | null;
             /** Doi */
             doi?: string | null;
             /** Evidence Type */
@@ -2212,12 +2223,19 @@ export interface components {
             origin: "OpenAlex" | "Overton" | "Uploaded";
             /** Publisher */
             publisher?: string | null;
+            /**
+             * Read In Full
+             * @default false
+             */
+            read_in_full: boolean;
             /** Record Type */
             record_type?: string | null;
             /** Screen Basis */
             screen_basis?: string | null;
             /** Screen Confidence */
             screen_confidence?: number | null;
+            /** Screen Reason */
+            screen_reason?: string | null;
             /** Screen Stage */
             screen_stage?: number | null;
             /** Screen Status */
@@ -2887,6 +2905,9 @@ export interface operations {
                 sort?: ("title" | "year" | "type" | "strength" | "status") | null;
                 order?: ("asc" | "desc") | null;
                 theme?: string | null;
+                origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
+                evidence_type?: string | null;
+                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak") | null;
             };
             header?: never;
             path: {

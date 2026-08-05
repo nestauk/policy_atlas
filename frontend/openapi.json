@@ -1106,6 +1106,17 @@
             "title": "Cited",
             "type": "boolean"
           },
+          "classification_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Reason"
+          },
           "evidence_type": {
             "anyOf": [
               {
@@ -1125,6 +1136,11 @@
             ],
             "title": "Origin",
             "type": "string"
+          },
+          "read_in_full": {
+            "default": false,
+            "title": "Read In Full",
+            "type": "boolean"
           },
           "screen_basis": {
             "anyOf": [
@@ -1147,6 +1163,17 @@
               }
             ],
             "title": "Screen Confidence"
+          },
+          "screen_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Reason"
           },
           "screen_stage": {
             "anyOf": [
@@ -3643,6 +3670,17 @@
             "title": "Cited In",
             "type": "array"
           },
+          "classification_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Reason"
+          },
           "doi": {
             "anyOf": [
               {
@@ -3707,6 +3745,11 @@
             ],
             "title": "Publisher"
           },
+          "read_in_full": {
+            "default": false,
+            "title": "Read In Full",
+            "type": "boolean"
+          },
           "record_type": {
             "anyOf": [
               {
@@ -3739,6 +3782,17 @@
               }
             ],
             "title": "Screen Confidence"
+          },
+          "screen_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Reason"
           },
           "screen_stage": {
             "anyOf": [
@@ -5267,6 +5321,67 @@
                 }
               ],
               "title": "Theme"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "OpenAlex",
+                    "Overton",
+                    "Uploaded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          },
+          {
+            "in": "query",
+            "name": "evidence_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strength",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Very strong",
+                    "Strong",
+                    "Moderate",
+                    "Limited",
+                    "Weak"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strength"
             }
           }
         ],

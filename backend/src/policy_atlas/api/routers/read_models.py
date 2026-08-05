@@ -88,6 +88,11 @@ def evidence(
     sort: Annotated[Literal["title", "year", "type", "strength", "status"] | None, Query()] = None,
     order: Annotated[Literal["asc", "desc"] | None, Query()] = None,
     theme: Annotated[uuid.UUID | None, Query()] = None,
+    origin: Annotated[Literal["OpenAlex", "Overton", "Uploaded"] | None, Query()] = None,
+    evidence_type: Annotated[str | None, Query(max_length=200)] = None,
+    strength: Annotated[
+        Literal["Very strong", "Strong", "Moderate", "Limited", "Weak"] | None, Query()
+    ] = None,
 ) -> Page[EvidenceItemOut]:
     """Return a bounded page from the evidence status ladder, optionally filtered."""
     _owned(conn, project_id, user)
@@ -103,6 +108,9 @@ def evidence(
         sort=sort,
         order=order,
         theme=theme,
+        origin=origin,
+        evidence_type=evidence_type,
+        strength=strength,
     )
 
 

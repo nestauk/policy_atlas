@@ -171,3 +171,53 @@ describe("SourcesView — fixture-driven render (mock mode)", () => {
     expect(screen.getAllByRole("row")).toHaveLength(mockEvidence.length + 1); // + header row
   });
 });
+
+describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", () => {
+  it("defaults the status view to Included and sends it to the query", () => {
+    renderSources();
+    expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
+    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("All is the explicit opt-in: sets status=all in the URL and drops the server filter", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("status=all");
+    expect(lastEvidenceQuery()).toMatchObject({ status: undefined });
+  });
+
+  it("binds the origin, evidence type and strength facet filters to the query", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Origin" }), "Overton");
+    expect(screen.getByTestId("location")).toHaveTextContent("origin=Overton");
+    expect(lastEvidenceQuery()).toMatchObject({ origin: "Overton" });
+
+    // Evidence-type options come from the landscape distribution.
+    const typeSelect = screen.getByRole("combobox", { name: "Evidence type" });
+    expect(within(typeSelect).getByRole("option", { name: "Local evaluation" })).toBeInTheDocument();
+    await user.selectOptions(typeSelect, "Systematic review");
+    expect(lastEvidenceQuery()).toMatchObject({ evidence_type: "Systematic review" });
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Evidence strength" }), "Moderate");
+    expect(lastEvidenceQuery()).toMatchObject({ strength: "Moderate" });
+  });
+
+  it("renders the Relevant column as a verdict with confidence, reasoning behind a hover", () => {
+    renderSources();
+    // The screened-in breakfast-clubs row: ✓ + its screening confidence.
+    const verdicts = screen.getAllByRole("button", { name: "Relevant: screening details" });
+    expect(verdicts.length).toBeGreaterThan(0);
+    expect(screen.getByText("91%")).toBeInTheDocument();
+    // The retracted row keeps its honest verdict.
+    expect(screen.getByRole("button", { name: "Excluded — retracted: screening details" })).toBeInTheDocument();
+  });
+
+  it("shows read depth in the Status column and drops the cited-redundant ladder label", () => {
+    renderSources();
+    expect(screen.getAllByText("Read in full").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Abstract only").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Cited in the evidence base")).toBeNull();
+  });
+});

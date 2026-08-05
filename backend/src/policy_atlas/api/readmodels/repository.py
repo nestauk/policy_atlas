@@ -469,6 +469,68 @@ def groups_out(conn: Connection, project_id: uuid.UUID) -> GroupsOut:
     return GroupsOut(facets=facets)
 
 
+def _screen_event_reason(payload: Mapping[str, Any], status: str) -> str | None:
+    """Pick the rep reason that explains the aggregated screen decision.
+
+    Reps vote; the first reason from a rep agreeing with the final status
+    wins ('unsure' votes count toward relevant, mirroring `_vote_decision`),
+    falling back to any rep's reason.
+    """
+    reps = payload.get("reps")
+    if not isinstance(reps, list):
+        return None
+    candidates = [
+        rep
+        for rep in reps
+        if isinstance(rep, Mapping) and isinstance(rep.get("reason"), str) and rep["reason"]
+    ]
+    for rep in candidates:
+        decision = rep.get("decision")
+        if decision == status or (status == "relevant" and decision == "unsure"):
+            return cast(str, rep["reason"])
+    return cast(str, candidates[0]["reason"]) if candidates else None
+
+
+def _source_reason_maps(
+    conn: Connection, project_id: uuid.UUID
+) -> tuple[dict[uuid.UUID, str], dict[uuid.UUID, str]]:
+    """Latest per-source screening/classification reasons from the event log.
+
+    The assess LLMs' one-sentence reasons are event-payload-only (never
+    result-row columns). Latest sequence wins, which tracks the effective
+    screen for append-only re-screens; failed screens carry no decision and
+    are skipped.
+    """
+    rows = conn.execute(
+        select(event_log.c.event_type, event_log.c.payload)
+        .where(
+            event_log.c.project_id == project_id,
+            event_log.c.event_type.in_(("source.screened", "source.classified")),
+        )
+        .order_by(event_log.c.sequence)
+    ).all()
+    screen_reasons: dict[uuid.UUID, str] = {}
+    classification_reasons: dict[uuid.UUID, str] = {}
+    for row in rows:
+        payload = row.payload if isinstance(row.payload, Mapping) else {}
+        try:
+            pss_id = uuid.UUID(str(payload.get("project_source_snapshot_id")))
+        except (TypeError, ValueError):
+            continue
+        if row.event_type == "source.classified":
+            reason = payload.get("reason")
+            if isinstance(reason, str) and reason:
+                classification_reasons[pss_id] = reason
+        else:
+            status = payload.get("status")
+            if status not in ("relevant", "not_relevant"):
+                continue
+            reason = _screen_event_reason(payload, status)
+            if reason is not None:
+                screen_reasons[pss_id] = reason
+    return screen_reasons, classification_reasons
+
+
 def _expand_evidence_statuses(values: Iterable[str]) -> set[str]:
     """Expand the `Included` filter shortcut into its ladder positions."""
     expanded: set[str] = set()
@@ -491,6 +553,9 @@ def evidence_page(
     sort: Literal["title", "year", "type", "strength", "status"] | None = None,
     order: Literal["asc", "desc"] | None = None,
     theme: uuid.UUID | None = None,
+    origin: str | None = None,
+    evidence_type: str | None = None,
+    strength: str | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status project-wide before paging.
 
@@ -529,6 +594,7 @@ def evidence_page(
         )
     ).all()
     screens = _effective_screens(conn, project_id)
+    screen_reasons, classification_reasons = _source_reason_maps(conn, project_id)
     classifications = _latest_row_by_id(
         conn.execute(
             select(
@@ -615,6 +681,15 @@ def evidence_page(
             continue
         classification = classifications.get(row.project_source_snapshot_id)
         appraisal = appraisals.get(row.project_source_snapshot_id)
+        item_origin = _origin(row.origin, metadata)
+        evidence_type_value = classification.primary_evidence_type if classification else None
+        tier = SCORE_LABELS.get(appraisal.quality_score) if appraisal else None
+        if origin is not None and item_origin != origin:
+            continue
+        if evidence_type is not None and evidence_type_value != evidence_type:
+            continue
+        if strength is not None and tier != strength:
+            continue
         sortable_items.append(
             (
                 EvidenceItemOut(
@@ -622,11 +697,11 @@ def evidence_page(
                     title=_title(metadata, row.source_locator),
                     year=_year(metadata),
                     venue=_venue(metadata),
-                    origin=_origin(row.origin, metadata),
+                    origin=item_origin,
                     status=cast(Any, status),
                     status_reason=reason,
-                    evidence_type=classification.primary_evidence_type if classification else None,
-                    appraisal_tier=SCORE_LABELS.get(appraisal.quality_score) if appraisal else None,
+                    evidence_type=evidence_type_value,
+                    appraisal_tier=tier,
                     cited=row_cited,
                     url=_url(metadata, row.source_locator),
                     screen_confidence=screen.screen_decision_confidence if screen else None,
@@ -636,6 +711,11 @@ def evidence_page(
                     if screen
                     and screen.status in {"relevant", "not_relevant", "excluded_retracted"}
                     else None,
+                    screen_reason=screen_reasons.get(row.project_source_snapshot_id),
+                    classification_reason=classification_reasons.get(
+                        row.project_source_snapshot_id
+                    ),
+                    read_in_full=row.full_text_status == "ingested",
                 ),
                 appraisal.quality_score if appraisal is not None else None,
             )
@@ -1765,6 +1845,7 @@ def source_dossier_out(
         return None
     metadata = row["metadata"] if isinstance(row["metadata"], Mapping) else {}
     screen = _effective_screens(conn, project_id).get(source_id)
+    screen_reasons, classification_reasons = _source_reason_maps(conn, project_id)
     selection = _latest_selection(conn, project_id)
     selected = _selected_ids(selection["selected"]) if selection is not None else set()
     extracted = (
@@ -1865,6 +1946,9 @@ def source_dossier_out(
         screen_status=cast(Any, screen.status)
         if screen and screen.status in {"relevant", "not_relevant", "excluded_retracted"}
         else None,
+        screen_reason=screen_reasons.get(source_id),
+        classification_reason=classification_reasons.get(source_id),
+        read_in_full=row["full_text_status"] == "ingested",
         abstract=abstract,
         abstract_source="llm_description"
         if raw_abstract_source == "llm_description"

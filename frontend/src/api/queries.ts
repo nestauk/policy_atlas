@@ -63,6 +63,9 @@ export interface EvidenceQuery extends PageQuery {
   order?: "asc" | "desc";
   /** Theme id (`ThemeOut.theme_id`) — collection-true across pages. */
   theme?: string;
+  origin?: "OpenAlex" | "Overton" | "Uploaded";
+  evidence_type?: string;
+  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak";
 }
 
 export interface FindingsQuery extends PageQuery {

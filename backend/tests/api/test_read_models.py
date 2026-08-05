@@ -1499,3 +1499,166 @@ def test_findings_group_filters_and_validation(tmp_path: Path, engine: Engine) -
         finally:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)
+
+
+def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: Engine) -> None:
+    """origin/evidence_type/strength filter collection-true; event reasons + read depth surface."""
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        scope_id = _seed_evidence_filter_fixture(engine, project_id)
+        with engine.begin() as conn:
+            rows = conn.execute(
+                select(
+                    project_source_snapshot.c.project_source_snapshot_id,
+                    source_snapshot.c.metadata,
+                )
+                .select_from(
+                    project_source_snapshot.join(
+                        source_snapshot,
+                        project_source_snapshot.c.source_snapshot_id
+                        == source_snapshot.c.source_snapshot_id,
+                    )
+                )
+                .where(project_source_snapshot.c.project_id == project_id)
+            ).all()
+            by_title = {
+                row.metadata["title"]: row.project_source_snapshot_id
+                for row in rows
+                if isinstance(row.metadata, dict) and isinstance(row.metadata.get("title"), str)
+            }
+            run_id = uuid.uuid4()
+            conn.execute(
+                insert(runs).values(
+                    run_id=run_id, project_id=project_id, status="running", started_at=now()
+                )
+            )
+            conn.execute(
+                insert(source_classification_result).values(
+                    source_classification_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=by_title["Selected"],
+                    project_id=project_id,
+                    classified_by_run_id=run_id,
+                    primary_evidence_type="Systematic Review and Meta-Analysis",
+                    classified_at=now(),
+                )
+            )
+            conn.execute(
+                insert(source_appraisal_result).values(
+                    source_appraisal_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=by_title["Selected"],
+                    project_id=project_id,
+                    appraised_by_run_id=run_id,
+                    quality_score=2,
+                    rubric_version="test",
+                    appraised_at=now(),
+                )
+            )
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=run_id,
+                event_type="source.screened",
+                payload={
+                    "project_source_snapshot_id": str(by_title["Selected"]),
+                    "status": "relevant",
+                    "reps": [
+                        # A dissenting rep first: the surfaced reason must be
+                        # the one agreeing with the aggregated decision.
+                        {
+                            "decision": "not_relevant",
+                            "confidence": 0.4,
+                            "reason": "Setting unclear",
+                        },
+                        {
+                            "decision": "relevant",
+                            "confidence": 0.9,
+                            "reason": "UK primary cohort in scope",
+                        },
+                    ],
+                },
+            )
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=run_id,
+                event_type="source.screened",
+                payload={
+                    "project_source_snapshot_id": str(by_title["Screened out"]),
+                    "status": "not_relevant",
+                    "reps": [
+                        {
+                            "decision": "not_relevant",
+                            "confidence": 0.95,
+                            "reason": "Adult-only population",
+                        }
+                    ],
+                },
+            )
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=run_id,
+                event_type="source.classified",
+                payload={
+                    "project_source_snapshot_id": str(by_title["Selected"]),
+                    "primary_evidence_type": "Systematic Review and Meta-Analysis",
+                    "confidence": 0.8,
+                    "reason": "Systematic review of trials",
+                },
+            )
+            seed_ingested_full_text(conn, pss_id=by_title["Selected"], chunks=["Full text body."])
+        try:
+            typed = client.get(
+                f"/api/v1/projects/{project_id}/evidence?evidence_type=Systematic%20Review%20and%20Meta-Analysis",
+                headers=owner,
+            ).json()
+            assert typed["pagination"]["total_items"] == 1
+            selected_row = typed["data"][0]
+            assert selected_row["title"] == "Selected"
+            assert selected_row["screen_reason"] == "UK primary cohort in scope"
+            assert selected_row["classification_reason"] == "Systematic review of trials"
+            assert selected_row["read_in_full"] is True
+
+            limited = client.get(
+                f"/api/v1/projects/{project_id}/evidence?strength=Limited", headers=owner
+            ).json()
+            assert limited["pagination"]["total_items"] == 1
+            assert limited["data"][0]["appraisal_tier"] == "Limited"
+            strong = client.get(
+                f"/api/v1/projects/{project_id}/evidence?strength=Strong", headers=owner
+            ).json()
+            assert strong["pagination"]["total_items"] == 0
+
+            uploaded = client.get(
+                f"/api/v1/projects/{project_id}/evidence?origin=Uploaded", headers=owner
+            ).json()
+            assert uploaded["pagination"]["total_items"] == 6
+            openalex = client.get(
+                f"/api/v1/projects/{project_id}/evidence?origin=OpenAlex", headers=owner
+            ).json()
+            assert openalex["pagination"]["total_items"] == 0
+            invalid = client.get(
+                f"/api/v1/projects/{project_id}/evidence?origin=bogus", headers=owner
+            )
+            assert invalid.status_code == 422
+
+            unfiltered = client.get(
+                f"/api/v1/projects/{project_id}/evidence", headers=owner
+            ).json()
+            screened_out_row = next(
+                row for row in unfiltered["data"] if row["title"] == "Screened out"
+            )
+            assert screened_out_row["screen_reason"] == "Adult-only population"
+            assert screened_out_row["read_in_full"] is False
+
+            dossier = client.get(
+                f"/api/v1/projects/{project_id}/sources/{by_title['Selected']}", headers=owner
+            ).json()
+            assert dossier["screen_reason"] == "UK primary cohort in scope"
+            assert dossier["classification_reason"] == "Systematic review of trials"
+            assert dossier["read_in_full"] is True
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
