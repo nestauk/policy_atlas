@@ -22,23 +22,23 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `028-ux-refinement` **design step 1** (2026-08-03,
-branch `task/028-ux-refinement`, stacked on `task/027-frontend-uplift`):
-interview-driven UX refinement — four internal policy-team interviews on
-the 027 build (type scale + copy diet, expandable composer, sequential
-plan-building fork, artefact contents-sidebar + progressive disclosure,
-key-findings bullets fork, sortable/theme-filterable sources, naming
-pass, tab-IA fork). Contract:
-`docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
-`docs/tasks/028-ux-refinement/design-inputs.md`.
+Implementation — task `029-copilot-qa` **design step 1** (2026-08-05,
+branch `task/029-copilot-qa`, stacked on `task/028-ux-refinement`):
+co-pilot Q&A — follow-up questions in chat after an analysis completes.
+The pre-registered seam (027 PR #35 adjudication + deferred.md): the Q&A
+thread/context model + transcript companion store (per-user sessions),
+multi-thread chat + Chats library UI, the lead-authored Q&A prompt
+surface, read-only tool scope (`retrieve` · `lookup` · `query_findings`,
+no `search`), trust-tier-labelled ephemeral answers. Contract:
+`docs/tasks/029-copilot-qa/contract.md`.
 
 Tasks `026-infra-deployment` (draft PR #33, Tier 4 — system **live** at
-`v3.policyatlas.uk`) and `027-frontend-uplift` (PR #36, Tier 3 — review
-stack adjudicated 2026-07-30, 32 fixes re-verified) are both at **step 9:
-human review + merge**. 027 branches from 026; 028 branches from 027;
-each PR re-targets `dev` as its parent merges — if a merge review touches
-files a stacked branch changed, that branch rebases before its own
-review. Known operational state: staging's OpenAI quota exhausted
+`v3.policyatlas.uk`), `027-frontend-uplift` (PR #36, Tier 3) and
+`028-ux-refinement` (PR #41, Tier 2/3 — review stack adjudicated
+2026-08-05) are all at **step 9: human review + merge** (#33 → #36 →
+#41). Each PR re-targets `dev` as its parent merges — if a merge review
+touches files a stacked branch changed, that branch rebases before its
+own review. Known operational state: staging's OpenAI quota exhausted
 2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
 (former 027 draft) stays deferred — contract draft at unpushed
 `a5c9708`.
