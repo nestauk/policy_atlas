@@ -123,7 +123,7 @@ export function Composer({
           disabled={disabled}
           className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-meta [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
-        <Button type="submit" variant="secondary" disabled={sendDisabled}>
+        <Button type="submit" disabled={sendDisabled || value.trim().length === 0}>
           Send
         </Button>
       </form>
@@ -393,10 +393,19 @@ export function PlanningPane({
       .catch(() => setSuggestions([]));
   };
 
+  // The landing (no conversation yet) is a bare centred prompt — no pane
+  // heading, no helper copy (Claude design concept; owner, 2026-08-05).
+  const landing =
+    transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
+
   return (
     <section aria-label="Planning conversation" className="flex h-full flex-col">
-      <PaneHeading>Plan the analysis</PaneHeading>
-      <Divider />
+      {!landing && (
+        <>
+          <PaneHeading>Plan the analysis</PaneHeading>
+          <Divider />
+        </>
+      )}
       <div
         ref={scrollRef}
         onScroll={(event) => {
@@ -405,9 +414,10 @@ export function PlanningPane({
         }}
         className="flex flex-1 flex-col overflow-y-auto px-4 py-4"
       >
-        {/* Bottom-anchor: pushes a short thread to the composer end. */}
-        <div aria-hidden="true" className="mt-auto" />
-        <div ref={contentRef} className="space-y-3">
+        {/* Bottom-anchor: pushes a short thread to the composer end;
+            the landing prompt centres instead. */}
+        {!landing && <div aria-hidden="true" className="mt-auto" />}
+        <div ref={contentRef} className={landing ? "my-auto space-y-3" : "space-y-3"}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-caption text-grey">
             Loading your planning conversation…
@@ -429,13 +439,11 @@ export function PlanningPane({
               </Button>
             </div>
           ))}
-        {transcript.data !== undefined &&
-          thread.length === 0 &&
-          transcript.optimisticTurns.length === 0 && (
-            <p role="status" className="max-w-prose-measure text-caption leading-relaxed text-grey">
-              Describe the policy question you need evidence for.
-            </p>
-          )}
+        {landing && (
+          <h2 className="text-center font-display text-title font-bold text-navy">
+            What do you need evidence on?
+          </h2>
+        )}
 
         {thread.flatMap((item, index) => {
           const rendered =
