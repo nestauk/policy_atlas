@@ -656,6 +656,17 @@ collapsed · 2-row composer · dict bundle) adopted as owner-ruled/recorded
 deviations — the contract text predates the refinement rulings and stays
 historical.
 
+**Step-9 human-review addendum (owner, live app, 2026-08-05):** every brand
+primary button rendered ink-on-blue on the deployed app. Root cause:
+tailwind-merge doesn't know the named type scale, classifies the unknown
+`text-meta`/`text-caption` tokens as text COLOURS, and stripped
+`text-white` from the merged class list — introduced by batch 13 putting
+scale tokens on the shared Button sizes (the batch's screenshots covered
+toggles/type surfaces, not button colour). Fixed at the single seam:
+`cn()` now registers the six scale tokens as font-size utilities via
+`extendTailwindMerge`, with a Button regression test asserting
+`text-white` and `text-meta` coexist. FE gates green (186 tests).
+
 **Fake-done check on this phase's own fixes:** no test was relaxed or
 deleted (all changes add assertions or enforce stricter behaviour); the
 FG/overlay/endorsement fixes ship with tests that fail on the pre-fix

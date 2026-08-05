@@ -1,5 +1,11 @@
 # Knowledge update log
 
+## 2026-08-05 (task 028 step 9 — owner live review)
+* **Creation**: Added
+  [custom-text-tokens-need-tailwind-merge-registration](custom-text-tokens-need-tailwind-merge-registration.md)
+  — every brand primary shipped ink-on-blue with all gates green (twMerge classified the
+  028 type-scale tokens as colours and stripped text-white); owner-caught on the live app.
+
 ## 2026-08-05 (task 028 step 8)
 * **Creation**: Added
   [retiring-ui-affordance-keeps-grammar-channel](retiring-ui-affordance-keeps-grammar-channel.md),
