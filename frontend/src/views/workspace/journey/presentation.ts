@@ -47,15 +47,10 @@ export function screenedOutFooter(count: number): string {
 }
 
 /** Outcome-first completion language; all other run statuses are non-completion states. */
-export function completionCopy(status: string | undefined): { heading: string; body: string } | null {
-  if (status === "succeeded") {
-    return { heading: "The evidence base is ready", body: "Every claim is traceable to its source, every exclusion recorded." };
-  }
-  if (status === "degraded") {
-    return {
-      heading: "The evidence base is ready with gaps",
-      body: "Some events were flagged in the decision log; they are recorded here, not hidden.",
-    };
-  }
+/** Completion-card heading per terminal status; body copy was cut (owner,
+ *  2026-08-05 — the degraded status banner already carries the caveat). */
+export function completionCopy(status: string | undefined): { heading: string } | null {
+  if (status === "succeeded") return { heading: "The evidence base is ready" };
+  if (status === "degraded") return { heading: "The evidence base is ready with gaps" };
   return null;
 }

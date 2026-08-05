@@ -265,10 +265,12 @@ export const mockArtefactSectionProse: Record<number, string> = {
 export const mockCoverage: components["schemas"]["CoverageOut"] = {
   sentence: "Coverage is adequate for school-food and family-support approaches (46 screened-in sources, 2019-2024), while local active-travel evaluation evidence remains thin.",
   base: { screened_in: 46, years: [2019, 2024] },
-  backends: ["openalex", "overton"],
+  backends: ["OpenAlex", "Overton"],
   backends_detail: [
     {
-      backend: "openalex",
+      // The real coverage read model serves PUBLIC backend names — the
+      // fixture matches so the label mapping is exercised as shipped.
+      backend: "OpenAlex",
       results: 86,
       relevant: 30,
       queries: [
@@ -278,7 +280,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
       ],
     },
     {
-      backend: "overton",
+      backend: "Overton",
       results: 42,
       relevant: 16,
       queries: [
