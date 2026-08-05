@@ -39,6 +39,21 @@ run fine on the shared DB because they don't repeatedly add/drop the same
 columns. Reach for a scratch database only when the migration under test
 churns columns.
 
+**It happened (028 review stack, 2026-08-05).** The older shared-DB churn
+tests finally exhausted a table on a week-old local `policy_atlas_test`:
+`test_screen_step_rename_migration` died mid-roundtrip with
+`psycopg.errors.TooManyColumns` **during its upgrade-back**, stranding the
+shared DB downgraded — so the incident presents as a **627-test cascade of
+`UndefinedColumn` failures**, with the real cause one line inside the first
+migration test's traceback. Recognise the signature (mass DB failures + the
+shared DB's `alembic_version` below head) before debugging any individual
+test; the remedy is recreating `policy_atlas_test` (only a from-scratch
+rewrite reclaims dropped-column slots — `VACUUM FULL` does not). Migrating
+the remaining shared-DB churn tests to this scratch pattern is a recorded
+seam (docs/deferred.md § task 028 seams).
+
 # Citations
 
 - `backend/tests/core/test_migrations_025.py`
+- `backend/tests/core/test_migrations_028.py`
+- 028 verification.md § Known unverified (the 2026-08-05 incident record)

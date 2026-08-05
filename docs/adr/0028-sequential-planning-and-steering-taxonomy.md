@@ -26,8 +26,11 @@ while the landscape depth's skipped components saved ~13s.
    row (one additive JSONB column); button confirmations are ordinary
    planning turns referencing part-id + option-id; free text beats buttons
    everywhere; answered parts pre-confirm in bulk; the ready plan renders
-   as an inline chat card, the only start surface (Start = approve the
-   current draft + dispatch, atomically). No check-in question: steering
+   as an inline chat card, the only start surface (as built — corrected at
+   the 028 review stack, F31: approval happens server-side when the turn
+   reaches ready; Start dispatches against the already-approved plan and
+   requires one, 400 otherwise; the stale-start fence demotes on a newer
+   completed turn). No check-in question: steering
    is **unattended by default** and requested in words. Steer-point
    defaults compile from the mode — never a conversation.
    *Rejected:* a form/wizard (free text is the 024 spine; humans steer in
