@@ -111,7 +111,7 @@ export function Composer({
         </label>
         <textarea
           id="planning-message"
-          rows={3}
+          rows={2}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
@@ -121,7 +121,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 flex-1 resize-none overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-meta [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-meta [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
         <Button type="submit" variant="secondary" disabled={sendDisabled}>
           Send
@@ -140,9 +140,11 @@ function UserBubble({ text }: { text: string }) {
   );
 }
 
+/** Planner replies are plain text — no box (binding record: planning-stage
+ *  `.planner`); only part cards and the plan card are bordered. */
 function PlannerBubble({ text }: { text: string }) {
   return (
-    <div className="anim-rise mr-8 border border-line bg-paper px-3.5 py-2.5">
+    <div className="anim-rise mr-8">
       <p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p>
     </div>
   );
@@ -392,14 +394,9 @@ export function PlanningPane({
         {transcript.data !== undefined &&
           thread.length === 0 &&
           transcript.optimisticTurns.length === 0 && (
-            <div role="status" className="max-w-prose-measure text-caption leading-relaxed text-grey">
-              <p>
-                Describe the policy question you need evidence for. The planner turns it into a
-                plan you approve — question, scope, thoroughness — then the analysis runs and
-                reports back here.
-              </p>
-              <p className="mt-2 text-caption">Your conversation is kept — it survives restarts.</p>
-            </div>
+            <p role="status" className="max-w-prose-measure text-caption leading-relaxed text-grey">
+              Describe the policy question you need evidence for.
+            </p>
           )}
 
         {thread.map((item) =>
@@ -430,7 +427,9 @@ export function PlanningPane({
 
         {transcript.optimisticTurns.map((turn: OptimisticPlanningTurn) => (
           <div key={turn.clientTurnId} className="space-y-3">
-            <UserBubble text={turn.userMessage} />
+            {/* Button-confirm turns never show a bubble — durable turns hide
+                them too; the ✓ on the part card is the record. */}
+            {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} />}
             {turn.status === "failed" && (
               <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
                 <p className="text-caption text-ink">

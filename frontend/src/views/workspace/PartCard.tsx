@@ -244,7 +244,14 @@ export function PartCard({
         {scrub(part.title)}
       </h3>
       {part.body != null && part.body !== "" && (
-        <p className="mt-1 max-w-prose-measure text-meta text-grey">{scrub(part.body)}</p>
+        // The planner's rationale is collapsed by default (owner, 2026-08-05:
+        // plan-step text clutter) — the title + chips carry the decision.
+        <details className="mt-1 max-w-prose-measure">
+          <summary className="cursor-pointer text-caption font-semibold text-grey hover:text-navy">
+            Notes
+          </summary>
+          <p className="mt-1 text-meta text-grey">{scrub(part.body)}</p>
+        </details>
       )}
 
       {(part.chips ?? []).length > 0 && (
@@ -341,7 +348,15 @@ export function PartCard({
           )}
         </p>
       ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
+        // Preset options (any option carrying a sub line) stack one per line
+        // at a shared width; plain confirm/refine pairs stay inline.
+        <div
+          className={
+            part.options.some((option) => option.sub != null && option.sub !== "")
+              ? "mt-3 flex max-w-md flex-col gap-2"
+              : "mt-3 flex flex-wrap gap-2"
+          }
+        >
           {part.options.map((option) => (
             <Button
               key={option.id}
@@ -349,6 +364,7 @@ export function PartCard({
               data-part-option={option.primary ? "primary" : "secondary"}
               variant={option.primary ? "primary" : "secondary"}
               disabled={!interactive}
+              className="justify-start"
               onClick={() =>
                 sendsDirectly(option)
                   ? onSend(confirmMessage(part, option))

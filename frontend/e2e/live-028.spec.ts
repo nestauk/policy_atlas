@@ -221,12 +221,12 @@ test.describe.serial("task 028 live check", () => {
     await shot(page, "a-05-thoroughness-part");
     await partOption(page, { id: "quick_look" });
 
-    // The inline ready plan card: details open, honest band, no-pause copy.
+    // The inline ready plan card: details open, honest band, check-ins "None".
     await driveToReady(page, "quick_look");
     const planCard = page.getByTestId("plan-card");
     await expect(planCard.getByText("ready", { exact: true })).toBeVisible();
     await expect(planCard.getByText(/~5-10 min|~10-15 min/)).toBeVisible();
-    await expect(planCard.getByText(/runs without pausing/)).toBeVisible();
+    await expect(planCard.getByText("None", { exact: true })).toBeVisible();
     await shot(page, "a-06-ready-card");
 
     // Start from the card — the ONLY start surface.

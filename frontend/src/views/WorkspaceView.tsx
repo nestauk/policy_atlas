@@ -32,7 +32,7 @@ export function WorkspaceView() {
 
   if (!hasRun) {
     return (
-      <main className="mx-auto min-h-[calc(100svh-58px)] max-w-[760px] bg-paper lg:border-x lg:border-line">
+      <main className="mx-auto h-[calc(100svh-58px)] max-w-[760px] bg-paper lg:border-x lg:border-line">
         <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
       </main>
     );
@@ -44,14 +44,16 @@ export function WorkspaceView() {
   // "the workspace expands too wide").
   return (
     <main
-      className="mx-auto grid min-h-[calc(100svh-58px)] max-w-[1440px] grid-cols-1 lg:grid-cols-[minmax(0,var(--chat))_minmax(0,1fr)]"
+      className="mx-auto grid min-h-[calc(100svh-58px)] max-w-[1440px] grid-cols-1 lg:h-[calc(100svh-58px)] lg:grid-cols-[minmax(0,var(--chat))_minmax(0,1fr)]"
       style={{ "--chat": rail.width } as React.CSSProperties}
     >
-      <div className="relative min-w-0 border-r border-line bg-paper">
+      {/* lg: fixed viewport height so chat and journey scroll independently;
+          below lg the stacked panes keep the page scroll. */}
+      <div className="relative flex min-w-0 flex-col border-r border-line bg-paper lg:overflow-hidden">
         <div className="flex justify-end border-b border-line p-1">
           <RailToggle collapsed={rail.collapsed} toggleProps={rail.toggleProps} />
         </div>
-        <div id={rail.regionId} hidden={rail.collapsed}>
+        <div id={rail.regionId} hidden={rail.collapsed} className="min-h-0 flex-1">
           <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
         </div>
         {!rail.collapsed && (
@@ -61,7 +63,7 @@ export function WorkspaceView() {
           />
         )}
       </div>
-      <div className="min-w-0 bg-ground">
+      <div className="min-w-0 bg-ground lg:overflow-hidden">
         <RunPane projectId={projectId} stream={stream} />
       </div>
     </main>

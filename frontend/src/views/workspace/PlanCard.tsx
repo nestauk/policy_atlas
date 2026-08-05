@@ -87,34 +87,41 @@ export function PlanCard({ projectId, runActive }: { projectId: string; runActiv
               ))}
             </div>
           )}
-          {scopingNotes.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {scopingNotes.map((note) => (
-                <Chip key={note} tone="soft">
-                  {scrub(note)}
-                </Chip>
-              ))}
-            </div>
-          )}
           {constraints.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {constraints.map((chip) => (
-                <Chip key={chip} tone="blue">
-                  {scrub(chip)}
-                </Chip>
-              ))}
+            <div className="mt-3">
+              <PaneHeading className="p-0">Search filters</PaneHeading>
+              <div className="mt-1 flex flex-wrap gap-1.5">
+                {constraints.map((chip) => (
+                  <Chip key={chip} tone="blue">
+                    {scrub(chip)}
+                  </Chip>
+                ))}
+              </div>
             </div>
           )}
-          {screeningCriteria.length > 0 && (
+          {(scopingNotes.length > 0 || screeningCriteria.length > 0) && (
             <div className="mt-3">
               <PaneHeading className="p-0">Screening rules</PaneHeading>
-              <ul className="mt-1 space-y-1 text-caption text-navy">
-                {screeningCriteria.map((criterion) => (
-                  <li key={criterion} className="break-words">
-                    • {scrub(criterion)}
-                  </li>
-                ))}
-              </ul>
+              {/* Scoping-note chips summarise the same per-document rules the
+                  list below details, so they live under the same heading. */}
+              {scopingNotes.length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {scopingNotes.map((note) => (
+                    <Chip key={note} tone="soft">
+                      {scrub(note)}
+                    </Chip>
+                  ))}
+                </div>
+              )}
+              {screeningCriteria.length > 0 && (
+                <ul className="mt-1 space-y-1 text-caption text-navy">
+                  {screeningCriteria.map((criterion) => (
+                    <li key={criterion} className="break-words">
+                      • {scrub(criterion)}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {steps.length > 0 && (
@@ -175,10 +182,9 @@ export function PlanCard({ projectId, runActive }: { projectId: string; runActiv
           {starting ? "Starting…" : "Start the analysis"}
         </Button>
         <p className="text-caption text-grey">
-          {plan.time_band !== null && plan.time_band !== "" ? `${scrub(plan.time_band)} · ` : ""}
-          {unattended
-            ? "it runs without pausing — ask for check-ins if you want them"
-            : "You can steer or pause at any check-in."}
+          {plan.time_band !== null && plan.time_band !== "" ? scrub(plan.time_band) : ""}
+          {!unattended &&
+            `${plan.time_band !== null && plan.time_band !== "" ? " · " : ""}You can steer or pause at any check-in.`}
         </p>
       </div>
       {startNotice !== null && (
