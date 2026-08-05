@@ -81,9 +81,9 @@ beforeEach(() => {
 });
 
 describe("SourcesView — sortable table (028 strand 7)", () => {
-  it("keeps Origin a plain, non-sortable header", () => {
+  it("keeps Origin a plain, non-sortable header (its filter select aside)", () => {
     renderSources();
-    const header = screen.getByRole("columnheader", { name: "Origin" });
+    const header = screen.getByRole("columnheader", { name: /Origin/ });
     expect(header).not.toHaveAttribute("aria-sort");
     expect(within(header).queryByRole("button")).toBeNull();
   });
@@ -187,21 +187,33 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     expect(lastEvidenceQuery()).toMatchObject({ status: undefined });
   });
 
-  it("binds the origin, evidence type and strength facet filters to the query", async () => {
+  it("binds the header-mounted origin, evidence type and strength filters to the query", async () => {
     const user = userEvent.setup();
     renderSources();
-    await user.selectOptions(screen.getByRole("combobox", { name: "Origin" }), "Overton");
+    const originSelect = screen.getByRole("combobox", { name: "Filter by origin" });
+    // Uploaded is not offered — document upload isn't a live feature.
+    expect(within(originSelect).queryByRole("option", { name: "Uploaded" })).toBeNull();
+    await user.selectOptions(originSelect, "Overton");
     expect(screen.getByTestId("location")).toHaveTextContent("origin=Overton");
     expect(lastEvidenceQuery()).toMatchObject({ origin: "Overton" });
 
     // Evidence-type options come from the landscape distribution.
-    const typeSelect = screen.getByRole("combobox", { name: "Evidence type" });
+    const typeSelect = screen.getByRole("combobox", { name: "Filter by evidence type" });
     expect(within(typeSelect).getByRole("option", { name: "Local evaluation" })).toBeInTheDocument();
     await user.selectOptions(typeSelect, "Systematic review");
     expect(lastEvidenceQuery()).toMatchObject({ evidence_type: "Systematic review" });
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Evidence strength" }), "Moderate");
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Filter by evidence strength" }),
+      "Moderate",
+    );
     expect(lastEvidenceQuery()).toMatchObject({ strength: "Moderate" });
+  });
+
+  it("hovers Abstract only with a human-readable reason", () => {
+    renderSources();
+    const hints = screen.getAllByRole("button", { name: "Abstract only: why" });
+    expect(hints.length).toBeGreaterThan(0);
   });
 
   it("renders the Relevant column as a verdict with confidence, reasoning behind a hover", () => {

@@ -39,8 +39,10 @@ export function nextEvidenceSort(
   return { sort: null, order: null };
 }
 
-/** Fixed vocabularies for the facet filters (the server's literal params). */
-export const ORIGIN_FILTER_OPTIONS = ["OpenAlex", "Overton", "Uploaded"] as const;
+/** Fixed vocabularies for the facet filters (the server's literal params).
+ *  "Uploaded" is deliberately not offered — document upload isn't a live
+ *  feature yet (owner, 2026-08-05). */
+export const ORIGIN_FILTER_OPTIONS = ["OpenAlex", "Overton"] as const;
 export const STRENGTH_FILTER_OPTIONS = [
   "Very strong",
   "Strong",
@@ -60,6 +62,31 @@ export function readDepthLabel(
   if (item.read_in_full) return "Read in full";
   if (item.status === "unavailable" || item.screen_status === "relevant") return "Abstract only";
   return null;
+}
+
+/** Human sentences for the backend's reason codes — raw codes never render. */
+const HUMAN_REASON: Record<string, string> = {
+  title_only: "Screened on the title only",
+  title_abstract: "Screened on the title and abstract",
+  fetch_failed: "The full text couldn't be fetched",
+  parse_failed: "The document couldn't be parsed",
+};
+
+/**
+ * The Abstract-only hover: why the full text wasn't read, in plain words.
+ * `null` for read-in-full rows (no hover needed).
+ */
+export function readDepthHint(
+  item: Pick<EvidenceItem, "read_in_full" | "status" | "status_reason">,
+): string | null {
+  if (item.read_in_full) return null;
+  if (item.status === "unavailable") {
+    const detail = item.status_reason ? HUMAN_REASON[item.status_reason] : undefined;
+    return detail !== undefined
+      ? `${detail} — only the abstract was read.`
+      : "The full text couldn't be obtained — only the abstract was read.";
+  }
+  return "The full text hasn't been read — screening and appraisal used the title and abstract.";
 }
 
 /** The strength hover, composed the same way as the citation sidebar's. */
@@ -109,7 +136,11 @@ export function screeningDetails(
   if (item.screen_basis === "title_only") details.push(["Read basis", "Title only"]);
   if (item.screen_basis === "title_abstract") details.push(["Read basis", "Title and abstract"]);
   if (item.screen_stage === 2) details.push(["Screening stage", "Confirmed against full text"]);
-  if (item.status_reason) details.push(["Reason", item.status_reason]);
+  // status_reason echoes screen_basis for screened-out rows (a duplicate) and
+  // carries backend codes elsewhere — humanize known codes, skip duplicates.
+  if (item.status_reason && item.status_reason !== item.screen_basis) {
+    details.push(["Reason", HUMAN_REASON[item.status_reason] ?? item.status_reason]);
+  }
   return details;
 }
 

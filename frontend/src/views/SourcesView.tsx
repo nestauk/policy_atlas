@@ -15,6 +15,7 @@ import { Tooltip } from "../ui/radix/Tooltip";
 import {
   abstractSourceLabel,
   nextEvidenceSort,
+  readDepthHint,
   readDepthLabel,
   screeningDetails,
   sourceStatusLabel,
@@ -111,9 +112,6 @@ export function SourcesView() {
     <main className="mx-auto max-w-6xl px-6 py-8">
       <header className="mb-5">
         <h1 className="font-display text-title font-extrabold text-navy">Sources</h1>
-        <p className="mt-1 text-caption text-grey">
-          Every source the analysis touched — what happened to it, and why.
-        </p>
         <div role="group" aria-label="Filter sources" className="mt-4 flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((filter) => (
             <button
@@ -150,39 +148,6 @@ export function SourcesView() {
           >
             Cited
           </button>
-          <FilterSelect
-            label="Origin"
-            allLabel="All origins"
-            value={originFilter ?? ""}
-            options={ORIGIN_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
-            onChange={(value) => updateParams((next) => {
-              if (value) next.set("origin", value);
-              else next.delete("origin");
-              next.delete("page");
-            })}
-          />
-          <FilterSelect
-            label="Evidence type"
-            allLabel="All types"
-            value={typeFilter ?? ""}
-            options={evidenceTypeOptions.map((value) => ({ value, label: scrub(value) }))}
-            onChange={(value) => updateParams((next) => {
-              if (value) next.set("type", value);
-              else next.delete("type");
-              next.delete("page");
-            })}
-          />
-          <FilterSelect
-            label="Evidence strength"
-            allLabel="All strengths"
-            value={strengthFilter ?? ""}
-            options={STRENGTH_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
-            onChange={(value) => updateParams((next) => {
-              if (value) next.set("strength", value);
-              else next.delete("strength");
-              next.delete("page");
-            })}
-          />
           <FilterSelect
             label="Key theme"
             allLabel="All themes"
@@ -232,19 +197,56 @@ export function SourcesView() {
                   activeOrder={sortOrder}
                   onSort={handleSort}
                 />
-                <th className="px-3 py-3">Origin</th>
+                <th className="px-3 py-3">
+                  Origin
+                  <HeaderFilter
+                    label="Filter by origin"
+                    allLabel="All"
+                    value={originFilter ?? ""}
+                    options={ORIGIN_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+                    onChange={(value) => updateParams((next) => {
+                      if (value) next.set("origin", value);
+                      else next.delete("origin");
+                      next.delete("page");
+                    })}
+                  />
+                </th>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[2]}
                   activeSort={sortField}
                   activeOrder={sortOrder}
                   onSort={handleSort}
-                />
+                >
+                  <HeaderFilter
+                    label="Filter by evidence type"
+                    allLabel="All"
+                    value={typeFilter ?? ""}
+                    options={evidenceTypeOptions.map((value) => ({ value, label: scrub(value) }))}
+                    onChange={(value) => updateParams((next) => {
+                      if (value) next.set("type", value);
+                      else next.delete("type");
+                      next.delete("page");
+                    })}
+                  />
+                </SortableColumnHeader>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[3]}
                   activeSort={sortField}
                   activeOrder={sortOrder}
                   onSort={handleSort}
-                />
+                >
+                  <HeaderFilter
+                    label="Filter by evidence strength"
+                    allLabel="All"
+                    value={strengthFilter ?? ""}
+                    options={STRENGTH_FILTER_OPTIONS.map((value) => ({ value, label: value }))}
+                    onChange={(value) => updateParams((next) => {
+                      if (value) next.set("strength", value);
+                      else next.delete("strength");
+                      next.delete("page");
+                    })}
+                  />
+                </SortableColumnHeader>
                 <th className="px-3 py-3">Relevant</th>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[4]}
@@ -295,7 +297,15 @@ export function SourcesView() {
                   <td className="px-3 py-3 align-top"><RelevantCell item={item} /></td>
                   <td className="px-3 py-3 align-top">
                     {readDepthLabel(item) !== null && (
-                      <Chip tone={item.read_in_full ? "blue" : "yellow"}>{readDepthLabel(item)}</Chip>
+                      item.read_in_full ? (
+                        <Chip tone="blue">{readDepthLabel(item)}</Chip>
+                      ) : (
+                        <Tooltip content={<p>{readDepthHint(item)}</p>}>
+                          <button type="button" aria-label="Abstract only: why" className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
+                            <Chip tone="yellow">{readDepthLabel(item)}</Chip>
+                          </button>
+                        </Tooltip>
+                      )
                     )}
                   </td>
                   <td className="px-3 py-3 align-top">
@@ -369,12 +379,15 @@ function SortableColumnHeader({
   activeOrder,
   onSort,
   className = "px-3 py-3",
+  children,
 }: {
   column: (typeof SOURCE_SORT_COLUMNS)[number];
   activeSort: EvidenceSortField | null;
   activeOrder: SortOrder | null;
   onSort: (field: EvidenceSortField) => void;
   className?: string;
+  /** Optional header-mounted filter control, rendered under the label. */
+  children?: ReactNode;
 }) {
   const order = activeSort === column.key ? activeOrder : null;
   const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
@@ -389,7 +402,39 @@ function SortableColumnHeader({
         {column.label}
         {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
       </button>
+      {children}
     </th>
+  );
+}
+
+/** A compact facet filter mounted inside a column header. */
+function HeaderFilter({
+  label,
+  allLabel,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  allLabel: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`mt-1 block max-w-36 cursor-pointer border bg-paper px-1 py-0.5 text-caption font-medium normal-case tracking-normal focus-visible:outline-2 focus-visible:outline-blue ${
+        value === "" ? "border-line-2 text-grey" : "border-blue text-blue"
+      }`}
+    >
+      <option value="">{allLabel}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
+    </select>
   );
 }
 
@@ -432,24 +477,21 @@ function FilterSelect({
   );
 }
 
-/** The screening verdict: tick/cross + confidence, reasoning on hover. */
+/** The screening verdict: tick/cross + confidence, the LLM's reasoning on
+ *  hover (just the reasoning — basis and depth live in the Status column). */
 function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }) {
   if (item.screen_status === null || item.screen_status === undefined) return null;
   const retracted = item.screen_status === "excluded_retracted";
   const relevant = item.screen_status === "relevant";
   const label = retracted ? "Excluded — retracted" : relevant ? "Relevant" : "Not relevant";
-  const details = screeningDetails(item);
-  const content = details.length === 0 ? (
-    <p>No additional screening detail was recorded.</p>
-  ) : (
-    <dl className="space-y-1">
-      {details.map(([detailLabel, value]) => (
-        <div key={detailLabel} className="flex gap-2">
-          <dt className="shrink-0 font-semibold text-grey">{detailLabel}</dt>
-          <dd>{scrub(value)}</dd>
-        </div>
-      ))}
-    </dl>
+  const content = (
+    <p>
+      {retracted
+        ? "The record was retracted, so it is excluded regardless of relevance."
+        : item.screen_reason
+          ? scrub(item.screen_reason)
+          : "No screening reasoning was recorded."}
+    </p>
   );
   return (
     <Tooltip content={content}>
