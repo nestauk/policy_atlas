@@ -265,6 +265,78 @@ One slice, ten committed phases on `task/028-ux-refinement` (stacked on
    byte-identical render re-baselined twice (P4 floor changes); the
    unattended steering-mode label pin.
 
+## Refinement pass (owner live-demo list, 2026-08-05)
+
+Fourteen owner-directed batches after step-6 exit, all lead-authored on
+`task/028-ux-refinement` (`f8f509a..6e4ef99`), each batch gated
+(FE typecheck/lint/vitest/mock-e2e; backend pytest/mypy/ruff/drift-check
+where touched) and screenshot-verified against a `VITE_MOCK` build:
+
+- **1 (`f8f509a`)** planning surface: one-line empty state, unboxed planner
+  replies, 2-row resizable composer, viewport-height independent scrolling,
+  part-card rationale behind a Notes disclosure, stacked preset options,
+  optimistic confirm-marker bubbles hidden, plan-card chips grouped under
+  Search filters/Screening rules, unattended copy cut, e2e pin updated.
+- **2 (`fa70b2f`)** chat pins to bottom (ResizeObserver on the thread —
+  child-owned queries grow content without a pane render); plan card at its
+  chronological position; a consumed approval hides its Start footer and
+  collapses by default.
+- **3 (`727c0dd`)** landing per the Claude design: centred display prompt,
+  no pane heading, primary Send disabled-until-text.
+- **4 (`0ed499b`)** landing polish: placeholder de-duplicated, prompt in
+  the top third, full-bleed white planning stage, 56px arrow Send.
+- **5 (`2bfa2cd`)** send-button iteration: white SVG arrow, dual-cutout
+  (`cutout-2` utility), 48×40, centred on the composer.
+- **6 (`208d1f4`)** sources rework (backend additive): origin/evidence_type/
+  strength filters; `screen_reason`/`classification_reason` recovered from
+  the event log (event-payload-only; agreeing-rep selection; no migration)
+  + `read_in_full`; Relevant verdict column; Status = read depth; cited
+  hover copy; **FIX** found in-batch: new filter params missing from the
+  react-query key served cached rows — key extended + `queryKeys` guard
+  test.
+- **7 (`e7fd5cc`)** header-mounted filters, subtitle cut, Uploaded origin
+  option dropped, reasoning-only relevance hover, humanized reason codes.
+- **8 (`bc4a4be`)** backend `sort=relevance` (p(relevant) spectrum; table
+  default, desc) + `year_from`/`year_to`; funnel-icon filters + year-range
+  popover; status buttons All·Included·Screened out with All default; full
+  ingest-failure vocabulary humanized (`blocked_by_host` …).
+- **9 (`5133aa6`)** evidence-base header: subtitle removed, conclusions
+  collapse to summaries, Sources "N cited out of M included", Study
+  types/Years count the CITED set (scope=cited landscape), Screened out
+  bare count.
+- **10 (`fc98562`)** completion-card body copy cut; landscape plots one per
+  row; **FIX**: "Where I looked" nearly empty on completed projects — the
+  durable coverage read model serves public backend names ("OpenAlex") but
+  the label map was keyed on stream keys ("openalex"); case-insensitive
+  lookup + fixture aligned to the server shape.
+- **11 (`027d6f9`)** coverage sentence/disclaimer cut; "Run the analysis
+  again" removed (replanned plans start from their inline plan card;
+  live-027b spec re-pointed); geography caveat cut; settings icon;
+  completed runs close the chat with a prominent evidence-base link.
+- **12 (`9493cb2`)** summary fallback marker cut; chevron settings icon;
+  journey cards reverse-chronological (themes high, Where I looked
+  bottom); sticky anchor bar and funnel footer removed.
+- **13 (`dd6447c`)** prominent blue Expand +/Collapse − toggles; type-scale
+  sweep — 33 off-scale sizes in shared components (nav, buttons, chips,
+  tabs, popovers, sheets, tooltips, toasts, feedback, auth) normalised
+  onto the named scale.
+- **14 (`6e4ef99`)** chips reset to the pre-sweep 11.5px brand token
+  (owner ruling — deliberate off-scale); workspace plan recap mirrors the
+  plan card's Search filters/Screening rules grouping; check-ins drop the
+  decimal time + Technical detail disclosure.
+
+**Review-relevant notes:** (a) two real defects were found and fixed by
+this pass's own visual checks (batch 6 query-key caching, batch 10
+backend-name case mismatch) — both now regression-guarded; (b) the
+completion card no longer offers a same-plan re-run — the replan → inline
+plan card path is the only restart affordance; (c) mock mode serves the
+same landscape for both scopes, so cited-scoped header counts (batch 9)
+are demo-identical to corpus counts — real projects differ; (d) additive
+API growth beyond api-additions.md: evidence `origin`/`evidence_type`/
+`strength`/`year_from`/`year_to`/`sort=relevance` params and
+`screen_reason`/`classification_reason`/`read_in_full` response fields —
+all additive, drift-check green, golden-tested.
+
 ## Intent & assumptions
 
 Everything traces to contract strands 1–14 and the two adversarial-review
