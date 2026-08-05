@@ -667,6 +667,16 @@ toggles/type surfaces, not button colour). Fixed at the single seam:
 `extendTailwindMerge`, with a Button regression test asserting
 `text-white` and `text-meta` coexist. FE gates green (186 tests).
 
+**Step-9 gate addendum (owner-approved dependency bump, 2026-08-05):** the
+PR's audit check failed on three fresh advisories against `cryptography`
+48.0.1 (PYSEC-2026-3552/3553/3554; 3552 fixed only in 50.0.0) — published
+against the existing lock, not introduced by this slice. Deps are a hard
+gate; the owner approved the bump explicitly at the PR. Pin raised to
+`>=50,<51`, `uv lock` updated, `make audit` clean, the directly-affected
+surface (pyjwt RS256/JWKS, `test_auth_conformance.py`) green, full
+`make verify` re-run green. The deployed API image predates the bump —
+patched on the next `deploy.sh update`.
+
 **Fake-done check on this phase's own fixes:** no test was relaxed or
 deleted (all changes add assertions or enforce stricter behaviour); the
 FG/overlay/endorsement fixes ship with tests that fail on the pre-fix
