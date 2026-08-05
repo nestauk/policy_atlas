@@ -69,7 +69,6 @@ export function JourneyPane({
   landscape,
   checkIn,
   terminal,
-  onStartFreshRun,
 }: {
   projectId: string;
   stream: RunStreamState;
@@ -80,7 +79,6 @@ export function JourneyPane({
   landscape?: Landscape;
   checkIn?: ReactNode;
   terminal?: ReactNode;
-  onStartFreshRun?: () => void;
 }) {
   const runStatus = stream.run?.status;
   const hasLandscape = Object.keys(landscape?.evidence_types ?? {}).length > 0 || Object.keys(landscape?.years ?? {}).length > 0 || Object.keys(landscape?.geographies ?? {}).length > 0 || (landscape?.themes?.length ?? 0) > 0;
@@ -103,7 +101,7 @@ export function JourneyPane({
       <StatusBanner status={runStatus} />
 
       <div className="space-y-5">
-        <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} onStartFreshRun={onStartFreshRun} />
+        <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} />
         {coverage !== undefined && <CoverageCard coverage={coverage} />}
         <section id="journey-timeline" className="scroll-mt-14">
           <Card className="anim-rise p-4">
@@ -207,19 +205,17 @@ function FunnelCard({ funnel }: { funnel: Funnel }) {
 
 function CoverageCard({ coverage }: { coverage: Coverage }) {
   const details = coverage.backends_detail ?? [];
-  return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Where I looked</PaneHeading>{details.length > 0 ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.flatMap((backend) => backendLabel(backend.backend) === null ? [] : [<div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-caption font-bold text-navy">{backendLabel(backend.backend)}</span><span className="shrink-0 whitespace-nowrap text-caption text-grey"><CountUp value={backend.results} className="font-display text-body font-bold text-blue" /> results · <CountUp value={backend.relevant} className="font-display text-body font-bold text-blue" /> relevant</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-caption"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>])}</div> : <p className="break-words text-caption text-navy">{(coverage.backends ?? []).map(backendLabel).filter((label): label is string => label !== null).join(" · ")}</p>}<p className="mt-3 break-words text-caption text-navy">{scrub(coverage.sentence)}</p><p className="mt-1 text-caption text-grey">Relevant counts are attributed across this project; per-query relevance was not recorded.</p></Card></section>;
+  return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Where I looked</PaneHeading>{details.length > 0 ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.flatMap((backend) => backendLabel(backend.backend) === null ? [] : [<div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-caption font-bold text-navy">{backendLabel(backend.backend)}</span><span className="shrink-0 whitespace-nowrap text-caption text-grey"><CountUp value={backend.results} className="font-display text-body font-bold text-blue" /> results · <CountUp value={backend.relevant} className="font-display text-body font-bold text-blue" /> relevant</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-caption"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>])}</div> : <p className="break-words text-caption text-navy">{(coverage.backends ?? []).map(backendLabel).filter((label): label is string => label !== null).join(" · ")}</p>}</Card></section>;
 }
 
-function CompletionCard({ projectId, status, funnel, onStartFreshRun }: { projectId: string; status: string | undefined; funnel?: Funnel; onStartFreshRun?: () => void }) {
+function CompletionCard({ projectId, status, funnel }: { projectId: string; status: string | undefined; funnel?: Funnel }) {
   const copy = completionCopy(status);
   if (copy === null) return null;
   const counts = [typeof funnel?.relevant === "number" ? `${funnel.relevant} sources included` : null, typeof funnel?.cited === "number" ? `${funnel.cited} cited` : null].filter((count): count is string => count !== null);
-  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-heading font-semibold text-navy">{copy.heading}</h3>{counts.length > 0 && <p className="mt-1 text-meta text-navy">{counts.join(", ")}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-caption font-bold text-white" to={`/projects/${projectId}/evidence-base`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-caption font-bold text-navy" to={`/projects/${projectId}/sources`}>All sources</Link>{onStartFreshRun !== undefined && (
-    // Replanning after a terminal run reaches `ready` in the thread; without
-    // this control a replanned plan has no start affordance (the plan pane
-    // only renders pre-first-run) — live-check finding, 2026-07-29.
-    <button type="button" onClick={onStartFreshRun} className="cursor-pointer border border-line-2 bg-paper px-3 py-2 text-caption font-bold text-navy hover:bg-ground focus-visible:outline-2 focus-visible:outline-blue">Run the analysis again</button>
-  )}</div></Card>;
+  // No "Run the analysis again" control (owner, 2026-08-05): a replanned
+  // ready plan starts from its inline plan card in the thread (batch 2
+  // chronology — new approvals after a run keep their Start footer).
+  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-heading font-semibold text-navy">{copy.heading}</h3>{counts.length > 0 && <p className="mt-1 text-meta text-navy">{counts.join(", ")}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-caption font-bold text-white" to={`/projects/${projectId}/evidence-base`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-caption font-bold text-navy" to={`/projects/${projectId}/sources`}>All sources</Link></div></Card>;
 }
 
 function GroupsCard({ groups }: { groups: Groups }) {
@@ -234,5 +230,5 @@ function LandscapeEmbed({ projectId, landscape }: { projectId: string; landscape
   const themes = orderThemes(landscape.themes ?? []);
   const hasDistributions = Object.keys(evidenceTypes).length > 0 || Object.keys(years).length > 0 || Object.keys(geographies).length > 0;
   return <>{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading>{/* One plot per row — side-by-side was unreadable next to the chat rail
-    (owner, 2026-08-05). */}<div className="grid min-w-0 gap-4">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Where sources were published</p><EvidenceDistributionChart data={geographies} size="compact" /><p className="mt-2 text-caption text-grey">Where sources were published, not where the studies were conducted.</p></div>}</div></Card></section>}{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-caption text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/projects/${projectId}/sources?theme=${theme.theme_id}`} className="shrink-0 text-caption font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}</>;
+    (owner, 2026-08-05). */}<div className="grid min-w-0 gap-4">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Where sources were published</p><EvidenceDistributionChart data={geographies} size="compact" /></div>}</div></Card></section>}{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-caption text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/projects/${projectId}/sources?theme=${theme.theme_id}`} className="shrink-0 text-caption font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}</>;
 }

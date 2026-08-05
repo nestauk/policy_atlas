@@ -168,7 +168,6 @@ export function LandscapeView() {
                   <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
                 </div>
               </Card>
-              <p className="mt-2 text-caption text-grey">Where sources were published, not where the studies were conducted.</p>
             </div>
           )}
       </div>

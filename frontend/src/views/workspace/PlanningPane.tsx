@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 
 import { useCheckIns, useDecisions, useRuns } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
@@ -293,12 +294,14 @@ export function presentRunDecisions(
 }
 
 function RunBlock({
+  projectId,
   run,
   decisions,
   stages,
   answered,
   checkIns,
 }: {
+  projectId: string;
   run: PlanningThreadRun;
   decisions: PlanningThreadDecision[];
   stages: StageEntry[];
@@ -307,6 +310,7 @@ function RunBlock({
 }) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
   const presentedDecisions = presentRunDecisions(decisions, stages);
+  const complete = run.status === "succeeded" || run.status === "degraded";
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-caption text-grey">
@@ -331,6 +335,19 @@ function RunBlock({
           checkIn={checkIns?.data.find((checkIn) => checkIn.check_in_id === decision.checkInId)}
         />
       ))}
+      {/* The chat's own destination once the run lands (owner, 2026-08-05):
+          a completed run's last word shouldn't be a quiet stage echo. */}
+      {complete && (
+        <div className="anim-rise mr-8 border border-green-tint bg-green-tint/40 px-4 py-3">
+          <p className="text-meta font-semibold text-navy">The evidence base is ready.</p>
+          <Link
+            to={`/projects/${projectId}/evidence-base`}
+            className="cutout mt-2 inline-block bg-blue px-3 py-2 text-caption font-bold text-white"
+          >
+            Read the evidence base
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
@@ -478,6 +495,7 @@ export function PlanningPane({
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
+                projectId={projectId}
                 run={item.run}
                 decisions={item.decisions}
                 stages={stream.stages}

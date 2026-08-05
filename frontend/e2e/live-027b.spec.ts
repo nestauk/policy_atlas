@@ -282,8 +282,11 @@ test.describe.serial("task 027 live check — part B", () => {
       "Run the same analysis again, fully unattended — no pauses.",
     );
     // After a terminal run the journey persists — a replanned ready plan is
-    // started from the completion card's "Run the analysis again" control.
-    const runAgain = page.getByRole("button", { name: "Run the analysis again" });
+    // started from its inline plan card in the thread (the completion card's
+    // "Run the analysis again" control was removed, owner 2026-08-05).
+    const runAgain = page
+      .getByTestId("plan-card")
+      .getByRole("button", { name: /Start(ing…)? the analysis/ });
     for (let attempt = 0; attempt < 8; attempt++) {
       if (await runAgain.isVisible().catch(() => false)) break;
       await plannerTurn(page, "Yes — mark it ready.");
