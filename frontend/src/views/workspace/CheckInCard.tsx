@@ -204,10 +204,9 @@ export function CheckInCard({
         </pre>
       ) : (
         <div className="mt-3 border border-line bg-paper-2 p-3">
+          {/* No decimal completion time, no raw-render disclosure (owner,
+              2026-08-05) — the stage label and counts carry the story. */}
           <p className="text-caption font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
-          <p className="mt-0.5 text-caption text-grey">
-            Completed in {presentedRender.seconds}s
-          </p>
           {presentedRender.counts.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {presentedRender.counts.map(({ label, value }) => (
@@ -217,12 +216,6 @@ export function CheckInCard({
               ))}
             </div>
           )}
-          <details className="mt-2 text-caption text-grey">
-            <summary className="cursor-pointer">Technical detail</summary>
-            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper p-2 font-sans text-caption leading-relaxed text-ink">
-              {scrub(checkIn.render)}
-            </pre>
-          </details>
         </div>
       )}
 

@@ -150,9 +150,10 @@ function PlanRecap({ plan }: { plan: PlanDraft | null }) {
     </button>
     {open && <div className="border-t border-line px-4 pb-4 pt-3">
       {settings.length > 0 && <div className="grid gap-px border border-line bg-line sm:grid-cols-2">{settings.map(([label, value]) => <div key={label} className="bg-paper px-3 py-2"><p className="text-caption font-bold uppercase tracking-wide text-grey">{label}</p><p className="text-caption font-medium text-navy">{value}</p></div>)}</div>}
-      {(plan.scoping_notes ?? []).length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{plan.scoping_notes?.map((note) => <Chip key={note} tone="soft">{scrub(note)}</Chip>)}</div>}
-      {constraints.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{constraints.map((chip) => <Chip key={chip} tone="blue">{scrub(chip)}</Chip>)}</div>}
-      {(plan.screening_criteria ?? []).length > 0 && <div className="mt-3"><PaneHeading className="p-0">Screening criteria</PaneHeading><ul className="mt-1 space-y-1 text-caption text-navy">{plan.screening_criteria?.map((criterion) => <li key={criterion}>• {scrub(criterion)}</li>)}</ul></div>}
+      {/* Same grouping as the inline plan card (owner, 2026-08-05): Search
+          filters (backend-applied) then Screening rules (judged per doc). */}
+      {constraints.length > 0 && <div className="mt-3"><PaneHeading className="p-0">Search filters</PaneHeading><div className="mt-1 flex flex-wrap gap-1.5">{constraints.map((chip) => <Chip key={chip} tone="blue">{scrub(chip)}</Chip>)}</div></div>}
+      {((plan.scoping_notes ?? []).length > 0 || (plan.screening_criteria ?? []).length > 0) && <div className="mt-3"><PaneHeading className="p-0">Screening rules</PaneHeading>{(plan.scoping_notes ?? []).length > 0 && <div className="mt-1 flex flex-wrap gap-1.5">{plan.scoping_notes?.map((note) => <Chip key={note} tone="soft">{scrub(note)}</Chip>)}</div>}{(plan.screening_criteria ?? []).length > 0 && <ul className="mt-1 space-y-1 text-caption text-navy">{plan.screening_criteria?.map((criterion) => <li key={criterion}>• {scrub(criterion)}</li>)}</ul>}</div>}
       {(plan.steps ?? []).length > 0 && <div className="mt-3"><PaneHeading className="p-0">Agreed steps</PaneHeading><ol className="mt-1 space-y-1 text-caption text-navy">{plan.steps?.map((step, index) => <li key={step.stage}>{index + 1}. {scrub(step.label)}{step.blurb !== "" && <span className="text-grey"> — {scrub(step.blurb)}</span>}</li>)}</ol></div>}
       {(plan.assumptions ?? []).length > 0 && <div className="mt-3"><PaneHeading className="p-0">Assumptions</PaneHeading><ul className="mt-1 space-y-1 text-caption text-grey">{plan.assumptions?.map((assumption) => <li key={assumption}>• {scrub(assumption)}</li>)}</ul></div>}
     </div>}
