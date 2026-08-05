@@ -663,7 +663,14 @@ code; the marker-claim edits correct evidence to match shipped behaviour
 rather than weakening a requirement silently (the requirement change is
 recorded as deviation 5).
 
-**Owner-decision cluster — the copy diet vs rubric 15 (decide at review):**
+**Owner-decision cluster — RULED (owner, 2026-08-05, at PR-open): all four
+accepted as shipped.** (a) the coverage-adequacy sentence stays unrendered
+(`coverage.sentence` remains available server-side if a consumer returns);
+(b) the per-query relevance disclaimer stays cut; (c) the journey-funnel
+exclusion count stays the evidence-base bare count; (d) the 2026-08-04
+evidence screenshots stand, with batch-level visual verification as the
+refinement pass's recorded evidence. Rubric 15 closes on these rulings.
+Original cluster as presented:
 the refinement pass cut three honesty-bearing surfaces that rubric 15
 protects. (a) **Coverage adequacy** (contract F1): `coverage.sentence`
 still composes "Coverage was judged adequate/inadequate" but no frontend
@@ -724,10 +731,9 @@ lane's per-item table is the detailed record.)
     tested.
 14. **Holds** — auth diff cosmetic; eslint scrub/safeHref bans intact; SSE
     byte-identical; store/mock suites green.
-15. **Holds except the owner cluster** — copy maps now fully in
-    presentation modules (step-7 moves included); the three honesty cuts
-    are owner decisions pending (§ above) — the box closes on the owner's
-    ruling.
+15. **Holds** — copy maps fully in presentation modules (step-7 moves
+    included); the three honesty cuts ruled accepted by the owner at
+    PR-open (§ above).
 16. **Holds** — flat judging structural; failed-carries-no-text
     DB-enforced; deterministic length/citation floor added under the
     judge; legacy fallback renders (unmarked per deviation 5; live-spec
