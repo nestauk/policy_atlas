@@ -38,3 +38,6 @@ node_modules/
 # Task 026: CDK context cache (account-scoped lookups) and synth output
 cdk.context.json
 infra/cdk.out/
+
+# Notebook checkpoints
+*checkpoint.ipynb

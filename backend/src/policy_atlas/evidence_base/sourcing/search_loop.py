@@ -75,14 +75,29 @@ CallStatus = Literal["ok", "error"]
 ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
 
 RAPID_WALL_CLOCK_S = 30
-STANDARD_WALL_CLOCK_S = 75
-DEEP_WALL_CLOCK_S = 150
+# Standard and deep have no time budget: the clock was the only thing that ever
+# set `stop_all`, and because the fan-out runs backend-outer/plan-inner, a breach
+# during the OpenAlex leg cost the entire Overton leg — zero grey literature, and
+# the run still reported 'adequate'. Volume is bounded at acquisition instead
+# (`record_cap_per_backend`), which brakes the thing that actually costs money.
+# Rapid keeps its clock: it is the interactive path, where latency is the point.
+STANDARD_WALL_CLOCK_S: int | None = None
+DEEP_WALL_CLOCK_S: int | None = None
 ROUND_CAP = 3
 POS_EXEMPLARS = 8
 NEG_EXEMPLARS = 4
 SNOWBALL_SEEDS = 5
 SNOWBALL_RESULTS = 40
-TARGET_CONFIDENT_RELEVANT = 20
+# Deep-loop satisficing goal: stop once this many confident-relevant documents
+# exist in the scope. Raised 20 -> 100 (2026-08-04) pending the recall
+# measurement. Stopping at 20 caps measured recall by construction when ground
+# truth is a systematic review's full reference list (77 references in the eval
+# corpus's ADHD review), so the old value was a plausible contributor to the
+# 2.4% mean search recall. At 100 the target rarely fires and the loop runs to
+# `round_cap` instead — deliberately, so `scripts/eval_ground_truth/` can tell
+# "target too low" apart from "search too weak" before we decide whether this
+# constant should exist at all (see `docs/deferred.md`).
+TARGET_CONFIDENT_RELEVANT = 100
 CONFIDENT_FLOOR = 0.7
 SHORT_CIRCUIT_RATE = 1.0 / 50.0
 THIN_CONFIDENT_RELEVANT = 8
@@ -96,17 +111,44 @@ DIVERSITY_CALL_MIN = 1
 # clamped to this accepted range. Out-of-range values are refused, never
 # silently clamped (honest refusal — see parse_search_directive).
 SEARCH_TARGET_MIN = 5
-SEARCH_TARGET_MAX = 60
+# Must contain TARGET_CONFIDENT_RELEVANT: refusals are honest, so a ceiling
+# below the default would refuse a user asking for the value they already get.
+SEARCH_TARGET_MAX = 100
 
 
 class DepthConstants(TypedDict):
     """Per-depth budget constants used by the search strategy."""
 
-    # Results requested per API call at this depth (not a shared total split
-    # across a fan-out — retrieval is cheap to over-fetch and dedup/screening
-    # trims it downstream; see the 15-way OpenAlex variant fan-out below).
+    # Results requested per API call at this depth — NOT a shared total split
+    # across the fan-out. A shared total divided by `planned` was the original
+    # bug: as the SR/RCT variant fan-out widened to 15 OpenAlex calls, the
+    # standard cap of 75 collapsed to 5 results per query.
+    #
+    # Sized against provider page boundaries, not "as much as possible"
+    # (Overton page 50 / OpenAlex page 200): each value stays within two
+    # Overton pages, so one logical call is 1-2 real HTTP requests and
+    # `http_budget` below keeps meaning roughly what its name says. Overton
+    # enforces a 1.2s gap per request, so per-call targets far above a page
+    # turn the fan-out into mostly enforced sleep.
+    #
+    # This bounds one CALL — how much a single query may fetch and how many
+    # HTTP requests that takes. It does NOT bound the round: that is
+    # `record_cap_per_backend` below.
     result_cap_per_backend: int
-    wall_clock_s: int
+    # Documents acquired per backend per round, applied after merge and dedup
+    # (see `acquire_sources`). This is the run's volume brake: every acquired
+    # record is embedded on acquisition and screened afterwards at SCREEN_REPS
+    # LLM calls each, so this number — not the per-call cap — is what bounds
+    # spend. None means uncapped.
+    #
+    # ponytail: 200 is sized from purpose (the deep loop's confident-relevant
+    # goal), not from measurement. `scripts/eval_ground_truth/` measures search
+    # recall against published-review ground truth; re-run it and set this from
+    # where recall stops improving. Note this cap and
+    # TARGET_CONFIDENT_RELEVANT move together: the target cannot be met from
+    # documents the cap never let through.
+    record_cap_per_backend: int | None
+    wall_clock_s: int | None
     round_cap: int
     http_budget: dict[str, int]
     # Deep-round-loop arm selection (017, contract rev 2.9): which of the
@@ -118,21 +160,25 @@ class DepthConstants(TypedDict):
 
 DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     "rapid": {
-        "result_cap_per_backend": 100,
+        "result_cap_per_backend": 50,
+        # Rapid is one round of 50-per-call under a 30s clock — already small.
+        "record_cap_per_backend": None,
         "wall_clock_s": RAPID_WALL_CLOCK_S,
         "round_cap": 1,
         "http_budget": {"openalex": 20, "overton": 5},
         "arms": frozenset(),
     },
     "standard": {
-        "result_cap_per_backend": 250,
+        "result_cap_per_backend": 75,
+        "record_cap_per_backend": 150,
         "wall_clock_s": STANDARD_WALL_CLOCK_S,
         "round_cap": 2,
         "http_budget": {"openalex": 30, "overton": 8},
         "arms": frozenset({"reformulate", "diversity"}),
     },
     "deep": {
-        "result_cap_per_backend": 500,
+        "result_cap_per_backend": 100,
+        "record_cap_per_backend": 200,
         "wall_clock_s": DEEP_WALL_CLOCK_S,
         "round_cap": ROUND_CAP,
         "http_budget": {"openalex": 50, "overton": 15},
@@ -1018,9 +1064,8 @@ def _prior_deep_usage(
     scope_id: uuid.UUID,
     backend_names: list[str],
     depth: SearchDepth,
-) -> tuple[dict[str, int], dict[str, int]]:
+) -> dict[str, int]:
     http_calls = dict.fromkeys(backend_names, 0)
-    result_counts = dict.fromkeys(backend_names, 0)
     rows = conn.execute(
         select(event_log.c.payload)
         .where(event_log.c.project_id == project_id)
@@ -1034,11 +1079,7 @@ def _prior_deep_usage(
         if not isinstance(backend, str) or backend not in http_calls:
             continue
         http_calls[backend] += 1
-        try:
-            result_counts[backend] += int(payload.get("result_count") or 0)
-        except (TypeError, ValueError):
-            continue
-    return http_calls, result_counts
+    return http_calls
 
 
 def _screened_records(
@@ -1258,20 +1299,16 @@ def run_search(
         project_id=project_id,
         scope_id=context.scope_id,
     ) + 1
-    prior_http_calls, prior_result_counts = _prior_deep_usage(
+    prior_http_calls = _prior_deep_usage(
         conn,
         project_id=project_id,
         scope_id=context.scope_id,
         backend_names=backend_names,
         depth=depth,
-    ) if depth in ("deep", "standard") else (
-        dict.fromkeys(backend_names, 0),
-        dict.fromkeys(backend_names, 0),
-    )
+    ) if depth in ("deep", "standard") else dict.fromkeys(backend_names, 0)
 
     start = clock()
     executed_calls: list[ExecutedCall] = []
-    raw_results_by_backend = dict(prior_result_counts)
     http_calls_by_backend = dict(prior_http_calls)
     queries_zero_result = dict.fromkeys(backend_names, 0)
     fallback_to_verbatim = dict.fromkeys(backend_names, False)
@@ -1310,22 +1347,20 @@ def run_search(
         backend_budget = constants["http_budget"].get(backend.name, 0)
         if http_calls_by_backend[backend.name] >= backend_budget:
             return None
-        remaining = (
+        request_size = (
             max_records if max_records is not None else constants["result_cap_per_backend"]
         )
-        if remaining <= 0:
-            return None
-        if clock() - start > constants["wall_clock_s"]:
+        budget_s = constants["wall_clock_s"]
+        if budget_s is not None and clock() - start > budget_s:
             wall_clock_breached = True
             stop_all = True
             return None
 
         http_calls_by_backend[backend.name] += 1
         try:
-            records = fetch(remaining)
-            records = records[:remaining]
+            records = fetch(request_size)
+            records = records[:request_size]
             excluded = post_filter_excluded() if post_filter_excluded is not None else None
-            raw_results_by_backend[backend.name] += len(records)
             call = ExecutedCall(
                 backend_name=backend.name,
                 verb=verb,
@@ -1801,6 +1836,7 @@ def run_search(
         scope_wire_params=scope_wire_params,
         wall_clock_breached=wall_clock_breached,
         search_guidance=guidance,
+        record_cap_per_backend=constants["record_cap_per_backend"],
     )
     counts["search"] = {
         "depth": depth,
@@ -1887,7 +1923,7 @@ def run_deep_rounds(
 
     while True:
         elapsed = clock() - started
-        if elapsed > DEEP_WALL_CLOCK_S:
+        if DEEP_WALL_CLOCK_S is not None and elapsed > DEEP_WALL_CLOCK_S:
             final_stop_condition = finalise_deep_stop(
                 conn,
                 project_id=project_id,
@@ -1924,7 +1960,9 @@ def run_deep_rounds(
             }
         )
 
-        wall_clock_breached = clock() - started > DEEP_WALL_CLOCK_S
+        wall_clock_breached = (
+            DEEP_WALL_CLOCK_S is not None and clock() - started > DEEP_WALL_CLOCK_S
+        )
         decision = evaluate_deep_stop(
             round_index=round_index,
             confident_relevant=confident,

@@ -33,6 +33,10 @@ from policy_atlas.evidence_base.corpus.select import (
     select_documents,
 )
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
+from policy_atlas.evidence_base.sourcing.search_loop import (
+    SEARCH_TARGET_MAX,
+    SEARCH_TARGET_MIN,
+)
 from policy_atlas.runtime import harness, steering_events
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.runner import (
@@ -289,8 +293,8 @@ def test_acquire_target_directive_delta_validates(delta: dict[str, Any]) -> None
 @pytest.mark.parametrize(
     "delta",
     [
-        {"search": {"target": 4}},
-        {"search": {"target": 61}},
+        {"search": {"target": SEARCH_TARGET_MIN - 1}},
+        {"search": {"target": SEARCH_TARGET_MAX + 1}},
         {"search": {"target": "30"}},
     ],
 )

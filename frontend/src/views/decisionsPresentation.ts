@@ -7,6 +7,7 @@ export const DECISION_DETAIL_LABELS: Record<string, string> = {
   acquired: "New sources found",
   results_returned: "Results returned by the databases",
   already_acquired: "Already in the project",
+  dropped_over_cap: "Set aside — over this round's limit",
   relevant: "Judged relevant",
   not_relevant: "Screened out",
   screen_failed: "Could not be screened",

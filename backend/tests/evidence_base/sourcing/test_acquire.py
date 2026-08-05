@@ -153,14 +153,20 @@ def acquire(
 
 
 def assert_invariant(counts: dict[str, Any]) -> None:
-    """acquired + already_acquired + skipped_unusable == results_returned, at both levels."""
+    """acquired + already_acquired + skipped_unusable + dropped_over_cap == results_returned."""
     assert (
-        counts["acquired"] + counts["already_acquired"] + counts["skipped_unusable"]
+        counts["acquired"]
+        + counts["already_acquired"]
+        + counts["skipped_unusable"]
+        + counts["dropped_over_cap"]
         == counts["results_returned"]
     )
     for b in counts["by_backend"].values():
         assert (
-            b["acquired"] + b["already_acquired"] + b["skipped_unusable"]
+            b["acquired"]
+            + b["already_acquired"]
+            + b["skipped_unusable"]
+            + b["dropped_over_cap"]
             == b["results_returned"]
         )
 

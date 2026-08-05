@@ -1,5 +1,13 @@
 # Knowledge update log
 
+## 2026-08-04 (task 028)
+* **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — the
+  total-volume bound named in the rule now exists (`record_cap_per_backend`, applied in
+  `acquire_sources` after a rank-interleaved merge and after dedup), and a third instance of the
+  same defect family is recorded: a *time* budget over an ordered fan-out truncates a specific set
+  of queries and providers, not a random sample. Standard/deep wall clocks removed for that reason;
+  rapid keeps its clock because latency is the requirement there, not a proxy for cost.
+
 ## 2026-07-28
 * **Creation**: Added [cdk-poweruser-deploy-boundaries](cdk-poweruser-deploy-boundaries.md),
   [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md),
@@ -96,6 +104,10 @@
   [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — a total
   cap needs a per-call distribution rule or the fan-out silently collapses to one
   load-bearing query (015 live-check finding, fixed in-slice as `_distribute_quota`).
+  **Superseded 2026-08-04** — `_distribute_quota` became the next bug (dividing a
+  shared cap across a widened fan-out gave 5 results per query). The concept is
+  rewritten: caps belong per call, sized against the provider page; total volume is
+  a separate bound.
 * **Creation**: Added
   [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md) — the 007
   zero-egress guard's importlib dodge (015 build); guards name their invariant, evasion

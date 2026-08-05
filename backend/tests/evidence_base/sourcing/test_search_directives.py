@@ -76,6 +76,15 @@ def test_parse_search_directive_accepts_valid_target(target: int) -> None:
     assert parse_search_directive({"search": {"target": target}}) == ("rapid", None, target, None)
 
 
+def test_default_target_is_within_the_accepted_override_range() -> None:
+    """Refusals are honest, so the default must be a value a user may ask for.
+
+    A ceiling below `TARGET_CONFIDENT_RELEVANT` would refuse a directive
+    requesting exactly the target the run already uses by default.
+    """
+    assert SEARCH_TARGET_MIN <= TARGET_CONFIDENT_RELEVANT <= SEARCH_TARGET_MAX
+
+
 @pytest.mark.parametrize(
     "target",
     [SEARCH_TARGET_MIN - 1, SEARCH_TARGET_MAX + 1, 0, -5],
@@ -386,8 +395,8 @@ def test_search_backend_scope_unknown_value_rejected_on_config() -> None:
 def test_deep_stop_target_reached() -> None:
     decision = evaluate_deep_stop(
         round_index=1,
-        confident_relevant=20,
-        new_confident_relevant=20,
+        confident_relevant=TARGET_CONFIDENT_RELEVANT,
+        new_confident_relevant=TARGET_CONFIDENT_RELEVANT,
         docs_screened_this_round=100,
         wall_clock_breached=False,
     )
@@ -397,7 +406,7 @@ def test_deep_stop_target_reached() -> None:
 def test_deep_stop_target_reached_above_target() -> None:
     decision = evaluate_deep_stop(
         round_index=2,
-        confident_relevant=25,
+        confident_relevant=TARGET_CONFIDENT_RELEVANT + 5,
         new_confident_relevant=5,
         docs_screened_this_round=10,
         wall_clock_breached=False,

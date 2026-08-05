@@ -605,11 +605,24 @@ PR landing:
    Unit tests pin every transform.
 
 6. **Per-provider result caps, depth-aware; fields requested explicitly**
-   *(amended revs 1.2, 2)*. Caps are per-backend so the verbose provider
-   can't crowd out grey literature, and **per-depth** (plan-pinned
-   constants; order: rapid ~25–50/backend, deep ~100–200/backend
-   across the whole run — the R&D's Arm-A ran 200/variant, our deep cap
-   bounds the *run*, not the variant). Pagination lands (decision 18);
+   *(amended revs 1.2, 2, and task 028)*. Caps are per-backend so the
+   verbose provider can't crowd out grey literature, and **per-depth**
+   (plan-pinned constants). **Task 028 amendment:** the cap that bounds
+   the *run* is no longer a shared result total divided across the
+   fan-out — that division was the bug (75 ÷ 15 queries = 5 results per
+   query). Two separate constants now do the two jobs:
+   `result_cap_per_backend` (50/75/100) bounds **one call**, sized to
+   provider page boundaries so a call is 1–2 HTTP requests; and
+   `record_cap_per_backend` (None/150/200) bounds **documents acquired
+   per backend per round**, applied in `acquire_sources` after a
+   rank-interleaved merge across the fan-out and after dedup. The
+   run-level brake is therefore a volume cap at acquisition, not a
+   result total at search — which brakes the thing that costs money
+   (each acquired record is embedded, then screened at `SCREEN_REPS`
+   LLM calls). The grey-literature protection this decision was written
+   for now comes from the cap being per-backend at acquisition, plus
+   the removal of the standard/deep wall clock that let the OpenAlex leg
+   skip the entire Overton leg. Pagination lands (decision 18);
    `breadth_truncated` remains the honest stop condition when a cap
    bites. **OpenAlex requests carry a `select=` field list derived from
    the mapper's constants** (envelope-source fields +

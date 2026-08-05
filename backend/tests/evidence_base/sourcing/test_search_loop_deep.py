@@ -273,7 +273,10 @@ def ov_record(
 
 def _assert_acquire_invariant(counts: dict[str, Any]) -> None:
     assert (
-        counts["acquired"] + counts["already_acquired"] + counts["skipped_unusable"]
+        counts["acquired"]
+        + counts["already_acquired"]
+        + counts["skipped_unusable"]
+        + counts["dropped_over_cap"]
         == counts["results_returned"]
     )
     for by_backend in counts["by_backend"].values():
@@ -281,6 +284,7 @@ def _assert_acquire_invariant(counts: dict[str, Any]) -> None:
             by_backend["acquired"]
             + by_backend["already_acquired"]
             + by_backend["skipped_unusable"]
+            + by_backend["dropped_over_cap"]
             == by_backend["results_returned"]
         )
 
@@ -642,11 +646,16 @@ def test_rapid_result_cap_is_flat_per_call_and_wall_clock_stop(
     generation = ScriptedGenerationBackend(
         queries=[_wire_queries([f"cap query {index}" for index in range(5)])]
     )
-    # Each call requests the depth's flat per-call target (100 for rapid) —
-    # not that target divided across the 15-call fan-out. Dividing a shared
-    # cap across a wide fan-out was the bug: quota shrank to ~3-5 per call as
-    # soon as the SR/RCT variant fan-out was reinstated. Every call now gets
-    # its own full-size request regardless of fan-out width.
+    # Each call requests the depth's flat per-call target — not that target
+    # divided across the 15-call fan-out. Dividing a shared cap across a wide
+    # fan-out was the bug: quota shrank to ~3-5 per call as soon as the SR/RCT
+    # variant fan-out was reinstated. Every call now gets its own full-size
+    # request regardless of fan-out width.
+    #
+    # The scripted pages deliberately over-deliver (target + 20, i.e. more than
+    # the entire old shared run cap) so that reintroducing a consumption-coupled
+    # `remaining` fails this test on the CALL COUNT: call #1 would bank the
+    # whole cap and calls #2-15 would be skipped.
     rapid_quota = DEPTH_CONSTANTS["rapid"]["result_cap_per_backend"]
     scripted_pages: list[ScriptResult] = [
         [oa_record(f"cap-{page}-{index}") for index in range(rapid_quota + 20)]
@@ -667,8 +676,10 @@ def test_rapid_result_cap_is_flat_per_call_and_wall_clock_stop(
     assert all(call.max_results == rapid_quota for call in capped_backend.calls)
     assert capped["results_returned"] == rapid_quota * 15
     assert capped["search"]["queries_executed"]["openalex"] == 15
-    # Honest stop attribution (task 019 item 5): capping on the run/http
-    # budget is not a wall-clock breach and not an error — a clean completion.
+    # Honest stop attribution (task 019 item 5): exhausting the planned fan-out
+    # is not a wall-clock breach and not an error — a clean completion. (Nothing
+    # "caps" here: there is no run cap, and rapid's OpenAlex http_budget of 20
+    # is never reached by a 15-call fan-out.)
     assert capped["search"]["wall_clock_breached"] is False
     assert capped["stop_condition"] == "completed"
 
@@ -705,6 +716,40 @@ def test_rapid_result_cap_is_flat_per_call_and_wall_clock_stop(
         .where(search_coverage_record.c.acquired_by_run_id == second_run)
     ).one()
     assert row.stop_condition == "wall_clock_exceeded"
+
+
+def test_standard_fanout_has_no_wall_clock(conn: Connection) -> None:
+    """Standard has no time budget, so no query is skipped for being late.
+
+    The clock was the only thing that ever set ``stop_all``, and the fan-out
+    runs backend-outer/plan-inner: a breach part-way through the OpenAlex leg
+    skipped the whole Overton leg. Volume is bounded at acquisition now
+    (``record_cap_per_backend``), so an elapsed time far past the old 75 s
+    budget must leave every planned call intact.
+    """
+    assert DEPTH_CONSTANTS["standard"]["wall_clock_s"] is None
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id, context={"search": {"depth": "standard"}})
+    generation = ScriptedGenerationBackend(
+        queries=[_wire_queries([f"clock query {index}" for index in range(5)])]
+    )
+    backend = ScriptedBackend(
+        scripts={"search": [[oa_record(f"late-{index}")] for index in range(15)]}
+    )
+
+    counts = run_search(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        context=_standard_context(scope_id),
+        backends=[backend],
+        generation_backend=generation,
+        clock=_fixed_clock([0.0, 10_000.0]),
+    )
+
+    assert len(backend.calls) == 15
+    assert counts["search"]["wall_clock_breached"] is False
+    assert counts["stop_condition"] == "completed"
 
 
 def test_deep_round_exemplar_payload_is_top_k_anchored_and_bounded(
@@ -960,8 +1005,9 @@ def test_deep_round_fixed_allocation_snowball_suggest_and_diversity(
     ]
     assert len(diversity_events) == 1
     assert "Seed positive" not in diversity_events[0]["query"]
-    # The diversity reserve is a bounded fraction of the per-backend result
-    # cap (rubric 7) — the un-steered call must not drain the episode cap.
+    # The diversity reserve is a bounded fraction of the per-call result target
+    # (rubric 7): one extra un-steered call, deliberately smaller than a full
+    # fan-out call rather than requesting the whole target.
     diversity_calls = [call for call in calls_by_verb["search"] if call.query == intent]
     assert len(diversity_calls) == 1
     expected_reserve = max(
@@ -1190,8 +1236,8 @@ def test_run_deep_rounds_target_override_honoured(conn: Connection) -> None:
     """D5 search.target: a lower override stops the loop the as-built default would not.
 
     Only 5 confident-relevant docs are seeded — well below
-    TARGET_CONFIDENT_RELEVANT (20) — so the as-built default would not stop
-    on "target_reached" here; passing target=5 does.
+    TARGET_CONFIDENT_RELEVANT — so the as-built default would not stop on
+    "target_reached" here; passing target=5 does.
     """
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -1433,17 +1479,25 @@ def test_run_deep_rounds_round_cap_budget_overlay_below_target(
     assert summary["overlay_applied"] is True
 
 
-def test_run_deep_rounds_wall_clock_budget_overlay_below_target(
+def test_run_deep_rounds_elapsed_time_never_truncates_the_loop(
     conn: Connection,
 ) -> None:
+    """Deep has no time budget: elapsed time cannot cut a round short.
+
+    Standard and deep trade the wall clock for a per-round acquisition cap
+    (``record_cap_per_backend``); only rapid still has a clock. Under the old
+    150 s budget this clock would have stopped the loop with
+    ``budget_exhausted`` before a single round ran.
+    """
+    assert DEEP_WALL_CLOCK_S is None
     project_id, _run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
     acquire_round, screen_round, _coverage_run_ids = _scripted_round_runner(
         conn,
         project_id=project_id,
         scope_id=scope_id,
-        docs_screened=[100],
-        new_confident=[2],
+        docs_screened=[100, 100],
+        new_confident=[2, 2],
         coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
     )
 
@@ -1454,14 +1508,11 @@ def test_run_deep_rounds_wall_clock_budget_overlay_below_target(
         acquire_round=acquire_round,
         screen_round=screen_round,
         start_round=2,
-        clock=_fixed_clock([0.0, 0.0, DEEP_WALL_CLOCK_S + 1.0, DEEP_WALL_CLOCK_S + 1.0]),
+        clock=_fixed_clock([0.0, 10_000.0]),
     )
 
-    rows = _coverage_rows(conn, project_id)
-    assert len(rows) == 1
-    assert rows[-1].stop_condition == "re_searched_still_thin"
-    assert summary["stop_condition"] == "re_searched_still_thin"
-    assert summary["overlay_applied"] is True
+    assert [entry["round"] for entry in summary["rounds"]] == [2, ROUND_CAP]
+    assert summary["wall_clock_s"] == 10_000.0
 
 
 def test_should_escalate_boundary(conn: Connection) -> None:

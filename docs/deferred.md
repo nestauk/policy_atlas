@@ -272,7 +272,85 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   result caps *with per-call distribution quotas*, credit-responsible `select=`, no
   citation floor, and a zero-progress page guard on pagination. The stub remains the
   zero-egress default; the 007 guard now names `search_live.py` as the sole sanctioned
-  HTTP-import home.
+  HTTP-import home. **Amended 2026-08-04:** the "per-call distribution quotas" clause no
+  longer holds — `_distribute_quota` was removed. Dividing a shared per-backend total
+  across the fan-out shrank as the fan-out widened (standard 75 ÷ 15 calls = 5 results
+  per query). `result_cap_per_backend` is now a flat **per-call** target sized against
+  provider page size (rapid 50 / standard 75 / deep 100). See the open seam below.
+
+- **Search total-volume ceiling — DISCHARGED (task 028, 2026-08-04).** The ceiling landed
+  at acquisition, not at search or at screening: `acquire_sources`'s
+  `record_cap_per_backend` (rapid None / standard 150 / deep 200) trims each backend's
+  search fan-out after a rank-interleaved merge and after dedup. Acquisition is the right
+  seam because persisting a record is what commits the spend — it is embedded on the spot
+  and screened at `SCREEN_REPS` calls afterwards — and because dedup-then-trim means a
+  capped round still yields a full cap of *new* documents rather than quietly doing less
+  work in later rounds. `dropped_over_cap` makes the trim visible per backend, and
+  `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
+  assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
+  purpose (the deep loop's confident-relevant goal), not measured.
+  `scripts/eval_ground_truth/` scores search recall against published-review ground truth
+  (current baseline: mean 2.4%, max 9.1%, at rapid depth under the divided quota) — re-run
+  it and set the cap from where recall stops improving.
+
+- **Deep-round continuation loop is unwired — OPEN (found 2026-08-05, pre-existing since
+  task 023).** `run_deep_rounds` and `should_escalate` have **no caller in `src/`**. Their
+  only caller in history was `skeleton.py`, deleted by `3304df4` ("task 023 phase D …
+  skeleton retirement", 2026-07-14); the orchestrator that replaced it composes exactly
+  one `acquire` step and one `screen_abstract` step, and `harness._run_acquire` calls
+  `run_search` once. `run_search` derives `round_index` from the scope's coverage-row
+  count, so a fresh scope is always round 1 and the `round_index >= 2` branch — the
+  reformulate, snowball, suggest and diversity arms — never runs. `search_loop.py:1846`
+  already calls it "a separate, not-yet-wired continuation driver". The unit tests stayed
+  green throughout because they call `run_deep_rounds` directly with scripted callables;
+  nothing asserts that anything in `src/` invokes it. **So the depth contract
+  ("standard = 2 rounds, deep = 3") is currently aspirational, not as-built: every depth
+  does one round, and the depths differ only in their caps and http budgets.** Decide
+  whether to re-wire it into the orchestrator or retire it with `should_escalate`.
+  `scripts/notebooks/search_rounds_and_arms.ipynb` drives the loop directly and is the
+  harness to re-wire against. NB a user-initiated second acquire on the same scope
+  (steering re-run / additive segment re-entry) *would* legitimately be round 2 and fire
+  the arms — that path is untraced.
+
+- **`TARGET_CONFIDENT_RELEVANT` raised 20 → 100, removal deferred — OPEN (2026-08-04,
+  amended 2026-08-05).** The constant is the deep loop's satisficing stop: stop once this
+  many confident-relevant documents exist. **It has no production effect today**, because
+  the only thing that consults it — `evaluate_deep_stop` — is called only by the unwired
+  `run_deep_rounds` above. Its two residual live effects are that `run_search` echoes it
+  into the acquire payload as `target_confident_relevant` (read by nothing in `src/` or
+  the frontend), and that it must sit inside `[SEARCH_TARGET_MIN, SEARCH_TARGET_MAX]` for
+  the D5 `search.target` directive (pinned by
+  `test_default_target_is_within_the_accepted_override_range`). `SEARCH_TARGET_MAX` was
+  raised 60 → 100 alongside it, which *is* live: the directive now accepts targets up to
+  100. **Correction to the original rationale:** the raise was made on the reasoning that
+  a target of 20 capped measured recall by construction (ground truth is a review's full
+  reference list — 77 in the eval corpus's ADHD review). That reasoning only holds if the
+  loop runs. It does not, so the target was never truncating searches and was **not** a
+  contributor to the 2.4% mean search recall — look at single-round coverage, query
+  generation and the caps instead. Settle alongside the wiring decision: if the loop is
+  re-wired, note that `below_target` drives the `re_searched_still_thin` overlay, which at
+  a target of 100 would fire on almost every run and should probably key off
+  `THIN_CONFIDENT_RELEVANT` (8) instead.
+
+- **Standard/deep wall clock removed — recorded (task 028, 2026-08-04).**
+  `STANDARD_WALL_CLOCK_S` and `DEEP_WALL_CLOCK_S` are `None`; the guards remain, so a
+  number restores the budget. Consequences accepted: `wall_clock_exceeded` and the deep
+  loop's clock-driven `budget_exhausted` are now rapid-only and unreachable at
+  standard/deep respectively; `ROUND_CAP = 3` becomes reachable at deep for the first
+  time; and, since `runtime/runner.py` has no step timeout, nothing bounds how long the
+  search stage may run. A deep run is now tens of minutes. If a latency bound is ever
+  needed again it belongs at the runner as a step timeout, not inside the fan-out where
+  it truncates an ordered list of queries.
+
+- **`http_budget` counts logical calls, not HTTP requests — OPEN (2026-08-04).**
+  `http_calls_by_backend` increments once per `execute_call`, but backends paginate
+  internally to satisfy `max_results` (Overton page 50, OpenAlex 200). Holding per-call
+  targets near one page keeps the two roughly equal, which is why the current values are
+  sized that way — but the budget does not enforce that relationship, and
+  `_TransportMixin.http_calls` (the real per-request counter) is incremented and never
+  read. Either consult it, or rename the budget to say what it counts. Also:
+  `wall_clock_s` is checked only at call entry, so a fully-paginated call can overrun the
+  deadline by the length of one call.
 - **Arm-B agentic search loop — DISCHARGED (task 015, ADR 0012).** The R&D direction landed
   as the deep depth: query reformulation from judged exemplars (via the production screen —
   the loop's judge IS `screen_v1`, no shadow relevance judgment), citation snowballing
