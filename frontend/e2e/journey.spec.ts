@@ -111,7 +111,6 @@ test.describe("mock evidence-base journey", () => {
     await expect(timeline.getByText("Finding relevant sources")).toBeVisible({ timeout: 15_000 });
     await expect(timeline.getByText("Synthesising the evidence")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Sources found")).toBeVisible();
-    await expect(page.getByText(/screened out — kept in the sources table/)).toBeVisible();
     await expect(page.getByText("Where I looked")).toBeVisible();
     await expect(page.getByText("OpenAlex · academic research")).toBeVisible();
 

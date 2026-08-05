@@ -142,15 +142,11 @@ export function SectionDisclosure({
       ) : (
         <h2 className="font-display text-heading font-bold text-navy">{scrub(section.title)}</h2>
       )}
+      {/* Fallback (first-sentence) summaries render unmarked — the checked/
+          fallback distinction is provenance for reviewers, not users
+          (owner, 2026-08-05). */}
       {!expanded && summary !== null && (
-        <p className="mt-1.5 max-w-prose-measure text-meta text-grey">
-          {scrub(summary.text)}
-          {!summary.verified && (
-            <span className="ml-1.5 text-caption text-grey">
-              — the section's first sentence; no checked summary
-            </span>
-          )}
-        </p>
+        <p className="mt-1.5 max-w-prose-measure text-meta text-grey">{scrub(summary.text)}</p>
       )}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
     </section>

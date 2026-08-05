@@ -54,7 +54,7 @@ describe("SectionDisclosure", () => {
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
   });
 
-  it("fallback summaries carry their marker", () => {
+  it("fallback summaries render unmarked — provenance is not user copy", () => {
     render(
       <SectionDisclosure
         id="s2"
@@ -65,7 +65,8 @@ describe("SectionDisclosure", () => {
         <p>Prose.</p>
       </SectionDisclosure>,
     );
-    expect(screen.getByText(/no checked summary/)).toBeInTheDocument();
+    // The first-sentence fallback still shows; the dev-facing marker doesn't.
+    expect(screen.queryByText(/no checked summary/)).toBeNull();
   });
 
   it("non-collapsible sections render in full with no toggle", () => {

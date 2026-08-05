@@ -41,11 +41,6 @@ export function funnelBarWidth(value: number, maximum: number): number {
   return Math.max(0, Math.min(100, (value / maximum) * 100));
 }
 
-/** Footer keeps exclusions visibly available in the sources table. */
-export function screenedOutFooter(count: number): string {
-  return `${count} screened out — kept in the sources table with reasons.`;
-}
-
 /** Outcome-first completion language; all other run statuses are non-completion states. */
 /** Completion-card heading per terminal status; body copy was cut (owner,
  *  2026-08-05 — the degraded status banner already carries the caveat). */

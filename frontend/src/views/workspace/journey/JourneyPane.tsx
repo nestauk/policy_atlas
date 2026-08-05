@@ -23,7 +23,7 @@ import {
   scopeChips,
   vocabLabel,
 } from "../planVocabulary";
-import { completionCopy, FUNNEL_STAGES, funnelBarWidth, screenedOutFooter, timelineSummary } from "./presentation";
+import { completionCopy, FUNNEL_STAGES, funnelBarWidth, timelineSummary } from "./presentation";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 type Funnel = components["schemas"]["FunnelOut"];
@@ -90,19 +90,14 @@ export function JourneyPane({
       {(runStatus === "running" || runStatus === "paused") && <ProgressStrip stages={stream.stages} paused={runStatus === "paused"} />}
       <PlanRecap plan={plan} />
 
-      <nav aria-label="Journey sections" className="sticky top-0 z-20 -mx-5 mb-4 flex flex-wrap gap-x-3 gap-y-1 border-b border-line bg-ground/95 px-5 py-2 backdrop-blur-sm">
-        <a className="shrink-0 text-caption font-bold uppercase tracking-wide text-navy hover:text-blue" href="#journey-timeline">Timeline</a>
-        {funnel !== undefined && <a className="shrink-0 text-caption font-bold uppercase tracking-wide text-navy hover:text-blue" href="#journey-funnel">Funnel</a>}
-        {coverage !== undefined && <a className="shrink-0 text-caption font-bold uppercase tracking-wide text-navy hover:text-blue" href="#journey-coverage">Coverage</a>}
-        {hasGroups && <a className="shrink-0 text-caption font-bold uppercase tracking-wide text-navy hover:text-blue" href="#journey-groups">Groups</a>}
-      </nav>
-
       <h2 className="mb-4 font-display text-heading font-semibold text-navy">{heading}</h2>
       <StatusBanner status={runStatus} />
 
+      {/* Card order (owner, 2026-08-05): Done, then the timeline, then the
+          step outputs in REVERSE chronological order — latest stages
+          (themes/landscape) first, Where I looked (search) at the bottom. */}
       <div className="space-y-5">
         <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} />
-        {coverage !== undefined && <CoverageCard coverage={coverage} />}
         <section id="journey-timeline" className="scroll-mt-14">
           <Card className="anim-rise p-4">
             <PaneHeading className="mb-2 p-0">{runStatus === "succeeded" || runStatus === "degraded" || runStatus === "aborted" ? "How it got there" : "The plan in motion"}</PaneHeading>
@@ -110,9 +105,10 @@ export function JourneyPane({
           </Card>
         </section>
         {checkIn}
-        {funnel !== undefined && <FunnelCard funnel={funnel} />}
-        {hasGroups && <GroupsCard groups={groups!} />}
         {hasLandscape && <LandscapeEmbed projectId={projectId} landscape={landscape!} />}
+        {hasGroups && <GroupsCard groups={groups!} />}
+        {funnel !== undefined && <FunnelCard funnel={funnel} />}
+        {coverage !== undefined && <CoverageCard coverage={coverage} />}
         {terminal}
       </div>
     </div>
@@ -200,7 +196,7 @@ function FunnelCard({ funnel }: { funnel: Funnel }) {
     return typeof value === "number" ? [{ key, label, definition, value }] : [];
   });
   if (rows.length === 0) return null;
-  return <section id="journey-funnel" className="scroll-mt-14"><Card className="anim-rise p-4"><PaneHeading className="mb-3 p-0">From sources to evidence</PaneHeading><div className="space-y-2">{rows.map((row) => <Tooltip key={row.key} content={<p className="text-caption text-navy">{row.definition}</p>}><div className="flex items-center gap-3"><span className="w-28 shrink-0 text-right text-caption font-medium text-navy">{row.label}</span><span className="h-3 flex-1 bg-ground"><span className="anim-bar block h-full bg-blue" style={{ width: `${funnelBarWidth(row.value, max)}%` }} /></span><CountUp value={row.value} className="w-8 shrink-0 text-caption font-bold text-navy" /></div></Tooltip>)}</div>{typeof funnel.screened_out === "number" && <p className="mt-3 pl-[124px] text-caption text-grey">{screenedOutFooter(funnel.screened_out)}</p>}</Card></section>;
+  return <section id="journey-funnel" className="scroll-mt-14"><Card className="anim-rise p-4"><PaneHeading className="mb-3 p-0">From sources to evidence</PaneHeading><div className="space-y-2">{rows.map((row) => <Tooltip key={row.key} content={<p className="text-caption text-navy">{row.definition}</p>}><div className="flex items-center gap-3"><span className="w-28 shrink-0 text-right text-caption font-medium text-navy">{row.label}</span><span className="h-3 flex-1 bg-ground"><span className="anim-bar block h-full bg-blue" style={{ width: `${funnelBarWidth(row.value, max)}%` }} /></span><CountUp value={row.value} className="w-8 shrink-0 text-caption font-bold text-navy" /></div></Tooltip>)}</div></Card></section>;
 }
 
 function CoverageCard({ coverage }: { coverage: Coverage }) {
@@ -229,6 +225,6 @@ function LandscapeEmbed({ projectId, landscape }: { projectId: string; landscape
   const geographies = landscape.geographies === null || landscape.geographies === undefined ? {} : normaliseGeographies(landscape.geographies);
   const themes = orderThemes(landscape.themes ?? []);
   const hasDistributions = Object.keys(evidenceTypes).length > 0 || Object.keys(years).length > 0 || Object.keys(geographies).length > 0;
-  return <>{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading>{/* One plot per row — side-by-side was unreadable next to the chat rail
-    (owner, 2026-08-05). */}<div className="grid min-w-0 gap-4">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Where sources were published</p><EvidenceDistributionChart data={geographies} size="compact" /></div>}</div></Card></section>}{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-caption text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/projects/${projectId}/sources?theme=${theme.theme_id}`} className="shrink-0 text-caption font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}</>;
+  return <>{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-caption text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/projects/${projectId}/sources?theme=${theme.theme_id}`} className="shrink-0 text-caption font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading>{/* One plot per row — side-by-side was unreadable next to the chat rail
+    (owner, 2026-08-05). */}<div className="grid min-w-0 gap-4">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Where sources were published</p><EvidenceDistributionChart data={geographies} size="compact" /></div>}</div></Card></section>}</>;
 }
