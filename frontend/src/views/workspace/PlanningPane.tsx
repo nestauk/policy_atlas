@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { useCheckIns, useDecisions, useRuns } from "../../api/queries";
 import { scrub } from "../../lib/scrub";
@@ -355,6 +355,34 @@ export function PlanningPane({
   const runActive = runStatus === "running" || runStatus === "paused";
   const composerDisabled = runActive || transcript.isSubmitting;
 
+  // Chat scroll: pinned to the bottom (newest messages) unless the user has
+  // scrolled up to read history; new content re-pins only when near-bottom.
+  // A ResizeObserver on the thread content catches growth the pane itself
+  // never renders for (child-owned queries like the plan card, disclosure
+  // toggles, font loads).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pinnedToBottom = useRef(true);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (el === null || content === null) return;
+    const pin = () => {
+      if (pinnedToBottom.current) el.scrollTop = el.scrollHeight;
+    };
+    pin();
+    const observer = new ResizeObserver(pin);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+
+  // The plan card sits at its chronological position: right after the last
+  // planning turn (approval always comes from a turn; turns are 409-fenced
+  // during runs), so a started run's block renders BELOW it, not above.
+  const lastTurnAt = thread.findLastIndex((item) => item.type === "planning_turn");
+  const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
+  const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
+
   const send = (input: { message: string; clientTurnId: string }) => {
     const trimmed = input.message.trim();
     if (trimmed.length === 0 || composerDisabled) return;
@@ -369,7 +397,17 @@ export function PlanningPane({
     <section aria-label="Planning conversation" className="flex h-full flex-col">
       <PaneHeading>Plan the analysis</PaneHeading>
       <Divider />
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollRef}
+        onScroll={(event) => {
+          const el = event.currentTarget;
+          pinnedToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
+        className="flex flex-1 flex-col overflow-y-auto px-4 py-4"
+      >
+        {/* Bottom-anchor: pushes a short thread to the composer end. */}
+        <div aria-hidden="true" className="mt-auto" />
+        <div ref={contentRef} className="space-y-3">
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-caption text-grey">
             Loading your planning conversation…
@@ -399,31 +437,35 @@ export function PlanningPane({
             </p>
           )}
 
-        {thread.map((item) =>
-          item.type === "planning_turn" ? (
-            <DurableTurn
-              key={`turn-${item.turn.turn_index}`}
-              turn={item.turn}
-              isLatest={item.turn.turn_index === latestTurnIndex}
-              onRetry={send}
-              retryDisabled={composerDisabled}
-              partState={partStates.get(item.turn.turn_index)}
-              onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
-              onPrefill={setMessage}
-            />
-          ) : (
-            <RunBlock
-              key={`run-${item.run.capability_run_id}`}
-              run={item.run}
-              decisions={item.decisions}
-              stages={stream.stages}
-              answered={
-                item.run.capability_run_id === stream.run?.id ? stream.decisions : []
-              }
-              checkIns={checkInsQuery.data}
-            />
-          ),
-        )}
+        {thread.flatMap((item, index) => {
+          const rendered =
+            item.type === "planning_turn" ? (
+              <DurableTurn
+                key={`turn-${item.turn.turn_index}`}
+                turn={item.turn}
+                isLatest={item.turn.turn_index === latestTurnIndex}
+                onRetry={send}
+                retryDisabled={composerDisabled}
+                partState={partStates.get(item.turn.turn_index)}
+                onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
+                onPrefill={setMessage}
+              />
+            ) : (
+              <RunBlock
+                key={`run-${item.run.capability_run_id}`}
+                run={item.run}
+                decisions={item.decisions}
+                stages={stream.stages}
+                answered={
+                  item.run.capability_run_id === stream.run?.id ? stream.decisions : []
+                }
+                checkIns={checkInsQuery.data}
+              />
+            );
+          return index === planCardAt - 1
+            ? [rendered, <PlanCard key="plan-card" projectId={projectId} runActive={runActive} started={planStarted} />]
+            : [rendered];
+        })}
 
         {transcript.optimisticTurns.map((turn: OptimisticPlanningTurn) => (
           <div key={turn.clientTurnId} className="space-y-3">
@@ -486,10 +528,6 @@ export function PlanningPane({
           </div>
         )}
 
-        {!transcript.isSubmitting && (
-          <PlanCard projectId={projectId} runActive={runActive} />
-        )}
-
         {stream.pendingCheckIn !== null && (
           <CheckInCard
             key={stream.pendingCheckIn.check_in_id}
@@ -498,6 +536,7 @@ export function PlanningPane({
             stages={stream.stages}
           />
         )}
+        </div>
       </div>
 
       <div className="border-t border-line px-4 py-3">

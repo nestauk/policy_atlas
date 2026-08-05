@@ -22,17 +22,28 @@ type PlanDraft = components["schemas"]["PlanDraft"];
 
 /**
  * The ready plan as an inline chat card (028 strand 3): the plan card is the
- * only start surface — it renders at the foot of the planning thread once the
- * draft reaches ready (server status "approved"), details open by default
- * pre-run. A draft that supersedes the approval demotes server-side (GET
+ * only start surface — it renders in the planning thread at its chronological
+ * position (after the last planning turn, above any run it started; owner,
+ * 2026-08-05), details open by default pre-run. A draft that supersedes the approval demotes server-side (GET
  * /plan returns "draft") and the card withdraws until the planner reaches
  * ready again; a stale start 409s `plan_stale` with honest copy.
  */
-export function PlanCard({ projectId, runActive }: { projectId: string; runActive: boolean }) {
+export function PlanCard({
+  projectId,
+  runActive,
+  started = false,
+}: {
+  projectId: string;
+  runActive: boolean;
+  /** A run already consumed this approval — the card is a record in the
+   *  thread: details collapse by default and the start footer withdraws
+   *  (re-runs live on the journey's completion card). */
+  started?: boolean;
+}) {
   const planQuery = usePlan(projectId);
   const startRun = useStartRun(projectId);
   const [startNotice, setStartNotice] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(!started);
 
   const plan: PlanDraft | null = planQuery.data?.plan ?? null;
   const approved = planQuery.data?.status === "approved";
@@ -162,6 +173,7 @@ export function PlanCard({ projectId, runActive }: { projectId: string; runActiv
         </div>
       )}
 
+      {!started && (
       <div className="flex items-center gap-3 border-t border-line px-4 py-3">
         <Button
           disabled={starting || runActive}
@@ -187,6 +199,7 @@ export function PlanCard({ projectId, runActive }: { projectId: string; runActiv
             `${plan.time_band !== null && plan.time_band !== "" ? " · " : ""}You can steer or pause at any check-in.`}
         </p>
       </div>
+      )}
       {startNotice !== null && (
         <p role="alert" className="border-t border-line px-4 py-2 text-caption text-red">
           {startNotice}
