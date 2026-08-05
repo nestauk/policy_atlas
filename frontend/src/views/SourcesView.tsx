@@ -325,7 +325,7 @@ export function SourcesView() {
                       item.read_in_full ? (
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
                       ) : (
-                        <Tooltip content={<p>{readDepthHint(item)}</p>}>
+                        <Tooltip content={<p>{scrub(readDepthHint(item) ?? "")}</p>}>
                           <button type="button" aria-label="Abstract only: why" className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
                             <Chip tone="yellow">{readDepthLabel(item)}</Chip>
                           </button>
@@ -698,7 +698,7 @@ export function SourceDossierBody({
       {source.abstract && (
         <DossierSection title="About">
           {abstractSourceLabel(source.abstract_source) && <Chip tone="yellow">AI description</Chip>}
-          <p className="mt-2 leading-relaxed text-grey">{scrub(source.abstract)}</p>
+          <p className="mt-2 max-w-prose-measure text-body leading-relaxed text-grey">{scrub(source.abstract)}</p>
         </DossierSection>
       )}
       {statusLabel && (

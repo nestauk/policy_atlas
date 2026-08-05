@@ -12,21 +12,21 @@ describe("sectionSummary", () => {
   it("uses the verified block summary when one exists", () => {
     expect(
       sectionSummary({ title: "T", role: "standard", summary: "The takeaway.", summary_status: "verified", blocks }),
-    ).toEqual({ text: "The takeaway.", verified: true });
+    ).toEqual({ text: "The takeaway." });
   });
 
   it("falls back to the section's own first sentence for failed or absent summaries", () => {
     for (const summary_status of ["failed", null] as const) {
       expect(
         sectionSummary({ title: "T", role: "standard", summary: null, summary_status, blocks }),
-      ).toEqual({ text: "Universal provision raised uptake.", verified: false });
+      ).toEqual({ text: "Universal provision raised uptake." });
     }
   });
 
   it("never uses an unverified summary text as a summary", () => {
     expect(
       sectionSummary({ title: "T", role: "standard", summary: "pending text", summary_status: "pending", blocks }),
-    ).toEqual({ text: "Universal provision raised uptake.", verified: false });
+    ).toEqual({ text: "Universal provision raised uptake." });
   });
 });
 
@@ -77,6 +77,40 @@ describe("SectionDisclosure", () => {
     );
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+  });
+
+  it("a claim span inside the section survives collapse then re-expand", async () => {
+    const user = userEvent.setup();
+    const prose = "Universal provision raised uptake in the review.";
+    const text = "raised uptake";
+    const start = prose.indexOf(text);
+    const block = {
+      block_id: "b3",
+      prose,
+      claims: [
+        {
+          claim_id: "c3",
+          claim_type: "citation" as const,
+          text,
+          span: [start, start + text.length] as [number, number],
+          citations: [],
+        },
+      ],
+    };
+    render(
+      <TooltipProvider>
+        <SectionDisclosure id="s4" section={section} collapsible defaultOpen>
+          <AnnotatedProse block={block} onOpenClaim={vi.fn()} />
+        </SectionDisclosure>
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { expanded: true }));
+    expect(screen.queryByRole("button", { name: /raised uptake/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { expanded: false }));
+    expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
   });
 });
 

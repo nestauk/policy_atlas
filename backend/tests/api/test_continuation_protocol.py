@@ -514,6 +514,20 @@ def test_theme_renames_are_p2_only_and_roll_back_with_a_failed_intent(
                 },
                 {"steer_point": "evidence_base_coverage"},
             )
+        with pytest.raises(InvalidResponseError, match="bounded plain text"):
+            continuation._theme_renames(
+                {"renames": [{"theme_id": theme_id, "name": "x" * 201}]},
+                {"steer_point": "evidence_base_coverage"},
+            )
+        with pytest.raises(InvalidResponseError, match="bounded plain text"):
+            continuation._theme_renames(
+                {"renames": [{"theme_id": theme_id, "name": "After\x00"}]},
+                {"steer_point": "evidence_base_coverage"},
+            )
+        assert continuation._theme_renames(
+            {"renames": [{"theme_id": theme_id, "name": "x" * 200}]},
+            {"steer_point": "evidence_base_coverage"},
+        ) == [(theme_id, "x" * 200)]
     finally:
         _cleanup(engine, project_id)
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -44,6 +45,10 @@ from policy_atlas.runtime.planner import PlannerBackend
 from policy_atlas.runtime.planner_prompt import PlanDraftWire
 
 log = structlog.get_logger()
+
+# The client's confirm-marker regex (`option=([a-z0-9_]+)`) — enforced
+# server-side so a card never ships an id the marker grammar can't round-trip.
+_OPTION_ID_RE = re.compile(r"[a-z][a-z0-9_]*")
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -172,6 +177,13 @@ def _validated_part(raw_part: object) -> PartProposalOut | None:
         return None
     if sum(option.primary for option in part.options) != 1:
         log.warning("planning_part_dropped", reason="invalid_primary_count")
+        return None
+    # The confirm-marker grammar the client derives ✓-state from admits only
+    # snake_case option ids; the rule lived in prompt text alone, so a
+    # planner-emitted id like "quick-look" broke marker parsing after refresh
+    # (review 028: security lane + Codex lane convergent finding).
+    if any(_OPTION_ID_RE.fullmatch(option.id) is None for option in part.options):
+        log.warning("planning_part_dropped", reason="invalid_option_id")
         return None
     for chip in part.chips or []:
         if chip.kind not in {"date_range", "country_list"}:

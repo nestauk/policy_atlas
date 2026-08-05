@@ -15,6 +15,7 @@ import {
 } from "../../../ui/charts/EvidenceDistributionChart";
 import { CountUp } from "../../../ui/motion/CountUp";
 import { Tooltip } from "../../../ui/radix/Tooltip";
+import { backendLabel } from "../checkInPresentation";
 import {
   ANALYSIS_DEPTH_LABEL,
   SEARCH_EFFORT_LABEL,
@@ -30,20 +31,6 @@ type Funnel = components["schemas"]["FunnelOut"];
 type Coverage = components["schemas"]["CoverageOut"];
 type Groups = components["schemas"]["GroupsOut"];
 type Landscape = components["schemas"]["LandscapeOut"];
-
-const BACKEND_LABELS: Record<string, string> = {
-  openalex: "OpenAlex · academic research",
-  overton: "Overton · policy documents",
-};
-
-/** Look a backend key up in the locked map. Unknown key → null (the caller
- *  omits). Case-insensitive: the coverage read model serves public names
- *  ("OpenAlex"), the stream serves durable keys ("openalex") — the label-map
- *  mismatch left a completed project's "Where I looked" card nearly empty
- *  (owner finding, 2026-08-05). */
-function backendLabel(backend: string): string | null {
-  return BACKEND_LABELS[backend.toLowerCase()] ?? null;
-}
 
 function elapsed(seconds: number): string {
   if (seconds < 60) return `${Math.round(seconds)}s`;

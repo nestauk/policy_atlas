@@ -33,6 +33,18 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
   unattended: "None",
 };
 
+/** Run-block status labels for the planning thread's run divider ("Analysis
+ *  run — running/paused/completed/…"). Unknown status → the caller omits. */
+export const RUN_BLOCK_STATUS: Record<string, string> = {
+  running: "running",
+  paused: "paused",
+  succeeded: "completed",
+  degraded: "completed with gaps",
+  failed: "failed",
+  interrupted: "interrupted",
+  aborted: "stopped",
+};
+
 /** Pre-ready component labels: the same public stage vocabulary the server's
  *  STAGE_PRESENTATION serves for approved-plan steps (D‑7b: the wire carries
  *  no steps before `ready`, so the pane lists the planned components). */

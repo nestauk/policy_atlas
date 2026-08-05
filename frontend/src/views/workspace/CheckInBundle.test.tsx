@@ -24,14 +24,24 @@ function renderBundle(
 }
 
 describe("CheckInBundle", () => {
-  it("renders the P1 search-review bundle: backend counts, sample titles, queries", () => {
+  it("renders the P1 search-review bundle: public backend labels, not raw keys", () => {
+    // Raw lowercase keys, as the stream/bundle actually carries them — a
+    // display-cased fixture here previously masked the raw-key defect.
     renderBundle({
-      backends: [{ backend: "OpenAlex", count: 41 }, { backend: "Overton", count: 23 }],
+      backends: [{ backend: "openalex", count: 41 }, { backend: "overton", count: 23 }],
       queries: ["childhood obesity local policy"],
       sample_titles: ["Free childcare: why, who for and how?"],
     });
-    expect(screen.getByText(/OpenAlex 41 · Overton 23 · from 1 query/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/OpenAlex · academic research 41 · Overton · policy documents 23 · from 1 query/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^openalex/)).toBeNull();
     expect(screen.getByText("Free childcare: why, who for and how?")).toBeInTheDocument();
+  });
+
+  it("P1 falls back to the scrubbed raw key for an unrecognised backend", () => {
+    renderBundle({ backends: [{ backend: "uploaded", count: 5 }] });
+    expect(screen.getByText("uploaded 5")).toBeInTheDocument();
   });
 
   it("P2 themes render with counts and rename stages a card-local edit", async () => {
@@ -69,6 +79,50 @@ describe("CheckInBundle", () => {
     await user.click(screen.getByRole("button", { name: "Remove section Delivery barriers" }));
     expect(onEditSections).toHaveBeenCalledWith([
       { title: "What the evidence shows", focus: "Answer the question" },
+    ]);
+  });
+
+  it("P4 row edit survives with its group_ids unchanged (title/focus edits must not strip them)", async () => {
+    const user = userEvent.setup();
+    const { onEditSections } = renderBundle({
+      proposal: {
+        proposed_sections: [
+          {
+            title: "What the evidence shows",
+            focus: "Answer the question",
+            group_ids: ["g-1", "g-2"],
+          },
+          { title: "Delivery barriers", focus: "Barriers reported" },
+        ],
+      },
+    });
+    await user.click(screen.getByRole("button", { name: "Edit section What the evidence shows" }));
+    await user.clear(screen.getByLabelText("Section title"));
+    await user.type(screen.getByLabelText("Section title"), "What the evidence shows now");
+    await user.click(screen.getByRole("button", { name: "Keep edit" }));
+    expect(onEditSections).toHaveBeenCalledWith([
+      {
+        title: "What the evidence shows now",
+        focus: "Answer the question",
+        group_ids: ["g-1", "g-2"],
+      },
+      { title: "Delivery barriers", focus: "Barriers reported" },
+    ]);
+  });
+
+  it("proposedSections carries an opaque group_ids row through, absent when not present", () => {
+    expect(
+      proposedSections({
+        proposal: {
+          proposed_sections: [
+            { title: "A", focus: "B", group_ids: ["g-1"] },
+            { title: "C", focus: "D" },
+          ],
+        },
+      }),
+    ).toEqual([
+      { title: "A", focus: "B", group_ids: ["g-1"] },
+      { title: "C", focus: "D" },
     ]);
   });
 

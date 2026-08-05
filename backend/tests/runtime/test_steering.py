@@ -2217,3 +2217,126 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
         assert _skip_reason("select", blocked_discretionary) is not None
     finally:
         _cleanup_project(engine, project_id)
+
+
+def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engine) -> None:
+    """Answering the FG pause with the canonical regroup delta re-runs group as
+    a replacement wired from the pause itself (review 028 M1: the affordance was
+    dead — rerun wiring existed only for P3, so both apply paths refused the
+    delta as an already-run adjustment)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")  # FG pauses "always" in frequent
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            by_steer_point={
+                "finding_groups": [
+                    Adjust(directive_deltas={"group": {"grouping": {"granularity": "coarser"}}})
+                ]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            compiled = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "plan.compiled"
+            ]
+        group_run_ids = [
+            entry["run_id"] for entry in compiled if entry["payload"]["component"] == "group"
+        ]
+        assert len(group_run_ids) == 2  # the original plus the replacement re-run
+
+        # Synthesise threads the NEW grouping run (deepest-available reference).
+        synthesise_payload = next(
+            entry["payload"] for entry in compiled if entry["payload"]["component"] == "synthesise"
+        )
+        assert synthesise_payload["grouping_run_id"] == str(group_run_ids[1])
+        assert synthesise_payload["grouping_run_id"] != str(group_run_ids[0])
+
+        # The FG pause fired exactly once — not re-entered after the regroup.
+        steer_points = [
+            point["steer_point"] for point, _ in io.pauses if point.get("kind") == "steer_point"
+        ]
+        assert steer_points.count("finding_groups") == 1
+        # And the pause payload carried the wired re-run surface.
+        fg_point = next(
+            point for point, _ in io.pauses if point.get("steer_point") == "finding_groups"
+        )
+        assert fg_point["rerun_component"] == "group"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p4_as_proposed_overlay_pins_displayed_equals_submitted(engine: Engine) -> None:
+    """The SYNTHESIS_SHAPE overlay clamps focus to the directive bound, trims to
+    the section budget, and carries the proposal's group_ids into the
+    as_proposed delta — displayed == submitted == valid (review 028 F4/M2/m1;
+    deleting the overlay must fail this test)."""
+    from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
+    from policy_atlas.runtime import runner as runner_module
+
+    plan = _base_plan(section_budget=2)
+    state = _SteeringState(
+        plan=plan,
+        plan_id=uuid.uuid4(),
+        plan_version=1,
+        plan_row_id=None,
+        chain=compose(plan),
+        pause_points=set(),
+    )
+    prebuilt = {
+        "bundle_version": "v1",
+        "proposal": {
+            "proposed_sections": [
+                {"title": "Costs", "focus": "f" * 300, "group_ids": ["outcome:g01"]},
+                {"title": "Delivery", "focus": "short", "group_ids": []},
+                {"title": "Over budget", "focus": "third section beyond budget 2"},
+            ],
+            "available_groups": [],
+            "boostable": {},
+        },
+        "grouping_flags": {},
+        "priority_counts": None,
+    }
+    options, bundle = runner_module._pause_options_and_bundle(
+        engine,
+        steer_point_name="synthesis_shape",
+        state=state,
+        project_id=uuid.uuid4(),
+        evidence_scope_id=uuid.uuid4(),
+        successful_runs={},
+        backends=_runner_backends(),
+        prebuilt_bundle=prebuilt,
+    )
+    assert bundle is not None
+    displayed = bundle["proposal"]["proposed_sections"]
+    # Focus clamped to 200; empty group_ids omitted; list trimmed to budget 2.
+    assert displayed == [
+        {"title": "Costs", "focus": "f" * 200, "group_ids": ["outcome:g01"]},
+        {"title": "Delivery", "focus": "short"},
+    ]
+    as_proposed = next(option for option in options if option["id"] == "as_proposed")
+    assert as_proposed["delta"] == {"synthesise": {"synthesis": {"sections": displayed}}}
+    # The submitted delta compiles in the answer-time grammar (the live-422 class):
+    # form-checked with membership deferred to the execution-time re-parse.
+    parse_synthesis_directive(
+        as_proposed["delta"]["synthesise"],
+        grouping_group_ids=None,
+        defer_group_membership=True,
+    )

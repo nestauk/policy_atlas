@@ -63,11 +63,16 @@ def insert_source_tags(
         for pss_id, tag, asserted_by in assertions
     ]
     if rows:
-        conn.execute(
-            pg_insert(source_tag)
-            .values(rows)
-            .on_conflict_do_update(
+        insert = pg_insert(source_tag).values(rows)
+        # Only the theme-carrying caller (characterise) may overwrite on
+        # conflict; theme-less callers keep the historical do-nothing so a
+        # re-assertion never clobbers an existing theme_id to NULL (review 028
+        # m2). do_nothing also tolerates duplicate keys inside one batch.
+        if theme_id is None:
+            statement = insert.on_conflict_do_nothing(constraint="uq_source_tag_assertion")
+        else:
+            statement = insert.on_conflict_do_update(
                 constraint="uq_source_tag_assertion",
                 set_={"theme_id": theme_id},
             )
-        )
+        conn.execute(statement)

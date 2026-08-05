@@ -7,9 +7,11 @@ describe("queryKeys.evidence", () => {
     const base = queryKeys.evidence("p", {});
     const variants: EvidenceQuery[] = [
       { page: 2 },
+      { page_size: 100 },
       { status: ["Included"] },
       { cited: true },
-      { sort: "year", order: "desc" },
+      { sort: "year" },
+      { order: "desc" },
       { theme: "t" },
       { origin: "Overton" },
       { evidence_type: "Systematic review" },

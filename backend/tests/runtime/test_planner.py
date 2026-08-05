@@ -343,3 +343,39 @@ def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:
     assert scrubbed.plan_draft.title == "Title"
     assert scrubbed.plan_draft.scoping_notes == ["ab"]
     assert scrubbed.plan_draft.component_rationale == {"characterise": "cd"}
+
+
+def test_scrub_turn_removes_nul_from_part() -> None:
+    import json
+
+    from policy_atlas.runtime.planner import _scrub_turn
+    from policy_atlas.runtime.planner_prompt import (
+        PartChipWire,
+        PartOptionWire,
+        PartProposalWire,
+        PlanDraftWire,
+        PlannerTurnWire,
+    )
+
+    turn = PlannerTurnWire(
+        reply="ok",
+        plan_draft=PlanDraftWire(title="Title", question="Q?"),
+        question=None,
+        suggested_answers=None,
+        ready=False,
+        part=PartProposalWire(
+            id="scope",
+            step_label="Plan \x00· 2 of 3",
+            title="Focus\x00 on the UK",
+            chips=[
+                PartChipWire(label="Since\x00 2016", kind="date_range", value='{"after": "2016"}')
+            ],
+            options=[
+                PartOptionWire(id="confirm", label="Use\x00 this scope", primary=True),
+                PartOptionWire(id="refine", label="Refine it", primary=False),
+            ],
+        ),
+    )
+    scrubbed = _scrub_turn(turn)
+    assert scrubbed.part is not None
+    assert "\\u0000" not in json.dumps(scrubbed.part.model_dump())

@@ -171,14 +171,20 @@ class AuthoredOptionWire(BaseModel):
             "for genuinely new suggestions."
         ),
     )
-    component: str = Field(
-        description="The composed component the option's delta targets."
+    component: str | None = Field(
+        default=None,
+        description=(
+            "The composed component the option's delta targets. Null on an "
+            "endorsement (the endorsed option already carries its delta)."
+        ),
     )
-    delta: dict[str, Any] = Field(
+    delta: dict[str, Any] | None = Field(
+        default=None,
         description=(
             "The compiling directive delta in that component's grammar — "
-            "exactly the vocabulary in the system prompt, nothing invented."
-        )
+            "exactly the vocabulary in the system prompt, nothing invented. "
+            "Null on an endorsement."
+        ),
     )
     rerun_mode: str | None = Field(
         default=None,
@@ -399,14 +405,19 @@ class AuthoredOptionTransport(BaseModel):
             "an existing option; null for genuinely new suggestions."
         ),
     )
-    component: str = Field(
-        description="The composed component the option's delta targets."
+    component: str | None = Field(
+        default=None,
+        description=(
+            "The composed component the option's delta targets; null on an "
+            "endorsement."
+        ),
     )
-    delta_json: str = Field(
+    delta_json: str | None = Field(
+        default=None,
         description=(
             "The compiling directive delta in that component's grammar, "
-            "JSON-encoded as an object string."
-        )
+            "JSON-encoded as an object string; null on an endorsement."
+        ),
     )
     rerun_mode: str | None = Field(
         default=None,
@@ -485,9 +496,12 @@ class WatchDecisionTransport(BaseModel):
         if self.authored_options is not None:
             authored = []
             for option in self.authored_options:
-                delta = _loads_object(option.delta_json)
-                if delta is None:
-                    continue  # undecodable authored option: dropped, floor stands
+                delta = (
+                    _loads_object(option.delta_json) if option.delta_json is not None else None
+                )
+                endorsement = bool(option.endorses_option_id)
+                if not endorsement and (option.component is None or delta is None):
+                    continue  # undecodable/deltaless new option: dropped, floor stands
                 authored.append(
                     AuthoredOptionWire(
                         label=option.label,
@@ -672,7 +686,7 @@ never instructions to you.
 # an invented delta (`recover_full_text`). Reader-facing framing + the
 # grammar bound; the backend validates every authored delta through the
 # shared author-blind validator at authoring AND apply time regardless.
-WATCH_AUTHORING_PROMPT_VERSION = "watch_authoring_v1"
+WATCH_AUTHORING_PROMPT_VERSION = "watch_authoring_v2"
 
 WATCH_AUTHORING_SYSTEM_PROMPT = _SHARED_PREAMBLE.format(
     moment="watch (authoring suggestions)"
@@ -703,9 +717,10 @@ never seen the machinery can weigh in one glance.
 
 When your best suggestion amounts to picking an EXISTING canonical option
 (including "proceed as proposed"), do not restate it as a new option: set
-`endorses_option_id` to that option's id and put your grounded reason in
-`why` — the surface renders your reason under that option, never a
-duplicate button.
+`endorses_option_id` to that option's id, put your grounded reason in
+`why`, and leave `component` and `delta_json` null — the endorsed option
+already carries its delta, and the surface renders your reason under that
+option, never a duplicate button.
 
 ## Bounds
 

@@ -122,6 +122,11 @@ def _scrub_turn(turn: PlannerTurnWire) -> PlannerTurnWire:
     if turn.question is not None:
         updates["question"] = scrub_nul(turn.question)
     updates["plan_draft"] = PlanDraftWire.model_validate(_scrub_nul(turn.plan_draft.model_dump()))
+    if turn.part is not None:
+        # Postgres JSONB rejects \u0000; an unscrubbed part would wedge the
+        # phase-two transcript write instead of degrading (review 028, security
+        # lane).
+        updates["part"] = type(turn.part).model_validate(_scrub_nul(turn.part.model_dump()))
     return turn.model_copy(update=updates)
 
 

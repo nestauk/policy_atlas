@@ -272,6 +272,40 @@ def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_
     assert stored["response"]["part"] == first.json()["part"]
 
 
+def test_planning_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> None:
+    """A card whose option id is valid snake_case survives validation intact."""
+    _reset_turn_locks()
+    part = PartProposalWire(
+        id="question",
+        step_label="Plan · 1 of 3",
+        title="Question",
+        options=[
+            PartOptionWire(id="quick_look", label="Quick look", primary=True),
+            PartOptionWire(id="deep_dive", label="Deep dive", primary=False),
+        ],
+    )
+    with api_client(tmp_path, {get_planner_backend: lambda: PartPlanner(part)}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = create_project(client, owner)
+        response = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+    assert response.status_code == 200
+    assert response.json()["part"] is not None
+    assert [option["id"] for option in response.json()["part"]["options"]] == [
+        "quick_look",
+        "deep_dive",
+    ]
+
+
 @pytest.mark.parametrize(
     ("part", "reason"),
     [
@@ -311,6 +345,18 @@ def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_
                 ],
             ),
             "invalid_chip_json",
+        ),
+        (
+            PartProposalWire(
+                id="question",
+                step_label="Plan · 1 of 3",
+                title="Question",
+                options=[
+                    PartOptionWire(id="quick-look", label="Quick look", primary=True),
+                    PartOptionWire(id="deep_dive", label="Deep dive", primary=False),
+                ],
+            ),
+            "invalid_option_id",
         ),
     ],
 )

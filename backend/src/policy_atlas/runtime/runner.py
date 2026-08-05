@@ -49,7 +49,10 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     StubSynthesisBackend,
     SynthesisBackend,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import DIRECTIVE_SECTION_TEXT_MAX
+from policy_atlas.evidence_base.synthesis.synthesis_tools import (
+    DIRECTIVE_SECTION_TEXT_MAX,
+    SECTION_CAP,
+)
 from policy_atlas.evidence_base.synthesis.synthesise import (
     SynthesiseContext,
     write_summaries_after_commit,
@@ -71,6 +74,7 @@ from policy_atlas.runtime.orchestrator_backend import (
     classify_boundary,
     run_watch_decision,
 )
+from policy_atlas.runtime.orchestrator_prompt import WATCH_AUTHORING_PROMPT_VERSION
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.steering import (
@@ -1375,6 +1379,25 @@ def _serialise_step_outcome(outcome: RunStepOutcome) -> dict[str, Any]:
     }
 
 
+def _after_boundary_rerun_component(
+    steer_point_name: str | None,
+    *,
+    selection_run_id: uuid.UUID | None,
+    successful_runs: dict[str, uuid.UUID],
+) -> str | None:
+    """The replacement re-run an after-boundary steer point wires from its pause.
+
+    P3 re-runs select; the finding-groups point re-runs group (its regroup floor
+    options are dead without this — review 028 M1). Either requires a persisted
+    run to replace; a failed component degrades the point instead (caller).
+    """
+    if steer_point_name == DEEPENING_SELECTION and selection_run_id is not None:
+        return "select"
+    if steer_point_name == FINDING_GROUPS and successful_runs.get("group") is not None:
+        return "group"
+    return None
+
+
 def _handle_after_component_boundary(
     engine: Engine,
     io: CheckInIO,
@@ -1427,8 +1450,8 @@ def _handle_after_component_boundary(
             ),
             selection_run_id=selection_run_id,
             allow_segment_reentry=allow_segment_reentry,
-            rerun_component=(
-                "select" if name == DEEPENING_SELECTION and selection_run_id is not None else None
+            rerun_component=_after_boundary_rerun_component(
+                name, selection_run_id=selection_run_id, successful_runs=successful_runs
             ),
             discretion_hook=discretion_hook,
             backends=backends,
@@ -1445,8 +1468,12 @@ def _handle_after_component_boundary(
     )
     # The deepening-selection (P3) steer point only offers its bundle/re-run when
     # select actually produced a persisted selection; a failed select degrades to
-    # a generic check-in pause (the pre-024 behaviour).
+    # a generic check-in pause (the pre-024 behaviour). The finding-groups point
+    # degrades the same way when group has no persisted run to re-run.
     if steer_point_name == DEEPENING_SELECTION and selection_run_id is None:
+        steer_point_name = None
+        triggers = None
+    if steer_point_name == FINDING_GROUPS and successful_runs.get("group") is None:
         steer_point_name = None
         triggers = None
     # Run-id attachment (plan pin, review M2): an after_component event attaches
@@ -1504,14 +1531,12 @@ def _handle_after_component_boundary(
         triggers=triggers,
         prebuilt_bundle=observation.bundle,
     )
-    # Only the P3 select steer point wires a replacement re-run from the pause
-    # today; P2/P4 present their re-run options as data for the Phase-5 router.
-    rerun_component = (
-        "select"
-        if steer_point_name == DEEPENING_SELECTION
-        and selection_run_id is not None
-        and "select" in REPLACEMENT_RERUNS
-        else None
+    # The P3 select and FG group steer points wire a replacement re-run from
+    # their pause (their floors offer re-run options at an after-boundary);
+    # P2/P4 sit at before-boundaries and get theirs from
+    # :func:`_before_boundary_surface`.
+    rerun_component = _after_boundary_rerun_component(
+        steer_point_name, selection_run_id=selection_run_id, successful_runs=successful_runs
     )
     # Additive segment re-entry (contract decision 7a) is offered at an
     # after_component boundary once acquire has run; the caller withholds it on
@@ -1916,21 +1941,37 @@ def _pause_options_and_bundle(
         proposal = bundle.get("proposal")
         sections = proposal.get("proposed_sections") if isinstance(proposal, dict) else None
         if isinstance(sections, list):
-            # The proposal's focus bound (SECTION_FOCUS_MAX=300) exceeds the
-            # steering directive's (DIRECTIVE_SECTION_TEXT_MAX=200), so the
-            # displayed-list submit would 422 on any long focus (found live,
-            # 028 G.2). Clamp ONCE here — in the bundle the card displays AND
-            # the as_proposed delta — so displayed == submitted == valid.
-            clamped = [
-                {
+            # The proposal's bounds exceed the steering directive's in three
+            # ways, so the displayed-list submit could 422/fail on submit or at
+            # execution: focus length (SECTION_FOCUS_MAX=300 vs
+            # DIRECTIVE_SECTION_TEXT_MAX=200, found live, 028 G.2), section
+            # count (the budget clause is prompt-advisory, review 028 m1), and
+            # the section→group bindings the directive grammar carries as
+            # `group_ids` (dropping them silently unscoped grouped deep runs,
+            # review 028 M2). Clamp ONCE here — in the bundle the card displays
+            # AND the as_proposed delta — so displayed == submitted == valid
+            # == executed.
+            section_bound = state.plan.section_budget or SECTION_CAP
+            clamped = []
+            for row in sections[:section_bound]:
+                if (
+                    not isinstance(row, dict)
+                    or not isinstance(row.get("title"), str)
+                    or not isinstance(row.get("focus"), str)
+                ):
+                    continue
+                clamped_row: dict[str, Any] = {
                     "title": cast(str, row.get("title")),
                     "focus": cast(str, row.get("focus"))[:DIRECTIVE_SECTION_TEXT_MAX],
                 }
-                for row in sections
-                if isinstance(row, dict)
-                and isinstance(row.get("title"), str)
-                and isinstance(row.get("focus"), str)
-            ]
+                group_ids = row.get("group_ids")
+                if (
+                    isinstance(group_ids, list)
+                    and group_ids
+                    and all(isinstance(group_id, str) for group_id in group_ids)
+                ):
+                    clamped_row["group_ids"] = list(group_ids)
+                clamped.append(clamped_row)
             proposal["proposed_sections"] = clamped  # type: ignore[index]
             for option in options:
                 if option.get("id") == "as_proposed":
@@ -4375,7 +4416,7 @@ def _watch_observe_boundary(
                 "authored_by": "orchestrator",
                 "authored_options": authored_dicts,
                 "execution_profile": {
-                    "prompt_version": "watch_authoring_v1",
+                    "prompt_version": WATCH_AUTHORING_PROMPT_VERSION,
                 },
             },
         )
@@ -4453,6 +4494,15 @@ def _validated_authored_options(
         raw = wire.model_dump() if hasattr(wire, "model_dump") else dict(wire)
         if len(kept) >= 2:
             reason = "authored option cap is two per pause"
+        elif isinstance(raw.get("endorses_option_id"), str) and raw.get("endorses_option_id"):
+            # An endorsement picks an existing canonical option; its own
+            # component/delta are discarded at projection, so none is required
+            # (review 028 C4 — requiring one made honest endorsements
+            # unserialisable). Strip any padding so nothing unvalidated rides
+            # into the durable pause payload.
+            raw["component"] = None
+            raw["delta"] = None
+            reason = None
         else:
             component, delta = raw.get("component"), raw.get("delta")
             try:

@@ -23,6 +23,7 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.api.locks import project_lock
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, characterisation_result, orchestration_plan
+from policy_atlas.core.tags import has_control_character
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
@@ -1064,6 +1065,11 @@ def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str
         theme_id, name = item.get("theme_id"), item.get("name")
         if not isinstance(theme_id, str) or not isinstance(name, str) or not name.strip():
             raise InvalidResponseError("each rename requires theme_id and a non-empty name")
+        # The same bounds every other user-supplied directive text carries
+        # (review 028, security lane): the name persists into the
+        # characterisation payload and renders project-wide.
+        if len(name.strip()) > 200 or has_control_character(name):
+            raise InvalidResponseError("theme names must be bounded plain text")
         if theme_id in seen:
             raise InvalidResponseError("each theme may be renamed once")
         seen.add(theme_id)
@@ -1084,7 +1090,12 @@ def _apply_theme_renames(
         conn.execute(
             select(characterisation_result)
             .where(characterisation_result.c.project_id == project_id)
-            .order_by(characterisation_result.c.created_at.desc())
+            # pk tie-break: stub runs mint rows inside one clock tick, and the
+            # rename target must be deterministic (review 028 m6).
+            .order_by(
+                characterisation_result.c.created_at.desc(),
+                characterisation_result.c.characterisation_id.desc(),
+            )
         )
         .mappings()
         .first()

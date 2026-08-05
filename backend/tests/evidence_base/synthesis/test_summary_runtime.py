@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from sqlalchemy import select
@@ -14,9 +14,26 @@ from policy_atlas.evidence_base.synthesis import synthesise as synthesise_module
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     StubSynthesisBackend,
     SummaryJudgeWire,
+    SummaryWire,
 )
-from policy_atlas.evidence_base.synthesis.synthesise import write_summaries_after_commit
+from policy_atlas.evidence_base.synthesis.synthesise import (
+    SUMMARY_REGENERATE_CAP,
+    write_summaries_after_commit,
+)
 from tests.helpers import delete_project_data, now, seed_project_and_run, seed_scope
+
+
+class _ScriptedSummaryBackend(StubSynthesisBackend):
+    """Stub backend whose block-summary text is scripted call by call."""
+
+    def __init__(self, summaries: list[str]) -> None:
+        super().__init__()
+        self._summaries = list(summaries)
+
+    def write_block_summary(self, seed: dict[str, Any]) -> Any:
+        """Return the next scripted summary, bypassing the prose-derived stub text."""
+        self.summary_seeds.append(seed)
+        return SummaryWire(summary=self._summaries.pop(0)), None
 
 
 def _seed_summary_source(engine: Engine) -> tuple[uuid.UUID, uuid.UUID, list[uuid.UUID]]:
@@ -217,6 +234,52 @@ def test_judge_fail_regenerates_then_persists_only_failed_status(engine: Engine)
         if project_id is not None:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)
+
+
+def test_writer_over_length_summary_fails_without_judge() -> None:
+    """A deterministically oversized block summary fails before any judge call."""
+    long_summary = "x" * 400
+    backend = _ScriptedSummaryBackend([long_summary] * (SUMMARY_REGENERATE_CAP + 1))
+    result = synthesise_module._write_and_judge_summary(
+        synthesis_backend=backend,
+        seed={"kind": "block"},
+        detail={},
+    )
+    assert result["status"] == "failed"
+    assert result["reason"] == "over_length"
+    assert result["judge_calls"] == 0
+    assert backend.summary_judge_inputs == []
+
+
+def test_writer_citation_marker_summary_fails() -> None:
+    """A block summary carrying a bracketed citation marker fails deterministically."""
+    tainted_summary = "See finding [3] for detail."
+    backend = _ScriptedSummaryBackend([tainted_summary] * (SUMMARY_REGENERATE_CAP + 1))
+    result = synthesise_module._write_and_judge_summary(
+        synthesis_backend=backend,
+        seed={"kind": "block"},
+        detail={},
+    )
+    assert result["status"] == "failed"
+    assert result["reason"] == "citation_markers"
+    assert result["judge_calls"] == 0
+    assert backend.summary_judge_inputs == []
+
+
+def test_format_violation_on_first_attempt_consumes_one_regenerate_and_then_verifies() -> None:
+    """An over-length first attempt still leaves a clean regenerate free to verify."""
+    long_summary = "x" * 400
+    clean_summary = "A concise clean summary."
+    backend = _ScriptedSummaryBackend([long_summary, clean_summary])
+    result = synthesise_module._write_and_judge_summary(
+        synthesis_backend=backend,
+        seed={"kind": "block"},
+        detail={},
+    )
+    assert result["status"] == "verified"
+    assert result["summary"] == clean_summary
+    assert result["writer_calls"] == 2
+    assert result["judge_calls"] == 1
 
 
 def test_artefact_summary_seed_is_anchored_on_key_findings_and_conclusions(engine: Engine) -> None:

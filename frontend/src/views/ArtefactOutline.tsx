@@ -16,25 +16,25 @@ export interface OutlineSection {
 /**
  * The one-line summary a collapsed section shows (028 strand 5/13):
  * the VERIFIED block summary where one exists; the section's own first
- * sentence as the honest fallback — carried WITH its marker, never presented
- * as a summary. `focus` never renders (live data shows it is the writing
- * brief). Never generated at render time.
+ * sentence as the honest fallback — rendered unmarked, indistinguishable
+ * from a verified summary (owner ruling, batch 12: the checked/fallback
+ * distinction is provenance for reviewers, not users). `focus` never
+ * renders (live data shows it is the writing brief). Never generated at
+ * render time.
  */
-export function sectionSummary(
-  section: OutlineSection,
-): { text: string; verified: boolean } | null {
+export function sectionSummary(section: OutlineSection): { text: string } | null {
   if (
     section.summary != null &&
     section.summary !== "" &&
     section.summary_status === "verified"
   ) {
-    return { text: section.summary, verified: true };
+    return { text: section.summary };
   }
   const prose = section.blocks?.[0]?.prose ?? "";
   if (prose === "") return null;
   const line = prose.split("\n").find((candidate) => candidate.trim() !== "") ?? "";
   const sentence = /^.*?[.!?](?=\s|$)/.exec(line.trim())?.[0] ?? line.trim();
-  return sentence === "" ? null : { text: sentence, verified: false };
+  return sentence === "" ? null : { text: sentence };
 }
 
 /** Slug id for a section heading — the sidebar's scroll target. */

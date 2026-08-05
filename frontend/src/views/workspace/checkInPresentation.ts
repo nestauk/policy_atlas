@@ -1,5 +1,43 @@
 import type { ResolvedDecision, StageEntry } from "../../store";
 
+/** Locked backend display names, keyed by the durable backend key the stream
+ *  and check-in bundles carry. Shared by the journey pane's coverage card
+ *  and the check-in bundle's P1 search-review card — both render raw
+ *  backend keys without it. */
+export const BACKEND_LABELS: Record<string, string> = {
+  openalex: "OpenAlex · academic research",
+  overton: "Overton · policy documents",
+};
+
+/** Look a backend key up in the locked map. Unknown key → null (the caller
+ *  omits). Case-insensitive: the coverage read model serves public names
+ *  ("OpenAlex"), the stream serves durable keys ("openalex") — the label-map
+ *  mismatch left a completed project's "Where I looked" card nearly empty
+ *  (owner finding, 2026-08-05) and, separately, left the P1 search-review
+ *  card rendering raw keys outright. */
+export function backendLabel(backend: string): string | null {
+  return BACKEND_LABELS[backend.toLowerCase()] ?? null;
+}
+
+/** Locked heading copy for the CheckInBundle P1–P4 blocks. Pure copy, moved
+ *  out of the component so the headings share the module's other locked
+ *  vocabulary rather than living as inline JSX literals. */
+export const CHECK_IN_SEARCH_HEADING = "What the search collected";
+
+export function checkInThemesHeading(count: number): string {
+  return `Themes in the evidence · ${count}`;
+}
+
+export function checkInReadingListHeading(count: number): string {
+  return `The reading list · ${count}`;
+}
+
+export function checkInGroupsHeading(count: number): string {
+  return `Finding groups · ${count}, largest first`;
+}
+
+export const CHECK_IN_SECTIONS_HEADING = "Proposed sections · edit any row, keep the rest";
+
 /** Locked labels for deterministic component-completion count fields. Unknown
  * keys are deliberately omitted rather than converted from implementation
  * vocabulary. */

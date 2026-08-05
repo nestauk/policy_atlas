@@ -766,6 +766,7 @@ def _parse_sections(
     *,
     grouping_group_ids: set[str] | None,
     section_budget: int | None = None,
+    defer_group_membership: bool = False,
 ) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         _directive_fail("synthesis directive sections must be a list")
@@ -791,9 +792,8 @@ def _parse_sections(
             "focus": _bounded_string(item["focus"], field=f"sections[{index}].focus"),
         }
         if "group_ids" in item:
-            if grouping_group_ids is None:
+            if grouping_group_ids is None and not defer_group_membership:
                 _directive_fail("synthesis directive group_ids require grouping")
-            assert grouping_group_ids is not None
             raw_group_ids = item["group_ids"]
             if not isinstance(raw_group_ids, list) or len(raw_group_ids) > DIRECTIVE_LIST_MAX:
                 _directive_fail("synthesis directive group_ids must be a bounded list")
@@ -813,7 +813,7 @@ def _parse_sections(
                         "synthesis directive group_ids must use expected form "
                         f"{GROUP_ID_EXPECTED_FORM}"
                     )
-                if group_id not in grouping_group_ids:
+                if grouping_group_ids is not None and group_id not in grouping_group_ids:
                     _directive_fail(
                         f"synthesis directive group_ids[{group_index}] is unknown; "
                         f"expected form {GROUP_ID_EXPECTED_FORM} resolving to grouping "
@@ -872,7 +872,10 @@ def _parse_retrieval_boosts(
 
 
 def parse_synthesis_directive(
-    context: dict[str, Any], *, grouping_group_ids: set[str] | None
+    context: dict[str, Any],
+    *,
+    grouping_group_ids: set[str] | None,
+    defer_group_membership: bool = False,
 ) -> SynthesisDirective:
     """Parse the fail-closed ``context["synthesis"]`` directive.
 
@@ -880,6 +883,11 @@ def parse_synthesis_directive(
         context: Evidence-scope context JSON object.
         grouping_group_ids: Valid grouping ids when grouping is referenced, or
             ``None`` when no grouping substrate exists.
+        defer_group_membership: Answer-time mode (steering validation, which has
+            no grouping substrate on hand): ``group_ids`` are form/bounds-checked
+            only, with membership enforced by the execution-time re-parse. Lets
+            the P4 as_proposed delta carry the proposal's section→group bindings
+            (review 028 M2) instead of 422ing at submit.
 
     Returns:
         A validated directive with retrieval boost weights clamped.
@@ -906,6 +914,7 @@ def parse_synthesis_directive(
             raw["sections"],
             grouping_group_ids=grouping_group_ids,
             section_budget=section_budget,
+            defer_group_membership=defer_group_membership,
         )
         if "sections" in raw
         else None

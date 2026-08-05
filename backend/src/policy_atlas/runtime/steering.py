@@ -1484,7 +1484,13 @@ def validate_option_delta(delta: dict[str, Any], *, backend_scope: str = "both")
         return
     if keys == {"synthesis"}:
         try:
-            parse_synthesis_directive({"synthesis": delta["synthesis"]}, grouping_group_ids=None)
+            # Answer-time validation has no grouping substrate; group_ids are
+            # form-checked here and membership-checked at execution (028 M2).
+            parse_synthesis_directive(
+                {"synthesis": delta["synthesis"]},
+                grouping_group_ids=None,
+                defer_group_membership=True,
+            )
         except SynthesisDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc
         return
@@ -2000,7 +2006,13 @@ def _validate_directive_delta(
         # exempt from the plan round-trip below.
         _require_keys(component, delta, {"synthesis"})
         try:
-            parse_synthesis_directive({"synthesis": delta["synthesis"]}, grouping_group_ids=None)
+            # Answer-time validation has no grouping substrate; group_ids are
+            # form-checked here and membership-checked at execution (028 M2).
+            parse_synthesis_directive(
+                {"synthesis": delta["synthesis"]},
+                grouping_group_ids=None,
+                defer_group_membership=True,
+            )
         except SynthesisDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc
         return

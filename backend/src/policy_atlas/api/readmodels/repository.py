@@ -403,13 +403,14 @@ def landscape_out(
         .limit(1)
     ).scalar_one_or_none()
     themes: list[ThemeOut] = []
+    relevant_id_set = set(relevant_ids)
     if isinstance(characterisation, Mapping) and isinstance(characterisation.get("themes"), list):
         for item in characterisation["themes"]:
             if isinstance(item, Mapping) and isinstance(item.get("name"), str):
                 member_ids = _uuid_members(item.get("member_ids"))
                 size: Any
                 if scope == "cited":
-                    size = sum(member_id in relevant_ids for member_id in member_ids)
+                    size = sum(member_id in relevant_id_set for member_id in member_ids)
                     if size == 0:
                         continue
                 else:
@@ -473,8 +474,9 @@ def _screen_event_reason(payload: Mapping[str, Any], status: str) -> str | None:
     """Pick the rep reason that explains the aggregated screen decision.
 
     Reps vote; the first reason from a rep agreeing with the final status
-    wins ('unsure' votes count toward relevant, mirroring `_vote_decision`),
-    falling back to any rep's reason.
+    wins ('unsure' votes count toward relevant, mirroring `_vote_decision`).
+    No agreeing rep -> no reason: a disagreeing rep's text can argue the
+    opposite of the shown status (review 028, security lane).
     """
     reps = payload.get("reps")
     if not isinstance(reps, list):
@@ -488,7 +490,7 @@ def _screen_event_reason(payload: Mapping[str, Any], status: str) -> str | None:
         decision = rep.get("decision")
         if decision == status or (status == "relevant" and decision == "unsure"):
             return cast(str, rep["reason"])
-    return cast(str, candidates[0]["reason"]) if candidates else None
+    return None
 
 
 def _source_reason_maps(

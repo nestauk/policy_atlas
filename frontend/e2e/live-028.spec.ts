@@ -47,15 +47,61 @@ async function apiStatus(page: Page): Promise<number> {
   }
 }
 
+// The PID (process-group leader) of the API process THIS script spawned via
+// startApi(), or null if it hasn't spawned one (yet, or after killApi()
+// consumed it). killApi() must never sweep every port-8000 listener or every
+// uvicorn process on the box — that can kill a developer's unrelated work.
+// It may only kill the tree it is provably responsible for.
+let spawnedApiPid: number | null = null;
+
 async function killApi(page: Page) {
-  log("killing the API process");
-  try {
-    execSync(
-      "lsof -ti tcp:8000 -sTCP:LISTEN | xargs kill -9; pkill -9 -f 'uvicorn policy_atlas' || true",
-      { stdio: "ignore" },
+  if (spawnedApiPid !== null) {
+    log(`killing the API process (pid ${spawnedApiPid})`);
+    try {
+      // startApi() spawns detached, so the child is its own process-group
+      // leader — killing the negated pid kills exactly that spawned tree
+      // (bash → make → uvicorn), not any other process on the box.
+      process.kill(-spawnedApiPid, "SIGKILL");
+    } catch {
+      // already dead is fine
+    }
+    spawnedApiPid = null;
+  } else if (process.env.LIVE_ALLOW_API_TAKEOVER === "1") {
+    // Leg B's FIRST restart targets the dev API `make dev` started before
+    // this script ran. Under the explicit opt-in only, take over exactly
+    // that process: every current-user listener on 8000 must be a
+    // policy-atlas uvicorn, else refuse — never a blind port sweep.
+    const pids = execSync("lsof -ti tcp:8000 -sTCP:LISTEN", { stdio: "pipe" })
+      .toString()
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+    for (const pid of pids) {
+      const command = execSync(`ps -o command= -p ${pid}`, { stdio: "pipe" }).toString();
+      if (!/uvicorn|policy_atlas/.test(command)) {
+        throw new Error(
+          `killApi: refusing takeover — pid ${pid} on port 8000 is not a policy-atlas ` +
+            `API (${command.trim()}).`,
+        );
+      }
+    }
+    log(`taking over the externally-started dev API (pid ${pids.join(", ")})`);
+    for (const pid of pids) {
+      const pgid = execSync(`ps -o pgid= -p ${pid}`, { stdio: "pipe" }).toString().trim();
+      try {
+        process.kill(-Number(pgid), "SIGKILL");
+      } catch {
+        // already dead is fine
+      }
+    }
+  } else {
+    throw new Error(
+      "killApi: this script did not spawn the API (nothing recorded), and " +
+        "LIVE_ALLOW_API_TAKEOVER=1 is not set. Either call startApi() first so this " +
+        "helper owns the process, or set LIVE_ALLOW_API_TAKEOVER=1 to let leg B " +
+        "restart the make-dev-started policy-atlas API (it verifies the process " +
+        "identity before killing; it never sweeps unrelated listeners).",
     );
-  } catch {
-    // already dead is fine
   }
   await expect
     .poll(async () => apiStatus(page), { timeout: 30_000, intervals: [500] })
@@ -83,6 +129,7 @@ function startApi() {
     detached: true,
     stdio: "ignore",
   });
+  spawnedApiPid = child.pid ?? null;
   child.unref();
 }
 
@@ -543,8 +590,10 @@ test.describe.serial("task 028 live check — leg B", () => {
       expect(titles.some((title) => title.includes("edited live"))).toBe(true);
     }
 
-    // Legacy fallback: any pre-028 artefact in this dev DB renders on the
-    // first-sentence fallback with its marker (no verified summaries).
+    // Legacy fallback: any pre-028 artefact in this dev DB renders its
+    // collapsed ordinary section's first-sentence fallback UNMARKED (owner
+    // ruling, batch 12 — the checked/fallback distinction is provenance for
+    // reviewers, not users). Mirrors ArtefactOutline.tsx's sectionSummary().
     const projects = await page.request.get(`${API}/api/v1/projects?page_size=50`, {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -557,17 +606,26 @@ test.describe.serial("task 028 live check — leg B", () => {
       );
       if (artefact.status() !== 200) continue;
       const sections = (await artefact.json()).sections as Array<{
+        role: string;
         summary_status?: string | null;
+        blocks?: Array<{ prose?: string }> | null;
       }>;
-      if (sections.some((section) => section.summary_status === "verified")) continue;
+      const fallbackTarget = sections.find(
+        (section) =>
+          section.role !== "key_findings" &&
+          section.summary_status !== "verified" &&
+          (section.blocks?.[0]?.prose ?? "") !== "",
+      );
+      if (fallbackTarget === undefined) continue;
+      const prose = fallbackTarget.blocks![0].prose!;
+      const line = prose.split("\n").find((candidate) => candidate.trim() !== "") ?? "";
+      const sentence = /^.*?[.!?](?=\s|$)/.exec(line.trim())?.[0] ?? line.trim();
+      if (sentence === "") continue;
       await page.goto(`/projects/${row.project_id}/evidence-base`);
-      const marker = page.getByText(/no checked summary/).first();
-      if (await marker.isVisible({ timeout: 15_000 }).catch(() => false)) {
-        log(`legacy artefact ${row.project_id} renders the fallback with its marker`);
-        await shot(page, "b-13-legacy-fallback");
-      } else {
-        log(`legacy artefact ${row.project_id} had no collapsed ordinary section to show a fallback`);
-      }
+      await expect(page.getByText(sentence, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByText(/no checked summary/)).toHaveCount(0);
+      log(`legacy artefact ${row.project_id} renders the fallback unmarked`);
+      await shot(page, "b-13-legacy-fallback");
       break;
     }
     log("leg B complete");

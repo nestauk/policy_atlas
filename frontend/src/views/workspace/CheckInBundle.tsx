@@ -2,6 +2,14 @@ import { useState } from "react";
 
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import {
+  backendLabel,
+  CHECK_IN_SEARCH_HEADING,
+  CHECK_IN_SECTIONS_HEADING,
+  checkInGroupsHeading,
+  checkInReadingListHeading,
+  checkInThemesHeading,
+} from "./checkInPresentation";
 
 /** One staged P2 theme rename (batched into the single check-in response). */
 export interface ThemeRename {
@@ -9,10 +17,16 @@ export interface ThemeRename {
   name: string;
 }
 
-/** One displayed P4 section row ({title, focus} — the steering grammar). */
+/**
+ * One displayed P4 section row ({title, focus} — the steering grammar).
+ * `group_ids` is an optional opaque section→group binding the backend may
+ * attach; rows without it stay `{title, focus}` exactly as before. Edits
+ * must carry it through unchanged — title/focus edits never strip it.
+ */
 export interface SectionRow {
   title: string;
   focus: string;
+  group_ids?: string[];
 }
 
 function asString(value: unknown): string | null {
@@ -25,6 +39,12 @@ function asNumber(value: unknown): number | null {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function asStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((entry): entry is string => typeof entry === "string");
+  return strings.length > 0 ? strings : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -42,7 +62,10 @@ export function proposedSections(bundle: Record<string, unknown> | null): Sectio
     const entry = record(row);
     const title = asString(entry?.title);
     const focus = asString(entry?.focus);
-    if (title !== null && focus !== null) sections.push({ title, focus });
+    const group_ids = asStringArray(entry?.group_ids);
+    if (title !== null && focus !== null) {
+      sections.push(group_ids !== undefined ? { title, focus, group_ids } : { title, focus });
+    }
   }
   return sections;
 }
@@ -132,9 +155,11 @@ export function CheckInBundle({
   return (
     <div>
       {backends.length > 0 && (
-        <ListBlock heading="What the search collected">
+        <ListBlock heading={CHECK_IN_SEARCH_HEADING}>
           <p className="mt-1 text-caption text-navy">
-            {backends.map(({ backend, count }) => `${scrub(backend)} ${count}`).join(" · ")}
+            {backends
+              .map(({ backend, count }) => `${scrub(backendLabel(backend) ?? backend)} ${count}`)
+              .join(" · ")}
             {queries.length > 0 ? ` · from ${queries.length === 1 ? "1 query" : `${queries.length} queries`}` : ""}
           </p>
           {sampleTitles.length > 0 && (
@@ -162,7 +187,7 @@ export function CheckInBundle({
       )}
 
       {themes.length > 0 && (
-        <ListBlock heading={`Themes in the evidence · ${themes.length}`}>
+        <ListBlock heading={checkInThemesHeading(themes.length)}>
           <ul className="mt-1.5 space-y-1">
             {themes.map((theme) => {
               const staged = stagedRenames.find((rename) => rename.theme_id === theme.theme_id);
@@ -222,7 +247,7 @@ export function CheckInBundle({
       )}
 
       {shortlist.length > 0 && (
-        <ListBlock heading={`The reading list · ${shortlist.length}`}>
+        <ListBlock heading={checkInReadingListHeading(shortlist.length)}>
           <ul className="mt-1.5 space-y-0.5">
             {shortlist.slice(0, 6).map((row) => (
               <li key={row.title} className="flex items-baseline gap-2 text-caption text-ink">
@@ -238,7 +263,7 @@ export function CheckInBundle({
       )}
 
       {groups.length > 0 && (
-        <ListBlock heading={`Finding groups · ${groups.length}, largest first`}>
+        <ListBlock heading={checkInGroupsHeading(groups.length)}>
           <ul className="mt-1.5 space-y-0.5">
             {groups.slice(0, 6).map((group) => (
               <li key={group.name} className="flex items-baseline gap-2 text-caption text-ink">
@@ -256,7 +281,7 @@ export function CheckInBundle({
       )}
 
       {sections.length > 0 && (
-        <ListBlock heading="Proposed sections · edit any row, keep the rest">
+        <ListBlock heading={CHECK_IN_SECTIONS_HEADING}>
           <ul className="mt-1.5 space-y-1">
             {sections.map((section, index) => (
               <li key={`${section.title}-${index}`} className="flex items-baseline gap-2 text-caption text-ink">
@@ -283,7 +308,11 @@ export function CheckInBundle({
                         onClick={() => {
                           if (rowTitle.trim() !== "") {
                             const next = [...sections];
-                            next[index] = { title: rowTitle.trim(), focus: rowFocus.trim() || section.focus };
+                            next[index] = {
+                              ...section,
+                              title: rowTitle.trim(),
+                              focus: rowFocus.trim() || section.focus,
+                            };
                             onEditSections(next);
                           }
                           setEditingRow(null);

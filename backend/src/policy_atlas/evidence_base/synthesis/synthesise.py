@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
@@ -5366,6 +5367,25 @@ def _artefact_summary_detail(
     }
 
 
+# Deterministic floor under the judge (review 028): the prompt's length and
+# no-citations rules were instruction-only, so a faithful-but-oversized or
+# citation-carrying summary could persist as verified. Ceilings run 1.5x the
+# prompt's ask — a hard stop for the pathological case, not a style check.
+_SUMMARY_CITATION_RE = re.compile(r"\[\d+\]")
+_SUMMARY_LENGTH_CEILING = {"artefact": 750}
+_SUMMARY_LENGTH_CEILING_DEFAULT = 300
+
+
+def _summary_format_violation(summary: str, *, seed: dict[str, Any]) -> str | None:
+    """Return the deterministic-format failure reason, or ``None`` when clean."""
+    ceiling = _SUMMARY_LENGTH_CEILING.get(str(seed.get("kind")), _SUMMARY_LENGTH_CEILING_DEFAULT)
+    if len(summary) > ceiling:
+        return "over_length"
+    if _SUMMARY_CITATION_RE.search(summary):
+        return "citation_markers"
+    return None
+
+
 def _write_and_judge_summary(
     *,
     synthesis_backend: SynthesisBackend,
@@ -5380,6 +5400,20 @@ def _write_and_judge_summary(
             emitted, usage = synthesis_backend.write_block_summary(seed)
             writer_calls += 1
             totals.add(usage)
+            format_reason = _summary_format_violation(emitted.summary, seed=seed)
+            if format_reason is not None:
+                log.warning("synthesise.summary_format_violation", reason=format_reason)
+                if attempt < SUMMARY_REGENERATE_CAP:
+                    continue
+                return {
+                    "status": "failed",
+                    "summary": None,
+                    "reason": format_reason,
+                    "provider_failure": False,
+                    "writer_calls": writer_calls,
+                    "judge_calls": judge_calls,
+                    "usage_totals": totals.payload(),
+                }
             verdict, usage = synthesis_backend.judge_summary(
                 summary=emitted.summary, detail=detail
             )

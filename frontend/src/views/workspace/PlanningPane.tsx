@@ -26,20 +26,10 @@ import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
 import { PlanCard } from "./PlanCard";
-import { COMPONENT_LABEL } from "./planVocabulary";
+import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
-
-const RUN_BLOCK_STATUS: Record<string, string> = {
-  running: "running",
-  paused: "paused",
-  succeeded: "completed",
-  degraded: "completed with gaps",
-  failed: "failed",
-  interrupted: "interrupted",
-  aborted: "stopped",
-};
 
 /**
  * Assign each run its turn boundary and each decision its run block. Planning
