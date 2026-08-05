@@ -48,6 +48,8 @@ staging-user:
 # (backend/.dev-issuer, gitignored), mints a fresh 4h token, and injects it
 # as VITE_DEV_TOKEN so the SPA signs in by itself.
 dev:
+	@! lsof -ti :8000 -sTCP:LISTEN >/dev/null || \
+	  { echo "port 8000 already in use:"; lsof -i :8000 -sTCP:LISTEN; exit 1; }
 	@test -d backend/.dev-issuer || \
 	  (cd backend && uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer)
 	@(trap 'kill 0' INT TERM EXIT; \
