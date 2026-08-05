@@ -123,8 +123,13 @@ export function Composer({
           disabled={disabled}
           className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-meta [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
-        <Button type="submit" disabled={sendDisabled || value.trim().length === 0}>
-          Send
+        <Button
+          type="submit"
+          aria-label="Send"
+          className="h-14 text-heading"
+          disabled={sendDisabled || value.trim().length === 0}
+        >
+          ↑
         </Button>
       </form>
       <p className="mt-1 text-caption text-grey">Enter to send · Shift+Enter for a new line</p>
@@ -414,10 +419,10 @@ export function PlanningPane({
         }}
         className="flex flex-1 flex-col overflow-y-auto px-4 py-4"
       >
-        {/* Bottom-anchor: pushes a short thread to the composer end;
-            the landing prompt centres instead. */}
-        {!landing && <div aria-hidden="true" className="mt-auto" />}
-        <div ref={contentRef} className={landing ? "my-auto space-y-3" : "space-y-3"}>
+        {/* Bottom-anchor: pushes a short thread to the composer end; the
+            landing prompt sits in the top third (1:2 spacer split). */}
+        <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
+        <div ref={contentRef} className="space-y-3">
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-caption text-grey">
             Loading your planning conversation…
@@ -545,6 +550,7 @@ export function PlanningPane({
           />
         )}
         </div>
+        {landing && <div aria-hidden="true" className="flex-[2]" />}
       </div>
 
       <div className="border-t border-line px-4 py-3">
@@ -559,7 +565,11 @@ export function PlanningPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={runActive ? "Replanning is available after the run" : "What do you need evidence on?"}
+          placeholder={
+            runActive
+              ? "Replanning is available after the run"
+              : "Describe the policy question you need evidence for."
+          }
           disabled={runActive}
           sendDisabled={composerDisabled}
         />

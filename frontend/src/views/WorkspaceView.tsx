@@ -31,9 +31,13 @@ export function WorkspaceView() {
   }
 
   if (!hasRun) {
+    // Full-bleed white page (no grey gutters, no column borders — owner,
+    // 2026-08-05); the readable measure lives on the inner column.
     return (
-      <main className="mx-auto h-[calc(100svh-58px)] max-w-[760px] bg-paper lg:border-x lg:border-line">
-        <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
+      <main className="h-[calc(100svh-58px)] bg-paper">
+        <div className="mx-auto h-full max-w-[760px]">
+          <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
+        </div>
       </main>
     );
   }
