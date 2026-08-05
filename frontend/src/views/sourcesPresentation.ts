@@ -2,7 +2,7 @@ import type { components } from "../api/gen/types";
 
 type EvidenceItem = components["schemas"]["EvidenceItemOut"];
 
-export type EvidenceSortField = "title" | "year" | "type" | "strength" | "status";
+export type EvidenceSortField = "title" | "year" | "type" | "strength" | "status" | "relevance";
 export type SortOrder = "asc" | "desc";
 
 /**
@@ -22,6 +22,9 @@ export const SOURCE_SORT_COLUMNS: ReadonlyArray<{
   { key: "type", label: "Evidence type", defaultOrder: "asc" },
   { key: "strength", label: "Evidence strength", defaultOrder: "asc" },
   { key: "status", label: "Status", defaultOrder: "asc" },
+  // Relevance = the p(relevant) spectrum; desc (the table default) reads
+  // confidently-relevant → uncertain → confidently-irrelevant.
+  { key: "relevance", label: "Relevant", defaultOrder: "desc" },
 ];
 
 /** Cycle a sources-table header click: none → the column's own default
@@ -64,13 +67,37 @@ export function readDepthLabel(
   return null;
 }
 
-/** Human sentences for the backend's reason codes — raw codes never render. */
+/** Human sentences for the backend's reason codes — raw codes never render.
+ *  The fetch codes mirror `ingest_full_text`'s failure vocabulary. */
 const HUMAN_REASON: Record<string, string> = {
   title_only: "Screened on the title only",
   title_abstract: "Screened on the title and abstract",
   fetch_failed: "The full text couldn't be fetched",
   parse_failed: "The document couldn't be parsed",
+  no_url: "No full-text link was available",
+  paywall: "The full text is behind a paywall",
+  not_found: "The full-text link no longer works",
+  too_large: "The document was too large to process",
+  timeout: "The fetch timed out",
+  corrupt: "The file was corrupt",
+  no_text_layer: "The PDF had no extractable text",
+  thin_text: "The document contained too little text to use",
+  empty: "The fetched document was empty",
+  blocked: "The publisher blocked the fetch",
+  blocked_by_host: "The publisher's site blocked the fetch",
+  fetch_error: "The fetch failed",
 };
+
+/** Humanize a backend reason code; unknown snake_case codes de-snake rather
+ *  than render as variables, anything else passes through untouched. */
+export function humanReason(code: string): string {
+  if (HUMAN_REASON[code] !== undefined) return HUMAN_REASON[code];
+  if (/^[a-z0-9_]+$/.test(code)) {
+    const phrase = code.replaceAll("_", " ");
+    return phrase.charAt(0).toUpperCase() + phrase.slice(1);
+  }
+  return code;
+}
 
 /**
  * The Abstract-only hover: why the full text wasn't read, in plain words.
@@ -81,9 +108,8 @@ export function readDepthHint(
 ): string | null {
   if (item.read_in_full) return null;
   if (item.status === "unavailable") {
-    const detail = item.status_reason ? HUMAN_REASON[item.status_reason] : undefined;
-    return detail !== undefined
-      ? `${detail} — only the abstract was read.`
+    return item.status_reason
+      ? `${humanReason(item.status_reason)} — only the abstract was read.`
       : "The full text couldn't be obtained — only the abstract was read.";
   }
   return "The full text hasn't been read — screening and appraisal used the title and abstract.";
@@ -137,9 +163,9 @@ export function screeningDetails(
   if (item.screen_basis === "title_abstract") details.push(["Read basis", "Title and abstract"]);
   if (item.screen_stage === 2) details.push(["Screening stage", "Confirmed against full text"]);
   // status_reason echoes screen_basis for screened-out rows (a duplicate) and
-  // carries backend codes elsewhere — humanize known codes, skip duplicates.
+  // carries backend codes elsewhere — humanize codes, skip duplicates.
   if (item.status_reason && item.status_reason !== item.screen_basis) {
-    details.push(["Reason", HUMAN_REASON[item.status_reason] ?? item.status_reason]);
+    details.push(["Reason", humanReason(item.status_reason)]);
   }
   return details;
 }

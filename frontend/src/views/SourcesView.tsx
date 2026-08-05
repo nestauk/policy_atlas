@@ -10,6 +10,7 @@ import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
 import {
@@ -28,9 +29,9 @@ import {
 } from "./sourcesPresentation";
 
 const STATUS_FILTERS = [
+  { key: "all", label: "All" },
   { key: "Included", label: "Included" },
   { key: "screened_out", label: "Screened out" },
-  { key: "all", label: "All" },
 ] as const;
 
 /** Sources: collection-true server filters and a URL-addressable source dossier. */
@@ -41,15 +42,16 @@ export function SourcesView() {
   useDocumentTitle(project.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
-  // Default view = Included (owner, 2026-08-05); "all" is the explicit opt-in.
   const statusFilter =
-    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "Included";
+    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "all";
   const citedFilter = searchParams.get("cited") === "true";
   const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
   const typeFilter = searchParams.get("type") ?? undefined;
   const strengthFilter = STRENGTH_FILTER_OPTIONS.find(
     (value) => value === searchParams.get("strength"),
   );
+  const yearFrom = parseYearParam(searchParams.get("year_from"));
+  const yearTo = parseYearParam(searchParams.get("year_to"));
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
   const sourceId = searchParams.get("source");
@@ -68,17 +70,23 @@ export function SourcesView() {
   // Evidence-type filter options come from the landscape distribution — the
   // same closed set the classification wrote for this project.
   const evidenceTypeOptions = Object.keys(landscape.data?.evidence_types ?? {}).sort();
+  // No explicit sort → the relevance spectrum, descending (owner default:
+  // confidently relevant → uncertain → confidently irrelevant).
+  const effectiveSort = sortField ?? "relevance";
+  const effectiveOrder = sortField !== null ? sortOrder : "desc";
   const evidence = useEvidence(projectId, {
     page,
     page_size: 50,
     status: statusFilter === "all" ? undefined : [statusFilter],
     cited: citedFilter || undefined,
-    sort: sortField ?? undefined,
-    order: sortOrder ?? undefined,
+    sort: effectiveSort,
+    order: effectiveOrder ?? undefined,
     theme: themeFilter,
     origin: originFilter,
     evidence_type: typeFilter,
     strength: strengthFilter,
+    year_from: yearFrom,
+    year_to: yearTo,
   });
   const dossier = useSourceDossier(projectId, sourceId);
   const findings = useFindings(projectId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
@@ -119,7 +127,7 @@ export function SourcesView() {
               type="button"
               aria-pressed={statusFilter === filter.key}
               onClick={() => updateParams((next) => {
-                if (filter.key === "Included") next.delete("status");
+                if (filter.key === "all") next.delete("status");
                 else next.set("status", filter.key);
                 next.delete("page");
               })}
@@ -187,16 +195,28 @@ export function SourcesView() {
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[0]}
                   className="px-4 py-3"
-                  activeSort={sortField}
-                  activeOrder={sortOrder}
+                  activeSort={effectiveSort}
+                  activeOrder={effectiveOrder}
                   onSort={handleSort}
                 />
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[1]}
-                  activeSort={sortField}
-                  activeOrder={sortOrder}
+                  activeSort={effectiveSort}
+                  activeOrder={effectiveOrder}
                   onSort={handleSort}
-                />
+                >
+                  <YearRangeFilter
+                    from={yearFrom}
+                    to={yearTo}
+                    onChange={(from, to) => updateParams((next) => {
+                      if (from !== undefined) next.set("year_from", String(from));
+                      else next.delete("year_from");
+                      if (to !== undefined) next.set("year_to", String(to));
+                      else next.delete("year_to");
+                      next.delete("page");
+                    })}
+                  />
+                </SortableColumnHeader>
                 <th className="px-3 py-3">
                   Origin
                   <HeaderFilter
@@ -213,8 +233,8 @@ export function SourcesView() {
                 </th>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[2]}
-                  activeSort={sortField}
-                  activeOrder={sortOrder}
+                  activeSort={effectiveSort}
+                  activeOrder={effectiveOrder}
                   onSort={handleSort}
                 >
                   <HeaderFilter
@@ -231,8 +251,8 @@ export function SourcesView() {
                 </SortableColumnHeader>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[3]}
-                  activeSort={sortField}
-                  activeOrder={sortOrder}
+                  activeSort={effectiveSort}
+                  activeOrder={effectiveOrder}
                   onSort={handleSort}
                 >
                   <HeaderFilter
@@ -247,11 +267,16 @@ export function SourcesView() {
                     })}
                   />
                 </SortableColumnHeader>
-                <th className="px-3 py-3">Relevant</th>
+                <SortableColumnHeader
+                  column={SOURCE_SORT_COLUMNS[5]}
+                  activeSort={effectiveSort}
+                  activeOrder={effectiveOrder}
+                  onSort={handleSort}
+                />
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[4]}
-                  activeSort={sortField}
-                  activeOrder={sortOrder}
+                  activeSort={effectiveSort}
+                  activeOrder={effectiveOrder}
                   onSort={handleSort}
                 />
                 <th className="px-3 py-3">Cited</th>
@@ -393,21 +418,40 @@ function SortableColumnHeader({
   const ariaSort = order === "asc" ? "ascending" : order === "desc" ? "descending" : "none";
   return (
     <th className={className} aria-sort={ariaSort}>
-      <button
-        type="button"
-        aria-label={`Sort by ${column.label.toLowerCase()}`}
-        onClick={() => onSort(column.key)}
-        className="flex cursor-pointer items-center gap-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
-      >
-        {column.label}
-        {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
-      </button>
-      {children}
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={`Sort by ${column.label.toLowerCase()}`}
+          onClick={() => onSort(column.key)}
+          className="flex cursor-pointer items-center gap-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+        >
+          {column.label}
+          {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
+        </button>
+        {children}
+      </span>
     </th>
   );
 }
 
-/** A compact facet filter mounted inside a column header. */
+function FunnelIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={`h-3.5 w-3.5 ${active ? "text-blue" : "text-grey"}`}
+      fill={active ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 5h18l-7 8v5l-4 2v-7L3 5Z" />
+    </svg>
+  );
+}
+
+/** A facet filter behind a funnel icon beside the header label: the icon IS
+ *  a native select (invisible overlay), so clicking it opens the dropdown. */
 function HeaderFilter({
   label,
   allLabel,
@@ -422,19 +466,94 @@ function HeaderFilter({
   onChange: (value: string) => void;
 }) {
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      className={`mt-1 block max-w-36 cursor-pointer border bg-paper px-1 py-0.5 text-caption font-medium normal-case tracking-normal focus-visible:outline-2 focus-visible:outline-blue ${
-        value === "" ? "border-line-2 text-grey" : "border-blue text-blue"
-      }`}
-    >
-      <option value="">{allLabel}</option>
-      {options.map((option) => (
-        <option key={option.value} value={option.value}>{option.label}</option>
-      ))}
-    </select>
+    <span className="relative inline-flex h-5 w-5 items-center justify-center">
+      <FunnelIcon active={value !== ""} />
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0 focus-visible:outline-2 focus-visible:outline-blue"
+      >
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
+function parseYearParam(value: string | null): number | undefined {
+  const year = Number(value);
+  return value !== null && Number.isInteger(year) && year >= 1000 && year <= 3000
+    ? year
+    : undefined;
+}
+
+/** The Year column's range filter: a funnel icon opening a two-field popover. */
+function YearRangeFilter({
+  from,
+  to,
+  onChange,
+}: {
+  from: number | undefined;
+  to: number | undefined;
+  onChange: (from: number | undefined, to: number | undefined) => void;
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger
+        aria-label="Filter by year range"
+        className="inline-flex h-5 w-5 cursor-pointer items-center justify-center focus-visible:outline-2 focus-visible:outline-blue"
+      >
+        <FunnelIcon active={from !== undefined || to !== undefined} />
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-3">
+        {/* Uncontrolled + apply-on-blur/Enter so partial typing ("20…")
+            never gets clobbered by a controlled reset. */}
+        <div className="flex items-center gap-2">
+          <label className="flex-1 text-caption font-semibold normal-case tracking-normal text-grey">
+            From
+            <input
+              key={`from-${from ?? "any"}`}
+              type="number"
+              inputMode="numeric"
+              defaultValue={from ?? ""}
+              onBlur={(event) => onChange(parseYearParam(event.target.value || null), to)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              placeholder="Any"
+              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-caption font-medium text-navy focus-visible:outline-2 focus-visible:outline-blue"
+            />
+          </label>
+          <label className="flex-1 text-caption font-semibold normal-case tracking-normal text-grey">
+            To
+            <input
+              key={`to-${to ?? "any"}`}
+              type="number"
+              inputMode="numeric"
+              defaultValue={to ?? ""}
+              onBlur={(event) => onChange(from, parseYearParam(event.target.value || null))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              placeholder="Any"
+              className="mt-1 w-full border border-line-2 bg-paper px-2 py-1 text-caption font-medium text-navy focus-visible:outline-2 focus-visible:outline-blue"
+            />
+          </label>
+        </div>
+        {(from !== undefined || to !== undefined) && (
+          <button
+            type="button"
+            onClick={() => onChange(undefined, undefined)}
+            className="mt-2 cursor-pointer text-caption font-semibold normal-case tracking-normal text-blue hover:underline"
+          >
+            Clear
+          </button>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

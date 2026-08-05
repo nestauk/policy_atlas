@@ -2902,12 +2902,14 @@ export interface operations {
                 page_size?: number;
                 status?: ("found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable" | "Included")[] | null;
                 cited?: boolean | null;
-                sort?: ("title" | "year" | "type" | "strength" | "status") | null;
+                sort?: ("title" | "year" | "type" | "strength" | "status" | "relevance") | null;
                 order?: ("asc" | "desc") | null;
                 theme?: string | null;
                 origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
                 evidence_type?: string | null;
                 strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak") | null;
+                year_from?: number | null;
+                year_to?: number | null;
             };
             header?: never;
             path: {

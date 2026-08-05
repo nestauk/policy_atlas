@@ -5275,7 +5275,8 @@
                     "year",
                     "type",
                     "strength",
-                    "status"
+                    "status",
+                    "relevance"
                   ],
                   "type": "string"
                 },
@@ -5382,6 +5383,42 @@
                 }
               ],
               "title": "Strength"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3000,
+                  "minimum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3000,
+                  "minimum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year To"
             }
           }
         ],

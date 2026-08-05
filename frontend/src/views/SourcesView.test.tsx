@@ -109,7 +109,8 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     const yearButton = screen.getByRole("button", { name: "Sort by year" });
     const yearHeader = screen.getByRole("columnheader", { name: /Year/ });
     expect(yearHeader).toHaveAttribute("aria-sort", "none");
-    expect(lastEvidenceQuery()).toMatchObject({ sort: undefined, order: undefined });
+    // No explicit sort → the relevance-spectrum default.
+    expect(lastEvidenceQuery()).toMatchObject({ sort: "relevance", order: "desc" });
 
     // Year's first click lands on desc — the server's own default for `sort=year`.
     await user.click(yearButton);
@@ -125,7 +126,8 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     await user.click(screen.getByRole("button", { name: "Sort by year" }));
     expect(screen.getByTestId("location")).not.toHaveTextContent("sort=");
     expect(screen.getByRole("columnheader", { name: /Year/ })).toHaveAttribute("aria-sort", "none");
-    expect(lastEvidenceQuery()).toMatchObject({ sort: undefined, order: undefined });
+    // Cycling off an explicit sort falls back to the relevance default.
+    expect(lastEvidenceQuery()).toMatchObject({ sort: "relevance", order: "desc" });
   });
 
   it("starts a non-year column ascending on its first click", async () => {
@@ -173,18 +175,37 @@ describe("SourcesView — fixture-driven render (mock mode)", () => {
 });
 
 describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", () => {
-  it("defaults the status view to Included and sends it to the query", () => {
+  it("defaults to All on the relevance spectrum, Relevant header marked descending", () => {
     renderSources();
-    expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
-    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
+    expect(lastEvidenceQuery()).toMatchObject({
+      status: undefined,
+      sort: "relevance",
+      order: "desc",
+    });
+    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("columnheader", { name: /Relevant/ })).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
   });
 
-  it("All is the explicit opt-in: sets status=all in the URL and drops the server filter", async () => {
+  it("Included narrows via the status param", async () => {
     const user = userEvent.setup();
     renderSources();
-    await user.click(screen.getByRole("button", { name: "All" }));
-    expect(screen.getByTestId("location")).toHaveTextContent("status=all");
-    expect(lastEvidenceQuery()).toMatchObject({ status: undefined });
+    await user.click(screen.getByRole("button", { name: "Included" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("status=Included");
+    expect(lastEvidenceQuery()).toMatchObject({ status: ["Included"] });
+  });
+
+  it("binds the Year header's range filter to the query", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(screen.getByRole("button", { name: "Filter by year range" }));
+    const fromInput = screen.getByLabelText("From");
+    await user.type(fromInput, "2021");
+    await user.tab();
+    expect(screen.getByTestId("location")).toHaveTextContent("year_from=2021");
+    expect(lastEvidenceQuery()).toMatchObject({ year_from: 2021 });
   });
 
   it("binds the header-mounted origin, evidence type and strength filters to the query", async () => {

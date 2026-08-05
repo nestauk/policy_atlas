@@ -1659,6 +1659,40 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             assert dossier["screen_reason"] == "UK primary cohort in scope"
             assert dossier["classification_reason"] == "Systematic review of trials"
             assert dossier["read_in_full"] is True
+
+            # Relevance sort (default direction desc): the p(relevant)
+            # spectrum — relevant by falling confidence (0.9 seeded default
+            # for both relevant rows), then not-relevant by rising confidence,
+            # unscreened rows last as nulls.
+            spectrum = client.get(
+                f"/api/v1/projects/{project_id}/evidence?sort=relevance", headers=owner
+            ).json()
+            ranks = [row["screen_status"] for row in spectrum["data"]]
+            assert ranks[:3].count("relevant") == 2
+            assert ranks[2] == "not_relevant"
+            assert all(status is None for status in ranks[3:])
+
+            # Year bounds are collection-true and drop unknown-year rows.
+            with engine.begin() as conn:
+                conn.execute(
+                    update(source_snapshot)
+                    .where(
+                        source_snapshot.c.source_snapshot_id
+                        == conn.execute(
+                            select(project_source_snapshot.c.source_snapshot_id).where(
+                                project_source_snapshot.c.project_source_snapshot_id
+                                == by_title["Screened out"]
+                            )
+                        ).scalar_one()
+                    )
+                    .values(metadata={"title": "Screened out", "year": 2015})
+                )
+            bounded = client.get(
+                f"/api/v1/projects/{project_id}/evidence?year_from=2014&year_to=2016",
+                headers=owner,
+            ).json()
+            assert bounded["pagination"]["total_items"] == 1
+            assert bounded["data"][0]["title"] == "Screened out"
         finally:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)

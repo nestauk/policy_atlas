@@ -550,12 +550,14 @@ def evidence_page(
     *,
     statuses: Iterable[str] | None = None,
     cited: bool | None = None,
-    sort: Literal["title", "year", "type", "strength", "status"] | None = None,
+    sort: Literal["title", "year", "type", "strength", "status", "relevance"] | None = None,
     order: Literal["asc", "desc"] | None = None,
     theme: uuid.UUID | None = None,
     origin: str | None = None,
     evidence_type: str | None = None,
     strength: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> Page[EvidenceItemOut]:
     """Return one evidence page, deriving status project-wide before paging.
 
@@ -684,18 +686,27 @@ def evidence_page(
         item_origin = _origin(row.origin, metadata)
         evidence_type_value = classification.primary_evidence_type if classification else None
         tier = SCORE_LABELS.get(appraisal.quality_score) if appraisal else None
+        year_value = _year(metadata)
         if origin is not None and item_origin != origin:
             continue
         if evidence_type is not None and evidence_type_value != evidence_type:
             continue
         if strength is not None and tier != strength:
             continue
+        # Year bounds drop unknown-year rows — a bounded view never implies
+        # an unknown year satisfied the bound.
+        if (year_from is not None or year_to is not None) and (
+            year_value is None
+            or (year_from is not None and year_value < year_from)
+            or (year_to is not None and year_value > year_to)
+        ):
+            continue
         sortable_items.append(
             (
                 EvidenceItemOut(
                     source_id=row.project_source_snapshot_id,
                     title=_title(metadata, row.source_locator),
-                    year=_year(metadata),
+                    year=year_value,
                     venue=_venue(metadata),
                     origin=item_origin,
                     status=cast(Any, status),
@@ -721,7 +732,7 @@ def evidence_page(
             )
         )
     if sort is not None:
-        direction = order or ("desc" if sort == "year" else "asc")
+        direction = order or ("desc" if sort in ("year", "relevance") else "asc")
 
         def compare(
             left: tuple[EvidenceItemOut, int | None],
@@ -751,18 +762,32 @@ _EVIDENCE_STATUS_SORT_RANK = {
 }
 
 
+def _relevance_rank(item: EvidenceItemOut) -> float | None:
+    """The p(relevant) spectrum: descending order = confidently relevant →
+    uncertain → confidently irrelevant (owner, 2026-08-05). Retracted pins to
+    the bottom of the screened set; unscreened rows are nulls (always last).
+    """
+    if item.screen_status == "relevant":
+        return item.screen_confidence if item.screen_confidence is not None else 0.5
+    if item.screen_status == "not_relevant":
+        return 1.0 - item.screen_confidence if item.screen_confidence is not None else 0.5
+    if item.screen_status == "excluded_retracted":
+        return -1.0
+    return None
+
+
 def _compare_evidence_sort(
     left: tuple[EvidenceItemOut, int | None],
     right: tuple[EvidenceItemOut, int | None],
     *,
-    sort: Literal["title", "year", "type", "strength", "status"],
+    sort: Literal["title", "year", "type", "strength", "status", "relevance"],
     direction: Literal["asc", "desc"],
 ) -> int:
     """Compare two already-projected evidence rows with nulls always last."""
     left_item, left_score = left
     right_item, right_score = right
-    left_value: str | int | None
-    right_value: str | int | None
+    left_value: str | int | float | None
+    right_value: str | int | float | None
     if sort == "title":
         left_value, right_value = left_item.title.casefold(), right_item.title.casefold()
     elif sort == "year":
@@ -771,6 +796,8 @@ def _compare_evidence_sort(
         left_value, right_value = left_item.evidence_type, right_item.evidence_type
     elif sort == "strength":
         left_value, right_value = left_score, right_score
+    elif sort == "relevance":
+        left_value, right_value = _relevance_rank(left_item), _relevance_rank(right_item)
     else:
         left_value = _EVIDENCE_STATUS_SORT_RANK[left_item.status]
         right_value = _EVIDENCE_STATUS_SORT_RANK[right_item.status]
@@ -784,7 +811,7 @@ def _compare_evidence_sort(
         right_text = cast(str, right_value)
         result = -1 if left_value < right_text else 1
     else:
-        right_rank = cast(int, right_value)
+        right_rank = cast(float, right_value)
         result = -1 if left_value < right_rank else 1
     return result if direction == "asc" else -result
 

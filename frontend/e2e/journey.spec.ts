@@ -203,18 +203,14 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("link", { name: "Sources", exact: true }).click();
     const sourceRows = page.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
-    // Default view = Included (7 fixture rows + header), not All.
-    await expect(sourceRows).toHaveCount(8);
-
-    const sourceFilters = page.getByRole("group", { name: "Filter sources" });
-    await sourceFilters.getByRole("button", { name: "All" }).click();
-    await expect(page).toHaveURL(/[?&]status=all/);
+    // Default view = All, sorted on the relevance spectrum.
     await expect(sourceRows).toHaveCount(10);
-    // The retracted verdict lives in the Relevant column's hover button now.
+    // The retracted verdict lives in the Relevant column's hover button.
     await expect(
       page.getByRole("button", { name: "Excluded — retracted: screening details" }),
     ).toBeVisible();
 
+    const sourceFilters = page.getByRole("group", { name: "Filter sources" });
     await sourceFilters.getByRole("button", { name: "Screened out" }).click();
     await expect(page).toHaveURL(/[?&]status=screened_out/);
     await expect(sourceRows).toHaveCount(2);

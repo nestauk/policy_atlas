@@ -14,6 +14,8 @@ describe("queryKeys.evidence", () => {
       { origin: "Overton" },
       { evidence_type: "Systematic review" },
       { strength: "Weak" },
+      { year_from: 2019 },
+      { year_to: 2024 },
     ];
     for (const query of variants) {
       expect(queryKeys.evidence("p", query)).not.toEqual(base);

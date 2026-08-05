@@ -20,7 +20,7 @@ export const queryKeys = {
   landscape: (projectId: string, scope?: "cited") =>
     ["projects", projectId, "landscape", scope] as const,
   evidence: (projectId: string, query?: EvidenceQuery) =>
-    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength] as const,
+    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
   findings: (projectId: string, query?: FindingsQuery) =>
     ["projects", projectId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (projectId: string, page?: number, pageSize?: number) =>
@@ -59,13 +59,15 @@ export interface EvidenceQuery extends PageQuery {
   status?: EvidenceStatusFilter[];
   cited?: boolean;
   /** Server-side sort key (default unsorted); `order` is 422 without it. */
-  sort?: "title" | "year" | "type" | "strength" | "status";
+  sort?: "title" | "year" | "type" | "strength" | "status" | "relevance";
   order?: "asc" | "desc";
   /** Theme id (`ThemeOut.theme_id`) — collection-true across pages. */
   theme?: string;
   origin?: "OpenAlex" | "Overton" | "Uploaded";
   evidence_type?: string;
   strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak";
+  year_from?: number;
+  year_to?: number;
 }
 
 export interface FindingsQuery extends PageQuery {

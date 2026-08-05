@@ -50,6 +50,14 @@ const APPRAISAL_TIER_SORT_RANK: Record<string, number> = {
   "High confidence": 2,
 };
 
+/** Mirrors `repository._relevance_rank`: the p(relevant) spectrum. */
+function mockRelevanceRank(item: EvidenceItemOut): number | null {
+  if (item.screen_status === "relevant") return item.screen_confidence ?? 0.5;
+  if (item.screen_status === "not_relevant") return 1 - (item.screen_confidence ?? 0.5);
+  if (item.screen_status === "excluded_retracted") return -1;
+  return null;
+}
+
 /** Mirrors `repository._compare_evidence_sort`: nulls always sort last,
  *  regardless of `direction`. */
 function compareMockEvidenceSort(
@@ -76,6 +84,9 @@ function compareMockEvidenceSort(
     rightValue = right.appraisal_tier !== null && right.appraisal_tier !== undefined
       ? APPRAISAL_TIER_SORT_RANK[right.appraisal_tier] ?? null
       : null;
+  } else if (sort === "relevance") {
+    leftValue = mockRelevanceRank(left);
+    rightValue = mockRelevanceRank(right);
   } else {
     leftValue = EVIDENCE_STATUS_SORT_RANK[left.status];
     rightValue = EVIDENCE_STATUS_SORT_RANK[right.status];
@@ -268,17 +279,25 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       const included = ["relevant", "not_selected", "selected", "read_in_full", "findings_extracted", "cited", "unavailable"];
       const statusMatches = statuses.length === 0 || statuses.some((status) => status === item.status || (status === "Included" && included.includes(item.status)));
       const themeMatches = theme === null || (mockEvidenceThemeIds[item.source_id] ?? []).includes(theme);
+      const yearFrom = url.searchParams.get("year_from");
+      const yearTo = url.searchParams.get("year_to");
+      const yearMatches =
+        (yearFrom === null && yearTo === null)
+        || (item.year !== null && item.year !== undefined
+          && (yearFrom === null || item.year >= Number(yearFrom))
+          && (yearTo === null || item.year <= Number(yearTo)));
       return statusMatches && (cited !== "true" || item.cited) && themeMatches
         && (origin === null || item.origin === origin)
         && (evidenceType === null || item.evidence_type === evidenceType)
-        && (strength === null || item.appraisal_tier === strength);
+        && (strength === null || item.appraisal_tier === strength)
+        && yearMatches;
     });
     // Server-side-equivalent sort (collection-true, matches
     // `repository._compare_evidence_sort`): `order` defaults to the
     // column's own natural direction (desc for year, asc otherwise) and
     // nulls always sort last regardless of direction.
     if (sort !== null) {
-      const direction = order ?? (sort === "year" ? "desc" : "asc");
+      const direction = order ?? (sort === "year" || sort === "relevance" ? "desc" : "asc");
       rows = [...rows].sort((left, right) => compareMockEvidenceSort(left, right, sort, direction));
     }
     return json(page(rows));
