@@ -1,10 +1,10 @@
 # Knowledge update log
 
-## 2026-08-06 (task 029)
+## 2026-08-06 (task 030)
 * **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — caps
   owner-set at rapid 50 / standard 100 / deep 200 per backend per round; the wall clock is gone at
   every depth (the runner's round gate + record caps replaced it), and the multi-round loop the
-  caps were sized for is now actually wired (runner-orchestrated rounds, task 029).
+  caps were sized for is now actually wired (runner-orchestrated rounds, task 030).
 
 ## 2026-08-05 (task 028 step 9 — owner live review)
 * **Creation**: Added
@@ -36,7 +36,7 @@
   Codex-no-Docker (already a delegated-practices rule, 027); nulls-first staging
   (already the wire-additions concept's core); a standalone "review-economy" concept
   (process, lives in the task-cycle skill + memory, not product knowledge).
-## 2026-08-04 (task 028)
+## 2026-08-04 (task 029)
 * **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — the
   total-volume bound named in the rule now exists (`record_cap_per_backend`, applied in
   `acquire_sources` after a rank-interleaved merge and after dedup), and a third instance of the

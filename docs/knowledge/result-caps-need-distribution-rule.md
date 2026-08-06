@@ -52,11 +52,11 @@ can consume another's allowance.
   sets `stop_all`, skipping every remaining query. Worse, backends run in order
   (`[openalex, overton]`), so a slow first backend costs the second one *all* of
   its calls — a whole evidence source, and the run still reported `adequate`.
-  Task 028 removed the clock for standard and deep for exactly this reason: a
+  Task 029 removed the clock for standard and deep for exactly this reason: a
   budget enforced by *stopping early* always truncates the tail of an ordered
   fan-out, and the tail is a specific set of queries and providers, not a random
   sample. Bound the volume instead, after the merge, where every query has
-  already had its turn. Task 029 removed rapid's clock too (with a rapid
+  already had its turn. Task 030 removed rapid's clock too (with a rapid
   record cap replacing its volume role): no depth has a time budget, and if a
   latency bound is ever needed it belongs at the runner as a step timeout,
   never inside the fan-out.
@@ -68,7 +68,7 @@ can consume another's allowance.
   snapshot in scope, and `acquire_sources` embeds each record as it persists it —
   so persisting a record is committing to both costs. That is why
   `record_cap_per_backend` trims *before* the write rather than filtering at
-  screening time. Owner-set (task 029): rapid 50 / standard 100 / deep 200 per
+  screening time. Owner-set (task 030): rapid 50 / standard 100 / deep 200 per
   backend per round — sized from methodology, not against the provider's
   willingness to return rows. Replace with a measurement from
   `scripts/eval_ground_truth/` (other branch), which scores search recall

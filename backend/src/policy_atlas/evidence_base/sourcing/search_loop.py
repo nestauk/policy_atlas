@@ -75,7 +75,7 @@ CallVerb = Literal[
 CallStatus = Literal["ok", "error"]
 ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
 
-# No wall clock at any depth (task 029): a time budget over an ordered fan-out
+# No wall clock at any depth (task 030): a time budget over an ordered fan-out
 # truncates the tail — a specific set of queries and providers, not a random
 # sample — and its breach once cost the entire Overton leg while the run still
 # reported 'adequate'. Volume is bounded at acquisition instead
@@ -572,7 +572,7 @@ def parse_search_directive(
     """Parse ``context["search"]`` using the fail-closed directive grammar.
 
     The former D5 ``target`` key was removed with ``TARGET_CONFIDENT_RELEVANT``
-    (task 029): the round cap is the budget, so there is no stop target to
+    (task 030): the round cap is the budget, so there is no stop target to
     override. A directive still carrying it is refused as an unknown key —
     honest refusal beats the silent no-op it previously compiled to.
 
@@ -938,7 +938,7 @@ def evaluate_deep_stop(
 ) -> StopDecision:
     """Evaluate round-loop stopping without touching the database.
 
-    There is deliberately no confident-relevant target (task 029): the round
+    There is deliberately no confident-relevant target (task 030): the round
     cap is the budget, and ``short_circuit`` is the yield-collapse early exit.
 
     Args:
@@ -1238,7 +1238,7 @@ def run_search(
 ) -> dict[str, Any]:
     """Execute the depth-graded search strategy and persist acquired records.
 
-    Every planned call runs to completion — there is no time budget (task 029:
+    Every planned call runs to completion — there is no time budget (task 030:
     a clock over the ordered fan-out truncated a specific tail, historically
     the whole Overton leg). Volume is bounded per round at acquisition by
     ``record_cap_per_backend``.

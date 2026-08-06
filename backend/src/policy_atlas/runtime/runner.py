@@ -827,7 +827,7 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
-        # Multi-round search gate (task 029): the walk is about to leave the
+        # Multi-round search gate (task 030): the walk is about to leave the
         # acquire→screen_abstract pair for the first post-screen component.
         # Standard/deep repeat the pair until the depth's round_cap or a yield
         # collapse; re-opening the two components hands the next round to the

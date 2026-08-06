@@ -927,7 +927,7 @@ def acquire_sources(
     #
     # Honest stop attribution (task 019 item 5): a clean run is 'completed',
     # never a claimed truncation. 'wall_clock_exceeded' left the vocabulary
-    # with the wall clock itself (task 029) — every planned call now runs.
+    # with the wall clock itself (task 030) — every planned call now runs.
     stop_condition = "error" if any_error else "completed"
     usable = totals["acquired"] + totals["already_acquired"]
     adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"

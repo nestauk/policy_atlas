@@ -32,13 +32,20 @@ pass, tab-IA fork). Contract:
 `docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
 `docs/tasks/028-ux-refinement/design-inputs.md`.
 
-Tasks `026-infra-deployment` (draft PR #33, Tier 4 — system **live** at
-`v3.policyatlas.uk`) and `027-frontend-uplift` (PR #36, Tier 3 — review
-stack adjudicated 2026-07-30, 32 fixes re-verified) are both at **step 9:
-human review + merge**. 027 branches from 026; 028 branches from 027;
-each PR re-targets `dev` as its parent merges — if a merge review touches
-files a stacked branch changed, that branch rebases before its own
-review. Known operational state: staging's OpenAI quota exhausted
+Tasks `026-infra-deployment` (PR #33, Tier 4 — system **live** at
+`v3.policyatlas.uk`), `027-frontend-uplift` (PR #44, Tier 3 — review
+stack adjudicated 2026-07-30, 32 fixes re-verified) and
+`028-ux-refinement` (PR #45) are **merged to `dev`**.
+
+Search-volume work carries the next two numbers, renumbered 2026-08-06
+when `028` was taken by the UX slice on `dev`: `029-search-volume-cap`
+(record caps per backend per round; standard/deep wall clocks removed —
+was `028-…`) and `030-multi-round-search` (rapid's clock removed, the
+runner-orchestrated round loop wired — was `029-…`). Both are plan-only
+docs; the code landed on branch `37-hotfix-remove-quota`. ADR numbers
+follow: `0028` is the UX slice's, so search-volume work starts at `0029`.
+
+Known operational state: staging's OpenAI quota exhausted
 2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
 (former 027 draft) stays deferred — contract draft at unpushed
 `a5c9708`.

@@ -59,7 +59,7 @@ relevant docs at the same generation. Repeated rounds reprocess nothing.
 
 ### 1. Per-backend screening caps — constants only (`search_loop.py`)
 
-The mechanism as built (task 028) is already what the owner wants: per-backend
+The mechanism as built (task 029) is already what the owner wants: per-backend
 rank-interleave across queries → dedupe → trim to `record_cap_per_backend`, cap
 checked before the identity guards (the dropped-twin fix and its regression test
 stand). Only the numbers change in `DEPTH_CONSTANTS`:
@@ -196,7 +196,7 @@ Mechanical work:
 
 ### 5. Docs
 
-- New `docs/tasks/029-multi-round-search/plan.md` (this file's content, adjusted) —
+- New `docs/tasks/030-multi-round-search/plan.md` (this file's content, adjusted) —
   wiring the loop is an architectural change; consider a short ADR ("search rounds are
   runner-orchestrated; component loop deleted with skeleton").
 - `docs/deferred.md`: discharge "Deep-round continuation loop is unwired" and the
