@@ -27,7 +27,7 @@ from policy_atlas.api.deps import (
 from policy_atlas.api.routers._common import owned_project, run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import capability_run, orchestration_plan
+from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 
@@ -149,6 +149,21 @@ def create_run(
             ).mappings().one_or_none()
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
+            approved_plan = OrchestrationPlan.model_validate(plan_row["payload"])
+            latest_completed_turn = conn.execute(
+                select(func.max(planning_transcript.c.turn_index))
+                .where(planning_transcript.c.project_id == project_id)
+                .where(planning_transcript.c.status == "completed")
+            ).scalar_one()
+            if (
+                approved_plan.source_turn_index is not None
+                and latest_completed_turn is not None
+                and approved_plan.source_turn_index < latest_completed_turn
+            ):
+                raise ApiConflict(
+                    "plan_stale",
+                    "the plan predates your latest planning message — review it, then start",
+                )
             existing_ids = {
                 row[0]
                 for row in conn.execute(

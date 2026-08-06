@@ -43,9 +43,8 @@ from tests.runtime.test_runner import _cleanup as _runner_cleanup
 
 # The exact console output ``CliIO.pause`` produces today for a known
 # steer-point pause (steer point "synthesis_shape", one fired trigger, a
-# compact bundle). Captured from the production render path; any change to
-# this string is a CLI-visible behaviour change and must be a deliberate,
-# reviewed diff — not a side effect of the park-disposition work.
+# compact bundle). Re-baselined deliberately for task 028: P4 is now the
+# report-plan-only floor, with regrouping moved to finding_groups.
 _GOLDEN_PAUSE_MENU = "\n".join(
     [
         "synthesise: check-in pending",
@@ -57,21 +56,14 @@ _GOLDEN_PAUSE_MENU = "\n".join(
         "  total_strata: 5",
         "Steering options:",
         "  1) Continue",
-        "  2) Synthesise as proposed — Proceed with the proposed synthesis plan "
-        "unchanged.",
-        "  3) Edit the synthesis sections — Set the synthesis sections yourself. "
-        "Provide the section titles and focus.",
-        "  4) Boost evidence type / quality tier in synthesis — Weight the "
-        "synthesis retrieval toward stronger-appraised evidence (type/tier "
-        "boosts; tag boosts are not offered).",
-        "  5) Re-group at a different granularity (replaces grouping) — "
-        "Re-group findings coarser or finer (D8); replaces the current "
-        "grouping.",
-        "  6) Re-group with guidance (replaces grouping) — Re-group findings "
-        "with your guidance (B3); replaces the current grouping. Provide the "
-        "guidance.",
-        "  7) Change steering mode",
-        "  8) Abort",
+        "  2) Write the report with these sections — The displayed plan is used "
+        "to write the report.",
+        "  3) Lean on the strongest evidence — The writing draws more heavily on "
+        "the highest-quality studies.",
+        "  4) Write the report with the edited sections — The sections as you "
+        "edited them are used to write the report.",
+        "  5) Change steering mode",
+        "  6) Abort",
         "  (or type your own steering instruction)",
     ]
 )
@@ -128,8 +120,8 @@ def test_cli_blocking_pause_header_and_options_substrings() -> None:
         "  covered_strata: 2",
         "Steering options:",
         "  1) Continue",
-        "  7) Change steering mode",
-        "  8) Abort",
+        "  5) Change steering mode",
+        "  6) Abort",
         "  (or type your own steering instruction)",
     ):
         assert expected_line in rendered, expected_line

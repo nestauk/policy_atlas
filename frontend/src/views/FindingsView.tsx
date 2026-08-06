@@ -82,16 +82,16 @@ function DefinitionRow({ label, value }: { label: string; value: string | null }
 function ExactWords({ quote, verified }: { quote?: string | null; verified?: boolean | null }) {
   return (
     <div>
-      <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-grey">
+      <h3 className="mb-2 text-caption font-bold uppercase tracking-wider text-grey">
         The exact words
       </h3>
       {typeof quote === "string" && quote !== "" ? (
-        <p className="text-[12.5px] italic leading-relaxed text-grey">
+        <p className="text-caption italic leading-relaxed text-grey">
           “{scrub(quote)}”{" "}
           {verified === true && <span className="not-italic text-green">✓ verified</span>}
         </p>
       ) : (
-        <p className="text-[12.5px] text-grey">No anchoring quote recorded.</p>
+        <p className="text-caption text-grey">No anchoring quote recorded.</p>
       )}
     </div>
   );
@@ -103,15 +103,15 @@ function IofExpansion({ finding }: { finding: IofFinding }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-grey">
+        <h3 className="mb-2 text-caption font-bold uppercase tracking-wider text-grey">
           Reported numbers
         </h3>
         {stats.length === 0 && finding.estimate_level === null ? (
-          <p className="text-[12.5px] text-grey">
+          <p className="text-caption text-grey">
             No numbers reported — recorded as direction only.
           </p>
         ) : (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12.5px]">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-caption">
             {stats.map(([label, value]) => (
               <DefinitionRow key={label} label={label} value={value} />
             ))}
@@ -154,10 +154,10 @@ function IcfExpansion({ finding }: { finding: IcfFinding }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-grey">
+        <h3 className="mb-2 text-caption font-bold uppercase tracking-wider text-grey">
           Context detail
         </h3>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12.5px]">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-caption">
           <DefinitionRow
             label="Context type"
             value={findingLabel(CONTEXT_TYPE_LABEL, finding.context_type)}
@@ -220,7 +220,7 @@ function FindingRow({
             aria-expanded={expanded}
             aria-label={`${expanded ? "Collapse" : "Expand"} finding: ${scrub(finding.intervention)}`}
             onClick={onToggle}
-            className="cursor-pointer text-[11px] text-grey focus-visible:outline-2 focus-visible:outline-blue"
+            className="cursor-pointer text-caption text-grey focus-visible:outline-2 focus-visible:outline-blue"
           >
             <span aria-hidden="true">{expanded ? "▾" : "▸"}</span>
           </button>
@@ -234,17 +234,17 @@ function FindingRow({
             )}
           </td>
         )}
-        <td className="max-w-[260px] px-3 py-3 text-[13px] font-medium leading-snug text-navy">
+        <td className="max-w-[260px] px-3 py-3 text-meta font-medium leading-snug text-navy">
           {scrub(finding.intervention)}
         </td>
-        <td className="max-w-[240px] px-3 py-3 text-[13px] leading-snug text-navy">
+        <td className="max-w-[240px] px-3 py-3 text-meta leading-snug text-navy">
           {finding.profile === "iof" ? scrub(finding.outcome) : scrub(finding.claim)}
         </td>
         <td className="px-3 py-3">
           {finding.profile === "iof" && directionLabel !== null && (
             <Tooltip
               content={
-                <span className="text-xs">
+                <span className="text-caption">
                   {[finding.population, finding.study_design]
                     .filter((value): value is string => typeof value === "string" && value !== "")
                     .map((value) => scrub(value))
@@ -266,7 +266,7 @@ function FindingRow({
         <td className="px-3 py-3">
           {group !== null && <Chip tone="soft">{scrub(group)}</Chip>}
         </td>
-        <td className="max-w-[220px] px-3 py-3 text-[12px] leading-snug">
+        <td className="max-w-[220px] px-3 py-3 text-caption leading-snug">
           <Link
             to={`/projects/${projectId}/sources?source=${encodeURIComponent(finding.source_id)}`}
             className="text-grey hover:text-blue hover:underline"
@@ -338,8 +338,8 @@ export function FindingsView() {
 
   return (
     <main className="mx-auto max-w-[1180px] px-6 py-8">
-      <h1 className="font-display text-xl font-extrabold text-navy">Findings</h1>
-      <p className="mt-1 text-[13px] text-grey">
+      <h1 className="font-display text-title font-extrabold text-navy">Findings</h1>
+      <p className="mt-1 text-meta text-grey">
         Every finding pulled from the sources — what was found, and the exact words it rests on.
       </p>
 
@@ -356,7 +356,7 @@ export function FindingsView() {
             type="button"
             aria-pressed={profile === value}
             onClick={() => setParam("profile", value ?? null)}
-            className={`cursor-pointer border px-2.5 py-1 text-[11.5px] font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
+            className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
               profile === value
                 ? "border-blue bg-blue-tint text-blue"
                 : "border-line bg-paper text-grey hover:bg-ground"
@@ -376,7 +376,7 @@ export function FindingsView() {
               setParam("facet", null);
               setParam("group", null);
             }}
-            className={`cursor-pointer border px-2.5 py-1 text-[11.5px] focus-visible:outline-2 focus-visible:outline-blue ${
+            className={`cursor-pointer border px-2.5 py-1 text-caption focus-visible:outline-2 focus-visible:outline-blue ${
               group === undefined
                 ? "border-blue bg-blue-tint text-blue"
                 : "border-line bg-paper text-grey hover:bg-ground"
@@ -401,7 +401,7 @@ export function FindingsView() {
                     setParam("group", candidate.label);
                   }
                 }}
-                className={`cursor-pointer border px-2.5 py-1 text-[11.5px] focus-visible:outline-2 focus-visible:outline-blue ${
+                className={`cursor-pointer border px-2.5 py-1 text-caption focus-visible:outline-2 focus-visible:outline-blue ${
                   group === candidate.label
                     ? "border-blue bg-blue-tint text-blue"
                     : "border-line bg-paper text-grey hover:bg-ground"
@@ -425,7 +425,7 @@ export function FindingsView() {
         (errorCode(findings.error) === "unauthenticated" ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="mt-5 p-8 text-center text-[13px] text-navy">
+          <Card role="alert" className="mt-5 p-8 text-center text-meta text-navy">
             Findings couldn't be loaded.{" "}
             <button
               type="button"
@@ -439,7 +439,7 @@ export function FindingsView() {
 
       {findings.data !== undefined && (
         <>
-          <p className="mt-4 text-[12px] text-grey" role="status">
+          <p className="mt-4 text-caption text-grey" role="status">
             {totalItems} finding{totalItems === 1 ? "" : "s"}
             {profile !== undefined || group !== undefined ? " match the filters" : ""}
           </p>
@@ -451,7 +451,7 @@ export function FindingsView() {
                     <span className="sr-only">Expand</span>
                   </th>
                   {showKind && (
-                    <th className="px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-grey">
+                    <th className="px-3 py-2.5 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
                       Kind
                     </th>
                   )}
@@ -459,7 +459,7 @@ export function FindingsView() {
                     (heading) => (
                       <th
                         key={heading}
-                        className="px-3 py-2.5 text-[11px] font-extrabold uppercase tracking-[0.06em] text-grey"
+                        className="px-3 py-2.5 text-caption font-extrabold uppercase tracking-[0.06em] text-grey"
                       >
                         {heading}
                       </th>
@@ -485,11 +485,11 @@ export function FindingsView() {
                   <tr>
                     <td
                       colSpan={showKind ? 7 : 6}
-                      className="px-4 py-8 text-center text-[13px] text-grey"
+                      className="px-4 py-8 text-center text-meta text-grey"
                     >
                       {profile !== undefined || group !== undefined
                         ? "No findings match these filters."
-                        : "No findings yet — they appear once the close-reading stage has run."}
+                        : "Findings appear here when an analysis runs at the deep setting — every finding extracted into a browsable database."}
                     </td>
                   </tr>
                 )}

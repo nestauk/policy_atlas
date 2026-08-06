@@ -26,3 +26,10 @@ Review moves that catch this class cheaply:
   (`successful_runs` vs "attempted run ids" was the whole bug).
 - Distrust tests that assert an *event/record exists* without asserting its
   *effect* — "emitted and discarded" passes those.
+- **For every option a steering floor offers, one test must ANSWER a pause
+  with it through the real apply path** (028 M1): the finding-groups
+  regroup options shipped dead — the coverage matrix asserted option *ids*
+  and that deltas *compile in the grammar*, but no test answered an FG
+  pause end-to-end, so nobody noticed the pause's re-run surface was wired
+  for P3 only and both apply paths refused the delta. Offered + compiles ≠
+  appliable.

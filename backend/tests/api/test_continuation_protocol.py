@@ -8,9 +8,10 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
+from policy_atlas.api import continuation
 from policy_atlas.api.continuation import (
     AlreadyAnsweredError,
     InvalidResponseError,
@@ -22,10 +23,11 @@ from policy_atlas.api.continuation import (
     startup_sweep,
 )
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run
+from policy_atlas.core.schema import capability_run, characterisation_result, event_log
 from policy_atlas.runtime.orchestrator_backend import StubOrchestratorBackend
 from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire, RouterFragmentWire
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
+from policy_atlas.runtime.steering import SteeringAdjustmentError
 from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_project
 from tests.runtime.test_steering import _insert_plan_row
 
@@ -62,6 +64,21 @@ class _ParkAtIO:
         """Park exactly before synthesis, whose durable affordance forbids re-entry."""
         del render
         if point["boundary"] == "before_component" and point["component"] == "synthesise":
+            raise WalkParked()
+        from policy_atlas.runtime.steering import Continue
+
+        return Continue()
+
+
+class _ParkAtP2IO:
+    """Park the P2 evidence-base check-in after its theme map has been written."""
+
+    def check_in(self, component: str, payload: dict[str, Any]) -> None:
+        del component, payload
+
+    def pause(self, point: dict[str, Any], render: str) -> Any:
+        del render
+        if point.get("steer_point") == "evidence_base_coverage":
             raise WalkParked()
         from policy_atlas.runtime.steering import Continue
 
@@ -371,6 +388,146 @@ def test_parked_answers_reject_replays_and_invalid_options(engine: Engine) -> No
                 response=_continue_response(),
                 actor="user-1",
             )
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_tampered_authored_option_is_refused_before_a_decision(engine: Engine) -> None:
+    """Apply-time validation refuses a corrupted durable authored delta loudly."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
+        with engine.begin() as conn:
+            payload = conn.execute(
+                select(event_log.c.payload).where(event_log.c.event_id == check_in_id)
+            ).scalar_one()
+            payload["options"].append(
+                {
+                    "id": "suggested_tampered",
+                    "label": "Tampered suggestion",
+                    "delta": {"select": {"selection": {"budget": "not-an-integer"}}},
+                    "authored": True,
+                    "suggested": True,
+                }
+            )
+            conn.execute(
+                update(event_log)
+                .where(event_log.c.event_id == check_in_id)
+                .values(payload=payload)
+            )
+        with pytest.raises(InvalidResponseError, match="authored option refused") as exc_info:
+            answer_check_in(
+                engine,
+                project_id=project_id,
+                check_in_id=check_in_id,
+                response={"kind": "option", "option_id": "suggested_tampered"},
+                actor="user-1",
+            )
+        assert "budget" in str(exc_info.value)
+        with engine.connect() as conn:
+            decisions = [
+                row
+                for row in events.read(conn, project_id)
+                if row["event_type"] == "steering.decision"
+            ]
+        assert decisions == []
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_theme_renames_are_p2_only_and_roll_back_with_a_failed_intent(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """P2 rename validation is unique and its write shares the answer transaction."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent", search_effort="standard")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=_ParkAtP2IO(),
+        )
+        assert outcome.status == "paused"
+        theme_id = str(uuid.uuid4())
+        with engine.begin() as conn:
+            pause = next(
+                row
+                for row in reversed(events.read(conn, project_id))
+                if row["event_type"] == "steering.pause"
+            )
+            characterisation_id = conn.execute(
+                select(characterisation_result.c.characterisation_id)
+                .where(characterisation_result.c.project_id == project_id)
+                .order_by(characterisation_result.c.created_at.desc())
+                .limit(1)
+            ).scalar_one()
+            conn.execute(
+                update(characterisation_result)
+                .where(characterisation_result.c.characterisation_id == characterisation_id)
+                .values(themes={"themes": [{"theme_id": theme_id, "name": "Before"}]})
+            )
+
+        def _failed_intent(*args: object, **kwargs: object) -> Any:
+            raise SteeringAdjustmentError("intent persistence sentinel")
+
+        monkeypatch.setattr(continuation, "_persist_intent", _failed_intent)
+        with pytest.raises(InvalidResponseError, match="intent persistence sentinel"):
+            answer_check_in(
+                engine,
+                project_id=project_id,
+                check_in_id=pause["event_id"],
+                response={
+                    "kind": "option",
+                    "option_id": "continue",
+                    "params": {"renames": [{"theme_id": theme_id, "name": "After"}]},
+                },
+                actor="user-1",
+            )
+        with engine.connect() as conn:
+            themes = conn.execute(
+                select(characterisation_result.c.themes).where(
+                    characterisation_result.c.characterisation_id == characterisation_id
+                )
+            ).scalar_one()
+        assert themes == {"themes": [{"theme_id": theme_id, "name": "Before"}]}
+
+        with pytest.raises(InvalidResponseError, match="only available"):
+            continuation._theme_renames(
+                {"renames": [{"theme_id": theme_id, "name": "After"}]},
+                {"steer_point": "deepening_selection"},
+            )
+        with pytest.raises(InvalidResponseError, match="renamed once"):
+            continuation._theme_renames(
+                {
+                    "renames": [
+                        {"theme_id": theme_id, "name": "After"},
+                        {"theme_id": theme_id, "name": "Again"},
+                    ]
+                },
+                {"steer_point": "evidence_base_coverage"},
+            )
+        with pytest.raises(InvalidResponseError, match="bounded plain text"):
+            continuation._theme_renames(
+                {"renames": [{"theme_id": theme_id, "name": "x" * 201}]},
+                {"steer_point": "evidence_base_coverage"},
+            )
+        with pytest.raises(InvalidResponseError, match="bounded plain text"):
+            continuation._theme_renames(
+                {"renames": [{"theme_id": theme_id, "name": "After\x00"}]},
+                {"steer_point": "evidence_base_coverage"},
+            )
+        assert continuation._theme_renames(
+            {"renames": [{"theme_id": theme_id, "name": "x" * 200}]},
+            {"steer_point": "evidence_base_coverage"},
+        ) == [(theme_id, "x" * 200)]
     finally:
         _cleanup(engine, project_id)
 

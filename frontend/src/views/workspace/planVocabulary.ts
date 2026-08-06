@@ -30,7 +30,19 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
   frequent: "At every step",
   moderate: "When something needs your judgement",
   minimal: "Only if it can't proceed",
-  unattended: "Unattended (no pauses)",
+  unattended: "None",
+};
+
+/** Run-block status labels for the planning thread's run divider ("Analysis
+ *  run — running/paused/completed/…"). Unknown status → the caller omits. */
+export const RUN_BLOCK_STATUS: Record<string, string> = {
+  running: "running",
+  paused: "paused",
+  succeeded: "completed",
+  degraded: "completed with gaps",
+  failed: "failed",
+  interrupted: "interrupted",
+  aborted: "stopped",
 };
 
 /** Pre-ready component labels: the same public stage vocabulary the server's

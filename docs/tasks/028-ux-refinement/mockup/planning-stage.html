@@ -1,0 +1,211 @@
+<title>028 — the planning stage: sequential parts</title>
+<style>
+  :root {
+    --navy: #0f294a; --blue: #0000ff; --grey: #646363; --paper: #f4f4f5;
+    --line: #e4e4e7; --line2: #d3d3d8; --teal: #18a48c; --ink: #1c1c1e;
+    --amber-bg: #fff6e3; --amber-bd: #f3d99a; --amber-ink: #8a5a00;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: system-ui, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.55; margin: 0; }
+  .wrap { max-width: 1150px; margin: 0 auto; padding: 36px 24px 80px; }
+  .eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--grey); margin: 0; }
+  h1 { font-weight: 800; font-size: 30px; letter-spacing: -0.5px; color: var(--navy); margin: 8px 0 0; text-wrap: balance; }
+  h2 { font-weight: 800; font-size: 20px; letter-spacing: -0.3px; color: var(--navy); margin: 40px 0 4px; }
+  .lede, .sub { max-width: 72ch; color: var(--grey); }
+  .lede { margin: 10px 0 0; } .sub { margin: 2px 0 14px; font-size: 14.5px; }
+  .jargon { background: #ffecec; color: #8a1f1f; padding: 0 3px; }
+
+  /* pathology table */
+  .pathology { background: #fff; border: 1px solid var(--line2); border-left: 3px solid var(--amber-bd); padding: 14px 18px; margin-top: 12px; max-width: 860px; }
+  .pathology .row { display: flex; gap: 10px; font-size: 13.5px; padding: 4px 0; border-top: 1px solid var(--line); }
+  .pathology .row:first-of-type { border-top: none; }
+  .pathology .t { flex: none; width: 46px; font-weight: 800; color: var(--grey); }
+  .pathology .u { flex: none; width: 300px; color: var(--ink); }
+  .pathology .r { flex: 1; color: var(--grey); }
+
+  /* chat column mock */
+  .chatcol { max-width: 620px; background: #fff; border: 1px solid var(--line2); box-shadow: 0 1px 3px rgba(15,41,74,0.06), 0 10px 28px rgba(15,41,74,0.05); padding: 22px 26px 24px; margin-top: 12px; }
+  .userbub { margin-left: 15%; background: #f5f5ff; border: 1px solid #ececff; padding: 10px 14px; font-size: 15px; }
+  .planner { font-size: 15px; max-width: 60ch; margin: 14px 0 0; }
+  .part { border: 1px solid var(--line2); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.05); padding: 14px 16px; margin-top: 12px; }
+  .part .step { margin: 0; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--grey); }
+  .part h3 { margin: 5px 0 0; font-size: 16.5px; font-weight: 800; color: var(--navy); line-height: 1.4; }
+  .part .body { margin: 5px 0 0; font-size: 14px; color: var(--grey); max-width: 56ch; }
+  .chips { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips span { border: 1px solid #c7c7ff; background: #ececff; color: var(--blue); font-size: 13px; font-weight: 600; padding: 3px 10px; }
+  .opts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .opts .b { font-size: 14px; font-weight: 700; padding: 9px 15px; }
+  .opts .p { background: var(--blue); color: #fff; border: none; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+  .opts .s { background: #fff; color: var(--navy); border: 1px solid var(--line2); font-weight: 600; }
+  .opts .b small { display: block; font-weight: 400; font-size: 12px; margin-top: 1px; }
+  .opts .p small { color: rgba(255,255,255,0.85); }
+  .opts .s small { color: var(--grey); }
+  .confirmed { margin-top: 11px; font-size: 14px; font-weight: 700; color: #0c6b5a; }
+  .confirmed button { border: none; background: none; padding: 0; font: inherit; font-size: 13px; font-weight: 600; color: var(--grey); text-decoration: underline; margin-left: 10px; cursor: pointer; }
+
+  /* plan card */
+  .plancard { border: 1px solid var(--blue); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.08); margin-top: 14px; }
+  .plancard .head { display: flex; align-items: baseline; gap: 10px; padding: 12px 16px; }
+  .plancard .head .k { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--grey); }
+  .plancard .head .q { flex: 1; font-size: 14.5px; font-weight: 600; color: var(--navy); }
+  .plancard .head .ready { border: 1px solid #b7e0d8; background: #e7f5f2; color: #0c6b5a; font-size: 11.5px; font-weight: 700; padding: 2px 8px; }
+  .plangrid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .plangrid div { background: #fff; padding: 8px 12px; }
+  .plangrid p { margin: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--grey); }
+  .plangrid b { font-size: 13.5px; color: var(--navy); }
+  .plancard .foot { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .plancard .go { background: var(--blue); color: #fff; border: none; font-size: 14.5px; font-weight: 700; padding: 11px 18px; clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); }
+  .plancard .band { font-size: 13px; color: var(--grey); }
+
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 12px; align-items: start; }
+  @media (max-width: 920px) { .duo { grid-template-columns: 1fr; } }
+  .collabel { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 8px; color: var(--navy); }
+
+  table.map { border-collapse: collapse; background: #fff; border: 1px solid var(--line2); margin-top: 12px; font-size: 13.5px; }
+  .map th, .map td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  .map th { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--grey); background: #fafafa; }
+  .map td b { color: var(--navy); }
+  .map .quiet { color: var(--grey); font-size: 12.5px; }
+  .note { margin-top: 14px; border-left: 3px solid var(--blue); background: #ececff; padding: 10px 14px; font-size: 14px; max-width: 78ch; }
+  .rulebox { background: #fff; border: 1px solid var(--line2); padding: 14px 18px; margin-top: 12px; max-width: 860px; font-size: 14.5px; }
+  .rulebox b { color: var(--navy); }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Task 028 · strand 3 (fork A) · planning stage — decision mock-up</p>
+  <h1>Sequential plan-building on the real plan surface</h1>
+  <p class="lede">Parts map to real plan fields. The walkthrough replays the corpus’s richer human session (ECEC) verbatim; the transcript corpus is 37 turns — mostly scripted live-check traffic, two human.</p>
+
+  <h2>What the live data shows the current planner doing</h2>
+  <p class="sub">The repeated confirmations are the <b>027 scripted live-check</b>’s retry loop (up to 8 attempts) — which exists because one confirmation was never enough: the planner demanded <b>5 turns</b> to reach ready (<b>9</b> on the replan), one steer-point default per confirmation.</p>
+  <div class="pathology">
+    <div class="row"><span class="t">turn 1</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"…I can't mark the plan fully ready until the remaining unatte…"</span></div>
+    <div class="row"><span class="t">turn 2</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"…I still need to walk the remaining unattended steer point…"</span></div>
+    <div class="row"><span class="t">turn 3</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"I've taken your confirmation as approval for the evidence-base coverage standing instruction too…"</span></div>
+    <div class="row"><span class="t">turn 4</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"I've recorded your confirmation for <span class="jargon">deepening_selection</span> too…"</span></div>
+    <div class="row"><span class="t">turn 5</span><span class="u">"Yes — that's right. Mark the plan ready."</span><span class="r">"Done — I've marked the plan ready."</span></div>
+  </div>
+  <p class="sub" style="margin-top:10px">Binding on <b>planner_v6</b>: <b>steer-point defaults are never a conversation</b> (they compile from the check-in mode), and <b>answered parts pre-confirm in bulk</b> — the scripted opening set three decisions at once; both human users steered in compound sentences.</p>
+
+  <h2>The real human session, replayed through the part flow</h2>
+  <p class="sub">This is the corpus's richest human conversation (the ECEC project) — the opening message verbatim, typo included, and the user's real compound follow-up arriving as free text mid-flow. Planner copy is drawn from what the live planner actually replied; the thoroughness and check-in parts are the flow's additions.</p>
+  <div class="chatcol">
+    <div class="userbub">ensuring that our most disadvantaged children have access to high auality ecece</div>
+    <div class="part">
+      <p class="step">Plan · 1 of 3 · the question</p>
+      <h3>What helps disadvantaged children access high-quality early childhood education and care?</h3>
+      <p class="body">Read as a policy and service-delivery question — I'll search academic and grey literature.</p>
+      <div class="opts"><span class="b p">That's my question</span><span class="b s">Refine it</span></div>
+      <div class="confirmed">✓ Confirmed <button>Change</button></div>
+    </div>
+    <div class="part">
+      <p class="step">Plan · 2 of 3 · scope</p>
+      <h3>What counts as in-scope?</h3>
+      <div class="chips"><span>Any country ✎</span><span>No date limit ✎</span><span>Policy &amp; service-delivery evidence ×</span><span style="border-style:dashed;background:#fff">+ add</span></div>
+      <p class="body">Edit any chip directly. Dates filter the search itself; setting and population become screening rules judged per document.</p>
+      <div class="opts"><span class="b p">Looks right</span></div>
+    </div>
+    <div class="userbub" style="margin-top:12px">can you make it uk only, with uk comparator countries (US, the scandis, canada, australia - and others that look particularly good)</div>
+    <div class="part">
+      <p class="step">Plan · 2 of 3 · scope — updated from your message</p>
+      <h3>UK as the primary setting, with named comparators</h3>
+      <div class="chips"><span>UK primary ✎</span><span>Comparators: US · Nordics · Canada · Australia ✎</span><span>+ other strong systems ×</span><span>No date limit ✎</span><span style="border-style:dashed;background:#fff">+ add</span></div>
+      <p class="body">No database country filters — they match author affiliation, not where a policy operates. UK-primary is a <b>screening rule</b>, so foreign-published UK evidence still counts.</p>
+      <div class="opts"><span class="b p">Looks right</span><span class="b s">Add or change a constraint</span></div>
+      <div class="confirmed">✓ Confirmed <button>Change</button></div>
+    </div>
+    <div class="part">
+      <p class="step">Plan · 3 of 3 · thoroughness</p>
+      <h3>How thorough should this be?</h3>
+      <div class="opts">
+        <span class="b s">Quick look<small>a short cited overview from a focused search · ~5–10 min</small></span>
+        <span class="b p">Standard review<small>a full cited report from a wider search · ~15–20 min</small></span>
+        <span class="b s">Deep analysis<small>the full report, plus every finding extracted into a browsable database · ~45 min</small></span>
+      </div>
+
+    </div>
+    <div class="planner">Review the plan — nothing runs until you start it.</div>
+    <div class="plancard">
+      <div class="head"><span class="k">The plan</span><span class="q">What helps disadvantaged children in the UK access high-quality ECEC — with comparator-country lessons?</span><span class="ready">ready</span></div>
+      <div class="plangrid">
+        <div><p>Thoroughness</p><b>Standard review</b></div>
+        <div><p>Check-ins</p><b>None — ask if you want them</b></div>
+        <div><p>Sources</p><b>Academic + policy</b></div>
+        <div><p>Screening rules</p><b>UK primary · comparators US/Nordics/CA/AU</b></div>
+        <div><p>Search filters</p><b>No date limit</b></div>
+      </div>
+      <div class="foot"><span class="go">Start the analysis</span><span class="band">~10–20 min · it runs without pausing</span></div>
+    </div>
+  </div>
+  <p class="note">The real compound message landed while another part was open — the scope card re-presents updated, nothing re-asked. The typo'd opening shows part 1's job: "auality ecece" becomes a question the user ratifies.</p>
+
+  <h2>The fast path — a compound opening</h2>
+  <p class="sub">Answered parts pre-confirm as one recap; only the gaps get asked. (No human compound opening in the corpus yet — the 027 script's stands in.)</p>
+  <div class="chatcol">
+    <div class="userbub">I need evidence on how school-based interventions affect pupil attendance in the UK. Rapid search effort, standard depth, academic sources only. <em style="color:var(--grey);font-size:12px">(scripted live-check opening)</em></div>
+    <div class="part">
+      <p class="step">Plan · from your message</p>
+      <h3>Here's what I've set from that — one question left</h3>
+      <div class="confirmed" style="margin-top:8px">✓ Question: school-based interventions and pupil attendance, UK school settings <button>Change</button></div>
+      <div class="confirmed">✓ Thoroughness: quick, standard-depth analysis <button>Change</button></div>
+      <div class="confirmed">✓ Sources: academic only <button>Change</button></div>
+      <p class="body" style="margin-top:10px">Scope: I've drafted <b>UK as a screening rule</b> (study setting, not publication venue) and <b>no date limit</b>. OK?</p>
+      <div class="opts"><span class="b p">Scope's right — show me the plan</span><span class="b s">Add a constraint</span></div>
+    </div>
+    <div class="planner" style="color:var(--grey);font-size:13.5px">→ next turn: the ready plan card. Two turns; the live planner took six.</div>
+  </div>
+
+  <h2>What 20 real plan versions show</h2>
+  <div class="rulebox">
+    <b>Humans steer scope, nothing else.</b> Both human sessions' only edits were scope refinements (UK primary + comparators · UK focus) — the diffs touch question/scoping/criteria, never effort, depth or sources. ·
+    <b>Nobody has ever chosen an effort/depth mix</b> — every plan is the default pair (rapid/standard came from the script's opening; both humans got standard/standard and never touched it). ·
+    <b>The planner drafts rich screening criteria from one line</b> — the ECEC opening became 9 include/exclude rules; the scope card summarises them, the plan card carries the full list. ·
+    <b>The planner silently pins dates</b> — every plan got `published_after` ≈ 10 years and `published_before` = the plan date. The upper bound makes later re-runs exclude newer documents: <b>planner_v6 drops the default upper bound</b>, and the recency floor becomes a visible scope chip the user can veto. ·
+    <b>The steer-point walk churned 11 plan versions</b> on one project — the same pathology, seen from the plan table. ·
+    Real component timings (medians): <b>synthesise 580s</b> · ingest 131s · classify 45s · everything else ≤23s — <b>screen_full + select cost ~13s combined</b>, so skipping them (the old landscape "speed-up") saved nothing. ·
+    <b>The real speed lever is report length</b> (owner, 2026-08-04): synthesis scales with section count (~60–70s/section) — Quick look compiles a <b>short report (3 ordinary sections + key findings and conclusions)</b> and lands in ~5–10 min.
+  </div>
+  <p class="note"><b>Ruled (owner, 2026-08-04): thoroughness stays part 3</b> — its cost/time consequences warrant one question — with <b>outcome-first option copy</b>: each preset says what you get and what gets read, never method adjectives (a new user can't weigh "rapid" against "deep"). Internal rungs (rapid/standard/deep · landscape/standard/deep) never render.</p>
+
+  <h2>The parts, mapped to the real plan surface</h2>
+  <table class="map">
+    <tr><th>Part (asked)</th><th>Real plan fields it settles</th><th>Never asked — compiled or shown on the card only</th></tr>
+    <tr><td><b>1 · Question</b></td><td>`question`, `title`</td><td rowspan="3">`steering_mode` — unattended, set only when the user asks for check-ins (owner: requested, not offered) · `steer_point_defaults` (compiled from mode — the five-turn walk dies) · `components` + `component_rationale` (orchestrator discretion) · `expected_artefact_shape`, `time_band` (derived) · `assumptions` (shown on the card's details) · `extract_profiles`, `grouping_facets` (depth defaults) · `screening_criteria` detail beyond the scope chips (drafted by the planner, shown on the card)</td></tr>
+    <tr><td><b>2 · Scope</b></td><td>`scope_constraints` — dates/geography <b>search filters</b>, applied at the backends · `screening_criteria` + `scoping_notes` — <b>screening rules</b>, judged per document (setting, population). One question; the planner routes each constraint to the right mechanism.</td></tr>
+    <tr><td><b>3 · Thoroughness</b></td><td>`search_effort` × `analysis_depth` × <b>section budget</b> (new additive plan field)</td></tr>
+  </table>
+  <p class="note"><b>Sources scope is not a part:</b> defaults to academic + policy, shows on the plan card, changes via free text or Change.</p>
+
+  <h2>How "how thorough?" is asked — ruled</h2>
+  <p class="sub">One question, three outcome-labelled presets + free-text custom mixes (owner, 2026-08-04). Each preset compiles <b>three</b> levers: search effort · analysis depth · <b>report length</b> (new — the plan carries a section budget the sections-planning prompt honours; timing data shows length is the only lever that moves the clock). Free text reaches any mix.</p>
+  <div class="duo">
+    <div>
+      <p class="collabel">Option A — one question, three presets + customise (recommended)</p>
+      <div class="rulebox">
+        <b>Quick look</b> = rapid search · landscape depth (~10 min) ·
+        <b>Standard review</b> = standard · standard (~20 min) ·
+        <b>Deep analysis</b> = deep · deep, findings extracted (~45 min).
+        A quiet "customise" exposes both axes — the scripted user's rapid+standard mix is covered by no preset. Free text compiles any mix.
+      </div>
+    </div>
+    <div>
+      <p class="collabel">Option B — two questions (search, then analysis)</p>
+      <div class="rulebox">
+        Every combination button-reachable — but a fifth turn, and the finding-vs-reading distinction needs explaining every time.
+      </div>
+    </div>
+  </div>
+
+  <h2>Behaviour rules (binding on the build)</h2>
+  <div class="rulebox">
+    <b>Free text beats buttons</b> — any reply can answer several parts, redirect, or ignore the question; the planner re-plans the rest. ·
+    <b>Change re-opens one part</b>; downstream confirmations survive unless invalidated (the planner says which). ·
+    <b>No part, no card</b> — prose-only turns render as prose; old transcripts unchanged; rehydration restores part + confirmed state. ·
+    <b>Never re-ask what's answered.</b> ·
+    <b>The plan card is the only start surface</b> — details open pre-run; 409 fence and two-phase persistence untouched. ·
+    <b>Assumptions attach to their parts</b> — the planner's interpretation declarations ("I read 'the scandis' as the Nordic countries") render on the card they concern, never as a buried list; the plan card details carries the full set. ·
+    <b>Scope chips edit directly</b> — ✎ opens an inline editor (dates get a range picker), × removes, + adds; edits batch into one planning turn and the planner routes each to filter or screening rule — chips never write plan fields raw. ·
+    <b>Custom country lists are ratified, not assumed</b> — a user-named grouping ("the scandis") renders as the proposed country chips with the definitional choice named; confirming the card ratifies the list (the prompt already mandates this — the card is where it happens). ·
+    <b>The thoroughness card is intent-aware</b> — Deep never promises a findings database on questions the planner won't compose one for; the planner may mark an off-diagonal mix primary, with its reason. ·
+    <b>planner_v6 deletes the steer-point walk</b> — the prompt's "WALK THE STEER POINTS, one point per turn" instruction (the located source of the 5-turn pathology) is removed; standing instructions compile from the mode.
+  </div>
+</div>

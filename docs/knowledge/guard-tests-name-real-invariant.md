@@ -35,6 +35,13 @@ letter diverges from its invariant is an instruction to diverge.
   include them in the pattern or assert at a level evasion can't reach.
 - Review the *diff against the guard's purpose* whenever a guard file's test
   suddenly needs no change while the guarded behaviour clearly grew.
+- **The guard's SELECTOR is part of its invariant** (028): the prompt-hash
+  guard pins files whose *name* contains "prompt", so
+  `synthesise_sections_v3`/`synthesise_key_findings_v2` — prompt constants
+  living in `synthesis_backend.py` — are invisible to it; their only guard
+  is version-pin tests. A guard that selects by filename convention guards
+  the convention, not the surface: widen the glob or move the constants
+  when a gated surface lands outside the selector.
 - Same family:
   [untrusted-prompt-fields-json-records](untrusted-prompt-fields-json-records.md)
   (the boundary is the mechanism, not the sanitizer's pattern).

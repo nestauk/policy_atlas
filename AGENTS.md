@@ -22,31 +22,26 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `027-frontend-uplift` **build complete through
-step 6** (2026-07-29, branch `task/027-frontend-uplift`): the
-demo-validated view layer rebuilt on the 025/026 production substrate —
-durable planning transcript (`planning_transcript`), lifecycle-placement
-runner delta + live `artefact.*` streaming, read-model enrichment +
-server-side filters, plan pane / journey / evidence-base / kind-aware
-findings / sources-dossier / check-in uplift, motion layer, rail,
-strand-14 hygiene, mock-journey CI lane. Live check driven scripted
-(Playwright over the real chain; both restart legs green). Evidence:
-`docs/tasks/027-frontend-uplift/verification.md`. **Next: the review
-stack in a fresh conversation (`task-cycle-review`).** Demo code is UX
-evidence, never imported; `demo-live-run` never merges. Contract:
-`docs/tasks/027-frontend-uplift/contract.md`. Owner re-sequencing
-2026-07-28: the eval slice (former 027 draft) is deferred — its
-contract draft survives at unpushed commit `a5c9708`.
+Implementation — task `028-ux-refinement` **design step 1** (2026-08-03,
+branch `task/028-ux-refinement`, stacked on `task/027-frontend-uplift`):
+interview-driven UX refinement — four internal policy-team interviews on
+the 027 build (type scale + copy diet, expandable composer, sequential
+plan-building fork, artefact contents-sidebar + progressive disclosure,
+key-findings bullets fork, sortable/theme-filterable sources, naming
+pass, tab-IA fork). Contract:
+`docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
+`docs/tasks/028-ux-refinement/design-inputs.md`.
 
-Task `026-infra-deployment` is **in review** (draft PR #33, Tier 4;
-build complete through step 6, 2026-07-28 — system **live** at
-`v3.policyatlas.uk`: Cognito login end-to-end, Aurora migrated,
-S3+CloudFront SPA; evidence in
-`docs/tasks/026-infra-deployment/verification.md`). 027 branches from
-`task/026-infra-deployment` (it depends on 026's frontend auth-gating
-fixes and deploy tooling); its PR re-targets `dev` once 026 merges.
-Known operational state: staging's OpenAI quota exhausted 2026-07-28
-(runs fail honest-429 until billing tops up).
+Tasks `026-infra-deployment` (draft PR #33, Tier 4 — system **live** at
+`v3.policyatlas.uk`) and `027-frontend-uplift` (PR #36, Tier 3 — review
+stack adjudicated 2026-07-30, 32 fixes re-verified) are both at **step 9:
+human review + merge**. 027 branches from 026; 028 branches from 027;
+each PR re-targets `dev` as its parent merges — if a merge review touches
+files a stacked branch changed, that branch rebases before its own
+review. Known operational state: staging's OpenAI quota exhausted
+2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
+(former 027 draft) stays deferred — contract draft at unpushed
+`a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist

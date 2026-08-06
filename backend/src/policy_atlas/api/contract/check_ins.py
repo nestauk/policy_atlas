@@ -34,6 +34,8 @@ class CheckInOption(BaseModel):
         requires_user_input: Whether picking this option requires an
             additional `params` fill-in on the response.
         suggested: Whether the server highlights this as the suggested pick.
+        why: Visible reason for a run-specific suggestion.
+        endorsement: Visible reason when the run endorses this canonical option.
     """
 
     id: str
@@ -41,6 +43,8 @@ class CheckInOption(BaseModel):
     description: str
     requires_user_input: bool
     suggested: bool = False
+    why: str | None = None
+    endorsement: str | None = None
 
 
 class CheckInTrigger(BaseModel):
@@ -69,6 +73,7 @@ class CheckInOut(BaseModel):
         options: Server-supplied options. The client must never invent
             options.
         triggers: Fired floor triggers, if any.
+        bundle: Scrubbed per-point display data, or ``None`` for legacy pauses.
         segment_reentry_allowed: Whether an additive segment re-entry is
             available at this boundary.
         rerun_component: Component a replacement re-run would target, or
@@ -86,6 +91,7 @@ class CheckInOut(BaseModel):
     render: str
     options: list[CheckInOption] = Field(default_factory=list)
     triggers: list[CheckInTrigger] = Field(default_factory=list)
+    bundle: dict[str, Any] | None = None
     segment_reentry_allowed: bool
     rerun_component: str | None = None
     status: CheckInStatus

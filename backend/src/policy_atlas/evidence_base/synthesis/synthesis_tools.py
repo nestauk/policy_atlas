@@ -309,6 +309,7 @@ class SynthesisDirective:
     """
 
     sections: list[dict[str, Any]] | None = None  # validated section specs
+    section_budget: int | None = None
     column_boosts: dict[str, dict[str, float]] = field(default_factory=dict)
     tag_boosts: dict[str, float] = field(default_factory=dict)
     appraisal_tier_boosts: dict[str, float] = field(default_factory=dict)
@@ -320,6 +321,7 @@ class SynthesisDirective:
         """Return the executed directive as deterministic JSON-compatible data."""
         return {
             "sections_source": "scope_context" if self.sections is not None else "proposal",
+            "section_budget": self.section_budget,
             "retrieval_boosts": {
                 "columns": self.column_boosts,
                 "tags": self.tag_boosts,
@@ -446,7 +448,7 @@ class SectionLoopResult(TypedDict):
     usage_totals: dict[str, int]
 
 
-_DIRECTIVE_KEYS = {"sections", "retrieval_boosts"}
+_DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget"}
 _SECTION_KEYS_REQUIRED = {"title", "focus"}
 _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
 _BOOST_KEYS = {"columns", "tags", "appraisal_tier", "screen_confidence"}
@@ -760,12 +762,17 @@ def _parse_screen_confidence_boost(value: Any) -> _ScreenConfidenceBoost:
 
 
 def _parse_sections(
-    value: Any, *, grouping_group_ids: set[str] | None
+    value: Any,
+    *,
+    grouping_group_ids: set[str] | None,
+    section_budget: int | None = None,
+    defer_group_membership: bool = False,
 ) -> list[dict[str, Any]]:
     if not isinstance(value, list):
         _directive_fail("synthesis directive sections must be a list")
-    if not value or len(value) > SECTION_CAP:
-        _directive_fail(f"synthesis directive sections must contain 1..{SECTION_CAP} items")
+    section_cap = min(SECTION_CAP, section_budget) if section_budget is not None else SECTION_CAP
+    if not value or len(value) > section_cap:
+        _directive_fail(f"synthesis directive sections must contain 1..{section_cap} items")
 
     from policy_atlas.evidence_base.synthesis.synthesis_backend import FORBIDDEN_SECTION_TITLES
 
@@ -785,9 +792,8 @@ def _parse_sections(
             "focus": _bounded_string(item["focus"], field=f"sections[{index}].focus"),
         }
         if "group_ids" in item:
-            if grouping_group_ids is None:
+            if grouping_group_ids is None and not defer_group_membership:
                 _directive_fail("synthesis directive group_ids require grouping")
-            assert grouping_group_ids is not None
             raw_group_ids = item["group_ids"]
             if not isinstance(raw_group_ids, list) or len(raw_group_ids) > DIRECTIVE_LIST_MAX:
                 _directive_fail("synthesis directive group_ids must be a bounded list")
@@ -807,7 +813,7 @@ def _parse_sections(
                         "synthesis directive group_ids must use expected form "
                         f"{GROUP_ID_EXPECTED_FORM}"
                     )
-                if group_id not in grouping_group_ids:
+                if grouping_group_ids is not None and group_id not in grouping_group_ids:
                     _directive_fail(
                         f"synthesis directive group_ids[{group_index}] is unknown; "
                         f"expected form {GROUP_ID_EXPECTED_FORM} resolving to grouping "
@@ -866,7 +872,10 @@ def _parse_retrieval_boosts(
 
 
 def parse_synthesis_directive(
-    context: dict[str, Any], *, grouping_group_ids: set[str] | None
+    context: dict[str, Any],
+    *,
+    grouping_group_ids: set[str] | None,
+    defer_group_membership: bool = False,
 ) -> SynthesisDirective:
     """Parse the fail-closed ``context["synthesis"]`` directive.
 
@@ -874,6 +883,11 @@ def parse_synthesis_directive(
         context: Evidence-scope context JSON object.
         grouping_group_ids: Valid grouping ids when grouping is referenced, or
             ``None`` when no grouping substrate exists.
+        defer_group_membership: Answer-time mode (steering validation, which has
+            no grouping substrate on hand): ``group_ids`` are form/bounds-checked
+            only, with membership enforced by the execution-time re-parse. Lets
+            the P4 as_proposed delta carry the proposal's section→group bindings
+            (review 028 M2) instead of 422ing at submit.
 
     Returns:
         A validated directive with retrieval boost weights clamped.
@@ -890,8 +904,18 @@ def parse_synthesis_directive(
     if unknown:
         _directive_fail("synthesis directive has invalid top-level keys")
 
+    section_budget = (
+        _parse_section_budget(raw["section_budget"])
+        if "section_budget" in raw
+        else None
+    )
     sections = (
-        _parse_sections(raw["sections"], grouping_group_ids=grouping_group_ids)
+        _parse_sections(
+            raw["sections"],
+            grouping_group_ids=grouping_group_ids,
+            section_budget=section_budget,
+            defer_group_membership=defer_group_membership,
+        )
         if "sections" in raw
         else None
     )
@@ -908,11 +932,33 @@ def parse_synthesis_directive(
         ) = _parse_retrieval_boosts(raw["retrieval_boosts"])
     return SynthesisDirective(
         sections=sections,
+        section_budget=section_budget,
         column_boosts=column_boosts,
         tag_boosts=tag_boosts,
         appraisal_tier_boosts=appraisal_tier_boosts,
         screen_confidence=screen_confidence,
     )
+
+
+def _parse_section_budget(value: Any) -> int:
+    """Validate the plan's ordinary-section ceiling in the synthesis grammar.
+
+    Args:
+        value: Candidate JSON directive value.
+
+    Returns:
+        The validated 2..SECTION_CAP ordinary-section budget.
+
+    Raises:
+        SynthesisDirectiveError: If the value is outside the executable range.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        _directive_fail("synthesis directive section_budget must be an integer")
+    if not 2 <= value <= SECTION_CAP:
+        _directive_fail(
+            f"synthesis directive section_budget must be between 2 and {SECTION_CAP}"
+        )
+    return int(value)
 
 
 def _metadata_title(metadata: Any, pss_id: uuid.UUID) -> str:

@@ -304,7 +304,7 @@ export interface paths {
         };
         /**
          * Landscape
-         * @description Return screened-in-only landscape distributions.
+         * @description Return screened-in-only or cited-only landscape distributions.
          */
         get: operations["landscape_api_v1_projects__project_id__landscape_get"];
         put?: never;
@@ -491,6 +491,8 @@ export interface components {
          *         coverage_snapshot: Embedded coverage snapshot.
          *         sections: Artefact sections, in final page order.
          *         references: Numbered reference list.
+         *         summary: Artefact-level summary, if produced.
+         *         summary_status: Artefact-level summary production state.
          */
         ArtefactOut: {
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
@@ -500,6 +502,10 @@ export interface components {
             references?: components["schemas"]["ReferenceOut"][];
             /** Sections */
             sections?: components["schemas"]["SectionOut"][];
+            /** Summary */
+            summary?: string | null;
+            /** Summary Status */
+            summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
         };
@@ -614,10 +620,17 @@ export interface components {
          *         requires_user_input: Whether picking this option requires an
          *             additional `params` fill-in on the response.
          *         suggested: Whether the server highlights this as the suggested pick.
+         *         why: Visible reason for a run-specific suggestion.
+         *         endorsement: Visible reason when the run endorses this canonical option.
          */
         CheckInOption: {
             /** Description */
             description: string;
+            /**
+             * Endorsement
+             * @default null
+             */
+            endorsement: string | null;
             /** Id */
             id: string;
             /** Label */
@@ -629,6 +642,11 @@ export interface components {
              * @default false
              */
             suggested: boolean;
+            /**
+             * Why
+             * @default null
+             */
+            why: string | null;
         };
         /**
          * CheckInOut
@@ -645,6 +663,7 @@ export interface components {
          *         options: Server-supplied options. The client must never invent
          *             options.
          *         triggers: Fired floor triggers, if any.
+         *         bundle: Scrubbed per-point display data, or ``None`` for legacy pauses.
          *         segment_reentry_allowed: Whether an additive segment re-entry is
          *             available at this boundary.
          *         rerun_component: Component a replacement re-run would target, or
@@ -659,6 +678,13 @@ export interface components {
              * @enum {string}
              */
             boundary: "after_component" | "before_component";
+            /**
+             * Bundle
+             * @default null
+             */
+            bundle: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Check In Id
              * Format: uuid
@@ -1048,6 +1074,8 @@ export interface components {
             appraisal_tier?: string | null;
             /** Cited */
             cited: boolean;
+            /** Classification Reason */
+            classification_reason?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
             /**
@@ -1055,10 +1083,17 @@ export interface components {
              * @enum {string}
              */
             origin: "OpenAlex" | "Overton" | "Uploaded";
+            /**
+             * Read In Full
+             * @default false
+             */
+            read_in_full: boolean;
             /** Screen Basis */
             screen_basis?: string | null;
             /** Screen Confidence */
             screen_confidence?: number | null;
+            /** Screen Reason */
+            screen_reason?: string | null;
             /** Screen Stage */
             screen_stage?: number | null;
             /** Screen Status */
@@ -1544,6 +1579,75 @@ export interface components {
             pagination: components["schemas"]["PageMeta"];
         };
         /**
+         * PartChipOut
+         * @description One typed, editable chip attached to a planning part.
+         *
+         *     Args:
+         *         label: Short user-visible chip label.
+         *         kind: Editor type for the chip value.
+         *         value: Machine-readable value consumed by that editor.
+         */
+        PartChipOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "date_range" | "country_list";
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * PartOptionOut
+         * @description One selectable option on a sequential planning part.
+         *
+         *     Args:
+         *         id: Stable option identifier within the part.
+         *         label: Short user-visible option label.
+         *         sub: Optional outcome and time-band sub-label.
+         *         primary: Whether this is the single recommended option.
+         *         reason: Optional explanation for the recommendation.
+         */
+        PartOptionOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Primary */
+            primary: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Sub */
+            sub?: string | null;
+        };
+        /**
+         * PartProposalOut
+         * @description One structured proposal in the sequential planning conversation.
+         *
+         *     Args:
+         *         id: The proposed planning part.
+         *         step_label: User-visible position and context for the proposal.
+         *         title: Plain-language proposal heading.
+         *         body: Optional supporting explanation.
+         *         chips: Optional typed scope chips.
+         *         options: The available response options.
+         */
+        PartProposalOut: {
+            /** Body */
+            body?: string | null;
+            /** Chips */
+            chips?: components["schemas"]["PartChipOut"][] | null;
+            /** Id */
+            id: string;
+            /** Options */
+            options: components["schemas"]["PartOptionOut"][];
+            /** Step Label */
+            step_label: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * PlanDraft
          * @description Draft or approved orchestration plan, as surfaced to the client.
          *
@@ -1570,6 +1674,7 @@ export interface components {
          *         assumptions: Visible assumptions and open guesses.
          *         expected_artefact_shape: Deterministic forecast derived from components.
          *         time_band: Deterministic wall-clock band derived from the two axes.
+         *         section_budget: Optional future synthesis cap for ordinary sections.
          *         steps: The composed chain, presentation-labelled, in execution order.
          *         ready: Whether the draft has validated fail-closed into an
          *             executable plan.
@@ -1644,6 +1749,11 @@ export interface components {
              * @default null
              */
             search_effort: ("rapid" | "standard" | "deep") | null;
+            /**
+             * Section Budget
+             * @default null
+             */
+            section_budget: number | null;
             /**
              * Steering Mode
              * @default null
@@ -1731,6 +1841,7 @@ export interface components {
          *         user_message: Submitted user message.
          *         reply: Planner reply, absent until a pending turn completes.
          *         suggestions: Planner quick-reply suggestions, if the turn completed.
+         *         part: Structured sequential-planning proposal, absent for legacy turns.
          *         status: Durable execution state for this turn.
          *         created_at: Receipt timestamp, retained as display metadata.
          *         completed_at: Terminal timestamp, absent while still pending.
@@ -1748,6 +1859,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
             /**
@@ -1790,8 +1902,10 @@ export interface components {
          *         plan: The full current draft plan.
          *         suggestions: The planner's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
+         *         part: Structured sequential-planning proposal, when this turn carries one.
          */
         PlanningTurnOut: {
+            part?: components["schemas"]["PartProposalOut"] | null;
             plan: components["schemas"]["PlanDraft"];
             /** Reply */
             reply: string;
@@ -2055,6 +2169,8 @@ export interface components {
          *         title: Section title.
          *         role: Section role (determines page position).
          *         blocks: The section's prose blocks, in order.
+         *         summary: Verified summary for a single-block section, if available.
+         *         summary_status: Summary production state for a single-block section.
          */
         SectionOut: {
             /** Blocks */
@@ -2066,6 +2182,10 @@ export interface components {
              * @enum {string}
              */
             role: "key_findings" | "standard" | "conclusions";
+            /** Summary */
+            summary?: string | null;
+            /** Summary Status */
+            summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
         };
@@ -2086,6 +2206,8 @@ export interface components {
             cited_by_count?: number | null;
             /** Cited In */
             cited_in?: components["schemas"]["CitedInOut"][];
+            /** Classification Reason */
+            classification_reason?: string | null;
             /** Doi */
             doi?: string | null;
             /** Evidence Type */
@@ -2101,12 +2223,19 @@ export interface components {
             origin: "OpenAlex" | "Overton" | "Uploaded";
             /** Publisher */
             publisher?: string | null;
+            /**
+             * Read In Full
+             * @default false
+             */
+            read_in_full: boolean;
             /** Record Type */
             record_type?: string | null;
             /** Screen Basis */
             screen_basis?: string | null;
             /** Screen Confidence */
             screen_confidence?: number | null;
+            /** Screen Reason */
+            screen_reason?: string | null;
             /** Screen Stage */
             screen_stage?: number | null;
             /** Screen Status */
@@ -2245,6 +2374,7 @@ export interface components {
          *         name: Theme name.
          *         size: Number of items in the theme.
          *         description: Short theme description.
+         *         theme_id: Stable theme identity, absent for legacy characterisations.
          */
         ThemeOut: {
             /** Description */
@@ -2253,6 +2383,8 @@ export interface components {
             name: string;
             /** Size */
             size: number;
+            /** Theme Id */
+            theme_id?: string | null;
         };
         /**
          * ThemeRefItemOut
@@ -2770,6 +2902,14 @@ export interface operations {
                 page_size?: number;
                 status?: ("found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable" | "Included")[] | null;
                 cited?: boolean | null;
+                sort?: ("title" | "year" | "type" | "strength" | "status" | "relevance") | null;
+                order?: ("asc" | "desc") | null;
+                theme?: string | null;
+                origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
+                evidence_type?: string | null;
+                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak") | null;
+                year_from?: number | null;
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -2902,7 +3042,9 @@ export interface operations {
     };
     landscape_api_v1_projects__project_id__landscape_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "cited" | null;
+            };
             header?: never;
             path: {
                 project_id: string;

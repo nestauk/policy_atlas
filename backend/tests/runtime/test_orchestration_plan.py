@@ -19,6 +19,7 @@ from policy_atlas.runtime.orchestration_plan import (
     OrchestrationPlan,
     SearchEffort,
     compose,
+    time_band_for,
 )
 
 SEARCH_EFFORTS: tuple[SearchEffort, ...] = ("rapid", "standard", "deep")
@@ -56,6 +57,47 @@ def _payload(**overrides: Any) -> dict[str, Any]:
 
 def _plan(**overrides: Any) -> OrchestrationPlan:
     return OrchestrationPlan.model_validate(_payload(**overrides))
+
+
+@pytest.mark.parametrize("section_budget", [2, 8])
+def test_section_budget_accepts_the_pinned_bounds(section_budget: int) -> None:
+    """The executable plan accepts only the 2..SECTION_CAP budget range."""
+    assert _plan(section_budget=section_budget).section_budget == section_budget
+
+
+@pytest.mark.parametrize("section_budget", [0, 1, 9])
+def test_section_budget_rejects_outside_pinned_bounds(section_budget: int) -> None:
+    """The executable plan fails closed outside the section budget range."""
+    with pytest.raises(ValidationError):
+        _plan(section_budget=section_budget)
+
+
+def test_section_budget_threads_to_synthesis_and_shortens_only_named_time_bands() -> None:
+    """The plan's budget reaches synthesis and changes only the stipulated cells."""
+    steps = {step.component: step for step in compose(_plan(section_budget=3)).steps}
+    assert steps["synthesise"].directive_delta == {"synthesis": {"section_budget": 3}}
+    assert time_band_for("rapid", "landscape", 3) == "~5-10 min"
+    assert time_band_for("standard", "landscape", 3) == "~5-10 min"
+    assert time_band_for("standard", "standard", 3) == "~5-10 min"
+    assert time_band_for("deep", "landscape", 3) == TIME_BANDS[("deep", "landscape")]
+    assert time_band_for("rapid", "standard", 3) == TIME_BANDS[("rapid", "standard")]
+    assert time_band_for("rapid", "landscape", None) == TIME_BANDS[("rapid", "landscape")]
+    short_report_cells = {
+        ("rapid", "landscape"),
+        ("standard", "landscape"),
+        ("standard", "standard"),
+    }
+    for effort in SEARCH_EFFORTS:
+        for depth in ANALYSIS_DEPTHS:
+            expected = (
+                "~5-10 min"
+                if (effort, depth) in short_report_cells
+                else TIME_BANDS[(effort, depth)]
+            )
+            assert time_band_for(effort, depth, 4) == expected
+            assert time_band_for(effort, depth, 5) == TIME_BANDS[(effort, depth)]
+    no_budget_steps = {step.component: step for step in compose(_plan()).steps}
+    assert no_budget_steps["synthesise"].directive_delta == {}
 
 
 def _valid_component_sets(depth: AnalysisDepth) -> list[list[str]]:

@@ -28,6 +28,7 @@ from policy_atlas.evidence_base.sourcing.country_filters import (
     validate_iso_alpha2,
     validate_overton_display_name,
 )
+from policy_atlas.evidence_base.synthesis.synthesis_tools import SECTION_CAP
 from policy_atlas.runtime.run_spec import COMPONENT_REGISTRY
 
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
@@ -62,9 +63,10 @@ PUBLISHER_COUNTRY_MAX = 100
 # import cycle (steering.py imports this module). A guard test pins this tuple to
 # steering.LATTICE_POINTS so the two never drift.
 STEER_POINTS: tuple[str, ...] = (
-    "search_exception",
+    "search_review",
     "evidence_base_coverage",
     "deepening_selection",
+    "finding_groups",
     "synthesis_shape",
 )
 
@@ -84,9 +86,7 @@ DISCRETIONARY_COMPONENTS: tuple[DiscretionaryComponent, ...] = (
     "group",
 )
 ALL_STEPS: tuple[str, ...] = SPINE + DISCRETIONARY_COMPONENTS
-DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(
-    ("select", "extract", "group")
-)
+DEEP_CHAIN_COMPONENTS: frozenset[DiscretionaryComponent] = frozenset(("select", "extract", "group"))
 DEEP_GROUPING_FACETS: tuple[GroupingFacet, ...] = (
     "intervention",
     "outcome",
@@ -165,9 +165,7 @@ ANALYSIS_DEPTH_TABLE: dict[AnalysisDepth, AnalysisDepthDirective] = {
 # at every compose() call.
 for _depth, _settings in ANALYSIS_DEPTH_TABLE.items():
     if _settings["findings_chain"] and not _settings["select"]:
-        raise AssertionError(
-            f"ANALYSIS_DEPTH_TABLE[{_depth!r}]: findings_chain requires select"
-        )
+        raise AssertionError(f"ANALYSIS_DEPTH_TABLE[{_depth!r}]: findings_chain requires select")
 del _depth, _settings
 
 NAMED_PAIRINGS: dict[str, tuple[SearchEffort, AnalysisDepth]] = {
@@ -205,6 +203,34 @@ TIME_BANDS: dict[tuple[SearchEffort, AnalysisDepth], str] = {
     ("standard", "deep"): "~80-95 min",
     ("deep", "deep"): "~90-100 min",
 }
+
+
+def time_band_for(
+    effort: SearchEffort,
+    depth: AnalysisDepth,
+    section_budget: int | None,
+) -> str:
+    """Return the deterministic display time band for a compiled plan.
+
+    Args:
+        effort: The plan's acquisition effort.
+        depth: The plan's analysis depth.
+        section_budget: Optional ordinary-section report budget.
+
+    Returns:
+        The display time band, including the short-report row where applicable.
+    """
+    if (
+        section_budget is not None
+        and section_budget <= 4
+        and (
+            (effort in {"rapid", "standard"} and depth == "landscape")
+            or (effort == "standard" and depth == "standard")
+        )
+    ):
+        return "~5-10 min"
+    return TIME_BANDS[(effort, depth)]
+
 
 _DISCRETIONARY_COMPONENT_SET = set(DISCRETIONARY_COMPONENTS)
 # The screening harness component is keyed "screen" in COMPONENT_REGISTRY
@@ -269,9 +295,7 @@ def _enabled_components(depth: AnalysisDepth) -> set[DiscretionaryComponent]:
 
 
 def _validate_registry() -> None:
-    missing = sorted(
-        {registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY)
-    )
+    missing = sorted({registry_component_for(step) for step in ALL_STEPS} - set(COMPONENT_REGISTRY))
     if missing:
         raise ValueError(f"orchestration references unknown registry component(s): {missing}")
 
@@ -439,9 +463,7 @@ class ScopeConstraints(BaseModel):
 
     @field_validator("author_affiliation_countries")
     @classmethod
-    def validate_author_affiliation_countries(
-        cls, value: list[str] | None
-    ) -> list[str] | None:
+    def validate_author_affiliation_countries(cls, value: list[str] | None) -> list[str] | None:
         """Validate the optional OpenAlex author-affiliation country filter.
 
         Args:
@@ -484,8 +506,7 @@ class ScopeConstraints(BaseModel):
         ):
             raise ValueError("published_after must not be later than published_before")
         if self.country_group is not None and (
-            self.publisher_country is not None
-            or self.author_affiliation_countries is not None
+            self.publisher_country is not None or self.author_affiliation_countries is not None
         ):
             raise ValueError(
                 "country_group is mutually exclusive with publisher_country "
@@ -632,6 +653,9 @@ class OrchestrationPlan(BaseModel):
         expected_artefact_shape: Deterministic forecast derived from components.
         assumptions: Visible assumptions and open guesses.
         time_band: Deterministic wall-clock band derived from the two axes.
+        section_budget: Optional future synthesis cap for ordinary sections.
+        source_turn_index: Planning turn that approved this payload, when it
+            was created through the planning API.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -653,6 +677,8 @@ class OrchestrationPlan(BaseModel):
     expected_artefact_shape: str = ""
     assumptions: list[str] = Field(default_factory=list)
     time_band: str = ""
+    section_budget: int | None = Field(default=None, ge=2, le=SECTION_CAP)
+    source_turn_index: int | None = None
 
     @field_validator("title", "question")
     @classmethod
@@ -836,7 +862,9 @@ class OrchestrationPlan(BaseModel):
             raise ValueError("expected_artefact_shape does not match the composed chain")
         self.expected_artefact_shape = expected_shape
 
-        expected_time_band = TIME_BANDS[(self.search_effort, self.analysis_depth)]
+        expected_time_band = time_band_for(
+            self.search_effort, self.analysis_depth, self.section_budget
+        )
         if self.time_band and self.time_band != expected_time_band:
             raise ValueError("time_band does not match search_effort and analysis_depth")
         self.time_band = expected_time_band
@@ -970,6 +998,8 @@ def _directive_delta(component: str, plan: OrchestrationPlan) -> dict[str, Any]:
         if not facets:
             raise ValueError("group cannot compile without grouping facets")
         return {"grouping": {"facets": list(facets)}}
+    if component == "synthesise" and plan.section_budget is not None:
+        return {"synthesis": {"section_budget": plan.section_budget}}
     return {}
 
 

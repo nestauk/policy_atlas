@@ -159,6 +159,10 @@ class PolicyAtlasStack(Stack):
                 "DB_POOL_SIZE": str(be_config["db_pool_size"]),
                 "DB_MAX_OVERFLOW": str(be_config["db_max_overflow"]),
                 "LOG_LEVEL": "INFO",
+                "LOG_FORMAT": "json",
+                # Tags deployed traces so they filter apart from local-dev
+                # runs inside the shared dev Langfuse project.
+                "LANGFUSE_TRACING_ENVIRONMENT": "staging",
             },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),

@@ -20,6 +20,20 @@ timestamp: 2026-07-29
 - **A fast-worker killed mid-task** (transient API stall) resumes losslessly
   via `SendMessage` to the same agent id — its transcript survives; don't
   re-brief from scratch (027 build).
+- **Codex-authored tests are the dominant delegated-defect surface** —
+  confirmed a third time in 028: the build's 15-test fallout plus one
+  invalid fixture were all test bugs (product code survived adjudication
+  unchanged), and the review stack's one shipped MAJOR (dead
+  finding-groups regroup) was masked by a Codex-authored matrix that
+  asserted ids/compilation instead of answering the pause (see
+  [tested-in-isolation-is-not-wired](tested-in-isolation-is-not-wired.md)).
+  Weight review budget toward delegated tests, not delegated product code.
+- **Two families editing one working tree concurrently** is safe when the
+  briefs carry disjoint file lists AND each names the sibling's files;
+  string-anchored edits on one SHARED file from two agents also merged
+  cleanly in 028 — but a mid-flight `pnpm typecheck` sees the union and
+  cross-fires (one agent's regenerated types transiently broke the
+  other's check). Gate on typecheck only after both land.
 
 # Why
 

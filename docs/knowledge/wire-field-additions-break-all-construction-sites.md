@@ -31,6 +31,14 @@ different commits (and different executors) without a red intermediate state.
 - Construction sites hide in: stub backends' sentinel payloads, shared test
   record factories, the few-shot example, and back-compat shims
   (`_with_iof_v2_defaults`) — grep for the model name, not just callers.
+- **Transport-twin wires double every site** (028): where a domain wire has
+  a JSON-string transport twin (`AuthoredOptionWire` /
+  `AuthoredOptionTransport`, delta as `delta_json`), a new field must
+  thread through BOTH twins **and** `to_wire()` or it silently drops
+  (`endorses_option_id`). And a schema that *requires* fields the prompt
+  tells the model to omit makes honest outputs unserialisable — 028's
+  endorsements needed `component`/`delta` nullable-on-endorsement with the
+  requiredness moved into consumer-side validation (`watch_authoring_v2`).
 - The import-time pre-flight is the guard doing its job: do not weaken it to
   make a partial addition pass.
 - Same family: [structured-output-prompts-pin-key-vocabulary](structured-output-prompts-pin-key-vocabulary.md)

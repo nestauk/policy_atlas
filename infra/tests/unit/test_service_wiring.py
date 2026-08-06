@@ -14,6 +14,8 @@ API_ENVIRONMENT_NAMES = {
     "DB_POOL_SIZE",
     "DB_MAX_OVERFLOW",
     "LOG_LEVEL",
+    "LOG_FORMAT",
+    "LANGFUSE_TRACING_ENVIRONMENT",
 }
 APP_SECRET_NAMES = {
     "OPENAI_API_KEY",
@@ -59,6 +61,8 @@ def test_api_container_has_the_complete_deployed_plain_environment_map():
     assert environment["DB_POOL_SIZE"] == "15"
     assert environment["DB_MAX_OVERFLOW"] == "10"
     assert environment["LOG_LEVEL"] == "INFO"
+    assert environment["LOG_FORMAT"] == "json"
+    assert environment["LANGFUSE_TRACING_ENVIRONMENT"] == "staging"
 
 
 def test_api_container_references_database_and_app_secrets_without_values():

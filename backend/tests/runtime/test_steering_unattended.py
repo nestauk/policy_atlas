@@ -86,19 +86,19 @@ def test_requires_input_option_without_supplied_delta_fails_closed() -> None:
     placeholder template supplies none — rejected at validation time."""
     with pytest.raises(ValidationError, match="requires user input"):
         SteerPointDefault(
-            steer_point="deepening_selection",
+            steer_point="evidence_base_coverage",
             action="proceed_flag",
             option_id="scope_strata",
-            delta={"selection": {"strata_scope": {"only": ["theme or stratum name"]}}},
+            delta={"select": {"selection": {"strata_scope": {"only": ["theme or stratum name"]}}}},
         )
 
 
 def test_requires_input_option_with_supplied_delta_validates() -> None:
     rule = SteerPointDefault(
-        steer_point="deepening_selection",
+        steer_point="evidence_base_coverage",
         action="proceed_flag",
         option_id="scope_strata",
-        delta={"selection": {"strata_scope": {"only": ["rural childcare"]}}},
+        delta={"select": {"selection": {"strata_scope": {"only": ["rural childcare"]}}}},
     )
     assert rule.option_id == "scope_strata"
 
@@ -211,9 +211,7 @@ def test_hard_stop_rule_aborts_and_cannot_be_overridden(engine: Engine) -> None:
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan(
             steering_mode="unattended",
-            steer_point_defaults=[
-                {"steer_point": "evidence_base_coverage", "action": "stop"}
-            ],
+            steer_point_defaults=[{"steer_point": "evidence_base_coverage", "action": "stop"}],
         )
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
 
@@ -240,14 +238,10 @@ def test_hard_stop_rule_aborts_and_cannot_be_overridden(engine: Engine) -> None:
         # The plan was abandoned; select never ran.
         with engine.connect() as conn:
             status = conn.execute(
-                select(orchestration_plan.c.status).where(
-                    orchestration_plan.c.plan_id == plan_id
-                )
+                select(orchestration_plan.c.status).where(orchestration_plan.c.plan_id == plan_id)
             ).scalar_one()
             selection_rows = conn.execute(
-                select(selection_result.c.run_id).where(
-                    selection_result.c.project_id == project_id
-                )
+                select(selection_result.c.run_id).where(selection_result.c.project_id == project_id)
             ).all()
         assert status == "abandoned"
         assert selection_rows == []
@@ -289,13 +283,9 @@ def test_unconfigured_default_proceeds_flags_loudest_and_evented(engine: Engine)
         )
         assert outcome.status == "succeeded"
 
-        auto = [
-            event for event in outcome.flagged_events if event["status"] == "auto_resolved"
-        ]
+        auto = [event for event in outcome.flagged_events if event["status"] == "auto_resolved"]
         floor_points = {
-            event["steer_point"]
-            for event in auto
-            if event["rule"] == "unconfigured_default"
+            event["steer_point"] for event in auto if event["rule"] == "unconfigured_default"
         }
         # The always-on decision points all fell to the loudest floor.
         assert {"evidence_base_coverage", "deepening_selection", "synthesis_shape"} <= floor_points
@@ -331,9 +321,7 @@ def test_fired_triggers_ride_the_standing_decision_payload(
         project_id, scope_id = _seed_project(engine)
         fired = [{"trigger": "thin_base", "detail": {"selected": 1}}]
         # Force P3's floor trigger to fire regardless of the corpus.
-        monkeypatch.setattr(
-            runner_module, "steer_point_triggers", lambda *a, **k: fired
-        )
+        monkeypatch.setattr(runner_module, "steer_point_triggers", lambda *a, **k: fired)
         plan = _base_plan(steering_mode="unattended", steer_point_defaults=[])
         plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
 
@@ -353,8 +341,7 @@ def test_fired_triggers_ride_the_standing_decision_payload(
         p3_decision = next(
             payload
             for payload in _standing_decisions(engine, project_id)
-            if payload.get("component") == "select"
-            and payload.get("boundary") == "after_component"
+            if payload.get("component") == "select" and payload.get("boundary") == "after_component"
         )
         assert p3_decision["triggers"] == fired
     finally:
@@ -375,14 +362,15 @@ def test_discretion_hook_only_consulted_when_no_pinned_rule(engine: Engine) -> N
             consulted.append(context.steer_point)
             return _DiscretionOutcome(interpreted_action="proceed", rule="unconfigured_default")
 
-        # Every lattice point carries a bare proceed_flag rule (search_exception
-        # too, since P1 fires on this corpus) so no boundary reaches the floor.
+        # Every lattice point carries a bare proceed_flag rule so no boundary
+        # reaches the discretion floor.
         ruled = _base_plan(
             steering_mode="unattended",
             steer_point_defaults=[
-                {"steer_point": "search_exception", "action": "proceed_flag"},
+                {"steer_point": "search_review", "action": "proceed_flag"},
                 {"steer_point": "evidence_base_coverage", "action": "proceed_flag"},
                 {"steer_point": "deepening_selection", "action": "proceed_flag"},
+                {"steer_point": "finding_groups", "action": "proceed_flag"},
                 {"steer_point": "synthesis_shape", "action": "proceed_flag"},
             ],
         )

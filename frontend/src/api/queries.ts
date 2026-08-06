@@ -17,9 +17,10 @@ export const queryKeys = {
   checkIns: (projectId: string, status?: "pending" | "all") =>
     ["projects", projectId, "check-ins", status] as const,
   funnel: (projectId: string) => ["projects", projectId, "funnel"] as const,
-  landscape: (projectId: string) => ["projects", projectId, "landscape"] as const,
+  landscape: (projectId: string, scope?: "cited") =>
+    ["projects", projectId, "landscape", scope] as const,
   evidence: (projectId: string, query?: EvidenceQuery) =>
-    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited] as const,
+    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
   findings: (projectId: string, query?: FindingsQuery) =>
     ["projects", projectId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (projectId: string, page?: number, pageSize?: number) =>
@@ -57,6 +58,16 @@ type EvidenceStatusFilter =
 export interface EvidenceQuery extends PageQuery {
   status?: EvidenceStatusFilter[];
   cited?: boolean;
+  /** Server-side sort key (default unsorted); `order` is 422 without it. */
+  sort?: "title" | "year" | "type" | "strength" | "status" | "relevance";
+  order?: "asc" | "desc";
+  /** Theme id (`ThemeOut.theme_id`) — collection-true across pages. */
+  theme?: string;
+  origin?: "OpenAlex" | "Overton" | "Uploaded";
+  evidence_type?: string;
+  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak";
+  year_from?: number;
+  year_to?: number;
 }
 
 export interface FindingsQuery extends PageQuery {
@@ -175,13 +186,13 @@ export function useFunnel(projectId: string) {
 
 /** `GET /api/v1/projects/{project_id}/landscape` — screened-in-only
  *  distributions, whole-object. */
-export function useLandscape(projectId: string) {
+export function useLandscape(projectId: string, scope?: "cited") {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.landscape(projectId),
+    queryKey: queryKeys.landscape(projectId, scope),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/landscape", {
-        params: { path: { project_id: projectId } },
+        params: { path: { project_id: projectId }, query: scope !== undefined ? { scope } : undefined },
       });
       if (error) throw error;
       return data;

@@ -39,13 +39,13 @@ export function SheetContent({
       >
         <div className="flex items-start justify-between gap-4 border-b border-line px-5 py-4">
           <div>
-            <DialogPrimitive.Title className="font-display text-[17px] font-bold text-navy">
+            <DialogPrimitive.Title className="font-display text-lead font-bold text-navy">
               {title}
             </DialogPrimitive.Title>
             {description === undefined ? (
               <VisuallyHiddenDescription />
             ) : (
-              <DialogPrimitive.Description className="mt-1 text-[12.5px] text-grey">
+              <DialogPrimitive.Description className="mt-1 text-caption text-grey">
                 {description}
               </DialogPrimitive.Description>
             )}
