@@ -1703,11 +1703,6 @@ first-class vocabulary. What follows is what it deliberately left out.
   (`policy_atlas.core.liveness`, best-effort publish points in the search/fetch
   transports). A *designed* per-component progress protocol (typed progress shapes,
   coverage of every component, durable where warranted) is still open.
-- **Licensed font delivery for the deployed web app** (owner + comms, 2026-07-21) —
-  Averta/Zosia are licensed for the web app; binaries are never committed (CI font-guard).
-  Locally they load from an untracked `frontend/public/fonts/`. The deployed app needs a
-  delivery mechanism outside the repo (private bucket injected at build/deploy time) —
-  pure mechanics for the infra slice; no licensing question remains.
 - **Cursor pagination migration path** (025 API pins) — offset + `total_items` is the
   deliberate v1 shape at per-project scale; if cross-project or unbounded-growth listings
   appear, add an opaque `cursor` param alongside (additive, never a breaking reshape).
@@ -1724,27 +1719,30 @@ first-class vocabulary. What follows is what it deliberately left out.
   `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
   API (the dev DB's two live-run projects are the known case). Recovery is a documented
   manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
-- **Deploy invariant: stop-old-before-boot-new** (025 review, adv-M3 + live-check SIGTERM
-  lesson, 2026-07-21) — the startup orphan sweep has no instance-ownership lease, and
-  default SIGTERM lets the walk executor keep running through a graceful drain. Until the
-  cross-instance seam lands (lease riding LISTEN/NOTIFY work), deploys MUST hard-kill the
-  old process before booting the new one, or the sweep/live-walk race interrupts healthy
-  runs. Recorded in web-api.md § Deployment posture; the infra slice's deploy scripts own
-  enforcing it.
 - **`CitationOut.source_id`** (025 live check, 2026-07-21) — the citation→dossier join is
   title-keyed; a locator-fallback title misses the evidence row (honest empty state).
   Adding `source_id` to `CitationOut` is small but a contract change (regen + views);
   next API-touching slice.
+- **Post-re-auth return-to renders the landing route** (026 live check, 2026-07-28) —
+  the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
+  react-router never observes: after any auth round-trip the URL may show the deep link
+  while the landing route renders. Cosmetic (a reload or click recovers); fix is a
+  router-level navigate in `onSigninCallback` — next frontend-touching slice.
+  (A second facet — a persistent OIDC callback error mounting the shell tokenless,
+  flagged by the 026 review's Codex lane — bit the owner live the same day and was
+  **fixed in-slice**: on error the provider renders a "Sign in again" retry that
+  strips consumed `code`/`state` params before stashing the return path; the shell
+  never mounts. Only the router-navigate restoration above remains open.)
 - **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
   exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
   presents under the acquire stage label ("Searching sources" while reading documents) —
   both are workspace-surface polish for the next frontend-touching slice.
-- **Automated FE↔real-API smoke** (025 review, adv-M6) — mock mode intercepts fetch, so
-  transport/auth/base-URL/error-mapping integration is structurally invisible to the
-  Playwright journey (all five live-check integration bugs were in that layer). A thin
-  CI job — real HTTP + dev-issuer auth + SSE against stub backends — closes the gap;
-  belongs with the CI work in the infra slice.
-- **Production build guard for `VITE_OIDC_AUTHORITY`** (025 security lane, info) — a
-  production bundle built without the OIDC authority silently ships the dev token panel
-  (backend still verifies RS256; not a bypass, but a posture smell). A build-time
-  refusal (or explicit dev opt-in flag) rides the infra slice's deploy checklist.
+
+## Infra deployment (task 026 seams)
+
+- **No deploy lock** (026 review, Codex adversarial, 2026-07-28) — `scripts/deploy.sh`
+  assumes one operator: two concurrent runs can interleave stop→migrate→scale (parallel
+  Alembic runs, one deploy booting the API mid-migration of the other). Acceptable while
+  deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
+  lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
+  seam when a second operator or CI-driven deploys appear.

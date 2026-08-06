@@ -41,10 +41,10 @@ def api_client(
     # Unique subs per client: the test DB is shared across the suite, and
     # owner-scoped listings would otherwise see other tests' projects.
     owner = mint_token(
-        f"owner-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_audience, 60, key_dir
+        f"owner-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
     )
     other = mint_token(
-        f"other-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_audience, 60, key_dir
+        f"other-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
     )
     app = create_app(settings=settings)
     if overrides:

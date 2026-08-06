@@ -37,6 +37,10 @@ ad-hoc run that commits (e.g. the manual orchestrate smoke) re-contaminates it. 
 prevention is one-DB-user-at-a-time — a build lane's "fence" covers done-check resources, not just
 files. If parallel lanes become routine, see deferred.md's per-lane `DATABASE_URL` entry.
 
+Corollary (026): any harness that *persists* real rows (the FE↔API smoke, manual poking) must own a
+disposable per-harness DB (`policy_atlas_smoke`, recreated per run, dropped at teardown) — reusing
+`policy_atlas_test` broke 4 migration round-trip tests and looked like a schema bug.
+
 # Citations
 
 - [tests/conftest.py](../../tests/conftest.py)

@@ -85,12 +85,41 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     void oidcRef.current.signinRedirect();
   }, []);
 
+  // Manual retry after a sign-in error. `code`/`state` are dropped from the
+  // stashed return path so the retry can't restore a consumed callback URL
+  // and error again (the usual cause: a restored tab or back-navigation to
+  // the post-login URL).
+  const retrySignIn = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("code");
+    params.delete("state");
+    const search = params.size > 0 ? `?${params.toString()}` : "";
+    const returnTo = `${window.location.pathname}${search}${window.location.hash}`;
+    sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+    void oidcRef.current.signinRedirect();
+  }, []);
+
   const status: AuthStatus = oidc.isLoading
     ? "loading"
     : oidc.isAuthenticated
       ? "authenticated"
       : "unauthenticated";
   const sub = oidc.user?.profile.sub;
+
+  // Cold-visit gating (026 live-check finding, 2026-07-28): a first
+  // unauthenticated entry previously rendered the app shell, whose queries
+  // 401'd forever with no path to sign-in — only mid-session expiry (the
+  // ReauthRedirect views) ever reached `signinRedirect`. Mirror the
+  // dev-token provider's own behaviour: the PROVIDER gates, sending cold
+  // visits straight to the hosted UI with the route preserved.
+  const shouldRedirect =
+    !oidc.isLoading && !oidc.isAuthenticated && !oidc.activeNavigator && !oidc.error;
+  useEffect(() => {
+    if (!shouldRedirect) return;
+    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
+    void oidcRef.current.signinRedirect();
+  }, [shouldRedirect]);
 
   const value: AuthApi = useMemo(
     () => ({
@@ -103,6 +132,36 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     }),
     [getAccessToken, signIn, signOut, onUnauthenticated, sub, status],
   );
+
+  // A persistent OIDC error (e.g. a stale sign-in callback) must not mount
+  // the shell tokenless — every query 401s with no visible path back to
+  // sign-in (026 live incident; the redirect gate above deliberately stands
+  // down on error to avoid a redirect loop). Surface the failure with a
+  // manual retry instead.
+  if (!oidc.isAuthenticated && oidc.error) {
+    return (
+      <div role="alert" className="text-sm text-grey">
+        <p>Sign-in didn&apos;t complete: {oidc.error.message}</p>
+        <button
+          type="button"
+          onClick={retrySignIn}
+          className="cursor-pointer text-[13px] text-grey underline hover:text-navy"
+        >
+          Sign in again
+        </button>
+      </div>
+    );
+  }
+
+  // While signing in (loading, redirecting, or about to redirect) the app
+  // shell must not mount — its queries would fire tokenless and 401.
+  if (!oidc.isAuthenticated) {
+    return (
+      <p role="status" className="text-sm text-grey">
+        Taking you to sign in…
+      </p>
+    );
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

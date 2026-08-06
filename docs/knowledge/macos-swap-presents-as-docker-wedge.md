@@ -31,3 +31,8 @@ explained both.
 The same pressure also produces the false test timeouts described in
 [deadline clocks need spawn headroom](process-start-deadlines-need-spawn-headroom.md)
 — one root cause, two unrelated-looking symptom families.
+
+Second wedge family (026 E): the VM's *network* path can wedge independently —
+API responsive, every pull hangs indefinitely, gvisor tx errors in the VM log,
+memory fine. App-level quit doesn't recycle the VM; a full process kill +
+relaunch does (~1.5h burned before that order was tried).

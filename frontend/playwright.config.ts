@@ -11,6 +11,10 @@ const PORT = 5173;
 
 export default defineConfig({
   testDir: "./e2e",
+  // The real-API smoke owns its own built-site/server lifecycle in
+  // scripts/fe_api_smoke.sh. It must never be picked up by this mock-only
+  // suite, whose web server intercepts every API call.
+  testIgnore: "**/fe-api-smoke.spec.ts",
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

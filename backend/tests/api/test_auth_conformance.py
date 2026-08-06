@@ -32,14 +32,14 @@ from policy_atlas.api.settings import Settings
 def issuer_a(tmp_path: Path) -> tuple[Path, Settings]:
     """Create the first file-backed development issuer configuration."""
     key_dir = tmp_path / "issuer-a"
-    return key_dir, _settings("http://dev-issuer-a.local", "audience-a", init(key_dir, kid="a-1"))
+    return key_dir, _settings("http://dev-issuer-a.local", "client-a", init(key_dir, kid="a-1"))
 
 
 @pytest.fixture
 def issuer_b(tmp_path: Path) -> tuple[Path, Settings]:
     """Create the second, intentionally incompatible development issuer."""
     key_dir = tmp_path / "issuer-b"
-    return key_dir, _settings("http://dev-issuer-b.local", "audience-b", init(key_dir, kid="b-1"))
+    return key_dir, _settings("http://dev-issuer-b.local", "client-b", init(key_dir, kid="b-1"))
 
 
 def test_provider_conformance(
@@ -47,20 +47,24 @@ def test_provider_conformance(
     issuer_a: tuple[Path, Settings],
     issuer_b: tuple[Path, Settings],
 ) -> None:
-    """Accept only an unexpired RS256 token from the configured issuer and audience."""
+    """Accept only an unexpired RS256 token from the configured issuer and client."""
     del engine
     key_dir_a, settings_a = issuer_a
     key_dir_b, settings_b = issuer_b
     valid = mint_token(
-        "user-a", settings_a.oidc_issuer, settings_a.oidc_audience, 60, key_dir_a, kid="a-1"
+        "user-a", settings_a.oidc_issuer, settings_a.oidc_client_id, 60, key_dir_a, kid="a-1"
     )
     invalid_tokens = (
-        _signed_token(key_dir_a, "a-1", settings_a.oidc_issuer, settings_a.oidc_audience, -1),
+        _signed_token(
+            key_dir_a,
+            "a-1",
+            _claims(settings_a.oidc_issuer, settings_a.oidc_client_id, -1),
+        ),
         mint_token("user-a", settings_a.oidc_issuer, "other", 60, key_dir_a, kid="a-1"),
         mint_token(
             "user-a",
             "http://dev-issuer-other.local",
-            settings_a.oidc_audience,
+            settings_a.oidc_client_id,
             60,
             key_dir_a,
             kid="a-1",
@@ -68,14 +72,14 @@ def test_provider_conformance(
         mint_token(
             "user-b",
             settings_b.oidc_issuer,
-            settings_b.oidc_audience,
+            settings_b.oidc_client_id,
             60,
             key_dir_b,
             kid="b-1",
         ),
-        _hs256_token(key_dir_a, "a-1", settings_a.oidc_issuer, settings_a.oidc_audience),
+        _hs256_token(key_dir_a, "a-1", settings_a.oidc_issuer, settings_a.oidc_client_id),
         jwt.encode(
-            _claims(settings_a.oidc_issuer, settings_a.oidc_audience, 60),
+            _claims(settings_a.oidc_issuer, settings_a.oidc_client_id, 60),
             key="",
             algorithm="none",
             headers={"kid": "a-1"},
@@ -88,16 +92,62 @@ def test_provider_conformance(
             _assert_unauthenticated(client.get("/probe", headers=_authorization(token)))
 
 
+def test_cognito_access_token_claim_conformance(
+    engine: Engine, issuer_a: tuple[Path, Settings]
+) -> None:
+    """Enforce Cognito access-token claims while deliberately ignoring ``aud``."""
+    del engine
+    key_dir, settings = issuer_a
+    cognito_access_token = mint_token(
+        "user-a", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir, kid="a-1"
+    )
+    aud_only_token = _signed_token(
+        key_dir,
+        "a-1",
+        _claims(settings.oidc_issuer, None, 60, token_use=None, audience="legacy-audience"),
+    )
+    wrong_client_id_token = _signed_token(
+        key_dir,
+        "a-1",
+        _claims(settings.oidc_issuer, "wrong-client", 60),
+    )
+    id_token = _signed_token(
+        key_dir,
+        "a-1",
+        _claims(settings.oidc_issuer, settings.oidc_client_id, 60, token_use="id"),
+    )
+    access_token_with_bogus_aud = _signed_token(
+        key_dir,
+        "a-1",
+        _claims(
+            settings.oidc_issuer,
+            settings.oidc_client_id,
+            60,
+            audience="bogus-audience",
+        ),
+    )
+
+    with _client(settings) as client:
+        assert client.get(
+            "/probe", headers=_authorization(cognito_access_token)
+        ).json() == {"user_id": "user-a"}
+        for token in (aud_only_token, wrong_client_id_token, id_token):
+            _assert_unauthenticated(client.get("/probe", headers=_authorization(token)))
+        assert client.get(
+            "/probe", headers=_authorization(access_token_with_bogus_aud)
+        ).json() == {"user_id": "user-a"}
+
+
 def test_key_rotation_refreshes_file_jwks(engine: Engine, issuer_a: tuple[Path, Settings]) -> None:
     """Verify both active kids, then reject a retired kid after a cache refresh."""
     del engine
     key_dir, settings = issuer_a
     init(key_dir, kid="a-2")
     token_a1 = mint_token(
-        "user-a", settings.oidc_issuer, settings.oidc_audience, 60, key_dir, kid="a-1"
+        "user-a", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir, kid="a-1"
     )
     token_a2 = mint_token(
-        "user-a", settings.oidc_issuer, settings.oidc_audience, 60, key_dir, kid="a-2"
+        "user-a", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir, kid="a-2"
     )
     with _client(settings) as client:
         assert client.get("/probe", headers=_authorization(token_a1)).status_code == 200
@@ -136,7 +186,8 @@ def test_unknown_kid_is_negatively_cached_after_one_refresh(
 
 
 def test_missing_and_malformed_authorization_are_unauthenticated(
-    engine: Engine, issuer_a: tuple[Path, Settings]
+    engine: Engine,
+    issuer_a: tuple[Path, Settings],
 ) -> None:
     """Keep malformed bearer input indistinguishable from a missing token."""
     del engine
@@ -161,11 +212,11 @@ def _client(settings: Settings) -> Iterator[TestClient]:
         yield client
 
 
-def _settings(issuer: str, audience: str, jwks_path: Path) -> Settings:
+def _settings(issuer: str, client_id: str, jwks_path: Path) -> Settings:
     """Build an explicit test configuration without remote JWKS access."""
     return Settings(
         issuer,
-        audience,
+        client_id,
         None,
         jwks_path,
         "http://app.example.test",
@@ -186,18 +237,18 @@ def _assert_unauthenticated(response: Any) -> None:
     assert set(response.json()) == {"error"}
 
 
-def _signed_token(key_dir: Path, kid: str, issuer: str, audience: str, ttl: int) -> str:
+def _signed_token(key_dir: Path, kid: str, claims: dict[str, object]) -> str:
     """Sign claims with an arbitrary expiry offset for conformance cases."""
     private_key = cast(
         rsa.RSAPrivateKey,
         serialization.load_pem_private_key((key_dir / f"{kid}.pem").read_bytes(), None),
     )
     return jwt.encode(
-        _claims(issuer, audience, ttl), private_key, algorithm="RS256", headers={"kid": kid}
+        claims, private_key, algorithm="RS256", headers={"kid": kid}
     )
 
 
-def _hs256_token(key_dir: Path, kid: str, issuer: str, audience: str) -> str:
+def _hs256_token(key_dir: Path, kid: str, issuer: str, client_id: str) -> str:
     """Forge the classic public-key-as-HMAC-secret token without PyJWT safeguards."""
     private_key = cast(
         rsa.RSAPrivateKey,
@@ -208,15 +259,29 @@ def _hs256_token(key_dir: Path, kid: str, issuer: str, audience: str) -> str:
         serialization.PublicFormat.SubjectPublicKeyInfo,
     )
     header = _base64url_json({"alg": "HS256", "kid": kid, "typ": "JWT"})
-    payload = _base64url_json(_claims(issuer, audience, 60))
+    payload = _base64url_json(_claims(issuer, client_id, 60))
     signature = hmac.new(public_key, f"{header}.{payload}".encode(), hashlib.sha256).digest()
     return f"{header}.{payload}.{_base64url(signature)}"
 
 
-def _claims(issuer: str, audience: str, ttl: int) -> dict[str, object]:
-    """Return standard claims for a near-term token."""
+def _claims(
+    issuer: str,
+    client_id: str | None,
+    ttl: int,
+    *,
+    token_use: str | None = "access",
+    audience: str | None = None,
+) -> dict[str, object]:
+    """Return Cognito-shaped claims, with optional legacy claim variations."""
     now = int(time.time())
-    return {"sub": "user-a", "iss": issuer, "aud": audience, "iat": now, "exp": now + ttl}
+    claims: dict[str, object] = {"sub": "user-a", "iss": issuer, "iat": now, "exp": now + ttl}
+    if client_id is not None:
+        claims["client_id"] = client_id
+    if token_use is not None:
+        claims["token_use"] = token_use
+    if audience is not None:
+        claims["aud"] = audience
+    return claims
 
 
 def _remove_kid(jwks_path: Path | None, kid: str) -> None:

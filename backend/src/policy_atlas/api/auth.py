@@ -169,10 +169,13 @@ class JwtAuthenticator:
             token,
             key=self.jwks.get_key(kid),
             algorithms=["RS256"],
-            audience=self._settings.oidc_audience,
             issuer=self._settings.oidc_issuer,
-            options={"require": ["exp", "sub"]},
+            options={"require": ["exp", "sub"], "verify_aud": False},
         )
+        if claims.get("token_use") != "access":
+            raise jwt.InvalidTokenError("token is not an access token")
+        if claims.get("client_id") != self._settings.oidc_client_id:
+            raise jwt.InvalidTokenError("token client_id mismatch")
         subject = claims.get("sub")
         if not isinstance(subject, str) or not subject:
             raise jwt.InvalidTokenError("token has no subject")
