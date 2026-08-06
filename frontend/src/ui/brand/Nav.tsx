@@ -19,7 +19,7 @@ export function NavBar({ className, ...props }: HTMLAttributes<HTMLElement>) {
 /** Wordmark: "Policy" navy + "Atlas" electric blue, display face. */
 export function NavLogo() {
   return (
-    <span className="whitespace-nowrap font-display text-lg font-extrabold tracking-[-0.3px] text-navy">
+    <span className="whitespace-nowrap font-display text-lead font-extrabold tracking-[-0.3px] text-navy">
       Policy <b className="font-extrabold text-blue">Atlas</b>
     </span>
   );
@@ -32,7 +32,7 @@ export function NavItem({ to, children }: { to: string; children: ReactNode }) {
       to={to}
       className={({ isActive }) =>
         cn(
-          "nav-underline text-[13px] font-semibold text-grey no-underline hover:text-navy",
+          "nav-underline text-meta font-semibold text-grey no-underline hover:text-navy",
           isActive && "nav-underline-on font-extrabold text-navy",
         )
       }

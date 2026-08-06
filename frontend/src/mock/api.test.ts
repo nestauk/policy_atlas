@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
 import { mockFetch, resetMockScenario } from "./api";
-import { MOCK_CHECK_IN_ID, MOCK_PROJECT_ID } from "./fixtures";
+import {
+  MOCK_CHECK_IN_ID,
+  MOCK_PROJECT_ID,
+  MOCK_THEME_ID_ACTIVE_TRAVEL,
+  MOCK_THEME_ID_SCHOOL_FOOD,
+  mockEvidenceThemeIds,
+} from "./fixtures";
 
 describe("mock API", () => {
   it("serves deterministic, screened-in landscape fixtures", async () => {
@@ -11,6 +17,60 @@ describe("mock API", () => {
     const landscape = await response.json() as { evidence_types: Record<string, number>; themes: { size: number }[] };
     expect(Object.values(landscape.evidence_types).reduce((total, count) => total + count, 0)).toBe(46);
     expect(landscape.themes.reduce((total, theme) => total + theme.size, 0)).toBe(46);
+  });
+
+  // 028 strand 7: the sources table's server-side `sort`/`order`/`theme`
+  // params — honoured honestly in mock mode so `?VITE_MOCK=1` behaviour
+  // doesn't diverge from `repository.evidence`'s real sort/filter logic.
+  describe("evidence sort/order/theme (028 strand 7)", () => {
+    it("sorts by year descending by default (the server's own default direction)", async () => {
+      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?sort=year`);
+      const { data } = await response.json() as { data: { year: number | null }[] };
+      const years = data.map((item) => item.year);
+      const nonNullYears = years.filter((year): year is number => year !== null);
+      expect(nonNullYears.length).toBeGreaterThan(0);
+      expect(nonNullYears).toEqual([...nonNullYears].sort((a, b) => b - a));
+      // Nulls sort last regardless of direction.
+      expect(years.slice(-years.filter((year) => year === null).length).every((year) => year === null)).toBe(true);
+    });
+
+    it("flips to ascending when `order=asc` is explicit, nulls still last", async () => {
+      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?sort=year&order=asc`);
+      const { data } = await response.json() as { data: { year: number | null }[] };
+      const nonNullYears = data.map((item) => item.year).filter((year): year is number => year !== null);
+      expect(nonNullYears).toEqual([...nonNullYears].sort((a, b) => a - b));
+      expect(data.at(-1)?.year).toBeNull();
+    });
+
+    it("sorts by title case-insensitively", async () => {
+      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?sort=title&order=asc`);
+      const { data } = await response.json() as { data: { title: string }[] };
+      const titles = data.map((item) => item.title);
+      expect(titles).toEqual([...titles].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+    });
+
+    it("filters collection-true by theme id", async () => {
+      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?theme=${MOCK_THEME_ID_SCHOOL_FOOD}`);
+      const { data } = await response.json() as { data: { source_id: string }[] };
+      const expectedIds = Object.entries(mockEvidenceThemeIds)
+        .filter(([, themeIds]) => themeIds.includes(MOCK_THEME_ID_SCHOOL_FOOD))
+        .map(([sourceId]) => sourceId);
+      expect(data.map((item) => item.source_id).sort()).toEqual(expectedIds.sort());
+      expect(data.length).toBeGreaterThan(0);
+    });
+
+    it("combines theme and sort — a different theme returns a disjoint, still-sorted set", async () => {
+      const response = await mockFetch(
+        `http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?theme=${MOCK_THEME_ID_ACTIVE_TRAVEL}&sort=title&order=asc`,
+      );
+      const { data } = await response.json() as { data: { source_id: string; title: string }[] };
+      const expectedIds = Object.entries(mockEvidenceThemeIds)
+        .filter(([, themeIds]) => themeIds.includes(MOCK_THEME_ID_ACTIVE_TRAVEL))
+        .map(([sourceId]) => sourceId);
+      expect(data.map((item) => item.source_id)).toEqual(expectedIds);
+      const titles = data.map((item) => item.title);
+      expect(titles).toEqual([...titles].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+    });
   });
 
   it("holds the scripted stream at the check-in then completes after an answer", async () => {

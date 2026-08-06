@@ -27,6 +27,15 @@ timestamp: 2026-07-29
 - **The planner pins structured extraction to deep analysis depth** — a
   standard-depth run has no extract stage and therefore no findings rows; live
   checks that need findings must ask for deep depth.
+- **Playwright strict mode collides with brand copy** (028): `getByText("ready")`
+  matches prose containing "ready" — pin chips/labels with `{ exact: true }`
+  from the first draft of an acceptance spec.
+- **The mock e2e suite and a live Playwright leg cannot share one laptop** —
+  the load makes mock `page.goto` time out; serialise them (028 G.2).
+- **live-028's restart helper only kills what it spawned** (028 review C2):
+  the leg-B FIRST restart targets the `make dev`-started API and requires
+  `LIVE_ALLOW_API_TAKEOVER=1`; it verifies every port-8000 listener is a
+  policy-atlas uvicorn before killing, and refuses otherwise.
 
 # Why
 

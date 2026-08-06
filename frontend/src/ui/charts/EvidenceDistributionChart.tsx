@@ -76,8 +76,8 @@ function ChartTooltip({
   const heading = row.payload?.label ?? String(label ?? "");
   return (
     <div className="border border-line-2 bg-paper px-2.5 py-1.5 shadow-sm">
-      <p className="text-[11.5px] font-semibold text-navy">{heading}</p>
-      <p className="text-[11px] text-grey">
+      <p className="text-caption font-semibold text-navy">{heading}</p>
+      <p className="text-caption text-grey">
         {row.value} source{row.value === 1 ? "" : "s"}
       </p>
     </div>

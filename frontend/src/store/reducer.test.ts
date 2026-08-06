@@ -26,6 +26,7 @@ function planDraft(overrides: Partial<PlanDraft> = {}): PlanDraft {
     scoping_notes: null,
     screening_criteria: null,
     search_effort: null,
+    section_budget: null,
     steering_mode: null,
     time_band: null,
     title: null,
@@ -48,6 +49,7 @@ function checkIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
     stage: "screen",
     status: "pending",
     triggers: [],
+    bundle: null,
     ...overrides,
   };
 }

@@ -88,9 +88,9 @@ function NewProjectForm({ onDone }: { onDone: () => void }) {
       if (!trimmed) return;
       create.mutate({ name: trimmed }, { onSuccess: (project) => { onDone(); void navigate(`/projects/${project.project_id}`); } });
     }}>
-      <label className="text-[13px] font-semibold text-navy" htmlFor="new-project-name">Project name</label>
-      <input id="new-project-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Childhood obesity — what works" className="border border-line-2 bg-paper px-3 py-2.5 text-[13px] focus-visible:outline-2 focus-visible:outline-blue" />
-      {create.isError && <p role="alert" className="text-xs text-red">The project couldn't be created. Try again.</p>}
+      <label className="text-meta font-semibold text-navy" htmlFor="new-project-name">Project name</label>
+      <input id="new-project-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Childhood obesity — what works" className="border border-line-2 bg-paper px-3 py-2.5 text-meta focus-visible:outline-2 focus-visible:outline-blue" />
+      {create.isError && <p role="alert" className="text-caption text-red">The project couldn't be created. Try again.</p>}
       <div className="flex items-center gap-2"><Button type="submit" disabled={create.isPending || !name.trim()}>Create project</Button><Button variant="ghost" onClick={onDone}>Cancel</Button></div>
     </form>
   );
@@ -105,21 +105,21 @@ export function LandingView() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="mb-8 flex items-end justify-between gap-6">
         <div>
-          <h1 className="font-display text-3xl font-extrabold tracking-[-0.5px] text-navy">Projects</h1>
+          <h1 className="font-display text-title font-extrabold tracking-[-0.5px] text-navy">Projects</h1>
         </div>
         {!creating && <Button onClick={() => setCreating(true)}>New project</Button>}
       </header>
       {creating && <Card className="mb-8 max-w-md p-5"><NewProjectForm onDone={() => setCreating(false)} /></Card>}
       {projects.isPending && <ProjectLoading />}
-      {projects.isError && <Card role="alert" className="max-w-md p-5 text-[13px] text-navy">Projects couldn't be loaded. <button type="button" className="cursor-pointer font-bold text-blue hover:underline" onClick={() => void projects.refetch()}>Retry</button></Card>}
+      {projects.isError && <Card role="alert" className="max-w-md p-5 text-meta text-navy">Projects couldn't be loaded. <button type="button" className="cursor-pointer font-bold text-blue hover:underline" onClick={() => void projects.refetch()}>Retry</button></Card>}
       {projects.data !== undefined && projects.data.data.length === 0 && !creating && (
-        <Card role="status" className="mx-auto max-w-md p-8 text-center"><h2 className="font-display text-lg font-bold text-navy">No projects yet</h2><p className="mt-1.5 text-[13px] text-grey">Start with the policy question you need evidence for.</p><Button className="mt-4" onClick={() => setCreating(true)}>New project</Button></Card>
+        <Card role="status" className="mx-auto max-w-md p-8 text-center"><h2 className="font-display text-heading font-bold text-navy">No projects yet</h2><p className="mt-1.5 text-meta text-grey">Start with the policy question you need evidence for.</p><Button className="mt-4" onClick={() => setCreating(true)}>New project</Button></Card>
       )}
       {projects.data !== undefined && projects.data.data.length > 0 && (
         <ul role="list" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.data.data.map((project, index) => <ProjectCard key={project.project_id} project={project} delayMs={Math.min(index, 8) * 60} />)}
           <li>
-            <button type="button" onClick={() => setCreating(true)} className="flex min-h-40 w-full cursor-pointer items-center justify-center border border-dashed border-line-2 bg-paper text-[13px] font-semibold text-grey hover:border-navy hover:text-navy focus-visible:outline-2 focus-visible:outline-blue">+ New project</button>
+            <button type="button" onClick={() => setCreating(true)} className="flex min-h-40 w-full cursor-pointer items-center justify-center border border-dashed border-line-2 bg-paper text-meta font-semibold text-grey hover:border-navy hover:text-navy focus-visible:outline-2 focus-visible:outline-blue">+ New project</button>
           </li>
         </ul>
       )}
@@ -166,8 +166,8 @@ function ProjectCard({ project, delayMs }: { project: Project; delayMs: number }
         {editing ? (
           <form onSubmit={(event) => { event.preventDefault(); saveRename(); }}>
             <label className="sr-only" htmlFor={`project-name-${project.project_id}`}>Project name</label>
-            <input id={`project-name-${project.project_id}`} autoFocus value={draftName} onChange={(event) => setDraftName(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") cancelRename(); }} className="w-full border border-line-2 bg-paper px-2 py-1.5 text-[14px] font-bold text-navy focus-visible:outline-2 focus-visible:outline-blue" />
-            {update.isError && <p role="alert" className="mt-2 text-xs text-red">The project couldn't be renamed. Try again.</p>}
+            <input id={`project-name-${project.project_id}`} autoFocus value={draftName} onChange={(event) => setDraftName(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") cancelRename(); }} className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy focus-visible:outline-2 focus-visible:outline-blue" />
+            {update.isError && <p role="alert" className="mt-2 text-caption text-red">The project couldn't be renamed. Try again.</p>}
             <div className="mt-3 flex gap-2"><Button type="submit" size="sm" disabled={!draftName.trim() || update.isPending}>Save name</Button><Button type="button" variant="ghost" size="sm" onClick={cancelRename}>Cancel rename</Button></div>
           </form>
         ) : (
@@ -214,12 +214,12 @@ function ProjectCard({ project, delayMs }: { project: Project; delayMs: number }
                 </button>
               </Tooltip>
             </div>
-            {archive.isError && <p role="alert" className="pr-36 text-xs text-red">The project couldn't be archived. Try again.</p>}
+            {archive.isError && <p role="alert" className="pr-36 text-caption text-red">The project couldn't be archived. Try again.</p>}
             <Link to={`/projects/${project.project_id}`} className="block pr-36 no-underline focus-visible:outline-2 focus-visible:outline-blue">
-              <h2 className="font-display text-[15px] font-bold leading-snug text-navy">{scrub(project.name)}</h2>
-              {project.question && <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-relaxed text-grey">{scrub(project.question)}</p>}
+              <h2 className="font-display text-meta font-bold leading-snug text-navy">{scrub(project.name)}</h2>
+              {project.question && <p className="mt-1.5 line-clamp-2 text-caption leading-relaxed text-grey">{scrub(project.question)}</p>}
             </Link>
-            {confirmingArchive && <div className="flex items-center justify-between gap-3 text-[11.5px] text-grey"><p>Archiving removes this project from your active projects. Confirm to archive it.</p><Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>Cancel archive</Button></div>}
+            {confirmingArchive && <div className="flex items-center justify-between gap-3 text-caption text-grey"><p>Archiving removes this project from your active projects. Confirm to archive it.</p><Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>Cancel archive</Button></div>}
             <div className="mt-auto flex items-center gap-2 pt-1"><Chip tone={presentation.tone}><StatusDot tone={presentation.dot} />{presentation.label}</Chip></div>
           </>
         )}

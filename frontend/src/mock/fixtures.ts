@@ -33,29 +33,47 @@ export const mockFunnel: components["schemas"]["FunnelOut"] = {
   cited: 12,
 };
 
-/** Every landscape distribution totals 46: the screened-in, not found, count. */
+export const MOCK_THEME_ID_SCHOOL_FOOD = "30000000-0000-4000-8000-000000000001";
+export const MOCK_THEME_ID_ACTIVE_TRAVEL = "30000000-0000-4000-8000-000000000002";
+
+/** Every landscape distribution totals 46: the screened-in, not found, count.
+ *  "Family support" carries no `theme_id` on purpose — a legacy
+ *  characterisation predating 028 strand 8, which the sources theme filter
+ *  must omit rather than offer a selection that can never round-trip. */
 export const mockLandscape: components["schemas"]["LandscapeOut"] = {
   evidence_types: { "Systematic review": 20, "Local evaluation": 14, "Policy analysis": 12 },
   years: { "2019": 6, "2020": 7, "2021": 9, "2022": 10, "2023": 8, "2024": 6 },
   themes: [
-    { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access." },
-    { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey." },
+    { name: "School food environments", size: 19, description: "Meal standards, free breakfast, and food access.", theme_id: MOCK_THEME_ID_SCHOOL_FOOD },
+    { name: "Active travel", size: 15, description: "Safer walking and cycling for the school journey.", theme_id: MOCK_THEME_ID_ACTIVE_TRAVEL },
     { name: "Family support", size: 12, description: "Affordable cooking and community referral support." },
   ],
   geographies: { "Tower Hamlets": 22, "London": 14, "Comparable UK cities": 10 },
 };
 
 export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
-  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, url: "https://example.org/universal-breakfast", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", cited: false },
-  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", cited: true },
-  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", cited: false },
+  { source_id: "10000000-0000-4000-8000-000000000001", title: "Childhood obesity prevention in urban primary schools", year: 2024, venue: "Public Health Nutrition", origin: "OpenAlex", status: "found", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000002", title: "Borough food strategy consultation", year: 2023, venue: "Tower Hamlets Council", origin: "Overton", status: "screened_out", screen_status: "excluded_retracted", screen_confidence: 1, status_reason: "The record was retracted", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000003", title: "Universal breakfast clubs and diet quality", year: 2022, venue: "BMJ Open", origin: "OpenAlex", status: "relevant", evidence_type: "Cohort study", appraisal_tier: "Moderate confidence", screen_status: "relevant", screen_confidence: 0.91, screen_basis: "title_abstract", screen_stage: 2, screen_reason: "Universal breakfast provision is a primary-school food-environment exposure in scope.", classification_reason: "Prospective cohort following ten schools over two academic years.", url: "https://example.org/universal-breakfast", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000004", title: "Healthy High Streets programme review", year: 2023, venue: "London Assembly", origin: "Overton", status: "not_selected", status_reason: "Lower transferability", screen_status: "relevant", screen_confidence: 0.72, screen_reason: "Covers food-environment levers around schools, though at borough rather than school level.", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false },
+  { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true },
+  { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true },
+  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the project owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true },
+  { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false },
 ];
+
+/** Theme membership for the mock evidence rows, keyed by theme id — the
+ *  real `EvidenceItemOut` carries no theme field (the server joins against
+ *  `source_tag` internally), so the sources-view theme filter has nothing
+ *  to key off in mock mode without this. `mock/api.ts`'s evidence handler
+ *  reads this to honour the `theme` query param honestly. */
+export const mockEvidenceThemeIds: Record<string, string[]> = {
+  [mockEvidence[2].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
+  [mockEvidence[4].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
+  [mockEvidence[7].source_id]: [MOCK_THEME_ID_SCHOOL_FOOD],
+  [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
+};
 
 export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
   [mockEvidence[2].source_id]: {
@@ -191,10 +209,11 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
   stage: "synthesise",
   render: "The screened-in set has strong school-food coverage but fewer local active-travel evaluations. Choose how the synthesis should handle that balance, or add your own free-text steer.",
   options: [
-    { id: "add-local-context", label: "Add local context", description: "Tell us which local programme or neighbourhood context to prioritise.", requires_user_input: true, suggested: false },
-    { id: "suggested-balanced", label: "Use the balanced synthesis", description: "Lead with the strongest evidence and name the local evidence gap.", requires_user_input: false, suggested: true },
+    { id: "add-local-context", label: "Add local context", description: "Tell us which local programme or neighbourhood context to prioritise.", requires_user_input: true, suggested: false, why: null, endorsement: null },
+    { id: "suggested-balanced", label: "Use the balanced synthesis", description: "Lead with the strongest evidence and name the local evidence gap.", requires_user_input: false, suggested: true, why: null, endorsement: null },
   ],
   triggers: [{ trigger: "thin_local_evidence", detail: { local_sources: 5, screened_in: 46 } }],
+  bundle: null,
   segment_reentry_allowed: true,
   rerun_component: "acquire",
   status: "pending",
@@ -246,10 +265,12 @@ export const mockArtefactSectionProse: Record<number, string> = {
 export const mockCoverage: components["schemas"]["CoverageOut"] = {
   sentence: "Coverage is adequate for school-food and family-support approaches (46 screened-in sources, 2019-2024), while local active-travel evaluation evidence remains thin.",
   base: { screened_in: 46, years: [2019, 2024] },
-  backends: ["openalex", "overton"],
+  backends: ["OpenAlex", "Overton"],
   backends_detail: [
     {
-      backend: "openalex",
+      // The real coverage read model serves PUBLIC backend names — the
+      // fixture matches so the label mapping is exercised as shipped.
+      backend: "OpenAlex",
       results: 86,
       relevant: 30,
       queries: [
@@ -259,7 +280,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
       ],
     },
     {
-      backend: "overton",
+      backend: "Overton",
       results: 42,
       relevant: 16,
       queries: [
@@ -300,6 +321,7 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   assumptions: ["Comparable UK cities count as transferable context."],
   expected_artefact_shape: "standard",
   time_band: "10-15 minutes",
+  section_budget: null,
   steps: [
     { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
     { stage: "screen", label: "Screening sources", blurb: "Checking relevance to primary-school children." },
@@ -330,8 +352,19 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       client_turn_id: MOCK_PLANNING_TURN_IDS.first,
       turn_index: 1,
       user_message: "Which local policy approaches reduce childhood obesity for primary-school children?",
-      reply: "I can look at school-food, active-travel and family-support levers for Tower Hamlets. Want me to keep it UK-focused?",
-      suggestions: ["Keep it UK-focused", "Widen to comparable cities"],
+      reply: "Here's how I've read your question.",
+      suggestions: [],
+      part: {
+        id: "question",
+        step_label: "Plan · 1 of 3 · the question",
+        title: "Which local policy approaches reduce childhood obesity for primary-school children?",
+        body: "Read as a policy and service-delivery question — I'll search academic and grey literature.",
+        chips: null,
+        options: [
+          { id: "confirm", label: "That's my question", sub: null, primary: true, reason: null },
+          { id: "refine", label: "Refine it", sub: null, primary: false, reason: null },
+        ],
+      },
       status: "completed",
       created_at: "2026-07-18T09:02:00Z",
       completed_at: "2026-07-18T09:02:04Z",
@@ -339,9 +372,23 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
     {
       client_turn_id: MOCK_PLANNING_TURN_IDS.second,
       turn_index: 2,
-      user_message: "Keep it UK-focused, rapid pass, and check both academic and policy sources.",
-      reply: "Plan's ready: a rapid search across academic and policy sources, a standard write-up, and a check-in whenever something needs your judgement.",
+      user_message: "That's my question\n\n[confirm part=question option=confirm]",
+      reply: "What counts as in-scope? Edit any chip directly.",
       suggestions: [],
+      part: {
+        id: "scope",
+        step_label: "Plan · 2 of 3 · scope",
+        title: "What counts as in-scope?",
+        body: "Dates filter the search itself; setting and population become screening rules judged per document.",
+        chips: [
+          { label: "UK primary", kind: "text", value: "UK as the primary study setting" },
+          { label: "Since 2016", kind: "date_range", value: '{"after": "2016-01-01", "before": null}' },
+        ],
+        options: [
+          { id: "confirm", label: "Looks right", sub: null, primary: true, reason: null },
+          { id: "change", label: "Add or change a constraint", sub: null, primary: false, reason: null },
+        ],
+      },
       status: "completed",
       created_at: "2026-07-18T09:03:10Z",
       completed_at: "2026-07-18T09:03:16Z",
@@ -352,6 +399,7 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       user_message: "Also fold in whether family-support programmes should be a separate lever.",
       reply: null,
       suggestions: [],
+      part: null,
       status: "failed",
       created_at: "2026-07-21T08:58:00Z",
       completed_at: "2026-07-21T08:58:03Z",

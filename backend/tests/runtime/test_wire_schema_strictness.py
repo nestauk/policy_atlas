@@ -113,3 +113,32 @@ def test_decision_transport_decodes_needs_arguments_and_drops_bad_authored() -> 
     assert wire.authored_options is not None
     assert len(wire.authored_options) == 1
     assert wire.authored_options[0].delta == {"selection": {"budget": 20}}
+
+
+def test_decision_transport_keeps_endorsement_with_null_component_and_delta() -> None:
+    transport = WatchDecisionTransport.model_validate(
+        {
+            "action": "author",
+            "reasoning": "endorsing the existing option needs no delta",
+            "authored_options": [
+                {
+                    "label": "Keep the current scope",
+                    "why": "the canonical option already covers this",
+                    "endorses_option_id": "continue",
+                    "component": None,
+                    "delta_json": None,
+                },
+                {
+                    "label": "broken new suggestion",
+                    "why": "not an endorsement, missing a delta",
+                    "delta_json": None,
+                },
+            ],
+        }
+    )
+    wire = transport.to_wire()
+    assert wire.authored_options is not None
+    assert len(wire.authored_options) == 1
+    assert wire.authored_options[0].endorses_option_id == "continue"
+    assert wire.authored_options[0].component is None
+    assert wire.authored_options[0].delta is None

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -9,6 +10,10 @@ const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 vi.mock("../api/queries", () => ({
   useProject: () => ({ data: { project_id: PROJECT_ID, name: "Acme project" } }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
+  // The header's project-settings popover (028 F.5) wires the rename/archive
+  // mutations, which resolve their API client through this hook — a bare
+  // object is enough since these tests never open the popover.
+  useApiClient: () => ({}),
 }));
 
 vi.mock("../auth", () => ({
@@ -23,12 +28,18 @@ vi.mock("../auth", () => ({
 }));
 
 function renderShell(initialPath: string) {
+  // The header's project-settings popover (028 F.5) wires rename/archive
+  // mutations, which resolve useQueryClient — a real QueryClient is needed
+  // even though these tests never trigger a mutation.
+  const queryClient = new QueryClient();
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <Routes>
-        <Route path="/projects/:projectId/*" element={<AppShell />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <Routes>
+          <Route path="/projects/:projectId/*" element={<AppShell />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

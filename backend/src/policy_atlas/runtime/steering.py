@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, cast
@@ -42,7 +43,6 @@ from policy_atlas.runtime.orchestration_plan import (
     ANALYSIS_DEPTH_TABLE,
     EXTRACT_PROFILE_IDS,
     NAMED_PAIRINGS,
-    TIME_BANDS,
     AnalysisDepth,
     ComposedChain,
     OrchestrationPlan,
@@ -50,6 +50,7 @@ from policy_atlas.runtime.orchestration_plan import (
     SteeringMode,
     _enabled_components,
     compose,
+    time_band_for,
 )
 from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire
 
@@ -148,6 +149,7 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
     part = {key: value for key, value in inner.items() if key in keys}
     return {context_key: part} if part else None
 
+
 # --- The steer-point lattice (task 024 decision 5) -------------------------
 #
 # Four named steer points at fixed component boundaries:
@@ -155,9 +157,12 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
 # P1 after acquire (exception point) · P2 before select (the coverage /
 # "evidence base" point) · P3 after select (deepening selection, the existing
 # point) · P4 before synthesise (the synthesis-shape point).
-SEARCH_EXCEPTION = "search_exception"
+SEARCH_REVIEW = "search_review"
+# Compatibility alias for callers compiled before the owner-ruled rename.
+SEARCH_EXCEPTION = SEARCH_REVIEW
 EVIDENCE_BASE_COVERAGE = "evidence_base_coverage"
 DEEPENING_SELECTION = "deepening_selection"
+FINDING_GROUPS = "finding_groups"
 SYNTHESIS_SHAPE = "synthesis_shape"
 
 # Retained for callers/tests that name the existing P3 point directly.
@@ -171,30 +176,35 @@ DEEPENING_SELECTION_STEER_POINT = DEEPENING_SELECTION
 LatticePolicy = Literal["always", "fired", "off"]
 _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
     "frequent": {
-        SEARCH_EXCEPTION: "always",
+        SEARCH_REVIEW: "always",
         EVIDENCE_BASE_COVERAGE: "always",
         DEEPENING_SELECTION: "always",
+        FINDING_GROUPS: "always",
         SYNTHESIS_SHAPE: "always",
     },
     "moderate": {
-        SEARCH_EXCEPTION: "fired",
-        EVIDENCE_BASE_COVERAGE: "always",
-        DEEPENING_SELECTION: "always",
+        SEARCH_REVIEW: "always",
+        EVIDENCE_BASE_COVERAGE: "fired",
+        DEEPENING_SELECTION: "fired",
+        FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "always",
     },
     "minimal": {
-        SEARCH_EXCEPTION: "fired",
+        SEARCH_REVIEW: "fired",
         EVIDENCE_BASE_COVERAGE: "fired",
         DEEPENING_SELECTION: "fired",
+        FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "fired",
     },
     "unattended": {
-        SEARCH_EXCEPTION: "off",
+        SEARCH_REVIEW: "off",
         EVIDENCE_BASE_COVERAGE: "off",
         DEEPENING_SELECTION: "off",
+        FINDING_GROUPS: "off",
         SYNTHESIS_SHAPE: "off",
     },
 }
+
 
 @dataclass(frozen=True, order=True)
 class PausePoint:
@@ -212,14 +222,13 @@ class PausePoint:
 # Canonical boundary for each lattice point. P2/P4 are before-boundaries; P1/P3
 # are after-boundaries. Defined after PausePoint (it constructs them).
 LATTICE_POINTS: dict[str, PausePoint] = {
-    SEARCH_EXCEPTION: PausePoint("after_component", "acquire"),
+    SEARCH_REVIEW: PausePoint("after_component", "acquire"),
     EVIDENCE_BASE_COVERAGE: PausePoint("before_component", "select"),
     DEEPENING_SELECTION: PausePoint("after_component", "select"),
+    FINDING_GROUPS: PausePoint("after_component", "group"),
     SYNTHESIS_SHAPE: PausePoint("before_component", "synthesise"),
 }
-_LATTICE_BY_POINT: dict[PausePoint, str] = {
-    point: name for name, point in LATTICE_POINTS.items()
-}
+_LATTICE_BY_POINT: dict[PausePoint, str] = {point: name for name, point in LATTICE_POINTS.items()}
 
 
 def lattice_name_for(point: PausePoint) -> str | None:
@@ -339,6 +348,63 @@ class SteeringAdjustmentError(ValueError):
     Args:
         message: Human-readable validation failure.
     """
+
+
+class SteeringDeltaInvalid(SteeringAdjustmentError):
+    """A proposed steering delta is invalid for this pause surface."""
+
+
+@dataclass(frozen=True)
+class SteeringValidationCtx:
+    """The full state that makes a steering delta valid at one pause."""
+
+    backend_scope: str
+    current_components: set[str]
+    completed_components: set[str]
+    rerun_surface: RerunSurface
+
+
+@dataclass(frozen=True)
+class ValidatedDelta:
+    """A delta accepted by the shared author-blind validator."""
+
+    component: str
+    delta: dict[str, Any]
+
+
+def validate_steering_delta(
+    delta: Mapping[str, Any], component: str, ctx: SteeringValidationCtx
+) -> ValidatedDelta:
+    """Validate one author-blind delta for its current steering surface.
+
+    Args:
+        delta: Component-local directive delta.
+        component: Component the delta targets.
+        ctx: Current run scope and pause affordances.
+
+    Returns:
+        The validated, copied delta.
+
+    Raises:
+        SteeringDeltaInvalid: If the delta is malformed or unavailable here.
+    """
+    if component not in ctx.current_components:
+        raise SteeringDeltaInvalid(f"component {component!r} is not in the plan")
+    if (
+        component in ctx.completed_components
+        and component != ctx.rerun_surface.replacement_component
+    ):
+        raise SteeringDeltaInvalid(
+            f"component {component!r} has already run and cannot be adjusted"
+        )
+    if not isinstance(delta, Mapping):
+        raise SteeringDeltaInvalid("delta must be an object")
+    copied = dict(delta)
+    try:
+        _validate_directive_delta(component, copied, backend_scope=ctx.backend_scope)
+    except SteeringAdjustmentError as exc:
+        raise SteeringDeltaInvalid(str(exc)) from exc
+    return ValidatedDelta(component=component, delta=copied)
 
 
 def pause_points(mode: SteeringMode, chain: ComposedChain) -> set[PausePoint]:
@@ -584,12 +650,14 @@ def build_steer_point_options(
     Raises:
         ValueError: If ``point`` is not a known lattice point.
     """
-    if point == SEARCH_EXCEPTION:
+    if point == SEARCH_REVIEW:
         return _p1_options()
     if point == EVIDENCE_BASE_COVERAGE:
         return _p2_options()
     if point == DEEPENING_SELECTION:
         return _p3_options(plan)
+    if point == FINDING_GROUPS:
+        return _groups_options()
     if point == SYNTHESIS_SHAPE:
         return _p4_options()
     raise ValueError(f"unknown steer point: {point!r}")
@@ -638,24 +706,31 @@ def generic_floor_options() -> list[dict[str, Any]]:
 
 
 def _p1_options() -> list[dict[str, Any]]:
-    """P1 search_exception floor (after acquire) — every delta on the acquire grammar."""
+    """P1 search-review floor (after acquire)."""
     return [
+        {
+            "id": "continue",
+            "intent": "Looks right — assess these",
+            "label": "Looks right — assess these",
+            "description": "Screening starts on what came back.",
+            "delta": {},
+            "requires_user_input": False,
+        },
         {
             "id": "deepen_search",
             "intent": "Search harder",
-            "label": "Deepen the search",
-            "description": "Raise the acquisition depth rung to search harder for sources.",
+            "label": "Search deeper",
+            "description": (
+                "Widens and deepens the search across the same databases; new results are added."
+            ),
             "delta": {"acquire": {"search": {"depth": "deep"}}},
             "requires_user_input": False,
         },
         {
             "id": "rescope_filters",
             "intent": "Change the search scope",
-            "label": "Rescope the search filters",
-            "description": (
-                "Change the recency / geography filters on the search; provide the "
-                "new filters."
-            ),
+            "label": "Change the search scope",
+            "description": "Set new date or geography limits; the search re-runs.",
             "delta": {
                 "acquire": {"search": {"filters": {"shared": {"published_after": "2015-01-01"}}}}
             },
@@ -664,26 +739,15 @@ def _p1_options() -> list[dict[str, Any]]:
         {
             "id": "guide_queries",
             "intent": "Guide the queries",
-            "label": "Guide the search queries",
-            "description": (
-                "Add query guidance and re-search (additive: your evidence base "
-                "grows). Provide the guidance sentences."
-            ),
+            "label": "Guide the queries",
+            "description": "Describe what to look for; new results are added to what came back.",
             "delta": {"acquire": {"search": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
             "requires_user_input": True,
         },
         {
-            "id": "accept_thin",
-            "intent": "Continue anyway",
-            "label": "Accept the thin evidence base and continue",
-            "description": "Proceed despite the coverage exception; the run is flagged.",
-            "delta": {},
-            "requires_user_input": False,
-        },
-        {
             "id": "abort",
             "intent": "Stop the run",
-            "label": "Stop the run here",
+            "label": "Stop the run",
             "description": "Abort the remaining walk; prior component work is preserved.",
             "delta": {},
             "requires_user_input": False,
@@ -707,18 +771,18 @@ def _p2_options() -> list[dict[str, Any]]:
         {
             "id": "continue",
             "intent": "The evidence base looks right",
-            "label": "Continue to selection",
-            "description": "Proceed to selection over the current evidence base.",
+            "label": "Looks right — go on to choose the reading list",
+            "description": "Nothing changes; the run continues.",
             "delta": {},
             "requires_user_input": False,
         },
         {
             "id": "search_more",
             "intent": "Search more on a subtopic",
-            "label": "Add to your evidence base",
+            "label": "Search for more on a subtopic",
             "description": (
-                "Additive re-search on a subtopic — your evidence base grows; nothing "
-                "already processed is redone. Provide what to search for."
+                "You say what to look for; new documents are added — nothing already "
+                "assessed is redone."
             ),
             "delta": {"acquire": {"search": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
             "requires_user_input": True,
@@ -726,10 +790,10 @@ def _p2_options() -> list[dict[str, Any]]:
         {
             "id": "adjust_criteria_rescreen",
             "intent": "Change the screening criteria and re-screen",
-            "label": "Adjust criteria and re-screen (replaces screening)",
+            "label": "Change the inclusion criteria and re-assess",
             "description": (
-                "Re-screen every document at new criteria; the new screen rows "
-                "supersede the current ones at document grain. Provide the criteria."
+                "You set new criteria; every document is re-assessed against them, "
+                "replacing today's decisions."
             ),
             "delta": {
                 "screen_abstract": {
@@ -741,10 +805,10 @@ def _p2_options() -> list[dict[str, Any]]:
         {
             "id": "recharacterise",
             "intent": "Re-map the themes",
-            "label": "Re-characterise the evidence (replaces characterisation)",
+            "label": "Re-map the themes",
             "description": (
-                "Redo theme discovery with your guidance and theme bounds; replaces "
-                "the current characterisation. Provide the guidance."
+                "Regenerate the theme map — plain regenerate, or guided by your "
+                "instructions. The current map is replaced."
             ),
             "delta": {
                 "characterise": {
@@ -753,31 +817,40 @@ def _p2_options() -> list[dict[str, Any]]:
             },
             "requires_user_input": True,
         },
+        {
+            "id": "scope_strata",
+            "intent": "Keep only named themes",
+            "label": "Keep only the themes I name",
+            "description": "Name the themes; only their documents go forward to reading.",
+            "delta": {"select": {"selection": {"strata_scope": {"only": [_STRATUM_PLACEHOLDER]}}}},
+            "requires_user_input": True,
+        },
+        {
+            "id": "exclude_docs",
+            "intent": "Leave out named documents",
+            "label": "Leave out documents I name",
+            "description": "Name documents to exclude from everything that follows.",
+            "delta": {"select": {"selection": {"exclude_ids": []}}},
+            "requires_user_input": True,
+        },
     ]
 
 
 def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
-    """P3 deepening_selection floor (after select) — the five existing plus four."""
+    """P3 reading-list floor (after select)."""
     current_budget = (
-        ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["selection_budget"]
-        if plan is not None
-        else None
+        ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["selection_budget"] if plan is not None else None
     )
     budget_default = (
-        current_budget
-        if current_budget is not None
-        else select_module.DEFAULT_SELECTION_BUDGET
+        current_budget if current_budget is not None else select_module.DEFAULT_SELECTION_BUDGET
     )
-    iof_id = EXTRACT_PROFILE_IDS["iof"]
-    icf_id = EXTRACT_PROFILE_IDS["icf"]
     return [
         {
             "id": "deepen_clusters",
-            "intent": "Deepen the named clusters",
-            "label": "Deepen the clusters or documents I name",
+            "intent": "Make sure these are read",
+            "label": "Make sure these are read",
             "description": (
-                "Prioritise the themes you name and force-include the documents "
-                "you name. Provide cluster and document ids to fill the template."
+                "Name themes or documents that must be on the list; it is re-picked around them."
             ),
             "delta": {"selection": {"priority_strata": [], "must_include_ids": []}},
             "requires_user_input": True,
@@ -785,26 +858,20 @@ def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
         {
             "id": "strongest_evidence",
             "intent": "Just the strongest evidence",
-            "label": "Favour the strongest-quality evidence",
+            "label": "Prefer the strongest evidence",
             "description": (
-                "Doubles the appraisal-quality weight in selection ranking "
-                "(weight_emphasis quality x2.0 — a multiplier on the default weight); "
-                "re-runs selection, replacing the current one."
+                "Re-picks the list, weighting study quality more heavily. Replaces this list."
             ),
-            "delta": {
-                "selection": {"weight_emphasis": {"quality": STRONGEST_QUALITY_MULTIPLIER}}
-            },
+            "delta": {"selection": {"weight_emphasis": {"quality": STRONGEST_QUALITY_MULTIPLIER}}},
             "requires_user_input": False,
         },
         {
             "id": "most_relevant",
             "intent": "Most relevant to my question",
-            "label": "Favour relevance to my question",
+            "label": "Prefer the most relevant",
             "description": (
-                "Lifts screen confidence as the closest as-built relevance proxy "
-                "(weight_emphasis screen_confidence x2.5) — an honest proxy, not a "
-                "true question-relevance signal. Re-runs selection, replacing the "
-                "current one."
+                "Re-picks the list using how directly each document meets your question. "
+                "Replaces this list."
             ),
             "delta": {
                 "selection": {
@@ -816,64 +883,53 @@ def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
         {
             "id": "adjust_budget",
             "intent": "Adjust the budget",
-            "label": "Change how many documents are selected",
-            "description": (
-                "Change the selection budget; provide the new document budget. "
-                "Re-runs selection, replacing the current one."
-            ),
+            "label": "Read more (or fewer) documents",
+            "description": "Set the number; the list is re-picked.",
             "delta": {"selection": {"budget": budget_default}},
-            "requires_user_input": True,
-        },
-        {
-            "id": "add_extraction_profile",
-            "intent": "Add the in-context-findings profile",
-            "label": "Add the ICF extraction profile",
-            "description": (
-                "Extract in-context findings (ICF) alongside the intervention-outcome "
-                "findings — additive at the profile grain."
-            ),
-            "delta": {"extract": {"extraction": {"profiles": [iof_id, icf_id]}}},
-            "requires_user_input": False,
-        },
-        {
-            "id": "refresh_extraction",
-            "intent": "Re-extract with new full text",
-            "label": "Refresh extraction for abstract-only docs",
-            "description": (
-                "Re-extract documents whose findings were abstract-only now full text "
-                "has landed (D3 memo refresh)."
-            ),
-            "delta": {
-                "extract": {"extraction": {"profiles": [iof_id], "refresh": "abstract_only"}}
-            },
-            "requires_user_input": False,
-        },
-        {
-            "id": "scope_strata",
-            "intent": "Only these themes go forward",
-            "label": "Scope selection to named strata",
-            "description": (
-                "Restrict selection to (or exclude) named strata/themes (D6). Provide "
-                "the strata to keep."
-            ),
-            "delta": {"selection": {"strata_scope": {"only": [_STRATUM_PLACEHOLDER]}}},
-            "requires_user_input": True,
-        },
-        {
-            "id": "exclude_docs",
-            "intent": "Drop specific documents",
-            "label": "Exclude documents I name",
-            "description": "Remove named documents from the selectable pool (D7). Provide the ids.",
-            "delta": {"selection": {"exclude_ids": []}},
             "requires_user_input": True,
         },
         {
             "id": "as_proposed",
             "intent": "As proposed",
-            "label": "Continue with the current selection",
-            "description": "Proceed with the current selection unchanged.",
+            "label": f"Read these {budget_default}",
+            "description": "The run continues into full-text reading.",
             "delta": {},
             "requires_user_input": False,
+        },
+    ]
+
+
+def _groups_options() -> list[dict[str, Any]]:
+    """Groups floor, available only on deep chains after grouping."""
+    return [
+        {
+            "id": "as_proposed",
+            "intent": "Keep these groups",
+            "label": "Keep these groups",
+            "description": "On to the report plan.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "regroup_granularity",
+            "intent": "Broader or narrower groups",
+            "label": "Broader or narrower groups",
+            "description": (
+                "Regroups the findings into fewer, broader clusters — or more, narrower "
+                "ones. Re-runs grouping; the report plan is then redrawn."
+            ),
+            "delta": {"group": {"grouping": {"granularity": "coarser"}}},
+            "requires_user_input": False,
+        },
+        {
+            "id": "regroup_guided",
+            "intent": "Regroup around my guidance",
+            "label": "Regroup around my guidance",
+            "description": (
+                "Describe the grouping you want; the findings are regrouped. Re-runs grouping."
+            ),
+            "delta": {"group": {"grouping": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
+            "requires_user_input": True,
         },
     ]
 
@@ -889,60 +945,36 @@ def _p4_options() -> list[dict[str, Any]]:
         {
             "id": "as_proposed",
             "intent": "As proposed",
-            "label": "Synthesise as proposed",
-            "description": "Proceed with the proposed synthesis plan unchanged.",
+            "label": "Write the report with these sections",
+            "description": "The displayed plan is used to write the report.",
             "delta": {},
             "requires_user_input": False,
         },
         {
-            "id": "edit_sections",
-            "intent": "Only these themes / edit the sections",
-            "label": "Edit the synthesis sections",
-            "description": (
-                "Set the synthesis sections yourself. Provide the section titles and focus."
-            ),
-            "delta": {
-                "synthesis": {
-                    "sections": [
-                        {
-                            "title": "Policy relevance of the evidence",
-                            "focus": "What the evidence says for the decision",
-                        }
-                    ]
-                }
-            },
-            "requires_user_input": True,
-        },
-        {
             "id": "emphasis_boosts",
             "intent": "Emphasise stronger evidence",
-            "label": "Boost evidence type / quality tier in synthesis",
-            "description": (
-                "Weight the synthesis retrieval toward stronger-appraised evidence "
-                "(type/tier boosts; tag boosts are not offered)."
-            ),
+            "label": "Lean on the strongest evidence",
+            "description": "The writing draws more heavily on the highest-quality studies.",
             "delta": {"synthesis": {"retrieval_boosts": {"appraisal_tier": {"5": 2.0}}}},
             "requires_user_input": False,
         },
+        # The inline-editing SUBMISSION channel, not a button (028 strand 14):
+        # per-row ✎/×/+ on the card compose the full edited ordinary list into
+        # this requires-input delta — grammar unchanged ({title, focus} rows),
+        # same confirm ladder. The old retype-everything BUTTON retired; the
+        # card renders this option as its row-editing affordance instead.
         {
-            "id": "regroup_granularity",
-            "intent": "Coarser or finer groups",
-            "label": "Re-group at a different granularity (replaces grouping)",
-            "description": (
-                "Re-group findings coarser or finer (D8); replaces the current grouping."
-            ),
-            "delta": {"group": {"grouping": {"granularity": "coarser"}}},
-            "requires_user_input": False,
-        },
-        {
-            "id": "regroup_guided",
-            "intent": "Re-group my way",
-            "label": "Re-group with guidance (replaces grouping)",
-            "description": (
-                "Re-group findings with your guidance (B3); replaces the current "
-                "grouping. Provide the guidance."
-            ),
-            "delta": {"group": {"grouping": {"guidance": [_GUIDANCE_PLACEHOLDER]}}},
+            "id": "edit_sections",
+            "intent": "Write the report with the edited sections",
+            "label": "Write the report with the edited sections",
+            "description": "The sections as you edited them are used to write the report.",
+            "delta": {
+                "synthesis": {
+                    "sections": [
+                        {"title": _GUIDANCE_PLACEHOLDER, "focus": _GUIDANCE_PLACEHOLDER}
+                    ]
+                }
+            },
             "requires_user_input": True,
         },
     ]
@@ -1054,9 +1086,7 @@ class FanOut:
     @property
     def rerun(self) -> CompiledFragment | None:
         """The single re-run fragment to apply this pause, or ``None`` (one-cycle rule)."""
-        return next(
-            (frag for frag in self.compiled if frag.kind != "plan_adjustment"), None
-        )
+        return next((frag for frag in self.compiled if frag.kind != "plan_adjustment"), None)
 
     def as_interpreted_action(self) -> dict[str, Any]:
         """The JSON-safe fan-out record stamped on the confirmed decision event."""
@@ -1128,9 +1158,7 @@ def compile_fanout(
     for fragment in compile_result.fragments:
         text = fragment.fragment_text
         if not fragment.compiles:
-            refused.append(
-                RefusedFragment(text, fragment.refusal_reason or "not yet expressible")
-            )
+            refused.append(RefusedFragment(text, fragment.refusal_reason or "not yet expressible"))
             continue
         try:
             candidate = _classify_and_validate(
@@ -1226,7 +1254,19 @@ def _classify_and_validate(
             raise _FragmentRefused(
                 "validation_failed: an additive re-search is not available at this pause"
             )
-        _revalidate_directive(component, delta, backend_scope=backend_scope)
+        try:
+            validate_steering_delta(
+                delta,
+                component,
+                SteeringValidationCtx(
+                    backend_scope=backend_scope,
+                    current_components=current_components,
+                    completed_components=set(),
+                    rerun_surface=rerun_surface,
+                ),
+            )
+        except SteeringDeltaInvalid as exc:
+            raise _FragmentRefused(f"validation_failed: {exc}") from exc
         return CompiledFragment(
             fragment.fragment_text, "segment_reentry", component, delta, "additive"
         )
@@ -1268,7 +1308,19 @@ def _classify_and_validate(
         )
     if component not in current_components:
         raise _FragmentRefused(f"validation_failed: {component!r} is not in the plan")
-    _revalidate_directive(component, delta, backend_scope=backend_scope)
+    try:
+        validate_steering_delta(
+            delta,
+            component,
+            SteeringValidationCtx(
+                backend_scope=backend_scope,
+                current_components=current_components,
+                completed_components=completed_components,
+                rerun_surface=rerun_surface,
+            ),
+        )
+    except SteeringDeltaInvalid as exc:
+        raise _FragmentRefused(f"validation_failed: {exc}") from exc
     return CompiledFragment(fragment.fragment_text, "plan_adjustment", component, delta, None)
 
 
@@ -1432,16 +1484,18 @@ def validate_option_delta(delta: dict[str, Any], *, backend_scope: str = "both")
         return
     if keys == {"synthesis"}:
         try:
+            # Answer-time validation has no grouping substrate; group_ids are
+            # form-checked here and membership-checked at execution (028 M2).
             parse_synthesis_directive(
-                {"synthesis": delta["synthesis"]}, grouping_group_ids=None
+                {"synthesis": delta["synthesis"]},
+                grouping_group_ids=None,
+                defer_group_membership=True,
             )
         except SynthesisDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc
         return
     if len(keys) != 1:
-        raise ValueError(
-            f"option delta must name exactly one component, got {sorted(keys)!r}"
-        )
+        raise ValueError(f"option delta must name exactly one component, got {sorted(keys)!r}")
     (component,) = keys
     _validate_directive_delta(component, delta[component], backend_scope=backend_scope)
 
@@ -1687,9 +1741,7 @@ def _validate_replacement_directive(component: str, directive: dict[str, Any]) -
         except FacetDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc
         return
-    raise SteeringAdjustmentError(
-        f"component {component!r} has no replacement re-run grammar"
-    )
+    raise SteeringAdjustmentError(f"component {component!r} has no replacement re-run grammar")
 
 
 def apply_replacement_rerun(
@@ -1850,9 +1902,7 @@ def _validate_delta_component_bounds(
 ) -> None:
     for component in directive_deltas:
         if component in completed_components:
-            raise SteeringAdjustmentError(
-                f"adjustment names already-run component {component!r}"
-            )
+            raise SteeringAdjustmentError(f"adjustment names already-run component {component!r}")
         if component not in current_components:
             raise SteeringAdjustmentError(f"adjustment names unknown component {component!r}")
 
@@ -1873,7 +1923,9 @@ def _apply_nudge(payload: dict[str, Any], nudge: str | None) -> None:
     payload["search_effort"] = search_effort
     payload["analysis_depth"] = analysis_depth
     _clip_components_to_depth(payload, analysis_depth=analysis_depth)
-    payload["time_band"] = TIME_BANDS[(search_effort, analysis_depth)]
+    payload["time_band"] = time_band_for(
+        search_effort, analysis_depth, payload.get("section_budget")
+    )
 
 
 def _clip_components_to_depth(payload: dict[str, Any], *, analysis_depth: AnalysisDepth) -> None:
@@ -1954,7 +2006,13 @@ def _validate_directive_delta(
         # exempt from the plan round-trip below.
         _require_keys(component, delta, {"synthesis"})
         try:
-            parse_synthesis_directive({"synthesis": delta["synthesis"]}, grouping_group_ids=None)
+            # Answer-time validation has no grouping substrate; group_ids are
+            # form-checked here and membership-checked at execution (028 M2).
+            parse_synthesis_directive(
+                {"synthesis": delta["synthesis"]},
+                grouping_group_ids=None,
+                defer_group_membership=True,
+            )
         except SynthesisDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc
         return
@@ -2105,7 +2163,9 @@ def _apply_select_delta(payload: dict[str, Any], selection: Any) -> None:
     for depth, settings in ANALYSIS_DEPTH_TABLE.items():
         if settings["selection_budget"] == budget:
             payload["analysis_depth"] = depth
-            payload["time_band"] = TIME_BANDS[(payload["search_effort"], depth)]
+            payload["time_band"] = time_band_for(
+                payload["search_effort"], depth, payload.get("section_budget")
+            )
             _clip_components_to_depth(payload, analysis_depth=depth)
             return
     raise SteeringAdjustmentError("selection budget does not map to a plan analysis_depth")
@@ -2178,17 +2238,15 @@ def _validate_delta_round_trip(
             if not (isinstance(extraction, dict) and "profiles" in extraction):
                 continue  # refresh / relevance_emphasis are commit-layer (overlay)
             try:
-                requested_profiles, _requested_refresh = (
-                    extract_module._parse_extraction_directive(extraction)
+                requested_profiles, _requested_refresh = extract_module._parse_extraction_directive(
+                    extraction
                 )
             except extract_module.ExtractError as exc:
                 raise SteeringAdjustmentError(str(exc)) from exc
             actual = amended_by_component.get(component)
             actual_extraction = actual.get("extraction") if isinstance(actual, dict) else None
             actual_profiles = (
-                actual_extraction.get("profiles")
-                if isinstance(actual_extraction, dict)
-                else None
+                actual_extraction.get("profiles") if isinstance(actual_extraction, dict) else None
             )
             if tuple(actual_profiles or ()) == requested_profiles:
                 continue

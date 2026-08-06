@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useEvidence, useFindings, useProject, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
@@ -13,6 +13,13 @@ import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
+import {
+  ContentsSidebar,
+  GatheredSection,
+  type OutlineSection,
+  SectionDisclosure,
+  sectionAnchor,
+} from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
 
@@ -227,7 +234,7 @@ function CitationContext({
   const tier = citation.grounding_tier ?? null;
   return (
     <div className="border border-line p-4">
-      <p className="text-[13px] font-bold leading-snug text-blue">
+      <p className="text-meta font-bold leading-snug text-blue">
         [{citation.n}]{" "}
         <button
           type="button"
@@ -238,13 +245,13 @@ function CitationContext({
         </button>
       </p>
       {meta.length > 0 && (
-        <p className="mt-0.5 text-[11.5px] text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
+        <p className="mt-0.5 text-caption text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">
         {tier !== null && TIER_LABEL[tier] !== undefined && (
           <Tooltip
             content={
-              <div className="max-w-[280px] space-y-1 text-xs">
+              <div className="max-w-[280px] space-y-1 text-caption">
                 <p>{TIER_TEXT[tier]}</p>
                 {typeof citation.grounding_rationale === "string" &&
                   citation.grounding_rationale !== "" && (
@@ -263,7 +270,7 @@ function CitationContext({
         {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
           <Tooltip
             content={
-              <span className="text-xs">
+              <span className="text-caption">
                 {typeof citation.evidence_type === "string"
                   ? `${scrub(citation.appraisal_label)} evidence strength — appraised from the document type: ${scrub(citation.evidence_type)}.`
                   : APPRAISAL_FALLBACK_HINT}
@@ -276,9 +283,9 @@ function CitationContext({
           </Tooltip>
         )}
       </div>
-      <div className="mt-3 space-y-2 text-[12.5px] leading-relaxed">
+      <div className="mt-3 space-y-2 text-caption leading-relaxed">
         {context.isPending && (
-          <p role="status" className="animate-pulse text-[11.5px] text-grey">
+          <p role="status" className="animate-pulse text-caption text-grey">
             Loading surrounding context…
           </p>
         )}
@@ -326,17 +333,17 @@ function ClaimPanel({
     >
       <SheetContent title="Where this comes from" description="Claim provenance">
         <div className="space-y-5">
-          <p className="border-l-2 border-l-blue pl-3 text-[13.5px] font-medium leading-snug text-navy">
+          <p className="border-l-2 border-l-blue pl-3 text-meta font-medium leading-snug text-navy">
             {scrub(claim.text)}
           </p>
           {claim.claim_type === "gap" && (
-            <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-[13px] leading-relaxed text-navy">
+            <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-meta leading-relaxed text-navy">
               <p>
                 This is a recorded evidence gap: the analysis looked and found the base thin
                 here. Gaps are part of the answer, never glossed over.
               </p>
               {gap !== null && (
-                <div className="mt-1.5 space-y-0.5 text-[11.5px] text-grey">
+                <div className="mt-1.5 space-y-0.5 text-caption text-grey">
                   {typeof gap.grade === "string" && GAP_GRADE_TEXT[gap.grade] !== undefined && (
                     <p>{GAP_GRADE_TEXT[gap.grade]}</p>
                   )}
@@ -361,19 +368,19 @@ function ClaimPanel({
           )}
           {claim.claim_type !== "gap" &&
             claim.claim_type !== "citation" &&
-            hint !== undefined && <p className="text-[12.5px] text-grey">{hint}</p>}
+            hint !== undefined && <p className="text-caption text-grey">{hint}</p>}
           {(claim.theme?.items?.length ?? 0) > 0 && (
             <div className="border-l-[3px] border-violet bg-blue-tint-2 p-3">
               {(claim.theme?.items ?? []).map((item, index) => (
                 <div key={index} className={index > 0 ? "mt-2.5" : undefined}>
-                  <p className="text-[13px] font-semibold text-navy">{scrub(item.name ?? "")}</p>
+                  <p className="text-meta font-semibold text-navy">{scrub(item.name ?? "")}</p>
                   {typeof item.description === "string" && item.description !== "" && (
-                    <p className="mt-0.5 text-[12px] leading-relaxed text-navy">
+                    <p className="mt-0.5 text-caption leading-relaxed text-navy">
                       {scrub(item.description)}
                     </p>
                   )}
                   {(item.sources?.length ?? 0) > 0 ? (
-                    <details className="mt-0.5 text-[11.5px] text-grey">
+                    <details className="mt-0.5 text-caption text-grey">
                       <summary className="cursor-pointer hover:text-navy">
                         Identified across {item.sources?.length} source
                         {(item.sources?.length ?? 0) === 1 ? "" : "s"} — show them
@@ -395,12 +402,12 @@ function ClaimPanel({
                       </ul>
                     </details>
                   ) : typeof item.size === "number" ? (
-                    <p className="mt-0.5 text-[11.5px] text-grey">
+                    <p className="mt-0.5 text-caption text-grey">
                       Identified across {item.size} sources
                     </p>
                   ) : null}
                   {typeof item.facet === "string" && item.facet !== "" && item.name ? (
-                    <p className="mt-0.5 text-[11.5px]">
+                    <p className="mt-0.5 text-caption">
                       <Link
                         className="font-semibold text-blue hover:underline"
                         to={`/projects/${projectId}/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
@@ -413,14 +420,14 @@ function ClaimPanel({
                 </div>
               ))}
               {typeof claim.theme?.base === "string" && claim.theme.base !== "" && (
-                <p className="mt-2 border-t border-line pt-2 text-[11px] text-grey">
+                <p className="mt-2 border-t border-line pt-2 text-caption text-grey">
                   Basis: {scrub(claim.theme.base)}
                 </p>
               )}
             </div>
           )}
           {claim.weakly_grounded === true && (
-            <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-[13px] text-navy">
+            <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">
               The grounding review could not fully verify this claim against its source — read
               it with that in mind.
             </p>
@@ -433,7 +440,7 @@ function ClaimPanel({
               onOpenDossier={onOpenDossier}
             />
           ))}
-          <p className="border-t border-line pt-3 text-[11px] text-grey">
+          <p className="border-t border-line pt-3 text-caption text-grey">
             Every claim links to the exact passage it came from.
           </p>
         </div>
@@ -461,7 +468,7 @@ function ClaimSpan({
   const tier = first?.grounding_tier ?? null;
   const tip =
     first !== undefined ? (
-      <div className="max-w-[260px] space-y-1.5 text-[12px] leading-snug">
+      <div className="max-w-[260px] space-y-1.5 text-caption leading-snug">
         <p className="font-semibold text-navy">{scrub(first.source_title)}</p>
         {first.quote !== "" && (
           <p className="italic text-grey">
@@ -472,11 +479,11 @@ function ClaimSpan({
         {tier !== null && TIER_LABEL[tier] !== undefined && (
           <p className="text-grey">{TIER_LABEL[tier]}</p>
         )}
-        <p className="text-[11px] text-grey">Click to view in context</p>
+        <p className="text-caption text-grey">Click to view in context</p>
       </div>
     ) : (claim.claim_type === "theme" || claim.claim_type === "pattern") &&
       (claim.theme?.items?.length ?? 0) > 0 ? (
-      <div className="max-w-[260px] space-y-1 text-[12px] leading-snug">
+      <div className="max-w-[260px] space-y-1 text-caption leading-snug">
         {(claim.theme?.items ?? []).slice(0, 3).map((item, index) => (
           <div key={index}>
             <p className="font-semibold text-navy">Theme: {scrub(item.name ?? "")}</p>
@@ -484,23 +491,23 @@ function ClaimSpan({
               <p className="text-grey">{scrub(item.description)}</p>
             )}
             {typeof item.size === "number" && (
-              <p className="text-[11px] text-grey">{item.size} sources</p>
+              <p className="text-caption text-grey">{item.size} sources</p>
             )}
           </div>
         ))}
-        <p className="text-[11px] text-grey">Click for detail</p>
+        <p className="text-caption text-grey">Click for detail</p>
       </div>
     ) : claim.claim_type === "gap" ? (
-      <div className="max-w-[260px] space-y-1 text-[12px] leading-snug">
+      <div className="max-w-[260px] space-y-1 text-caption leading-snug">
         <p className="font-semibold text-navy">Evidence gap</p>
         <p className="text-grey">
           {(typeof claim.gap?.grade === "string" ? GAP_GRADE_TEXT[claim.gap.grade] : undefined) ??
             TYPE_HINT.gap}
         </p>
-        <p className="text-[11px] text-grey">Click for the coverage detail</p>
+        <p className="text-caption text-grey">Click for the coverage detail</p>
       </div>
     ) : (
-      <span className="text-xs">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
+      <span className="text-caption">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
     );
   const typeLabel = TYPE_LABEL[claim.claim_type];
   const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
@@ -531,7 +538,7 @@ function ClaimSpan({
           type="button"
           aria-label={`Citations ${citationNumbers.join(", ")}`}
           onClick={() => onOpen(claim)}
-          className="citation-marker mx-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-[10.5px] font-semibold text-blue/80 hover:border-blue/60 hover:text-blue"
+          className="citation-marker mx-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80 hover:border-blue/60 hover:text-blue"
         >
           [{citationNumbers.join(",")}]
         </button>
@@ -540,7 +547,7 @@ function ClaimSpan({
         <button
           type="button"
           onClick={() => onOpen(claim)}
-          className={`mx-1 cursor-pointer border px-1.5 align-[2px] text-[10px] font-semibold ${
+          className={`mx-1 cursor-pointer border px-1.5 align-[2px] text-caption font-semibold ${
             claim.claim_type === "gap"
               ? "border-yellow/60 bg-yellow-tint/60 text-navy/80 hover:border-yellow"
               : "border-line bg-ground text-grey hover:border-line-2"
@@ -606,8 +613,75 @@ export function AnnotatedProse({
     (claim) => claim.span === null || claim.span === undefined,
   );
 
+  // Key-findings bullets (028 fork B): prose whose non-empty lines all start
+  // "- " renders as a list. Segments regroup by line; a claim span crossing a
+  // bullet boundary degrades honestly to the trailing anchored list below —
+  // its popover survives, it is never mis-rendered across two bullets.
+  const lines = block.prose.split("\n").filter((line) => line.trim() !== "");
+  const isBulleted = lines.length > 0 && lines.every((line) => line.trimStart().startsWith("- "));
+  if (isBulleted) {
+    const bullets: Array<Array<(typeof segments)[number]>> = [];
+    const crossing: ClaimLike[] = [];
+    let current: Array<(typeof segments)[number]> = [];
+    for (const segment of segments) {
+      const pieces = segment.text.split("\n");
+      pieces.forEach((piece, pieceIndex) => {
+        if (pieceIndex > 0) {
+          if (current.length > 0) bullets.push(current);
+          current = [];
+        }
+        if (piece === "") return;
+        if (segment.kind === "claim" && pieces.filter((p) => p.trim() !== "").length > 1) {
+          // The span crosses a bullet boundary — degrade the whole claim.
+          if (!crossing.includes(segment.claim)) crossing.push(segment.claim);
+          current.push({ kind: "plain", text: piece });
+          return;
+        }
+        current.push(
+          segment.kind === "claim" ? { kind: "claim", text: piece, claim: segment.claim } : { kind: "plain", text: piece },
+        );
+      });
+    }
+    if (current.length > 0) bullets.push(current);
+    return (
+      <div className="max-w-prose-measure text-body text-ink">
+        <ul className="list-none space-y-1.5">
+          {bullets.map((bullet, bulletIndex) => (
+            <li key={bulletIndex} className="flex gap-2">
+              <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 bg-blue" />
+              <span>
+                {bullet.map((segment, index) =>
+                  segment.kind === "plain" ? (
+                    <span key={index}>{scrub(segment.text.replace(/^\s*- /, ""))}</span>
+                  ) : (
+                    <ClaimSpan
+                      key={index}
+                      claim={segment.claim}
+                      text={segment.text.replace(/^\s*- /, "")}
+                      onOpen={onOpenClaim}
+                    />
+                  ),
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {crossing.map((claim) => (
+          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+          </p>
+        ))}
+        {unspanned.map((claim) => (
+          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+            <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
+          </p>
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="text-[14.5px] leading-[1.7] text-ink">
+    <div className="max-w-prose-measure text-body text-ink">
       <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
@@ -619,7 +693,7 @@ export function AnnotatedProse({
         })}
       </p>
       {unspanned.map((claim) => (
-        <p key={claim.claim_id} className="mt-2 text-[12.5px] text-grey">
+        <p key={claim.claim_id} className="mt-2 text-caption text-grey">
           <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
@@ -663,15 +737,15 @@ function SourceDossier({
         description="Source dossier"
       >
         {evidence.isPending && (
-          <p role="status" className="animate-pulse text-[12.5px] text-grey">
+          <p role="status" className="animate-pulse text-caption text-grey">
             Loading the dossier…
           </p>
         )}
-        {dossier.isPending && <p role="status" className="animate-pulse text-[12.5px] text-grey">Loading the dossier…</p>}
-        {dossier.isError && <p role="alert" className="text-[12.5px] text-navy">This source dossier couldn't be loaded.</p>}
+        {dossier.isPending && <p role="status" className="animate-pulse text-caption text-grey">Loading the dossier…</p>}
+        {dossier.isError && <p role="alert" className="text-caption text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {!byId && evidence.data !== undefined && source === undefined && (
-          <p className="text-[12.5px] text-grey">This source isn't in the evidence list yet.</p>
+          <p className="text-caption text-grey">This source isn't in the evidence list yet.</p>
         )}
       </SheetContent>
     </Sheet>
@@ -696,7 +770,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
       {terminalPartial ? (
         <div
           role="alert"
-          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-[12.5px] leading-relaxed text-navy"
+          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-caption leading-relaxed text-navy"
         >
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
@@ -706,31 +780,31 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
           </p>
         </div>
       ) : (
-        <p role="status" className="flex items-center gap-2 text-[12.5px] text-grey">
+        <p role="status" className="flex items-center gap-2 text-caption text-grey">
           <span aria-hidden="true" className="anim-breathe inline-block h-2 w-2 bg-blue" />
           Being written now — sections appear as they are drafted
         </p>
       )}
       {visible.map((section) => (
         <section key={section.index} className="mt-9">
-          <h2 className="font-display text-lg font-bold text-navy">{scrub(section.title)}</h2>
+          <h2 className="font-display text-heading font-bold text-navy">{scrub(section.title)}</h2>
           {section.state === "filled" && (section.prose ?? "") !== "" ? (
-            <p className="anim-rise mt-2 whitespace-pre-line text-[14px] leading-[1.75] text-ink">
+            <p className="anim-rise mt-2 max-w-prose-measure whitespace-pre-line text-body text-ink">
               {scrub(section.prose ?? "")}
             </p>
           ) : section.state === "writing" && !terminalPartial ? (
-            <p role="status" className="anim-breathe mt-2 text-[13px] text-grey">
+            <p role="status" className="anim-breathe mt-2 text-meta text-grey">
               Writing this section now…
             </p>
           ) : (
-            <p className="mt-2 text-[13px] italic text-grey">
+            <p className="mt-2 text-meta italic text-grey">
               {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
             </p>
           )}
         </section>
       ))}
       {!terminalPartial && (
-        <p className="mt-10 border-t border-line pt-4 text-[12px] text-grey">
+        <p className="mt-10 border-t border-line pt-4 text-caption text-grey">
           Citations and source provenance are attached when the write-up completes and is
           checked.
         </p>
@@ -747,6 +821,10 @@ export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const artefact = useArtefact(projectId);
+  // Cited-scoped distributions for the facts strip: study types and years
+  // count what the report CITES, not the whole included corpus (owner,
+  // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
+  const citedLandscape = useLandscape(projectId, "cited");
   const stream = useRunStream(projectId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
@@ -787,7 +865,7 @@ export function ArtefactView() {
     if (code !== "not_found") {
       return (
         <main className="mx-auto max-w-3xl px-6 py-10">
-          <Card role="alert" className="p-8 text-center text-[13px] text-navy">
+          <Card role="alert" className="p-8 text-center text-meta text-navy">
             The evidence base couldn't be loaded.{" "}
             <button
               type="button"
@@ -811,8 +889,8 @@ export function ArtefactView() {
     return (
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Card role="status" className="p-8 text-center">
-          <h1 className="font-display text-lg font-bold text-navy">No evidence base yet</h1>
-          <p className="mt-1.5 text-[13px] text-grey">
+          <h1 className="font-display text-title font-bold text-navy">No evidence base yet</h1>
+          <p className="mt-1.5 text-meta text-grey">
             The evidence base appears here once an analysis reaches synthesis.
           </p>
         </Card>
@@ -835,48 +913,103 @@ export function ArtefactView() {
   }
 
   const snapshot = data.coverage_snapshot;
-  const studyTypes = Object.entries(snapshot?.study_types ?? {}).sort(([, a], [, b]) => b - a);
-  const shownTypes = studyTypes.slice(0, 3);
+  // Study types and years count the CITED set (the live cited-scope
+  // landscape), not the whole included corpus.
+  const citedTypes = Object.entries(citedLandscape.data?.evidence_types ?? {}).sort(
+    ([, a], [, b]) => b - a,
+  );
+  const shownTypes = citedTypes.slice(0, 3);
+  const citedYears = Object.keys(citedLandscape.data?.years ?? {})
+    .map(Number)
+    .filter(Number.isInteger);
   const sections = orderSections((data.sections ?? []) as SectionLike[]);
 
-  const snapshotCells: Array<[string, string]> = [];
+  // Sources and Screened out link into the sources view, filtered to match
+  // (028 F.5): `cited` and `status` are SourcesView's existing URL params —
+  // there is no `status=cited` value, so the cited count routes through the
+  // boolean `cited=true` param instead.
+  const snapshotCells: Array<[string, string, string | null]> = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
     // never "found".
-    snapshotCells.push(["Sources", `${snapshot.source_count} cited · ${snapshot.included} included`]);
+    snapshotCells.push([
+      "Sources",
+      `${snapshot.source_count} cited out of ${snapshot.included} included`,
+      `/projects/${projectId}/sources?cited=true`,
+    ]);
   }
   if (shownTypes.length > 0) {
     snapshotCells.push([
       "Study types",
       shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
-        (studyTypes.length > 3 ? ` · +${studyTypes.length - 3} more` : ""),
+        (citedTypes.length > 3 ? ` · +${citedTypes.length - 3} more` : ""),
+      null,
     ]);
   }
-  if (snapshot?.year_range !== null && snapshot?.year_range !== undefined) {
-    snapshotCells.push(["Years", `${snapshot.year_range[0]}–${snapshot.year_range[1]}`]);
+  if (citedYears.length > 0) {
+    snapshotCells.push([
+      "Years",
+      `${Math.min(...citedYears)}–${Math.max(...citedYears)}`,
+      null,
+    ]);
   }
   if (typeof snapshot?.screened_out === "number") {
-    snapshotCells.push(["Screened out", `${snapshot.screened_out} — all listed with reasons`]);
+    snapshotCells.push([
+      "Screened out",
+      `${snapshot.screened_out}`,
+      `/projects/${projectId}/sources?status=screened_out`,
+    ]);
   }
 
+  const outlineEntries = [
+    ...sections.map((section, index) => ({
+      id: sectionAnchor(section.title, index),
+      title: section.title,
+    })),
+    ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
+    { id: "gathered", title: "How the evidence was gathered" },
+  ];
+
   return (
-    <main className="artefact-page anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+    <div className="mx-auto flex max-w-[1060px] justify-center gap-6 px-4">
+      <ContentsSidebar entries={outlineEntries} />
+      <main className="artefact-page anim-rise my-8 min-w-0 max-w-[780px] flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
       <header className="mb-8">
-        <p className="text-[11px] font-extrabold uppercase tracking-[0.06em] text-grey">
+        <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
           Evidence base
         </p>
-        <h1 className="mt-1 font-display text-[26px] font-extrabold leading-tight tracking-[-0.5px] text-navy">
+        <h1 className="mt-1 font-display text-title font-extrabold leading-tight tracking-[-0.5px] text-navy">
           {scrub(data.title)}
         </h1>
-        <p className="mt-2 text-[13.5px] text-grey">{scrub(data.question)}</p>
+        {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
+        {data.summary != null && data.summary !== "" && data.summary_status === "verified" && (
+          <p className="mt-3 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-3 py-2 text-body text-ink">
+            {scrub(data.summary)}
+          </p>
+        )}
         {snapshotCells.length > 0 && (
           <div className="mt-5 grid grid-cols-2 border border-line sm:grid-cols-4">
-            {snapshotCells.map(([label, value]) => (
-              <div key={label} className="border-r border-line p-3 last:border-r-0">
-                <p className="text-[10.5px] font-bold uppercase tracking-wider text-grey">{label}</p>
-                <p className="mt-1 text-[12.5px] font-medium leading-snug text-navy">{scrub(value)}</p>
-              </div>
-            ))}
+            {snapshotCells.map(([label, value, href]) => {
+              const content = (
+                <>
+                  <p className="text-caption font-bold uppercase tracking-wider text-grey">{label}</p>
+                  <p className="mt-1 text-caption font-medium leading-snug text-navy">{scrub(value)}</p>
+                </>
+              );
+              return href !== null ? (
+                <Link
+                  key={label}
+                  to={href}
+                  className="border-r border-line p-3 last:border-r-0 hover:underline"
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={label} className="border-r border-line p-3 last:border-r-0">
+                  {content}
+                </div>
+              );
+            })}
           </div>
         )}
         {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
@@ -884,46 +1017,30 @@ export function ArtefactView() {
       </header>
 
       {sections.map((section, index) => (
-        <section
+        <SectionDisclosure
           key={index}
-          className={section.role === "conclusions" ? "mb-9 border-t border-line pt-6" : "mb-9"}
+          id={sectionAnchor(section.title, index)}
+          section={section as OutlineSection}
+          // Key findings is never collapsible (always in full); every other
+          // section — conclusions included — starts collapsed on its summary
+          // (owner, 2026-08-05).
+          collapsible={section.role !== "key_findings"}
+          defaultOpen={false}
         >
-          <h2 className="mb-3 font-display text-lg font-bold text-navy">{scrub(section.title)}</h2>
-          <div className="space-y-4">
-            {(section.blocks ?? []).map((block) => (
-              <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
-            ))}
-          </div>
-        </section>
+          {(section.blocks ?? []).map((block) => (
+            <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
+          ))}
+        </SectionDisclosure>
       ))}
 
       {(data.references ?? []).length > 0 && (
-        <section aria-label="References" className="mt-12 border-t border-line pt-6">
-          <h2 className="mb-3 font-display text-base font-bold text-navy">References</h2>
-          <ol className="space-y-1.5 text-[12.5px] text-ink">
-            {(data.references ?? []).map((reference) => (
-              <li key={reference.n} className="flex gap-2">
-                <span className="font-bold text-blue">[{reference.n}]</span>
-                <span>
-                  <button
-                    type="button"
-                    className="cursor-pointer text-left hover:underline"
-                    onClick={() => openDossier(reference.title)}
-                  >
-                    {scrub(reference.title)}
-                  </button>
-                  {reference.year !== null && reference.year !== undefined && (
-                    <span className="text-grey"> ({reference.year})</span>
-                  )}
-                  {reference.venue !== null && reference.venue !== undefined && (
-                    <span className="text-grey"> · {scrub(reference.venue)}</span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ol>
-        </section>
+        <ReferencesSection
+          references={data.references ?? []}
+          onOpenReference={openDossier}
+        />
       )}
+
+      <GatheredSection projectId={projectId} id="gathered" />
 
       <ClaimPanel
         projectId={projectId}
@@ -938,6 +1055,65 @@ export function ArtefactView() {
       {dossierSource !== null && (
         <SourceDossier projectId={projectId} sourceRef={dossierSource} onClose={closeDossier} />
       )}
-    </main>
+      </main>
+    </div>
+  );
+}
+
+/** References as a collapsible entry with an always-visible summary line —
+ *  it is the ArtefactOut.references collection, not a synthesis section
+ *  (028 strand 10, binding record). */
+function ReferencesSection({
+  references,
+  onOpenReference,
+}: {
+  references: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  onOpenReference: (title: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section aria-label="References" id="references" className="mt-12 scroll-mt-20 border-t border-line pt-6">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full cursor-pointer items-baseline gap-2 text-left"
+      >
+        <h2 className="flex-1 font-display text-heading font-bold text-navy">References</h2>
+        <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+          {open ? "Collapse −" : "Expand +"}
+        </span>
+      </button>
+      {!open && (
+        <p className="mt-1.5 text-meta text-grey">
+          {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
+          in this report
+        </p>
+      )}
+      {open && (
+        <ol className="mt-3 space-y-1.5 text-caption text-ink">
+          {references.map((reference) => (
+            <li key={reference.n} className="flex gap-2">
+              <span className="font-bold text-blue">[{reference.n}]</span>
+              <span>
+                <button
+                  type="button"
+                  className="cursor-pointer text-left hover:underline"
+                  onClick={() => onOpenReference(reference.title)}
+                >
+                  {scrub(reference.title)}
+                </button>
+                {reference.year !== null && reference.year !== undefined && (
+                  <span className="text-grey"> ({reference.year})</span>
+                )}
+                {reference.venue !== null && reference.venue !== undefined && (
+                  <span className="text-grey"> · {scrub(reference.venue)}</span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }

@@ -6,7 +6,8 @@ export type ConflictCode =
   | "capacity"
   | "planning_turn_in_progress"
   | "stale_turn"
-  | "already_answered";
+  | "already_answered"
+  | "plan_stale";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -16,6 +17,8 @@ export const conflictSentences: Record<ConflictCode, string> = {
   planning_turn_in_progress: "That planning turn is still being prepared. Refresh to see the completed turn.",
   stale_turn: "That planning turn is no longer the latest one. Refresh the planning conversation and try again.",
   already_answered: "This check-in has already been answered. Refresh to see the recorded decision.",
+  plan_stale:
+    "The plan predates your latest planning message. Review the updated plan, then start.",
 };
 
 /**

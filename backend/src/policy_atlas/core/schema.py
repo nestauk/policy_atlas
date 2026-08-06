@@ -1,6 +1,6 @@
 """SQLAlchemy Core table metadata — twenty-eight tables plus one read view.
 
-No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
+No deferred columns (no same_content_as or lineage key).
 """
 
 from sqlalchemy import (
@@ -50,7 +50,12 @@ artefact = Table(
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
     Column("title", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Deferred: artefact summary field + pending/verified/failed marker
+    Column("summary", Text, nullable=True),
+    Column("summary_status", Text, nullable=True),
+    CheckConstraint(
+        "summary_status IN ('pending', 'verified', 'failed')",
+        name="ck_artefact_summary_status",
+    ),
 )
 
 block = Table(
@@ -62,7 +67,13 @@ block = Table(
     Column("content", Text, nullable=False),
     Column("content_hash", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Deferred: co-versioned summary + summary_status marker; block-lineage key; structured blocks
+    Column("summary", Text, nullable=True),
+    Column("summary_status", Text, nullable=True),
+    CheckConstraint(
+        "summary_status IN ('pending', 'verified', 'failed')",
+        name="ck_block_summary_status",
+    ),
+    # Deferred: block-lineage key; structured blocks
 )
 
 addressable_unit = Table(
@@ -608,6 +619,7 @@ source_tag = Table(
     Column("asserted_by", Text, nullable=False),
     Column("created_by_run_id", UUID(as_uuid=True), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("theme_id", UUID(as_uuid=True), nullable=True),
     ForeignKeyConstraint(
         ["project_source_snapshot_id", "project_id"],
         [
@@ -1093,6 +1105,7 @@ planning_transcript = Table(
     # ``previous_draft``. ``response`` is the distinct projected API result.
     Column("planner_state", JSONB, nullable=True),
     Column("response", JSONB, nullable=True),
+    Column("part", JSONB, nullable=True),
     Column("suggestions", JSONB, nullable=False),
     Column("status", Text, nullable=False),  # pending|completed|failed
     Column("created_at", DateTime(timezone=True), nullable=False),

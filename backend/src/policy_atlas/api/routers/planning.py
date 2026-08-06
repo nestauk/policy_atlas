@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
+import re
 import threading
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, cast
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
@@ -19,6 +22,7 @@ from policy_atlas.api.contract import (
     PAGE_SIZE_MAX,
     Page,
     PageMeta,
+    PartProposalOut,
     PlanDraft,
     PlanningTranscriptTurnOut,
     PlanningTurnCreate,
@@ -32,13 +36,19 @@ from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTAT
 from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
 from policy_atlas.runtime.orchestrate import build_plan, persist_approved_plan
 from policy_atlas.runtime.orchestration_plan import (
-    TIME_BANDS,
     OrchestrationPlan,
     compose,
     registry_component_for,
+    time_band_for,
 )
 from policy_atlas.runtime.planner import PlannerBackend
 from policy_atlas.runtime.planner_prompt import PlanDraftWire
+
+log = structlog.get_logger()
+
+# The client's confirm-marker regex (`option=([a-z0-9_]+)`) — enforced
+# server-side so a card never ships an id the marker grammar can't round-trip.
+_OPTION_ID_RE = re.compile(r"[a-z][a-z0-9_]*")
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -103,7 +113,9 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
     values.pop("steer_point_defaults", None)
     effort, depth = values.get("search_effort"), values.get("analysis_depth")
     if effort in {"rapid", "standard", "deep"} and depth in {"landscape", "standard", "deep"}:
-        values["time_band"] = TIME_BANDS[(effort, depth)]
+        values["time_band"] = time_band_for(
+            effort, depth, values.get("section_budget")
+        )
     values["ready"] = ready
     return PlanDraft.model_validate(values)
 
@@ -112,6 +124,9 @@ def _draft_from_plan(plan: OrchestrationPlan) -> PlanDraft:
     """Project a validated runtime plan into the API's approved draft shape."""
     values = plan.model_dump(mode="json")
     values.pop("steer_point_defaults", None)
+    # This links an approved payload to its transcript turn; it is not a
+    # user-visible plan-draft field.
+    values.pop("source_turn_index", None)
     steps: list[PlanStep] = []
     seen_stages: set[str] = set()
     for step in compose(plan).steps:
@@ -133,6 +148,55 @@ def _response_from_row(row: RowMapping) -> PlanningTurnOut:
     if response is None:
         raise RuntimeError("completed planning transcript row has no response")
     return PlanningTurnOut.model_validate(response)
+
+
+def _validated_part(raw_part: object) -> PartProposalOut | None:
+    """Validate one planner part proposal, degrading malformed cards to prose.
+
+    Args:
+        raw_part: The optional runtime wire proposal returned by the planner.
+
+    Returns:
+        A standalone API proposal when it meets the card rules, else ``None``.
+    """
+    if raw_part is None:
+        return None
+
+    try:
+        if isinstance(raw_part, BaseModel):
+            raw_part = raw_part.model_dump(mode="json")
+        part = PartProposalOut.model_validate(raw_part)
+    except ValidationError:
+        log.warning("planning_part_dropped", reason="invalid_shape")
+        return None
+    if part.id not in {"question", "scope", "thoroughness"}:
+        log.warning("planning_part_dropped", reason="invalid_part_id")
+        return None
+    if not 2 <= len(part.options) <= 4:
+        log.warning("planning_part_dropped", reason="invalid_option_count")
+        return None
+    if sum(option.primary for option in part.options) != 1:
+        log.warning("planning_part_dropped", reason="invalid_primary_count")
+        return None
+    # The confirm-marker grammar the client derives ✓-state from admits only
+    # snake_case option ids; the rule lived in prompt text alone, so a
+    # planner-emitted id like "quick-look" broke marker parsing after refresh
+    # (review 028: security lane + Codex lane convergent finding).
+    if any(_OPTION_ID_RE.fullmatch(option.id) is None for option in part.options):
+        log.warning("planning_part_dropped", reason="invalid_option_id")
+        return None
+    for chip in part.chips or []:
+        if chip.kind not in {"date_range", "country_list"}:
+            continue
+        try:
+            decoded = json.loads(chip.value)
+        except (TypeError, ValueError):
+            log.warning("planning_part_dropped", reason="invalid_chip_json")
+            return None
+        if not isinstance(decoded, dict):
+            log.warning("planning_part_dropped", reason="invalid_chip_json")
+            return None
+    return part
 
 
 def _planner_inputs(
@@ -168,6 +232,7 @@ def _transcript_out(row: RowMapping) -> PlanningTranscriptTurnOut:
         user_message=row["user_message"],
         reply=row["reply"],
         suggestions=row["suggestions"],
+        part=row["part"],
         status=row["status"],
         created_at=row["created_at"],
         completed_at=row["completed_at"],
@@ -314,15 +379,18 @@ def create_planning_turn(
         draft = _draft_from_plan(approved) if approved is not None else _draft_from_wire(
             turn.plan_draft, ready=ready
         )
+        part = _validated_part(turn.part)
         result = PlanningTurnOut(
             reply=turn.reply,
             plan=draft,
             suggestions=turn.suggested_answers or [],
+            part=part,
         )
         phase_two_values = {
             "reply": turn.reply,
             "planner_state": turn.plan_draft.model_dump(mode="json"),
             "response": result.model_dump(mode="json"),
+            "part": part.model_dump(mode="json") if part is not None else None,
             "suggestions": result.suggestions,
             "status": "completed",
             "completed_at": _now(),
@@ -367,6 +435,12 @@ def create_planning_turn(
                 if completed.rowcount != 1:
                     raise RuntimeError("planning transcript turn was not open at phase two")
                 if approved is not None:
+                    turn_index = conn.execute(
+                        select(planning_transcript.c.turn_index).where(
+                            planning_transcript.c.id == phase_one
+                        )
+                    ).scalar_one()
+                    approved.source_turn_index = int(turn_index)
                     persist_approved_plan(conn, project_id=project_id, plan=approved)
         if run_started_meanwhile:
             raise ApiConflict(
@@ -426,19 +500,30 @@ def get_plan(
             .order_by(orchestration_plan.c.version.desc())
             .limit(1)
         ).mappings().one_or_none()
-        if row is None:
-            draft_row = conn.execute(
-                select(planning_transcript.c.response)
-                .where(planning_transcript.c.project_id == project_id)
-                .where(planning_transcript.c.status == "completed")
-                .order_by(planning_transcript.c.turn_index.desc())
-                .limit(1)
-            ).mappings().one_or_none()
-        else:
-            draft_row = None
+        latest_completed = conn.execute(
+            select(planning_transcript.c.turn_index, planning_transcript.c.response)
+            .where(planning_transcript.c.project_id == project_id)
+            .where(planning_transcript.c.status == "completed")
+            .order_by(planning_transcript.c.turn_index.desc())
+            .limit(1)
+        ).mappings().one_or_none()
+        approved_is_stale = False
+        if row is not None:
+            approved_plan = OrchestrationPlan.model_validate(row["payload"])
+            approved_is_stale = (
+                approved_plan.source_turn_index is not None
+                and latest_completed is not None
+                and approved_plan.source_turn_index < latest_completed["turn_index"]
+            )
+        draft_row = latest_completed if row is None or approved_is_stale else None
     if row is not None:
+        if approved_is_stale:
+            if draft_row is None or draft_row["response"] is None:
+                raise HTTPException(status_code=404, detail="resource not found")
+            response = PlanningTurnOut.model_validate(draft_row["response"])
+            return PlanOut(plan=response.plan, version=0, status="draft")
         return PlanOut(
-            plan=_draft_from_plan(OrchestrationPlan.model_validate(row["payload"])),
+            plan=_draft_from_plan(approved_plan),
             version=row["version"],
             status=row["status"],
         )

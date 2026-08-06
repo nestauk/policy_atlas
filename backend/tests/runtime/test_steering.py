@@ -260,9 +260,7 @@ def test_extract_refresh_is_exempt_from_plan_round_trip_but_profiles_still_are()
     # _base_plan()'s default "deep" depth compiles extract_profiles to both
     # IOF and ICF (ANALYSIS_DEPTH_TABLE["deep"]) — matched here so the
     # profiles half of the round-trip check genuinely passes.
-    delta = {
-        "extraction": {"profiles": [IOF_PROFILE_ID, ICF_PROFILE_ID], "refresh": "all"}
-    }
+    delta = {"extraction": {"profiles": [IOF_PROFILE_ID, ICF_PROFILE_ID], "refresh": "all"}}
     _validate_directive_delta("extract", delta, backend_scope="both")  # does not raise
 
     chain = compose(_base_plan())
@@ -317,7 +315,7 @@ def test_acquire_target_directive_delta_rejects_out_of_range(delta: dict[str, An
     ],
 )
 def test_select_strata_scope_and_exclude_ids_directive_delta_validates(
-    delta: dict[str, Any]
+    delta: dict[str, Any],
 ) -> None:
     _validate_directive_delta("select", delta, backend_scope="both")  # does not raise
 
@@ -331,7 +329,7 @@ def test_select_strata_scope_and_exclude_ids_directive_delta_validates(
     ],
 )
 def test_select_strata_scope_and_exclude_ids_directive_delta_rejects_bogus(
-    delta: dict[str, Any]
+    delta: dict[str, Any],
 ) -> None:
     with pytest.raises(SteeringAdjustmentError):
         _validate_directive_delta("select", delta, backend_scope="both")
@@ -340,9 +338,7 @@ def test_select_strata_scope_and_exclude_ids_directive_delta_rejects_bogus(
 def test_select_exclude_ids_conflicting_with_must_include_ids_rejected() -> None:
     """D7: the same id in both exclude_ids and must_include_ids fails closed."""
     shared_id = str(uuid.uuid4())
-    delta = {
-        "selection": {"must_include_ids": [shared_id], "exclude_ids": [shared_id]}
-    }
+    delta = {"selection": {"must_include_ids": [shared_id], "exclude_ids": [shared_id]}}
     with pytest.raises(SteeringAdjustmentError, match="conflicts"):
         _validate_directive_delta("select", delta, backend_scope="both")
 
@@ -370,9 +366,7 @@ def test_group_granularity_directive_delta_validates(delta: dict[str, Any]) -> N
         {"grouping": {"granularity": 1}},
     ],
 )
-def test_group_granularity_directive_delta_rejects_bogus_value(
-    delta: dict[str, Any]
-) -> None:
+def test_group_granularity_directive_delta_rejects_bogus_value(delta: dict[str, Any]) -> None:
     with pytest.raises(SteeringAdjustmentError):
         _validate_directive_delta("group", delta, backend_scope="both")
 
@@ -538,10 +532,9 @@ def test_pause_points_compile_pinned_for_all_modes() -> None:
         PausePoint("before_component", "select"),
         PausePoint("before_component", "synthesise"),
     }
-    # Moderate always-pauses at P2 + P3 + P4 (P1 is fired-only, so not static).
+    # Moderate always-pauses at P1 + P4; P2/P3/Groups are fired-only.
     assert pause_points("moderate", chain) == {
-        PausePoint("before_component", "select"),
-        PausePoint("after_component", "select"),
+        PausePoint("after_component", "acquire"),
         PausePoint("before_component", "synthesise"),
     }
     # Minimal: all four lattice points are fired-only (named behaviour change —
@@ -692,9 +685,7 @@ def test_minimal_partial_delta_round_trips_despite_composer_injected_siblings(
             [
                 Adjust(
                     directive_deltas={
-                        "screen_full": {
-                            "screening": {"criteria": ["Exclude opinion pieces."]}
-                        }
+                        "screen_full": {"screening": {"criteria": ["Exclude opinion pieces."]}}
                     }
                 )
             ]
@@ -760,9 +751,7 @@ def test_appraise_adjustment_accepted_end_to_end_but_absent_from_plan_payload(
             [
                 Adjust(
                     directive_deltas={
-                        "appraise": {
-                            "appraisal": {"rubric": {"Expert Opinion and Commentary": 5}}
-                        }
+                        "appraise": {"appraisal": {"rubric": {"Expert Opinion and Commentary": 5}}}
                     }
                 )
             ]
@@ -832,9 +821,7 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
         # appraise has run) so the rejection is "already-run"; the reprompt then
         # Continues.
         io = ScriptedIO(
-            by_steer_point={
-                "evidence_base_coverage": [Adjust(directive_deltas={"appraise": {}})]
-            }
+            by_steer_point={"evidence_base_coverage": [Adjust(directive_deltas={"appraise": {}})]}
         )
 
         outcome = run_plan(
@@ -853,9 +840,7 @@ def test_adjustment_naming_already_run_component_reprompts_without_plan_write(
         # Under the lattice an already-run adjustment is rejected at whichever
         # lattice pause first fires (P2 fires on the thin seed); the rejection
         # render surfaces and no plan-version row is written.
-        assert any(
-            "already-run component 'appraise'" in render for _, render in io.pauses
-        )
+        assert any("already-run component 'appraise'" in render for _, render in io.pauses)
         with engine.connect() as conn:
             rows = conn.execute(
                 select(orchestration_plan.c.version, orchestration_plan.c.status)
@@ -899,15 +884,17 @@ def test_abort_at_pause_stops_walk_marks_plan_abandoned_and_preserves_prior_runs
         assert all(step.status == "succeeded" for step in outcome.steps)
         with engine.connect() as conn:
             plan_status = conn.execute(
-                select(orchestration_plan.c.status).where(
-                    orchestration_plan.c.plan_id == plan_id
-                )
+                select(orchestration_plan.c.status).where(orchestration_plan.c.plan_id == plan_id)
             ).scalar_one()
-            run_statuses = conn.execute(
-                select(runs.c.status)
-                .where(runs.c.project_id == project_id)
-                .order_by(runs.c.started_at)
-            ).scalars().all()
+            run_statuses = (
+                conn.execute(
+                    select(runs.c.status)
+                    .where(runs.c.project_id == project_id)
+                    .order_by(runs.c.started_at)
+                )
+                .scalars()
+                .all()
+            )
             synth_count = conn.execute(
                 select(func.count())
                 .select_from(synthesis_result)
@@ -929,9 +916,7 @@ def test_unattended_auto_resolves_steer_point_without_pause_and_collates_flag(
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan(
             steering_mode="unattended",
-            steer_point_defaults=[
-                {"steer_point": "deepening_selection", "action": "proceed_flag"}
-            ],
+            steer_point_defaults=[{"steer_point": "deepening_selection", "action": "proceed_flag"}],
         )
         io = ScriptedIO()
 
@@ -970,9 +955,7 @@ def test_unattended_auto_resolves_steer_point_without_pause_and_collates_flag(
         # Loudest-flag collation ordering: unconfigured_default is reviewed FIRST.
         collation = outcome.collation_render
         assert "auto-resolutions" in collation
-        assert collation.index("unconfigured_default") < collation.index(
-            "rule=deepening_selection"
-        )
+        assert collation.index("unconfigured_default") < collation.index("rule=deepening_selection")
     finally:
         _cleanup_project(engine, project_id)
 
@@ -1083,26 +1066,37 @@ def test_steer_point_triggers_map_each_flag_shape(engine: Engine) -> None:
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan()
         large_run = _insert_selection_row(
-            engine, project_id=project_id, scope_id=scope_id,
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
             flags={"large_stratum_excluded": ["Housing supply"]},
         )
         nominated_run = _insert_selection_row(
-            engine, project_id=project_id, scope_id=scope_id,
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
             flags={
                 "priority_stratum_excluded": ["Health equity"],
                 "must_include_conflict": ["doc-1"],
             },
         )
         thin_run = _insert_selection_row(
-            engine, project_id=project_id, scope_id=scope_id,
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
             flags={"thin_base": {"sufficiently_confident": 2, "floor": 10}},
         )
         other_run = _insert_selection_row(
-            engine, project_id=project_id, scope_id=scope_id,
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
             flags={"thin_full_text": {"share": 0.1, "floor": 0.5}},
         )
         empty_run = _insert_selection_row(
-            engine, project_id=project_id, scope_id=scope_id, flags={},
+            engine,
+            project_id=project_id,
+            scope_id=scope_id,
+            flags={},
         )
 
         with engine.connect() as conn:
@@ -1125,9 +1119,7 @@ def test_steer_point_triggers_map_each_flag_shape(engine: Engine) -> None:
                 conn, project_id=project_id, selection_run_id=uuid.uuid4(), plan=plan
             )
 
-        assert large == [
-            {"trigger": "excluded_large_stratum", "detail": ["Housing supply"]}
-        ]
+        assert large == [{"trigger": "excluded_large_stratum", "detail": ["Housing supply"]}]
         assert nominated == [
             {
                 "trigger": "excluded_user_nominated",
@@ -1161,10 +1153,6 @@ def test_build_steer_point_options_speak_intents_with_pinned_grammar() -> None:
         "strongest_evidence",
         "most_relevant",
         "adjust_budget",
-        "add_extraction_profile",
-        "refresh_extraction",
-        "scope_strata",
-        "exclude_docs",
         "as_proposed",
     }
     assert by_id["deepen_clusters"]["delta"] == {
@@ -1180,8 +1168,8 @@ def test_build_steer_point_options_speak_intents_with_pinned_grammar() -> None:
     assert by_id["as_proposed"]["delta"] == {}
     # Every option speaks a user intent and carries an honest description.
     assert all(option["intent"] and option["description"] for option in options)
-    # screen_confidence is named honestly as the relevance proxy, not true relevance.
-    assert "proxy" in by_id["most_relevant"]["description"]
+    assert by_id["most_relevant"]["label"] == "Prefer the most relevant"
+    assert "Replaces this list." in by_id["most_relevant"]["description"]
 
 
 def test_emphasis_options_reorder_selection_through_the_real_select_path() -> None:
@@ -1206,12 +1194,20 @@ def test_emphasis_options_reorder_selection_through_the_real_select_path() -> No
     )
 
     default_quality = select_documents(
-        quality_candidates, strata=[quality_stratum], strategy="coverage_stratified_v1",
-        directive=default_directive, intent="q", ranking_backend=None,
+        quality_candidates,
+        strata=[quality_stratum],
+        strategy="coverage_stratified_v1",
+        directive=default_directive,
+        intent="q",
+        ranking_backend=None,
     )
     emphasised_quality = select_documents(
-        quality_candidates, strata=[quality_stratum], strategy="coverage_stratified_v1",
-        directive=quality_directive, intent="q", ranking_backend=None,
+        quality_candidates,
+        strata=[quality_stratum],
+        strategy="coverage_stratified_v1",
+        directive=quality_directive,
+        intent="q",
+        ranking_backend=None,
     )
     assert [record["pss_id"] for record in default_quality.selected] == [str(doc_a.pss_id)]
     assert [record["pss_id"] for record in emphasised_quality.selected] == [str(doc_b.pss_id)]
@@ -1230,12 +1226,20 @@ def test_emphasis_options_reorder_selection_through_the_real_select_path() -> No
     )
 
     default_relevance = select_documents(
-        relevance_candidates, strata=[relevance_stratum], strategy="coverage_stratified_v1",
-        directive=default_directive, intent="q", ranking_backend=None,
+        relevance_candidates,
+        strata=[relevance_stratum],
+        strategy="coverage_stratified_v1",
+        directive=default_directive,
+        intent="q",
+        ranking_backend=None,
     )
     emphasised_relevance = select_documents(
-        relevance_candidates, strata=[relevance_stratum], strategy="coverage_stratified_v1",
-        directive=relevance_directive, intent="q", ranking_backend=None,
+        relevance_candidates,
+        strata=[relevance_stratum],
+        strategy="coverage_stratified_v1",
+        directive=relevance_directive,
+        intent="q",
+        ranking_backend=None,
     )
     assert [record["pss_id"] for record in default_relevance.selected] == [str(doc_c.pss_id)]
     assert [record["pss_id"] for record in emphasised_relevance.selected] == [str(doc_d.pss_id)]
@@ -1248,9 +1252,7 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
     try:
         project_id, scope_id = _seed_project(engine)
         plan = _base_plan()  # moderate mode, full (deep) chain
-        plan_id = _insert_plan_row(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan
-        )
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
         # Reselect lands at the P3 deepening_selection pause; every other lattice
         # pause (P1 fires on the thin stub seed, P2, P4) Continues.
         io = ScriptedIO(
@@ -1308,9 +1310,7 @@ def test_moderate_steer_point_reselect_reruns_select_and_threads_new_run_id(
         assert len(select_run_ids) == 2
 
         # The re-run select runs under the amended plan version.
-        rerun_select = next(
-            entry for entry in compiled if entry["run_id"] == select_run_ids[1]
-        )
+        rerun_select = next(entry for entry in compiled if entry["run_id"] == select_run_ids[1])
         assert rerun_select["payload"]["plan_version"] == 2
 
         # Extract threads the NEW selection run id, not the original.
@@ -1628,9 +1628,7 @@ def test_plan_mappable_screening_criteria_takes_plan_path_no_overlay(engine: Eng
 def _scope_context(engine: Engine, scope_id: uuid.UUID) -> dict[str, Any]:
     with engine.connect() as conn:
         context: dict[str, Any] = conn.execute(
-            select(evidence_scope.c.context).where(
-                evidence_scope.c.evidence_scope_id == scope_id
-            )
+            select(evidence_scope.c.context).where(evidence_scope.c.evidence_scope_id == scope_id)
         ).scalar_one()
     return context
 
@@ -1761,48 +1759,10 @@ def test_pending_group_split_maps_facets_and_overlays_granularity_guidance(
         _cleanup_project(engine, project_id)
 
 
-def test_p3_refresh_extraction_option_applies_end_to_end(engine: Engine) -> None:
-    """The canonical P3 refresh_extraction option (profiles + refresh) applies
-    cleanly on pending extract: profiles map to the plan, refresh reaches the run
-    via the overlay."""
-    project_id: uuid.UUID | None = None
-    try:
-        project_id, scope_id = _seed_project(engine)
-        plan = _base_plan()  # moderate: P3 (deepening_selection) pauses
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
-        option = next(
-            opt
-            for opt in build_steer_point_options(plan=plan, point="deepening_selection")
-            if opt["id"] == "refresh_extraction"
-        )
-        io = ScriptedIO(
-            by_steer_point={
-                "deepening_selection": [Adjust(directive_deltas=option["delta"])]
-            }
-        )
-
-        outcome = run_plan(
-            engine,
-            project_id=project_id,
-            evidence_scope_id=scope_id,
-            plan=plan,
-            plan_id=plan_id,
-            plan_version=1,
-            plan_row_id=plan_id,
-            backends=_runner_backends(),
-            io=io,
-        )
-        assert outcome.status == "succeeded"
-
-        # The refresh reached the run through the overlay.
-        extraction_ctx = _scope_context(engine, scope_id)["extraction"]
-        assert extraction_ctx["refresh"] == "abstract_only"
-        extract_compiled = _compiled_by_component(engine, project_id)["extract"]
-        assert extract_compiled[0]["pending_overlay"] == {
-            "extraction": {"refresh": "abstract_only"}
-        }
-    finally:
-        _cleanup_project(engine, project_id)
+def test_p3_refresh_extraction_is_retired_from_the_floor() -> None:
+    """Task 028 keeps refresh extraction for authored suggestions, not P3's floor."""
+    options = build_steer_point_options(plan=_base_plan(), point="deepening_selection")
+    assert "refresh_extraction" not in {option["id"] for option in options}
 
 
 def test_pending_select_commit_layer_key_overlays_to_run(engine: Engine) -> None:
@@ -1967,9 +1927,7 @@ def test_re_characterise_moves_reference_preserves_rows_and_stamps_replacement(
             boundary="after_component",
             component="characterise",
         )
-        adjustment = Adjust(
-            directive_deltas={"characterise": {"characterise": {"themes": "more"}}}
-        )
+        adjustment = Adjust(directive_deltas={"characterise": {"characterise": {"themes": "more"}}})
         rerun_state, merged = _apply_replacement_rerun(
             engine,
             project_id=project_id,
@@ -2052,9 +2010,7 @@ def test_re_group_moves_reference_preserves_rows_and_stamps_replacement(
             boundary="after_component",
             component="group",
         )
-        adjustment = Adjust(
-            directive_deltas={"group": {"grouping": {"granularity": "coarser"}}}
-        )
+        adjustment = Adjust(directive_deltas={"group": {"grouping": {"granularity": "coarser"}}})
         rerun_state, merged = _apply_replacement_rerun(
             engine,
             project_id=project_id,
@@ -2213,9 +2169,7 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
             boundary="after_component",
             component="characterise",
         )
-        adjustment = Adjust(
-            directive_deltas={"characterise": {"characterise": {"themes": "more"}}}
-        )
+        adjustment = Adjust(directive_deltas={"characterise": {"characterise": {"themes": "more"}}})
         rerun_state, merged = _apply_replacement_rerun(
             engine,
             project_id=project_id,
@@ -2229,9 +2183,7 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
         # Fault-inject the re-run only (the initial walk already succeeded).
         def failing_characterise_scope(*args: Any, **kwargs: Any) -> dict[str, Any]:
             del args, kwargs
-            raise CharacteriseFailure(
-                coverage={"base_counts": {}}, error="forced re-run failure"
-            )
+            raise CharacteriseFailure(coverage={"base_counts": {}}, error="forced re-run failure")
 
         monkeypatch.setattr(harness, "characterise_scope", failing_characterise_scope)
 
@@ -2265,3 +2217,126 @@ def test_failed_replacement_rerun_blocks_downstream_discretionary(
         assert _skip_reason("select", blocked_discretionary) is not None
     finally:
         _cleanup_project(engine, project_id)
+
+
+def test_finding_groups_regroup_option_reruns_group_from_the_pause(engine: Engine) -> None:
+    """Answering the FG pause with the canonical regroup delta re-runs group as
+    a replacement wired from the pause itself (review 028 M1: the affordance was
+    dead — rerun wiring existed only for P3, so both apply paths refused the
+    delta as an already-run adjustment)."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent")  # FG pauses "always" in frequent
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        io = ScriptedIO(
+            by_steer_point={
+                "finding_groups": [
+                    Adjust(directive_deltas={"group": {"grouping": {"granularity": "coarser"}}})
+                ]
+            }
+        )
+
+        outcome = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=io,
+        )
+
+        assert outcome.status == "succeeded"
+
+        with engine.connect() as conn:
+            compiled = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["event_type"] == "plan.compiled"
+            ]
+        group_run_ids = [
+            entry["run_id"] for entry in compiled if entry["payload"]["component"] == "group"
+        ]
+        assert len(group_run_ids) == 2  # the original plus the replacement re-run
+
+        # Synthesise threads the NEW grouping run (deepest-available reference).
+        synthesise_payload = next(
+            entry["payload"] for entry in compiled if entry["payload"]["component"] == "synthesise"
+        )
+        assert synthesise_payload["grouping_run_id"] == str(group_run_ids[1])
+        assert synthesise_payload["grouping_run_id"] != str(group_run_ids[0])
+
+        # The FG pause fired exactly once — not re-entered after the regroup.
+        steer_points = [
+            point["steer_point"] for point, _ in io.pauses if point.get("kind") == "steer_point"
+        ]
+        assert steer_points.count("finding_groups") == 1
+        # And the pause payload carried the wired re-run surface.
+        fg_point = next(
+            point for point, _ in io.pauses if point.get("steer_point") == "finding_groups"
+        )
+        assert fg_point["rerun_component"] == "group"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p4_as_proposed_overlay_pins_displayed_equals_submitted(engine: Engine) -> None:
+    """The SYNTHESIS_SHAPE overlay clamps focus to the directive bound, trims to
+    the section budget, and carries the proposal's group_ids into the
+    as_proposed delta — displayed == submitted == valid (review 028 F4/M2/m1;
+    deleting the overlay must fail this test)."""
+    from policy_atlas.evidence_base.synthesis.synthesis_tools import parse_synthesis_directive
+    from policy_atlas.runtime import runner as runner_module
+
+    plan = _base_plan(section_budget=2)
+    state = _SteeringState(
+        plan=plan,
+        plan_id=uuid.uuid4(),
+        plan_version=1,
+        plan_row_id=None,
+        chain=compose(plan),
+        pause_points=set(),
+    )
+    prebuilt = {
+        "bundle_version": "v1",
+        "proposal": {
+            "proposed_sections": [
+                {"title": "Costs", "focus": "f" * 300, "group_ids": ["outcome:g01"]},
+                {"title": "Delivery", "focus": "short", "group_ids": []},
+                {"title": "Over budget", "focus": "third section beyond budget 2"},
+            ],
+            "available_groups": [],
+            "boostable": {},
+        },
+        "grouping_flags": {},
+        "priority_counts": None,
+    }
+    options, bundle = runner_module._pause_options_and_bundle(
+        engine,
+        steer_point_name="synthesis_shape",
+        state=state,
+        project_id=uuid.uuid4(),
+        evidence_scope_id=uuid.uuid4(),
+        successful_runs={},
+        backends=_runner_backends(),
+        prebuilt_bundle=prebuilt,
+    )
+    assert bundle is not None
+    displayed = bundle["proposal"]["proposed_sections"]
+    # Focus clamped to 200; empty group_ids omitted; list trimmed to budget 2.
+    assert displayed == [
+        {"title": "Costs", "focus": "f" * 200, "group_ids": ["outcome:g01"]},
+        {"title": "Delivery", "focus": "short"},
+    ]
+    as_proposed = next(option for option in options if option["id"] == "as_proposed")
+    assert as_proposed["delta"] == {"synthesise": {"synthesis": {"sections": displayed}}}
+    # The submitted delta compiles in the answer-time grammar (the live-422 class):
+    # form-checked with membership deferred to the execution-time re-parse.
+    parse_synthesis_directive(
+        as_proposed["delta"]["synthesise"],
+        grouping_group_ids=None,
+        defer_group_membership=True,
+    )

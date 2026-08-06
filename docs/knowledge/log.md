@@ -1,5 +1,36 @@
 # Knowledge update log
 
+## 2026-08-05 (task 028 step 9 — owner live review)
+* **Creation**: Added
+  [custom-text-tokens-need-tailwind-merge-registration](custom-text-tokens-need-tailwind-merge-registration.md)
+  — every brand primary shipped ink-on-blue with all gates green (twMerge classified the
+  028 type-scale tokens as colours and stripped text-white); owner-caught on the live app.
+
+## 2026-08-05 (task 028 step 8)
+* **Creation**: Added
+  [retiring-ui-affordance-keeps-grammar-channel](retiring-ui-affordance-keeps-grammar-channel.md),
+  [content-keyed-ids-uuid5](content-keyed-ids-uuid5.md),
+  [server-key-label-maps-one-home-raw-fixtures](server-key-label-maps-one-home-raw-fixtures.md)
+  — task 028 (UX refinement): authored from BOTH the build's knowledge candidates and the
+  review stack's findings (014 retro rule).
+* **Update**: [column-churn-migrations-need-scratch-db](column-churn-migrations-need-scratch-db.md)
+  — the predicted exhaustion happened (TooManyColumns mid-roundtrip → 627-failure cascade,
+  recognition signature + remedy recorded); [tested-in-isolation-is-not-wired](tested-in-isolation-is-not-wired.md)
+  — every offered floor option needs a test that ANSWERS a pause with it (028 M1, dead FG
+  regroup); [delegated-executor-practices](delegated-executor-practices.md) — Codex-authored
+  tests confirmed the dominant delegated-defect surface a third time; shared-file concurrent
+  edits merge but mid-flight typecheck cross-fires;
+  [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)
+  — transport-twin corollary + schema-requires-what-the-prompt-forbids (endorsements,
+  watch_authoring_v2); [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md)
+  — the guard's selector is part of its invariant (prompt-guard filename glob);
+  [live-check-drive-runbook](live-check-drive-runbook.md) — Playwright exact:true vs brand
+  copy, mock/live serialisation, LIVE_ALLOW_API_TAKEOVER.
+* **Declined with reasons**: dev-DB-migrate gotcha (already in the runbook, 027 entry);
+  Codex-no-Docker (already a delegated-practices rule, 027); nulls-first staging
+  (already the wire-additions concept's core); a standalone "review-economy" concept
+  (process, lives in the task-cycle skill + memory, not product knowledge).
+
 ## 2026-07-28
 * **Creation**: Added [cdk-poweruser-deploy-boundaries](cdk-poweruser-deploy-boundaries.md),
   [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md),

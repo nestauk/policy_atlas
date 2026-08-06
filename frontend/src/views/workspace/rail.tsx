@@ -43,7 +43,8 @@ export interface RailState {
  * to sane bounds. No persistence: a fresh session gets the default split.
  *
  * Until the user resizes, the width stays on the caller's animated
- * percentage default (the 55/45→35/65 RETRO split); the first resize pins it
+ * percentage default (55/45 planning, 50/50 once a run exists — 028 strand 4
+ * revises the RETRO §2.3 split); the first resize pins it
  * to pixels for the rest of the session.
  */
 export function useRail(defaultWidth: string): RailState {

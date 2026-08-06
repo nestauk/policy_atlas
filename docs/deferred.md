@@ -1108,9 +1108,24 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   applies flag-not-block; v1 honours the rule through the weakly-grounded mechanism only.
   Policy-conditioned flagging (below-policy support visibly flagged as such) lands with
   the policy surface.
-- **Block summaries / artefact summary / faithfulness judging** — the navigation layer
-  (provenance-grounding § Summaries): co-versioned block summary column, the artefact
-  summary field, flat faithfulness judging. Blocks ship summary-free at `version=1`.
+- **Block summaries / artefact summary / faithfulness judging** — DISCHARGED by task 028
+  (strand 13): co-versioned block summary column + marker, artefact summary field +
+  marker, flat LLM faithfulness judging with bounded regenerate-on-fail, written
+  post-commit in standalone transactions; legacy blocks stay summary-free (the
+  first-sentence fallback renders WITH its marker). Remaining sub-seams: **summary
+  export** (a summary never renders detached from its drill-down — export stays ⏸ per
+  spec) · **multi-block section summaries** (as-built one block per section; a
+  multi-block section omits its summary honestly — `SectionOut.summary` projects the
+  single block only) · **artefact-summary staleness machinery** (flag-and-propose is
+  trivially satisfied while blocks never regenerate — recorded, not built beyond the
+  marker) · **summary/judge calibration** (eval workstream, with the judge seams below).
+- **Theme rename beyond P2** — task 028's `rename_theme` delta is P2-only by constraint
+  (strata are name-keyed downstream; renames land before anything consumed the names).
+  Renaming after selection/grouping needs id-keyed strata plumbing end-to-end.
+- **P4 structural-section editing** — key findings and conclusions are display-only on
+  the report-plan card (never editable/removable, task 028 ruling); a future surface for
+  suppressing/steering structural blocks is a fresh design decision, not an extension of
+  `edit_sections`.
 - **Synthesis structure discovery** (contract rev 7.2 — declined-for-now bundle):
   recon-informed section proposal, structure-mismatch signals, a bounded revision
   checkpoint. Revisit with evidence if one-shot sectioning proves a real problem on live
@@ -1794,3 +1809,58 @@ first-class vocabulary. What follows is what it deliberately left out.
   findings pages derive the full project collection per request for collection-true
   `total_items` (funnel precedent), so a page walk is O(N) per page. Fine at
   single-project scale; revisit with SQL-level filters if project corpora grow 10×.
+
+## UX refinement (task 028 seams)
+
+- **SSE client read-inactivity watchdog** (leg-B live finding, root-caused at the 028
+  review stack, 2026-08-05): `frontend/src/api/sse.ts`'s reconnect loop is sound, but
+  when an intermediary swallows the upstream close (dev Vite `http-proxy` does; prod
+  CloudFront can), `reader.read()` pends forever and the client stalls silently with
+  `connectionStatus` still "connected" — the server-side close is visible only as the
+  backend's `api.sse_closed` log. The server heartbeats every 15s (`: keep-alive`), so
+  the fix shape is bounded: abort the attempt after ~45s (3× heartbeat) without bytes
+  and fall into the existing backoff/reconnect at the cursor. Deferred because sse.ts's
+  byte-identical state was this slice's rubric-14 evidence and the CloudFront behaviour
+  deserves its own live verification; own small slice.
+- **`summary_status="pending"` is dead vocabulary** (028 review m3): migration CHECK and
+  contract admit it, nothing writes it; the FE keys strictly on `"verified"` so nothing
+  mislabels, but in-flight and never-summarised are indistinguishable to readers. Write
+  `pending` at mint (or drop the vocab) when a consumer needs the distinction.
+- **P1 sample titles are project-wide** (028 review m4): `p1_bundle.sample_titles` takes
+  the five latest `project_source_snapshot` rows for the whole project while counts and
+  queries are scope-filtered — in a multi-question project the card can show another
+  question's documents. Scope the sample when the workspace-cluster/multi-question IA
+  lands.
+- **`_source_reason_maps` scans the full project event log per request** (028 review
+  m5): every evidence page / dossier read JSON-walks all `source.screened`/
+  `source.classified` events (the dossier builds both whole-project maps for one
+  source). Within the funnel_out materialisation precedent, but this is the append-only
+  event log — payload-filtered SQL or a dossier-scoped variant when event logs grow.
+- **`planning_part_dropped` is a structlog warning, not a domain event** (028 review
+  F21): a dropped part card is invisible to the decision log / durable audit. Promote
+  to an `event_log` row (additive event type, own gate) if part-drop auditability is
+  ever needed.
+- **`CheckInOut.bundle` ships as `dict`** (028 review F13): the per-point projection is
+  server-side allowlisted (`checkin_read.py`) but the contract type is open, so the
+  generated client carries no shape and `CheckInBundle.tsx` hand-rolls fail-soft
+  parsers. Type it per-point (discriminated union) when the bundle grammar stabilises.
+- **Shared-DB column-churn migration tests** (028 review-stack incident, 2026-08-05):
+  the 1600-column tuple-descriptor exhaustion documented in
+  docs/knowledge/column-churn-migrations-need-scratch-db.md happened for real — older
+  roundtrip tests (`test_screen_step_rename_migration`, `test_search_migration`,
+  `test_synthesis_refinement_migration`, `test_schema`'s downgrade case) still churn
+  add/drop columns on the long-lived shared `policy_atlas_test`; the first test to trip
+  the limit strands the shared DB downgraded and presents as a hundreds-failed cascade.
+  Migrate them to the scratch-DB pattern (`test_migrations_025/028` are the template);
+  until then the remedy is recreating `policy_atlas_test`.
+- **`plan_stale` vs in-flight turn** (028 review F20): the stale-start fence maxes over
+  completed turns only, so Start can dispatch against the older approved plan while a
+  newer turn is still pending (safe — the pending turn then fails `run_active`, but
+  "start silently wins over a message already sent" is untested UX). Add the race test
+  if the planning surface ever softens the 409 posture.
+- **Summary-runtime niceties** (028 review INFOs): `writer_calls` misses the attempt
+  that raised; regenerate resends an identical seed (no judge-feedback rider — a
+  deterministic/low-temperature writer retries byte-identically); the artefact-summary
+  path re-fetches block prose already fetched; `write_block_summary` doubles as the
+  artefact entry point keyed on `seed["kind"]`. Revisit with the summary/judge
+  calibration eval workstream.

@@ -1,0 +1,300 @@
+<title>028 fork C — ruled: cited-scoped gathering section + Landscape tab</title>
+<style>
+  :root {
+    --navy: #0f294a; --blue: #0000ff; --grey: #646363; --paper: #f4f4f5;
+    --line: #e4e4e7; --line2: #d3d3d8; --teal: #18a48c; --ink: #1c1c1e;
+    --amber-bg: #fff6e3; --amber-bd: #f3d99a; --amber-ink: #8a5a00;
+    --display: system-ui, "Segoe UI", sans-serif;
+  }
+  body { background: var(--paper); color: var(--ink); font-family: system-ui, "Segoe UI", sans-serif; font-size: 16px; line-height: 1.55; margin: 0; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 36px 24px 80px; }
+  .eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.07em; color: var(--grey); margin: 0; }
+  h1 { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: -0.5px; color: var(--navy); margin: 8px 0 0; text-wrap: balance; }
+  .lede { max-width: 70ch; color: var(--grey); margin: 10px 0 0; }
+  .fontnote { font-size: 12.5px; color: var(--grey); margin: 6px 0 0; }
+  .framehead { font-family: var(--display); font-size: 18px; font-weight: 800; color: var(--navy); margin: 34px 0 0; }
+
+  /* Browser frame */
+  .frame { margin-top: 12px; border: 1px solid var(--line2); background: #fff; box-shadow: 0 1px 3px rgba(15,41,74,0.06), 0 10px 28px rgba(15,41,74,0.05); }
+  .framebar { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: #fafafa; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line2); }
+  .url { font-size: 12.5px; color: var(--grey); margin-left: 8px; }
+
+  /* Product header */
+  .phead { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px; height: 54px; border-bottom: 1px solid var(--line); background: #fff; flex-wrap: wrap; }
+  .brand { font-family: var(--display); font-weight: 800; font-size: 17px; letter-spacing: -0.3px; color: var(--navy); white-space: nowrap; }
+  .brand b { color: var(--blue); }
+  .crumb { color: var(--line2); }
+  .proj { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .tabs { display: flex; gap: 20px; flex-wrap: wrap; }
+  .tabs span { font-size: 14.5px; font-weight: 600; color: var(--grey); padding: 15px 0 13px; border-bottom: 2px solid transparent; }
+  .tabs .active { font-weight: 800; color: var(--navy); border-bottom-color: var(--blue); }
+
+  /* Evidence-base page */
+  .page { display: flex; justify-content: center; gap: 32px; padding: 28px 22px 44px; background: var(--paper); }
+  .contents { width: 230px; flex: none; position: sticky; top: 54px; align-self: flex-start; }
+  .contents p { margin: 0 0 8px; font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; color: var(--grey); }
+  .contents a { display: block; padding: 6px 0 6px 11px; font-size: 13px; line-height: 1.35; color: var(--navy); border-left: 3px solid var(--line); text-decoration: none; }
+  .contents a.here { color: var(--blue); font-weight: 700; border-left-color: var(--blue); }
+  .contents a.new { background: #ececff; }
+  article { width: 100%; max-width: 640px; background: #fff; border: 1px solid var(--line); padding: 34px 40px 40px; }
+  article > .eyebrow { color: var(--grey); }
+  article h2 { font-family: var(--display); font-size: 26px; font-weight: 800; letter-spacing: -0.4px; line-height: 1.15; color: var(--navy); margin: 6px 0 0; }
+  .q { color: var(--grey); margin: 8px 0 0; font-size: 15.5px; max-width: 62ch; }
+
+  /* Sections: title + always-visible summary; expand reveals cited prose */
+  section.fixed, details { border-top: 1px solid var(--line); }
+  section.fixed { padding: 14px 0 18px; margin-top: 26px; }
+  section.fixed h3 { font-family: var(--display); font-size: 17.5px; font-weight: 800; letter-spacing: -0.2px; line-height: 1.3; color: var(--navy); margin: 0; }
+  summary { cursor: pointer; padding: 14px 0 12px; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  .titlerow { display: flex; align-items: baseline; gap: 12px; }
+  .titlerow h3 { font-family: var(--display); font-size: 17.5px; font-weight: 800; letter-spacing: -0.2px; line-height: 1.3; color: var(--navy); margin: 0; flex: 1; text-wrap: balance; }
+  .chev { font-size: 12.5px; font-weight: 700; color: var(--blue); white-space: nowrap; }
+  details[open] .chev .closed, details:not([open]) .chev .opened { display: none; }
+  .summ { margin: 6px 0 0; font-size: 14px; color: var(--grey); max-width: 62ch; }
+  .body { padding: 0 0 18px; }
+  .body ul { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 9px; }
+  .body li { max-width: 62ch; font-size: 15px; }
+  .body .prose { max-width: 62ch; font-size: 15px; margin: 0; }
+  .ref { border: 1px solid rgba(0,0,255,0.25); background: #f5f5ff; color: rgba(0,0,255,0.85); font-size: 11px; font-weight: 700; padding: 0 5px; }
+  .gap { border: 1px solid var(--amber-bd); background: var(--amber-bg); color: var(--amber-ink); font-size: 11px; font-weight: 700; padding: 1px 6px; }
+
+  /* charts */
+  .blocktitle { font-size: 13px; font-weight: 700; color: var(--navy); margin: 0 0 9px; }
+  .bars { display: flex; flex-direction: column; gap: 7px; }
+  .bar { display: flex; align-items: center; gap: 10px; }
+  .bar .lab { width: 128px; flex: none; text-align: right; font-size: 12.5px; font-weight: 600; color: var(--navy); }
+  .bar .track { height: 11px; flex: 1; background: var(--paper); }
+  .bar .fill { display: block; height: 100%; background: var(--blue); }
+  .bar .n { width: 32px; flex: none; font-size: 12.5px; font-weight: 700; color: var(--navy); font-variant-numeric: tabular-nums; }
+  .twocol { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 18px; }
+  @media (max-width: 720px) { .twocol { grid-template-columns: 1fr; } .contents { display: none; } article { padding: 24px; } }
+  .years { display: flex; align-items: flex-end; gap: 5px; height: 64px; }
+  .years span { flex: 1; background: #a5a5ff; }
+  .yearlabs { display: flex; gap: 5px; margin-top: 3px; }
+  .yearlabs span { flex: 1; text-align: center; font-size: 10px; color: var(--grey); }
+  .caveat { margin: 8px 0 0; font-size: 12.5px; color: var(--grey); max-width: 56ch; }
+  .lsblock { margin-top: 20px; }
+  .lsblock:first-child { margin-top: 6px; }
+  .groups { display: flex; flex-wrap: wrap; gap: 6px; }
+  .groups span { border: 1px solid var(--line2); background: var(--paper); font-size: 12.5px; font-weight: 600; color: var(--navy); padding: 4px 10px; }
+  .xref { margin: 16px 0 0; font-size: 13.5px; }
+  .xref a { color: var(--blue); font-weight: 600; }
+
+  /* landscape standalone page */
+  .lspage { padding: 28px 22px 44px; background: var(--paper); }
+  .lspage .inner { max-width: 760px; margin: 0 auto; }
+  .lspage h2 { font-family: var(--display); font-size: 24px; font-weight: 800; letter-spacing: -0.3px; color: var(--navy); margin: 0; }
+  .card { background: #fff; border: 1px solid var(--line2); padding: 16px 18px; margin-top: 14px; }
+
+  .note { margin-top: 16px; border-left: 3px solid var(--blue); background: #ececff; padding: 10px 14px; font-size: 14px; max-width: 76ch; }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Task 028 · contract fork C · design mock-up · rev 3 (owner direction folded in)</p>
+  <h1>Ruled direction: cited-scoped gathering section in the report; Landscape keeps the whole corpus</h1>
+  <p class="lede">Summaries stay visible when collapsed · Key findings always shows in full · the report's gathered-plots cover <strong>cited sources only</strong>; the <strong>Landscape tab stays</strong> for the whole corpus. Sections and summaries are the real attendance artefact's; ~ counts illustrative.</p>
+  <p class="fontnote">Type is a system-font stand-in — the product renders Averta/Zosia, which can't ship in a mock-up file.</p>
+
+  <p class="framehead">The evidence-base page</p>
+  <div class="frame">
+    <div class="framebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">v3.policyatlas.uk / projects / pupil-attendance / evidence-base</span></div>
+    <div class="phead">
+      <div><span class="brand">Policy <b>Atlas</b></span> <span class="crumb">/</span> <span class="proj">Pupil attendance in UK schools</span></div>
+      <div class="tabs"><span>Workspace</span><span class="active">Evidence base</span><span>Findings</span><span>Sources</span><span>Landscape</span><span>Decision log</span></div>
+    </div>
+    <div class="page">
+      <nav class="contents" aria-label="Contents">
+        <p>Contents</p>
+        <a class="here" href="#top">Key findings</a>
+        <a href="#top">What the academic evidence shows about effects on pupil attendance in UK school settings</a>
+        <a href="#top">Direct attendance support: mentoring, follow-up, and school-home collaboration</a>
+        <a href="#top">Health, hygiene, and nutrition interventions with attendance outcomes</a>
+        <a href="#top">School organisation changes: start times, extended schools, and inter-school collaboration</a>
+        <a href="#top">Inclusion, wellbeing, and school-climate approaches linked to attendance</a>
+        <a href="#top">Drivers of absenteeism and variation in effects across pupils and settings</a>
+        <a href="#top">Strength and applicability of the evidence base for UK attendance policy</a>
+        <a href="#top">Conclusions</a>
+        <a class="new" href="#top">How the evidence was gathered</a>
+        <a href="#top">References</a>
+      </nav>
+      <article id="top">
+        <p class="eyebrow">Evidence base · v1</p>
+        <h2>Pupil attendance in UK schools</h2>
+        <p class="q">What is the evidence from academic literature on the effects of school-based interventions on pupil attendance in UK school settings?</p>
+
+        <section class="fixed">
+          <h3>Key findings</h3>
+          <div class="body">
+            <ul>
+              <li>School–home communication carries the strongest attendance-direction signal in the material read for this question. <span class="ref">refs</span></li>
+              <li>Mentoring as a UK impact intervention has weaker citable evidence than school–home communication. <span class="ref">refs</span></li>
+              <li>The clearest UK experimental result is a null: the Greater Manchester PATHS cluster trial reported no significant differences. <span class="ref">refs</span></li>
+              <li>The evidence base is broad but thin for UK attendance effects — twelve documents screened in, four of them systematic reviews. <span class="gap">gap</span></li>
+            </ul>
+          </div>
+        </section>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>What the academic evidence shows about effects on pupil attendance in UK school settings</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">Overall, the documents point to multiple plausible routes into attendance — school–home collaboration, direct attendance support, health and nutrition, timetable change, inclusion.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose with claim annotations…)</p></div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>Direct attendance support: mentoring, follow-up, and school-home collaboration</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">For direct attendance support, the citable evidence is stronger on school–home communication than on mentoring as a UK impact intervention.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>Health, hygiene, and nutrition interventions with attendance outcomes</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">The attendance evidence found here is wider school-based literature rather than UK-specific impact evidence.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>School organisation changes: start times, extended schools, and inter-school collaboration</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">The directly attendance-relevant evidence is thinner and more indirect than the evidence on communication with families.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>Inclusion, wellbeing, and school-climate approaches linked to attendance</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">The citable evidence is stronger for describing associated outcomes than for estimating attendance gains.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>Drivers of absenteeism and variation in effects across pupils and settings</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">The reviews and syntheses frame attendance problems as multi-causal rather than as a single behaviour to be corrected.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>Strength and applicability of the evidence base for UK attendance policy</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">The evidence base is broad but thin for UK attendance effects: twelve documents screened in, four systematic reviews or meta-analyses, one RCT or quasi-experimental study.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details open>
+          <summary>
+            <div class="titlerow"><h3>Conclusions</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Read section +</span></span></div>
+            <p class="summ">The clearest UK experimental evidence read here is not an attendance gain: in the Greater Manchester PATHS cluster trial, the authors reported no significant differences.</p>
+          </summary>
+          <div class="body"><p class="prose">(Full cited section prose…)</p></div>
+        </details>
+
+        <details open>
+          <summary>
+            <div class="titlerow"><h3>How the evidence was gathered</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></div>
+            <p class="summ">The shape of the evidence this report cites. The whole search — everything found and screened — lives in the Landscape tab.</p>
+          </summary>
+          <div class="body">
+            <div class="twocol" style="margin-top:6px">
+              <div>
+                <p class="blocktitle">Evidence types (cited)</p>
+                <div class="bars">
+                  <div class="bar"><span class="lab">Systematic review</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">~4</span></div>
+                  <div class="bar"><span class="lab">Other studies</span><span class="track"><span class="fill" style="width:75%"></span></span><span class="n">~3</span></div>
+                  <div class="bar"><span class="lab">RCT / quasi-exp.</span><span class="track"><span class="fill" style="width:25%"></span></span><span class="n">~1</span></div>
+                </div>
+              </div>
+              <div>
+                <p class="blocktitle">Publication years (cited, ~)</p>
+                <div class="years"><span style="height:35%"></span><span style="height:70%"></span><span style="height:100%"></span><span style="height:70%"></span><span style="height:35%"></span></div>
+                <div class="yearlabs"><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span></div>
+              </div>
+            </div>
+            <div class="lsblock">
+              <p class="blocktitle">Where cited sources were published (~)</p>
+              <div class="bars">
+                <div class="bar"><span class="lab">UK</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">~6</span></div>
+                <div class="bar"><span class="lab">US</span><span class="track"><span class="fill" style="width:33%"></span></span><span class="n">~2</span></div>
+              </div>
+              <p class="caveat">Where sources were published, not where the studies were conducted.</p>
+            </div>
+            <div class="lsblock">
+              <p class="blocktitle">Key themes (~ names illustrative)</p>
+              <div class="groups"><span>School–home communication · 5 documents →</span><span>Attendance support roles · 4 documents →</span><span>Health &amp; nutrition · 3 documents →</span></div>
+              <p class="caveat">Each theme opens the theme-filtered Sources view.</p>
+            </div>
+            <p class="xref">Whole search: ~64 found → 12 included → ~9 cited. <a href="#landscape">See the full landscape →</a></p>
+          </div>
+        </details>
+
+        <details>
+          <summary>
+            <div class="titlerow"><h3>References</h3><span class="chev"><span class="opened">Hide −</span><span class="closed">Expand +</span></span></div>
+            <p class="summ">Numbered references for every citation in the report.</p>
+          </summary>
+          <div class="body"><p class="prose">(Reference list…)</p></div>
+        </details>
+      </article>
+    </div>
+  </div>
+
+  <p class="note">Not shown here: the fix for the jarring overview→theme-sections flow lands in the <strong>section-planning prompt</strong> (contract strand 12) — the planned section list itself becomes a coherent narrative — not in page chrome.</p>
+
+  <p class="framehead" id="landscape">The Landscape tab (stays — the whole evidence base)</p>
+  <div class="frame">
+    <div class="framebar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="url">v3.policyatlas.uk / projects / pupil-attendance / landscape</span></div>
+    <div class="phead">
+      <div><span class="brand">Policy <b>Atlas</b></span> <span class="crumb">/</span> <span class="proj">Pupil attendance in UK schools</span></div>
+      <div class="tabs"><span>Workspace</span><span>Evidence base</span><span>Findings</span><span>Sources</span><span class="active">Landscape</span><span>Decision log</span></div>
+    </div>
+    <div class="lspage">
+      <div class="inner">
+        <h2>Landscape</h2>
+        <p class="caveat">Distributions describe the screened-in sources only; the funnel spans the whole search.</p>
+        <div class="card">
+          <p class="blocktitle">From search to citation</p>
+          <div class="bars">
+            <div class="bar"><span class="lab">Found</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">~64</span></div>
+            <div class="bar"><span class="lab">Relevant</span><span class="track"><span class="fill" style="width:38%"></span></span><span class="n">~24</span></div>
+            <div class="bar"><span class="lab">Included</span><span class="track"><span class="fill" style="width:19%"></span></span><span class="n">12</span></div>
+            <div class="bar"><span class="lab">Cited</span><span class="track"><span class="fill" style="width:14%"></span></span><span class="n">~9</span></div>
+          </div>
+        </div>
+        <div class="twocol">
+          <div class="card" style="margin-top:14px">
+            <p class="blocktitle">Evidence types (screened in)</p>
+            <div class="bars">
+              <div class="bar"><span class="lab">Other studies</span><span class="track"><span class="fill" style="width:100%"></span></span><span class="n">7</span></div>
+              <div class="bar"><span class="lab">Systematic review</span><span class="track"><span class="fill" style="width:57%"></span></span><span class="n">4</span></div>
+              <div class="bar"><span class="lab">RCT / quasi-exp.</span><span class="track"><span class="fill" style="width:14%"></span></span><span class="n">1</span></div>
+            </div>
+          </div>
+          <div class="card" style="margin-top:14px">
+            <p class="blocktitle">Publication years (~)</p>
+            <div class="years"><span style="height:30%"></span><span style="height:45%"></span><span style="height:60%"></span><span style="height:100%"></span><span style="height:75%"></span><span style="height:60%"></span></div>
+            <div class="yearlabs"><span>18</span><span>19</span><span>20</span><span>21</span><span>22</span><span>23</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <p class="blocktitle">Key themes (~ names illustrative)</p>
+          <div class="groups"><span>School–home communication · 5 documents →</span><span>Attendance support roles · 4 documents →</span><span>Health &amp; nutrition · 3 documents →</span></div>
+        </div>
+        <div class="card">
+          <p class="blocktitle">Finding groups (~ names illustrative)</p>
+          <div class="groups"><span>Communication effects · ~4</span><span>Support roles · ~3</span><span>Organisation change · ~2</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

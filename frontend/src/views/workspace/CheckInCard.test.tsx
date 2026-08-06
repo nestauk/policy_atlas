@@ -34,6 +34,7 @@ function baseCheckIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
     stage: "screen",
     status: "pending",
     triggers: [],
+    bundle: null,
     ...overrides,
   };
 }
@@ -45,6 +46,8 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
     description: "",
     requires_user_input: false,
     suggested: false,
+    why: null,
+    endorsement: null,
     ...overrides,
   };
 }
@@ -148,11 +151,12 @@ describe("CheckInCard — deterministic completion render", () => {
     });
     renderCard(baseCheckIn({ render, stage: "characterise" }));
     expect(screen.getByText("Mapping the landscape")).toBeInTheDocument();
-    expect(screen.getByText("Completed in 12.7s")).toBeInTheDocument();
+    // No decimal completion time, no raw-render disclosure (owner, 2026-08-05).
+    expect(screen.queryByText(/Completed in/)).toBeNull();
     expect(screen.getByText("Sources quality-appraised: 12")).toBeInTheDocument();
     expect(screen.getByText("Skipped: 2")).toBeInTheDocument();
     expect(screen.queryByText("Internal: 9")).toBeNull();
-    expect(screen.getByText("Technical detail").closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByText("Technical detail")).toBeNull();
   });
 
   it("keeps a non-machine render as scrubbed prose", () => {

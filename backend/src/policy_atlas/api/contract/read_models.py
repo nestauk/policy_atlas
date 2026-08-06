@@ -109,11 +109,13 @@ class ThemeOut(BaseModel):
         name: Theme name.
         size: Number of items in the theme.
         description: Short theme description.
+        theme_id: Stable theme identity, absent for legacy characterisations.
     """
 
     name: str
     size: int
     description: str
+    theme_id: uuid.UUID | None = None
 
 
 class LandscapeOut(BaseModel):
@@ -203,6 +205,12 @@ class EvidenceItemOut(BaseModel):
     screen_basis: str | None = None
     screen_stage: int | None = None
     screen_status: Literal["relevant", "not_relevant", "excluded_retracted"] | None = None
+    # 028 refinement (additive): the LLMs' one-sentence reasons, recovered
+    # from the event log (they are event-payload-only, never result-row
+    # columns), and the read depth the status ladder otherwise collapses.
+    screen_reason: str | None = None
+    classification_reason: str | None = None
+    read_in_full: bool = False
 
 
 class FindingBaseOut(BaseModel):
@@ -477,12 +485,16 @@ class SectionOut(BaseModel):
         title: Section title.
         role: Section role (determines page position).
         blocks: The section's prose blocks, in order.
+        summary: Verified summary for a single-block section, if available.
+        summary_status: Summary production state for a single-block section.
     """
 
     title: str
     role: SectionRole
     focus: str | None = None
     blocks: list[BlockOut] = Field(default_factory=list)
+    summary: str | None = None
+    summary_status: Literal["pending", "verified", "failed"] | None = None
 
 
 class ReferenceOut(BaseModel):
@@ -530,6 +542,8 @@ class ArtefactOut(BaseModel):
         coverage_snapshot: Embedded coverage snapshot.
         sections: Artefact sections, in final page order.
         references: Numbered reference list.
+        summary: Artefact-level summary, if produced.
+        summary_status: Artefact-level summary production state.
     """
 
     title: str
@@ -537,6 +551,8 @@ class ArtefactOut(BaseModel):
     coverage_snapshot: CoverageSnapshotOut
     sections: list[SectionOut] = Field(default_factory=list)
     references: list[ReferenceOut] = Field(default_factory=list)
+    summary: str | None = None
+    summary_status: Literal["pending", "verified", "failed"] | None = None
 
 
 class CoverageOut(BaseModel):

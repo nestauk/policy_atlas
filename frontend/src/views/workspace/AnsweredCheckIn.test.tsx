@@ -47,13 +47,14 @@ describe("AnsweredCheckIn", () => {
   it("keeps the selected label visible and discloses the rejected server options", () => {
     const checkIn: CheckInOut = {
       boundary: "after_component",
+      bundle: null,
       check_in_id: "c1",
       component: "screen_full",
       created_at: "2026-07-28T10:00:00Z",
       kind: "pause",
       options: [
-        { id: "continue", label: "Continue with this evidence", description: "", requires_user_input: false, suggested: true },
-        { id: "adjust", label: "Change the approach", description: "", requires_user_input: false, suggested: false },
+        { id: "continue", label: "Continue with this evidence", description: "", requires_user_input: false, suggested: true, why: null, endorsement: null },
+        { id: "adjust", label: "Change the approach", description: "", requires_user_input: false, suggested: false, why: null, endorsement: null },
       ],
       render: "Screening paused.",
       rerun_component: null,

@@ -28,14 +28,14 @@ const buttonVariants = cva(
           "disabled:text-line-2 disabled:hover:text-line-2",
       },
       size: {
-        md: "px-[18px] py-[11px] text-[13px]",
-        sm: "px-[13px] py-2 text-xs",
+        md: "px-[18px] py-[11px] text-meta",
+        sm: "px-[13px] py-2 text-caption",
       },
     },
     compoundVariants: [
       { variant: "primary", size: "sm", class: "cutout-sm" },
       { variant: "secondary", size: "md", class: "px-3.5" },
-      { variant: "ghost", size: "md", class: "px-3 py-[9px] text-[12.5px]" },
+      { variant: "ghost", size: "md", class: "px-3 py-[9px] text-caption" },
     ],
     defaultVariants: { variant: "primary", size: "md" },
   },
