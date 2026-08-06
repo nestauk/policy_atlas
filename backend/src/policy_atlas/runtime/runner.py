@@ -66,6 +66,7 @@ from policy_atlas.runtime.orchestrator_backend import (
     classify_boundary,
     run_watch_decision,
 )
+from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
@@ -753,6 +754,16 @@ def _run_plan_impl(
                 return _finish_run(engine, step_outcomes, flagged_events,
                     status=segment_result.run_status, capability_run_id=capability_run_id,
                     project_id=project_id)
+        elif (
+            resume_decision.response in {"continue", "adjust", "mode_change"}
+            and resume_from.parked_boundary == "before_component"
+            and remaining_steps
+            and remaining_steps[0].component == resume_from.parked_component
+        ):
+            # The parked before-boundary was decided by the recorded steering.decision;
+            # re-presenting it re-asks a decided question (live-path parity — a continue
+            # at a before-boundary runs the step).
+            last_check_in_payload = None
 
     while remaining_steps:
         step = remaining_steps.pop(0)
@@ -4802,7 +4813,27 @@ def _run_step_attempt(
             payload=plan_payload,
         )
 
+    # Lifecycle events deliberately bracket, rather than participate in, the
+    # component transaction. This makes stage.started visible to the live SSE
+    # tail while work is in flight and leaves started->failed coherent if the
+    # component transaction is rolled back before its node can record failure.
+    with engine.begin() as conn:
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="component.started",
+            payload={"component": registry_component},
+        )
+    log.info(
+        "component.started",
+        component=step.component,
+        registry_component=registry_component,
+        run_id=str(run_id),
+    )
+
     started = time.monotonic()
+    component_summary: dict[str, Any] | None = None
     try:
         with engine.begin() as conn:
             _apply_directive(
@@ -4826,7 +4857,7 @@ def _run_step_attempt(
                 component=step.component,
                 session_id=session_id,
             ):
-                run_harness(
+                harness_outcome = run_harness(
                     conn,
                     config=config,
                     project_id=project_id,
@@ -4847,7 +4878,33 @@ def _run_step_attempt(
                     search_backends=backends.search_backends,
                     search_generation_backend=backends.search_generation,
                     document_fetcher=backends.document_fetcher,
+                    progress_emitter=(
+                        ProgressEmitter(engine, project_id=project_id, run_id=run_id)
+                        if registry_component == "synthesise"
+                        else None
+                    ),
                 )
+                summary = harness_outcome.get("summary")
+                component_summary = summary if isinstance(summary, dict) else None
+        # A successful harness result has committed with the component work;
+        # append its terminal lifecycle event separately so the payload remains
+        # byte-identical to the former node-level append.
+        if component_summary is not None:
+            with engine.begin() as conn:
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=run_id,
+                    event_type="component.completed",
+                    payload={"component": registry_component, **component_summary},
+                )
+            log.info(
+                "component.completed",
+                component=step.component,
+                registry_component=registry_component,
+                run_id=str(run_id),
+                **component_summary,
+            )
     except Exception as exc:
         wall_clock_s = time.monotonic() - started
         error = _bounded_error(exc)

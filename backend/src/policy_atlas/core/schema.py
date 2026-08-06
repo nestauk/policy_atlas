@@ -1076,6 +1076,35 @@ orchestration_plan = Table(
     CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_oplan_payload_object"),
 )
 
+# --- Durable planning transcript (task 027) ---
+
+planning_transcript = Table(
+    "planning_transcript",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("client_turn_id", UUID(as_uuid=True), nullable=False),
+    # This is the transcript's ordering coordinate. ``created_at`` remains
+    # display metadata only: timestamp ordering is not a conversation order.
+    Column("turn_index", Integer, nullable=False),
+    Column("user_message", Text, nullable=False),
+    Column("reply", Text, nullable=True),
+    # ``planner_state`` is the raw PlanDraftWire dump used as the next call's
+    # ``previous_draft``. ``response`` is the distinct projected API result.
+    Column("planner_state", JSONB, nullable=True),
+    Column("response", JSONB, nullable=True),
+    Column("suggestions", JSONB, nullable=False),
+    Column("status", Text, nullable=False),  # pending|completed|failed
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    UniqueConstraint("project_id", "client_turn_id", name="uq_ptr_project_client_turn"),
+    UniqueConstraint("project_id", "turn_index", name="uq_ptr_project_turn_index"),
+    CheckConstraint(
+        "status IN ('pending', 'completed', 'failed')", name="ck_ptr_status"
+    ),
+    CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_ptr_suggestions_array"),
+)
+
 # --- Capability run (task 024) ---
 #
 # The steering-surface walk entity (contract decision 2): one row per

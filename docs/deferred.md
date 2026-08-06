@@ -1719,10 +1719,12 @@ first-class vocabulary. What follows is what it deliberately left out.
   `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
   API (the dev DB's two live-run projects are the known case). Recovery is a documented
   manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
-- **`CitationOut.source_id`** (025 live check, 2026-07-21) — the citation→dossier join is
-  title-keyed; a locator-fallback title misses the evidence row (honest empty state).
-  Adding `source_id` to `CitationOut` is small but a contract change (regen + views);
-  next API-touching slice.
+- **`CitationOut.source_id`** (025 live check, 2026-07-21) — **CLOSED at 027 owner
+  feedback (2026-07-29)**: `source_id` (+ `grounding_rationale`) added to `CitationOut`;
+  citation→dossier opens are id-keyed (title stays as the legacy path for references
+  and theme members). The sibling display bug — full-text-grounded citations showing
+  locator URLs — was the envelope/text-snapshot authority split, fixed at the read
+  model (envelope is the sole bibliographic authority; references keyed by document).
 - **Post-re-auth return-to renders the landing route** (026 live check, 2026-07-28) —
   the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
   react-router never observes: after any auth round-trip the URL may show the deep link
@@ -1746,3 +1748,49 @@ first-class vocabulary. What follows is what it deliberately left out.
   deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
   lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
   seam when a second operator or CI-driven deploys appear.
+
+## Frontend uplift (task 027 seams)
+
+- **025 "draft conversation is lost on restart" pin — DISCHARGED** (027 strand 12,
+  2026-07-29): the planning conversation persists in `planning_transcript` (durable
+  idempotency, rehydration, restart-surviving thread — live-checked). No backfill:
+  pre-027 projects have zero turn rows.
+- **Co-pilot Q&A UI seam** — multi-thread chat, Chats library, per-thread artifact
+  context (PR #35 adjudication): the transcript schema is deliberately single-table/
+  planning-only so the co-pilot slice brings its own thread/context model; the rail is
+  single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
+- **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
+  IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
+  journey/evidence components are IA-agnostic and re-mount under it unchanged.
+- **Steering boundary re-pause under FREQUENT mode** (027 live check, 2026-07-29) —
+  **DISCHARGED same day** (owner-directed, commit 4c4a65d): continuation records the
+  parked pause's boundary+component and a continue/adjust/mode_change resume of a
+  decided before-boundary no longer re-presents it (live-path parity; parity tests in
+  test_continuation_parity.py). The original loop: answer → continuation → re-evaluate
+  → pause again, one orchestrator call per cycle (event seq 364–388, project
+  5e08e143…).
+- **Multi-instance turn lock** — the planning 409 primitive is a process-local lock
+  registry by design (one-instance posture); LISTEN/NOTIFY stays the 025 scale-out seam.
+- **Live per-backend search counts** (D‑1 rev 2) — `search.executed` events commit with
+  the acquire component, so mid-stage per-backend counts genuinely cannot stream yet;
+  the journey shows tick-based activity until stage completion. Revisit if tick payloads
+  ever widen (behaviour change, own gate).
+- **Print/share/export CTA** — the evidence-base print stylesheet ships; the share/export
+  product seam stays deferred and undischarged.
+- **Project-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
+  here per its own commitment): the decisions read model derives from every run in the
+  project; the journey card says "attributed across this project". Run-scoped decision
+  views wait on the workspace-cluster IA's run-scoped read models (above).
+- **`DecisionOut.detail` server-side narrowing** (read-model-additions.md rev 2 [D-4],
+  API hygiene): `detail` passes the raw event payload through; the client renders only
+  allowlisted keys. Narrow the server projection when a second consumer appears.
+- **Orphaned `component.started` on hard process death** (027 review, 2026-07-29): the
+  runner commits `component.started` in a standalone transaction before opening the
+  component transaction; a SIGKILL in that gap leaves the pair unclosed on the `runs`
+  row (walk-level recovery via the continuation startup sweep still marks the
+  capability run interrupted, so the user-facing state is honest). A runs-row
+  reconciliation sweep is the seam if that trail ever needs to be self-consistent.
+- **Filter pagination materialises the collection** (027 C.2, by design): evidence and
+  findings pages derive the full project collection per request for collection-true
+  `total_items` (funnel precedent), so a page walk is O(N) per page. Fine at
+  single-project scale; revisit with SQL-level filters if project corpora grow 10×.

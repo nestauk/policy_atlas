@@ -446,15 +446,14 @@ def test_harness_group_component_success_default_backend(conn: Connection) -> No
     rid = seed_run(conn, project_id)
     plan = Plan(component="group", evidence_scope_id=scope_id, extraction_run_id=seeded.run_id)
     config = compile(plan)
-    run_harness(conn, config=config, project_id=project_id, run_id=rid, provider=StubEchoProvider())
+    outcome = run_harness(
+        conn, config=config, project_id=project_id, run_id=rid, provider=StubEchoProvider()
+    )
 
     log_entries = events.read(conn, project_id)
-    completed = [
-        e for e in log_entries
-        if e["event_type"] == "component.completed" and e["payload"].get("component") == "group"
-    ]
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
+    summary = outcome["summary"]
+    assert summary is not None
+    payload = summary
     assert {"facet", "groups", "residuals", "counts"} <= set(payload.keys())
 
     run_completed = [e for e in log_entries if e["event_type"] == "run.completed"]

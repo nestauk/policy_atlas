@@ -1,7 +1,9 @@
 import { Card } from "../brand/Card";
+import { useDocumentTitle } from "../../lib/title";
 
 /** Owner-indistinguishable absence copy for missing or archived resources. */
 export function NotFoundView() {
+  useDocumentTitle("Not found");
   return (
     <main className="mx-auto max-w-2xl px-6 py-16">
       <Card className="p-6">

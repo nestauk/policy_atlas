@@ -106,6 +106,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     parse_synthesis_directive,
     run_section_loop,
 )
+from policy_atlas.runtime.progress import ProgressEmitter
 
 log = structlog.get_logger()
 
@@ -4406,6 +4407,7 @@ def _key_findings_pass(
         "emission_calls": 1,
         "call_counts": call_counts,
         "usage": usage_totals.payload(),
+        "prose": final_prose,
     }
 
 
@@ -4419,6 +4421,7 @@ def synthesise_scope(
     grounding_judge_backend: GroundingJudgeBackend,
     embedding_backend: Any,
     chunk_reranker: Any = None,
+    progress_emitter: ProgressEmitter | None = None,
 ) -> dict[str, Any]:
     """Run the synthesise component for one evidence scope.
 
@@ -4431,6 +4434,8 @@ def synthesise_scope(
         grounding_judge_backend: Grounding judge backend.
         embedding_backend: Embedding backend for chunk search.
         chunk_reranker: Optional chunk reranker; defaults to pass-through.
+        progress_emitter: Optional independently-transactional presentation
+            event emitter. It never writes through ``conn``.
 
     Returns:
         Component summary for ``component.completed``.
@@ -4641,6 +4646,10 @@ def synthesise_scope(
             role="conclusions",
         ),
     ]
+    if progress_emitter is not None:
+        progress_emitter.emit_skeleton(
+            [{"title": section.title, "focus": section.focus} for section in sections]
+        )
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
     groups_unsectioned_by_facet = _groups_unsectioned_by_facet(substrate, assigned_groups)
@@ -4693,6 +4702,8 @@ def synthesise_scope(
     repair_unparseable_any = False
 
     for section_index, section in enumerate(sections):
+        if progress_emitter is not None:
+            progress_emitter.section_started(section_index)
         member_findings = _group_member_findings(section, substrate=substrate)
         member_finding_ids = {
             finding["finding_id"]
@@ -4802,6 +4813,8 @@ def synthesise_scope(
             created_at=created_at,
         )
         blocks_written.append(block_id)
+        if progress_emitter is not None:
+            progress_emitter.section_completed(section_index, prose=final_prose)
         total_chunk_rejections += accounting.chunk_claims_rejected
         total_structural_rejections += accounting.claims_rejected_structural
         total_gap_degraded += accounting.gap_claims_degraded
@@ -4842,6 +4855,8 @@ def synthesise_scope(
     # The final key-findings pass (ADR 0015 §8): produced LAST (after every
     # section incl. conclusions), shown FIRST. Conditional-required — an empty
     # emission mints no block and nothing is forced.
+    if progress_emitter is not None:
+        progress_emitter.key_findings_started()
     try:
         key_findings_result = _key_findings_pass(
             conn,
@@ -4892,11 +4907,15 @@ def synthesise_scope(
         repair_unparseable_any = repair_unparseable_any or kf_accounting.repair_unparseable
         all_claims.extend(kf_claims)
         key_findings_rollup = {"present": True}
+        if progress_emitter is not None:
+            progress_emitter.key_findings_completed(prose=key_findings_result["prose"])
     else:
         key_findings_rollup = {
             "present": False,
             "reason": key_findings_result["reason"],
         }
+        if progress_emitter is not None:
+            progress_emitter.key_findings_completed(prose="")
 
     retrieval_provenance = retriever.provenance() if retriever is not None else {}
     retrieval_scope_payload = {

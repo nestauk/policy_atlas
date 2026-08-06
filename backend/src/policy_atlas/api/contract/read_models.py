@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -31,6 +31,36 @@ EvidenceStatus = Literal[
     "findings_extracted",
     "cited",
     "unavailable",
+]
+
+#: The `?status=Included` filter shortcut: every ladder position reached
+#: once a source has been screened in, i.e. the full ladder minus the two
+#: pre-decision positions `found` (not yet screened) and `screened_out`
+#: (screened out) — spec § Read models filters.
+EVIDENCE_STATUS_INCLUDED: tuple[EvidenceStatus, ...] = (
+    "relevant",
+    "not_selected",
+    "selected",
+    "read_in_full",
+    "findings_extracted",
+    "cited",
+    "unavailable",
+)
+
+#: Values accepted by the evidence `status` query filter: the full ladder
+#: plus the `Included` aggregate shortcut (repeatable; combinable with
+#: `cited`).
+EvidenceStatusFilter = Literal[
+    "found",
+    "screened_out",
+    "relevant",
+    "not_selected",
+    "selected",
+    "read_in_full",
+    "findings_extracted",
+    "cited",
+    "unavailable",
+    "Included",
 ]
 
 #: Run-scoped B2' relevance mark on a finding.
@@ -169,9 +199,13 @@ class EvidenceItemOut(BaseModel):
     appraisal_tier: str | None = None
     cited: bool
     url: str | None = None
+    screen_confidence: float | None = None
+    screen_basis: str | None = None
+    screen_stage: int | None = None
+    screen_status: Literal["relevant", "not_relevant", "excluded_retracted"] | None = None
 
 
-class FindingOut(BaseModel):
+class FindingBaseOut(BaseModel):
     """One row of the paginated findings list.
 
     Args:
@@ -189,6 +223,101 @@ class FindingOut(BaseModel):
     source_title: str
     profile: ExtractProfile
     relevance: FindingRelevance | None = None
+
+
+class IofStatisticsOut(BaseModel):
+    """Reported IOF statistics, with authentic nulls for absent values."""
+
+    effect_size: float | None = None
+    effect_size_type: str | None = None
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    standard_error: float | None = None
+    p_value: float | None = None
+    n: int | None = None
+    k: int | None = None
+    i_squared: float | None = None
+    tau2: float | None = None
+
+
+class IofFindingOut(FindingBaseOut):
+    """An intervention-outcome finding, discriminated by ``profile='iof'``."""
+
+    profile: Literal["iof"] = "iof"
+    intervention: str
+    outcome: str
+    effect_direction: str
+    statistics: IofStatisticsOut
+    comparator: str | None = None
+    estimate_level: str | None = None
+    causality_by_design: str | None = None
+    is_primary: bool | None = None
+    stratum_qualifiers: list[dict[str, str]] = Field(default_factory=list)
+    effect_basis: str | None = None
+    study_geography: str | None = None
+    population: str | None = None
+    setting: str | None = None
+    study_design: str | None = None
+    quote: str | None = None
+    quote_verified: bool | None = None
+    groups: dict[str, str] = Field(default_factory=dict)
+
+
+class IcfFindingOut(FindingBaseOut):
+    """An implementation-context finding, discriminated by ``profile='icf'``."""
+
+    profile: Literal["icf"] = "icf"
+    context_type: str
+    claim: str
+    context_label: str | None = None
+    intervention: str
+    outcome: str | None = None
+    population: str | None = None
+    setting: str | None = None
+    study_geography: str | None = None
+    study_design: str | None = None
+    claim_level: str | None = None
+    claim_basis: str | None = None
+    level: str | None = None
+    resource_requirements: str | None = None
+    workforce_requirements: str | None = None
+    quote: str | None = None
+    quote_verified: bool | None = None
+    groups: dict[str, str] = Field(default_factory=dict)
+
+
+type FindingOut = Annotated[IofFindingOut | IcfFindingOut, Field(discriminator="profile")]
+
+
+class SourceTagOut(BaseModel):
+    """One source tag assertion and its provenance."""
+
+    tag: str
+    tag_type: str
+    asserted_by: str
+
+
+class CitedInOut(BaseModel):
+    """One latest-artefact claim which cites a source."""
+
+    claim: str
+    quote: str
+    section_title: str
+
+
+class SourceDossierOut(EvidenceItemOut):
+    """The optional source dossier, including provenance and latest citations."""
+
+    abstract: str | None = None
+    abstract_source: Literal["provider", "llm_description"] | None = None
+    publisher: str | None = None
+    record_type: str | None = None
+    language: str | None = None
+    doi: str | None = None
+    cited_by_count: int | None = None
+    fwci: float | None = None
+    tags: list[SourceTagOut] = Field(default_factory=list)
+    cited_in: list[CitedInOut] = Field(default_factory=list)
 
 
 class DecisionOut(BaseModel):
@@ -218,18 +347,87 @@ class CitationOut(BaseModel):
         citation_id: Durable citation identity — the key for the
             chunk-context endpoint (`GET .../citations/{citation_id}/context`).
         n: Reference number (matches a `ReferenceOut.n`).
-        source_title: Cited source's title.
+        source_id: The cited document's project source identity, when the
+            citation resolves to one (joins to the sources/dossier surface).
+        source_title: Cited source's title (envelope metadata).
         quote: The quoted span from the source.
         grounding_tier: Optional grounding-judge tier label.
+        grounding_rationale: The grounding judge's recorded reason for the
+            tier, when one was persisted with the verdict.
         appraisal_label: Optional appraisal label.
+        evidence_type: The cited document's classified evidence type — the
+            input the appraisal rubric scores from.
     """
 
     citation_id: uuid.UUID
     n: int
+    source_id: uuid.UUID | None = None
     source_title: str
     quote: str
     grounding_tier: str | None = None
+    grounding_rationale: str | None = None
     appraisal_label: str | None = None
+    evidence_type: str | None = None
+
+
+class GapCaveatOut(BaseModel):
+    """The evidence-coverage caveat accompanying a gap claim."""
+
+    search_space: str | None = None
+    adequacy_verdict: str | None = None
+    verdict_origin: str | None = None
+
+
+class GapOut(BaseModel):
+    """A structured gap explanation attached to one claim."""
+
+    grade: str | None = None
+    caveat: GapCaveatOut | None = None
+    inferred: bool | None = None
+
+
+class ThemeSourceOut(BaseModel):
+    """One source contributing to a theme or grouping reference.
+
+    Args:
+        source_id: The project's source identity.
+        title: Display title of the source.
+    """
+
+    source_id: uuid.UUID
+    title: str
+
+
+class ThemeRefItemOut(BaseModel):
+    """One named durable theme or grouping reference.
+
+    Args:
+        name: Display name for the theme or group.
+        description: Optional concise description.
+        size: Optional number of members.
+        facet: Grouping facet, when this is a group reference.
+        sources: Resolved member sources, when member identities are available.
+    """
+
+    name: str
+    description: str | None = None
+    size: int | None = None
+    facet: str | None = None
+    sources: list[ThemeSourceOut] | None = None
+
+
+class ThemeRefOut(BaseModel):
+    """The durable themes or groups a theme claim describes.
+
+    Args:
+        source: Whether the references are characterisation themes or groups.
+        base: Optional source-data basis recorded by synthesis.
+        items: Resolved named references.
+    """
+
+    source: Literal["characterisation", "grouping"]
+    base: str | None = None
+    items: list[ThemeRefItemOut]
 
 
 class ClaimOut(BaseModel):
@@ -242,6 +440,7 @@ class ClaimOut(BaseModel):
         span: Character offsets `[start, end]` into the block's `prose`, or
             `None`.
         citations: Citations attached to this claim (citation-type only).
+        theme: Named themes or groups referenced by a theme claim.
     """
 
     claim_id: uuid.UUID
@@ -249,6 +448,9 @@ class ClaimOut(BaseModel):
     text: str
     span: tuple[int, int] | None = None
     citations: list[CitationOut] = Field(default_factory=list)
+    weakly_grounded: bool | None = None
+    gap: GapOut | None = None
+    theme: ThemeRefOut | None = None
 
 
 class BlockOut(BaseModel):
@@ -258,7 +460,8 @@ class BlockOut(BaseModel):
         block_id: The block's identity.
         prose: The block's final persisted prose.
         claims: Span-anchored claim annotations over `prose`.
-        gaps: Named coverage gaps surfaced for this block.
+        gaps: Deprecated legacy coverage gaps. New structured gaps are carried
+            by `ClaimOut.gap`; this field remains empty for new artefacts.
     """
 
     block_id: uuid.UUID
@@ -278,6 +481,7 @@ class SectionOut(BaseModel):
 
     title: str
     role: SectionRole
+    focus: str | None = None
     blocks: list[BlockOut] = Field(default_factory=list)
 
 
@@ -345,6 +549,28 @@ class CoverageOut(BaseModel):
 
     sentence: str
     base: dict[str, Any] = Field(default_factory=dict)
+    backends: list[str] = Field(default_factory=list)
+    backends_detail: list[CoverageBackendDetailOut] = Field(default_factory=list)
+
+
+class CoverageQueryOut(BaseModel):
+    """One completed query and its result count for a public backend."""
+
+    query: str
+    results: int
+
+
+class CoverageBackendDetailOut(BaseModel):
+    """Post-run source counts for one public backend.
+
+    ``relevant`` is deliberately project-wide in C.1; per-query relevance
+    was not recorded and is therefore absent.
+    """
+
+    backend: str
+    results: int
+    relevant: int
+    queries: list[CoverageQueryOut] = Field(default_factory=list)
 
 
 class ChunkContextOut(BaseModel):
@@ -362,3 +588,7 @@ class ChunkContextOut(BaseModel):
     span_start: int
     span_end: int
     clamped: bool
+    previous: str | None = None
+    next: str | None = None
+    year: int | None = None
+    venue: str | None = None

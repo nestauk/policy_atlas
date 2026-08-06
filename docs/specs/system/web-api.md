@@ -77,19 +77,53 @@ artefact, groups) are whole-object.
 
 - `POST /api/v1/projects/{id}/planning-turns`
   `{message, client_turn_id}` → `{reply, plan, suggestions[]}` — one real
-  planner turn. `client_turn_id` (UUID, caller-minted) makes double-submit
-  idempotent (the same turn is returned, not re-run). A concurrent turn on
-  the same project → 409 `planning_turn_in_progress` (per-project lock).
+  planner turn. Every turn is durable in the per-project
+  `planning_transcript`: its monotonic `turn_index`, assigned when the user
+  message is received, is the conversation ordering coordinate;
+  `created_at` is display metadata only. `message` caps at 10 000 characters
+  (turns are durable and rehydrated into every later planner call). The short
+  first transaction follows the owner/run-active gate **under the project row
+  lock** and creates a `pending` row; the LLM call runs outside any
+  transaction (I2); a second transaction writes its reply, raw planner-state
+  snapshot, projected response and suggestions as `completed`. When the turn
+  approves a plan, that second transaction re-checks the run fence under the
+  project row lock (a run that started during the planner call fails the turn
+  with 409 `run_active` — no plan lands under a live walk) and then persists
+  the plan, atomically. Planner failure marks the row `failed`; a process
+  crash between phases leaves an honest `pending` row.
+  `client_turn_id` is caller-minted UUID idempotency durable across API
+  restarts: retrying a completed row with the same message returns its stored
+  projected response verbatim. Only the latest `turn_index` may be retried;
+  it re-runs in place with the same index. A reused id with a different
+  message, or a non-latest unfinished retry, → 409 `stale_turn`. A new id
+  while a `pending` row is younger than ten minutes → 409
+  `planning_turn_in_progress`; reading after ten minutes terminally marks the
+  pending row `failed`. The process-local per-project turn lock remains a
+  belt-and-braces concurrency guard under the one-instance posture.
   A turn while the project's walk is running or parked → 409 `run_active`:
   steering is the sanctioned mid-run plan channel, and the fence guarantees
   the latest-approved plan is always the active walk's own lineage
   (review adjudication, 2026-07-21).
   The draft `plan` mirrors `OrchestrationPlan` field-by-field with every
-  field optional while drafting + `steps[]` + `ready`; planner session
-  state is process-local and bounded — an in-flight draft conversation is
-  lost on restart, honestly (the approved plan object is durable).
+  field optional while drafting + `steps[]` + `ready`. Planner context
+  rehydrates from completed rows in `turn_index` order (each contributes the
+  user message then planner reply); the raw `planner_state` from the latest
+  completed row becomes `previous_draft`. Stored HTTP projections are never
+  fed back to the planner. A fresh tracing session id per request is correct:
+  conversation quality depends solely on that durable composition.
 - `GET /api/v1/projects/{id}/plan` → the current plan (draft or approved,
-  with `version`/`status`), whole-object.
+  with `version`/`status`), whole-object. It returns the approved plan when
+  one exists; otherwise the latest completed transcript row's stored
+  `response.plan` without recomputation. It is 404 only when neither exists,
+  so drafts survive API restarts.
+- `GET /api/v1/projects/{id}/planning-turns` → the owner-scoped durable
+  transcript in ascending `turn_index`, paginated in the standard
+  `{data, pagination}` envelope. Each row exposes `turn_index`,
+  `client_turn_id` (the caller's own idempotency key, returned so a
+  reloaded client can retry its incomplete latest turn), `user_message`,
+  `reply`, `suggestions`, `status`, `created_at` and
+  `completed_at`; pending and failed rows remain visibly incomplete. There
+  is no backfill: projects predating the table simply have zero turns.
 
 ### Runs
 
@@ -144,14 +178,53 @@ artefact, groups) are whole-object.
 
 `funnel` · `landscape` (distributions over the screened-in set only) ·
 `groups` · `evidence` (paginated source list with status ladder) ·
-`findings` (paginated; carries run-scoped B2′ relevance marks
-`priority | normal` when the run has them) · `decisions` (paginated
+`findings` (paginated discriminated `profile: iof | icf` records; carries
+run-scoped B2′ relevance marks `priority | normal` when the run has them) ·
+`sources/{source_id}` (optional dossier: source metadata, tags, and claims
+cited by the latest artefact only) · `decisions` (paginated
 decision log from `steering_history` + allowlisted events) · `artefact`
 (sections, span-anchored claims, citations; the chunk-context read model
 clamps context to a character window around the cited span — the 008
 seam's named consumer) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
+
+- Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
+  or grouping references to named items (`name`, optional `description` and
+  `size`; grouping items also carry their `facet` for deep-linking), including
+  their resolved member `sources` (`source_id`, `title`) when member identities
+  are available. Stale or unresolvable references and member sources are
+  omitted, and an empty theme resolution is `null`.
+
+The C.1 additions enrich these records additively: coverage exposes public
+backend names and post-run query detail; evidence exposes effective-screen
+detail; finding profiles carry their stored typed fields and grounding; and
+artefact claims/sections/chunk context expose their durable presentation
+detail. Collection filter query parameters land separately in C.2, so C.1
+keeps existing paginated-list parameters unchanged.
+
+The C.2 additions add collection filters to `evidence` and `findings`, on
+top of the existing `page`/`page_size`. All filter params are optional,
+repeatable where noted, and combinable; every filtered response's
+`total_items` is collection-true — it reflects the filtered collection,
+never the unfiltered project total or the returned page's length.
+Evidence status is still derived server-side in Python project-wide before
+filtering and paging (the `funnel_out` precedent — bounded to one
+project's rows).
+
+- `GET .../evidence`: `status` (repeatable; any evidence status ladder
+  value, plus the aggregate shortcut `Included` = the 7 ladder positions
+  reached once a source is screened in — i.e. every status except `found`
+  and `screened_out`) · `cited` (bool). An unrecognised `status` value is
+  422.
+- `GET .../findings`: `profile` (`iof | icf`; 422 if unrecognised) ·
+  `facet`+`group` (both required together — a facet name and an exact
+  group label within it; an unknown facet/group pair returns an empty
+  page, not an error) · `group_id` (the group's qualified id,
+  `<facet>:gNN`, as an alternative to `facet`+`group` — combining it with
+  either is 422; an unknown `group_id` returns an empty page) ·
+  `source_id` (the evidence row's source id; no match returns an empty
+  page).
 
 ### SSE
 
@@ -173,6 +246,9 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `stage.started` | `{stage, label, blurb}` | component run start |
 | `stage.completed` | `{stage, label, summary, seconds}` | component terminal |
 | `stage.failed` | `{stage, label, reason, skipped}` | component failure/skip |
+| `artefact.skeleton` | `{sections: [{index, title, focus}]}` in presentation order | synthesise presentation progress |
+| `artefact.section_started` | `{index}` | synthesise presentation progress |
+| `artefact.section_completed` | `{index, title, prose}` | synthesise presentation progress |
 | `checkin.pending` | the full check-in resource | `steering.pause` |
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
@@ -186,6 +262,18 @@ may change. Nothing else internal (module names, model ids, raw payload
 keys) is observable. The frontend store must rebuild idempotently from
 replay alone — mid-run refresh, server restart with a parked pending
 check-in, and reconnect-mid-stream are the tested cases.
+
+`artefact.*` frames are durable presentation/progress records, not partial
+artefact reads or authoritative artefact content: whole-section prose is sent
+for live rendering, while the evidence-base artefact of record is committed
+only when synthesis completes. The skeleton's display `index` is the identity
+used by every artefact frame; it includes key findings first (although that
+section is generated last) and conclusions last. An empty key-findings pass
+still closes its slot with `artefact.section_completed` and empty prose.
+Stage lifecycle events commit at phase boundaries: `stage.started` commits
+before its component transaction opens and `stage.completed` commits after it,
+so a tail sees real in-flight work and a rolled-back component retains its
+started→failed trail.
 
 ## Deployment posture (v1)
 

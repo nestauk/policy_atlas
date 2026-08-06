@@ -49,7 +49,7 @@ from tests.helpers import (
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 29
+    assert len(metadata.tables) == 30
 
 
 # --- Stub logic (pure Python, no DB) ---
@@ -510,7 +510,7 @@ def test_harness_classify_component(conn: Connection) -> None:
 
     plan = Plan(component="classify", evidence_scope_id=scope_id)
     config = compile(plan)
-    run_harness(
+    outcome = run_harness(
         conn,
         config=config,
         project_id=pid,
@@ -527,16 +527,12 @@ def test_harness_classify_component(conn: Connection) -> None:
     ).fetchall()
     assert len(rows) == 1
 
-    # component.completed payload has the right keys
-    log_entries = events.read(conn, pid)
-    completed = [e for e in log_entries if e["event_type"] == "component.completed"
-                 and e["payload"].get("component") == "classify"]
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
-    assert set(payload.keys()) >= {"component", "classified", "by_type", "skipped"}
-    assert payload["classified"] == 1
-    assert payload["skipped"] == 1
-    assert payload["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
+    summary = outcome["summary"]
+    assert summary is not None
+    assert {"classified", "by_type", "skipped"} <= set(summary.keys())
+    assert summary["classified"] == 1
+    assert summary["skipped"] == 1
+    assert summary["usage_totals"] == {"prompt": 11, "completion": 7, "total": 18, "cached": 0}
 
     # Run ended as succeeded
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid_classify)).one()

@@ -8,6 +8,7 @@ import { FindingsView } from "./views/FindingsView";
 import { LandingView } from "./views/LandingView";
 import { SourcesView } from "./views/SourcesView";
 import { WorkspaceView } from "./views/WorkspaceView";
+import { NotFoundView } from "./ui/feedback/NotFoundView";
 
 // Lazy: `recharts` is a substantial dependency only the landscape route
 // needs — keeping it out of the main chunk means every other route (and
@@ -44,6 +45,9 @@ export const router = createBrowserRouter([
         ),
       },
       { path: "/projects/:projectId/decisions", element: <DecisionsView /> },
+      // Catch-all: an unknown URL still gets the app chrome and an honest
+      // "nothing here" view rather than a router error page.
+      { path: "*", element: <NotFoundView /> },
     ],
   },
 ]);

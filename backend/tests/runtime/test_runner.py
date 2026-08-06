@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -14,6 +15,7 @@ import policy_atlas.runtime.runner as runner_module
 from policy_atlas.core import events
 from policy_atlas.core.fixtures import get_source
 from policy_atlas.core.schema import (
+    capability_run,
     chunk,
     event_log,
     evidence_scope,
@@ -27,7 +29,7 @@ from policy_atlas.evidence_base.corpus.characterise import CharacteriseFailure
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.evidence_base.sourcing.ingest_upload import ingest_upload
 from policy_atlas.runtime import harness
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
+from policy_atlas.runtime.orchestration_plan import ComponentStep, OrchestrationPlan, compose
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 from tests.helpers import delete_project_data, now
 
@@ -232,6 +234,45 @@ def _cleanup(engine: Engine, project_id: uuid.UUID | None) -> None:
 
 def _runner_backends() -> RunnerBackends:
     return RunnerBackends(search_backends=[])
+
+
+def _single_component_attempt(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    component: str,
+) -> Any:
+    # runs.capability_run_id carries a composite FK — the walk row must exist.
+    plan_id = uuid.uuid4()
+    capability_run_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            capability_run.insert().values(
+                capability_run_id=capability_run_id,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                capability="evidence_base",
+                plan_id=plan_id,
+                plan_version=1,
+                status="running",
+                started_at=now(),
+            )
+        )
+    return runner_module._run_step_attempt(
+        engine,
+        project_id=project_id,
+        evidence_scope_id=scope_id,
+        plan=_base_plan(),
+        plan_id=plan_id,
+        plan_version=1,
+        step=ComponentStep(component=component),
+        directive_delta={},
+        reference_kwargs={},
+        backends=_runner_backends(),
+        session_id=None,
+        capability_run_id=capability_run_id,
+    )
 
 
 def _plan_compiled_events(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -931,6 +972,159 @@ def test_backstop_failure_attempt_retries_and_succeeds(
                 .order_by(runs.c.started_at)
             ).scalars().all()
         assert statuses == ["failed", "succeeded"]
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_component_started_commits_before_the_component_transaction(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id: uuid.UUID | None = None
+    entered = threading.Event()
+    release = threading.Event()
+    outcomes: list[Any] = []
+    failures: list[BaseException] = []
+
+    def blocking_harness(
+        conn: Connection,
+        *,
+        run_id: uuid.UUID,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del kwargs
+        entered.set()
+        assert release.wait(timeout=2)
+        conn.execute(
+            runs.update().where(runs.c.run_id == run_id).values(status="succeeded", ended_at=now())
+        )
+        return {"summary": {"sources_added": 1}, "error": None}
+
+    monkeypatch.setattr(runner_module, "run_harness", blocking_harness)
+    try:
+        project_id, scope_id = _seed_project(engine)
+
+        def run_attempt() -> None:
+            try:
+                outcomes.append(
+                    _single_component_attempt(
+                        engine,
+                        project_id=project_id,
+                        scope_id=scope_id,
+                        component="acquire",
+                    )
+                )
+            except BaseException as exc:  # pragma: no cover - asserted below
+                failures.append(exc)
+
+        worker = threading.Thread(target=run_attempt)
+        worker.start()
+        assert entered.wait(timeout=2)
+        with engine.connect() as conn:
+            in_flight = events.read(conn, project_id)
+        assert [entry["event_type"] for entry in in_flight] == [
+            "run.started",
+            "plan.compiled",
+            "component.started",
+        ]
+        release.set()
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+        assert failures == []
+        assert outcomes[0].status == "succeeded"
+        with engine.connect() as conn:
+            terminal = events.read(conn, project_id)
+        completed = next(
+            entry for entry in terminal if entry["event_type"] == "component.completed"
+        )
+        assert completed["payload"] == {"component": "acquire", "sources_added": 1}
+    finally:
+        release.set()
+        _cleanup(engine, project_id)
+
+
+def test_component_rollback_retains_started_then_backstop_failed_pair(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id: uuid.UUID | None = None
+
+    def rollback_harness(conn: Connection, **kwargs: Any) -> dict[str, Any]:
+        del conn, kwargs
+        raise RuntimeError("forced unhandled component rollback")
+
+    monkeypatch.setattr(runner_module, "run_harness", rollback_harness)
+    try:
+        project_id, scope_id = _seed_project(engine)
+        outcome = _single_component_attempt(
+            engine, project_id=project_id, scope_id=scope_id, component="acquire"
+        )
+        assert outcome.status == "failed"
+        with engine.connect() as conn:
+            rows = events.read(conn, project_id)
+        component_events = [
+            row
+            for row in rows
+            if row["event_type"].startswith("component.")
+            and row["event_type"] != "component.timing"
+        ]
+        assert [row["event_type"] for row in component_events] == [
+            "component.started",
+            "component.failed",
+        ]
+        assert component_events[1]["payload"] == {
+            "component": "acquire",
+            "error": "RuntimeError: forced unhandled component rollback",
+        }
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_synthesis_progress_survives_rolled_back_component_before_terminal_events(
+    engine: Engine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_id: uuid.UUID | None = None
+
+    def fail_after_one_streamed_section(
+        conn: Connection,
+        *,
+        progress_emitter: Any,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        del conn, kwargs
+        assert progress_emitter is not None
+        progress_emitter.emit_skeleton([{"title": "Evidence", "focus": "What changed"}])
+        progress_emitter.section_started(0)
+        progress_emitter.section_completed(0, prose="Completed before failure.")
+        raise RuntimeError("synthesis backend failed after one section")
+
+    monkeypatch.setattr(runner_module, "run_harness", fail_after_one_streamed_section)
+    try:
+        project_id, scope_id = _seed_project(engine)
+        outcome = _single_component_attempt(
+            engine, project_id=project_id, scope_id=scope_id, component="synthesise"
+        )
+        assert outcome.status == "failed"
+        with engine.connect() as conn:
+            rows = events.read(conn, project_id)
+        event_types = [row["event_type"] for row in rows]
+        assert event_types[:7] == [
+            "run.started",
+            "plan.compiled",
+            "component.started",
+            "artefact.skeleton",
+            "artefact.section_started",
+            "artefact.section_completed",
+            "component.failed",
+        ]
+        assert event_types[7] == "run.failed"
+        completed = rows[5]
+        assert completed["payload"] == {
+            "index": 1,
+            "title": "Evidence",
+            "prose": "Completed before failure.",
+        }
     finally:
         _cleanup(engine, project_id)
 

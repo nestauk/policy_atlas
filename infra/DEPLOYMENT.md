@@ -135,6 +135,11 @@ synth-time context query and must not run before the VPC exists.
      (Self-signup is disabled — operator-created users only, for the migration
      window.)
 
+     For test users day-to-day, `make staging-user EMAIL=<email-format-username>
+     PASSWORD='<password>'` wraps this: invite email suppressed, permanent
+     password set directly (the address needs no real inbox; recovery for fake
+     addresses is `admin-set-user-password` again).
+
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit
    code via `describe-tasks`.

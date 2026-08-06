@@ -1,5 +1,11 @@
 import type { SseFrame } from "../api/sseFrame";
-import { GLOBAL_LIVENESS_KEY, type ResolvedDecision, type RunStreamState, type StageEntry } from "./types";
+import {
+  GLOBAL_LIVENESS_KEY,
+  type LiveSection,
+  type ResolvedDecision,
+  type RunStreamState,
+  type StageEntry,
+} from "./types";
 
 /**
  * Pure reducer over the SSE frame stream — no framework, no side effects.
@@ -56,6 +62,7 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         runs: { ...base.runs, [frame.capability_run_id]: frame.status },
         stages: isNewRun ? [] : base.stages,
         liveness: isNewRun ? {} : base.liveness,
+        liveSections: isNewRun ? {} : base.liveSections,
       };
     }
 
@@ -94,6 +101,60 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
         }),
       };
 
+    case "artefact.skeleton":
+      return {
+        ...base,
+        liveSections: Object.fromEntries(
+          frame.sections.map((section) => [
+            section.index,
+            {
+              index: section.index,
+              title: section.title,
+              focus: section.focus,
+              state: "planned",
+            } satisfies LiveSection,
+          ]),
+        ),
+      };
+
+    case "artefact.section_started": {
+      const section = base.liveSections[frame.index];
+      // Frames name skeleton display indices. Do not manufacture a section
+      // if a malformed/out-of-order stream lacks its skeleton.
+      if (section === undefined) return base;
+      return {
+        ...base,
+        liveSections: {
+          ...base.liveSections,
+          [frame.index]: { ...section, state: "writing" },
+        },
+      };
+    }
+
+    case "artefact.section_completed": {
+      const section = base.liveSections[frame.index];
+      if (section === undefined) return base;
+      // An empty prose completion closes an optional section (notably key
+      // findings). Removing it is honest: the view must hide, never fake.
+      if (frame.prose.length === 0) {
+        const remainingSections = { ...base.liveSections };
+        delete remainingSections[frame.index];
+        return { ...base, liveSections: remainingSections };
+      }
+      return {
+        ...base,
+        liveSections: {
+          ...base.liveSections,
+          [frame.index]: {
+            ...section,
+            title: frame.title,
+            prose: frame.prose,
+            state: "filled",
+          },
+        },
+      };
+    }
+
     case "checkin.pending":
       return { ...base, pendingCheckIn: frame.check_in };
 
@@ -131,6 +192,26 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
     default:
       return assertNever(frame);
   }
+}
+
+/**
+ * Report whether live presentation sections must be labelled as an
+ * incomplete draft after a terminal run outcome.
+ *
+ * Args:
+ *   state: Current stream state.
+ *
+ * Returns:
+ *   True only for failed, aborted, or interrupted runs retaining at least
+ *   one streamed section. Sections deliberately remain available for view
+ *   rendering beneath the terminal-honesty banner.
+ */
+export function hasTerminalPartialLiveArtefact(state: RunStreamState): boolean {
+  return (
+    state.run !== null &&
+    ["failed", "aborted", "interrupted"].includes(state.run.status) &&
+    Object.keys(state.liveSections).length > 0
+  );
 }
 
 /** Find the most recent `started` entry for `stage` and replace it in

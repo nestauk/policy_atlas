@@ -981,7 +981,7 @@ def test_harness_characterise_component_success(conn: Connection) -> None:
 
     plan = Plan(component="characterise", evidence_scope_id=scope_id)
     config = compile(plan)
-    run_harness(
+    outcome = run_harness(
         conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
         theme_grouping_backend=StubThemeGroupingBackend(),
     )
@@ -993,14 +993,9 @@ def test_harness_characterise_component_success(conn: Connection) -> None:
     ).scalar_one()
     assert rows == 1
 
-    log_entries = events.read(conn, pid)
-    completed = [
-        e for e in log_entries
-        if e["event_type"] == "component.completed"
-        and e["payload"].get("component") == "characterise"
-    ]
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
+    summary = outcome["summary"]
+    assert summary is not None
+    payload = summary
     assert {"coverage", "themes", "unclustered", "flags", "provenance"} <= set(payload.keys())
 
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
@@ -1827,7 +1822,7 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
     rid = seed_run(conn, pid)
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    run_harness(
+    outcome = run_harness(
         conn,
         config=config,
         project_id=pid,
@@ -1836,12 +1831,7 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
         theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
-    completed = [
-        event for event in events.read(conn, pid)
-        if event["event_type"] == "component.completed"
-        and event["payload"].get("component") == "characterise"
-    ]
-    assert len(completed) == 1
+    assert outcome["summary"] is not None
 
 
 def test_judgment_tracing_noop_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -3,10 +3,14 @@ import { useRef, useState } from "react";
 import { useAnswerCheckIn } from "../../api/mutations";
 import { conflictSentences, isConflictCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
+import { recordSessionAnsweredCheckIn } from "../../store/thread";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
+import { useToast } from "../../ui/radix/Toast";
+import { presentCheckInRender, triggerCopy } from "./checkInPresentation";
+import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
 
 interface CompiledSteer {
   render: string;
@@ -43,6 +47,7 @@ export function CheckInCard({
   stages: StageEntry[];
 }) {
   const answer = useAnswerCheckIn(projectId);
+  const toast = useToast();
   const [freeText, setFreeText] = useState("");
   const [changeModeOpen, setChangeModeOpen] = useState(false);
   const [changeModeValue, setChangeModeValue] = useState<ChangeModeValue>("moderate");
@@ -50,24 +55,41 @@ export function CheckInCard({
   const [notice, setNotice] = useState<string | null>(null);
   const freeTextRef = useRef<HTMLInputElement>(null);
 
+  // Toast complements the inline `notice` below — it doesn't replace it: the
+  // inline copy is load-bearing right where the user is looking, the toast
+  // makes the failure visible even if they've scrolled away from the card.
   const conflictNotice = (error: unknown) => {
     const code = (error as { code?: string }).code;
-    setNotice(
-      isConflictCode(code)
-        ? conflictSentences[code]
-        : "That couldn't be applied. The check-in is still waiting.",
-    );
+    const message = isConflictCode(code)
+      ? conflictSentences[code]
+      : "That couldn't be applied. The check-in is still waiting.";
+    setNotice(message);
+    toast.toast({ title: "Check-in update failed", description: message, tone: "error" });
   };
 
   const sendOption = (optionId: string, params?: Record<string, unknown>) => {
     setNotice(null);
+    const selected = (checkIn.options ?? []).find((option) => option.id === optionId);
     answer.mutate(
       { checkInId: checkIn.check_in_id, body: { kind: "option", option_id: optionId, params: params ?? null } },
-      { onError: conflictNotice },
+      {
+        onSuccess: () => {
+          if (selected === undefined) return;
+          recordSessionAnsweredCheckIn(
+            checkIn.check_in_id,
+            selected.label,
+            (checkIn.options ?? [])
+              .filter((option) => option.id !== optionId)
+              .map((option) => option.label),
+          );
+        },
+        onError: conflictNotice,
+      },
     );
   };
 
   const stageLabel = findStageLabel(stages, checkIn.stage);
+  const presentedRender = presentCheckInRender(checkIn.render, checkIn.stage, stages);
 
   if (compiled !== null) {
     return (
@@ -131,15 +153,50 @@ export function CheckInCard({
     );
   }
 
+  const triggerLines = triggerCopy(checkIn.triggers);
+  const orchestratorSuggested = (checkIn.options ?? []).some((option) => option.suggested);
+
   return (
-    <Card aria-live="polite" className="border-l-2 border-l-orange p-5">
+    <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
+      {orchestratorSuggested && (
+        <p className="mb-1.5 text-[10.5px] font-extrabold uppercase tracking-[0.06em] text-grey">
+          Suggested by the orchestrator
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone="yellow">Waiting on your input</Chip>
         {stageLabel !== null && <Chip tone="soft">{scrub(stageLabel)}</Chip>}
       </div>
-      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
-        {scrub(checkIn.render)}
-      </pre>
+      {triggerLines.length > 0 && (
+        <p className="mt-2 text-[12px] leading-relaxed text-grey">{triggerLines.join(" ")}</p>
+      )}
+      {presentedRender === null ? (
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
+          {scrub(checkIn.render)}
+        </pre>
+      ) : (
+        <div className="mt-3 border border-line bg-paper-2 p-3">
+          <p className="text-[12.5px] font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
+          <p className="mt-0.5 text-[12px] text-grey">
+            Completed in {presentedRender.seconds}s
+          </p>
+          {presentedRender.counts.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {presentedRender.counts.map(({ label, value }) => (
+                <Chip key={label} tone="soft">
+                  {label}: {value}
+                </Chip>
+              ))}
+            </div>
+          )}
+          <details className="mt-2 text-[11.5px] text-grey">
+            <summary className="cursor-pointer">Technical detail</summary>
+            <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper p-2 font-sans text-[11.5px] leading-relaxed text-ink">
+              {scrub(checkIn.render)}
+            </pre>
+          </details>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-col gap-2">
         {(checkIn.options ?? []).map((option) => (
@@ -191,11 +248,16 @@ export function CheckInCard({
                   onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
                   className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-blue"
                 >
-                  {CHANGE_MODE_VALUES.map((value) => (
-                    <option key={value} value={value}>
-                      {value[0].toUpperCase() + value.slice(1)}
-                    </option>
-                  ))}
+                  {CHANGE_MODE_VALUES.flatMap((value) => {
+                    const label = vocabLabel(STEERING_MODE_LABEL, value);
+                    return label === null
+                      ? []
+                      : [
+                          <option key={value} value={value}>
+                            {label}
+                          </option>,
+                        ];
+                  })}
                 </select>
                 <Button type="submit" size="sm" disabled={answer.isPending}>
                   Send
@@ -262,7 +324,15 @@ export function CheckInCard({
             setNotice(null);
             answer.mutate(
               { checkInId: checkIn.check_in_id, body: { kind: "abort" } },
-              { onError: conflictNotice },
+              {
+                onSuccess: () =>
+                  recordSessionAnsweredCheckIn(
+                    checkIn.check_in_id,
+                    "Stop the analysis",
+                    (checkIn.options ?? []).map((option) => option.label),
+                  ),
+                onError: conflictNotice,
+              },
             );
           }}
         >

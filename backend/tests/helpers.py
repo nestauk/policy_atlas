@@ -273,6 +273,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         implementation_context_finding,
         intervention_outcome_finding,
         orchestration_plan,
+        planning_transcript,
         project,
         project_source_snapshot,
         runs,
@@ -402,6 +403,10 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
+    # Durable planning turns before their project parent.
+    conn.execute(delete(planning_transcript).where(
+        planning_transcript.c.project_id == project_id
+    ))
     # orchestration_plan before evidence_scope (fk_oplan_scope_project).
     conn.execute(delete(orchestration_plan).where(
         orchestration_plan.c.project_id == project_id

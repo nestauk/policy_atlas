@@ -113,6 +113,27 @@ class _BoundaryParkIO(_ParkOnceIO):
         return Continue()
 
 
+class _BeforeBoundaryParkIO(_ParkOnceIO):
+    """Park once at one before-component boundary and continue elsewhere."""
+
+    def __init__(self, component: str) -> None:
+        super().__init__()
+        self.component = component
+
+    def pause(self, point: dict[str, Any], render: str) -> Continue:
+        """Park at the selected before-component boundary."""
+        self.pauses.append((dict(point), render))
+        if (
+            not self.parked
+            and point["boundary"] == "before_component"
+            and point["component"] == self.component
+        ):
+            self.live_state, self.surface = _capture_live_state(point)
+            self.parked = True
+            raise WalkParked()
+        return Continue()
+
+
 def _capture_live_state(point: dict[str, Any]) -> tuple[ContinuationState, dict[str, Any]]:
     """Read the runner's loop locals at the IO seam without mutating the walk."""
     frame = inspect.currentframe()
@@ -140,6 +161,8 @@ def _capture_live_state(point: dict[str, Any]) -> tuple[ContinuationState, dict[
         blocked_discretionary=dict(local["blocked_discretionary"]),
         completed_components=set(local["completed_components"]),
         last_check_in_payload=copy.deepcopy(local["last_check_in_payload"]),
+        parked_boundary=point["boundary"],
+        parked_component=point["component"],
         most_recent_attempted_run_id=local["most_recent_attempted_run_id"],
         session_id=local["session_id"],
     )
@@ -265,6 +288,8 @@ def _canonicalise_parity(
             "last_check_in_payload": _normalise_value(
                 state.last_check_in_payload, canonicalizer
             ),
+            "parked_boundary": state.parked_boundary,
+            "parked_component": state.parked_component,
         }
     )
     canonical_surface = _normalise_value(surface, canonicalizer)
@@ -330,7 +355,7 @@ def _normalise_scalar(key: str, value: Any, canonicalizer: _WalkCanonicalizer) -
     return _normalise_value(value, canonicalizer)
 
 
-def _assert_16_fields_equal(expected: dict[str, Any], actual: dict[str, Any]) -> None:
+def _assert_continuation_fields_equal(expected: dict[str, Any], actual: dict[str, Any]) -> None:
     """Assert every continuation annex field, excluding session identity."""
     assert expected["capability_run_id"] == actual["capability_run_id"]
     assert expected["plan"] == actual["plan"]
@@ -348,6 +373,8 @@ def _assert_16_fields_equal(expected: dict[str, Any], actual: dict[str, Any]) ->
     assert expected["blocked_discretionary"] == actual["blocked_discretionary"]
     assert expected["completed_components"] == actual["completed_components"]
     assert expected["last_check_in_payload"] == actual["last_check_in_payload"]
+    assert expected["parked_boundary"] == actual["parked_boundary"]
+    assert expected["parked_component"] == actual["parked_component"]
     assert expected["most_recent_attempted_run_id"] == actual["most_recent_attempted_run_id"]
 
 
@@ -360,7 +387,7 @@ def _assert_parity(
     """Assert structural continuation and byte-level surface parity across walks."""
     expected_fields, expected_bytes = _canonicalise_parity(expected_state, expected_surface)
     actual_fields, actual_bytes = _canonicalise_parity(actual_state, actual_surface)
-    _assert_16_fields_equal(expected_fields, actual_fields)
+    _assert_continuation_fields_equal(expected_fields, actual_fields)
     assert expected_bytes == actual_bytes
 
 
@@ -453,6 +480,123 @@ def test_parked_continue_rebuilds_the_runner_state_from_durable_rows(engine: Eng
     finally:
         _cleanup(engine, parked_project_id)
         _cleanup(engine, unbroken_project_id)
+
+
+def test_before_boundary_park_continue_runs_the_pending_component(engine: Engine) -> None:
+    """A decided parked before-boundary is not presented again on continuation."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent", search_effort="standard")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        parked_io = _BeforeBoundaryParkIO("select")
+        parked = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=parked_io,
+        )
+        assert parked.status == "paused"
+        assert parked.capability_run_id is not None
+        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        assert state.parked_boundary == "before_component"
+        assert state.parked_component == "select"
+        with engine.connect() as conn:
+            resume_sequence = events.read(conn, project_id)[-1]["sequence"]
+        resumed = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=NullIO(),
+            resume_from=state,
+            resume_decision=ResumeDecision(response="continue"),
+        )
+        assert any(outcome.component == "select" for outcome in resumed.steps)
+        with engine.connect() as conn:
+            resumed_events = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["sequence"] > resume_sequence
+            ]
+        assert any(
+            entry["event_type"] == "component.started"
+            and entry["payload"].get("component") == "select"
+            for entry in resumed_events
+        )
+        assert not any(
+            entry["event_type"] == "steering.pause"
+            and entry["payload"].get("boundary") == "before_component"
+            and entry["payload"].get("component") == "select"
+            for entry in resumed_events
+        )
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_after_boundary_park_continue_evaluates_the_next_before_boundary(
+    engine: Engine,
+) -> None:
+    """An after-component decision does not decide the next before-boundary."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        plan = _base_plan(steering_mode="frequent", search_effort="standard")
+        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        parked = run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=_BoundaryParkIO("characterise"),
+        )
+        assert parked.status == "paused"
+        assert parked.capability_run_id is not None
+        state = build(engine, project_id=project_id, capability_run_id=parked.capability_run_id)
+        assert state.parked_boundary == "after_component"
+        assert state.parked_component == "characterise"
+        with engine.connect() as conn:
+            resume_sequence = events.read(conn, project_id)[-1]["sequence"]
+        run_plan(
+            engine,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            plan=plan,
+            plan_id=plan_id,
+            plan_version=1,
+            plan_row_id=plan_id,
+            backends=_runner_backends(),
+            io=NullIO(),
+            resume_from=state,
+            resume_decision=ResumeDecision(response="continue"),
+        )
+        with engine.connect() as conn:
+            resumed_events = [
+                entry
+                for entry in events.read(conn, project_id)
+                if entry["sequence"] > resume_sequence
+            ]
+        assert any(
+            entry["event_type"] == "steering.pause"
+            and entry["payload"].get("boundary") == "before_component"
+            and entry["payload"].get("component") == "select"
+            for entry in resumed_events
+        )
+    finally:
+        _cleanup(engine, project_id)
 
 
 def test_class9_sees_failed_replacement_rerun_from_runner_attempted_map(

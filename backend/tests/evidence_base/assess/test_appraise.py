@@ -87,7 +87,7 @@ def _appraisal_rows(conn: Connection, project_id: uuid.UUID) -> list[sa.Row[Any]
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 29
+    assert len(metadata.tables) == 30
 
 
 # --- Rubric and labels (pure Python, no DB) ---
@@ -581,7 +581,7 @@ def test_harness_appraise_component(conn: Connection) -> None:
     ))
 
     plan = Plan(component="appraise", evidence_scope_id=scope_id)
-    run_harness(
+    outcome = run_harness(
         conn, config=compile(plan), project_id=pid, run_id=rid_appraise,
         provider=StubEchoProvider(),
     )
@@ -593,16 +593,14 @@ def test_harness_appraise_component(conn: Connection) -> None:
     assert rows[0].quality_score == 5
 
     log_entries = events.read(conn, pid)
-    completed = [e for e in log_entries if e["event_type"] == "component.completed"
-                 and e["payload"].get("component") == "appraise"]
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
-    assert payload["appraised"] == 1
-    assert payload["by_score"] == {"5": 1}  # JSON object keys are strings
-    assert payload["skipped_non_evidence"] == 1
-    assert payload["skipped_unknown"] == 0
-    assert payload["already_appraised"] == 0
-    assert payload["unclassified"] == 0
+    summary = outcome["summary"]
+    assert summary is not None
+    assert summary["appraised"] == 1
+    assert summary["by_score"] == {5: 1}  # in-memory summary, pre-JSON (int keys)
+    assert summary["skipped_non_evidence"] == 1
+    assert summary["skipped_unknown"] == 0
+    assert summary["already_appraised"] == 0
+    assert summary["unclassified"] == 0
 
     # No source.appraised event for the skipped row
     appraised_events = [e for e in log_entries if e["event_type"] == "source.appraised"]

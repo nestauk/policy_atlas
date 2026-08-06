@@ -19,6 +19,9 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.checkin_read import _check_in
 from policy_atlas.api.contract import (
+    ArtefactSectionCompletedFrame,
+    ArtefactSectionStartedFrame,
+    ArtefactSkeletonFrame,
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
@@ -225,6 +228,33 @@ def _frames_for_row(
                 **persisted,
             ).model_dump(mode="json")
         ]
+    if event_type == "artefact.skeleton":
+        try:
+            return [
+                ArtefactSkeletonFrame(
+                    type="artefact.skeleton", **payload, **persisted
+                ).model_dump(mode="json")
+            ]
+        except (TypeError, ValueError):
+            return []
+    if event_type == "artefact.section_started":
+        try:
+            return [
+                ArtefactSectionStartedFrame(
+                    type="artefact.section_started", **payload, **persisted
+                ).model_dump(mode="json")
+            ]
+        except (TypeError, ValueError):
+            return []
+    if event_type == "artefact.section_completed":
+        try:
+            return [
+                ArtefactSectionCompletedFrame(
+                    type="artefact.section_completed", **payload, **persisted
+                ).model_dump(mode="json")
+            ]
+        except (TypeError, ValueError):
+            return []
     if event_type == "steering.pause":
         decided = _is_decided_pause(row, all_events)
         try:
