@@ -74,12 +74,13 @@ cd ../frontend && LIVE_TOKEN=$LIVE_TOKEN LIVE_LEG=a \
 # then LIVE_LEG=b for leg B
 ```
 
-Evidence screenshots: `docs/tasks/028-ux-refinement/evidence/`.
+Evidence screenshots: attached to PR #41 (kept out of the git tree — binary
+evidence lives on the PR; see `docs/knowledge/binary-evidence-stays-off-the-tree.md`).
 
 ## Live check narration
 
 (Timestamps are in the spec's own log lines, `[live-028 …]`, echoed in the
-Playwright output; screenshots per surface in evidence/.)
+Playwright output; screenshots per surface attached to PR #41.)
 
 **Leg A — Quick look, unattended** (project "028 live leg A"):
 Timeline (spec log, UTC): 11:35:17 centred empty state (no rail pre-run, the
@@ -103,7 +104,7 @@ summaries; contents sidebar present; **3 verified block summaries**;
 **artefact summary honestly `failed`** (judge rejected 3/3 — the bounded
 regenerate + honest-fail degrade working live; never rendered as a
 summary). Sources: Year sort → URL `sort=year` → second press `order=asc`.
-Screenshots a-01…a-12 in evidence/. **PASS (12.7 min).**
+Screenshots a-01…a-12 attached to PR #41. **PASS (12.7 min).**
 
 **Leg B — Standard review, frequent (requested in words)** (project
 "028 live leg B"):
