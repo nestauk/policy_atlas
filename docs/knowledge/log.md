@@ -1,5 +1,11 @@
 # Knowledge update log
 
+## 2026-08-06 (task 029)
+* **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — caps
+  owner-set at rapid 50 / standard 100 / deep 200 per backend per round; the wall clock is gone at
+  every depth (the runner's round gate + record caps replaced it), and the multi-round loop the
+  caps were sized for is now actually wired (runner-orchestrated rounds, task 029).
+
 ## 2026-08-04 (task 028)
 * **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — the
   total-volume bound named in the rule now exists (`record_cap_per_backend`, applied in

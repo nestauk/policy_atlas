@@ -280,7 +280,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 - **Search total-volume ceiling — DISCHARGED (task 028, 2026-08-04).** The ceiling landed
   at acquisition, not at search or at screening: `acquire_sources`'s
-  `record_cap_per_backend` (rapid None / standard 150 / deep 200) trims each backend's
+  `record_cap_per_backend` (task 029 owner-set: rapid 50 / standard 100 / deep 200, per
+  backend per round) trims each backend's
   search fan-out after a rank-interleaved merge and after dedup. Acquisition is the right
   seam because persisting a record is what commits the spend — it is embedded on the spot
   and screened at `SCREEN_REPS` calls afterwards — and because dedup-then-trim means a
@@ -289,58 +290,53 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
   assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
   purpose (the deep loop's confident-relevant goal), not measured.
-  `scripts/eval_ground_truth/` scores search recall against published-review ground truth
-  (current baseline: mean 2.4%, max 9.1%, at rapid depth under the divided quota) — re-run
-  it and set the cap from where recall stops improving.
+  `scripts/eval_ground_truth/` (lives on a different branch) scores search recall against
+  published-review ground truth (baseline: mean 2.4%, max 9.1%, at rapid depth under the
+  divided quota) — after this branch and that one merge, re-run it and set the caps from
+  where recall stops improving. With rounds + arms live (task 029) that re-run is the
+  acceptance test for the whole change.
 
-- **Deep-round continuation loop is unwired — OPEN (found 2026-08-05, pre-existing since
-  task 023).** `run_deep_rounds` and `should_escalate` have **no caller in `src/`**. Their
-  only caller in history was `skeleton.py`, deleted by `3304df4` ("task 023 phase D …
-  skeleton retirement", 2026-07-14); the orchestrator that replaced it composes exactly
-  one `acquire` step and one `screen_abstract` step, and `harness._run_acquire` calls
-  `run_search` once. `run_search` derives `round_index` from the scope's coverage-row
-  count, so a fresh scope is always round 1 and the `round_index >= 2` branch — the
-  reformulate, snowball, suggest and diversity arms — never runs. `search_loop.py:1846`
-  already calls it "a separate, not-yet-wired continuation driver". The unit tests stayed
-  green throughout because they call `run_deep_rounds` directly with scripted callables;
-  nothing asserts that anything in `src/` invokes it. **So the depth contract
-  ("standard = 2 rounds, deep = 3") is currently aspirational, not as-built: every depth
-  does one round, and the depths differ only in their caps and http budgets.** Decide
-  whether to re-wire it into the orchestrator or retire it with `should_escalate`.
-  `scripts/notebooks/search_rounds_and_arms.ipynb` drives the loop directly and is the
-  harness to re-wire against. NB a user-initiated second acquire on the same scope
-  (steering re-run / additive segment re-entry) *would* legitimately be round 2 and fire
-  the arms — that path is untraced.
+- **Multi-round search wired into the runner — DISCHARGED (task 029, 2026-08-06).** The
+  round loop found unwired on 2026-08-05 (orphaned since task 023's skeleton retirement,
+  `3304df4`) is now runner-orchestrated: after `screen_abstract` completes, a gate at the
+  walk's classify pop re-opens the acquire+screen pair until the depth's `round_cap`
+  (rapid 1 / standard 2 / deep 3) or a yield collapse (`short_circuit`, < 1 new
+  confident-relevant per 50 screened from round 2). Each round is an ordinary step —
+  fresh run rows, steering boundaries, check-ins, SSE frames. The gate recomputes every
+  input from persisted state (coverage rows, the screen run's own rows via
+  `new_confident_relevant_for_run`), so a run parked mid-loop resumes at the correct
+  round. `run_deep_rounds` and `should_escalate` were **deleted** (the runner owns the
+  loop; rapid→deep escalation stays unbuilt — a fresh decision if wanted). The loop-level
+  stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
+  thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
+  `tests/runtime/test_search_rounds.py`.
+  **Accepted blemishes, not fixed:** `successful_runs["acquire"]` is last-write-wins, so
+  the P1 coverage trigger and the "Where I looked" pane read only the final round's
+  coverage row and queries; the loop-level stop condition is written after the last
+  screen boundary, so the `re_searched_still_thin` P1 check-in trigger can only see it on
+  a later boundary, if at all; the frontend timeline shows repeated
+  "Searching sources"/"Screening" rows with no round labels.
 
-- **`TARGET_CONFIDENT_RELEVANT` raised 20 → 100, removal deferred — OPEN (2026-08-04,
-  amended 2026-08-05).** The constant is the deep loop's satisficing stop: stop once this
-  many confident-relevant documents exist. **It has no production effect today**, because
-  the only thing that consults it — `evaluate_deep_stop` — is called only by the unwired
-  `run_deep_rounds` above. Its two residual live effects are that `run_search` echoes it
-  into the acquire payload as `target_confident_relevant` (read by nothing in `src/` or
-  the frontend), and that it must sit inside `[SEARCH_TARGET_MIN, SEARCH_TARGET_MAX]` for
-  the D5 `search.target` directive (pinned by
-  `test_default_target_is_within_the_accepted_override_range`). `SEARCH_TARGET_MAX` was
-  raised 60 → 100 alongside it, which *is* live: the directive now accepts targets up to
-  100. **Correction to the original rationale:** the raise was made on the reasoning that
-  a target of 20 capped measured recall by construction (ground truth is a review's full
-  reference list — 77 in the eval corpus's ADHD review). That reasoning only holds if the
-  loop runs. It does not, so the target was never truncating searches and was **not** a
-  contributor to the 2.4% mean search recall — look at single-round coverage, query
-  generation and the caps instead. Settle alongside the wiring decision: if the loop is
-  re-wired, note that `below_target` drives the `re_searched_still_thin` overlay, which at
-  a target of 100 would fire on almost every run and should probably key off
-  `THIN_CONFIDENT_RELEVANT` (8) instead.
+- **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
+  2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.
+  `TARGET_CONFIDENT_RELEVANT`, `SEARCH_TARGET_MIN/MAX`, the parser's `target` key, the
+  orchestrator-prompt line advertising it (stale 5–60 range) and the
+  `target_confident_relevant` payload echo are all deleted. Free text like "aim for 30
+  papers" now gets an honest parser refusal instead of compiling to a silent no-op (the
+  plan layer always discarded the value; nothing read the echo). `target_reached` stays
+  in the coverage CHECK constraint as a historical value — no migration. If a
+  "stop early at N" user feature is ever wanted, rebuild it at the runner's round gate,
+  not in the parser.
 
-- **Standard/deep wall clock removed — recorded (task 028, 2026-08-04).**
-  `STANDARD_WALL_CLOCK_S` and `DEEP_WALL_CLOCK_S` are `None`; the guards remain, so a
-  number restores the budget. Consequences accepted: `wall_clock_exceeded` and the deep
-  loop's clock-driven `budget_exhausted` are now rapid-only and unreachable at
-  standard/deep respectively; `ROUND_CAP = 3` becomes reachable at deep for the first
-  time; and, since `runtime/runner.py` has no step timeout, nothing bounds how long the
-  search stage may run. A deep run is now tens of minutes. If a latency bound is ever
-  needed again it belongs at the runner as a step timeout, not inside the fan-out where
-  it truncates an ordered list of queries.
+- **Wall clock removed entirely — recorded (tasks 028–029).** Task 028 removed the
+  standard/deep clocks; task 029 removed rapid's 30 s clock and the whole `stop_all`
+  mechanism with it — no planned call is ever skipped at any depth, and acquire's stop
+  vocabulary is `completed`/`error` (`wall_clock_exceeded` stays in the CHECK constraint
+  as a historical value). Volume is bounded by `record_cap_per_backend`
+  (owner-set 2026-08-06: rapid 50 / standard 100 / deep 200, per backend per round);
+  nothing bounds latency anywhere — rapid's worst case is its ~21 sequential provider
+  calls plus retries. If a latency bound is ever needed it belongs at the runner as a
+  step timeout, not inside the fan-out where it truncates an ordered list of queries.
 
 - **`http_budget` counts logical calls, not HTTP requests — OPEN (2026-08-04).**
   `http_calls_by_backend` increments once per `execute_call`, but backends paginate
@@ -348,9 +344,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   targets near one page keeps the two roughly equal, which is why the current values are
   sized that way — but the budget does not enforce that relationship, and
   `_TransportMixin.http_calls` (the real per-request counter) is incremented and never
-  read. Either consult it, or rename the budget to say what it counts. Also:
-  `wall_clock_s` is checked only at call entry, so a fully-paginated call can overrun the
-  deadline by the length of one call.
+  read. Either consult it, or rename the budget to say what it counts.
 - **Arm-B agentic search loop — DISCHARGED (task 015, ADR 0012).** The R&D direction landed
   as the deep depth: query reformulation from judged exemplars (via the production screen —
   the loop's judge IS `screen_v1`, no shadow relevance judgment), citation snowballing
@@ -454,9 +448,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   episode ran 343 s end-to-end while the loop driver honoured its 150 s budget), and the
   **coverage-record stop-condition grain — DISCHARGED (task 019).** Migration
   `921d3a781f3f` widens the stop-value vocabulary: clean completion now records
-  `completed`, a rapid wall-clock breach records `wall_clock_exceeded`;
-  `breadth_truncated` is retained for historical rows only. The deep-path
-  vocabulary is unchanged.
+  `completed`; `breadth_truncated` is retained for historical rows only.
+  (`wall_clock_exceeded`, task 019's rapid-breach value, joined the historical
+  set when task 029 removed the wall clock.)
 - **Rev-3.10 loop seams** — calibrated recall estimate (Chao capture-recapture /
   Undermind exponential-saturation fit → a user-facing "estimated % of relevant found" on
   the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must

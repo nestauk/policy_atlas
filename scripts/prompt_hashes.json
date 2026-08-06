@@ -7,6 +7,6 @@
   "backend/src/policy_atlas/evidence_base/extract/relevance_prompt.py": "47fb6b94ad83e5ce77fd5d5bff488298346a6032d70fc178de8df287e4062cbc",
   "backend/src/policy_atlas/evidence_base/sourcing/search_prompts.py": "5470c0882f9e3871ab45696a01c9062545dc6a13f0ddad204533b0a5ffa1c1d7",
   "backend/src/policy_atlas/evidence_base/synthesis/synthesis_prompts_v6.py": "6c6f45724a308d8d9c4b6703c218ee6b50eb8474c69c8a164342154a9bb5c141",
-  "backend/src/policy_atlas/runtime/orchestrator_prompt.py": "6108a52db8a40ac2c23e5010945939fd0d064ffc65348c7d8c26b7515ef3db6c",
+  "backend/src/policy_atlas/runtime/orchestrator_prompt.py": "6523f070fd43d065b1c12586b30017906d5f404365f86bda9c19572fd5861bf9",
   "backend/src/policy_atlas/runtime/planner_prompt.py": "bf6b0f996982a8343fa38d9c3410df14f7f1c0205fe406116629de5699106013"
 }

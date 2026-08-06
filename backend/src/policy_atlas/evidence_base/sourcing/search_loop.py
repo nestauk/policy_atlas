@@ -26,6 +26,7 @@ from policy_atlas.core.schema import (
     event_log,
     project_source_snapshot,
     search_coverage_record,
+    source_screening_result,
     source_snapshot,
 )
 from policy_atlas.core.usage import UsageAccumulator
@@ -74,30 +75,19 @@ CallVerb = Literal[
 CallStatus = Literal["ok", "error"]
 ArmName = Literal["reformulate", "snowball", "suggest", "diversity"]
 
-RAPID_WALL_CLOCK_S = 30
-# Standard and deep have no time budget: the clock was the only thing that ever
-# set `stop_all`, and because the fan-out runs backend-outer/plan-inner, a breach
-# during the OpenAlex leg cost the entire Overton leg — zero grey literature, and
-# the run still reported 'adequate'. Volume is bounded at acquisition instead
+# No wall clock at any depth (task 029): a time budget over an ordered fan-out
+# truncates the tail — a specific set of queries and providers, not a random
+# sample — and its breach once cost the entire Overton leg while the run still
+# reported 'adequate'. Volume is bounded at acquisition instead
 # (`record_cap_per_backend`), which brakes the thing that actually costs money.
-# Rapid keeps its clock: it is the interactive path, where latency is the point.
-STANDARD_WALL_CLOCK_S: int | None = None
-DEEP_WALL_CLOCK_S: int | None = None
+# There is deliberately no confident-relevant stop target either: the per-depth
+# `round_cap` is the budget, with `short_circuit` (SHORT_CIRCUIT_RATE) as the
+# yield-collapse early exit.
 ROUND_CAP = 3
 POS_EXEMPLARS = 8
 NEG_EXEMPLARS = 4
 SNOWBALL_SEEDS = 5
 SNOWBALL_RESULTS = 40
-# Deep-loop satisficing goal: stop once this many confident-relevant documents
-# exist in the scope. Raised 20 -> 100 (2026-08-04) pending the recall
-# measurement. Stopping at 20 caps measured recall by construction when ground
-# truth is a systematic review's full reference list (77 references in the eval
-# corpus's ADHD review), so the old value was a plausible contributor to the
-# 2.4% mean search recall. At 100 the target rarely fires and the loop runs to
-# `round_cap` instead — deliberately, so `scripts/eval_ground_truth/` can tell
-# "target too low" apart from "search too weak" before we decide whether this
-# constant should exist at all (see `docs/deferred.md`).
-TARGET_CONFIDENT_RELEVANT = 100
 CONFIDENT_FLOOR = 0.7
 SHORT_CIRCUIT_RATE = 1.0 / 50.0
 THIN_CONFIDENT_RELEVANT = 8
@@ -106,14 +96,6 @@ REFORMULATE_CALL_CAP = 4
 SNOWBALL_CALL_CAP = 6
 SUGGEST_CALL_CAP = 6
 DIVERSITY_CALL_MIN = 1
-
-# D5 (024 steering surface): user-directed override of TARGET_CONFIDENT_RELEVANT,
-# clamped to this accepted range. Out-of-range values are refused, never
-# silently clamped (honest refusal — see parse_search_directive).
-SEARCH_TARGET_MIN = 5
-# Must contain TARGET_CONFIDENT_RELEVANT: refusals are honest, so a ceiling
-# below the default would refuse a user asking for the value they already get.
-SEARCH_TARGET_MAX = 100
 
 
 class DepthConstants(TypedDict):
@@ -139,16 +121,13 @@ class DepthConstants(TypedDict):
     # (see `acquire_sources`). This is the run's volume brake: every acquired
     # record is embedded on acquisition and screened afterwards at SCREEN_REPS
     # LLM calls each, so this number — not the per-call cap — is what bounds
-    # spend. None means uncapped.
+    # spend. Owner-set (2026-08-06): rapid 50 / standard 100 / deep 200, per
+    # backend per round.
     #
-    # ponytail: 200 is sized from purpose (the deep loop's confident-relevant
-    # goal), not from measurement. `scripts/eval_ground_truth/` measures search
-    # recall against published-review ground truth; re-run it and set this from
-    # where recall stops improving. Note this cap and
-    # TARGET_CONFIDENT_RELEVANT move together: the target cannot be met from
-    # documents the cap never let through.
-    record_cap_per_backend: int | None
-    wall_clock_s: int | None
+    # ponytail: sized from methodology, not measurement. The ground-truth
+    # recall eval (scripts/eval_ground_truth/, other branch) is the instrument
+    # for revising these once rounds + arms are live.
+    record_cap_per_backend: int
     round_cap: int
     http_budget: dict[str, int]
     # Deep-round-loop arm selection (017, contract rev 2.9): which of the
@@ -161,17 +140,14 @@ class DepthConstants(TypedDict):
 DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     "rapid": {
         "result_cap_per_backend": 50,
-        # Rapid is one round of 50-per-call under a 30s clock — already small.
-        "record_cap_per_backend": None,
-        "wall_clock_s": RAPID_WALL_CLOCK_S,
+        "record_cap_per_backend": 50,
         "round_cap": 1,
         "http_budget": {"openalex": 20, "overton": 5},
         "arms": frozenset(),
     },
     "standard": {
         "result_cap_per_backend": 75,
-        "record_cap_per_backend": 150,
-        "wall_clock_s": STANDARD_WALL_CLOCK_S,
+        "record_cap_per_backend": 100,
         "round_cap": 2,
         "http_budget": {"openalex": 30, "overton": 8},
         "arms": frozenset({"reformulate", "diversity"}),
@@ -179,7 +155,6 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
     "deep": {
         "result_cap_per_backend": 100,
         "record_cap_per_backend": 200,
-        "wall_clock_s": DEEP_WALL_CLOCK_S,
         "round_cap": ROUND_CAP,
         "http_budget": {"openalex": 50, "overton": 15},
         "arms": frozenset({"reformulate", "snowball", "suggest", "diversity"}),
@@ -593,30 +568,32 @@ def overton_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
 
 def parse_search_directive(
     context: dict[str, Any],
-) -> tuple[SearchDepth, Any | None, int | None, list[str] | None]:
+) -> tuple[SearchDepth, Any | None, list[str] | None]:
     """Parse ``context["search"]`` using the fail-closed directive grammar.
+
+    The former D5 ``target`` key was removed with ``TARGET_CONFIDENT_RELEVANT``
+    (task 029): the round cap is the budget, so there is no stop target to
+    override. A directive still carrying it is refused as an unknown key —
+    honest refusal beats the silent no-op it previously compiled to.
 
     Args:
         context: Evidence-scope context JSON object.
 
     Returns:
-        ``(depth, raw_filters, target, guidance)``. Absent directive defaults
-        to rapid depth, no filters, no target override and no guidance (all
-        ``None``).
+        ``(depth, raw_filters, guidance)``. Absent directive defaults to rapid
+        depth, no filters and no guidance.
 
     Raises:
         SearchDirectiveError: If the directive has an unknown key, a malformed
-            depth value, a ``target`` outside ``[SEARCH_TARGET_MIN,
-            SEARCH_TARGET_MAX]`` (out-of-range values are refused, never
-            silently clamped), or a malformed ``guidance`` channel (B1: 1-5
+            depth value, or a malformed ``guidance`` channel (B1: 1-5
             non-empty, bounded, control-character-free strings).
     """
     raw = context.get("search")
     if raw is None:
-        return "rapid", None, None, None
+        return "rapid", None, None
     if not isinstance(raw, dict):
         raise SearchDirectiveError("search directive must be an object")
-    unknown = set(raw) - {"depth", "filters", "target", "guidance"}
+    unknown = set(raw) - {"depth", "filters", "guidance"}
     if unknown:
         raise SearchDirectiveError("search directive contains unknown keys")
     depth: SearchDepth = "rapid"
@@ -629,23 +606,12 @@ def parse_search_directive(
         depth = raw_depth
     if "filters" in raw and raw["filters"] is None:
         raise SearchDirectiveError("search directive filters must be an object")
-    target: int | None = None
-    if "target" in raw:
-        raw_target = raw["target"]
-        if isinstance(raw_target, bool) or not isinstance(raw_target, int):
-            raise SearchDirectiveError("search directive target must be an integer")
-        if raw_target < SEARCH_TARGET_MIN or raw_target > SEARCH_TARGET_MAX:
-            raise SearchDirectiveError(
-                f"search directive target must be between {SEARCH_TARGET_MIN} "
-                f"and {SEARCH_TARGET_MAX}"
-            )
-        target = raw_target
     guidance: list[str] | None = None
     if "guidance" in raw:
         guidance = parse_guidance_channel(
             raw["guidance"], error=SearchDirectiveError, max_chars=DIRECTIVE_STRING_MAX
         )
-    return depth, raw.get("filters"), target, guidance
+    return depth, raw.get("filters"), guidance
 
 
 def _object_block(raw: Any, *, label: str) -> dict[str, Any]:
@@ -868,17 +834,68 @@ def _with_filter_variants(plan: _PlannedCall, variant_count: int) -> list[_Plann
     ]
 
 
-def _count_existing_rounds(
+def count_existing_rounds(
     conn: Connection,
     *,
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
 ) -> int:
+    """Count completed search rounds for a scope (one coverage row per round).
+
+    ``run_search`` derives its own round index from this (round N+1 unlocks
+    the reformulate/snowball/suggest/diversity arms at N+1 >= 2), and the
+    runner's round gate reads it to enforce the depth's ``round_cap``.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope being searched.
+
+    Returns:
+        Number of ``search_coverage_record`` rows for the scope.
+    """
     count = conn.execute(
         select(func.count())
         .select_from(search_coverage_record)
         .where(search_coverage_record.c.project_id == project_id)
         .where(search_coverage_record.c.evidence_scope_id == scope_id)
+    ).scalar_one()
+    return int(count)
+
+
+def new_confident_relevant_for_run(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    run_id: uuid.UUID,
+) -> int:
+    """Count confident-relevant stage-1 rows written by one screen run.
+
+    Screening is incremental (NOT-EXISTS on prior non-failed stage-1 rows), so
+    the rows a screen run writes are exactly the documents new to that round —
+    this is the round's marginal yield, read from persisted provenance rather
+    than in-memory state so the runner's round gate survives park/resume.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        scope_id: Evidence scope being screened.
+        run_id: The screen run whose newly written rows to count.
+
+    Returns:
+        Count of that run's stage-1 rows with ``status='relevant'`` and
+        ``screen_decision_confidence >= CONFIDENT_FLOOR``.
+    """
+    count = conn.execute(
+        select(func.count())
+        .select_from(source_screening_result)
+        .where(source_screening_result.c.project_id == project_id)
+        .where(source_screening_result.c.evidence_scope_id == scope_id)
+        .where(source_screening_result.c.screened_by_run_id == run_id)
+        .where(source_screening_result.c.screen_stage == 1)
+        .where(source_screening_result.c.status == "relevant")
+        .where(source_screening_result.c.screen_decision_confidence >= CONFIDENT_FLOOR)
     ).scalar_one()
     return int(count)
 
@@ -912,62 +929,33 @@ def confident_relevant_count(
     return int(count)
 
 
-def should_escalate(
-    conn: Connection,
-    *,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-) -> bool:
-    """Return whether a rapid run is thin enough to need deep continuation.
-
-    Args:
-        conn: Open database connection.
-        project_id: Owning project.
-        scope_id: Evidence scope being searched.
-
-    Returns:
-        ``True`` when confident relevant evidence is below
-        ``THIN_CONFIDENT_RELEVANT``.
-    """
-    return (
-        confident_relevant_count(conn, project_id=project_id, scope_id=scope_id)
-        < THIN_CONFIDENT_RELEVANT
-    )
-
-
 def evaluate_deep_stop(
     *,
     round_index: int,
-    confident_relevant: int,
     new_confident_relevant: int,
     docs_screened_this_round: int,
-    wall_clock_breached: bool,
-    round_cap: int = ROUND_CAP,
-    target: int = TARGET_CONFIDENT_RELEVANT,
+    round_cap: int,
 ) -> StopDecision:
-    """Evaluate deep-loop stopping without touching the database.
+    """Evaluate round-loop stopping without touching the database.
+
+    There is deliberately no confident-relevant target (task 029): the round
+    cap is the budget, and ``short_circuit`` is the yield-collapse early exit.
 
     Args:
         round_index: Search round just completed.
-        confident_relevant: Current confident-relevant total.
         new_confident_relevant: New confident-relevant rows from this round.
         docs_screened_this_round: Stage-1 docs screened this round.
-        wall_clock_breached: Whether the deep wall-clock budget was exceeded.
-        round_cap: Maximum round index before the budget backstop fires.
-        target: Confident-relevant target (D5 ``search.target`` override, or
-            ``TARGET_CONFIDENT_RELEVANT`` when absent).
+        round_cap: The depth's round budget (``DEPTH_CONSTANTS[depth]["round_cap"]``).
 
     Returns:
         Stop decision with the raw stop condition, if any.
     """
-    if confident_relevant >= target:
-        return StopDecision(True, "target_reached")
     if round_index >= 2 and (
         docs_screened_this_round == 0
         or new_confident_relevant / docs_screened_this_round < SHORT_CIRCUIT_RATE
     ):
         return StopDecision(True, "short_circuit")
-    if wall_clock_breached or round_index >= round_cap:
+    if round_index >= round_cap:
         return StopDecision(True, "budget_exhausted")
     return StopDecision(False, None)
 
@@ -978,29 +966,27 @@ def finalise_deep_stop(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     stop_condition: str,
-    below_target: bool,
+    thin: bool,
 ) -> str:
-    """Write the final deep stop condition onto the latest coverage row.
+    """Write the final round-loop stop condition onto the latest coverage row.
 
     Args:
         conn: Open database connection.
         project_id: Owning project.
         scope_id: Evidence scope being searched.
         stop_condition: Raw stop condition from ``evaluate_deep_stop``.
-        below_target: Whether final confident-relevant count is below target.
+        thin: Whether the final confident-relevant count is below
+            ``THIN_CONFIDENT_RELEVANT`` — the honesty overlay that tells the
+            reader "we searched again and the evidence is still thin".
 
     Returns:
         Stop condition written to ``search_coverage_record`` after applying the
-        deep-thin overlay.
+        thin-evidence overlay.
 
     Raises:
         RuntimeError: If no search coverage row exists for the scope.
     """
-    final_value = (
-        "re_searched_still_thin"
-        if stop_condition != "target_reached" and below_target
-        else stop_condition
-    )
+    final_value = "re_searched_still_thin" if thin else stop_condition
     row = conn.execute(
         select(search_coverage_record.c.search_coverage_record_id)
         .where(search_coverage_record.c.project_id == project_id)
@@ -1175,35 +1161,26 @@ def _read_exemplars(
     ]
 
 
-def _suggest_grounded_screened_out(
-    conn: Connection,
-    *,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    pss_ids: list[str],
-) -> int:
-    if not pss_ids:
-        return 0
-    effective = screen.effective_screen_rows()
-    parsed = [uuid.UUID(pss_id) for pss_id in pss_ids]
-    count = conn.execute(
-        select(func.count())
-        .select_from(effective)
-        .where(effective.c.project_id == project_id)
-        .where(effective.c.evidence_scope_id == scope_id)
-        .where(effective.c.project_source_snapshot_id.in_(parsed))
-        .where(effective.c.status == "not_relevant")
-    ).scalar_one()
-    return int(count)
+def docs_screened_from_payload(payload: dict[str, Any]) -> int:
+    """Extract the stage-1 ``screened`` count from a screen component summary.
 
+    Stage-1 ``screened`` is the honest round-loop denominator: the number of
+    newly loaded docs before consensus insertion. Used by the runner's round
+    gate to evaluate ``short_circuit``.
 
-def _docs_screened_from_payload(payload: dict[str, Any]) -> int:
-    # Stage-1 ``screened`` is the honest deep-loop denominator: it is the
-    # number of newly loaded docs before consensus insertion.
+    Args:
+        payload: A screen component's ``component.completed`` summary.
+
+    Returns:
+        The stage-1 ``screened`` count.
+
+    Raises:
+        RuntimeError: If the payload lacks an integer ``screened`` count.
+    """
     value = payload.get("screened")
     if isinstance(value, int):
         return value
-    raise RuntimeError("deep loop screen_round payload must include stage-1 'screened'")
+    raise RuntimeError("round-loop screen payload must include stage-1 'screened'")
 
 
 def _compose_variant(query: str, clause: str) -> str:
@@ -1258,9 +1235,13 @@ def run_search(
     backends: list[acquire.SearchBackend],
     generation_backend: SearchGenerationBackend,
     embedder: EmbeddingBackend | None = None,
-    clock: Callable[[], float] = time.monotonic,
 ) -> dict[str, Any]:
     """Execute the depth-graded search strategy and persist acquired records.
+
+    Every planned call runs to completion — there is no time budget (task 029:
+    a clock over the ordered fan-out truncated a specific tail, historically
+    the whole Overton leg). Volume is bounded per round at acquisition by
+    ``record_cap_per_backend``.
 
     Args:
         conn: Open database connection; writes are delegated to acquire.
@@ -1270,7 +1251,6 @@ def run_search(
         backends: Configured search backends, executed in list order.
         generation_backend: Query generation backend.
         embedder: Optional embedding backend passed through to acquire.
-        clock: Monotonic clock dependency for wall-clock budget checks.
 
     Returns:
         Acquire counts with an added ``search`` summary dictionary.
@@ -1279,7 +1259,7 @@ def run_search(
         SearchDirectiveError: If the search directive or filters are malformed.
         RuntimeError: If generation fails.
     """
-    depth, raw_filters, search_target, guidance = parse_search_directive(context.context)
+    depth, raw_filters, guidance = parse_search_directive(context.context)
     constants = DEPTH_CONSTANTS[depth]
     backend_names = [backend.name for backend in backends]
     validated_filters = validate_scope_filters(raw_filters, backend_names=backend_names)
@@ -1294,7 +1274,7 @@ def run_search(
         _scope_wire_params_payload(wire_params_by_backend) if raw_filters is not None else None
     )
 
-    round_index = _count_existing_rounds(
+    round_index = count_existing_rounds(
         conn,
         project_id=project_id,
         scope_id=context.scope_id,
@@ -1307,7 +1287,7 @@ def run_search(
         depth=depth,
     ) if depth in ("deep", "standard") else dict.fromkeys(backend_names, 0)
 
-    start = clock()
+    started = time.monotonic()
     executed_calls: list[ExecutedCall] = []
     http_calls_by_backend = dict(prior_http_calls)
     queries_zero_result = dict.fromkeys(backend_names, 0)
@@ -1324,8 +1304,6 @@ def run_search(
     suggestions_grounded = 0
     suggestions_dropped = 0
     suggest_failures = 0
-    wall_clock_breached = False
-    stop_all = False
     generation_calls = 0
     usage_totals = UsageAccumulator()
 
@@ -1341,21 +1319,12 @@ def run_search(
         max_records: int | None = None,
         arm: ArmName | None = None,
     ) -> ExecutedCall | None:
-        nonlocal stop_all, wall_clock_breached
-        if stop_all:
-            return None
         backend_budget = constants["http_budget"].get(backend.name, 0)
         if http_calls_by_backend[backend.name] >= backend_budget:
             return None
         request_size = (
             max_records if max_records is not None else constants["result_cap_per_backend"]
         )
-        budget_s = constants["wall_clock_s"]
-        if budget_s is not None and clock() - start > budget_s:
-            wall_clock_breached = True
-            stop_all = True
-            return None
-
         http_calls_by_backend[backend.name] += 1
         try:
             records = fetch(request_size)
@@ -1446,10 +1415,6 @@ def run_search(
                 len(filter_variants_by_backend[backend.name]),
             ):
                 execute_plan(backend, plan)
-                if stop_all:
-                    break
-            if stop_all:
-                break
     elif depth in ("deep", "standard") and round_index >= 2:
         positive_records, _negative_records, positive_exemplars, negative_exemplars = (
             _read_exemplars(
@@ -1487,10 +1452,6 @@ def run_search(
                             arm="reformulate",
                             max_records=quota,
                         )
-                        if stop_all:
-                            break
-                    if stop_all:
-                        break
             elif backend.name == "overton":
                 for paraphrase in overton_paraphrases[:2]:
                     for plan in _with_filter_variants(
@@ -1503,12 +1464,6 @@ def run_search(
                             arm="reformulate",
                             max_records=quota,
                         )
-                        if stop_all:
-                            break
-                    if stop_all:
-                        break
-            if stop_all:
-                break
 
         openalex_backend = next(
             (
@@ -1517,7 +1472,7 @@ def run_search(
             ),
             None,
         )
-        if "snowball" in constants["arms"] and openalex_backend is not None and not stop_all:
+        if "snowball" in constants["arms"] and openalex_backend is not None:
             seeds = [
                 record for record in positive_records
                 if record.metadata.get("backend") == "openalex"
@@ -1554,8 +1509,6 @@ def run_search(
                 )
                 if call is not None and call.status == "ok":
                     snowball_records += len(call.records)
-                if stop_all:
-                    break
 
             referenced: list[str] = []
             seen_refs: set[str] = set()
@@ -1582,7 +1535,7 @@ def run_search(
                 referenced
                 and remaining_snowball > 0
                 and arm_calls["snowball"] < SNOWBALL_CALL_CAP
-                and not stop_all
+               
             ):
                 execute_call(
                     openalex_backend,
@@ -1606,7 +1559,7 @@ def run_search(
             ),
             None,
         )
-        if "suggest" in constants["arms"] and suggest_backend is not None and not stop_all:
+        if "suggest" in constants["arms"] and suggest_backend is not None:
             try:
                 generation_calls += 1
                 suggest_wire, usage = generation_backend.suggest(
@@ -1664,7 +1617,7 @@ def run_search(
                 for index, suggestion in enumerate(suggestions):
                     if index in grounded_indices:
                         continue
-                    if arm_calls["suggest"] >= SUGGEST_CALL_CAP or stop_all:
+                    if arm_calls["suggest"] >= SUGGEST_CALL_CAP:
                         break
                     title = cast(str, suggestion["title"])
                     suggestion_doi = _normalized_doi(suggestion.get("doi"))
@@ -1712,7 +1665,7 @@ def run_search(
             (backend for backend in backends if backend.name == "openalex"),
             None,
         )
-        if diversity_backend is not None and not stop_all:
+        if diversity_backend is not None:
             if round_index == 2:
                 diversity_query = context.intent
                 diversity_origin: QueryOrigin = "verbatim"
@@ -1741,8 +1694,6 @@ def run_search(
                         arm="diversity",
                         max_records=reserve,
                     )
-                    if stop_all:
-                        break
     else:
         wire, usage = generation_backend.generate_queries(
             QueriesPayload(intent=context.intent, guidance=guidance)
@@ -1775,10 +1726,6 @@ def run_search(
                     backend_calls.append(call)
                     if plan.group_key is not None:
                         generated_groups.setdefault(plan.group_key, []).append(call)
-                if stop_all:
-                    break
-            if stop_all:
-                break
 
             zero_groups = 0
             for calls in generated_groups.values():
@@ -1813,17 +1760,7 @@ def run_search(
                 ):
                     if execute_plan(backend, fallback) is not None:
                         fallback_to_verbatim[backend.name] = True
-                    if stop_all:
-                        break
-            if stop_all:
-                break
 
-    elapsed = clock() - start
-    # wall_clock_breached is already known here — the loop above set it before
-    # this call, in the same synchronous invocation — so acquire's coverage
-    # row gets the honest stop condition on creation; no update-after pass is
-    # needed (unlike the deep loop's cross-round finalise_deep_stop, whose
-    # final stop condition isn't known until later rounds complete).
     counts = acquire.acquire_sources(
         conn,
         project_id=project_id,
@@ -1834,28 +1771,19 @@ def run_search(
         executed_calls=executed_calls,
         depth=depth,
         scope_wire_params=scope_wire_params,
-        wall_clock_breached=wall_clock_breached,
         search_guidance=guidance,
         record_cap_per_backend=constants["record_cap_per_backend"],
     )
     counts["search"] = {
         "depth": depth,
         "round_index": round_index,
-        # D5 (024 steering surface): executed TARGET_CONFIDENT_RELEVANT override,
-        # echoed here regardless of depth — the deep loop's own stop-target
-        # bookkeeping (run_deep_rounds / evaluate_deep_stop) is a separate,
-        # not-yet-wired continuation driver this only threads a value into.
-        "target_confident_relevant": (
-            search_target if search_target is not None else TARGET_CONFIDENT_RELEVANT
-        ),
         "queries_executed": {
             name: sum(1 for call in executed_calls if call.backend_name == name)
             for name in backend_names
         },
         "queries_zero_result": queries_zero_result,
         "fallback_to_verbatim": fallback_to_verbatim,
-        "wall_clock_s": elapsed,
-        "wall_clock_breached": wall_clock_breached,
+        "wall_clock_s": time.monotonic() - started,
         "generation_calls": generation_calls,
         "arm_calls": arm_calls,
         "suggestions_proposed": suggestions_proposed,
@@ -1870,146 +1798,3 @@ def run_search(
     }
     counts["usage_totals"] = usage_totals.payload()
     return counts
-
-
-def run_deep_rounds(
-    conn: Connection,
-    *,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    acquire_round: Callable[[], dict[str, Any]],
-    screen_round: Callable[[], dict[str, Any]],
-    start_round: int = 2,
-    clock: Callable[[], float] = time.monotonic,
-    target: int = TARGET_CONFIDENT_RELEVANT,
-) -> dict[str, Any]:
-    """Run skeleton-sequenced deep acquire/screen rounds to a stop.
-
-    Args:
-        conn: Open database connection.
-        project_id: Owning project.
-        scope_id: Evidence scope being searched.
-        acquire_round: Callable that executes one acquire component and returns
-            its ``component.completed`` payload.
-        screen_round: Callable that executes one stage-1 screen component and
-            returns its ``component.completed`` payload.
-        start_round: First deep continuation round. Defaults to round 2 because
-            round 1 is the already-screened rapid leg.
-        clock: Monotonic clock dependency for deterministic tests.
-        target: Confident-relevant target (D5 ``search.target`` override, or
-            ``TARGET_CONFIDENT_RELEVANT`` when absent — byte-identical to
-            as-built when unset).
-
-    Returns:
-        Deep-loop summary containing per-round costs, final stop condition,
-        final confident-relevant count, wall-clock seconds, the executed
-        target and suggest-arm quality counters.
-
-    Raises:
-        RuntimeError: If a screen payload does not include the stage-1
-            ``screened`` count or finalization lacks a coverage row.
-    """
-    started = clock()
-    round_index = start_round
-    rounds: list[dict[str, Any]] = []
-    suggest_pss_ids: list[str] = []
-    prior_confident = confident_relevant_count(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-    )
-    final_stop_condition: str | None = None
-    overlay_applied = False
-
-    while True:
-        elapsed = clock() - started
-        if DEEP_WALL_CLOCK_S is not None and elapsed > DEEP_WALL_CLOCK_S:
-            final_stop_condition = finalise_deep_stop(
-                conn,
-                project_id=project_id,
-                scope_id=scope_id,
-                stop_condition="budget_exhausted",
-                below_target=prior_confident < target,
-            )
-            overlay_applied = final_stop_condition != "budget_exhausted"
-            break
-
-        acquire_payload = acquire_round()
-        by_verb = acquire_payload.get("acquired_pss_by_verb")
-        if isinstance(by_verb, dict):
-            for verb in ("lookup_dois", "lookup_title"):
-                values = by_verb.get(verb)
-                if isinstance(values, list):
-                    suggest_pss_ids.extend(str(value) for value in values)
-
-        screen_payload = screen_round()
-        docs_screened = _docs_screened_from_payload(screen_payload)
-        confident = confident_relevant_count(
-            conn,
-            project_id=project_id,
-            scope_id=scope_id,
-        )
-        new_confident = max(0, confident - prior_confident)
-        cost = None if new_confident == 0 else docs_screened / new_confident
-        rounds.append(
-            {
-                "round": round_index,
-                "docs_screened": docs_screened,
-                "new_confident_relevant": new_confident,
-                "cost_per_marginal_confident_relevant": cost,
-            }
-        )
-
-        wall_clock_breached = (
-            DEEP_WALL_CLOCK_S is not None and clock() - started > DEEP_WALL_CLOCK_S
-        )
-        decision = evaluate_deep_stop(
-            round_index=round_index,
-            confident_relevant=confident,
-            new_confident_relevant=new_confident,
-            docs_screened_this_round=docs_screened,
-            wall_clock_breached=wall_clock_breached,
-            round_cap=DEPTH_CONSTANTS["deep"]["round_cap"],
-            target=target,
-        )
-        if decision.stop:
-            if decision.stop_condition is None:
-                raise RuntimeError("deep stop decision missing stop_condition")
-            final_stop_condition = finalise_deep_stop(
-                conn,
-                project_id=project_id,
-                scope_id=scope_id,
-                stop_condition=decision.stop_condition,
-                below_target=confident < target,
-            )
-            overlay_applied = final_stop_condition != decision.stop_condition
-            prior_confident = confident
-            break
-
-        prior_confident = confident
-        round_index += 1
-
-    if final_stop_condition is None:
-        raise RuntimeError("deep loop ended without a stop condition")
-
-    suggest_grounded_screened_out = _suggest_grounded_screened_out(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        pss_ids=suggest_pss_ids,
-    )
-    wall_clock_s = clock() - started
-    return {
-        "rounds": rounds,
-        "stop_condition": final_stop_condition,
-        "confident_relevant": prior_confident,
-        "wall_clock_s": wall_clock_s,
-        "overlay_applied": overlay_applied,
-        "target_confident_relevant": target,
-        "suggest": {
-            "acquired_pss": suggest_pss_ids,
-            "acquired": len(suggest_pss_ids),
-            "grounded_screened_out": suggest_grounded_screened_out,
-        },
-        "suggest_grounded_screened_out": suggest_grounded_screened_out,
-    }

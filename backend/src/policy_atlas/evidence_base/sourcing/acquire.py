@@ -529,7 +529,6 @@ def acquire_sources(
     executed_calls: Sequence[ExecutedSearchCall],
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
-    wall_clock_breached: bool = False,
     search_guidance: list[str] | None = None,
     record_cap_per_backend: int | None = None,
 ) -> dict[str, Any]:
@@ -553,11 +552,6 @@ def acquire_sources(
         depth: Search-depth directive recorded in events and coverage.
         scope_wire_params: Per-backend executed wire params or variant payloads
             recorded on the coverage record.
-        wall_clock_breached: Whether the calling search strategy's own
-            wall-clock budget was exceeded (task 019: the rapid/standard
-            fan-out's honest stop-grain signal, mirroring the deep loop's
-            ``budget_exhausted``). Ignored when ``any_error`` is true — an
-            error stop is always reported as ``'error'``.
         search_guidance: B1 (024 steering surface) executed ``search.guidance``
             list, echoed verbatim onto ``search_coverage_record.scope_filters``
             as a sibling ``guidance`` key when present.
@@ -931,18 +925,10 @@ def acquire_sources(
     # run -> inadequate (nothing screenable came back). An empty-but-successful
     # backend beside a productive one is honest coverage, not inadequacy.
     #
-    # Honest stop attribution (task 019 item 5): a clean run that never hit an
-    # error or its own wall-clock budget is 'completed', not a truncation — the
-    # old default falsely claimed breadth_truncated on every run. A run that
-    # stopped because the calling search strategy's wall clock fired is
-    # 'wall_clock_exceeded', the rapid/standard fan-out's mirror of the deep
-    # loop's budget_exhausted.
-    if any_error:
-        stop_condition = "error"
-    elif wall_clock_breached:
-        stop_condition = "wall_clock_exceeded"
-    else:
-        stop_condition = "completed"
+    # Honest stop attribution (task 019 item 5): a clean run is 'completed',
+    # never a claimed truncation. 'wall_clock_exceeded' left the vocabulary
+    # with the wall clock itself (task 029) — every planned call now runs.
+    stop_condition = "error" if any_error else "completed"
     usable = totals["acquired"] + totals["already_acquired"]
     adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"
 

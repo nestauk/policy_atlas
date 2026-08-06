@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
-from contextlib import suppress
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 import pytest
@@ -22,35 +20,21 @@ from policy_atlas.core.schema import (
     search_coverage_record,
     source_screening_result,
 )
-from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.assess.screen import ScreenContext, screen_sources
-from policy_atlas.evidence_base.assess.screen_prompt import (
-    ScreenEnvelopePayload,
-    ScreenFullTextPayload,
-    ScreenRepWire,
-)
 from policy_atlas.evidence_base.sourcing.acquire import AcquireContext, BackendCaps
 from policy_atlas.evidence_base.sourcing.search_loop import (
     CONFIDENT_FLOOR,
-    DEEP_WALL_CLOCK_S,
     DEPTH_CONSTANTS,
     DIVERSITY_FRACTION,
     NEG_EXEMPLARS,
     POS_EXEMPLARS,
-    RAPID_WALL_CLOCK_S,
     RCT_CLAUSE,
     REFORMULATE_CALL_CAP,
-    ROUND_CAP,
-    SHORT_CIRCUIT_RATE,
     SNOWBALL_SEEDS,
     SR_CLAUSE,
     SUGGEST_CALL_CAP,
-    TARGET_CONFIDENT_RELEVANT,
-    THIN_CONFIDENT_RELEVANT,
-    confident_relevant_count,
-    run_deep_rounds,
+    finalise_deep_stop,
+    new_confident_relevant_for_run,
     run_search,
-    should_escalate,
 )
 from policy_atlas.evidence_base.sourcing.search_prompts import (
     EXEMPLAR_ABSTRACT_MAX,
@@ -185,46 +169,6 @@ class ScriptedBackend:
         key = "|".join(dois)
         self.calls.append(BackendCall("lookup_dois", key, {}, max_results, list(dois)))
         return self._limit(self._consume("lookup_dois", key), max_results)
-
-
-class TitleScriptedScreeningBackend:
-    """Stage-1 screening double driven by acquired document titles."""
-
-    mode = "scripted"
-
-    def screen_envelope(
-        self,
-        payload: ScreenEnvelopePayload,
-        *,
-        rep_index: int = 0,
-    ) -> UsageResult[ScreenRepWire]:
-        """Return a deterministic rep from the title prefix."""
-        del rep_index
-        decision: Literal["relevant", "not_relevant"] = (
-            "relevant" if payload.title.startswith("Relevant") else "not_relevant"
-        )
-        return (
-            ScreenRepWire(
-                decision=decision,
-                confidence=0.9,
-                reason=f"Title scripted as {decision}.",
-            ),
-            None,
-        )
-
-    def screen_fulltext(
-        self, payload: ScreenFullTextPayload
-    ) -> UsageResult[ScreenRepWire]:
-        """Return a deterministic full-text confirmation."""
-        del payload
-        return (
-            ScreenRepWire(
-                decision="relevant",
-                confidence=0.9,
-                reason="Scripted full-text confirmation.",
-            ),
-            None,
-        )
 
 
 def _context(scope_id: uuid.UUID, *, intent: str = "Test intent") -> AcquireContext:
@@ -423,61 +367,6 @@ def _wire_suggestions(papers: list[dict[str, Any]]) -> SearchSuggestWire:
     return SearchSuggestWire(papers=[SuggestedPaper(**paper) for paper in papers])
 
 
-def _fixed_clock(values: list[float]) -> Callable[[], float]:
-    iterator = iter(values)
-    last = values[-1]
-
-    def clock() -> float:
-        nonlocal last
-        with suppress(StopIteration):
-            last = next(iterator)
-        return last
-
-    return clock
-
-
-def _scripted_round_runner(
-    conn: Connection,
-    *,
-    project_id: uuid.UUID,
-    scope_id: uuid.UUID,
-    docs_screened: list[int],
-    new_confident: list[int],
-    coverage_start: datetime,
-) -> tuple[Callable[[], dict[str, Any]], Callable[[], dict[str, Any]], list[uuid.UUID]]:
-    state = {"round": 0}
-    coverage_run_ids: list[uuid.UUID] = []
-
-    def acquire_round() -> dict[str, Any]:
-        index = state["round"]
-        run_id = seed_run(conn, project_id)
-        coverage_run_ids.append(run_id)
-        _seed_coverage_row(
-            conn,
-            project_id=project_id,
-            scope_id=scope_id,
-            run_id=run_id,
-            created_at=coverage_start + timedelta(seconds=index),
-        )
-        return {"acquired_pss_by_verb": {}}
-
-    def screen_round() -> dict[str, Any]:
-        index = state["round"]
-        for offset in range(new_confident[index]):
-            _seed_screened_source(
-                conn,
-                project_id=project_id,
-                run_id=seed_run(conn, project_id),
-                scope_id=scope_id,
-                title=f"Round {index} relevant {offset}",
-                confidence=CONFIDENT_FLOOR,
-            )
-        state["round"] += 1
-        return {"screened": docs_screened[index]}
-
-    return acquire_round, screen_round, coverage_run_ids
-
-
 def test_rapid_fanout_events_failed_variant_isolated(conn: Connection) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
@@ -638,7 +527,7 @@ def test_zero_result_generated_queries_count_and_openalex_fallback(
     assert openalex_search_events[-1]["result_count"] == 1
 
 
-def test_rapid_result_cap_is_flat_per_call_and_wall_clock_stop(
+def test_rapid_result_cap_is_flat_per_call(
     conn: Connection,
 ) -> None:
     project_id, run_id = seed_project_and_run(conn)
@@ -676,58 +565,20 @@ def test_rapid_result_cap_is_flat_per_call_and_wall_clock_stop(
     assert all(call.max_results == rapid_quota for call in capped_backend.calls)
     assert capped["results_returned"] == rapid_quota * 15
     assert capped["search"]["queries_executed"]["openalex"] == 15
-    # Honest stop attribution (task 019 item 5): exhausting the planned fan-out
-    # is not a wall-clock breach and not an error — a clean completion. (Nothing
-    # "caps" here: there is no run cap, and rapid's OpenAlex http_budget of 20
-    # is never reached by a 15-call fan-out.)
-    assert capped["search"]["wall_clock_breached"] is False
+    # Honest stop attribution: exhausting the planned fan-out is not an error —
+    # a clean completion. (Rapid's OpenAlex http_budget of 20 is never reached
+    # by a 15-call fan-out; the per-round record cap bites at acquisition, not
+    # here — the scripted records above are cross-call duplicates and dedup to
+    # a handful of acquired rows.)
     assert capped["stop_condition"] == "completed"
 
-    second_run = seed_run(conn, project_id)
-    generation_2 = ScriptedGenerationBackend(
-        queries=[_wire_queries([f"clock query {index}" for index in range(5)])]
-    )
-    clock_backend = ScriptedBackend(
-        scripts={"search": [[oa_record(f"clock-{index}")] for index in range(15)]}
-    )
-    clock = _fixed_clock([0.0, 0.0, 1.0, 2.0, RAPID_WALL_CLOCK_S + 1.0])
 
-    stopped = run_search(
-        conn,
-        project_id=project_id,
-        run_id=second_run,
-        context=_context(scope_id),
-        backends=[clock_backend],
-        generation_backend=generation_2,
-        clock=clock,
-    )
-
-    assert len(clock_backend.calls) == 3
-    assert stopped["search"]["queries_executed"]["openalex"] == 3
-    assert stopped["search"]["wall_clock_breached"] is True
-
-    # Honest stop attribution (task 019 item 5): the rapid/standard fan-out's
-    # own wall-clock breach reaches the coverage record run_search creates,
-    # with no update-after pass — acquire_sources sees wall_clock_breached
-    # before it ever writes the row.
-    assert stopped["stop_condition"] == "wall_clock_exceeded"
-    row = conn.execute(
-        select(search_coverage_record)
-        .where(search_coverage_record.c.acquired_by_run_id == second_run)
-    ).one()
-    assert row.stop_condition == "wall_clock_exceeded"
-
-
-def test_standard_fanout_has_no_wall_clock(conn: Connection) -> None:
-    """Standard has no time budget, so no query is skipped for being late.
-
-    The clock was the only thing that ever set ``stop_all``, and the fan-out
-    runs backend-outer/plan-inner: a breach part-way through the OpenAlex leg
-    skipped the whole Overton leg. Volume is bounded at acquisition now
-    (``record_cap_per_backend``), so an elapsed time far past the old 75 s
-    budget must leave every planned call intact.
-    """
-    assert DEPTH_CONSTANTS["standard"]["wall_clock_s"] is None
+def test_fanout_runs_every_planned_call_with_no_time_budget(
+    conn: Connection,
+) -> None:
+    """No wall clock exists at any depth (task 029), so no planned query is
+    ever skipped for lateness. The old clock's breach mid-fan-out silently cost
+    every remaining call — historically the whole Overton leg."""
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id, context={"search": {"depth": "standard"}})
     generation = ScriptedGenerationBackend(
@@ -744,11 +595,9 @@ def test_standard_fanout_has_no_wall_clock(conn: Connection) -> None:
         context=_standard_context(scope_id),
         backends=[backend],
         generation_backend=generation,
-        clock=_fixed_clock([0.0, 10_000.0]),
     )
 
     assert len(backend.calls) == 15
-    assert counts["search"]["wall_clock_breached"] is False
     assert counts["stop_condition"] == "completed"
 
 
@@ -1165,159 +1014,6 @@ def test_suggestion_grounding_matrix_and_screened_out_counter(
     doi_call = next(call for call in backend.calls if call.verb == "lookup_dois")
     assert doi_call.values == ["10.123/abc", "10.123/out"]
 
-    lookup_doi_pss_ids = cast("list[str]", counts["acquired_pss_by_verb"]["lookup_dois"])
-    screened_out_pss = uuid.UUID(lookup_doi_pss_ids[1])
-    _seed_screening(
-        conn,
-        project_id=project_id,
-        run_id=seed_run(conn, project_id),
-        scope_id=scope_id,
-        pss_id=screened_out_pss,
-        status="not_relevant",
-        confidence=0.95,
-    )
-
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=lambda: {"acquired_pss_by_verb": counts["acquired_pss_by_verb"]},
-        screen_round=lambda: {"screened": 1},
-        start_round=2,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
-    )
-
-    assert summary["suggest"]["grounded_screened_out"] == 1
-    assert summary["suggest_grounded_screened_out"] == 1
-
-
-def test_run_deep_rounds_target_reached_stop_finalises_latest_row(
-    conn: Connection,
-) -> None:
-    project_id, run_id = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    for index in range(TARGET_CONFIDENT_RELEVANT):
-        _seed_screened_source(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            scope_id=scope_id,
-            title=f"Target relevant {index}",
-            confidence=CONFIDENT_FLOOR,
-        )
-    acquire_round, screen_round, coverage_run_ids = _scripted_round_runner(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        docs_screened=[0],
-        new_confident=[0],
-        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=screen_round,
-        start_round=2,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
-    )
-
-    rows = _coverage_rows(conn, project_id)
-    assert len(rows) == 1
-    assert coverage_run_ids == [rows[0].acquired_by_run_id]
-    assert rows[0].stop_condition == "target_reached"
-    assert summary["stop_condition"] == "target_reached"
-    assert summary["overlay_applied"] is False
-
-
-def test_run_deep_rounds_target_override_honoured(conn: Connection) -> None:
-    """D5 search.target: a lower override stops the loop the as-built default would not.
-
-    Only 5 confident-relevant docs are seeded — well below
-    TARGET_CONFIDENT_RELEVANT — so the as-built default would not stop on
-    "target_reached" here; passing target=5 does.
-    """
-    project_id, run_id = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    override_target = 5
-    for index in range(override_target):
-        _seed_screened_source(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            scope_id=scope_id,
-            title=f"Override relevant {index}",
-            confidence=CONFIDENT_FLOOR,
-        )
-    acquire_round, screen_round, coverage_run_ids = _scripted_round_runner(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        docs_screened=[0],
-        new_confident=[0],
-        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=screen_round,
-        start_round=2,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
-        target=override_target,
-    )
-
-    rows = _coverage_rows(conn, project_id)
-    assert len(rows) == 1
-    assert coverage_run_ids == [rows[0].acquired_by_run_id]
-    assert rows[0].stop_condition == "target_reached"
-    assert summary["stop_condition"] == "target_reached"
-    assert summary["target_confident_relevant"] == override_target
-    assert summary["overlay_applied"] is False
-
-
-def test_run_deep_rounds_default_target_is_as_built_constant(conn: Connection) -> None:
-    """Absent target ≡ as-built: run_deep_rounds' default equals TARGET_CONFIDENT_RELEVANT."""
-    project_id, run_id = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    for index in range(TARGET_CONFIDENT_RELEVANT):
-        _seed_screened_source(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            scope_id=scope_id,
-            title=f"Default target relevant {index}",
-            confidence=CONFIDENT_FLOOR,
-        )
-    acquire_round, screen_round, _coverage_run_ids = _scripted_round_runner(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        docs_screened=[0],
-        new_confident=[0],
-        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=screen_round,
-        start_round=2,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
-    )
-
-    assert summary["stop_condition"] == "target_reached"
-    assert summary["target_confident_relevant"] == TARGET_CONFIDENT_RELEVANT
-
-
-# --- B1 search.guidance: query generation + provenance echo ---
-
 
 def test_search_guidance_flows_to_query_generation_and_provenance(conn: Connection) -> None:
     """B1 behavioural + isolation: search.guidance reaches query GENERATION
@@ -1403,250 +1099,132 @@ def test_search_guidance_leaves_evidence_scope_row_unchanged(conn: Connection) -
     assert dict(row.context) == directive
 
 
-def test_run_deep_rounds_short_circuit_overlay_below_target(
+def test_finalise_deep_stop_writes_raw_condition_when_not_thin(
     conn: Connection,
 ) -> None:
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
-    for index in range(THIN_CONFIDENT_RELEVANT - 1):
-        _seed_screened_source(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            scope_id=scope_id,
-            title=f"Thin relevant {index}",
-            confidence=CONFIDENT_FLOOR,
-        )
-    acquire_round, screen_round, _coverage_run_ids = _scripted_round_runner(
+    _seed_coverage_row(conn, project_id=project_id, scope_id=scope_id, run_id=run_id)
+
+    final = finalise_deep_stop(
         conn,
         project_id=project_id,
         scope_id=scope_id,
-        docs_screened=[10],
-        new_confident=[0],
-        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
+        stop_condition="budget_exhausted",
+        thin=False,
     )
 
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=screen_round,
-        start_round=2,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
-    )
-
-    rows = _coverage_rows(conn, project_id)
-    assert len(rows) == 1
-    assert rows[-1].stop_condition == "re_searched_still_thin"
-    assert summary["stop_condition"] == "re_searched_still_thin"
-    assert summary["overlay_applied"] is True
+    assert final == "budget_exhausted"
+    assert _coverage_rows(conn, project_id)[-1].stop_condition == "budget_exhausted"
 
 
-def test_run_deep_rounds_round_cap_budget_overlay_below_target(
+def test_finalise_deep_stop_thin_overlay_wins_over_raw_condition(
     conn: Connection,
 ) -> None:
-    project_id, _run_id = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    docs = [100, 100]
-    new_confident = [2, 2]
-    assert new_confident[0] / docs[0] == pytest.approx(SHORT_CIRCUIT_RATE)
-    acquire_round, screen_round, _coverage_run_ids = _scripted_round_runner(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        docs_screened=docs,
-        new_confident=new_confident,
-        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=screen_round,
-        start_round=ROUND_CAP - 1,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 2.0, 3.0, 4.0]),
-    )
-
-    rows = _coverage_rows(conn, project_id)
-    assert len(rows) == 2
-    assert rows[0].stop_condition == "breadth_truncated"
-    assert rows[1].stop_condition == "re_searched_still_thin"
-    assert summary["rounds"][-1]["round"] == ROUND_CAP
-    assert summary["stop_condition"] == "re_searched_still_thin"
-    assert summary["overlay_applied"] is True
-
-
-def test_run_deep_rounds_elapsed_time_never_truncates_the_loop(
-    conn: Connection,
-) -> None:
-    """Deep has no time budget: elapsed time cannot cut a round short.
-
-    Standard and deep trade the wall clock for a per-round acquisition cap
-    (``record_cap_per_backend``); only rapid still has a clock. Under the old
-    150 s budget this clock would have stopped the loop with
-    ``budget_exhausted`` before a single round ran.
-    """
-    assert DEEP_WALL_CLOCK_S is None
-    project_id, _run_id = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    acquire_round, screen_round, _coverage_run_ids = _scripted_round_runner(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        docs_screened=[100, 100],
-        new_confident=[2, 2],
-        coverage_start=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-
-    summary = run_deep_rounds(
-        conn,
-        project_id=project_id,
-        scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=screen_round,
-        start_round=2,
-        clock=_fixed_clock([0.0, 10_000.0]),
-    )
-
-    assert [entry["round"] for entry in summary["rounds"]] == [2, ROUND_CAP]
-    assert summary["wall_clock_s"] == 10_000.0
-
-
-def test_should_escalate_boundary(conn: Connection) -> None:
+    """The honesty overlay (task 029) keys on THIN_CONFIDENT_RELEVANT, not a
+    stop target: however the loop stopped, a thin corpus reports
+    're_searched_still_thin' so the reader knows the evidence base is weak."""
     project_id, run_id = seed_project_and_run(conn)
     scope_id = seed_scope(conn, project_id)
-    for index in range(THIN_CONFIDENT_RELEVANT - 1):
-        _seed_screened_source(
-            conn,
-            project_id=project_id,
-            run_id=run_id,
-            scope_id=scope_id,
-            title=f"Boundary relevant {index}",
-            confidence=CONFIDENT_FLOOR,
-        )
+    _seed_coverage_row(conn, project_id=project_id, scope_id=scope_id, run_id=run_id)
 
-    assert confident_relevant_count(conn, project_id=project_id, scope_id=scope_id) == 7
-    assert should_escalate(conn, project_id=project_id, scope_id=scope_id) is True
-
-    _seed_screened_source(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        scope_id=scope_id,
-        title="Boundary relevant 7",
-        confidence=CONFIDENT_FLOOR,
-    )
-
-    assert confident_relevant_count(conn, project_id=project_id, scope_id=scope_id) == 8
-    assert should_escalate(conn, project_id=project_id, scope_id=scope_id) is False
-
-
-def test_rapid_thin_flow_runs_one_bounded_deep_continuation(
-    conn: Connection,
-) -> None:
-    project_id, rapid_run = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, project_id)
-    generation = ScriptedGenerationBackend(
-        queries=[_wire_queries(["thin rapid query"])],
-        reformulations=[_wire_queries([])],
-        suggestions=[SearchSuggestWire(papers=[])],
-    )
-    rapid_backend = ScriptedBackend(
-        scripts={
-            "search": [
-                [oa_record(f"thin-{index}", title=f"Relevant thin {index}") for index in range(7)],
-                [],
-                [],
-            ]
-        }
-    )
-
-    run_search(
-        conn,
-        project_id=project_id,
-        run_id=rapid_run,
-        context=_context(scope_id),
-        backends=[rapid_backend],
-        generation_backend=generation,
-    )
-    screen_sources(
-        conn,
-        project_id=project_id,
-        run_id=seed_run(conn, project_id),
-        context=ScreenContext(scope_id=scope_id, intent="Test intent", context={}),
-        screening_backend=TitleScriptedScreeningBackend(),
-    )
-    assert should_escalate(conn, project_id=project_id, scope_id=scope_id) is True
-
-    deep_calls = {"count": 0}
-
-    def acquire_round() -> dict[str, Any]:
-        deep_calls["count"] += 1
-        return run_search(
-            conn,
-            project_id=project_id,
-            run_id=seed_run(conn, project_id),
-            context=_deep_context(scope_id),
-            backends=[
-                ScriptedBackend(
-                    caps=BackendCaps(has_snowball=False, has_title_lookup=False),
-                    scripts={"search": [[]]},
-                )
-            ],
-            generation_backend=generation,
-        )
-
-    summary = run_deep_rounds(
+    final = finalise_deep_stop(
         conn,
         project_id=project_id,
         scope_id=scope_id,
-        acquire_round=acquire_round,
-        screen_round=lambda: screen_sources(
-            conn,
-            project_id=project_id,
-            run_id=seed_run(conn, project_id),
-            context=ScreenContext(scope_id=scope_id, intent="Test intent", context={}),
-            screening_backend=TitleScriptedScreeningBackend(),
-        ),
-        start_round=2,
-        clock=_fixed_clock([0.0, 0.0, 1.0, 1.0]),
+        stop_condition="short_circuit",
+        thin=True,
     )
 
-    assert deep_calls["count"] == 1
-    assert summary["stop_condition"] == "re_searched_still_thin"
+    assert final == "re_searched_still_thin"
     assert _coverage_rows(conn, project_id)[-1].stop_condition == "re_searched_still_thin"
 
-    fat_project_id, fat_run = seed_project_and_run(conn)
-    fat_scope_id = seed_scope(conn, fat_project_id)
-    fat_generation = ScriptedGenerationBackend(queries=[_wire_queries(["fat rapid query"])])
-    fat_backend = ScriptedBackend(
-        scripts={
-            "search": [
-                [oa_record(f"fat-{index}", title=f"Relevant fat {index}") for index in range(8)],
-                [],
-                [],
-            ]
-        }
-    )
-    run_search(
+
+def test_finalise_deep_stop_targets_only_the_latest_coverage_row(
+    conn: Connection,
+) -> None:
+    """Earlier rounds keep their own per-round stop conditions; only the final
+    round's row carries the loop-level stop."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    _seed_coverage_row(
         conn,
-        project_id=fat_project_id,
-        run_id=fat_run,
-        context=_context(fat_scope_id),
-        backends=[fat_backend],
-        generation_backend=fat_generation,
+        project_id=project_id,
+        scope_id=scope_id,
+        run_id=run_id,
+        stop_condition="completed",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
-    screen_sources(
+    _seed_coverage_row(
         conn,
-        project_id=fat_project_id,
-        run_id=seed_run(conn, fat_project_id),
-        context=ScreenContext(scope_id=fat_scope_id, intent="Test intent", context={}),
-        screening_backend=TitleScriptedScreeningBackend(),
+        project_id=project_id,
+        scope_id=scope_id,
+        run_id=seed_run(conn, project_id),
+        stop_condition="completed",
+        created_at=datetime(2026, 1, 2, tzinfo=UTC),
     )
-    assert should_escalate(conn, project_id=fat_project_id, scope_id=fat_scope_id) is False
+
+    finalise_deep_stop(
+        conn,
+        project_id=project_id,
+        scope_id=scope_id,
+        stop_condition="budget_exhausted",
+        thin=False,
+    )
+
+    rows = _coverage_rows(conn, project_id)
+    assert [row.stop_condition for row in rows] == ["completed", "budget_exhausted"]
+
+
+def test_finalise_deep_stop_without_coverage_row_raises(conn: Connection) -> None:
+    project_id, _run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    with pytest.raises(RuntimeError):
+        finalise_deep_stop(
+            conn,
+            project_id=project_id,
+            scope_id=scope_id,
+            stop_condition="budget_exhausted",
+            thin=False,
+        )
+
+
+def test_new_confident_relevant_for_run_counts_only_that_runs_confident_rows(
+    conn: Connection,
+) -> None:
+    """The runner's round gate reads a round's marginal yield from the screen
+    run's own rows — below-floor and not-relevant rows never count, and other
+    runs' rows never bleed in (park/resume safety comes from this provenance)."""
+    project_id, run_a = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    run_b = seed_run(conn, project_id)
+    _seed_screened_source(
+        conn, project_id=project_id, run_id=run_a, scope_id=scope_id,
+        title="A confident 1", confidence=0.9,
+    )
+    _seed_screened_source(
+        conn, project_id=project_id, run_id=run_a, scope_id=scope_id,
+        title="A confident 2", confidence=CONFIDENT_FLOOR,
+    )
+    _seed_screened_source(
+        conn, project_id=project_id, run_id=run_a, scope_id=scope_id,
+        title="A below floor", confidence=CONFIDENT_FLOOR - 0.05,
+    )
+    _seed_screened_source(
+        conn, project_id=project_id, run_id=run_a, scope_id=scope_id,
+        title="A not relevant", status="not_relevant", confidence=0.95,
+    )
+    _seed_screened_source(
+        conn, project_id=project_id, run_id=run_b, scope_id=scope_id,
+        title="B confident", confidence=0.9,
+    )
+
+    assert new_confident_relevant_for_run(
+        conn, project_id=project_id, scope_id=scope_id, run_id=run_a
+    ) == 2
+    assert new_confident_relevant_for_run(
+        conn, project_id=project_id, scope_id=scope_id, run_id=run_b
+    ) == 1
 
 
 def test_acquire_search_does_not_write_screening_rows(

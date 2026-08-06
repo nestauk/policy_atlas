@@ -56,8 +56,10 @@ can consume another's allowance.
   budget enforced by *stopping early* always truncates the tail of an ordered
   fan-out, and the tail is a specific set of queries and providers, not a random
   sample. Bound the volume instead, after the merge, where every query has
-  already had its turn. Rapid keeps its clock: it is the interactive path, and
-  the latency bound is the requirement there rather than a proxy for cost.
+  already had its turn. Task 029 removed rapid's clock too (with a rapid
+  record cap replacing its volume role): no depth has a time budget, and if a
+  latency bound is ever needed it belongs at the runner as a step timeout,
+  never inside the fan-out.
 - **`http_budget` counts logical `execute_call`s, not HTTP requests.** Backends
   paginate internally to satisfy `max_results`, so per-call targets above one page
   make the budget's name a lie. Keep targets near a page, or count pages.
@@ -66,11 +68,11 @@ can consume another's allowance.
   snapshot in scope, and `acquire_sources` embeds each record as it persists it —
   so persisting a record is committing to both costs. That is why
   `record_cap_per_backend` trims *before* the write rather than filtering at
-  screening time. Size it against what the loop actually wants
-  (`TARGET_CONFIDENT_RELEVANT`), not against the provider's willingness to
-  return rows — and then replace the guess with a measurement from
-  `scripts/eval_ground_truth/`, which scores search recall against published
-  systematic-review ground truth.
+  screening time. Owner-set (task 029): rapid 50 / standard 100 / deep 200 per
+  backend per round — sized from methodology, not against the provider's
+  willingness to return rows. Replace with a measurement from
+  `scripts/eval_ground_truth/` (other branch), which scores search recall
+  against published systematic-review ground truth.
 - Bounds sized on fixtures need one live run where they actually bind before
   they are trusted (see also
   [sanitized-fixtures-audit-against-raw](sanitized-fixtures-audit-against-raw.md)).
