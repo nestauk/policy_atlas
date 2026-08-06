@@ -67,7 +67,8 @@ Scripted Playwright drive (owner-approved fallback), 2026-07-29, local stack: re
 backend on :8000 (dev DB at alembic head), Vite on :5173 with `VITE_DEV_TOKEN`,
 real chain at rapid effort / standard depth / academic-only. Two spec files
 (`e2e/live-027.spec.ts` part A, `e2e/live-027b.spec.ts` part B), evidence
-screenshots numbered 01–24 in `evidence/`.
+screenshots numbered 01–24 attached to PR #36 (kept out of the git tree —
+binary evidence lives on the PR, see `.gitignore` `docs/tasks/*/evidence/`).
 
 **Part A (04:59–05:32 UTC, project "027 live check", FREQUENT steering):**
 - 04:59:11 — landing rename (cancel restores, Enter applies) + archive two-step
@@ -238,7 +239,7 @@ and SSE replay/pending suites pass **unmodified** across the lifecycle-placement
 
 No secrets, keys, or real-source raw text added. Mock fixtures are invented, sanitized
 values (sanitized-fixtures policy). The dev-issuer keypair stays untracked. Screenshots
-in `evidence/` show only invented/live-dev data on localhost. The replaced favicon
+(attached to PR #36) show only invented/live-dev data on localhost. The replaced favicon
 removes a possibly Figma-licensed asset from the public repo.
 
 ## Owner-feedback round (2026-07-29, post-step-6, pre-review)
