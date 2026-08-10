@@ -3,9 +3,10 @@
 > **Status:** drafted 2026-08-05 (as `029-copilot-qa`); **rev 2, 2026-08-10 — unified
 > conversation model, owner-directed** (interview outcome: fold the planning-conversation
 > restructure in; "qa" naming dropped repo-wide). **Contract approved (before planning):
-> 2026-08-10 · owner, at rev 2.8** — adversarial lane runs post-approval (Tier-4
-> standard); a material finding reopens the 🛑. · Plan approved: _pending_ · ADR:
-> _expected (unified conversation model + lineage chain + chat fast-path pin)_.
+> 2026-08-10 · owner, at rev 2.8; adversarial lane ran (rev 3); reopened 🛑
+> re-approved 2026-08-10 · owner, at rev 3.1. CONTRACT FINAL FOR PLANNING.** ·
+> Plan approved: _pending_ · ADR: _expected (unified conversation model + lineage
+> chain + chat fast-path pin)_.
 >
 > **rev 2 (owner interview, 2026-08-06→10):** (1) **Naming**: "qa" reads as quality
 > assurance and undersells the surface — user-facing **Chats**, code `conversation` /
