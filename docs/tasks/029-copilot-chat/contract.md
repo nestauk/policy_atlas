@@ -83,6 +83,16 @@
 > **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
 > (Out list).
 >
+> **rev 2.6 (2026-08-10): PR #35 chat mockup re-mined** (owner-directed; the
+> colleague's demo branch this slice's container model came from, now read for its
+> interaction detail — adjudication in [design-inputs.md](design-inputs.md)).
+> Adopted: **context chips with "Whole project" zero-state** (the concrete UX for
+> "artefact = entry point, never a fence"; `@`-multi-select deferred to
+> workspace-cluster) and **URL-addressable conversations** (deep-linkable threads —
+> the mockup's in-memory-only reopen is its own dead end). A dozen presentation
+> details recorded as build-time inputs; declines recorded with reasons (thread-type
+> special-casing, quick-reply chips, hard delete, start-run-from-chat).
+>
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.
@@ -130,6 +140,9 @@ live check.
 - 027 `contract.md` strand 12 + `rehydration-mapping.md` — the planning-transcript
   precedent this slice re-homes (two-phase persistence, idempotency, no-backfill → now
   a real backfill, see strand 1).
+- This slice's own inputs: [research-notes.md](research-notes.md) (2025–26 practice,
+  4 lanes) · [v2-chat-review.md](v2-chat-review.md) (V2 lessons) ·
+  [design-inputs.md](design-inputs.md) (PR #35 mockup adjudication).
 
 ## Design pins (the strands)
 
@@ -301,7 +314,12 @@ the base layer). Stored HTTP projections are never fed back to the model (027 ru
 - Entry points: the artefact reader ("Ask about this analysis" — opens a chat with the
   artefact as *entry context*, not a fence) · the 028 "evidence base is ready" card ·
   the library ("New chat") · "Run the analysis again" → opens the new planning
-  conversation.
+  conversation. **Entry context renders as a removable chip** ("Whole project" when
+  none; chip click navigates to the artefact) — rev 2.6, the PR #35 ContextBar
+  pattern; multi-artifact `@`-context waits for workspace-cluster. **Conversations
+  are URL-addressable** (thread id in the route; library rows and "ask" affordances
+  deep-link). Finer rail/library presentation follows
+  [design-inputs.md](design-inputs.md) § build-time details.
 - **Answers render as prose with inline `[n]` citation markers + tier chip** (rev 2.1:
   inline click-to-source is table stakes, and it's the artefact reader's own grammar) —
   `whitespace-pre-wrap` + scrub, **no markdown dependency** (now a recorded *security
