@@ -85,6 +85,21 @@
 > **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
 > (Out list).
 >
+> **rev 3.2 (2026-08-10, plan-stage folds — ratified with the plan 🛑; surfaced by
+> the plan adversarial lane):** (1) **explicit cancel signal** — bare HTTP disconnect
+> cannot carry intent, so stop is `POST /conversations/{cid}/turns/{turn_id}/cancel`
+> (owner-scoped, idempotent, keyed to the pending turn); disconnect-without-cancel →
+> the server finishes and completes the row, as pinned. (2) **Title mechanics** —
+> a chat is created titled "New chat"; the first turn's reservation transaction sets
+> the title from the question (server-derived, atomic; `title` stays non-null).
+> (3) **Successor-creation mechanics** — "Run the analysis again" only navigates;
+> the next planning turn on a project whose planning conversation is closed creates
+> the seeded successor in its reservation transaction (no phantom drafts, no new
+> endpoint). (4) Hydration-exclusion sentence corrected: "artefact prose" →
+> non-hydrated prose beyond the strand-5 budget rule (rev 3.1 made budgeted artefact
+> prose a frame field; the old exclusion line was a residue). (5) ADR renumbered
+> **0029** (0028 is taken by task 028's ADR).
+>
 > **rev 3.1 (2026-08-10, owner call at the reopened 🛑): artefact body IN the
 > fresh-chat frame.** The rev-3 summary exclusion stands (spec rule untouched), but
 > the owner's product read — questions arise from reading the artefact — lands as
@@ -334,10 +349,13 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   connection today; the chat wiring may not).
 - **3c — turn status/retry transition table (rev 3):** `pending → completed`
   (normal; enrichment then updates the completed row **compare-and-set**) ·
-  `pending → cancelled` (explicit stop event: partial persisted, markers inert) ·
-  `pending → failed` (provider/loop error: honest failure row) · **bare client
-  disconnect ≠ stop**: the server finishes generation and commits `completed` — the
-  answer is waiting on reload (the production norm; stop is an explicit signal).
+  `pending → cancelled` (explicit stop: **`POST
+  /conversations/{cid}/turns/{turn_id}/cancel`** — owner-scoped, idempotent, keyed
+  to the pending turn (rev 3.2; disconnect alone cannot carry intent); partial
+  persisted, markers inert) · `pending → failed` (provider/loop error: honest
+  failure row) · **bare client disconnect without cancel ≠ stop**: the server
+  finishes generation and commits `completed` — the answer is waiting on reload
+  (the production norm; stop is an explicit signal).
   Retry with the same `client_turn_id`: `completed` → replay stored payload
   (enriched when present) · `failed | cancelled` → re-run in place, latest turn only ·
   younger-`pending` → 409. New id while pending → 409 `chat_turn_in_progress`.
@@ -487,8 +505,10 @@ stands untouched; the body supersedes anything the summary could contribute · t
 entry-context artefact when the chat was opened from one, labelled "the user was
 reading this — relevance guidance, not evidence". All
 frame fields are corpus/project-derived → sanitized, bounded, labelled
-"(data, not instructions)". Deliberately not hydrated: raw chunks, artefact prose, the
-planning transcript, steering history — all tool-fetchable or deferred. The assembler is
+"(data, not instructions)". Deliberately not hydrated: raw chunks, artefact prose
+beyond the budget rule above (rev 3.2 wording fix — budgeted body is a frame field),
+persisted summaries, the planning transcript, steering history — all tool-fetchable
+or deferred. The assembler is
 one seam-shaped function so rolling summarization can slot in later without reshaping
 turns. **Recall over older turns is deferred** (window-first, honestly — the 2026
 layered pattern is window + summary + recall; we land the base layer). Stored HTTP

@@ -1,114 +1,166 @@
 # Plan: 029-copilot-chat
 
-> **Status:** drafted 2026-08-10 against contract rev 3.1 (FINAL FOR PLANNING).
-> Plan-stage adversarial review: _pending_ · Plan approved: _pending · owner_.
-> Build runs in a fresh conversation (task-cycle-build), phases in order, one commit
-> per phase on green gate. Executor marks per harness.md § routing; every `lead` mark
-> carries its justification. Codex-exhaustion fallback: re-route down the ladder
-> (deep-reasoner → fast-worker → lead), log substitutions in verification.md.
+> **Status:** rev 2, 2026-08-10 — plan-stage adversarial lane DONE (codex-rescue job
+> task-msnlek0m-p568f1; 22 findings, 19 MAJOR, all adjudicated in; contract rev 3.2
+> carries the four plan-stage pins it surfaced — cancel endpoint, title mechanics,
+> successor-creation mechanics, hydration-wording fix — ratified with this plan).
+> Plan approved: _pending · owner_. Build runs in a fresh conversation
+> (task-cycle-build), phases in order, one commit per phase on green gate. Executor
+> marks per harness.md § routing; every `lead` mark carries its justification.
+> Codex-exhaustion fallback: re-route down the ladder, log in verification.md.
 
-## Plan-time constants (reviewable pins; contract defers these here)
+## Plan-time constants (reviewable pins)
 
-- Context window K = **8 turns**; window char ceiling **16 000 chars** (oldest-first
-  truncation). Frame artefact budget **40 000 chars** (budget rule per contract §5).
-- Output ceiling **4 096 tokens** per answer. Per-owner in-flight chat-turn cap **2**
-  (429-class error `chat_capacity`). Stale-pending expiry 10 min (planning parity).
-- Judge enrichment timeout **45 s**; enrichment retries once; then "unchecked" stands.
-- Tool loop: turn cap and per-turn read caps inherit the shipped synthesis constants.
+- Context window K = **8 turns**; window char ceiling **16 000 chars** (oldest-first).
+- Frame artefact budget **40 000 chars** = the **degradation threshold for non-entry
+  artefacts** (the entry-context artefact always keeps its full body — contract §5).
+- Output ceiling **4 096 tokens** per answer (new chat-adapter cap; synthesis calls
+  stay uncapped). Per-owner in-flight chat-turn cap **2** (429-class `chat_capacity`).
+- Stale-pending expiry 10 min (= planning `_PENDING_TTL` parity, verified).
+- Judge enrichment timeout **45 s**, one retry, then "unchecked" stands.
+- Enrichment refetch (frontend): poll the turn read model every **3 s, ≤60 s**, stop
+  on enriched · terminal-unchecked (server says judge gave up) · conversation
+  switched/unmounted/archived. Fake-timer store tests.
+- Tool loop: synthesis constants inherited (turn cap 6; 6 executed reads/turn).
 
-## Verify gates (consolidation argued per the 014 lesson)
+## Backfill truth table (contract §1 requires it AT this gate)
 
-Full `make verify`: **A** (build-open baseline + schema) · **B** (planning re-home —
-runner + schema-adjacent) · **H** (step-6 exit). Phases C–G commit on green
-`make verify-fast` (new-file-dominant; the C kernel extraction additionally requires
-the full synthesis test module green before its commit).
+One legacy planning conversation per project **with ≥1 planning turn**; zero-turn
+projects get nothing. Status derives from plan/run state at migration time:
+
+| Project state at migration | Legacy conversation status |
+|---|---|
+| Turns exist, no run ever dispatched | `active` |
+| Latest run `running` / `paused` | `active` (fence semantics unchanged mid-walk) |
+| Latest run `succeeded` / `degraded`, no completed planning turn after `ended_at` | `closed` (closed_at = run `ended_at`) |
+| Latest run `succeeded` / `degraded`, ≥1 completed planning turn after `ended_at` (mid-replan) | `closed` **+ a second `active` successor owning the post-run turns** (turn ownership splits at the first post-completion turn) |
+| Latest run `failed` / `aborted` / `interrupted` | `active` (replanning within lineage) — except an `abandoned` plan with no later draft → `closed` |
+| Archived project | same rules; conversation archived-state untouched (kind=planning is never `archived`) |
+
+Every row is an A4 fixture case. Rubric 14 aligned to this table.
+
+## Reader-scope matrix (contract §4 requires the plan to verify it)
+
+| Tool / lookup kind | As-built scope key | 029 strategy |
+|---|---|---|
+| `search_chunks` | corpus / evidence scope | **scope-wide by design** (contract: chunk search spans the shared corpus) |
+| `query_findings` | `extraction_run_id` | resolver-bound (safe) |
+| `selection_rationale` | scope + `selection_run_id` | resolver-bound (safe) |
+| `characterisation_summary` | `characterisation_run_id` | resolver-bound (safe) |
+| `grouping_groups` | `grouping_run_id` | resolver-bound (safe) |
+| `appraisal_by_doc` · `classification_by_doc` · `tags_by_doc` · `screening_by_doc` | **scope-wide** (scope_id only) | bind to the resolved run set where result rows carry run keys; else snapshot-bound at turn start — C2 verifies per kind with a leak test (new-run rows must not appear) |
+| `coverage_records` | project + scope (**scope-wide**) | same binding treatment as above |
+| `docs_by_tag` · `tag_aggregate` | scope-wide | same binding treatment |
+
+## Verify gates (rev 2 — corrected against the real Makefile)
+
+- **FULL `make verify`** at **A · B · C · F · H**. Rationale: A/B schema+runner
+  (mandatory classes); **C adds a governed prompt** — `prompt-guard` only runs in
+  full verify — and touches synthesis internals; **F changes the public API** —
+  OpenAPI/client drift checks only run in full verify.
+- **`make verify-fast`** at **D · E**.
+- **G** gates on explicit frontend verification (unit + build) **plus the Playwright
+  e2e including the new chat leg** — named commands in the phase commit, since root
+  verify-fast runs neither and full verify skips Playwright.
+- **OpenAPI + TS client regeneration runs in every phase that changes the API
+  surface (D and F), not only F** — drift asserted at each.
 
 ## Phase A — baseline + schema (FULL verify)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| A1 | `make verify` green baseline on the branch | lead (inline) | one command — delegation costs more than it saves |
-| A2 | Backfill **truth table** finalized (no-run · running/paused · succeeded/degraded · failed/aborted/interrupted · abandoned plan · mid-replan · archived) | **lead** | seam design — the table IS the migration's semantics; contract requires it at this gate |
-| A3 | Migration: `conversation` (+ partial unique active-planning index, `entry_artefact_id`) · `chat_turn` · `planning_transcript.conversation_id` · `plan.conversation_id` · `artefact.capability_run_id` · legacy backfill per A2 | codex | machine-verifiable: A4 tests + up/down |
-| A4 | Migration tests: up/down · backfill fixture cases (every A2 row) · invariant index | codex (with A3) | |
-| A5 | Destructive-downgrade rehearsal evidence (pre-write only) + post-write rollback note | fast-worker | mechanical: run, capture, document |
+| A1 | `make verify` green baseline | lead (inline) | one command |
+| A2 | Migration: `conversation` (+ partial unique active-planning index, `entry_artefact_id`) · `chat_turn` · `planning_transcript.conversation_id` · `plan.conversation_id` · `artefact.capability_run_id` · legacy backfill per the truth table above | codex | machine-verifiable: A3 + up/down |
+| A3 | Migration tests: up/down · one fixture per truth-table row · invariant index | codex (with A2) | |
+| A4 | Destructive-downgrade rehearsal (pre-write only) + post-write rollback note | fast-worker | mechanical |
 
-## Phase B — planning re-home (FULL verify)
-
-| # | Task | Executor | Notes |
-|---|---|---|---|
-| B1 | Executed-plan→`PlanDraftWire` seed mapping (design) | **lead** | seam design: the mapping defines successor-conversation semantics |
-| B2 | Conversation lifecycle service: create-with-project/first-turn, one-active invariant, successor seeding per B1; planning rehydration scoped to the active conversation | codex | parity tests keep planning behaviour identical otherwise |
-| B3 | Closure-in-terminal-transaction delta in `_finish_run` | **lead** | fragile runner surface; small diff — the 027 rev-4 runner-delta precedent (lead-authored, parity-tested) |
-| B4 | Planning endpoints: additive `conversation_id` exposure; lifecycle + closure + seeding + rehydration-scope tests | codex | includes crash-between-phases honesty cases |
-
-## Phase C — chat turn engine (verify-fast; synthesis test module full-green before commit)
+## Phase B — planning re-home + lineage writers (FULL verify)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| C1 | Kernel extraction: bounded tool-loop kernel + injected final emitter; section adapter keeps `run_section_loop` behaviour bit-identical (existing synthesis tests unchanged) | codex | the riskiest refactor — machine-verifiable by the untouched synthesis suite |
-| C2 | Terminal-run component-id resolver (+ tests: replacement/additive re-runs, degraded missing components, resolved-once-per-turn) | codex | mirrors the continuation-reducer reduction |
-| C3 | Chat turn service: two-phase rows, conversation-keyed single-flight, 3c transition table, idempotency, fences (`no_completed_run`, `run_active`), resource controls, per-call short-lived connections | codex | barrier/race tests per rubric 13/16/21 |
-| C4 | `chat_v1` system prompt + wire models (`claims[]`/citations) + context assembler (frame incl. artefact body + budget rule + labels) | **lead** | prompt-bearing surface end-to-end; field descriptions and frame labels are prompt text |
-| C5 | Citation floor + compaction (citable set = tool ∪ frame; appraised/citable-kind; orphan stripping; warning marker) + floor tests | codex | deterministic, precisely specced |
-| C6 | Context-assembler + tracing tests (frame fields, budget degrade, session-per-conversation, trace id in payload) | fast-worker | mechanical transcription of the contract's enumerated checks |
+| B1 | Executed-plan→`PlanDraftWire` seed mapping (design) | **lead** | seam design — successor semantics |
+| B2 | Conversation lifecycle service: create-with-project/first-turn; one-active invariant; **successor created by the first planning turn after closure, seeded per B1, in its reservation transaction** (contract rev 3.2 — the button only navigates); planning rehydration scoped to the active conversation; **planning calls use `conversation_id` as the stable Langfuse session id** (contract strand 7 — fixes the per-turn throwaway session) | codex | parity tests keep planning behaviour otherwise identical |
+| B3 | Closure delta in `_finish_run`'s existing terminal transaction (verified as-built: status + `run.finished` already commit in one `engine.begin()`) | **lead** | fragile runner surface; smallest diff; parity tests |
+| B4 | **Lineage writer plumbing**: plan creation (`orchestrate.py` insert) + steering plan-version writes inherit `conversation_id`; artefact insert (`synthesise.py`) writes `capability_run_id`; **lineage-walk test on a stub run** (conversation → plan → run → artefact) + legacy-NULL honesty test | codex | rubric 13's home — was silently unowned in rev 1 |
+| B5 | Planning endpoints: additive `conversation_id` exposure; lifecycle/closure/seeding/rehydration-scope/session-id tests | codex | crash-between-phases honesty cases |
 
-## Phase D — streaming (verify-fast)
-
-| # | Task | Executor | Notes |
-|---|---|---|---|
-| D1 | NDJSON turn stream: event union, exactly-one-terminal semantics, post-header `failed` events, stop vs bare-disconnect (server finishes), cancelled-partial persistence; OpenAI streaming adapter behind the provider-neutral wire | codex | first token-streaming plumbing — named risk; stream contract tests per rubric 20 |
-
-## Phase E — judge enrichment (verify-fast; **contract-named cut-line**)
+## Phase C — chat turn engine (FULL verify — prompt-guard + synthesis suite)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| E1 | Chat-emission→judge-envelope shaping; async enrichment worker; CAS write; unchecked→verdict read-model states; enrichment tests (attach, failure→unchecked, no-citation skip, retry replay) | codex | reuses `grounding_judge` as-is |
-| E2 | Judge-prompt adaptation for chat-shaped claims — ONLY if E1 shows the existing envelope mis-fits | **lead** | prompt gate (contract rev 3); if exercised, version-bumped and named in verification.md |
+| C0 | **Kernel seam design**: pin the kernel callable/result signatures, the injected final-emitter interface, and the section adapter's preserved behaviour (provider calls, transcripts, error emission, accounting) + characterization assertions to hold C1 to | **lead** | seam design — the plan lane showed "bit-identical" isn't free; C1 delegates only after this pin |
+| C1 | Kernel extraction per C0; section adapter passes the characterization assertions; synthesis suite untouched and green | codex | |
+| C2 | Terminal-run component-id resolver + **reader-scope binding per the matrix above** (+ per-kind leak tests; replacement/additive re-runs; degraded missing components; resolved once per turn) | codex | |
+| C3 | Chat turn service: two-phase rows (reservation sets the title from the first question — contract rev 3.2), conversation-keyed single-flight, 3c transition table incl. the cancel endpoint, idempotency, fences, resource controls, per-call short-lived connections | codex | barrier/race tests per rubric 13/16/21 |
+| C4 | `chat_v1` system prompt + wire models (`claims[]`/citations) + context assembler (frame incl. artefact body + budget rule + labels) | **lead** | prompt-bearing end-to-end |
+| C5 | Citation floor + compaction (citable set = tool ∪ frame; appraised/citable-kind; orphan strip; warning marker) + floor tests + **tool-allowlist test** (exactly `search_chunks · query_findings · lookup`; `search`/write tools not constructible — rubric 9's home) | codex | |
+| C6 | Context-assembler + tracing tests + **injection-boundary matrix test**: every channel into `chat_v1` (current question, each K-window turn, every frame field, every tool-result channel) asserted sanitized + bounded + data-labelled (rubric 17's home) | fast-worker | mechanical from the enumerated matrix |
 
-## Phase F — conversations API surface (verify-fast)
+## Phase D — streaming (verify-fast + API regen/drift)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| F1 | Endpoints: library list (+`status=archived`), `GET /{cid}`, create (`entry_artefact_id`), PATCH, archive/unarchive; BOLA + archived-semantics tests; OpenAPI + TS client regen | codex | fences/BOLA nuance keeps this above fast-worker |
+| D0 | **Cancel-wire + stream-shape pin**: the `POST .../turns/{turn_id}/cancel` endpoint semantics (contract rev 3.2) and the NDJSON event schemas/field names | **lead** | public-wire design; D1 delegates against it |
+| D1 | Stream implementation per D0: event union, exactly-one-terminal semantics, post-header `failed` events, cancel endpoint, disconnect-finishes-server-side, cancelled-partial persistence; OpenAI streaming adapter behind the neutral wire; **owns `POST .../turns`**; OpenAPI/client regen + drift check | codex | stream contract tests per rubric 20; serialized with F on the router (no parallel router edits) |
 
-## Phase G — frontend (verify-fast)
+## Phase E — judge enrichment (verify-fast; **the contract-named cut-line**)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| G1 | Store layer: conversation store (mirrors `usePlanningTranscript` reducer), NDJSON stream reader, enrichment refetch | codex | |
-| G2 | Rail + views: tabs/switcher, Chats library, context chip, URL-addressable conversations, composer (stream/stop states), message rendering (markers, references, hover quote-in-context, unchecked→verdict upgrade, warning/stopped badges), hand-off card, entry points | codex | spec = contract §6 + design-inputs.md build details + the committed mockup; component tests per rubric |
-| G3 | Frontend test sweep + mock-journey e2e extension (chat leg on the stub backend) | fast-worker | from G2's enumerated test list |
+| E1 | Emission→judge-envelope shaping; async worker; CAS write; unchecked→verdict read-model states; enrichment tests | codex | reuses `grounding_judge` as-is |
+| E2 | Judge-prompt adaptation ONLY if E1 shows envelope mis-fit | **lead** | prompt gate |
+
+**Cut honesty:** exercising this cut-line (or any other scope cut) requires an owner-
+approved contract + rubric revision before Phase H — rubric 10a currently binds
+completion; a cut without the revision leaves the task in progress, not done.
+
+## Phase F — conversations API surface (FULL verify — drift gate)
+
+| # | Task | Executor | Notes |
+|---|---|---|---|
+| F1 | Endpoints: library list (+`status=archived`), `GET /{cid}`, **`GET /{cid}/turns`** (paginated ascending — G1's rehydration/refetch source; was unowned in rev 1), create (`entry_artefact_id`; title "New chat"), PATCH, archive/unarchive; BOLA + archived-semantics tests; OpenAPI/TS regen + drift | codex | runs after D (router serialization) |
+
+## Phase G — frontend (gate: frontend unit + build + Playwright e2e incl. chat leg)
+
+| # | Task | Executor | Notes |
+|---|---|---|---|
+| G1 | Store layer: conversation store (reducer parity with `usePlanningTranscript`), NDJSON stream reader, cancel mutation, **bounded enrichment refetch per the pinned polling policy** | codex | fake-timer tests |
+| G2 | **Product surface — lead as integrator** (taste-bearing per the ladder; 027/028 precedent): rail composition, tabs/switcher, Chats library, context chip, URL-addressable conversations, composer stream/stop states, message rendering (markers, references, hover quote-in-context, unchecked→verdict upgrade, warning/stopped badges), hand-off card, entry points — **delegating enumerated component transcription to codex per mockup + design-inputs** (G2a rail/tab/library shells · G2b message/citation components · G2c state plumbing), lead owns composition, copy, and final pass | **lead** (+codex sub-briefs) | spec = contract §6 + mockup + design-inputs |
+| G3 | Frontend test sweep + mock-journey e2e chat leg (stub backend) | fast-worker | from G2's enumerated list |
 
 ## Phase H — step-6 exit (FULL verify)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| H1 | `web-api.md` § Conversations rewrite · deferred.md seam updates · AGENTS.md pointer refresh | fast-worker | doc transcription from the final contract |
-| H2 | ADR **0028** — unified conversation model + lineage chain + chat fast-path (two-stage floors + async claim-grain judge) | **lead** | decision record; Accepted at plan sign-off date |
-| H3 | Scoped live check per contract (local funded key): migration state sanity · chat from artefact (provenance + generative + evidence-not-held w/ handoff) · stop mid-stream · restart durability · library round-trip · "Run the analysis again" successor seeding · full-chain smoke via CI e2e | lead + owner | ≤30 min wall; staging quota still exhausted — local run |
-| H4 | verification.md assembly (incl. any codex-fallback substitutions) | lead | evidence adjudication is the lead's |
+| H1 | `web-api.md` § Conversations rewrite · deferred.md updates · AGENTS.md pointer | fast-worker | doc transcription |
+| H2 | ADR **0029** — unified conversation model + lineage chain + chat fast-path | **lead** | 0028 is taken (task 028) |
+| H3 | Scoped live check per contract (local funded key; ≤30 min): migration sanity · chat from artefact (provenance + generative + evidence-not-held/handoff) · stop mid-stream (cancel endpoint) · bare-disconnect completion · restart durability · library round-trip · successor seeding · CI e2e smoke | lead + owner | |
+| H4 | verification.md assembly (+ any codex-fallback substitutions) | lead | evidence adjudication |
+
+## Step 7–10 handoff (rubric 8)
+
+The build conversation ends at H. The **Tier-4 review stack runs in a fresh
+conversation** (task-cycle-review): contract verifier · `/code-review` medium ·
+**one security lane** (injection posture, tool-set boundary, BOLA, idempotency/races,
+stream lifecycle) · adversarial code review (codex) · human deep review. Review diffs
+exclude generated files (OpenAPI/TS client) and migration fixtures per the
+review-economy pins; findings adjudicated by the fresh conversation's lead, evidence
+into verification.md; then PR onto `dev`, human merge, close-out.
 
 ## Dependency notes
 
-A → B → C → D → F → G ordered; E after D (enrichment updates streamed rows) but
-independent of F/G backend-wise (G's upgrade UI depends on E — if E is cut at this
-gate, G ships "unchecked" states only and E becomes the fast-follow). C1 blocks C3/C5.
-F can run parallel to D/E after C.
+A → B → C → D → E/F → G → H. E after D (enrichment updates streamed rows); **D and F
+serialize on the conversations router**; F may otherwise overlap E. C0 blocks C1;
+C1 blocks C3/C5. If E is cut (with the owner-approved contract/rubric revision the
+cut requires), G ships "unchecked" states and E becomes the fast-follow.
 
 ## Risks
 
-1. **C1 kernel extraction** regressing synthesis — mitigated by bit-identical section
-   adapter + full synthesis module gate before the phase commit.
-2. **B3 runner delta** — smallest possible diff, lead-authored, parity tests.
-3. **Backfill on live data** — truth table at this gate, fixtures per row, rehearsed
-   downgrade, behaviour-level post-write rollback (contract §1).
-4. **First streaming plumbing** (D1) — provider-neutral wire keeps the blast radius
-   in one adapter; stream tests are contract-enumerated.
+1. **C1 kernel extraction** — mitigated by C0's lead-pinned seam + characterization
+   assertions + full synthesis suite in the phase gate.
+2. **B3 runner delta** — smallest diff, lead-authored, parity tests; grounded:
+   `_finish_run` already commits terminally in one transaction.
+3. **Backfill on live data** — truth table above; fixtures per row; rehearsed
+   downgrade; behaviour-level post-write rollback.
+4. **First streaming plumbing** (D) — D0 pins the wire; blast radius one adapter.
 5. **Codex quota** — fallback ladder per the standing rule.
-
-## Cut-lines (owner, at this gate or mid-build)
-
-- **Phase E** (judge enrichment) → ship "unchecked" citations, E as fast-follow.
-- G2's hover quote-in-context → markers + references footer only.
-- Library `status=archived` view → archive works, listing view later.
