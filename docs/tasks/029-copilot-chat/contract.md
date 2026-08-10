@@ -45,6 +45,20 @@
 > Owner's framing: "I would ideally prefer streaming"; waiting for Bedrock buys
 > nothing under the neutral pin. Strand 3 carries the mechanics.
 >
+> **rev 2.3 (2026-08-10): V2 chat review folded in** (owner-directed survey of the
+> sibling `discovery_policy_atlas` chat; adjudication in
+> [v2-chat-review.md](v2-chat-review.md)). Ports: **(a)** server-minted per-turn
+> citation register + post-answer compaction (strand 4 — the model cites only from a
+> register the server assigned; display renumbers to surviving citations); **(b)**
+> typed stream progress events with user-facing tool labels + collapsing activity
+> summary (strand 3/6); **(c)** cancel affordance — client abort, server generator
+> cleanup, honest terminal turn state (strand 3); **(d)** cross-chat turn-state
+> concurrency test (acceptance checks). V2's warts stand as evidence for pins 029
+> already carries: localStorage-only transcripts (vs our server store), live egress
+> from chat (vs our no-`search` boundary), raw interpolation (vs our injection
+> posture), regex prose-fighting (vs our structured terminal payload), no
+> idempotency/cancellation (vs `client_turn_id` + (c)).
+>
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.
@@ -179,10 +193,14 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   stays atomic at completion (two-phase turn rows unchanged: pending → stream → the
   completed row commits whole; a crash mid-stream leaves an honest pending→failed row,
   and an idempotent retry of a completed turn replays the stored answer as a single
-  terminal payload, no re-generation). Tool-loop turns before the final emission are
-  covered by a staged progress affordance ("checking the evidence…"), not fake tokens.
-  This is the backend's **first token-streaming plumbing** — named as such for the plan
-  and review stack.
+  terminal payload, no re-generation). Tool-loop turns before the final emission emit
+  **typed progress events with user-facing tool labels** (rev 2.3, the V2 activity
+  pattern — "Searching the evidence…", collapsing to an activity summary in the UI),
+  not fake tokens. **Cancel is a first-class affordance** (rev 2.3): the client can
+  abort the stream (composer stop button); the server cleans up the generator and
+  marks the turn row with an honest terminal state — a canceled turn is never a
+  silent pending. This is the backend's **first token-streaming plumbing** — named as
+  such for the plan and review stack.
 
 ### 4 — The chat agent: `chat_v1` orchestrator moment (lead-authored, prompt-bearing)
 
@@ -201,12 +219,17 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   hard rule — egress must not originate outside the audit record). Turn caps + per-turn
   read caps as shipped.
 - **Fast-path discipline — pinning the spec's 🟡**: chat **skips the verify pass**.
-  Trust is carried by labelling with deterministic floors: (a) cited chunk/finding ids
-  must be in the set the tool loop actually returned this turn — anything else is
-  stripped and the tier downgraded; (b) an inline `[n]` marker whose citation was
-  stripped is stripped with it; (c) zero surviving citations forces the "pure LLM
-  reasoning" label; (d) no answer renders untier-labelled (§3.3 taxonomy). An ungrounded
-  answer indistinguishable from a grounded one is the cardinal sin this prevents.
+  Trust is carried by labelling with deterministic floors, built on a **server-minted
+  citation register** (rev 2.3, the V2 pattern): every source the tool loop returns is
+  assigned a turn-scoped number server-side, and the model cites only from that
+  register. Floors: (a) a citation must resolve to a register entry — anything else
+  (fabricated, out-of-range) is stripped and the tier downgraded; (b) an inline `[n]`
+  marker whose citation was stripped is stripped with it; (c) after generation the
+  answer is compacted — citations renumber to the surviving cited set, uncited
+  register entries drop from the display payload; (d) zero surviving citations forces
+  the "pure LLM reasoning" label; (e) no answer renders untier-labelled (§3.3
+  taxonomy). An ungrounded answer indistinguishable from a grounded one is the
+  cardinal sin this prevents.
   **Named residual (rev 2.1)**: id-membership does not catch *misattribution* (a real
   chunk cited for a claim it doesn't support — the dominant failure mode in 2025–26
   citation studies); the tier label is the honest v1 mitigation, and a per-claim
@@ -331,11 +354,16 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   citations → pure-LLM label) · chat tool set contains no `search`/write tool
   (allowlist test) · archive semantics (chats only) · lineage walk (conversation → plan
   → run → artefact) on a stub run · stub-backend chat e2e (create → turn → durable
-  rehydration) · **streaming contract tests** (deltas then exactly one terminal
-  payload; mid-stream failure → honest failed row + client recovery; idempotent retry
-  of a completed turn replays stored answer without re-generation; disconnect cleanup)
-  · frontend component tests (library, switcher, tier chip, composer states, hand-off
-  affordance, stream rendering).
+  rehydration) · **streaming contract tests** (typed progress events then deltas then
+  exactly one terminal payload; mid-stream failure → honest failed row + client
+  recovery; client cancel → generator cleanup + honest terminal turn state; idempotent
+  retry of a completed turn replays stored answer without re-generation; disconnect
+  cleanup) · **citation-register tests** (out-of-range marker stripped; compaction
+  renumbers to the surviving cited set; uncited register entries dropped from display)
+  · **cross-chat concurrency test** (concurrent turns in different chats of one
+  project share no turn state — the V2 request-scoped-state lesson) · frontend
+  component tests (library, switcher, tier chip, composer states incl. stop button,
+  hand-off affordance, stream rendering + activity summary).
 - **Live manual check (contract-time scope pin):** on one existing completed-run
   project — post-migration state sane (legacy planning conversation status honest);
   open a chat from the artefact; one provenance-lookup + one generative-synthesis

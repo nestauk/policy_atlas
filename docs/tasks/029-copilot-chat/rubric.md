@@ -24,11 +24,14 @@ Slice-specific:
 
 9.  [ ] **Tool-set boundary holds**: the chat surface can construct no `search` and no
         write tool — proven by the allowlist test, not by reading.
-10. [ ] **Tier honesty is deterministic**: a fabricated citation id is stripped and the
-        tier downgraded; inline `[n]` markers whose citation was stripped are stripped
-        with it; zero surviving citations forces the pure-LLM label; no answer renders
-        without a tier chip from the locked vocabulary; marker/hover/footer all resolve
-        only to surviving citations.
+10. [ ] **Tier honesty is deterministic, on the server-minted citation register**: a
+        citation that doesn't resolve to a register entry (fabricated or out-of-range)
+        is stripped and the tier downgraded; inline `[n]` markers whose citation was
+        stripped are stripped with it; the display payload is compacted (renumbered to
+        the surviving cited set, uncited register entries dropped); zero surviving
+        citations forces the pure-LLM label; no answer renders without a tier chip
+        from the locked vocabulary; marker/hover/footer all resolve only to surviving
+        citations.
 11. [ ] **Chats are ephemeral and read-only**: a chat turn writes only `conversation`/
         `chat_turn` rows — no artefact, finding, annotation, plan or shared
         project-event writes; the evidence-not-held hand-off is a link, never a plan
@@ -54,9 +57,14 @@ Slice-specific:
 19. [ ] `web-api.md` gains the Conversations section in the same change; prompt pin
         (`chat_v1`) and model env constant recorded; ADR Accepted; no user-facing or
         code-level "qa" naming anywhere in the slice.
-20. [ ] **Streaming honesty (rev 2.2)**: text deltas + exactly one terminal validated
-        payload per turn; the persisted answer equals the streamed prose; the wire
-        shape is provider-neutral (no partial-JSON passthrough); mid-stream failure
-        leaves an honest failed row and the client recovers; an idempotent retry of a
+20. [ ] **Streaming honesty (rev 2.2/2.3)**: typed progress events (user-facing tool
+        labels) + text deltas + exactly one terminal validated payload per turn; the
+        persisted answer equals the streamed prose; the wire shape is provider-neutral
+        (no partial-JSON passthrough); mid-stream failure leaves an honest failed row
+        and the client recovers; client cancel cleans up the generator and leaves an
+        honest terminal turn state, never a silent pending; an idempotent retry of a
         completed turn replays the stored answer without re-generation; the project
         SSE vocabulary is untouched.
+21. [ ] **Cross-chat isolation (rev 2.3)**: concurrent turns in different chats of one
+        project share no turn state (register, tool budgets, stream buffers) — proven
+        by the concurrency test, not by reading.
