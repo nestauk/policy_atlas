@@ -38,6 +38,26 @@ design-input only — never merge/run (burned dev keypair in its history).
 - Planning-conversation titles derive from the plan/run (the mockup's job-thread
   auto-titling, mapped onto our lifecycle).
 
+## Post-research additions (plan rev 2.2, owner question: "what else should we inherit?")
+
+- **Copy answer** — copy button on assistant messages; copied text includes the
+  references footer and the verdict/unchecked/warning state (an answer never leaves
+  the tool stripped of its trust story). Fits the product premise: users brief
+  outside the tool.
+- **Date dividers / time grouping** in thread + library — the evidence-base
+  wireframes' own returning-user pattern, finally adopted.
+- **Composer draft persistence** — unsent input survives conversation switches
+  (session-local, never server-persisted).
+- **Empty-state starter questions** — three deterministic suggestions derived from
+  the artefact's section titles/key findings (no LLM call). ⚠ owner taste cut-line
+  (copy-diet tension) — cut freely at G2 review.
+
+## Named as deferred seams (real 2026 patterns, wrong slice)
+
+- Conversation search (scales with chat count) · project-level standing chat
+  instructions (needs its own prompt-governance design; the Gems/Projects pattern) ·
+  "Continue generating" on stopped turns. → deferred.md at H1.
+
 ## Already covered by stronger contract pins
 
 - Progress affordance: mockup's single planner-progress line → our typed progress

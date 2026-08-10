@@ -130,14 +130,14 @@ completion; a cut without the revision leaves the task in progress, not done.
 | # | Task | Executor | Notes |
 |---|---|---|---|
 | G1 | Store layer: conversation store (reducer parity with `usePlanningTranscript`), NDJSON stream reader, cancel mutation, **bounded enrichment refetch per the pinned polling policy** | codex | fake-timer tests |
-| G2 | **Product surface — lead as integrator** (taste-bearing per the ladder; 027/028 precedent): rail composition, tabs/switcher, Chats library, context chip, URL-addressable conversations, composer stream/stop states, message rendering (markers, references, hover quote-in-context, unchecked→verdict upgrade, warning/stopped badges), hand-off card, entry points — **delegating enumerated component transcription to codex per mockup + design-inputs** (G2a rail/tab/library shells · G2b message/citation components · G2c state plumbing), lead owns composition, copy, and final pass | **lead** (+codex sub-briefs) | spec = contract §6 + mockup + design-inputs |
+| G2 | **Product surface — lead as integrator** (taste-bearing per the ladder; 027/028 precedent): rail composition, tabs/switcher, Chats library, context chip, URL-addressable conversations, composer stream/stop states, message rendering (markers, references, hover quote-in-context, unchecked→verdict upgrade, warning/stopped badges), hand-off card, entry points, **plus the rev-2.2 additions: copy-answer (with references + trust state), date dividers, composer draft persistence, deterministic empty-state starter questions (owner taste cut-line)** — **delegating enumerated component transcription to codex per mockup + design-inputs** (G2a rail/tab/library shells · G2b message/citation components · G2c state plumbing), lead owns composition, copy, and final pass | **lead** (+codex sub-briefs) | spec = contract §6 + mockup + design-inputs |
 | G3 | Frontend test sweep + mock-journey e2e chat leg (stub backend) | fast-worker | from G2's enumerated list |
 
 ## Phase H — step-6 exit (FULL verify)
 
 | # | Task | Executor | Notes |
 |---|---|---|---|
-| H1 | `web-api.md` § Conversations rewrite · deferred.md updates · AGENTS.md pointer | fast-worker | doc transcription |
+| H1 | `web-api.md` § Conversations rewrite · deferred.md updates (incl. rev-2.2 named seams: conversation search · standing chat instructions · continue-generating) · AGENTS.md pointer | fast-worker | doc transcription |
 | H2 | ADR **0029** — unified conversation model + lineage chain + chat fast-path | **lead** | 0028 is taken (task 028) |
 | H3 | Scoped live check per contract (local funded key; ≤30 min): migration sanity · chat from artefact (provenance + generative + evidence-not-held/handoff) · stop mid-stream (cancel endpoint) · bare-disconnect completion · restart durability · library round-trip · successor seeding · CI e2e smoke | lead + owner | |
 | H4 | verification.md assembly (+ any codex-fallback substitutions) | lead | evidence adjudication |
