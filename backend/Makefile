@@ -1,8 +1,11 @@
-.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit openapi
+.PHONY: setup dev reset-test-db test test-fast typecheck lint build verify verify-fast okf-validate audit openapi
 
 # Tests run against a dedicated database on the same local container, so committing
 # tests can't pollute the dev DB. Override for a different host/DB.
 TEST_DATABASE_URL ?= postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test
+
+# Bare database name: last path segment, minus any `?sslmode=...` query string.
+TEST_DB_NAME := $(firstword $(subst ?, ,$(notdir $(TEST_DATABASE_URL))))
 
 # DB is the root Makefile's job (docker compose lives at repo root); this target
 # only provisions the Python side.
@@ -18,12 +21,42 @@ setup:
 dev:
 	uv run --env-file .env uvicorn policy_atlas.api.app:create_app --factory --reload --port 8000
 
-test:
+# Every test run starts from an empty database. Most tests roll back, but the
+# ones that exercise the real runner/API commit for real, and a crash mid-test
+# strands those rows. Stranded rows are not merely untidy: the migration
+# roundtrip tests downgrade the chain and re-add the OLD, narrower CHECK
+# constraints, which Postgres validates against existing rows — so one orphaned
+# `search_coverage_record` row with a post-widen `stop_condition` fails the
+# downgrade and reds the whole suite for a reason nowhere near the test that
+# leaked it (cost us a build, 2026-08-10). Dropping is the cheap fix: the full
+# schema rebuilds from the migration chain in well under a second, and it means
+# no test can ever inherit another run's state.
+# `dropdb --force` is irreversible, so the target refuses to fire unless BOTH
+# hold: the URL points at the local compose Postgres, and the database name ends
+# in `_test`. A TEST_DATABASE_URL aimed at a remote host is left alone (you own
+# that DB's cleanliness) rather than dropped locally or hard-failing the run;
+# one aimed at the dev `policy_atlas` DB is refused outright. conftest's
+# fail-closed check only runs once pytest starts — too late to save the data.
+reset-test-db:
+	@case "$(TEST_DATABASE_URL)" in \
+		*@localhost:*|*@127.0.0.1:*) ;; \
+		*) echo "reset-test-db: TEST_DATABASE_URL is not local — skipping reset"; exit 0 ;; \
+	esac; \
+	case "$(TEST_DB_NAME)" in \
+		*_test) ;; \
+		*) echo "reset-test-db: refusing to drop '$(TEST_DB_NAME)' — test DB names must end in _test"; exit 1 ;; \
+	esac; \
+	docker compose -f ../docker-compose.yml exec -T db \
+		dropdb --force --if-exists -U policy_atlas $(TEST_DB_NAME); \
+	docker compose -f ../docker-compose.yml exec -T db \
+		createdb -U policy_atlas $(TEST_DB_NAME)
+
+test: reset-test-db
 	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest
 
 # Inner-loop convenience: everything except the ingest integration tests (~11 real
 # document-ingest runs, minutes). Full `make test` / `make verify` remain the gate.
-test-fast:
+test-fast: reset-test-db
 	DATABASE_URL="$(TEST_DATABASE_URL)" uv run pytest --ignore=tests/test_ingest_full_text.py
 
 typecheck:
