@@ -40,6 +40,7 @@ from policy_atlas.core.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
+    runs,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -4585,6 +4586,11 @@ def synthesise_scope(
         artefact.insert().values(
             artefact_id=artefact_id,
             project_id=project_id,
+            capability_run_id=conn.execute(
+                sa_select(runs.c.capability_run_id)
+                .where(runs.c.run_id == run_id)
+                .where(runs.c.project_id == project_id)
+            ).scalar_one_or_none(),
             title=derive_artefact_title(context.intent),
             created_at=created_at,
         )

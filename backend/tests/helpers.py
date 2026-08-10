@@ -265,7 +265,9 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         block,
         capability_run,
         characterisation_result,
+        chat_turn,
         chunk_embedding,
+        conversation,
         event_log,
         evidence_scope,
         extraction_result,
@@ -407,10 +409,19 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     conn.execute(delete(planning_transcript).where(
         planning_transcript.c.project_id == project_id
     ))
-    # orchestration_plan before evidence_scope (fk_oplan_scope_project).
+    # orchestration_plan before evidence_scope (fk_oplan_scope_project) and
+    # before conversation (orchestration_plan.conversation_id FKs onto it).
     conn.execute(delete(orchestration_plan).where(
         orchestration_plan.c.project_id == project_id
     ))
+    # chat_turn before conversation; conversation after its FK dependants
+    # (planning_transcript/orchestration_plan above) and before project.
+    conn.execute(delete(chat_turn).where(
+        chat_turn.c.conversation_id.in_(
+            select(conversation.c.id).where(conversation.c.project_id == project_id)
+        )
+    ))
+    conn.execute(delete(conversation).where(conversation.c.project_id == project_id))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
 

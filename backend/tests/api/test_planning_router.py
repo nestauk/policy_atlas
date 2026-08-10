@@ -18,9 +18,15 @@ from policy_atlas.api.routers import runs as runs_router
 from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core.schema import (
     capability_run,
+    conversation,
     evidence_scope,
     orchestration_plan,
     planning_transcript,
+)
+from policy_atlas.runtime.conversation_lifecycle import (
+    close_planning_conversation,
+    ensure_active_planning_conversation,
+    seed_draft_from_executed_plan,
 )
 from policy_atlas.runtime.orchestration_plan import TIME_BANDS, OrchestrationPlan
 from policy_atlas.runtime.planner import StubPlannerBackend
@@ -39,6 +45,7 @@ class CountingPlanner(StubPlannerBackend):
 
     def __init__(self) -> None:
         self.calls: list[tuple[list[dict[str, str]], dict[str, object] | None]] = []
+        self.session_ids: list[uuid.UUID | None] = []
 
     def plan_turn(
         self,
@@ -48,8 +55,8 @@ class CountingPlanner(StubPlannerBackend):
         session_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Record and delegate the deterministic planner turn."""
-        del session_id
         self.calls.append((turns, previous_draft))
+        self.session_ids.append(session_id)
         return super().plan_turn(turns, previous_draft)
 
 
@@ -103,11 +110,13 @@ def _pending_values(
     message: str,
     created_at: datetime,
     status: str = "pending",
+    conversation_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Build a direct transcript fixture row for retry-boundary tests."""
     return {
         "id": uuid.uuid4(),
         "project_id": uuid.UUID(project_id),
+        "conversation_id": conversation_id,
         "client_turn_id": client_turn_id,
         "turn_index": turn_index,
         "user_message": message,
@@ -185,6 +194,8 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert transcript.json()["pagination"] == {"page": 1, "page_size": 50, "total_items": 1}
         assert transcript.json()["data"][0]["turn_index"] == 0
         assert transcript.json()["data"][0]["status"] == "completed"
+        conversation_id = first.json()["conversation_id"]
+        assert transcript.json()["data"][0]["conversation_id"] == conversation_id
 
         ready = client.post(
             f"/api/v1/projects/{project_id}/planning-turns",
@@ -196,6 +207,8 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         )
         assert ready.status_code == 200
         assert ready.json()["plan"]["ready"] is True
+        assert ready.json()["conversation_id"] == conversation_id
+        assert stub.session_ids == [uuid.UUID(conversation_id), uuid.UUID(conversation_id)]
         persisted = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "approved"
@@ -215,12 +228,20 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert rows[1]["completed_at"] is not None
         assert (
             conn.execute(
-                select(orchestration_plan.c.plan_id).where(
+                select(orchestration_plan.c.plan_id, orchestration_plan.c.conversation_id).where(
                     orchestration_plan.c.project_id == uuid.UUID(project_id)
                 )
-            ).one_or_none()
-            is not None
+            ).one()
+            .conversation_id
+            == uuid.UUID(conversation_id)
         )
+        planning_conversation = conn.execute(
+            select(conversation.c.title, conversation.c.status).where(
+                conversation.c.id == uuid.UUID(conversation_id)
+            )
+        ).one()
+        assert planning_conversation.title == ready.json()["plan"]["title"]
+        assert planning_conversation.status == "active"
 
 
 def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_path: Path) -> None:
@@ -626,6 +647,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
         assert listed.json()["data"] == [
             {
                 "turn_index": 0,
+                "conversation_id": listed.json()["data"][0]["conversation_id"],
                 "client_turn_id": turn_id,
                 "user_message": "Recoverable planner failure",
                 "reply": None,
@@ -692,6 +714,9 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
         project_id = create_project(client, owner)
         old_id = uuid.uuid4()
         with engine.begin() as conn:
+            conversation_id = ensure_active_planning_conversation(
+                conn, project_id=uuid.UUID(project_id), now=datetime.now(UTC)
+            )
             conn.execute(
                 planning_transcript.insert().values(
                     **_pending_values(
@@ -700,12 +725,14 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                         turn_index=0,
                         message="expired pending",
                         created_at=datetime.now(UTC) - timedelta(minutes=11),
+                        conversation_id=conversation_id,
                     )
                 )
             )
         old_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
         assert old_read.status_code == 200
         assert old_read.json()["data"][0]["status"] == "failed"
+        assert old_read.json()["data"][0]["conversation_id"] == str(conversation_id)
         assert old_read.json()["data"][0]["completed_at"] is not None
         other_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=other)
         assert other_read.status_code == 404
@@ -720,6 +747,7 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                         turn_index=1,
                         message="fresh pending",
                         created_at=datetime.now(UTC),
+                        conversation_id=conversation_id,
                     )
                 )
             )
@@ -899,4 +927,73 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
                 .order_by(planning_transcript.c.turn_index.desc())
                 .limit(1)
             ).scalar_one()
-            assert last_status == "failed"
+        assert last_status == "failed"
+
+
+def test_closed_planning_conversation_creates_seeded_successor(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A successor starts from the approved plan, never the closed transcript."""
+    _reset_turn_locks()
+    stub = CountingPlanner()
+    with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
+        project_id = create_project(client, owner)
+        first = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "How can cities reduce heat risk?",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        approved = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
+        )
+        assert first.status_code == approved.status_code == 200
+        predecessor_id = uuid.UUID(approved.json()["conversation_id"])
+        with engine.begin() as conn:
+            plan_payload = conn.execute(
+                select(orchestration_plan.c.payload)
+                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
+                .where(orchestration_plan.c.status == "approved")
+            ).scalar_one()
+            close_planning_conversation(
+                conn, project_id=uuid.UUID(project_id), closed_at=datetime.now(UTC)
+            )
+
+        successor = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "Run it again with a narrower scope",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        assert successor.status_code == 200
+        successor_id = uuid.UUID(successor.json()["conversation_id"])
+        assert successor_id != predecessor_id
+        assert stub.calls[-1][0] == [
+            {"role": "user", "text": "Run it again with a narrower scope"}
+        ]
+        assert stub.calls[-1][1] == seed_draft_from_executed_plan(
+            OrchestrationPlan.model_validate(plan_payload)
+        ).model_dump(mode="json")
+        assert stub.session_ids[-1] == successor_id
+
+        follow_up = client.post(
+            f"/api/v1/projects/{project_id}/planning-turns",
+            headers=owner,
+            json={
+                "message": "Keep the same evidence question",
+                "client_turn_id": str(uuid.uuid4()),
+            },
+        )
+        assert follow_up.status_code == 200
+        assert stub.calls[-1][0] == [
+            {"role": "user", "text": "Run it again with a narrower scope"},
+            {"role": "planner", "text": successor.json()["reply"]},
+            {"role": "user", "text": "Keep the same evidence question"},
+        ]
+        assert stub.session_ids[-1] == successor_id

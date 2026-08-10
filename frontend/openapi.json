@@ -2961,7 +2961,7 @@
         "type": "object"
       },
       "PlanningTranscriptTurnOut": {
-        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-project conversation coordinate.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    part: Structured sequential-planning proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-project conversation coordinate.\n    conversation_id: Owning planning conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    part: Structured sequential-planning proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
         "properties": {
           "client_turn_id": {
             "format": "uuid",
@@ -2979,6 +2979,18 @@
               }
             ],
             "title": "Completed At"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
           },
           "created_at": {
             "format": "date-time",
@@ -3067,8 +3079,20 @@
         "type": "object"
       },
       "PlanningTurnOut": {
-        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-planning proposal, when this turn carries one.",
+        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-planning proposal, when this turn carries one.\n    conversation_id: Planning conversation that produced this turn.",
         "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
           "part": {
             "anyOf": [
               {

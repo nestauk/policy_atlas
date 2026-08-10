@@ -1836,6 +1836,7 @@ export interface components {
          *
          *     Args:
          *         turn_index: Monotonic per-project conversation coordinate.
+         *         conversation_id: Owning planning conversation, absent only on legacy rows.
          *         client_turn_id: The caller's idempotency key for this turn — returned
          *             so a reloaded client can retry its own incomplete latest turn.
          *         user_message: Submitted user message.
@@ -1854,6 +1855,8 @@ export interface components {
             client_turn_id: string;
             /** Completed At */
             completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1903,8 +1906,11 @@ export interface components {
          *         suggestions: The planner's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
          *         part: Structured sequential-planning proposal, when this turn carries one.
+         *         conversation_id: Planning conversation that produced this turn.
          */
         PlanningTurnOut: {
+            /** Conversation Id */
+            conversation_id?: string | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan: components["schemas"]["PlanDraft"];
             /** Reply */
