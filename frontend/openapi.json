@@ -364,6 +364,18 @@
             "title": "Created At",
             "type": "string"
           },
+          "enrichment": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enrichment"
+          },
           "handoff": {
             "anyOf": [
               {

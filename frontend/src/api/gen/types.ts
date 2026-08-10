@@ -718,6 +718,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Enrichment */
+            enrichment?: {
+                [key: string]: unknown;
+            } | null;
             /** Handoff */
             handoff?: "evidence_not_held" | null;
             /**

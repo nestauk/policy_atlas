@@ -19,6 +19,11 @@ from policy_atlas.core.embeddings import (
     OpenAIEmbeddingBackend,
     StubEmbeddingBackend,
 )
+from policy_atlas.evidence_base.synthesis.grounding_judge import (
+    GroundingJudgeBackend,
+    OpenAIGroundingJudgeBackend,
+    StubGroundingJudgeBackend,
+)
 from policy_atlas.runtime.chat_backend import ChatBackend, StubChatBackend
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend
 from policy_atlas.runtime.orchestrate import live_planner_and_backends
@@ -192,6 +197,13 @@ def get_chat_embedding_backend() -> EmbeddingBackend:
     return StubEmbeddingBackend()
 
 
+def get_grounding_judge_backend() -> GroundingJudgeBackend:
+    """Return the key-selected existing grounding judge backend for chat enrichment."""
+    if _live():
+        return OpenAIGroundingJudgeBackend(langfuse_client=tracing.get_langfuse())
+    return StubGroundingJudgeBackend()
+
+
 __all__ = [
     "get_conn",
     "get_chat_backend",
@@ -199,6 +211,7 @@ __all__ = [
     "get_current_user",
     "get_engine",
     "get_executor",
+    "get_grounding_judge_backend",
     "get_orchestrator_backend",
     "get_planner_backend",
     "get_runner_backends",

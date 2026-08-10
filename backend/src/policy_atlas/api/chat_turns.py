@@ -541,6 +541,7 @@ def run_chat_turn(
                 "prompt_version": CHAT_PROMPT_VERSION,
                 "trace_id": trace_id,
                 "stopped_before_evidence_check": False,
+                "enrichment": {"status": "pending" if floored.citations else "not_applicable"},
             }
             if not streamed_parts:
                 _emit_delta(floored.prose)

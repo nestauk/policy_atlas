@@ -18,6 +18,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
+from policy_atlas.api.chat_enrichment import enrich_chat_turn
 from policy_atlas.api.chat_turns import ChatTurnResult, _phase_one_turn, run_chat_turn
 from policy_atlas.api.contract import (
     CancelledEvent,
@@ -36,10 +37,12 @@ from policy_atlas.api.deps import (
     get_chat_embedding_backend,
     get_current_user,
     get_engine,
+    get_grounding_judge_backend,
 )
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import chat_turn, conversation, project
+from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import ChatBackend
 
 router = APIRouter(
@@ -93,6 +96,9 @@ def _turn_out(result: ChatTurnResult) -> ChatTurnOut:
         completed_at=result.completed_at,
         claims=claims if isinstance(claims, list) else [],
         citations=citations if isinstance(citations, list) else [],
+        enrichment=payload.get("enrichment")
+        if isinstance(payload.get("enrichment"), dict)
+        else None,
         warning_not_evidence_checked=bool(payload.get("warning_not_evidence_checked", False)),
         handoff=payload.get("handoff") if payload.get("handoff") == "evidence_not_held" else None,
         stopped_before_evidence_check=bool(payload.get("stopped_before_evidence_check", False)),
@@ -125,6 +131,7 @@ async def create_chat_turn_stream(
     engine: Annotated[Engine, Depends(get_engine)],
     chat_backend: Annotated[ChatBackend, Depends(get_chat_backend)],
     embedding_backend: Annotated[EmbeddingBackend, Depends(get_chat_embedding_backend)],
+    judge_backend: Annotated[GroundingJudgeBackend, Depends(get_grounding_judge_backend)],
 ) -> StreamingResponse:
     """Reserve a chat turn and stream its provider-neutral NDJSON lifecycle."""
     # Reservation happens before response headers. All ownership, eligibility,
@@ -195,6 +202,24 @@ async def create_chat_turn_stream(
                 events.put(CancelledEvent(turn=_turn_out(result)))
             else:
                 events.put(CompletedEvent(turn=_turn_out(result)))
+                payload = result.answer_payload or {}
+                enrichment = payload.get("enrichment")
+                if (
+                    not result.replayed
+                    and isinstance(enrichment, dict)
+                    and enrichment.get("status") == "pending"
+                ):
+                    threading.Thread(
+                        target=enrich_chat_turn,
+                        kwargs={
+                            "engine": engine,
+                            "turn_id": result.id,
+                            "judge_backend": judge_backend,
+                            "langfuse_client": tracing.get_langfuse(),
+                        },
+                        name=f"policy-atlas-chat-enrichment-{result.id}",
+                        daemon=True,
+                    ).start()
         except Exception:
             events.put(
                 FailedEvent(

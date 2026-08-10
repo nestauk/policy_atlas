@@ -34,6 +34,7 @@ class ChatTurnOut(BaseModel):
     completed_at: datetime | None
     claims: list[dict[str, Any]] = Field(default_factory=list)
     citations: list[dict[str, Any]] = Field(default_factory=list)
+    enrichment: dict[str, Any] | None = None
     warning_not_evidence_checked: bool = False
     handoff: Literal["evidence_not_held"] | None = None
     stopped_before_evidence_check: bool = False
