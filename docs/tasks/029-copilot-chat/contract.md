@@ -47,9 +47,10 @@
 >
 > **rev 2.3 (2026-08-10): V2 chat review folded in** (owner-directed survey of the
 > sibling `discovery_policy_atlas` chat; adjudication in
-> [v2-chat-review.md](v2-chat-review.md)). Ports: **(a)** server-minted per-turn
-> citation register + post-answer compaction (strand 4 — the model cites only from a
-> register the server assigned; display renumbers to surviving citations); **(b)**
+> [v2-chat-review.md](v2-chat-review.md)). Ports: **(a)** cite-only-what-you-read +
+> post-answer compaction invariants (strand 4 — **rev 2.3.1, owner challenge:** the
+> *mechanism* is house-pattern durable-id `citations[]`, not V2's server-pre-assigned
+> number register, which was declined as a free-prose-era workaround); **(b)**
 > typed stream progress events with user-facing tool labels + collapsing activity
 > summary (strand 3/6); **(c)** cancel affordance — client abort, server generator
 > cleanup, honest terminal turn state (strand 3); **(d)** cross-chat turn-state
@@ -219,17 +220,24 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   hard rule — egress must not originate outside the audit record). Turn caps + per-turn
   read caps as shipped.
 - **Fast-path discipline — pinning the spec's 🟡**: chat **skips the verify pass**.
-  Trust is carried by labelling with deterministic floors, built on a **server-minted
-  citation register** (rev 2.3, the V2 pattern): every source the tool loop returns is
-  assigned a turn-scoped number server-side, and the model cites only from that
-  register. Floors: (a) a citation must resolve to a register entry — anything else
-  (fabricated, out-of-range) is stripped and the tier downgraded; (b) an inline `[n]`
-  marker whose citation was stripped is stripped with it; (c) after generation the
-  answer is compacted — citations renumber to the surviving cited set, uncited
-  register entries drop from the display payload; (d) zero surviving citations forces
+  Trust is carried by labelling with deterministic, outcome-level floors (rev 2.3.1 —
+  mechanism follows the house pattern, not V2's): the terminal structured payload
+  carries a `citations[]` array of **durable ids** (chunk/source/finding — the same
+  citation currency as synthesis), and inline `[n]` markers index into that array;
+  display numbering is derived at persist time, never a second authority. Floors:
+  (a) every citation must resolve to an id the tool loop actually returned this turn —
+  anything else (fabricated, out-of-range) is stripped and the tier downgraded;
+  (b) an inline marker whose citation was stripped is stripped with it; (c) the
+  persisted display payload is compacted — surviving citations numbered by first
+  appearance, uncited entries never displayed; (d) zero surviving citations forces
   the "pure LLM reasoning" label; (e) no answer renders untier-labelled (§3.3
   taxonomy). An ungrounded answer indistinguishable from a grounded one is the
-  cardinal sin this prevents.
+  cardinal sin this prevents. *(Considered and declined: V2's server-pre-assigned
+  per-turn citation register — needed there because free-prose output made inline
+  numbers the only citation channel; its one advantage, mid-stream marker
+  resolvability, doesn't justify a second numbering authority + prose re-parsing when
+  markers become interactive at the terminal payload seconds later. See
+  [v2-chat-review.md](v2-chat-review.md).)*
   **Named residual (rev 2.1)**: id-membership does not catch *misattribution* (a real
   chunk cited for a claim it doesn't support — the dominant failure mode in 2025–26
   citation studies); the tier label is the honest v1 mitigation, and a per-claim
@@ -358,9 +366,9 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   exactly one terminal payload; mid-stream failure → honest failed row + client
   recovery; client cancel → generator cleanup + honest terminal turn state; idempotent
   retry of a completed turn replays stored answer without re-generation; disconnect
-  cleanup) · **citation-register tests** (out-of-range marker stripped; compaction
-  renumbers to the surviving cited set; uncited register entries dropped from display)
-  · **cross-chat concurrency test** (concurrent turns in different chats of one
+  cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped +
+  tier downgraded; orphan marker stripped; compaction numbers survivors by first
+  appearance; uncited entries never displayed) · **cross-chat concurrency test** (concurrent turns in different chats of one
   project share no turn state — the V2 request-scoped-state lesson) · frontend
   component tests (library, switcher, tier chip, composer states incl. stop button,
   hand-off affordance, stream rendering + activity summary).

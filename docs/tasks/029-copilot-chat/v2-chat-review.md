@@ -9,15 +9,18 @@ rendering, multi-thread-per-project transcripts — **in browser localStorage on
 
 ## What V2 got right → ported into the 029 contract
 
-1. **Server-assigned citation numbers + post-hoc compaction** (the standout): every
-   retrieved source gets a turn-scoped number minted *server-side* when tool results
-   return; the model cites from that register; after generation the answer is
-   re-parsed, renumbered to only the sources actually cited, uncited ones dropped.
-   The model cannot invent a source that was never registered. → 029 strand 4: the
-   citation floor becomes register-based (marker must resolve to a register entry
-   *and* survive compaction), which also closes V2's own two leaks — an out-of-range
-   `[7]` surviving into the rendered answer, and a zero-citation answer displaying as
-   if grounded (ours forces the pure-LLM tier).
+1. **Cite-only-what-you-read + post-hoc compaction — invariants ported, mechanism
+   declined** (rev 2.3.1, owner challenge): V2 mints turn-scoped source numbers
+   server-side and re-parses the answer to renumber/prune — necessary there because
+   free-prose output made inline numbers the only citation channel. V3's house
+   pattern already carries citations as **durable ids in structured output**
+   (synthesis precedent), so 029 pins the *outcomes* (every citation resolves to a
+   tool-returned id; orphan markers stripped; display numbering derived + compacted
+   at persist time; zero survivors → pure-LLM tier) on a payload-indexed `citations[]`
+   mechanism instead. This closes V2's own two leaks — an out-of-range `[7]`
+   surviving into the render, and a zero-citation answer displaying as if grounded —
+   without a second numbering authority or prose re-parsing. V2's register keeps one
+   real advantage (markers resolvable mid-stream); adjudged not worth it.
 2. **Streamed step transparency**: typed event vocabulary (`agent.status`,
    `tool.started/completed/failed`, `message.delta`, `message.completed`) driving a
    live activity card with user-facing tool labels, collapsing to "Used N actions and
