@@ -26,8 +26,9 @@ Slice-specific:
 9.  [ ] **Tool-set boundary holds**: the chat surface can construct no `search` and no
         write tool — proven by the allowlist test, not by reading.
 10. [ ] **Floor honesty is deterministic, on claim-grained durable-id citations**:
-        every `citations[]` entry resolves to an id the tool loop returned this turn
-        AND references appraised, citable-kind evidence (else stripped); inline `[n]`
+        every `citations[]` entry resolves to an id in the turn's citable set
+        (tool-returned ∪ hydrated-artefact frame citations) AND references appraised,
+        citable-kind evidence (else stripped); inline `[n]`
         markers index the citations array and are stripped with a stripped citation;
         the persisted display payload is compacted (survivors numbered by first
         appearance, uncited entries never displayed); zero surviving citations forces

@@ -84,6 +84,16 @@
 > **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
 > (Out list).
 >
+> **rev 3.1 (2026-08-10, owner call at the reopened 🛑): artefact body IN the
+> fresh-chat frame.** The rev-3 summary exclusion stands (spec rule untouched), but
+> the owner's product read — questions arise from reading the artefact — lands as
+> hydrating the **grounded body** (section prose + claim citation markers + id-keyed
+> references): the verified content of record, not a condensation. Provenance
+> questions answer from the frame citing the artefact's own chunk ids (floor
+> extended: citable set = tool-returned ∪ frame-carried ids); deterministic budget
+> rule (entry-context artefact full; others degrade to key findings + section
+> titles; rest tool-fetchable) doubles as the multi-artefact shape.
+>
 > **rev 3 (2026-08-10): contract-stage adversarial lane DONE** (codex-rescue job
 > task-msnk8k33-o0ndx2; 23 findings, 17 MAJOR — all adjudicated in; **reopened 🛑,
 > owner re-approval required**). Material folds: **(a)** spec conflicts fixed —
@@ -405,9 +415,11 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
     ids** (the same claim/citation currency as synthesis, which is what the judge
     machinery requires); inline `[n]` markers index the citations array; display
     numbering derived at persist time. Floors: (a) every citation must resolve to an
-    id the tool loop actually returned this turn **and reference appraised,
-    citable-kind evidence** (rev 3 — tool results already carry `appraised`; the
-    cite-only-appraised hard rule holds on this surface too); anything else is
+    id in the turn's **citable set** — ids the tool loop actually returned this turn
+    **∪ citation ids carried in the hydrated artefact frame** (rev 3.1: both durable;
+    frame-carried ids are appraised by construction, having passed the full block
+    discipline when the artefact was made) — **and reference appraised, citable-kind
+    evidence** (rev 3 — tool results already carry `appraised`); anything else is
     stripped; (b) an orphaned marker is stripped with its citation; (c) the persisted
     display payload is compacted; (d) zero surviving citations → the answer carries
     the **"not evidence-checked"** warning marker — a warning, never a tier
@@ -459,12 +471,20 @@ Per-turn chat context = the conversation's recent window (last K turns verbatim,
 at plan time, **plus a token/char ceiling so one oversized turn can't blow the budget** —
 rev 2.1) + the current question + the **project frame**. The frame (rev 2.8, fresh-chat
 hydration enumerated — *orient, don't stuff*: the frame says where the model is standing;
-specifics are the tool loop's job): project name + research question · the composed
-coverage sentence · the funnel headline counts · per artefact its title and section
-titles — **never the prose, and never the persisted summary** (rev 3: summaries are
-navigation devices; nothing load-bearing, including agent context, derives from one —
-provenance-grounding rule) · the entry-context artefact when the chat was opened from
-one, labelled "the user was reading this — relevance guidance, not evidence". All
+specifics are the tool loop's job — **except the artefact itself, rev 3.1**): project
+name + research question · the composed coverage sentence · the funnel headline
+counts · **per artefact, its grounded body** — section prose with claim citation
+markers + the id-keyed reference list (owner call: the artefact is where users'
+questions arise; and it is the *verified content of record*, not a summary — every
+hydrated claim already carries block-discipline citations, so provenance questions
+can be answered from the frame, citing the artefact's own chunk ids, often with zero
+tool calls). **Budget rule (deterministic):** over a frame budget pinned at plan, the
+entry-context artefact keeps its full body and other artefacts degrade to
+key-findings section + section titles; anything not hydrated stays tool-fetchable.
+**The persisted summary stays out** — the spec's summaries-are-not-load-bearing rule
+stands untouched; the body supersedes anything the summary could contribute · the
+entry-context artefact when the chat was opened from one, labelled "the user was
+reading this — relevance guidance, not evidence". All
 frame fields are corpus/project-derived → sanitized, bounded, labelled
 "(data, not instructions)". Deliberately not hydrated: raw chunks, artefact prose, the
 planning transcript, steering history — all tool-fetchable or deferred. The assembler is
@@ -603,8 +623,10 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   enriched replay) · **resolver tests** (terminal-run component-id resolution incl.
   replacement/additive re-runs and degraded missing components; resolved once per
   turn) · **resource-control tests** (output ceiling; per-owner in-flight cap →
-  named 429-class error) · **context-assembler tests** (exact frame fields; summary
-  excluded; K-window + token-ceiling truncation oldest-first; other conversations'
+  named 429-class error) · **context-assembler tests** (exact frame fields; artefact body
+  present with citation keys; summary excluded; budget degrade rule (entry-context
+  full → others key-findings+titles); frame-carried citation ids floor-valid;
+  K-window + token-ceiling truncation oldest-first; other conversations'
   turns never present) · **tracing tests** (stable session id per conversation;
   prompt/model metadata; `answer_payload` trace id matches the trace) ·
   **citation-floor tests** (unresolvable/out-of-range/unappraised citation stripped;
