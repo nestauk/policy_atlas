@@ -26,8 +26,9 @@ design-input only — never merge/run (burned dev keypair in its history).
 - Threads as a horizontal tab strip; ✕ on hover; close = archive (never destroy);
   focus falls to the neighbouring tab; the rail never empties (blank chat
   auto-created); a blank "New chat" tab is reused rather than duplicated.
-- Chats library rows: 2-line last-message preview · context chip echo · "Open" badge
-  distinguishing rail-open from archived · relative time · Enter-to-open focus ring.
+- Chats library rows: 2-line last-message preview · context chip echo · relative
+  time · Enter-to-open focus ring. (The mockup's "Open" badge was cut at the
+  2026-08-10 mockup review — tab presence and the preview carry it.)
 - Force-expand-rail signal so remote affordances (artefact "Ask about this") can pop
   the collapsed rail; drag-resize with min/max + collapse-to-spine (027/028 rail
   machinery already does most of this).

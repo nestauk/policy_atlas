@@ -83,6 +83,16 @@
 > **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
 > (Out list).
 >
+> **rev 2.7 (2026-08-10, owner calls at the mockup review):** (1) **per-citation
+> judge tiers IN** — the async grounding judge runs post-stream and attaches
+> per-citation §3.3 verdicts (answer chip = weakest tier present; citations are
+> honestly "unchecked" until enrichment; judge failure never blocks). Resolves the
+> tier-grain question: answer-level self-report both flattened mixed answers and
+> self-graded in the judge's vocabulary; async enrichment is judge-true with zero
+> visible latency. Staged as its own plan phase, cuttable at the plan 🛑. (2) The
+> Chats-library **Open/Closed badges are cut** (copy diet — tab presence and the
+> preview carry the same information).
+>
 > **rev 2.6 (2026-08-10): PR #35 chat mockup re-mined** (owner-directed; the
 > colleague's demo branch this slice's container model came from, now read for its
 > interaction detail — adjudication in [design-inputs.md](design-inputs.md)).
@@ -265,29 +275,38 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   boundary**: no `search`, no write tools constructible from the chat surface (spec
   hard rule — egress must not originate outside the audit record). Turn caps + per-turn
   read caps as shipped.
-- **Fast-path discipline — pinning the spec's 🟡**: chat **skips the verify pass**.
-  Trust is carried by labelling with deterministic, outcome-level floors (rev 2.3.1 —
-  mechanism follows the house pattern, not V2's): the terminal structured payload
-  carries a `citations[]` array of **durable ids** (chunk/source/finding — the same
-  citation currency as synthesis), and inline `[n]` markers index into that array;
-  display numbering is derived at persist time, never a second authority. Floors:
-  (a) every citation must resolve to an id the tool loop actually returned this turn —
-  anything else (fabricated, out-of-range) is stripped and the tier downgraded;
-  (b) an inline marker whose citation was stripped is stripped with it; (c) the
-  persisted display payload is compacted — surviving citations numbered by first
-  appearance, uncited entries never displayed; (d) zero surviving citations forces
-  the "pure LLM reasoning" label; (e) no answer renders untier-labelled (§3.3
-  taxonomy). An ungrounded answer indistinguishable from a grounded one is the
-  cardinal sin this prevents. *(Considered and declined: V2's server-pre-assigned
-  per-turn citation register — needed there because free-prose output made inline
-  numbers the only citation channel; its one advantage, mid-stream marker
-  resolvability, doesn't justify a second numbering authority + prose re-parsing when
-  markers become interactive at the terminal payload seconds later. See
-  [v2-chat-review.md](v2-chat-review.md).)*
-  **Named residual (rev 2.1)**: id-membership does not catch *misattribution* (a real
-  chunk cited for a claim it doesn't support — the dominant failure mode in 2025–26
-  citation studies); the tier label is the honest v1 mitigation, and a per-claim
-  groundedness check on chat answers is routed to the eval slice, not silently absent.
+- **Fast-path discipline — pinning the spec's 🟡 (rev 2.7: two stages, judge-true)**:
+  chat skips verification **inline** — nothing delays the stream — and the real
+  **grounding judge runs asynchronously after the stream closes**, attaching
+  **per-citation §3.3 tier verdicts** (owner call, 2026-08-10: per-citation labels are
+  the judge system's design; an answer-level self-graded tier both flattens mixed
+  answers and fakes the judge's precision).
+  - **Stage 1 — deterministic floors at the terminal payload** (rev 2.3.1 mechanism,
+    unchanged): the structured payload carries `citations[]` as **durable ids** (the
+    same citation currency as synthesis); inline `[n]` markers index that array;
+    display numbering derived at persist time. Floors: (a) every citation must
+    resolve to an id the tool loop actually returned this turn — anything else is
+    stripped; (b) an orphaned marker is stripped with its citation; (c) the persisted
+    display payload is compacted; (d) zero surviving citations → the answer is
+    "pure LLM reasoning", no judge call; (e) surviving citations land in an honest
+    **"unchecked"** state — never wearing a tier they haven't earned.
+  - **Stage 2 — async judge enrichment**: for answers with surviving citations, the
+    grounding judge (the synthesis judge machinery) assesses each cited claim against
+    its cited chunk(s) and per-citation tier verdicts attach as an enrichment write
+    on the turn row; the answer-level chip becomes a **derived summary = the weakest
+    tier present**. Judge failure or timeout leaves citations honestly "unchecked" —
+    enrichment never blocks, never fabricates, and a judge verdict can only downgrade
+    or confirm, never launder. The upgrade reaches an open chat via the turn read
+    model (bounded refetch; **no project-SSE change**). An idempotent retry replays
+    the enriched payload when present.
+  *(Considered and declined: V2's server-pre-assigned per-turn citation register —
+  see [v2-chat-review.md](v2-chat-review.md); and inline/blocking judge — the whole
+  point of stream-then-verify is that verification cost never sits on the visible
+  answer.)*
+  **Residual, revised at rev 2.7**: the async judge now covers *misattribution* (a
+  real chunk cited for an unsupported claim — the dominant 2025–26 failure mode) for
+  every enriched answer; what remains for the eval slice is measuring the **judge's
+  own quality on chat-shaped claims** and the unenriched window/failure path.
 - Both spec flavours in scope: *provenance lookup* and *generative synthesis* rendered
   into chat, not persisted as artefact content.
 - **Evidence-not-held honesty + hand-off**: when the corpus can't answer, the answer
@@ -388,6 +407,9 @@ data.
 
 OpenAI under the approved controls (v3.0 posture; Bedrock behind the routing seam).
 New surface: `chat_v1` on `POLICY_ATLAS_CHAT_MODEL` (default = orchestrator model).
+The async enrichment reuses the **existing grounding-judge surface and model class**
+(rev 2.7) — a new call site, not a new prompt surface; any judge-prompt adaptation
+for chat-shaped claims is lead-only and version-bumped.
 Prompt-bearing: `CHAT_SYSTEM_PROMPT` + chat wire-model field descriptions — lead-only.
 Staging OpenAI quota exhausted (honest-429) — the live check runs locally against a
 funded key, or after billing top-up.
@@ -424,9 +446,13 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   exactly one terminal payload; mid-stream failure → honest failed row + client
   recovery; client cancel → generator cleanup + partial prose persisted as `cancelled`
   with inert markers + no-tier badge; idempotent retry of a completed turn replays
-  stored answer without re-generation; disconnect cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped +
-  tier downgraded; orphan marker stripped; compaction numbers survivors by first
-  appearance; uncited entries never displayed) · **cross-chat concurrency test** (concurrent turns in different chats of one
+  stored answer without re-generation; disconnect cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped;
+  orphan marker stripped; compaction numbers survivors by first appearance; uncited
+  entries never displayed; zero survivors → pure-LLM answer, no judge call) ·
+  **judge-enrichment tests** (per-citation verdicts attach on the turn row; answer
+  chip = weakest tier present; judge failure/timeout leaves citations "unchecked" and
+  the turn completed; retry replays enriched payload when present; stub-judge
+  deterministic path) · **cross-chat concurrency test** (concurrent turns in different chats of one
   project share no turn state — the V2 request-scoped-state lesson) · frontend
   component tests (library, switcher, tier chip, composer states incl. stop button,
   hand-off affordance, stream rendering + activity summary).

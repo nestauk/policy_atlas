@@ -26,12 +26,17 @@ Slice-specific:
         write tool — proven by the allowlist test, not by reading.
 10. [ ] **Tier honesty is deterministic, on durable-id citations**: every `citations[]`
         entry resolves to an id the tool loop returned this turn (fabricated or
-        out-of-range → stripped + tier downgraded); inline `[n]` markers index the
-        citations array and are stripped with a stripped citation; the persisted
-        display payload is compacted (surviving citations numbered by first
-        appearance, uncited entries never displayed); zero surviving citations forces
-        the pure-LLM label; no answer renders without a tier chip from the locked
-        vocabulary; marker/hover/footer all resolve only to surviving citations.
+        out-of-range → stripped); inline `[n]` markers index the citations array and
+        are stripped with a stripped citation; the persisted display payload is
+        compacted (surviving citations numbered by first appearance, uncited entries
+        never displayed); zero surviving citations forces the pure-LLM label with no
+        judge call; marker/hover/footer all resolve only to surviving citations.
+10a. [ ] **Judge enrichment is honest (rev 2.7)**: citations render "unchecked" until
+        the async grounding judge attaches per-citation §3.3 verdicts; the
+        answer-level chip is derived (weakest tier present) from the locked
+        vocabulary; judge failure/timeout leaves "unchecked" — enrichment never
+        blocks the turn, never upgrades a floor-stripped citation, and reaches open
+        chats via the turn read model without any project-SSE change.
 11. [ ] **Chats are ephemeral and read-only**: a chat turn writes only `conversation`/
         `chat_turn` rows — no artefact, finding, annotation, plan or shared
         project-event writes; the evidence-not-held hand-off is a link, never a plan

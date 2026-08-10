@@ -138,9 +138,14 @@
   .activity b { color: var(--navy); }
 
   .refs { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
-  .refs .ref { font-size: 12px; color: var(--grey); line-height: 1.45; }
+  .refs .ref { font-size: 12px; color: var(--grey); line-height: 1.45; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
   .refs .ref a { color: var(--blue); text-decoration: none; font-weight: 600; }
-  .refs .ref .rn { color: var(--blue); font-weight: 700; margin-right: 6px; }
+  .refs .ref .rn { color: var(--blue); font-weight: 700; }
+  .rtier { font-size: 12px; font-weight: 700; padding: 1px 7px; line-height: 1.4; }
+  .rtier.t1 { background: var(--green-tint); color: #0d6e5e; }
+  .rtier.t2 { background: var(--green-tint); color: #0d6e5e; }
+  .rtier.t3 { background: var(--yellow-tint); color: #8a5b00; }
+  .rtier.un { background: var(--ground); color: var(--grey); border: 1px dashed var(--line2); }
 
   /* progress events */
   .prog { display: flex; flex-direction: column; gap: 6px; }
@@ -201,8 +206,6 @@
   .lrow:last-child { border-bottom: 1px solid var(--line); }
   .lrow.hover { background: var(--blue-tint2); outline: 2px solid var(--blue); outline-offset: -2px; }
   .lrow .lt { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--navy); }
-  .lrow .badge { font-size: 12px; font-weight: 700; color: var(--blue); border: 1px solid var(--blue); padding: 1px 7px; }
-  .lrow .badge.closed { color: var(--grey); border-color: var(--line2); }
   .lrow .lp { grid-column: 1; font-size: 14px; color: var(--grey); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 60ch; }
   .lrow .lmeta { grid-column: 1; display: flex; gap: 8px; align-items: center; margin-top: 2px; }
   .lrow .rtime { grid-row: 1; grid-column: 2; font-size: 12px; color: var(--grey); white-space: nowrap; }
@@ -229,7 +232,7 @@
     <div class="pins">
       <span class="pin">many chats per project</span>
       <span class="pin">stream → verify → cite</span>
-      <span class="pin">tier on every answer</span>
+      <span class="pin">judge-tiered citations</span>
       <span class="pin">chats never mutate</span>
     </div>
   </header>
@@ -241,9 +244,9 @@
       <h2>A follow-up chat beside the artefact</h2>
       <p class="fdesc">The rail hosts conversations as tabs: the <b>closed planning conversation</b> (grey dot — its
       run completed and produced this evidence base) and the active chat. Answers are plain prose with inline
-      <b>[n]</b> citations, a <b>trust tier chip</b>, a collapsed activity line, and a references footer that opens
-      the source dossier. The context bar shows this chat was opened from the artefact; the chip navigates, the ✕
-      detaches — scope stays whole-project either way.</p>
+      <b>[n]</b> citations; the grounding judge has run post-stream, so each reference carries its <b>own tier
+      verdict</b> and the answer chip is the <b>weakest tier present</b>. The context bar shows this chat was opened
+      from the artefact; the chip navigates, the ✕ detaches — scope stays whole-project either way.</p>
     </header>
     <div class="shot"><div class="app">
       <div class="rail">
@@ -266,9 +269,9 @@
               <span class="activity">Checked the evidence — <b>3 searches · 6 sources read</b></span>
             </div>
             <div class="refs">
-              <div class="ref"><span class="rn">[1]</span><a href="#">Fuel poverty and low-carbon heating adoption</a> — BEIS, 2023</div>
-              <div class="ref"><span class="rn">[2]</span><a href="#">Barriers to heat pump adoption in social housing</a> — Energy Policy, 2022</div>
-              <div class="ref"><span class="rn">[3]</span><a href="#">Retrofit finance for low-income owner-occupiers</a> — UKERC, 2024</div>
+              <div class="ref"><span class="rn">[1]</span><a href="#">Fuel poverty and low-carbon heating adoption</a> — BEIS, 2023 <span class="rtier t1">Tier 1 · direct quote</span></div>
+              <div class="ref"><span class="rn">[2]</span><a href="#">Barriers to heat pump adoption in social housing</a> — Energy Policy, 2022 <span class="rtier t2">Tier 2 · grounded</span></div>
+              <div class="ref"><span class="rn">[3]</span><a href="#">Retrofit finance for low-income owner-occupiers</a> — UKERC, 2024 <span class="rtier t2">Tier 2 · grounded</span></div>
             </div>
           </div>
         </div>
@@ -297,9 +300,9 @@
       <div class="fno">Frame 02 · streaming</div>
       <h2>Progress events, then prose, then the evidence check</h2>
       <p class="fdesc">Before tokens arrive the turn shows <b>typed progress events</b> — real tool steps with
-      user-facing labels, not a spinner. Prose then streams with markers rendered as plain text; citations and the
-      tier attach when the terminal payload lands. The composer's send becomes <b>Stop</b> for the whole
-      generation.</p>
+      user-facing labels, not a spinner. Prose streams with markers as plain text; citations attach at the terminal
+      payload in an <b>“unchecked”</b> state, and the grounding judge's per-citation tier verdicts land a few
+      seconds later. The composer's send becomes <b>Stop</b> for the whole generation.</p>
     </header>
     <div class="shot"><div class="app">
       <div class="rail">
@@ -446,9 +449,9 @@
       <div class="fno">Frame 05 · chats library</div>
       <h2>Every conversation, one library</h2>
       <p class="fdesc">Chats and planning conversations in one list: title, two-line preview, context chip, relative
-      time. <b>Open</b> marks rail-open threads; planning conversations show <b>closed</b> with the run they
-      produced. Hover (second row) reveals rename/archive — <b>no delete anywhere</b>; the transcript is part of the
-      project record.</p>
+      time — the preview carries each conversation's state (the planning row names the run it produced). Hover
+      (second row) reveals rename/archive — <b>no delete anywhere</b>; the transcript is part of the project
+      record.</p>
     </header>
     <div class="shot"><div class="lib-wrap">
       <div class="lib-head">
@@ -457,7 +460,7 @@
       </div>
       <div class="lib-rows">
         <div class="lrow">
-          <div class="lt">Upfront-cost barriers <span class="badge">Open</span></div>
+          <div class="lt">Upfront-cost barriers</div>
           <div class="rtime">just now</div>
           <div class="lp">Two of the three cited studies include private renters. The Energy Policy study [2] samples across tenures but reports renters separately…</div>
           <div class="lmeta"><span class="ctx-chip">Evidence base · Heat pump uptake</span></div>
@@ -470,7 +473,7 @@
           <div class="acts"><span>Rename</span><span class="arch">Archive</span></div>
         </div>
         <div class="lrow">
-          <div class="lt">Planning — Evidence base <span class="badge closed">Closed · run 2 Aug</span></div>
+          <div class="lt">Planning — Evidence base</div>
           <div class="rtime">8 days ago</div>
           <div class="lp">Plan approved: 2 search backends, UK scope, 2015–2025, moderate steering. Produced “Heat pump uptake in disadvantaged households”.</div>
           <div class="lmeta"><span class="ctx-chip zero">Whole project</span></div>
@@ -528,6 +531,7 @@
           <div class="qt">Where this comes from</div>
           <div class="quote">“…mean out-of-pocket expenditure of £4,200 (SD £1,850) among grant-eligible households
           completing installation in 2022 (table 12)…”</div>
+          <div class="qsrc"><span class="rtier t1">Tier 1 · direct quote</span></div>
           <div class="qsrc">Fuel poverty and low-carbon heating adoption — BEIS, 2023 · <a href="#">Open source dossier →</a></div>
         </div>
       </div>
