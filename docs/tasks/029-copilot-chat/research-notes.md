@@ -96,6 +96,37 @@ contract rev 2.1 status block.
   https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-v2025.pdf ·
   https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/
 
+## Lane 4 — turn persistence vs production systems (rev 2.4 input, 2026-08-10)
+
+- **Row grain: per-message rows universally** — LibreChat (one document per message,
+  parent pointers), Vercel ai-chatbot (row per message: id/chatId/role/parts),
+  AI SDK `UIMessage[]`, Open WebUI + ChatGPT (message *trees* with
+  parentId/childrenIds for edit/regenerate branching). No surveyed system stores a
+  turn-pair row. Pair-grain forecloses regenerate/branching/tool-rows/per-message
+  cost accounting — kept knowingly for our strict ask→answer shape; the
+  pair→per-message split is the named migration seam.
+  https://deepwiki.com/intelequia/LibreChat/3.4-conversation-and-messages ·
+  https://deepwiki.com/vercel/ai-chatbot/2.3-message-flow-and-persistence ·
+  https://docs.openwebui.com/features/chat-conversations/data-controls/import-export/ ·
+  https://codingbeautydev.com/blog/chatbot-conversation-branching/
+- **Streaming persistence: write-at-completion is the orthodoxy** (AI SDK `onFinish`
+  — "only when complete, not on every chunk"; `consumeStream()` finishes server-side
+  past client disconnect); resumable streams are an additive Redis layer (deltas in
+  Redis, DB only ever sees complete messages) — validates buffer-then-atomic-commit
+  and defers resumability cleanly.
+  https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-message-persistence ·
+  https://ai-sdk.dev/docs/ai-sdk-ui/chatbot-resume-streams
+- **State machines: cancel keeps the partial** — LibreChat persists stopped text with
+  `unfinished: true`; assistant-ui's status is `incomplete/cancelled` *with content
+  kept*; ChatGPT has continue-generating. Dropping the partial was our one
+  stricter-than-anyone choice → corrected in rev 2.4 (status `cancelled`, markers
+  inert, "stopped before evidence check" badge, no tier).
+  https://github.com/danny-avila/LibreChat/discussions/11461 ·
+  https://github.com/assistant-ui/assistant-ui/blob/main/packages/core/src/types/message.ts
+- **Ordering: explicit `turn_index` is sturdier than the norm** (templates use
+  createdAt ASC or array position; trees use parent chains) — a genuine improvement,
+  cheap because pair-grain guarantees linearity.
+
 ## Scorecard (as folded into rev 2.1)
 
 - **Leads practice:** trust tiers + abstention · deterministic citation floor ·

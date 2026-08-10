@@ -61,8 +61,9 @@ Slice-specific:
         labels) + text deltas + exactly one terminal validated payload per turn; the
         persisted answer equals the streamed prose; the wire shape is provider-neutral
         (no partial-JSON passthrough); mid-stream failure leaves an honest failed row
-        and the client recovers; client cancel cleans up the generator and leaves an
-        honest terminal turn state, never a silent pending; an idempotent retry of a
+        and the client recovers; client cancel cleans up the generator and persists the
+        partial prose as `cancelled` — markers inert, "stopped before evidence check"
+        badge in place of a tier, never a silent pending; an idempotent retry of a
         completed turn replays the stored answer without re-generation; the project
         SSE vocabulary is untouched.
 21. [ ] **Cross-chat isolation (rev 2.3)**: concurrent turns in different chats of one

@@ -60,6 +60,17 @@
 > posture), regex prose-fighting (vs our structured terminal payload), no
 > idempotency/cancellation (vs `client_turn_id` + (c)).
 >
+> **rev 2.4 (2026-08-10): turn-persistence check vs production systems** (owner
+> question; research in [research-notes.md](research-notes.md) § Lane 4). Lifecycle
+> validated: buffer-then-atomic-commit is the AI SDK `onFinish` orthodoxy; honest
+> `failed` rows exceed most templates; explicit `turn_index` is sturdier than the
+> timestamp ordering templates use. Two divergences adjudicated: **turn-pair row
+> grain kept knowingly** (no production system does it, but it models exactly our
+> ask→answer shape; the pair→per-message split is the named regenerate/branching
+> seam) and **cancel now keeps the partial** (production norm — LibreChat
+> `unfinished`, assistant-ui `incomplete/cancelled`; status `cancelled`, markers
+> inert, "stopped before evidence check" badge in place of a tier).
+>
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.
@@ -125,7 +136,12 @@ live check.
   prompt version** — per-turn audit metadata, rev 2.1) ·
   `capability_run_id` (nullable FK, `uq_capr_id_project` composite precedent — records
   which run's committed state answered; provenance, **not** scope) ·
-  `status ∈ pending | completed | failed` · `created_at`, `completed_at`.
+  `status ∈ pending | completed | failed | cancelled` · `created_at`, `completed_at`.
+  **Grain note (rev 2.4):** the turn-pair row (user message + answer in one row) is a
+  deliberate departure from production per-message-row schemas — sound while the shape
+  is strictly ask→answer (no regenerate, no branching, no tool rows: all out of
+  scope), with the exit named: pair→per-message split is a mechanical additive
+  migration recorded as the seam regenerate/branching would open with.
 - **`planning_transcript`** gains `conversation_id` FK — turn columns and mechanics
   otherwise untouched. Turn storage stays per-kind (planning columns and chat columns
   share almost nothing; "model only what behaves" — no speculative unified turn table).
@@ -197,11 +213,16 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   terminal payload, no re-generation). Tool-loop turns before the final emission emit
   **typed progress events with user-facing tool labels** (rev 2.3, the V2 activity
   pattern — "Searching the evidence…", collapsing to an activity summary in the UI),
-  not fake tokens. **Cancel is a first-class affordance** (rev 2.3): the client can
-  abort the stream (composer stop button); the server cleans up the generator and
-  marks the turn row with an honest terminal state — a canceled turn is never a
-  silent pending. This is the backend's **first token-streaming plumbing** — named as
-  such for the plan and review stack.
+  not fake tokens. **Cancel is a first-class affordance** (rev 2.3; shape corrected
+  rev 2.4 to production practice): the client can abort the stream (composer stop
+  button); the server cleans up the generator and **persists the partial prose** with
+  status `cancelled` — users keep the text they watched stream (the LibreChat/
+  assistant-ui/ChatGPT norm), never a silent pending. Since the terminal `citations[]`
+  never arrived, inline markers in a cancelled partial are unresolvable by
+  construction: they render inert and the turn carries a "stopped before evidence
+  check" badge in place of a trust tier — content kept, tier honesty intact. This is
+  the backend's **first token-streaming plumbing** — named as such for the plan and
+  review stack.
 
 ### 4 — The chat agent: `chat_v1` orchestrator moment (lead-authored, prompt-bearing)
 
@@ -304,7 +325,10 @@ conversation entity now makes natural). Prompt-version metadata on every call.
   chats that replan or trigger runs (never — a hand-off link is the ceiling) ·
   cross-chat memory/recall (2026 practice keeps it opt-in and memory-mediated; our
   chats stay mutually blind, knowledge travels via artefacts) · LLM auto-titling
-  (first-question truncation v1; async cheap-model titling is a noted easy upgrade).
+  (first-question truncation v1; async cheap-model titling is a noted easy upgrade) ·
+  regenerate/edit/branching (the pair→per-message row split is its named migration
+  seam, rev 2.4) · resumable mid-stream recovery (Redis-style delta buffer — additive
+  later precisely because the DB only ever commits terminal rows).
 
 ## Constraints & approval gates
 
@@ -364,9 +388,9 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   → run → artefact) on a stub run · stub-backend chat e2e (create → turn → durable
   rehydration) · **streaming contract tests** (typed progress events then deltas then
   exactly one terminal payload; mid-stream failure → honest failed row + client
-  recovery; client cancel → generator cleanup + honest terminal turn state; idempotent
-  retry of a completed turn replays stored answer without re-generation; disconnect
-  cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped +
+  recovery; client cancel → generator cleanup + partial prose persisted as `cancelled`
+  with inert markers + no-tier badge; idempotent retry of a completed turn replays
+  stored answer without re-generation; disconnect cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped +
   tier downgraded; orphan marker stripped; compaction numbers survivors by first
   appearance; uncited entries never displayed) · **cross-chat concurrency test** (concurrent turns in different chats of one
   project share no turn state — the V2 request-scoped-state lesson) · frontend
