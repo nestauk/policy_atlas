@@ -14,6 +14,9 @@ from aws_cdk import (
     triggers,
 )
 
+from .components.nesta_db_jumpbox import NestaDBJumpbox
+
+
 class DatabaseStack(Stack):
     def __init__(self, scope: Stack, id: str,
                  db_config: dict, env_name: str, **kwargs) -> None:
@@ -121,6 +124,16 @@ class DatabaseStack(Stack):
             peer=fck_nat_sg,
             connection=ec2.Port.tcp(5432),
             description="Allow fck-nat instance to connect to RDS"
+        )
+
+        # Provide IAM-gated database access without public ingress.
+        NestaDBJumpbox(self, "NestaDBJumpbox",
+            vpc=vpc,
+            db_cluster=cluster,
+            remote_mode=True,
+            local_mode=False,
+            db_port=5432,
+            local_port=15432,
         )
 
         # --- SSM parameter exports ---

@@ -201,10 +201,10 @@ def test_app_stack_deploy_invariant_values_are_template_pinned():
     assert target_group["Properties"]["HealthCheckPath"] == "/readyz"
 
 
-def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress():
+def test_aurora_security_group_has_only_expected_5432_ingress():
     database_rules = _port_5432_ingress(TEMPLATES["database"])
     app_rules = _port_5432_ingress(TEMPLATES["app"])
-    assert len(database_rules) + len(app_rules) == 3
+    assert len(database_rules) + len(app_rules) == 4
 
     db_security_group_id = next(
         logical_id
@@ -222,10 +222,14 @@ def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress()
         for rule in database_rules
         if "SsmParameterValuepolicyatlasv3networkfcknatsgid" in json.dumps(rule)
     )
+    jumpbox_rule = next(
+        rule for rule in database_rules if "NestaDBJumpbox" in json.dumps(rule)
+    )
     assert "MigrationLambdaSG" in json.dumps(migration_rule["SourceSecurityGroupId"])
     assert "SsmParameterValuepolicyatlasv3networkfcknatsgid" in json.dumps(
         fck_nat_rule["SourceSecurityGroupId"]
     )
+    assert "NestaDBJumpbox" in json.dumps(jumpbox_rule["SourceSecurityGroupId"])
 
     assert len(app_rules) == 1
     api_rule = app_rules[0]
@@ -233,6 +237,15 @@ def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress()
         api_rule["GroupId"]
     )
     assert "BackendSG" in json.dumps(api_rule["SourceSecurityGroupId"])
+
+
+def test_jumpbox_output_forwards_to_the_cluster_endpoint():
+    outputs = json.dumps(TEMPLATES["database"]["Outputs"], sort_keys=True)
+    assert "AWS-StartPortForwardingSessionToRemoteHost" in outputs
+    assert "PortForwardingCommand" in outputs
+    assert "NestaDBJumpbox" in outputs
+    assert "Endpoint.Address" in outputs
+    assert 'localPortNumber=\\\"15432\\\"' in outputs
 
 
 def test_fck_nat_role_has_ssm_managed_instance_policy():
