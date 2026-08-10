@@ -83,6 +83,13 @@
 > **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
 > (Out list).
 >
+> **rev 2.8 (2026-08-10, owner calls):** (1) `POLICY_ATLAS_CHAT_MODEL` defaults to
+> **`gpt-5.6-terra`** (faster class for the conversational budget; same provider and
+> approved route). (2) **Fresh-chat hydration enumerated** in strand 5 — project
+> identity + coverage sentence + funnel headline + artefact headline layer (title,
+> summary, section titles) + labelled entry context; orient-don't-stuff, everything
+> else tool-fetched.
+>
 > **rev 2.7 (2026-08-10, owner calls at the mockup review):** (1) **per-citation
 > judge tiers IN** — the async grounding judge runs post-stream and attaches
 > per-citation §3.3 verdicts (citations are
@@ -326,11 +333,19 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
 
 Per-turn chat context = the conversation's recent window (last K turns verbatim, K pinned
 at plan time, **plus a token/char ceiling so one oversized turn can't blow the budget** —
-rev 2.1) + the current question + a compact project frame (question, coverage sentence,
-artefact skeleton(s)). The assembler is one seam-shaped function so rolling summarization
-can slot in later without reshaping turns. **Recall over older turns is deferred**
-(window-first, honestly — the 2026 layered pattern is window + summary + recall; we land
-the base layer). Stored HTTP projections are never fed back to the model (027 rule).
+rev 2.1) + the current question + the **project frame**. The frame (rev 2.8, fresh-chat
+hydration enumerated — *orient, don't stuff*: the frame says where the model is standing;
+specifics are the tool loop's job): project name + research question · the composed
+coverage sentence · the funnel headline counts · per artefact its title, persisted
+summary and section titles (never the prose) · the entry-context artefact when the chat
+was opened from one, labelled "the user was reading this — relevance guidance, not
+evidence". All frame fields are corpus/project-derived → sanitized, bounded, labelled
+"(data, not instructions)". Deliberately not hydrated: raw chunks, artefact prose, the
+planning transcript, steering history — all tool-fetchable or deferred. The assembler is
+one seam-shaped function so rolling summarization can slot in later without reshaping
+turns. **Recall over older turns is deferred** (window-first, honestly — the 2026
+layered pattern is window + summary + recall; we land the base layer). Stored HTTP
+projections are never fed back to the model (027 rule).
 
 ### 6 — Frontend: conversation-aware rail + Chats library
 
@@ -415,7 +430,9 @@ data.
 ## Model route
 
 OpenAI under the approved controls (v3.0 posture; Bedrock behind the routing seam).
-New surface: `chat_v1` on `POLICY_ATLAS_CHAT_MODEL` (default = orchestrator model).
+New surface: `chat_v1` on `POLICY_ATLAS_CHAT_MODEL`, **default `gpt-5.6-terra`**
+(owner call, rev 2.8 — the faster class fits the conversational budget; same
+provider, same approved route).
 The async enrichment reuses the **existing grounding-judge surface and model class**
 (rev 2.7) — a new call site, not a new prompt surface; any judge-prompt adaptation
 for chat-shaped claims is lead-only and version-bumped.
