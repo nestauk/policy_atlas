@@ -71,6 +71,18 @@
 > `unfinished`, assistant-ui `incomplete/cancelled`; status `cancelled`, markers
 > inert, "stopped before evidence check" badge in place of a tier).
 >
+> **rev 2.5 (2026-08-10): framework/dependency adjudication** (owner question).
+> Declined with reasons: LangChain (not in the stack; the in-house tool loop already
+> does the job, audit-integrated) · running chat on the LangGraph harness (already a
+> dep, but it's the durable walk substrate — a chat turn needs no checkpoints/
+> boundaries; chat stays on `run_section_loop`) · Vercel AI SDK (TS server half
+> useless against FastAPI; client half fights the provider-neutral wire pin + house
+> store patterns) · Langfuse prompt management (prompts stay code-pinned,
+> git-versioned, lead-authored — the governance posture). Folded: per-turn **Langfuse
+> trace id stored in `answer_payload`** (strand 7 — DB row ↔ trace audit linkage);
+> **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
+> (Out list).
+>
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.
@@ -308,7 +320,9 @@ the base layer). Stored HTTP projections are never fed back to the model (027 ru
 
 One Langfuse `session_id` **per conversation** — chats *and* planning conversations
 (discharging the known planning wart of a throwaway session per turn, which the
-conversation entity now makes natural). Prompt-version metadata on every call.
+conversation entity now makes natural). Prompt-version metadata on every call. The
+turn's **Langfuse trace id is stored in `answer_payload`** (rev 2.5) — the durable
+row and the trace reference each other, so the audit walk crosses planes in one hop.
 
 ## Scope / Out of scope
 
@@ -328,7 +342,9 @@ conversation entity now makes natural). Prompt-version metadata on every call.
   (first-question truncation v1; async cheap-model titling is a noted easy upgrade) ·
   regenerate/edit/branching (the pair→per-message row split is its named migration
   seam, rev 2.4) · resumable mid-stream recovery (Redis-style delta buffer — additive
-  later precisely because the DB only ever commits terminal rows).
+  later precisely because the DB only ever commits terminal rows) · answer
+  thumbs-feedback → Langfuse scores (rev 2.5 — the eval slice's gold-set seam; that
+  slice decides the surface).
 
 ## Constraints & approval gates
 
