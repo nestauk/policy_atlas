@@ -4,7 +4,9 @@
 > task-msnlek0m-p568f1; 22 findings, 19 MAJOR, all adjudicated in; contract rev 3.2
 > carries the four plan-stage pins it surfaced — cancel endpoint, title mechanics,
 > successor-creation mechanics, hydration-wording fix — ratified with this plan).
-> Plan approved: _pending · owner_. Build runs in a fresh conversation
+> **Plan approved: 2026-08-10 · owner (rev 2.2; contract revs 3.2/3.3 ratified with
+> it). ADR 0029 Accepted same day — H2 discharged at design close (step 4), the
+> skill-correct placement.** Build runs in a fresh conversation
 > (task-cycle-build), phases in order, one commit per phase on green gate. Executor
 > marks per harness.md § routing; every `lead` mark carries its justification.
 > Codex-exhaustion fallback: re-route down the ladder, log in verification.md.
@@ -138,7 +140,7 @@ completion; a cut without the revision leaves the task in progress, not done.
 | # | Task | Executor | Notes |
 |---|---|---|---|
 | H1 | `web-api.md` § Conversations rewrite · deferred.md updates (incl. rev-2.2 named seams: conversation search · standing chat instructions · continue-generating) · AGENTS.md pointer | fast-worker | doc transcription |
-| H2 | ADR **0029** — unified conversation model + lineage chain + chat fast-path | **lead** | 0028 is taken (task 028) |
+| H2 | ~~ADR 0029~~ **DONE at design close** (`docs/adr/0029-unified-conversation-model-copilot-chat.md`, Accepted 2026-08-10) — H2 is a no-op unless the build materially deviates (then the ADR amends) | lead | |
 | H3 | Scoped live check per contract (local funded key; ≤30 min): migration sanity · chat from artefact (provenance + generative + evidence-not-held/handoff) · stop mid-stream (cancel endpoint) · bare-disconnect completion · restart durability · library round-trip · successor seeding · CI e2e smoke | lead + owner | |
 | H4 | verification.md assembly (+ any codex-fallback substitutions) | lead | evidence adjudication |
 

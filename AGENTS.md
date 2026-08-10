@@ -22,18 +22,20 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `029-copilot-chat` **design step 1, contract rev 2**
-(2026-08-10, branch `task/029-copilot-chat` from merged `dev`; renamed
-from `029-copilot-qa` — "qa" naming dropped): co-pilot chat — the unified
-conversation model. A project holds many conversations,
+Implementation — task `029-copilot-chat` **DESIGN COMPLETE → build (step
+5) opens in a fresh conversation** (`/task-cycle-build`; 2026-08-10,
+branch `task/029-copilot-chat` from merged `dev`): co-pilot chat — the
+unified conversation model. A project holds many conversations,
 Claude-Projects-style: follow-up **chats** (read-only, project-scoped,
-answering across artefacts from committed evidence, trust-tier-labelled
-ephemeral answers, tool scope `search_chunks` · `lookup` ·
-`query_findings`, no `search`) and **planning conversations** (one per
-plan lineage, closing when its run completes — supersedes 027's rolling
-thread; audit chain conversation → plan → run → artefact). Tier 4 (legacy
-backfill migration on live data). Contract:
-`docs/tasks/029-copilot-chat/contract.md`.
+answering across artefacts; streamed NDJSON turns with claim-grained
+citations, deterministic floors + async judge enrichment; tool scope
+`search_chunks` · `lookup` · `query_findings`, no `search`) and
+**planning conversations** (one per plan lineage, closing with its run's
+terminal transaction — supersedes 027's rolling thread; row-grain audit
+chain conversation → plan → run → artefact). Tier 4 (legacy backfill
+migration on live data). Contract rev 3.3 (approved) · plan rev 2.2
+(approved, executor marks, phases A–H) · ADR 0029 (Accepted) ·
+mockup + research inputs: `docs/tasks/029-copilot-chat/`.
 
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
 `c501022`); system **live** at `v3.policyatlas.uk`. Known operational

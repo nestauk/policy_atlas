@@ -5,8 +5,8 @@
 > restructure in; "qa" naming dropped repo-wide). **Contract approved (before planning):
 > 2026-08-10 · owner, at rev 2.8; adversarial lane ran (rev 3); reopened 🛑
 > re-approved 2026-08-10 · owner, at rev 3.1. CONTRACT FINAL FOR PLANNING.** ·
-> Plan approved: _pending_ · ADR: _expected (unified conversation model + lineage
-> chain + chat fast-path pin)_.
+> Plan approved: **2026-08-10 · owner (plan rev 2.2; revs 3.2/3.3 ratified with
+> it)** · ADR: **0029**, Accepted 2026-08-10.
 >
 > **rev 2 (owner interview, 2026-08-06→10):** (1) **Naming**: "qa" reads as quality
 > assurance and undersells the surface — user-facing **Chats**, code `conversation` /
