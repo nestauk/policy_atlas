@@ -31,12 +31,13 @@ Slice-specific:
         compacted (surviving citations numbered by first appearance, uncited entries
         never displayed); zero surviving citations forces the pure-LLM label with no
         judge call; marker/hover/footer all resolve only to surviving citations.
-10a. [ ] **Judge enrichment is honest (rev 2.7)**: citations render "unchecked" until
-        the async grounding judge attaches per-citation §3.3 verdicts; the
-        answer-level chip is derived (weakest tier present) from the locked
-        vocabulary; judge failure/timeout leaves "unchecked" — enrichment never
-        blocks the turn, never upgrades a floor-stripped citation, and reaches open
-        chats via the turn read model without any project-SSE change.
+10a. [ ] **Judge enrichment is honest (rev 2.7/2.7.1)**: citations render "unchecked"
+        until the async grounding judge attaches per-citation §3.3 verdicts (locked
+        vocabulary) — the only tier display on cited answers (no answer-wide chip);
+        zero-citation answers carry the pure-LLM marker, cancelled turns the stopped
+        badge; judge failure/timeout leaves "unchecked" — enrichment never blocks the
+        turn, never upgrades a floor-stripped citation, and reaches open chats via
+        the turn read model without any project-SSE change.
 11. [ ] **Chats are ephemeral and read-only**: a chat turn writes only `conversation`/
         `chat_turn` rows — no artefact, finding, annotation, plan or shared
         project-event writes; the evidence-not-held hand-off is a link, never a plan

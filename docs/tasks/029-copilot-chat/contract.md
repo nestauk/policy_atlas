@@ -85,13 +85,16 @@
 >
 > **rev 2.7 (2026-08-10, owner calls at the mockup review):** (1) **per-citation
 > judge tiers IN** — the async grounding judge runs post-stream and attaches
-> per-citation §3.3 verdicts (answer chip = weakest tier present; citations are
+> per-citation §3.3 verdicts (citations are
 > honestly "unchecked" until enrichment; judge failure never blocks). Resolves the
 > tier-grain question: answer-level self-report both flattened mixed answers and
 > self-graded in the judge's vocabulary; async enrichment is judge-true with zero
 > visible latency. Staged as its own plan phase, cuttable at the plan 🛑. (2) The
 > Chats-library **Open/Closed badges are cut** (copy diet — tab presence and the
-> preview carry the same information).
+> preview carry the same information). **rev 2.7.1:** the derived answer-wide
+> weakest-tier chip is cut too (owner) — per-citation verdicts are the tier display;
+> only the zero-citation "pure LLM reasoning" marker and the stopped badge remain
+> answer-level, each because there is no citation to carry the signal.
 >
 > **rev 2.6 (2026-08-10): PR #35 chat mockup re-mined** (owner-directed; the
 > colleague's demo branch this slice's container model came from, now read for its
@@ -287,14 +290,18 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
     display numbering derived at persist time. Floors: (a) every citation must
     resolve to an id the tool loop actually returned this turn — anything else is
     stripped; (b) an orphaned marker is stripped with its citation; (c) the persisted
-    display payload is compacted; (d) zero surviving citations → the answer is
-    "pure LLM reasoning", no judge call; (e) surviving citations land in an honest
-    **"unchecked"** state — never wearing a tier they haven't earned.
+    display payload is compacted; (d) zero surviving citations → the answer carries
+    the "pure LLM reasoning" marker (the one answer-level signal that survives —
+    with no citations there is nothing else to carry it), no judge call;
+    (e) surviving citations land in an honest **"unchecked"** state — never wearing
+    a tier they haven't earned.
   - **Stage 2 — async judge enrichment**: for answers with surviving citations, the
     grounding judge (the synthesis judge machinery) assesses each cited claim against
     its cited chunk(s) and per-citation tier verdicts attach as an enrichment write
-    on the turn row; the answer-level chip becomes a **derived summary = the weakest
-    tier present**. Judge failure or timeout leaves citations honestly "unchecked" —
+    on the turn row — **the only tier display on cited answers** (rev 2.7.1, owner:
+    the derived answer-wide weakest-tier chip is cut as redundant; per-citation
+    verdicts carry the whole story). Judge failure or timeout leaves citations
+    honestly "unchecked" —
     enrichment never blocks, never fabricates, and a judge verdict can only downgrade
     or confirm, never launder. The upgrade reaches an open chat via the turn read
     model (bounded refetch; **no project-SSE change**). An idempotent retry replays
@@ -339,15 +346,17 @@ the base layer). Stored HTTP projections are never fed back to the model (027 ru
   are URL-addressable** (thread id in the route; library rows and "ask" affordances
   deep-link). Finer rail/library presentation follows
   [design-inputs.md](design-inputs.md) § build-time details.
-- **Answers render as prose with inline `[n]` citation markers + tier chip** (rev 2.1:
+- **Answers render as prose with inline `[n]` citation markers** (rev 2.1:
   inline click-to-source is table stakes, and it's the artefact reader's own grammar) —
   `whitespace-pre-wrap` + scrub, **no markdown dependency** (now a recorded *security
   control*: no rendered links from model output closes the EchoLeak-class exfiltration
   channel, on top of the copy-diet rationale); the `chat_v1` prompt constrains answers
   to plain paragraphs with `[n]` markers. Markers + the references footer resolve to
   the id-keyed dossier open; **hover/click shows the cited quote in context** (reusing
-  the chunk-context read-model pattern the artefact citations already use); tier chips
-  use only the locked `TIER_LABEL`/`TIER_TEXT` vocabulary.
+  the chunk-context read-model pattern the artefact citations already use);
+  per-citation tier verdicts (rev 2.7.1 — the only tier display) use only the locked
+  `TIER_LABEL`/`TIER_TEXT` vocabulary, alongside the zero-citation pure-LLM marker
+  and the stopped badge.
 - Composer is the extracted 028 `Composer` with per-kind copy; disabled states stay
   honest (pending turn; fence states show why).
 - State layer mirrors `usePlanningTranscript` (durable query + optimistic reducer +
@@ -449,12 +458,13 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   stored answer without re-generation; disconnect cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped;
   orphan marker stripped; compaction numbers survivors by first appearance; uncited
   entries never displayed; zero survivors → pure-LLM answer, no judge call) ·
-  **judge-enrichment tests** (per-citation verdicts attach on the turn row; answer
-  chip = weakest tier present; judge failure/timeout leaves citations "unchecked" and
+  **judge-enrichment tests** (per-citation verdicts attach on the turn row — no
+  answer-wide chip; judge failure/timeout leaves citations "unchecked" and
   the turn completed; retry replays enriched payload when present; stub-judge
   deterministic path) · **cross-chat concurrency test** (concurrent turns in different chats of one
   project share no turn state — the V2 request-scoped-state lesson) · frontend
-  component tests (library, switcher, tier chip, composer states incl. stop button,
+  component tests (library, switcher, per-citation verdicts + pure-LLM/stopped
+  markers, composer states incl. stop button,
   hand-off affordance, stream rendering + activity summary).
 - **Live manual check (contract-time scope pin):** on one existing completed-run
   project — post-migration state sane (legacy planning conversation status honest);
