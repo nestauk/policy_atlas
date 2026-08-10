@@ -35,11 +35,15 @@
 > (EchoLeak-class CVE-2025-32711 showed markdown-link rendering exfiltrating from
 > "read-only" chat — our renderer closes that channel), and the misattribution gap
 > (id-membership doesn't catch "real chunk, unsupported claim") explicitly routed to
-> the eval slice. **❓ reopened at the 🛑: streaming** — blocking answers are the one
+> the eval slice. **❓ reopened at the 🛑: streaming** — blocking answers were the one
 > genuinely non-mainstream pin (grounded chat streams near-universally; the
-> state-of-the-art shape is stream-prose-then-attach-verified-citations; blocking lands
-> ~5–15 s against a ~2 s expectation). Owner decides: keep blocking v1 with the seam
-> named, or fold stream-then-verify into this slice.
+> state-of-the-art shape is stream-prose-then-attach-verified-citations).
+>
+> **rev 2.2 (owner call, 2026-08-10): streaming IN** — stream-then-verify on the turn
+> POST, under a provider-neutral wire pin (text deltas + one terminal validated
+> payload) so the Bedrock move re-ports only the provider adapter it rewrites anyway.
+> Owner's framing: "I would ideally prefer streaming"; waiting for Bedrock buys
+> nothing under the neutral pin. Strand 3 carries the mechanics.
 >
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
@@ -164,17 +168,21 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   else 409 `no_completed_run`; while the walk is `running | paused` → 409 `run_active`
   (mid-run reads would see a half-written evidence base; steering is the mid-run
   channel). *Owner cut-line: allow chats while paused — defer unless wanted now.*
-- **❓ Streaming (owner decision at the 🛑, rev 2.1).** Default pin: blocking
-  request/response (no token streaming exists anywhere in the backend; 028 froze the
-  project SSE vocabulary — untouched either way), with an **honest latency affordance**
-  (breathing row + "checking the evidence — can take ~10–15 s" copy, per the copy-text
-  principle) and answers kept short. Streaming is then the *named first upgrade*:
-  stream-prose-then-attach-verified-citations on the turn POST itself (fetch-stream —
-  never the project event channel), with the citation floor running on the completed
-  buffer; the turn endpoint's response/persistence shape is designed so that upgrade is
-  additive. Alternative the owner may choose instead: fold stream-then-verify into this
-  slice (adds real scope — first token-streaming plumbing in the backend — to an
-  already Tier-4 slice).
+- **Streaming — IN, stream-then-verify (owner call, rev 2.2; resolves rev 2.1's ❓).**
+  `POST .../turns` returns a **fetch-stream** (never the project event channel — the
+  frozen 028 SSE vocabulary is untouched): prose text deltas as they generate, then
+  **one terminal validated payload** (surviving citations, trust tier, turn metadata)
+  after the citation floor runs server-side on the completed buffer. The wire contract
+  is **provider-neutral by pin** — text deltas + terminal payload, never
+  provider-specific partial-JSON passthrough — so the Bedrock migration only re-ports
+  the provider adapter it rewrites anyway (`ConverseStream` maps 1:1). Persistence
+  stays atomic at completion (two-phase turn rows unchanged: pending → stream → the
+  completed row commits whole; a crash mid-stream leaves an honest pending→failed row,
+  and an idempotent retry of a completed turn replays the stored answer as a single
+  terminal payload, no re-generation). Tool-loop turns before the final emission are
+  covered by a staged progress affordance ("checking the evidence…"), not fake tokens.
+  This is the backend's **first token-streaming plumbing** — named as such for the plan
+  and review stack.
 
 ### 4 — The chat agent: `chat_v1` orchestrator moment (lead-authored, prompt-bearing)
 
@@ -256,7 +264,8 @@ conversation entity now makes natural). Prompt-version metadata on every call.
   (OpenAPI/TS client regeneration); `web-api.md` § Conversations rewrite in the same
   change; deferred.md updates; ADR; rollback plan for the backfill.
 - **Out (⏸ stays deferred, named):** answer promotion to artefact block · shared search
-  request conversion · token/SSE streaming · recall beyond the window (incl.
+  request conversion · streaming for *planning* turns (chat streams; planning stays
+  blocking — its own later uplift) · recall beyond the window (incl.
   cross-planning-conversation rationale carry) · feeding the live read executors to the
   watch deliberation sites (`read_tools=None` — adjacent, untouched) · multi-artefact
   read-model widening (workspace-cluster) · catch-me-up / multi-user visibility ·
@@ -322,8 +331,11 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   citations → pure-LLM label) · chat tool set contains no `search`/write tool
   (allowlist test) · archive semantics (chats only) · lineage walk (conversation → plan
   → run → artefact) on a stub run · stub-backend chat e2e (create → turn → durable
-  rehydration) · frontend component tests (library, switcher, tier chip, composer
-  states, hand-off affordance).
+  rehydration) · **streaming contract tests** (deltas then exactly one terminal
+  payload; mid-stream failure → honest failed row + client recovery; idempotent retry
+  of a completed turn replays stored answer without re-generation; disconnect cleanup)
+  · frontend component tests (library, switcher, tier chip, composer states, hand-off
+  affordance, stream rendering).
 - **Live manual check (contract-time scope pin):** on one existing completed-run
   project — post-migration state sane (legacy planning conversation status honest);
   open a chat from the artefact; one provenance-lookup + one generative-synthesis

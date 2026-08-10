@@ -54,3 +54,9 @@ Slice-specific:
 19. [ ] `web-api.md` gains the Conversations section in the same change; prompt pin
         (`chat_v1`) and model env constant recorded; ADR Accepted; no user-facing or
         code-level "qa" naming anywhere in the slice.
+20. [ ] **Streaming honesty (rev 2.2)**: text deltas + exactly one terminal validated
+        payload per turn; the persisted answer equals the streamed prose; the wire
+        shape is provider-neutral (no partial-JSON passthrough); mid-stream failure
+        leaves an honest failed row and the client recovers; an idempotent retry of a
+        completed turn replays the stored answer without re-generation; the project
+        SSE vocabulary is untouched.
