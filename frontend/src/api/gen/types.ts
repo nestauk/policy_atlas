@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/v1/conversations/{conversation_id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Chat Turn Stream
+         * @description Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.
+         */
+        post: operations["create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Chat Turn
+         * @description Explicitly stop a pending chat turn, preserving any streamed partial.
+         */
+        post: operations["cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -610,6 +650,102 @@ export interface components {
             prose: string;
         };
         /**
+         * CancelTurnOut
+         * @description The honest durable status observed after a cancel attempt.
+         */
+        CancelTurnOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed" | "cancelled";
+        };
+        /**
+         * CancelledEvent
+         * @description The one cancelled terminal stream event, retaining partial prose.
+         */
+        CancelledEvent: {
+            turn: components["schemas"]["ChatTurnOut"];
+            /**
+             * Type
+             * @default cancelled
+             * @constant
+             */
+            type: "cancelled";
+        };
+        /**
+         * ChatTurnCreate
+         * @description One idempotent question submitted to an active chat conversation.
+         */
+        ChatTurnCreate: {
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ChatTurnOut
+         * @description Durable public projection of one chat turn.
+         */
+        ChatTurnOut: {
+            /** Answer */
+            answer: string | null;
+            /** Citations */
+            citations?: {
+                [key: string]: unknown;
+            }[];
+            /** Claims */
+            claims?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Handoff */
+            handoff?: "evidence_not_held" | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed" | "cancelled";
+            /**
+             * Stopped Before Evidence Check
+             * @default false
+             */
+            stopped_before_evidence_check: boolean;
+            /** Turn Index */
+            turn_index: number;
+            /** User Message */
+            user_message: string;
+            /**
+             * Warning Not Evidence Checked
+             * @default false
+             */
+            warning_not_evidence_checked: boolean;
+        };
+        /**
          * CheckInOption
          * @description One server-supplied option offered at a check-in.
          *
@@ -919,6 +1055,19 @@ export interface components {
             weakly_grounded?: boolean | null;
         };
         /**
+         * CompletedEvent
+         * @description The one successful terminal stream event.
+         */
+        CompletedEvent: {
+            turn: components["schemas"]["ChatTurnOut"];
+            /**
+             * Type
+             * @default completed
+             * @constant
+             */
+            type: "completed";
+        };
+        /**
          * CountryGroupDraft
          * @description Draft mirror of the runtime `CountryGroup`.
          *
@@ -1052,6 +1201,20 @@ export interface components {
             summary: string;
         };
         /**
+         * DeltaEvent
+         * @description A provider-neutral prose fragment.
+         */
+        DeltaEvent: {
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @default delta
+             * @constant
+             */
+            type: "delta";
+        };
+        /**
          * EvidenceItemOut
          * @description One row of the paginated evidence/source list.
          *
@@ -1135,6 +1298,34 @@ export interface components {
             groups?: components["schemas"]["GroupOut"][];
             /** Ungrouped */
             ungrouped: number;
+        };
+        /**
+         * FailedEvent
+         * @description The one failed terminal stream event.
+         */
+        FailedEvent: {
+            error: components["schemas"]["FailedEventError"];
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * Type
+             * @default failed
+             * @constant
+             */
+            type: "failed";
+        };
+        /**
+         * FailedEventError
+         * @description Publicly safe post-header failure information.
+         */
+        FailedEventError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
         };
         FindingOut: components["schemas"]["IofFindingOut"] | components["schemas"]["IcfFindingOut"];
         /**
@@ -1919,6 +2110,20 @@ export interface components {
             suggestions?: string[];
         };
         /**
+         * ProgressEvent
+         * @description A user-facing read-tool activity emitted before that tool runs.
+         */
+        ProgressEvent: {
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @default progress
+             * @constant
+             */
+            type: "progress";
+        };
+        /**
          * ProjectCreate
          * @description Inbound body for `POST /api/v1/projects`.
          *
@@ -2506,6 +2711,73 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatTurnCreate"];
+            };
+        };
+        responses: {
+            /** @description `application/x-ndjson`: progress/delta events followed by exactly one completed, failed, or cancelled terminal event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelTurnOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_api_v1_projects_get: {
         parameters: {
             query?: {

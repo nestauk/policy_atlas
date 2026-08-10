@@ -43,6 +43,16 @@ class OutputCappedChatBackend(CountingChatBackend):
         return super().chat_turn(*args, **kwargs)
 
 
+class CancellingChatBackend(StubChatBackend):
+    """Stub that asks the caller to stop after its first visible prose fragment."""
+
+    def chat_turn(self, *args: Any, on_delta: Any = None, **kwargs: Any) -> Any:
+        transcript = args[1] if len(args) > 1 else kwargs.get("transcript") or []
+        if transcript and on_delta is not None:
+            on_delta("Partial answer")
+        return super().chat_turn(*args, on_delta=on_delta, **kwargs)
+
+
 def _chat(engine: Engine, *, owner: str = "chat-owner") -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
     """Create an owned active chat over a project fixture."""
     project_id, scope_id = _seed_project(engine)
@@ -254,6 +264,40 @@ def test_chat_tool_allowlist_is_closed() -> None:
     assert set(tools) == {"search_chunks", "query_findings", "lookup"}
 
 
+def test_explicit_cancel_keeps_partial_prose_without_citations(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cancel observed between deltas commits the partial with the stopped marker."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        cancel = threading.Event()
+        result = chat_turns.run_chat_turn(
+            engine,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            user_id="chat-owner",
+            message="Question",
+            client_turn_id=uuid.uuid4(),
+            chat_backend=CancellingChatBackend(),
+            cancel_event=cancel,
+            on_delta=lambda _text: cancel.set(),
+        )
+        assert result.status == "cancelled"
+        assert result.answer == "Partial answer"
+        assert result.answer_payload == {
+            "claims": [],
+            "citations": [],
+            "warning_not_evidence_checked": False,
+            "handoff": None,
+            "stopped_before_evidence_check": True,
+        }
+    finally:
+        _cleanup(engine, project_id)
+
+
 def _second_chat_in_same_project(engine: Engine, project_id: uuid.UUID) -> uuid.UUID:
     """Insert an additional active chat conversation onto an existing project."""
     conversation_id = uuid.uuid4()
@@ -328,13 +372,18 @@ class BlockingChatBackend(StubChatBackend):
         *,
         force_emit: bool,
         max_output_tokens: int | None = None,
+        **kwargs: Any,
     ) -> Any:
         if not transcript and not force_emit:
             if self.started is not None:
                 self.started.set()
             self.gate.wait(timeout=5)
         return super().chat_turn(
-            messages, transcript, force_emit=force_emit, max_output_tokens=max_output_tokens
+            messages,
+            transcript,
+            force_emit=force_emit,
+            max_output_tokens=max_output_tokens,
+            **kwargs,
         )
 
 

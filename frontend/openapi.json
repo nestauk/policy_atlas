@@ -245,6 +245,185 @@
         "title": "BlockOut",
         "type": "object"
       },
+      "CancelTurnOut": {
+        "description": "The honest durable status observed after a cancel attempt.",
+        "properties": {
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CancelTurnOut",
+        "type": "object"
+      },
+      "CancelledEvent": {
+        "description": "The one cancelled terminal stream event, retaining partial prose.",
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/ChatTurnOut"
+          },
+          "type": {
+            "const": "cancelled",
+            "default": "cancelled",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn"
+        ],
+        "title": "CancelledEvent",
+        "type": "object"
+      },
+      "ChatTurnCreate": {
+        "additionalProperties": false,
+        "description": "One idempotent question submitted to an active chat conversation.",
+        "properties": {
+          "client_turn_id": {
+            "format": "uuid",
+            "title": "Client Turn Id",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "client_turn_id"
+        ],
+        "title": "ChatTurnCreate",
+        "type": "object"
+      },
+      "ChatTurnOut": {
+        "description": "Durable public projection of one chat turn.",
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer"
+          },
+          "citations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "claims": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "client_turn_id": {
+            "format": "uuid",
+            "title": "Client Turn Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "conversation_id": {
+            "format": "uuid",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "handoff": {
+            "anyOf": [
+              {
+                "const": "evidence_not_held",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "stopped_before_evidence_check": {
+            "default": false,
+            "title": "Stopped Before Evidence Check",
+            "type": "boolean"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "user_message": {
+            "title": "User Message",
+            "type": "string"
+          },
+          "warning_not_evidence_checked": {
+            "default": false,
+            "title": "Warning Not Evidence Checked",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "conversation_id",
+          "turn_index",
+          "client_turn_id",
+          "user_message",
+          "answer",
+          "status",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "ChatTurnOut",
+        "type": "object"
+      },
       "CheckInOption": {
         "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.\n    why: Visible reason for a run-specific suggestion.\n    endorsement: Visible reason when the run endorses this canonical option.",
         "properties": {
@@ -828,6 +1007,25 @@
         "title": "ClaimOut",
         "type": "object"
       },
+      "CompletedEvent": {
+        "description": "The one successful terminal stream event.",
+        "properties": {
+          "turn": {
+            "$ref": "#/components/schemas/ChatTurnOut"
+          },
+          "type": {
+            "const": "completed",
+            "default": "completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn"
+        ],
+        "title": "CompletedEvent",
+        "type": "object"
+      },
       "CountryGroupDraft": {
         "description": "Draft mirror of the runtime `CountryGroup`.\n\nArgs:\n    label: Pinned Tier-1 label, or a user/planner label for an explicit\n        Tier-2 country list. `None` while undecided.\n    countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.\n    authorship: Provenance of the group membership, when settled.",
         "properties": {
@@ -1088,6 +1286,26 @@
         "title": "DecisionOut",
         "type": "object"
       },
+      "DeltaEvent": {
+        "description": "A provider-neutral prose fragment.",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "delta",
+            "default": "delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "DeltaEvent",
+        "type": "object"
+      },
       "EvidenceItemOut": {
         "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
         "properties": {
@@ -1305,6 +1523,50 @@
           "ungrouped"
         ],
         "title": "FacetGroupsOut",
+        "type": "object"
+      },
+      "FailedEvent": {
+        "description": "The one failed terminal stream event.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/FailedEventError"
+          },
+          "turn_id": {
+            "format": "uuid",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "failed",
+            "default": "failed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "turn_id"
+        ],
+        "title": "FailedEvent",
+        "type": "object"
+      },
+      "FailedEventError": {
+        "description": "Publicly safe post-header failure information.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "FailedEventError",
         "type": "object"
       },
       "FindingOut": {
@@ -3125,6 +3387,26 @@
         "title": "PlanningTurnOut",
         "type": "object"
       },
+      "ProgressEvent": {
+        "description": "A user-facing read-tool activity emitted before that tool runs.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "type": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "ProgressEvent",
+        "type": "object"
+      },
       "ProjectCreate": {
         "additionalProperties": false,
         "description": "Inbound body for `POST /api/v1/projects`.\n\nArgs:\n    name: Project display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.",
@@ -4460,6 +4742,124 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/conversations/{conversation_id}/turns": {
+      "post": {
+        "description": "Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.",
+        "operationId": "create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatTurnCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "`application/x-ndjson`: progress/delta events followed by exactly one completed, failed, or cancelled terminal event."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Chat Turn Stream",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/cancel": {
+      "post": {
+        "description": "Explicitly stop a pending chat turn, preserving any streamed partial.",
+        "operationId": "cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelTurnOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Cancel Chat Turn",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/api/v1/projects": {
       "get": {
         "description": "List the authenticated user's projects with derived latest-run state.",

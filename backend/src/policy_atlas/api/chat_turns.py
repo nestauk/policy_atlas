@@ -64,6 +64,10 @@ class ChatTurnResult:
     replayed: bool
 
 
+class ChatTurnCancelled(Exception):
+    """Internal control signal for an explicitly cancelled chat turn."""
+
+
 def _now() -> datetime:
     """Return a timezone-aware persistence timestamp."""
     return datetime.now(UTC)
@@ -215,6 +219,20 @@ def _phase_one_turn(
         ).scalar_one_or_none()
         if pending_after is not None:
             raise ApiConflict("stale_turn", "a newer chat turn is pending")
+        # A terminal failed/cancelled row is retried in place. The streaming
+        # router registers the live cancel handle before this second pass, so
+        # a newly received explicit stop cannot be mistaken for a retry here.
+        conn.execute(
+            update(chat_turn)
+            .where(chat_turn.c.id == existing["id"])
+            .values(
+                answer=None,
+                answer_payload=None,
+                capability_run_id=None,
+                status="pending",
+                completed_at=None,
+            )
+        )
         return cast(uuid.UUID, existing["id"])
 
     pending = conn.execute(
@@ -300,11 +318,55 @@ def _chat_backend_turn(
     transcript: list[ToolExchange],
     *,
     force_emit: bool,
+    on_delta: Callable[[str], None] | None = None,
 ) -> Any:
     """Invoke one backend turn with the plan-pinned output ceiling."""
     return backend.chat_turn(
-        messages, transcript, force_emit=force_emit, max_output_tokens=CHAT_MAX_OUTPUT_TOKENS
+        messages,
+        transcript,
+        force_emit=force_emit,
+        max_output_tokens=CHAT_MAX_OUTPUT_TOKENS,
+        on_delta=on_delta,
     )
+
+
+def _cancelled_result(
+    engine: Engine,
+    *,
+    turn_id: uuid.UUID,
+    partial_answer: str,
+) -> ChatTurnResult:
+    """Persist an explicit stop while keeping its unverified streamed prose."""
+    payload = {
+        "claims": [],
+        "citations": [],
+        "warning_not_evidence_checked": False,
+        "handoff": None,
+        "stopped_before_evidence_check": True,
+    }
+    with engine.begin() as conn:
+        conn.execute(
+            update(chat_turn)
+            .where(chat_turn.c.id == turn_id)
+            .where(chat_turn.c.status.in_(("pending", "cancelled")))
+            .values(
+                answer=partial_answer,
+                answer_payload=payload,
+                status="cancelled",
+                completed_at=_now(),
+            )
+        )
+        row = conn.execute(select(chat_turn).where(chat_turn.c.id == turn_id)).mappings().one()
+    return _row_result(row, replayed=False)
+
+
+def _turn_was_cancelled(engine: Engine, *, turn_id: uuid.UUID) -> bool:
+    """Return whether a racing no-live-generator cancel already changed the row."""
+    with engine.connect() as conn:
+        return (
+            conn.execute(select(chat_turn.c.status).where(chat_turn.c.id == turn_id)).scalar_one()
+            == "cancelled"
+        )
 
 
 def run_chat_turn(
@@ -320,6 +382,7 @@ def run_chat_turn(
     langfuse_client: Any = None,
     on_progress: Callable[[str], None] | None = None,
     on_delta: Callable[[str], None] | None = None,
+    cancel_event: threading.Event | None = None,
 ) -> ChatTurnResult:
     """Run a chat turn with a short reservation and terminal commit transaction.
 
@@ -334,12 +397,12 @@ def run_chat_turn(
         embedding_backend: Optional query embedding backend for chat retrieval.
         langfuse_client: Optional tracing client.
         on_progress: Optional user-facing tool activity callback.
-        on_delta: Reserved streaming delta callback, wired by Phase D.
+        on_delta: Optional provider-neutral final-prose callback.
+        cancel_event: Explicit stream-cancel signal, if this is a live turn.
 
     Returns:
         The completed or replayed durable chat turn.
     """
-    del on_delta  # The C4 backend seam is buffered; Phase D owns token streaming.
     if len(message) > CHAT_MESSAGE_MAX:
         raise ValueError(f"chat message exceeds {CHAT_MESSAGE_MAX} characters")
     lock = _turn_lock(conversation_id)
@@ -358,7 +421,25 @@ def run_chat_turn(
         if isinstance(phase_one, ChatTurnResult):
             return phase_one
         turn_id = phase_one
+        streamed_parts: list[str] = []
+
+        def _check_cancelled(*, check_row: bool = True) -> None:
+            if cancel_event is not None and cancel_event.is_set():
+                raise ChatTurnCancelled()
+            # The row check covers the no-live-generator cancel race; it runs
+            # at turn/tool boundaries only — never per streamed delta.
+            if check_row and _turn_was_cancelled(engine, turn_id=turn_id):
+                raise ChatTurnCancelled()
+
+        def _emit_delta(text: str) -> None:
+            _check_cancelled(check_row=False)
+            if text:
+                streamed_parts.append(text)
+                if on_delta is not None:
+                    on_delta(text)
+
         try:
+            _check_cancelled()
             scope = resolve_terminal_run_components(engine, project_id=project_id)
             if scope is None:
                 raise RuntimeError("completed capability run disappeared before chat execution")
@@ -384,8 +465,16 @@ def run_chat_turn(
             )
 
             def turn_fn(transcript: list[ToolExchange], *, force_emit: bool) -> Any:
+                _check_cancelled()
+                # The delta sink rides every turn: the backend only streams
+                # when it emits, and emission can happen on any turn, not just
+                # the turn-cap-forced one.
                 response, usage = _chat_backend_turn(
-                    chat_backend, messages, transcript, force_emit=force_emit
+                    chat_backend,
+                    messages,
+                    transcript,
+                    force_emit=force_emit,
+                    on_delta=_emit_delta,
                 )
                 return {
                     "emission": response.get("answer"),
@@ -398,6 +487,13 @@ def run_chat_turn(
                 "query_findings": "Reading findings…",
                 "lookup": "Looking up sources…",
             }
+
+            def _on_tool_start(name: str, _arguments: dict[str, Any]) -> None:
+                """Stop before a read or report its user-facing activity."""
+                _check_cancelled()
+                if on_progress is not None:
+                    on_progress(labels[name])
+
             with tracing.component_span(
                 langfuse_client,
                 run_id=turn_id,
@@ -411,12 +507,9 @@ def run_chat_turn(
                     turn_cap=SECTION_TURN_CAP,
                     retriever=retriever,
                     emit_label="emit_answer",
-                    on_tool_start=(
-                        (lambda name, _arguments: on_progress(labels[name]))
-                        if on_progress is not None
-                        else None
-                    ),
+                    on_tool_start=_on_tool_start,
                 )
+                _check_cancelled()
                 if root_span is not None:
                     root_span.update(
                         metadata={"prompt_version": CHAT_PROMPT_VERSION, "model": CHAT_MODEL}
@@ -447,7 +540,10 @@ def run_chat_turn(
                 "model_id": CHAT_MODEL,
                 "prompt_version": CHAT_PROMPT_VERSION,
                 "trace_id": trace_id,
+                "stopped_before_evidence_check": False,
             }
+            if not streamed_parts:
+                _emit_delta(floored.prose)
             with engine.begin() as conn:
                 completed = conn.execute(
                     update(chat_turn)
@@ -469,6 +565,10 @@ def run_chat_turn(
                     .one()
                 )
             return _row_result(row, replayed=False)
+        except ChatTurnCancelled:
+            return _cancelled_result(
+                engine, turn_id=turn_id, partial_answer="".join(streamed_parts)
+            )
         except Exception:
             log.exception(
                 "chat_turn_failed", project_id=str(project_id), conversation_id=str(conversation_id)

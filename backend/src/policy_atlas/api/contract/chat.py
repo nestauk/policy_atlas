@@ -1,0 +1,94 @@
+"""Chat-turn request, durable projection, and NDJSON stream contracts."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+CHAT_MESSAGE_MAX = 10_000
+
+
+class ChatTurnCreate(BaseModel):
+    """One idempotent question submitted to an active chat conversation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    message: str = Field(min_length=1, max_length=CHAT_MESSAGE_MAX)
+    client_turn_id: uuid.UUID
+
+
+class ChatTurnOut(BaseModel):
+    """Durable public projection of one chat turn."""
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    turn_index: int
+    client_turn_id: uuid.UUID
+    user_message: str
+    answer: str | None
+    status: Literal["pending", "completed", "failed", "cancelled"]
+    created_at: datetime
+    completed_at: datetime | None
+    claims: list[dict[str, Any]] = Field(default_factory=list)
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+    warning_not_evidence_checked: bool = False
+    handoff: Literal["evidence_not_held"] | None = None
+    stopped_before_evidence_check: bool = False
+
+
+class ProgressEvent(BaseModel):
+    """A user-facing read-tool activity emitted before that tool runs."""
+
+    type: Literal["progress"] = "progress"
+    label: str
+
+
+class DeltaEvent(BaseModel):
+    """A provider-neutral prose fragment."""
+
+    type: Literal["delta"] = "delta"
+    text: str
+
+
+class CompletedEvent(BaseModel):
+    """The one successful terminal stream event."""
+
+    type: Literal["completed"] = "completed"
+    turn: ChatTurnOut
+
+
+class FailedEventError(BaseModel):
+    """Publicly safe post-header failure information."""
+
+    code: str
+    message: str
+
+
+class FailedEvent(BaseModel):
+    """The one failed terminal stream event."""
+
+    type: Literal["failed"] = "failed"
+    error: FailedEventError
+    turn_id: uuid.UUID
+
+
+class CancelledEvent(BaseModel):
+    """The one cancelled terminal stream event, retaining partial prose."""
+
+    type: Literal["cancelled"] = "cancelled"
+    turn: ChatTurnOut
+
+
+ChatStreamEvent = Annotated[
+    ProgressEvent | DeltaEvent | CompletedEvent | FailedEvent | CancelledEvent,
+    Field(discriminator="type"),
+]
+
+
+class CancelTurnOut(BaseModel):
+    """The honest durable status observed after a cancel attempt."""
+
+    status: Literal["pending", "completed", "failed", "cancelled"]

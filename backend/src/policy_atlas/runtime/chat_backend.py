@@ -8,6 +8,7 @@ loop mechanics live in the shared bounded tool-loop kernel
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Protocol, TypedDict
 
 from policy_atlas.core.usage import TokenUsage, UsageResult
@@ -39,6 +40,7 @@ class ChatBackend(Protocol):
         *,
         force_emit: bool,
         max_output_tokens: int | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> UsageResult[ChatTurn]:
         """Produce one loop turn: read-tool calls, or the answer emission.
 
@@ -48,6 +50,8 @@ class ChatBackend(Protocol):
             force_emit: True on the final turn — the backend must emit.
             max_output_tokens: Generated-answer ceiling the provider call
                 must honour (plan pin 4096); the stub records it only.
+            on_delta: Optional provider-neutral prose callback for the final
+                emission only.
 
         Returns:
             The turn plus token usage.
@@ -73,8 +77,9 @@ class StubChatBackend:
         *,
         force_emit: bool,
         max_output_tokens: int | None = None,
+        on_delta: Callable[[str], None] | None = None,
     ) -> UsageResult[ChatTurn]:
-        del max_output_tokens  # recorded by test doubles; no provider to cap
+        del max_output_tokens, on_delta  # recorded by test doubles; no provider to cap
         question = messages[-1]["content"] if messages else ""
         if not transcript and not force_emit:
             return (

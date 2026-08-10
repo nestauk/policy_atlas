@@ -14,6 +14,13 @@ from sqlalchemy.engine import Connection, Engine
 from policy_atlas.api.auth import get_current_user
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
+from policy_atlas.core.embeddings import (
+    EmbeddingBackend,
+    OpenAIEmbeddingBackend,
+    StubEmbeddingBackend,
+)
+from policy_atlas.runtime.chat_backend import ChatBackend, StubChatBackend
+from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend
 from policy_atlas.runtime.orchestrate import live_planner_and_backends
 from policy_atlas.runtime.orchestrator_backend import (
     OpenAIOrchestratorBackend,
@@ -166,8 +173,29 @@ def get_orchestrator_backend() -> OrchestratorBackend:
     return StubOrchestratorBackend()
 
 
+def get_chat_backend() -> ChatBackend:
+    """Return the live streaming chat adapter or deterministic local stub.
+
+    Returns:
+        The key-selected chat backend. The component-level chat span owns
+        session and trace recording, so this provider stays stateless.
+    """
+    if _live():
+        return OpenAIChatBackend()
+    return StubChatBackend()
+
+
+def get_chat_embedding_backend() -> EmbeddingBackend:
+    """Return the retrieval embedder matching the chat provider posture."""
+    if _live():
+        return OpenAIEmbeddingBackend()
+    return StubEmbeddingBackend()
+
+
 __all__ = [
     "get_conn",
+    "get_chat_backend",
+    "get_chat_embedding_backend",
     "get_current_user",
     "get_engine",
     "get_executor",
