@@ -486,9 +486,12 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
 
 ### 5 — Context assembly (window, not full replay)
 
-Per-turn chat context = the conversation's recent window (last K turns verbatim, K pinned
-at plan time, **plus a token/char ceiling so one oversized turn can't blow the budget** —
-rev 2.1) + the current question + the **project frame**. The frame (rev 2.8, fresh-chat
+Per-turn chat context = the conversation's turns verbatim under a **ceiling-only
+window** (rev 3.3, owner at the plan 🛑: the whole thread up to a char ceiling pinned
+in the plan, truncating oldest-first only on overflow — full memory for the
+many-short-chats shape this product is; a fixed small-K window was the API-app cost
+pattern, not what 2026 chat products do) + the current question + the **project
+frame**. The frame (rev 2.8, fresh-chat
 hydration enumerated — *orient, don't stuff*: the frame says where the model is standing;
 specifics are the tool loop's job — **except the artefact itself, rev 3.1**): project
 name + research question · the composed coverage sentence · the funnel headline
@@ -647,7 +650,8 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   named 429-class error) · **context-assembler tests** (exact frame fields; artefact body
   present with citation keys; summary excluded; budget degrade rule (entry-context
   full → others key-findings+titles); frame-carried citation ids floor-valid;
-  K-window + token-ceiling truncation oldest-first; other conversations'
+  ceiling-window truncation oldest-first (full thread under the ceiling); other
+  conversations'
   turns never present) · **tracing tests** (stable session id per conversation;
   prompt/model metadata; `answer_payload` trace id matches the trace) ·
   **citation-floor tests** (unresolvable/out-of-range/unappraised citation stripped;

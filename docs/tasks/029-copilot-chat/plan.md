@@ -11,7 +11,12 @@
 
 ## Plan-time constants (reviewable pins)
 
-- Context window K = **8 turns**; window char ceiling **16 000 chars** (oldest-first).
+- Context window = **the whole conversation, ceiling-bounded** (rev 2.1, owner:
+  fixed small-K is an API-app cost pattern, not what flagship chat products do —
+  they carry the full thread to the context limit): all turns up to **32 000 chars**,
+  truncating oldest-first only when exceeded. Chats are many-and-short by design, so
+  this is full memory for virtually every real thread; the summarization/recall seam
+  is unchanged.
 - Frame artefact budget **40 000 chars** = the **degradation threshold for non-entry
   artefacts** (the entry-context artefact always keeps its full body — contract §5).
 - Output ceiling **4 096 tokens** per answer (new chat-adapter cap; synthesis calls
@@ -94,7 +99,7 @@ Every row is an A4 fixture case. Rubric 14 aligned to this table.
 | C3 | Chat turn service: two-phase rows (reservation sets the title from the first question — contract rev 3.2), conversation-keyed single-flight, 3c transition table incl. the cancel endpoint, idempotency, fences, resource controls, per-call short-lived connections | codex | barrier/race tests per rubric 13/16/21 |
 | C4 | `chat_v1` system prompt + wire models (`claims[]`/citations) + context assembler (frame incl. artefact body + budget rule + labels) | **lead** | prompt-bearing end-to-end |
 | C5 | Citation floor + compaction (citable set = tool ∪ frame; appraised/citable-kind; orphan strip; warning marker) + floor tests + **tool-allowlist test** (exactly `search_chunks · query_findings · lookup`; `search`/write tools not constructible — rubric 9's home) | codex | |
-| C6 | Context-assembler + tracing tests + **injection-boundary matrix test**: every channel into `chat_v1` (current question, each K-window turn, every frame field, every tool-result channel) asserted sanitized + bounded + data-labelled (rubric 17's home) | fast-worker | mechanical from the enumerated matrix |
+| C6 | Context-assembler + tracing tests + **injection-boundary matrix test**: every channel into `chat_v1` (current question, each windowed turn, every frame field, every tool-result channel) asserted sanitized + bounded + data-labelled (rubric 17's home) | fast-worker | mechanical from the enumerated matrix |
 
 ## Phase D — streaming (verify-fast + API regen/drift)
 
