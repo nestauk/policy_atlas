@@ -18,6 +18,29 @@
 > the planning conversation (a link, not a plan mutation). (5) The audit chain becomes
 > first-class: **planning conversation → plan → capability run → artefact**.
 >
+> **rev 2.1 (2026-08-10): web-research pass** (owner-directed; three-lane survey of
+> 2025–26 practice — product containers, transcript/context engineering, grounded-chat
+> UX; sources in `research-notes.md`). Validated as-is: owned Postgres transcript store
+> (the *recommended* pattern for regulated/FOI deployments, not a compromise) ·
+> client-minted idempotency · many-chats-per-project (Claude/ChatGPT Projects,
+> Perplexity Spaces) · no cross-chat recall by default · read-only tool scope (OWASP
+> LLM01 / lethal-trifecta guidance) · trust tiers + abstention (**leads** consumer
+> practice) · deterministic citation floor (**leads** most products). Amendments folded:
+> **(a)** inline `[n]` citation markers + click/hover-to-quote (footer-only lags —
+> inline click-to-source is table stakes; reuses the artefact citation grammar +
+> chunk-context read model); **(b)** token ceiling alongside the K-turn window; context
+> assembler shaped so a summarizer slots in later; **(c)** `answer_payload` carries
+> model id + prompt version (audit hardening); **(d)** honest latency affordance while
+> blocking; **(e)** plain-prose/no-markdown re-recorded as a *security control*
+> (EchoLeak-class CVE-2025-32711 showed markdown-link rendering exfiltrating from
+> "read-only" chat — our renderer closes that channel), and the misattribution gap
+> (id-membership doesn't catch "real chunk, unsupported claim") explicitly routed to
+> the eval slice. **❓ reopened at the 🛑: streaming** — blocking answers are the one
+> genuinely non-mainstream pin (grounded chat streams near-universally; the
+> state-of-the-art shape is stream-prose-then-attach-verified-citations; blocking lands
+> ~5–15 s against a ~2 s expectation). Owner decides: keep blocking v1 with the seam
+> named, or fold stream-then-verify into this slice.
+>
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.
@@ -79,7 +102,8 @@ live check.
 - **`chat_turn`** — `id` PK · `conversation_id` FK (kind=chat) · `turn_index` ·
   `client_turn_id` (uniques `(conversation_id, turn_index)`, `(conversation_id,
   client_turn_id)`) · `user_message` (≤10 000 chars) · `answer` (prose) ·
-  `answer_payload` JSONB (citations, trust tier, bounded tool digest) ·
+  `answer_payload` JSONB (citations, trust tier, bounded tool digest, **model id +
+  prompt version** — per-turn audit metadata, rev 2.1) ·
   `capability_run_id` (nullable FK, `uq_capr_id_project` composite precedent — records
   which run's committed state answered; provenance, **not** scope) ·
   `status ∈ pending | completed | failed` · `created_at`, `completed_at`.
@@ -140,9 +164,17 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
   else 409 `no_completed_run`; while the walk is `running | paused` → 409 `run_active`
   (mid-run reads would see a half-written evidence base; steering is the mid-run
   channel). *Owner cut-line: allow chats while paused — defer unless wanted now.*
-- **No streaming, no SSE change** (no token streaming exists; 028 froze the SSE
-  vocabulary). Blocking request/response with the breathing-row affordance; streaming
-  is a named deferred seam.
+- **❓ Streaming (owner decision at the 🛑, rev 2.1).** Default pin: blocking
+  request/response (no token streaming exists anywhere in the backend; 028 froze the
+  project SSE vocabulary — untouched either way), with an **honest latency affordance**
+  (breathing row + "checking the evidence — can take ~10–15 s" copy, per the copy-text
+  principle) and answers kept short. Streaming is then the *named first upgrade*:
+  stream-prose-then-attach-verified-citations on the turn POST itself (fetch-stream —
+  never the project event channel), with the citation floor running on the completed
+  buffer; the turn endpoint's response/persistence shape is designed so that upgrade is
+  additive. Alternative the owner may choose instead: fold stream-then-verify into this
+  slice (adds real scope — first token-streaming plumbing in the backend — to an
+  already Tier-4 slice).
 
 ### 4 — The chat agent: `chat_v1` orchestrator moment (lead-authored, prompt-bearing)
 
@@ -163,9 +195,14 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
 - **Fast-path discipline — pinning the spec's 🟡**: chat **skips the verify pass**.
   Trust is carried by labelling with deterministic floors: (a) cited chunk/finding ids
   must be in the set the tool loop actually returned this turn — anything else is
-  stripped and the tier downgraded; (b) zero surviving citations forces the "pure LLM
-  reasoning" label; (c) no answer renders untier-labelled (§3.3 taxonomy). An ungrounded
+  stripped and the tier downgraded; (b) an inline `[n]` marker whose citation was
+  stripped is stripped with it; (c) zero surviving citations forces the "pure LLM
+  reasoning" label; (d) no answer renders untier-labelled (§3.3 taxonomy). An ungrounded
   answer indistinguishable from a grounded one is the cardinal sin this prevents.
+  **Named residual (rev 2.1)**: id-membership does not catch *misattribution* (a real
+  chunk cited for a claim it doesn't support — the dominant failure mode in 2025–26
+  citation studies); the tier label is the honest v1 mitigation, and a per-claim
+  groundedness check on chat answers is routed to the eval slice, not silently absent.
 - Both spec flavours in scope: *provenance lookup* and *generative synthesis* rendered
   into chat, not persisted as artefact content.
 - **Evidence-not-held honesty + hand-off**: when the corpus can't answer, the answer
@@ -177,9 +214,12 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
 ### 5 — Context assembly (window, not full replay)
 
 Per-turn chat context = the conversation's recent window (last K turns verbatim, K pinned
-at plan time) + the current question + a compact project frame (question, coverage
-sentence, artefact skeleton(s)). **Recall over older turns is deferred** (window-first,
-honestly). Stored HTTP projections are never fed back to the model (027 rule).
+at plan time, **plus a token/char ceiling so one oversized turn can't blow the budget** —
+rev 2.1) + the current question + a compact project frame (question, coverage sentence,
+artefact skeleton(s)). The assembler is one seam-shaped function so rolling summarization
+can slot in later without reshaping turns. **Recall over older turns is deferred**
+(window-first, honestly — the 2026 layered pattern is window + summary + recall; we land
+the base layer). Stored HTTP projections are never fed back to the model (027 rule).
 
 ### 6 — Frontend: conversation-aware rail + Chats library
 
@@ -190,10 +230,15 @@ honestly). Stored HTTP projections are never fed back to the model (027 rule).
   artefact as *entry context*, not a fence) · the 028 "evidence base is ready" card ·
   the library ("New chat") · "Run the analysis again" → opens the new planning
   conversation.
-- **Answers render as prose + citations + tier chip** — `whitespace-pre-wrap` + scrub,
-  **no markdown dependency**; the `chat_v1` prompt constrains answers to plain
-  paragraphs. Citations render as a references footer (source title → id-keyed dossier
-  open); tier chips use only the locked `TIER_LABEL`/`TIER_TEXT` vocabulary.
+- **Answers render as prose with inline `[n]` citation markers + tier chip** (rev 2.1:
+  inline click-to-source is table stakes, and it's the artefact reader's own grammar) —
+  `whitespace-pre-wrap` + scrub, **no markdown dependency** (now a recorded *security
+  control*: no rendered links from model output closes the EchoLeak-class exfiltration
+  channel, on top of the copy-diet rationale); the `chat_v1` prompt constrains answers
+  to plain paragraphs with `[n]` markers. Markers + the references footer resolve to
+  the id-keyed dossier open; **hover/click shows the cited quote in context** (reusing
+  the chunk-context read-model pattern the artefact citations already use); tier chips
+  use only the locked `TIER_LABEL`/`TIER_TEXT` vocabulary.
 - Composer is the extracted 028 `Composer` with per-kind copy; disabled states stay
   honest (pending turn; fence states show why).
 - State layer mirrors `usePlanningTranscript` (durable query + optimistic reducer +
@@ -216,7 +261,10 @@ conversation entity now makes natural). Prompt-version metadata on every call.
   watch deliberation sites (`read_tools=None` — adjacent, untouched) · multi-artefact
   read-model widening (workspace-cluster) · catch-me-up / multi-user visibility ·
   Bedrock routing · presentational per-run segmentation of the legacy rolling thread ·
-  chats that replan or trigger runs (never — a hand-off link is the ceiling).
+  chats that replan or trigger runs (never — a hand-off link is the ceiling) ·
+  cross-chat memory/recall (2026 practice keeps it opt-in and memory-mediated; our
+  chats stay mutually blind, knowledge travels via artefacts) · LLM auto-titling
+  (first-question truncation v1; async cheap-model titling is a noted easy upgrade).
 
 ## Constraints & approval gates
 

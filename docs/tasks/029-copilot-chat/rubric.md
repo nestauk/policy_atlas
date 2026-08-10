@@ -25,8 +25,10 @@ Slice-specific:
 9.  [ ] **Tool-set boundary holds**: the chat surface can construct no `search` and no
         write tool — proven by the allowlist test, not by reading.
 10. [ ] **Tier honesty is deterministic**: a fabricated citation id is stripped and the
-        tier downgraded; zero surviving citations forces the pure-LLM label; no answer
-        renders without a tier chip from the locked vocabulary.
+        tier downgraded; inline `[n]` markers whose citation was stripped are stripped
+        with it; zero surviving citations forces the pure-LLM label; no answer renders
+        without a tier chip from the locked vocabulary; marker/hover/footer all resolve
+        only to surviving citations.
 11. [ ] **Chats are ephemeral and read-only**: a chat turn writes only `conversation`/
         `chat_turn` rows — no artefact, finding, annotation, plan or shared
         project-event writes; the evidence-not-held hand-off is a link, never a plan
