@@ -388,6 +388,12 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         project_source_snapshot.c.project_id == project_id
     ))
     conn.execute(delete(runs).where(runs.c.project_id == project_id))
+    # chat_turn before capability_run (chat_turn.capability_run_id FKs onto it).
+    conn.execute(delete(chat_turn).where(
+        chat_turn.c.conversation_id.in_(
+            select(conversation.c.id).where(conversation.c.project_id == project_id)
+        )
+    ))
     # capability_run after runs (runs.capability_run_id FKs onto it) and before
     # evidence_scope/project (its composite scope FK + project FK target them).
     conn.execute(delete(capability_run).where(capability_run.c.project_id == project_id))
@@ -414,13 +420,8 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     conn.execute(delete(orchestration_plan).where(
         orchestration_plan.c.project_id == project_id
     ))
-    # chat_turn before conversation; conversation after its FK dependants
-    # (planning_transcript/orchestration_plan above) and before project.
-    conn.execute(delete(chat_turn).where(
-        chat_turn.c.conversation_id.in_(
-            select(conversation.c.id).where(conversation.c.project_id == project_id)
-        )
-    ))
+    # conversation after its FK dependants (chat_turn above,
+    # planning_transcript/orchestration_plan above) and before project.
     conn.execute(delete(conversation).where(conversation.c.project_id == project_id))
     conn.execute(delete(evidence_scope).where(evidence_scope.c.project_id == project_id))
     conn.execute(delete(project).where(project.c.project_id == project_id))
