@@ -22,26 +22,24 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `029-copilot-qa` **design step 1** (2026-08-05,
-branch `task/029-copilot-qa`, stacked on `task/028-ux-refinement`):
-co-pilot Q&A — follow-up questions in chat after an analysis completes.
-The pre-registered seam (027 PR #35 adjudication + deferred.md): the Q&A
-thread/context model + transcript companion store (per-user sessions),
-multi-thread chat + Chats library UI, the lead-authored Q&A prompt
-surface, read-only tool scope (`retrieve` · `lookup` · `query_findings`,
-no `search`), trust-tier-labelled ephemeral answers. Contract:
-`docs/tasks/029-copilot-qa/contract.md`.
+Implementation — task `029-copilot-chat` **design step 1, contract rev 2**
+(2026-08-10, branch `task/029-copilot-chat` from merged `dev`; renamed
+from `029-copilot-qa` — "qa" naming dropped): co-pilot chat — the unified
+conversation model. A project holds many conversations,
+Claude-Projects-style: follow-up **chats** (read-only, project-scoped,
+answering across artefacts from committed evidence, trust-tier-labelled
+ephemeral answers, tool scope `search_chunks` · `lookup` ·
+`query_findings`, no `search`) and **planning conversations** (one per
+plan lineage, closing when its run completes — supersedes 027's rolling
+thread; audit chain conversation → plan → run → artefact). Tier 4 (legacy
+backfill migration on live data). Contract:
+`docs/tasks/029-copilot-chat/contract.md`.
 
-Tasks `026-infra-deployment` (draft PR #33, Tier 4 — system **live** at
-`v3.policyatlas.uk`), `027-frontend-uplift` (PR #36, Tier 3) and
-`028-ux-refinement` (PR #41, Tier 2/3 — review stack adjudicated
-2026-08-05) are all at **step 9: human review + merge** (#33 → #36 →
-#41). Each PR re-targets `dev` as its parent merges — if a merge review
-touches files a stacked branch changed, that branch rebases before its
-own review. Known operational state: staging's OpenAI quota exhausted
-2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
-(former 027 draft) stays deferred — contract draft at unpushed
-`a5c9708`.
+Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
+`c501022`); system **live** at `v3.policyatlas.uk`. Known operational
+state: staging's OpenAI quota exhausted 2026-07-28 (runs fail honest-429
+until billing tops up). The eval slice (former 027 draft) stays
+deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist
