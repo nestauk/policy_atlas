@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — twenty-eight tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-two tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -48,6 +48,7 @@ artefact = Table(
     metadata,
     Column("artefact_id", UUID(as_uuid=True), primary_key=True),
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("capability_run_id", UUID(as_uuid=True), nullable=True),
     Column("title", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("summary", Text, nullable=True),
@@ -55,6 +56,51 @@ artefact = Table(
     CheckConstraint(
         "summary_status IN ('pending', 'verified', 'failed')",
         name="ck_artefact_summary_status",
+    ),
+    UniqueConstraint("artefact_id", "project_id", name="uq_artefact_id_project"),
+    ForeignKeyConstraint(
+        ["capability_run_id", "project_id"],
+        ["capability_run.capability_run_id", "capability_run.project_id"],
+        name="fk_artefact_capability_run_project",
+        match="SIMPLE",
+    ),
+)
+
+conversation = Table(
+    "conversation",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("title", Text, nullable=False),
+    Column("entry_artefact_id", UUID(as_uuid=True), nullable=True),
+    Column("status", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("closed_at", DateTime(timezone=True), nullable=True),
+    Column("archived_at", DateTime(timezone=True), nullable=True),
+    ForeignKeyConstraint(
+        ["entry_artefact_id", "project_id"],
+        ["artefact.artefact_id", "artefact.project_id"],
+        name="fk_conversation_entry_artefact_project",
+        match="SIMPLE",
+    ),
+    CheckConstraint("kind IN ('planning', 'chat')", name="ck_conversation_kind"),
+    CheckConstraint(
+        "status IN ('active', 'closed', 'archived')", name="ck_conversation_status"
+    ),
+    CheckConstraint(
+        "(status = 'archived') = (archived_at IS NOT NULL)",
+        name="ck_conversation_archived_at",
+    ),
+    CheckConstraint(
+        "kind = 'chat' OR status <> 'archived'",
+        name="ck_conversation_planning_never_archived",
+    ),
+    Index(
+        "uq_conversation_one_active_planning",
+        "project_id",
+        unique=True,
+        postgresql_where=text("kind = 'planning' AND status = 'active'"),
     ),
 )
 
@@ -1062,6 +1108,7 @@ orchestration_plan = Table(
     metadata,
     Column("plan_id", UUID(as_uuid=True), primary_key=True),
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("conversation_id", UUID(as_uuid=True), ForeignKey("conversation.id"), nullable=True),
     # NULLABLE — resolved at approval time; the composite FK below binds only
     # once it's set (MATCH SIMPLE, per synthesis_result's optional references).
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=True),
@@ -1095,6 +1142,7 @@ planning_transcript = Table(
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("conversation_id", UUID(as_uuid=True), ForeignKey("conversation.id"), nullable=True),
     Column("client_turn_id", UUID(as_uuid=True), nullable=False),
     # This is the transcript's ordering coordinate. ``created_at`` remains
     # display metadata only: timestamp ordering is not a conversation order.
@@ -1158,5 +1206,32 @@ capability_run = Table(
         "status IN ('running', 'paused', 'succeeded', 'degraded', 'failed', "
         "'aborted', 'interrupted')",
         name="ck_capr_status",
+    ),
+)
+
+chat_turn = Table(
+    "chat_turn",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("conversation_id", UUID(as_uuid=True), ForeignKey("conversation.id"), nullable=False),
+    Column("turn_index", Integer, nullable=False),
+    Column("client_turn_id", UUID(as_uuid=True), nullable=False),
+    Column("user_message", Text, nullable=False),
+    Column("answer", Text, nullable=True),
+    Column("answer_payload", JSONB, nullable=True),
+    Column(
+        "capability_run_id",
+        UUID(as_uuid=True),
+        ForeignKey("capability_run.capability_run_id"),
+        nullable=True,
+    ),
+    Column("status", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    UniqueConstraint("conversation_id", "turn_index", name="uq_chat_turn_conv_index"),
+    UniqueConstraint("conversation_id", "client_turn_id", name="uq_chat_turn_conv_client"),
+    CheckConstraint(
+        "status IN ('pending', 'completed', 'failed', 'cancelled')",
+        name="ck_chat_turn_status",
     ),
 )
