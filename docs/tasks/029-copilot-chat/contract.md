@@ -84,6 +84,54 @@
 > **thumbs-feedback → Langfuse scores** named as the eval slice's gold-set seam
 > (Out list).
 >
+> **rev 3 (2026-08-10): contract-stage adversarial lane DONE** (codex-rescue job
+> task-msnk8k33-o0ndx2; 23 findings, 17 MAJOR — all adjudicated in; **reopened 🛑,
+> owner re-approval required**). Material folds: **(a)** spec conflicts fixed —
+> artefact summaries OUT of hydration (nothing load-bearing from a summary,
+> provenance-grounding §; titles + section titles stay); citation floor now also
+> requires **appraised, citable-kind** evidence (the tool already exposes
+> `appraised`); the judge attaches at **claim grain** — the terminal payload carries
+> `claims[]` with claim→citation mapping, and `answer_payload` persists the judge's
+> `{verdict, weakly_grounded, rationale}` + audit metadata per claim, surfaced at the
+> claim's citation markers; lineage claim narrowed to row-level (field-level turn
+> provenance stays the deferred plan-as-object seam). **(b)** build-breakers pinned —
+> executor scoping needs the **terminal-run component-id resolver** (same ordered
+> event/run reduction as continuation state, resolved once per turn; scope-wide
+> readers bounded to the resolved set — plan verifies which); chat single-flight
+> locks are **conversation-keyed**, the project row lock ends at reservation, and no
+> transaction/pooled connection survives provider waits or streaming (per-call
+> short-lived connections); successor planning seeding is a **deterministic
+> executed-plan→draft mapping** (the `previous_draft` full-replay mechanics don't
+> transfer); planning-conversation closure commits **inside the run's terminal
+> transaction**. **(c)** interface gaps closed — stream pinned as **NDJSON union**
+> `progress | delta | completed | failed | cancelled`, exactly one terminal event per
+> still-connected request, post-header failures as events; `GET /conversations/{cid}`
+> added; `conversation.entry_artefact_id` (nullable, project-guarded) carries the
+> context chip; typed `handoff` field (no link parsing from prose); archived
+> conversations listable by owner + unarchive resolves them (404 stays the
+> cross-owner/unknown rule); turn status/retry **transition table** (bare disconnect
+> ≠ stop: server finishes and completes the row, the V2/AI-SDK norm; stop persists
+> the partial as `cancelled`; enrichment is compare-and-set); **resource controls**
+> (output-token ceiling · per-owner in-flight turn cap · named rate-limit error);
+> rollback boundary stated (destructive downgrade pre-write only; post-write rollback
+> is behaviour-level, additive schema/data retained). **(d)** honesty fixes —
+> across-artefacts scope stated precisely (chunk search spans the whole shared
+> corpus; findings/lookup read the terminal run set; older runs' structured reads are
+> the named workspace-cluster residual); backfill covers only projects **with**
+> planning turns, full state truth table at the plan 🛑; zero-citation marker
+> re-worded as a warning ("not evidence-checked"), never a tier equivalence, with the
+> prompt rule *evidential claims about the corpus cite or abstain*; chat-judge prompt
+> adaptation named under the prompt gate as a cut-line; the loop reuse restated as
+> **kernel extraction** (composer/caps/accounting reused; small bounded-loop kernel
+> with injected final emitter; section + chat adapters). Stale rev-residue purged
+> (blocking wording, deferred-streaming rubric line, orchestrator-default model,
+> singular tier fields). **Declined, with reasons:** a deterministic quote-presence
+> floor (the judge enrichment assesses support; quote emission contradicts the
+> fast-path output shape — the spec's quote-presence rule binds the block discipline
+> chat explicitly doesn't carry) · judging uncited reasoning claims (the safe-harbour
+> concern is met by the warning marker + cite-or-abstain rule; judging uncited prose
+> is eval-slice instrumentation).
+>
 > **rev 2.8 (2026-08-10, owner calls):** (1) `POLICY_ATLAS_CHAT_MODEL` defaults to
 > **`gpt-5.6-terra`** (faster class for the conversational budget; same provider and
 > approved route). (2) **Fresh-chat hydration enumerated** in strand 5 — project
@@ -171,15 +219,20 @@ live check.
 
 - **`conversation`** — `id` (UUID PK) · `project_id` FK · `kind ∈ planning | chat` ·
   `title` (chats: server-derived from first question, PATCH-renameable; planning:
-  server-derived from the plan/run) · `status ∈ active | closed | archived` ·
+  server-derived from the plan/run) · **`entry_artefact_id`** (nullable,
+  project-guarded FK — the context chip's durable home; set at creation, exposed in
+  reads, PATCH-clearable; rev 3) · `status ∈ active | closed | archived` ·
   `created_at`, `closed_at`, `archived_at`. Owner scope rides the project.
   Invariant: **at most one `active` planning conversation per project** (partial unique
   index) — preserves the single-plan-draft invariant and the run fence.
 - **`chat_turn`** — `id` PK · `conversation_id` FK (kind=chat) · `turn_index` ·
   `client_turn_id` (uniques `(conversation_id, turn_index)`, `(conversation_id,
   client_turn_id)`) · `user_message` (≤10 000 chars) · `answer` (prose) ·
-  `answer_payload` JSONB (citations, trust tier, bounded tool digest, **model id +
-  prompt version** — per-turn audit metadata, rev 2.1) ·
+  `answer_payload` JSONB (`claims[]` with claim→citation mapping · per-claim judge
+  enrichment `{verdict, weakly_grounded, rationale}` + judge audit metadata (model,
+  prompt version, envelope refs) — rev 3, claim-grained per the binding taxonomy ·
+  bounded tool digest · **model id + prompt version + Langfuse trace id** — per-turn
+  audit metadata) ·
   `capability_run_id` (nullable FK, `uq_capr_id_project` composite precedent — records
   which run's committed state answered; provenance, **not** scope) ·
   `status ∈ pending | completed | failed | cancelled` · `created_at`, `completed_at`.
@@ -195,13 +248,19 @@ live check.
   against the as-built plan/version tables is a plan-time mapping); `capability_run`
   already pins `plan_id + plan_version`; **`artefact` gains nullable
   `capability_run_id`** — closing the named 025/027 gap so *conversation → plan → run →
-  artefact* is walkable end-to-end. All additive, nullable, no legacy fabrication.
+  artefact* is walkable end-to-end **at row grain** (rev 3: per-field turn
+  back-references — plan-as-object's field-level provenance — stay the named
+  workspace-cluster deferral). All additive, nullable, no legacy fabrication.
 - **Legacy backfill (the one data migration — the riskiest element of the slice):**
-  each project with existing planning turns gets exactly one legacy planning
-  conversation owning all its rows; its `active`/`closed` status is derived honestly
-  from plan/run state at migration time (open draft newer than the last completed run →
-  `active`; else `closed`) — precise rule finalized at plan 🛑, with a tested downgrade
-  path (rollback plan, Tier-4 discipline).
+  each project **with ≥1 planning turn** gets exactly one legacy planning conversation
+  owning all its rows (zero-turn projects get nothing — rev 3, honest population);
+  its `active`/`closed` status derives from plan/run state at migration time via a
+  **complete truth table finalized at the plan 🛑** — covering no-run ·
+  running/paused · succeeded/degraded · failed/aborted/interrupted · abandoned plans ·
+  mid-replan · archived projects. **Rollback boundary (rev 3):** the destructive
+  downgrade is rehearsal/pre-write only; once 029 rows exist in production, rollback
+  is behaviour-level (disable the surfaces) with the additive schema and data
+  retained — transcripts are never destroyed by a rollback.
 - **Provider-side conversation state stays forbidden** (018 standing constraint —
   audit/FOI/portability). No hard delete anywhere; PR #35's "delete" is archive/reopen.
 
@@ -209,10 +268,15 @@ live check.
 
 - One planning conversation per **plan lineage**: created with the project (or on first
   planning turn); steer-point plan revisions mid-run stay within its lineage; a run
-  reaching `succeeded | degraded` **closes** it; "Run the analysis again" opens a new
-  one **seeded from the executed plan** (the existing `previous_draft` mechanics — no
-  transcript replay across conversations). Failed/aborted/interrupted runs leave it
-  `active` for replanning within the same lineage.
+  reaching `succeeded | degraded` **closes** it — and that closure commits **inside the
+  run's terminal transaction** (rev 3: atomic with the terminal status + `run.finished`
+  event; a crash can never leave a succeeded run with an active planning
+  conversation). "Run the analysis again" opens a new one **seeded from the executed
+  plan** via a **deterministic executed-plan→draft mapping from the durable approved
+  plan row, first-turn-only** (rev 3 — the `previous_draft` full-replay mechanics
+  read transcript rows and do not transfer to a fresh conversation). No transcript
+  replay across conversations. Failed/aborted/interrupted runs leave it `active` for
+  replanning within the same lineage.
 - **Planner rehydration scopes to the conversation's own turns** — bounding context by
   construction (the rolling model's unbounded full-replay is the engineering defect this
   fixes, not just aesthetics).
@@ -227,16 +291,48 @@ live check.
 All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error envelope.
 
 - `GET /projects/{id}/conversations?kind=&status=` — the library read model (both kinds;
-  newest first; latest-turn preview; chats + closed planning conversations browsable).
-- `POST /projects/{id}/conversations` `{}` → 201 chat conversation (kind=chat only —
-  planning conversations are lifecycle-created, never minted by hand).
-- `PATCH /conversations/{cid}` `{title?}` · `POST /conversations/{cid}/archive` ·
-  `.../unarchive` — chats only, idempotent, mirroring project-archive semantics.
-- `POST /conversations/{cid}/turns` `{message, client_turn_id}` → blocking `ChatTurnOut`
-  (answer + citations + tier), kind=chat; mirrors planning-turn mechanics wholesale
-  (pending row under project lock → LLM outside transaction → completed row; idempotent
-  retry of latest turn; 409 `stale_turn` / `chat_turn_in_progress`; 10-min stale expiry;
-  honest pending/failed rows). `GET .../turns` — paginated ascending.
+  newest first; latest-turn preview; chats + closed planning conversations browsable;
+  `status=archived` lists an owner's archived chats — the 404-indistinguishable rule
+  covers cross-owner and unknown ids, not an owner's own archived rows, rev 3).
+- `GET /conversations/{cid}` → `ConversationOut` (title, kind, status,
+  `entry_artefact_id`, timestamps) — rev 3, the deep-link resolver; same BOLA rules.
+- `POST /projects/{id}/conversations` `{entry_artefact_id?}` → 201 chat conversation
+  (kind=chat only — planning conversations are lifecycle-created, never minted by
+  hand; the entry artefact must belong to the project).
+- `PATCH /conversations/{cid}` `{title?, entry_artefact_id?}` (clearable) ·
+  `POST /conversations/{cid}/archive` · `.../unarchive` — chats only, idempotent;
+  unarchive is the one owner-scoped call that resolves an archived conversation.
+- `POST /conversations/{cid}/turns` `{message, client_turn_id}` → **the turn stream**
+  (strand 3a below), kind=chat; turn-row mechanics mirror planning turns (pending row
+  reserved under the project row lock → provider work outside any transaction →
+  terminal row commits whole; idempotent retry of latest turn; 409 `stale_turn` /
+  `chat_turn_in_progress`; 10-min stale expiry; honest pending/failed rows) — **with
+  the concurrency corrections in strand 3b**. `GET .../turns` — paginated ascending.
+- **3a — the stream wire (rev 3):** NDJSON; a discriminated union
+  `progress | delta | completed | failed | cancelled`; **exactly one terminal event
+  per still-connected accepted request**; an error after headers is a `failed` event
+  (the standard error envelope applies only before headers); client recovery after
+  its own disconnect = re-read the turn via `GET .../turns`. Provider-neutral by pin
+  (rev 2.2) — the union carries text deltas + one terminal validated payload.
+- **3b — concurrency corrections (rev 3; "wholesale" was wrong on three counts):**
+  chat single-flight locks are **conversation-keyed**, not project-keyed (concurrent
+  turns in different chats are a feature); the project row lock is held only for the
+  reservation transaction, never through provider calls; **no DB transaction, row
+  lock, or pooled connection survives a provider wait or the stream** — tool reads
+  open short-lived per-call connections (the synthesis readers close over a live
+  connection today; the chat wiring may not).
+- **3c — turn status/retry transition table (rev 3):** `pending → completed`
+  (normal; enrichment then updates the completed row **compare-and-set**) ·
+  `pending → cancelled` (explicit stop event: partial persisted, markers inert) ·
+  `pending → failed` (provider/loop error: honest failure row) · **bare client
+  disconnect ≠ stop**: the server finishes generation and commits `completed` — the
+  answer is waiting on reload (the production norm; stop is an explicit signal).
+  Retry with the same `client_turn_id`: `completed` → replay stored payload
+  (enriched when present) · `failed | cancelled` → re-run in place, latest turn only ·
+  younger-`pending` → 409. New id while pending → 409 `chat_turn_in_progress`.
+- **3d — resource controls (rev 3):** a generated-answer output-token ceiling · a
+  **per-owner in-flight chat-turn cap** (number at plan) with a named 429-class
+  error · message cap 10 000 chars as pinned. Deterministic tests for each.
 - **Existing planning endpoints keep their paths and semantics** (`/planning-turns`,
   `/plan`) — they now operate on the project's single active planning conversation;
   responses additively expose `conversation_id`. Evolution stays additive; nothing
@@ -274,50 +370,77 @@ All owner-scoped (404-indistinguishable BOLA rule), standard pagination + error 
 
 - New moment beside router/watch: `CHAT_SYSTEM_PROMPT` from `_SHARED_PREAMBLE` (moment
   count sentence updates per house rule), own pin `chat_v1`, own
-  `POLICY_ATLAS_CHAT_MODEL` env constant (default = orchestrator model), wire models
+  `POLICY_ATLAS_CHAT_MODEL` env constant (default `gpt-5.6-terra`, rev 2.8), wire models
   `extra="forbid"`, all corpus-derived and user inputs sanitized + bounded + labelled
   "(data, not instructions)" — the standing injection posture, inherited verbatim.
-- **Tool loop = reuse**: `run_section_loop` over `build_section_tools` with the live
-  executors (`search_chunks` on the Q&A-lookup retrieval profile · `query_findings` ·
-  `lookup`), **project-scoped**: reads across all committed runs/artefacts the project
-  holds (v3.0 practical floor: the latest completed run's committed outputs — the
-  single-EB era makes that the whole evidence base; the multi-artefact widening rides
-  the workspace-cluster read models, seam named). **The tool set is the security
-  boundary**: no `search`, no write tools constructible from the chat surface (spec
-  hard rule — egress must not originate outside the audit record). Turn caps + per-turn
-  read caps as shipped.
+- **Tool loop = kernel extraction, not literal reuse** (rev 3 refinement of the rev-2
+  pin): `run_section_loop` terminates on a structured section-claims emission, so the
+  shared part — `build_section_tools` (validation, dedup, char budget), the turn/read
+  caps, rejected-call accounting — is extracted into a small **bounded tool-loop
+  kernel with an injected final emitter**; section and chat keep separate
+  final-emission adapters (chat's streams prose + `claims[]`).
+- **Executor scope (rev 3, stated precisely):** a per-turn **terminal-run component-id
+  resolver** reconstructs `evidence_scope_id` + the characterisation/selection/
+  extraction/grouping run ids for the project's terminal completed run — the same
+  ordered event/run reduction the continuation reducer uses — resolved **once per
+  turn** so every read in a turn sees one consistent set; scope-wide readers are
+  bounded to the resolved set (the plan verifies which readers are scope-wide). A run
+  starting mid-turn therefore cannot leak into an in-flight answer, and chat never
+  fences run creation (read-only surfaces don't block the primary workflow).
+  Across-artefacts honesty: `search_chunks` spans the **whole shared corpus** (all
+  runs' screened-in text); `query_findings`/`lookup` read the terminal run's
+  committed outputs; structured reads over *older* runs' findings are the named
+  workspace-cluster residual. **The tool set is the security boundary**: no `search`,
+  no write tools constructible from the chat surface (spec hard rule — egress must
+  not originate outside the audit record).
 - **Fast-path discipline — pinning the spec's 🟡 (rev 2.7: two stages, judge-true)**:
   chat skips verification **inline** — nothing delays the stream — and the real
   **grounding judge runs asynchronously after the stream closes**, attaching
   **per-citation §3.3 tier verdicts** (owner call, 2026-08-10: per-citation labels are
   the judge system's design; an answer-level self-graded tier both flattens mixed
   answers and fakes the judge's precision).
-  - **Stage 1 — deterministic floors at the terminal payload** (rev 2.3.1 mechanism,
-    unchanged): the structured payload carries `citations[]` as **durable ids** (the
-    same citation currency as synthesis); inline `[n]` markers index that array;
-    display numbering derived at persist time. Floors: (a) every citation must
-    resolve to an id the tool loop actually returned this turn — anything else is
+  - **Stage 1 — deterministic floors at the terminal payload** (rev 2.3.1 mechanism;
+    claim-grained at rev 3): the structured payload carries **`claims[]`** — claim
+    spans over the prose, each mapping to its `citations[]` entries as **durable
+    ids** (the same claim/citation currency as synthesis, which is what the judge
+    machinery requires); inline `[n]` markers index the citations array; display
+    numbering derived at persist time. Floors: (a) every citation must resolve to an
+    id the tool loop actually returned this turn **and reference appraised,
+    citable-kind evidence** (rev 3 — tool results already carry `appraised`; the
+    cite-only-appraised hard rule holds on this surface too); anything else is
     stripped; (b) an orphaned marker is stripped with its citation; (c) the persisted
     display payload is compacted; (d) zero surviving citations → the answer carries
-    the "pure LLM reasoning" marker (the one answer-level signal that survives —
-    with no citations there is nothing else to carry it), no judge call;
+    the **"not evidence-checked"** warning marker — a warning, never a tier
+    equivalence (rev 3; Tier 4 is not a safe harbour), no judge call; the `chat_v1`
+    prompt rule is *evidential claims about the corpus cite or abstain*;
     (e) surviving citations land in an honest **"unchecked"** state — never wearing
-    a tier they haven't earned.
-  - **Stage 2 — async judge enrichment**: for answers with surviving citations, the
-    grounding judge (the synthesis judge machinery) assesses each cited claim against
-    its cited chunk(s) and per-citation tier verdicts attach as an enrichment write
-    on the turn row — **the only tier display on cited answers** (rev 2.7.1, owner:
-    the derived answer-wide weakest-tier chip is cut as redundant; per-citation
-    verdicts carry the whole story). Judge failure or timeout leaves citations
-    honestly "unchecked" —
-    enrichment never blocks, never fabricates, and a judge verdict can only downgrade
-    or confirm, never launder. The upgrade reaches an open chat via the turn read
-    model (bounded refetch; **no project-SSE change**). An idempotent retry replays
-    the enriched payload when present.
+    a verdict they haven't earned.
+  - **Stage 2 — async judge enrichment (claim-grained, rev 3)**: for answers with
+    surviving cited claims, the grounding judge assesses **each claim against its
+    cited chunk(s)** in the judge's existing envelope (claim id, claim text,
+    citations, full prose, span map); per-claim `{verdict, weakly_grounded,
+    rationale}` + the judge's audit metadata persist in `answer_payload`, and
+    verdicts surface at the claim's citation markers — **the only tier display on
+    cited answers** (rev 2.7.1: no answer-wide chip). The chat emission is shaped
+    into the judge's existing envelope where possible; **any judge-prompt adaptation
+    for chat-shaped claims is a named lead-authored prompt surface under the prompt
+    gate, and a plan cut-line** (rev 3). Judge failure or timeout leaves claims
+    honestly "unchecked" — enrichment never blocks, never fabricates, only confirms
+    or downgrades, and writes **compare-and-set** on the completed row. The upgrade
+    reaches an open chat via the turn read model (bounded refetch; **no project-SSE
+    change**). An idempotent retry replays the enriched payload when present.
+  - **Hand-off is typed** (rev 3): "the corpus doesn't hold this" sets
+    `handoff: evidence_not_held` on the terminal payload/read model with the
+    server-resolved planning target — the affordance renders from data, never parsed
+    from prose (no links in model output by pin).
   *(Considered and declined: V2's server-pre-assigned per-turn citation register —
-  see [v2-chat-review.md](v2-chat-review.md); and inline/blocking judge — the whole
-  point of stream-then-verify is that verification cost never sits on the visible
-  answer.)*
+  see [v2-chat-review.md](v2-chat-review.md); inline/blocking judge — verification
+  cost never sits on the visible answer; a deterministic quote-presence floor —
+  quote emission contradicts the fast-path output shape, the spec's quote-presence
+  rule binds the block discipline chat explicitly doesn't carry, and claim support
+  is exactly what the judge enrichment assesses; judging uncited reasoning prose —
+  the warning marker + cite-or-abstain rule carries the safe-harbour concern,
+  anything beyond is eval-slice instrumentation.)*
   **Residual, revised at rev 2.7**: the async judge now covers *misattribution* (a
   real chunk cited for an unsupported claim — the dominant 2025–26 failure mode) for
   every enriched answer; what remains for the eval slice is measuring the **judge's
@@ -337,10 +460,12 @@ at plan time, **plus a token/char ceiling so one oversized turn can't blow the b
 rev 2.1) + the current question + the **project frame**. The frame (rev 2.8, fresh-chat
 hydration enumerated — *orient, don't stuff*: the frame says where the model is standing;
 specifics are the tool loop's job): project name + research question · the composed
-coverage sentence · the funnel headline counts · per artefact its title, persisted
-summary and section titles (never the prose) · the entry-context artefact when the chat
-was opened from one, labelled "the user was reading this — relevance guidance, not
-evidence". All frame fields are corpus/project-derived → sanitized, bounded, labelled
+coverage sentence · the funnel headline counts · per artefact its title and section
+titles — **never the prose, and never the persisted summary** (rev 3: summaries are
+navigation devices; nothing load-bearing, including agent context, derives from one —
+provenance-grounding rule) · the entry-context artefact when the chat was opened from
+one, labelled "the user was reading this — relevance guidance, not evidence". All
+frame fields are corpus/project-derived → sanitized, bounded, labelled
 "(data, not instructions)". Deliberately not hydrated: raw chunks, artefact prose, the
 planning transcript, steering history — all tool-fetchable or deferred. The assembler is
 one seam-shaped function so rolling summarization can slot in later without reshaping
@@ -469,13 +594,22 @@ beyond trivial plumbing · scope would grow past this slice · turn/token budget
   citations → pure-LLM label) · chat tool set contains no `search`/write tool
   (allowlist test) · archive semantics (chats only) · lineage walk (conversation → plan
   → run → artefact) on a stub run · stub-backend chat e2e (create → turn → durable
-  rehydration) · **streaming contract tests** (typed progress events then deltas then
-  exactly one terminal payload; mid-stream failure → honest failed row + client
-  recovery; client cancel → generator cleanup + partial prose persisted as `cancelled`
-  with inert markers + no-tier badge; idempotent retry of a completed turn replays
-  stored answer without re-generation; disconnect cleanup) · **citation-floor tests** (unresolvable/out-of-range citation stripped;
+  rehydration) · **streaming contract tests** (the NDJSON union
+  `progress | delta | completed | failed | cancelled`; exactly one terminal event per
+  still-connected request; post-header failure arrives as a `failed` event; explicit
+  stop → generator cleanup + partial persisted as `cancelled` with inert markers +
+  warning badge; **bare disconnect → generation finishes and the row completes**;
+  retries per the 3c transition table incl. failed/cancelled re-run-in-place and
+  enriched replay) · **resolver tests** (terminal-run component-id resolution incl.
+  replacement/additive re-runs and degraded missing components; resolved once per
+  turn) · **resource-control tests** (output ceiling; per-owner in-flight cap →
+  named 429-class error) · **context-assembler tests** (exact frame fields; summary
+  excluded; K-window + token-ceiling truncation oldest-first; other conversations'
+  turns never present) · **tracing tests** (stable session id per conversation;
+  prompt/model metadata; `answer_payload` trace id matches the trace) ·
+  **citation-floor tests** (unresolvable/out-of-range/unappraised citation stripped;
   orphan marker stripped; compaction numbers survivors by first appearance; uncited
-  entries never displayed; zero survivors → pure-LLM answer, no judge call) ·
+  entries never displayed; zero survivors → warning-marked answer, no judge call) ·
   **judge-enrichment tests** (per-citation verdicts attach on the turn row — no
   answer-wide chip; judge failure/timeout leaves citations "unchecked" and
   the turn completed; retry replays enriched payload when present; stub-judge
