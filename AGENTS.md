@@ -22,10 +22,13 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `029-copilot-chat` **DESIGN COMPLETE → build (step
-5) opens in a fresh conversation** (`/task-cycle-build`; 2026-08-10,
-branch `task/029-copilot-chat` from merged `dev`): co-pilot chat — the
-unified conversation model. A project holds many conversations,
+Implementation — task `029-copilot-chat` **BUILT + REVIEW STACK COMPLETE
+→ PR open for human review (step 9)** (build 2026-08-10→11, phases A–H +
+owner live-check fixes + contract rev 3.4 side panel; review stack
+2026-08-11 — five lanes, findings adjudicated in the task's
+verification.md § Review findings, fixes landed on the branch; two
+contract-vs-build divergences escalated to the owner in the PR): co-pilot
+chat — the unified conversation model. A project holds many conversations,
 Claude-Projects-style: follow-up **chats** (read-only, project-scoped,
 answering across artefacts; streamed NDJSON turns with claim-grained
 citations, deterministic floors + async judge enrichment; tool scope
@@ -33,7 +36,8 @@ citations, deterministic floors + async judge enrichment; tool scope
 **planning conversations** (one per plan lineage, closing with its run's
 terminal transaction — supersedes 027's rolling thread; row-grain audit
 chain conversation → plan → run → artefact). Tier 4 (legacy backfill
-migration on live data). Contract rev 3.3 (approved) · plan rev 2.2
+migration on live data). Contract rev 3.4 (approved; 3.4 = the owner's
+live-check side-panel amendment) · plan rev 2.2
 (approved, executor marks, phases A–H) · ADR 0029 (Accepted) ·
 mockup + research inputs: `docs/tasks/029-copilot-chat/`. API surface:
 `docs/specs/system/web-api.md` § Conversations.

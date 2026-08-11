@@ -13,7 +13,9 @@ const OPEN_TABS_PREFIX = "policy-atlas.open-chat-tabs.";
  */
 export function useActiveConversation() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeConversationId = searchParams.get("chat");
+  // `?chat=` (present but empty) must read as closed, not as a panel bound
+  // to conversation id "" — align with AppShell's own `chatOpen` check.
+  const activeConversationId = searchParams.get("chat") || null;
   const setActiveConversation = useCallback((conversationId: string | null) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
@@ -75,7 +77,10 @@ export function useConversationMutations(projectId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.conversations(projectId) });
+    // The 3-element prefix, not `queryKeys.conversations(projectId)`: that
+    // filtered key carries explicit `undefined` kind/status, which never
+    // partial-matches a consumer's `{ kind: "chat", status: "active" }` key.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.conversationsRoot(projectId) });
   }, [projectId, queryClient]);
 
   const create = useCallback(async (entryArtefactId: string | null) => {

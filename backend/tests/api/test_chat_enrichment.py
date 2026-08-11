@@ -13,11 +13,11 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api import chat_enrichment, chat_turns
 from policy_atlas.api.chat_enrichment import enrich_chat_turn
-from policy_atlas.core.schema import chat_turn, source_snapshot
+from policy_atlas.core.schema import chat_turn, project_source_snapshot, source_snapshot
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.evidence_base.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import StubChatBackend
-from tests.api.test_chat_turns import _chat, _cleanup, _walk
+from tests.api.test_chat_turns import _chat, _cleanup, _seed_project, _walk
 from tests.helpers import now
 
 
@@ -54,8 +54,8 @@ class BlockingJudge(CountingJudge):
         return super().judge_block(envelope)
 
 
-def _seed_chunk(engine: Engine) -> tuple[uuid.UUID, uuid.UUID]:
-    """Create one frozen chunk suitable for a chat judge envelope."""
+def _seed_chunk(engine: Engine, project_id: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    """Create one frozen chunk, ingested into ``project_id``, for a chat judge envelope."""
     snapshot_id = uuid.uuid4()
     chunk_id = uuid.uuid4()
     with engine.begin() as conn:
@@ -67,6 +67,16 @@ def _seed_chunk(engine: Engine) -> tuple[uuid.UUID, uuid.UUID]:
                 source_locator="test://chat-enrichment",
                 metadata={},
                 created_at=now(),
+            )
+        )
+        conn.execute(
+            project_source_snapshot.insert().values(
+                project_source_snapshot_id=uuid.uuid4(),
+                project_id=project_id,
+                source_snapshot_id=snapshot_id,
+                origin="uploaded",
+                run_id=None,
+                ingested_at=now(),
             )
         )
         conn.execute(
@@ -89,7 +99,7 @@ def _completed_turn(
 ) -> tuple[uuid.UUID, dict[str, Any]]:
     """Insert a completed cited chat turn and return its id and initial payload."""
     project_id, _scope_id, conversation_id = _chat(engine)
-    snapshot_id, chunk_id = _seed_chunk(engine)
+    snapshot_id, chunk_id = _seed_chunk(engine, project_id)
     prose = "Evidence text supports the answer.[1]"
     payload: dict[str, Any] = {
         "claims": [
@@ -151,6 +161,11 @@ def _cleanup_enrichment(
     """Remove the detached frozen-source fixture as well as its project fixture."""
     with engine.begin() as conn:
         conn.execute(chunk_table.delete().where(chunk_table.c.source_snapshot_id == snapshot_id))
+        conn.execute(
+            project_source_snapshot.delete().where(
+                project_source_snapshot.c.source_snapshot_id == snapshot_id
+            )
+        )
         conn.execute(
             source_snapshot.delete().where(source_snapshot.c.source_snapshot_id == snapshot_id)
         )
@@ -257,6 +272,41 @@ def test_zero_citation_turn_is_not_judged(engine: Engine) -> None:
         _cleanup_enrichment(engine, project_id, fixture["snapshot_id"])
 
 
+def test_enrichment_rejects_a_chunk_cited_from_a_different_project(engine: Engine) -> None:
+    """Cited-chunk resolution is scoped to the turn's own project, not the corpus DB-wide.
+
+    A chunk id that genuinely exists but was ingested into a DIFFERENT project must
+    resolve as missing for this turn — the same as a fabricated id — never leaking
+    another project's evidence into the judge envelope (defense-in-depth: safe today
+    only because the floor's citable set is already project-scoped).
+    """
+    project_id: uuid.UUID | None = None
+    foreign_project_id: uuid.UUID | None = None
+    try:
+        project_id, fixture = _completed_turn(engine)
+        turn_id = fixture["turn_id"]
+        foreign_project_id, _foreign_scope_id = _seed_project(engine)
+        _foreign_snapshot_id, foreign_chunk_id = _seed_chunk(engine, foreign_project_id)
+
+        payload = _payload(engine, turn_id)
+        payload["citations"][0]["id"] = str(foreign_chunk_id)
+        with engine.begin() as conn:
+            conn.execute(
+                chat_turn.update().where(chat_turn.c.id == turn_id).values(answer_payload=payload)
+            )
+
+        judge = CountingJudge()
+        enrich_chat_turn(engine, turn_id=turn_id, judge_backend=judge)
+
+        assert judge.calls == 0
+        result = _payload(engine, turn_id)
+        assert result["enrichment"]["status"] == "failed"
+        assert result["enrichment"]["failure"] == "ChatEnrichmentError"
+    finally:
+        _cleanup(engine, foreign_project_id)
+        _cleanup_enrichment(engine, project_id, fixture["snapshot_id"])
+
+
 def test_cas_loser_never_calls_the_judge(engine: Engine) -> None:
     """An already enriched payload is a no-op rather than a duplicate judge call."""
     project_id: uuid.UUID | None = None
@@ -278,7 +328,7 @@ def test_replay_preserves_an_enriched_payload(
     try:
         project_id, scope_id, conversation_id = _chat(engine)
         _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-        snapshot_id, chunk_id = _seed_chunk(engine)
+        snapshot_id, chunk_id = _seed_chunk(engine, project_id)
         monkeypatch.setattr(
             chat_turns,
             "build_section_tools",

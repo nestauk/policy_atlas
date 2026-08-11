@@ -19,6 +19,7 @@ from policy_atlas.api.routers._common import owned_project
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
+from policy_atlas.core.usage import usage_metadata
 from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     SECTION_TURN_CAP,
     ToolExchange,
@@ -127,7 +128,7 @@ def _first_question_title(message: str) -> str:
 
 
 def _resolve_citation_sources(
-    engine: Engine, citations: list[dict[str, Any]]
+    engine: Engine, citations: list[dict[str, Any]], *, project_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Attach source display facts to floored citations (title + document id).
 
@@ -135,6 +136,13 @@ def _resolve_citation_sources(
     2026-08-11). Bibliographic authority is the ENVELOPE snapshot per the
     artefact read model's rule; the pss id joins to the sources/dossier
     surface. Resolution failure leaves the honest id-only citation.
+
+    Both branches are project-scoped (security review, 2026-08-11): a chunk's
+    source_snapshot is content-keyed and can be shared by another project's
+    project_source_snapshot, and a finding_id alone carries no project
+    boundary, so either lookup left unscoped could resolve another project's
+    document onto this project's citation (see
+    ``repository.chunk_quote_context_out`` for the same chunk-side filter).
     """
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import (
@@ -185,6 +193,7 @@ def _resolve_citation_sources(
                     )
                 )
                 .where(chunk_table.c.chunk_id.in_(chunk_ids))
+                .where(project_source_snapshot.c.project_id == project_id)
             ):
                 meta = row.metadata if isinstance(row.metadata, dict) else {}
                 title = meta.get("title") or row.source_locator
@@ -219,6 +228,7 @@ def _resolve_citation_sources(
                         )
                     )
                     .where(table.c.finding_id.in_(finding_ids))
+                    .where(table.c.project_id == project_id)
                 ):
                     meta = row.metadata if isinstance(row.metadata, dict) else {}
                     facts[str(row.finding_id)] = {
@@ -255,8 +265,25 @@ def _phase_one_turn(
     user_id: str,
     message: str,
     client_turn_id: uuid.UUID,
+    reserved_turn_id: uuid.UUID | None = None,
 ) -> ChatTurnResult | uuid.UUID:
-    """Reserve one chat row or replay a completed row under the project lock."""
+    """Reserve one chat row or replay a completed row under the project lock.
+
+    Args:
+        conn: Open connection already inside the caller's transaction.
+        project_id: Owner-scoped project id.
+        conversation_id: Active chat conversation id.
+        user_id: Authenticated project owner.
+        message: Current user question.
+        client_turn_id: Client-minted idempotency key.
+        reserved_turn_id: The turn id the caller itself already reserved for
+            this client_turn_id, if any (the streaming worker re-entering its
+            own reservation). A live ``pending`` row under this
+            client_turn_id is only retried in place when it matches; any
+            other caller racing the same client_turn_id gets a conflict
+            instead of resetting — and possibly double-running — a turn that
+            is not its own (security review, 2026-08-11).
+    """
     owned_project(conn, project_id=project_id, user_id=user_id, for_update=True)
     chat = (
         conn.execute(
@@ -321,9 +348,16 @@ def _phase_one_turn(
         ).scalar_one_or_none()
         if pending_after is not None:
             raise ApiConflict("stale_turn", "a newer chat turn is pending")
-        # A terminal failed/cancelled row is retried in place. The streaming
-        # router registers the live cancel handle before this second pass, so
-        # a newly received explicit stop cannot be mistaken for a retry here.
+        if existing["status"] == "pending" and existing["id"] != reserved_turn_id:
+            # A live pending row under this client_turn_id belongs to someone
+            # else's in-flight attempt (or a distinct racing call of our own) —
+            # only the caller that reserved this exact row may proceed past
+            # here (single-flight is the DB row, gated inside this lock).
+            raise ApiConflict("chat_turn_in_progress", "a chat turn is already running")
+        # A terminal failed/cancelled row, or the caller's own reserved
+        # pending row, is retried in place. The streaming router registers
+        # the live cancel handle before this second pass, so a newly
+        # received explicit stop cannot be mistaken for a retry here.
         conn.execute(
             update(chat_turn)
             .where(chat_turn.c.id == existing["id"])
@@ -485,6 +519,7 @@ def run_chat_turn(
     on_progress: Callable[[str], None] | None = None,
     on_delta: Callable[[str], None] | None = None,
     cancel_event: threading.Event | None = None,
+    reserved_turn_id: uuid.UUID | None = None,
 ) -> ChatTurnResult:
     """Run a chat turn with a short reservation and terminal commit transaction.
 
@@ -501,6 +536,9 @@ def run_chat_turn(
         on_progress: Optional user-facing tool activity callback.
         on_delta: Optional provider-neutral final-prose callback.
         cancel_event: Explicit stream-cancel signal, if this is a live turn.
+        reserved_turn_id: The turn id the caller already reserved for this
+            client_turn_id, if any (the streaming route's worker re-entering
+            its own reservation) — see ``_phase_one_turn``.
 
     Returns:
         The completed or replayed durable chat turn.
@@ -519,6 +557,7 @@ def run_chat_turn(
                 user_id=user_id,
                 message=message,
                 client_turn_id=client_turn_id,
+                reserved_turn_id=reserved_turn_id,
             )
         if isinstance(phase_one, ChatTurnResult):
             return phase_one
@@ -566,17 +605,51 @@ def run_chat_turn(
                 question=message,
             )
 
+            call_count = 0
+
             def turn_fn(transcript: list[ToolExchange], *, force_emit: bool) -> Any:
+                nonlocal call_count
                 _check_cancelled()
-                # The delta sink rides every turn: the backend only streams
-                # when it emits, and emission can happen on any turn, not just
-                # the turn-cap-forced one.
-                response, usage = _chat_backend_turn(
-                    chat_backend,
-                    messages,
-                    transcript,
-                    force_emit=force_emit,
-                    on_delta=_emit_delta,
+                call_count += 1
+
+                def _call() -> Any:
+                    # The delta sink rides every turn: the backend only streams
+                    # when it emits, and emission can happen on any turn, not
+                    # just the turn-cap-forced one.
+                    return _chat_backend_turn(
+                        chat_backend,
+                        messages,
+                        transcript,
+                        force_emit=force_emit,
+                        on_delta=_emit_delta,
+                    )
+
+                def _record(span: Any, result: tuple[dict[str, Any], Any]) -> None:
+                    response, usage = result
+                    span.update(
+                        input={
+                            "messages": messages,
+                            "tool_exchanges": len(transcript),
+                            "force_emit": force_emit,
+                        },
+                        output=response,
+                        metadata={
+                            "prompt_version": CHAT_PROMPT_VERSION,
+                            **usage_metadata(usage),
+                        },
+                        model=CHAT_MODEL,
+                    )
+
+                # The streaming adapter bypasses the instrumented-client path,
+                # so the generation observation is opened here — without it the
+                # turn's trace holds no model I/O at all (review stack,
+                # live-trace lane).
+                response, usage = tracing.traced_call(
+                    langfuse_client,
+                    name=f"chat:call{call_count}",
+                    as_type="generation",
+                    call=_call,
+                    update=_record,
                 )
                 return {
                     "emission": response.get("answer"),
@@ -612,24 +685,34 @@ def run_chat_turn(
                     on_tool_start=_on_tool_start,
                 )
                 _check_cancelled()
+                emission = loop["emission"]
+                if emission is None:
+                    raise RuntimeError("chat loop completed without an answer emission")
+                floored = apply_citation_floor(
+                    emission,
+                    tool_chunk_ids=gathered_ids(loop["transcript"])["chunk_ids"],
+                    tool_finding_ids=gathered_ids(loop["transcript"])["finding_ids"],
+                    frame_chunk_ids=set(frame.citable_chunk_ids),
+                    appraised_chunk_ids=_appraised_chunk_ids(loop["transcript"]),
+                )
+                # Trace-level I/O makes the turn legible from the trace *list*
+                # (the persisted floored answer, not the raw emission — the
+                # row and the trace must tell the same story).
                 if root_span is not None:
                     root_span.update(
-                        metadata={"prompt_version": CHAT_PROMPT_VERSION, "model": CHAT_MODEL}
+                        input={"question": message},
+                        output={
+                            "answer": floored.prose,
+                            "citations": len(floored.citations),
+                        },
+                        metadata={"prompt_version": CHAT_PROMPT_VERSION, "model": CHAT_MODEL},
                     )
                 trace_id = _trace_id(root_span)
-            emission = loop["emission"]
-            if emission is None:
-                raise RuntimeError("chat loop completed without an answer emission")
-            floored = apply_citation_floor(
-                emission,
-                tool_chunk_ids=gathered_ids(loop["transcript"])["chunk_ids"],
-                tool_finding_ids=gathered_ids(loop["transcript"])["finding_ids"],
-                frame_chunk_ids=set(frame.citable_chunk_ids),
-                appraised_chunk_ids=_appraised_chunk_ids(loop["transcript"]),
-            )
             payload = {
                 "claims": floored.claims,
-                "citations": _resolve_citation_sources(engine, floored.citations),
+                "citations": _resolve_citation_sources(
+                    engine, floored.citations, project_id=project_id
+                ),
                 "warning_not_evidence_checked": floored.warning_not_evidence_checked,
                 "stripped": floored.stripped,
                 "evidence_not_held": floored.evidence_not_held,
@@ -651,7 +734,7 @@ def run_chat_turn(
                 completed = conn.execute(
                     update(chat_turn)
                     .where(chat_turn.c.id == turn_id)
-                    .where(chat_turn.c.status.in_(("pending", "failed", "cancelled")))
+                    .where(chat_turn.c.status == "pending")
                     .values(
                         answer=floored.prose,
                         answer_payload=payload,
@@ -661,6 +744,18 @@ def run_chat_turn(
                     )
                 )
                 if completed.rowcount != 1:
+                    row = (
+                        conn.execute(select(chat_turn).where(chat_turn.c.id == turn_id))
+                        .mappings()
+                        .one()
+                    )
+                    if row["status"] == "cancelled":
+                        # A durable cross-process cancel landed after our last
+                        # in-process check but before this commit. Its partial
+                        # is already persisted (the cancel path wrote it) — the
+                        # terminal state stays cancelled, never overwritten to
+                        # completed (security review, 2026-08-11).
+                        return _row_result(row, replayed=False)
                     raise RuntimeError("chat turn was not open at terminal commit")
                 row = (
                     conn.execute(select(chat_turn).where(chat_turn.c.id == turn_id))
@@ -677,10 +772,13 @@ def run_chat_turn(
                 "chat_turn_failed", project_id=str(project_id), conversation_id=str(conversation_id)
             )
             with engine.begin() as conn:
+                # Narrowed to "pending" only (security review, 2026-08-11): a
+                # late failure must not overwrite a durable cancel that landed
+                # first; an already-failed row leaves this a no-op.
                 conn.execute(
                     update(chat_turn)
                     .where(chat_turn.c.id == turn_id)
-                    .where(chat_turn.c.status.in_(("pending", "failed")))
+                    .where(chat_turn.c.status == "pending")
                     .values(status="failed", completed_at=_now())
                 )
             raise

@@ -13,18 +13,20 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api import chat_turns
+from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.deps import (
     get_chat_backend,
     get_chat_embedding_backend,
     get_grounding_judge_backend,
 )
+from policy_atlas.api.routers import conversations as conversations_router
 from policy_atlas.core.embeddings import StubEmbeddingBackend
-from policy_atlas.core.schema import chat_turn, source_snapshot
+from policy_atlas.core.schema import chat_turn, project_source_snapshot, source_snapshot
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.evidence_base.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import StubChatBackend
 from tests.api.resource_support import api_client
-from tests.api.test_chat_turns import _chat, _citable_tools, _cleanup, _walk
+from tests.api.test_chat_turns import _chat, _citable_tools, _cleanup, _insert_pending_turn, _walk
 from tests.helpers import now
 
 
@@ -50,8 +52,13 @@ class CountingJudge(StubGroundingJudgeBackend):
         return super().judge_block(envelope)
 
 
-def _stream_chunk(engine: Engine) -> tuple[uuid.UUID, uuid.UUID]:
-    """Create a frozen chunk whose id can survive the post-stream judge read."""
+def _stream_chunk(engine: Engine, project_id: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    """Create a frozen chunk, ingested into ``project_id``, that survives the judge read.
+
+    The project_source_snapshot row matters: enrichment's evidence reads are
+    project-scoped (review-stack hardening), so a chunk without one resolves
+    as missing — exactly like production chunks that always arrive via ingest.
+    """
     snapshot_id = uuid.uuid4()
     chunk_id = uuid.uuid4()
     with engine.begin() as conn:
@@ -63,6 +70,16 @@ def _stream_chunk(engine: Engine) -> tuple[uuid.UUID, uuid.UUID]:
                 source_locator="test://chat-stream-enrichment",
                 metadata={},
                 created_at=now(),
+            )
+        )
+        conn.execute(
+            project_source_snapshot.insert().values(
+                project_source_snapshot_id=uuid.uuid4(),
+                project_id=project_id,
+                source_snapshot_id=snapshot_id,
+                origin="uploaded",
+                run_id=None,
+                ingested_at=now(),
             )
         )
         conn.execute(
@@ -84,6 +101,11 @@ def _cleanup_stream_chunk(engine: Engine, snapshot_id: uuid.UUID) -> None:
     """Delete the detached frozen-source fixture after an endpoint test."""
     with engine.begin() as conn:
         conn.execute(chunk_table.delete().where(chunk_table.c.source_snapshot_id == snapshot_id))
+        conn.execute(
+            project_source_snapshot.delete().where(
+                project_source_snapshot.c.source_snapshot_id == snapshot_id
+            )
+        )
         conn.execute(
             source_snapshot.delete().where(source_snapshot.c.source_snapshot_id == snapshot_id)
         )
@@ -144,25 +166,7 @@ def test_completed_stream_triggers_async_judge_enrichment(
     project_id: uuid.UUID | None = None
     snapshot_id: uuid.UUID | None = None
     try:
-        snapshot_id, chunk_id = _stream_chunk(engine)
         judge = CountingJudge()
-        monkeypatch.setattr(
-            chat_turns,
-            "build_section_tools",
-            lambda **_: {
-                "search_chunks": lambda _arguments: {
-                    "chunks": [
-                        {
-                            "chunk_record_id": str(chunk_id),
-                            "content": "Evidence text supports the answer.",
-                            "appraised": True,
-                        }
-                    ]
-                },
-                "query_findings": lambda _arguments: {"findings": []},
-                "lookup": lambda _arguments: {"result": {}},
-            },
-        )
         with api_client(
             tmp_path,
             {
@@ -173,6 +177,26 @@ def test_completed_stream_triggers_async_judge_enrichment(
         ) as (client, owner_headers, _):
             project_id, scope_id, conversation_id = _chat(engine, owner=_owner_id(owner_headers))
             _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+            # Seed after the project exists: enrichment's evidence reads are
+            # project-scoped, so the cited chunk must be ingested into it.
+            snapshot_id, chunk_id = _stream_chunk(engine, project_id)
+            monkeypatch.setattr(
+                chat_turns,
+                "build_section_tools",
+                lambda **_: {
+                    "search_chunks": lambda _arguments: {
+                        "chunks": [
+                            {
+                                "chunk_record_id": str(chunk_id),
+                                "content": "Evidence text supports the answer.",
+                                "appraised": True,
+                            }
+                        ]
+                    },
+                    "query_findings": lambda _arguments: {"findings": []},
+                    "lookup": lambda _arguments: {"result": {}},
+                },
+            )
             response = client.post(
                 f"/api/v1/conversations/{conversation_id}/turns",
                 headers=owner_headers,
@@ -232,5 +256,188 @@ def test_turn_stream_failure_is_a_single_terminal_event(
         assert response.status_code == 200
         assert [event["type"] for event in events].count("failed") == 1
         assert events[-1]["type"] == "failed"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_replay_of_completed_turn_over_the_stream_is_a_single_completed_event(
+    engine: Engine, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Retrying a completed turn's client_turn_id replays once, with no deltas."""
+    project_id: uuid.UUID | None = None
+    try:
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        with api_client(
+            tmp_path,
+            {
+                get_chat_backend: StubChatBackend,
+                get_chat_embedding_backend: StubEmbeddingBackend,
+            },
+        ) as (client, owner_headers, _):
+            project_id, scope_id, conversation_id = _chat(engine, owner=_owner_id(owner_headers))
+            _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+            body = {
+                "message": "What does the evidence say?",
+                "client_turn_id": str(uuid.uuid4()),
+            }
+            first = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=owner_headers,
+                json=body,
+            )
+            first_turn_id = _events(first)[-1]["turn"]["id"]
+
+            replay = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=owner_headers,
+                json=body,
+            )
+        assert replay.status_code == 200
+        replay_events = _events(replay)
+        assert len(replay_events) == 1
+        assert replay_events[0]["type"] == "completed"
+        assert replay_events[0]["turn"]["id"] == first_turn_id
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_pre_header_envelope_errors_are_json_not_ndjson(
+    engine: Engine, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Reservation-time failures use the standard JSON error envelope, not the stream."""
+    project_id: uuid.UUID | None = None
+    cap_project_ids: list[uuid.UUID] = []
+    try:
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        with api_client(
+            tmp_path,
+            {
+                get_chat_backend: StubChatBackend,
+                get_chat_embedding_backend: StubEmbeddingBackend,
+            },
+        ) as (client, owner_headers, _):
+            owner = _owner_id(owner_headers)
+
+            unknown = client.post(
+                f"/api/v1/conversations/{uuid.uuid4()}/turns",
+                headers=owner_headers,
+                json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
+            )
+            assert unknown.status_code == 404
+            assert unknown.headers["content-type"].startswith("application/json")
+            assert unknown.json()["error"]["code"] == "not_found"
+
+            project_id, _scope_id, conversation_id = _chat(engine, owner=owner)
+            no_run = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=owner_headers,
+                json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
+            )
+            assert no_run.status_code == 409
+            assert no_run.headers["content-type"].startswith("application/json")
+            assert no_run.json()["error"]["code"] == "no_completed_run"
+
+            cap_project_a, _scope_a, conv_a = _chat(engine, owner=owner)
+            cap_project_b, _scope_b, conv_b = _chat(engine, owner=owner)
+            cap_project_ids = [cap_project_a, cap_project_b]
+            _insert_pending_turn(engine, conversation_id=conv_a)
+            _insert_pending_turn(engine, conversation_id=conv_b)
+            cap_project_c, scope_c, conv_c = _chat(engine, owner=owner)
+            cap_project_ids.append(cap_project_c)
+            _walk(engine, project_id=cap_project_c, scope_id=scope_c, status="succeeded")
+            capacity = client.post(
+                f"/api/v1/conversations/{conv_c}/turns",
+                headers=owner_headers,
+                json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
+            )
+            assert capacity.status_code == 429
+            assert capacity.headers["content-type"].startswith("application/json")
+            assert capacity.json()["error"]["code"] == "chat_capacity"
+    finally:
+        _cleanup(engine, project_id)
+        for cap_project_id in cap_project_ids:
+            _cleanup(engine, cap_project_id)
+
+
+def _always_run_active(*_args: Any, **_kwargs: Any) -> Any:
+    """Simulate a capability run starting between route reservation and worker start."""
+    raise ApiConflict("run_active", "finish the active run before starting a chat turn")
+
+
+def test_worker_side_reservation_conflict_fails_the_reserved_row(
+    engine: Engine, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pre-try worker conflict CASes the reserved row to failed, not left pending."""
+    project_id: uuid.UUID | None = None
+    try:
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        # Patches only chat_turns' own module-global lookup of _phase_one_turn,
+        # which is what run_chat_turn's internal (worker-side) re-entry call
+        # resolves at call time. The route's own reservation call above uses
+        # a name bound at import time in conversations.py and is unaffected,
+        # so the route still reserves the row normally before the worker's
+        # re-entry call fails.
+        monkeypatch.setattr(chat_turns, "_phase_one_turn", _always_run_active)
+        with api_client(
+            tmp_path,
+            {
+                get_chat_backend: StubChatBackend,
+                get_chat_embedding_backend: StubEmbeddingBackend,
+            },
+        ) as (client, owner_headers, _):
+            project_id, scope_id, conversation_id = _chat(engine, owner=_owner_id(owner_headers))
+            _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+            response = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=owner_headers,
+                json={"message": "Question", "client_turn_id": str(uuid.uuid4())},
+            )
+            events = _events(response)
+            terminal = events[-1]
+            assert terminal["type"] == "failed"
+            turn_id = uuid.UUID(terminal["turn_id"])
+            with engine.connect() as conn:
+                status = conn.execute(
+                    select(chat_turn.c.status).where(chat_turn.c.id == turn_id)
+                ).scalar_one()
+            assert status == "failed"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_capacity_failure_at_cancel_registration_rolls_back_the_reservation(
+    engine: Engine, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A saturated cancel registry leaves no pending row behind."""
+    project_id: uuid.UUID | None = None
+    try:
+        monkeypatch.setattr(
+            conversations_router,
+            "_register_cancel",
+            lambda _turn_id: (_ for _ in ()).throw(
+                ApiCapacity("chat_capacity", "too many chat turns are in progress")
+            ),
+        )
+        with api_client(
+            tmp_path,
+            {
+                get_chat_backend: StubChatBackend,
+                get_chat_embedding_backend: StubEmbeddingBackend,
+            },
+        ) as (client, owner_headers, _):
+            project_id, scope_id, conversation_id = _chat(engine, owner=_owner_id(owner_headers))
+            _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+            response = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=owner_headers,
+                json={"message": "Question", "client_turn_id": str(uuid.uuid4())},
+            )
+            assert response.status_code == 429
+            assert response.json()["error"]["code"] == "chat_capacity"
+            with engine.connect() as conn:
+                remaining = conn.execute(
+                    select(chat_turn.c.id).where(chat_turn.c.conversation_id == conversation_id)
+                ).all()
+            assert remaining == []
     finally:
         _cleanup(engine, project_id)

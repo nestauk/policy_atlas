@@ -2,19 +2,13 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useApiClient } from "../../../api/queries";
+import { conflictSentences, isConflictCode } from "../../../lib/errors";
 import { scrub } from "../../../lib/scrub";
 import type { ChatConversationRow } from "../../../store";
 import { Button } from "../../../ui/brand/Button";
 import { Chip } from "../../../ui/brand/Chip";
 import { Tooltip } from "../../../ui/radix/Tooltip";
-import { HighlightedContext, SourceDossier } from "../../ArtefactView";
-
-const TIER_LABEL: Record<string, string> = {
-  tier_1: "Tier 1 · direct quote", tier_2: "Tier 2 · grounded", tier_3: "Tier 3 · supported", tier_4: "Tier 4 · reasoning", unsupported_mis_cited: "Unsupported — flagged",
-};
-const TIER_TEXT: Record<string, string> = {
-  tier_1: "Direct quote, verified against the source", tier_2: "Grounded in a specific passage", tier_3: "Supported across passages", tier_4: "Reasoning from the evidence, not a quote", unsupported_mis_cited: "Failed verification — flagged, never hidden",
-};
+import { HighlightedContext, SourceDossier, TIER_LABEL, TIER_TEXT } from "../../ArtefactView";
 
 interface ChatCitation {
   id?: string;
@@ -26,8 +20,6 @@ interface ChatCitation {
   source_id?: string;
   title?: string;
   state?: string;
-  verdict?: string;
-  grounding_tier?: string;
 }
 
 /** Plain-prose chat thread with citations and durable honesty states.
@@ -38,20 +30,34 @@ interface ChatCitation {
  * Returns:
  *   User bubbles, assistant prose, and citation affordances.
  */
-export function ChatMessages({ projectId, rows, onOpenPlanning }: { projectId: string; rows: ChatConversationRow[]; onOpenPlanning: () => void }) {
+export function ChatMessages({ projectId, rows, onOpenPlanning, onRetry }: { projectId: string; rows: ChatConversationRow[]; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
   const [citation, setCitation] = useState<ChatCitation | null>(null);
   const [dossierRef, setDossierRef] = useState<string | null>(null);
   const datedRows = useMemo(() => rows.map((row, index) => ({ row, showDate: index === 0 || dayOf(createdAt(row)) !== dayOf(createdAt(rows[index - 1])) })), [rows]);
-  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-caption text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={setCitation} onOpenDossier={setDossierRef} onOpenPlanning={onOpenPlanning} /></div>)}{citation !== null && <CitationPopover projectId={projectId} citation={citation} onClose={() => setCitation(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier projectId={projectId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
+  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-caption text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={setCitation} onOpenDossier={setDossierRef} onOpenPlanning={onOpenPlanning} onRetry={onRetry} /></div>)}{citation !== null && <CitationPopover projectId={projectId} citation={citation} onClose={() => setCitation(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier projectId={projectId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
 }
 
-function AssistantMessage({ turn, onCitation, onOpenDossier, onOpenPlanning }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void; onOpenPlanning: () => void }) {
+function AssistantMessage({ turn, onCitation, onOpenDossier, onOpenPlanning, onRetry }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
   const answer = "id" in turn ? turn.answer ?? "" : turn.answer;
   const citations = citationsOf(turn);
-  const cancelled = "id" in turn && turn.status === "cancelled";
+  const cancelled = turn.status === "cancelled";
+  const failed = turn.status === "failed";
   const warning = "id" in turn && turn.warning_not_evidence_checked;
   const handoff = "id" in turn && turn.handoff === "evidence_not_held";
   const copy = async () => { await navigator.clipboard?.writeText(copyText(answer, citations, turn)); };
+  // A failed turn still renders honestly (contract rubric: pending/failed
+  // rows stay visibly honest) — any partial prose received before the
+  // failure, a short plain-language reason, and a way to try again. Never
+  // silence into the blank the caller sees when there's simply no answer.
+  if (failed) {
+    const code = errorCodeOf(turn);
+    const message = isConflictCode(code) ? conflictSentences[code] : "This answer failed.";
+    return <div className="mr-8 space-y-2">
+      {answer && <p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} disabled onCitation={onCitation} /></p>}
+      <p role="alert" className="text-caption text-red">{message}</p>
+      <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
+    </div>;
+  }
   if (!answer && !("id" in turn && turn.status === "pending")) return null;
   return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} disabled={cancelled} onCitation={onCitation} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-caption text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-caption text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
@@ -122,16 +128,23 @@ function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user
 function keyOf(row: ChatConversationRow) { return "id" in row ? row.id : row.clientTurnId; }
 function dayOf(value: string) { return new Date(value).toISOString().slice(0, 10); }
 function activityOf(row: ChatConversationRow) { return "id" in row ? [] : row.activityLabels; }
+function clientTurnIdOf(row: ChatConversationRow) { return "id" in row ? row.client_turn_id : row.clientTurnId; }
+// The durable `ChatTurnOut` carries no error fields at all — a failed row
+// read back from a refetch degrades to the generic fallback below.
+function errorCodeOf(row: ChatConversationRow) { return "id" in row ? undefined : row.errorCode; }
 function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
 function citationId(citation: ChatCitation) { return citation.id ?? citation.chunk_id ?? citation.citation_id ?? ""; }
 function verdictInfoFor(turn: ChatConversationRow, citation: ChatCitation): { tier: string | null; rationale: string | null } {
   const claim = claimFor(turn, citation);
   const rationale = claim !== null && typeof claim.rationale === "string" && claim.rationale !== "" ? claim.rationale : null;
+  // The only live shape is `citation.state === "verdict:<tier>"` — the
+  // floor's allowlist can never emit a bare `verdict`/`grounding_tier` key
+  // on the citation itself, so reading those here only widened what a
+  // loosened payload could display. The claim-level fallback below is a
+  // distinct, real schema field and stays.
   const fromState = citation.state?.startsWith("verdict:") ? citation.state.slice("verdict:".length) : null;
   if (fromState !== null && TIER_LABEL[fromState]) return { tier: fromState, rationale };
-  if (citation.verdict && TIER_LABEL[citation.verdict]) return { tier: citation.verdict, rationale };
-  if (citation.grounding_tier && TIER_LABEL[citation.grounding_tier]) return { tier: citation.grounding_tier, rationale };
   const value = claim?.verdict ?? claim?.grounding_tier;
   if (typeof value === "string" && TIER_LABEL[value]) return { tier: value, rationale };
   return { tier: null, rationale };

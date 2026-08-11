@@ -13,8 +13,10 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core.schema import (
     chat_turn,
+    conversation,
     implementation_context_finding,
     intervention_outcome_finding,
+    project_source_snapshot,
     source_extraction_record,
     source_snapshot,
 )
@@ -58,8 +60,16 @@ def _parse_ids(raw_ids: set[str]) -> set[uuid.UUID]:
     return parsed
 
 
-def _load_chunks(conn: Connection, chunk_ids: set[str]) -> dict[str, dict[str, Any]]:
-    """Fetch cited chunks' immutable content and envelope metadata by durable id."""
+def _load_chunks(
+    conn: Connection, chunk_ids: set[str], *, project_id: uuid.UUID
+) -> dict[str, dict[str, Any]]:
+    """Fetch cited chunks' immutable content and envelope metadata by durable id.
+
+    Scoped to the turn's project (defense-in-depth): a chunk id resolves DB-wide
+    otherwise, safe today only because the floor's citable set is already
+    project-scoped — a chunk never ingested into this project resolves as
+    missing, the same as a fabricated id.
+    """
     if not chunk_ids:
         return {}
     parsed_ids = _parse_ids(chunk_ids)
@@ -75,9 +85,14 @@ def _load_chunks(conn: Connection, chunk_ids: set[str]) -> dict[str, dict[str, A
             chunk_table.join(
                 source_snapshot,
                 chunk_table.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
+            ).join(
+                project_source_snapshot,
+                chunk_table.c.source_snapshot_id
+                == project_source_snapshot.c.source_snapshot_id,
             )
         )
         .where(chunk_table.c.chunk_id.in_(parsed_ids))
+        .where(project_source_snapshot.c.project_id == project_id)
     ).mappings()
     chunks = {
         str(row["chunk_id"]): {
@@ -95,8 +110,15 @@ def _load_chunks(conn: Connection, chunk_ids: set[str]) -> dict[str, dict[str, A
     return chunks
 
 
-def _load_finding_rows(conn: Connection, finding_ids: set[str]) -> dict[str, dict[str, Any]]:
-    """Load finding grounding and frozen-source provenance for judge anchors."""
+def _load_finding_rows(
+    conn: Connection, finding_ids: set[str], *, project_id: uuid.UUID
+) -> dict[str, dict[str, Any]]:
+    """Load finding grounding and frozen-source provenance for judge anchors.
+
+    Scoped to the turn's project (defense-in-depth, mirroring ``_load_chunks``):
+    a finding id resolves DB-wide otherwise, safe today only because the
+    floor's citable set is already project-scoped.
+    """
     if not finding_ids:
         return {}
     parsed_ids = _parse_ids(finding_ids)
@@ -123,6 +145,7 @@ def _load_finding_rows(conn: Connection, finding_ids: set[str]) -> dict[str, dic
                 )
             )
             .where(table.c.finding_id.in_(parsed_ids))
+            .where(table.c.project_id == project_id)
         ).mappings()
         for row in rows:
             found[str(row["finding_id"])] = {
@@ -138,10 +161,10 @@ def _load_finding_rows(conn: Connection, finding_ids: set[str]) -> dict[str, dic
 
 
 def _finding_anchors(
-    conn: Connection, finding_ids: set[str]
+    conn: Connection, finding_ids: set[str], *, project_id: uuid.UUID
 ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
     """Mirror synthesis finding-anchor resolution for the existing judge envelope."""
-    findings = _load_finding_rows(conn, finding_ids)
+    findings = _load_finding_rows(conn, finding_ids, project_id=project_id)
     snapshot_ids = {record["source_snapshot_id"] for record in findings.values()}
     parsed_snapshots = _parse_ids(snapshot_ids)
     chunk_rows = conn.execute(
@@ -250,7 +273,12 @@ def _citation_map(payload: dict[str, Any]) -> dict[int, dict[str, Any]]:
 
 
 def _shape_envelope(
-    conn: Connection, *, payload: dict[str, Any], answer: str, intent: str
+    conn: Connection,
+    *,
+    payload: dict[str, Any],
+    answer: str,
+    intent: str,
+    project_id: uuid.UUID,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Mint chat claim ids and shape floored claims into ``synthesis_envelope_v2``."""
     raw_claims = payload.get("claims")
@@ -282,7 +310,9 @@ def _shape_envelope(
                 citation_id = citation.get("id")
                 if isinstance(citation_id, str):
                     cited_finding_ids.add(citation_id)
-    anchors_by_finding, anchor_chunks = _finding_anchors(conn, cited_finding_ids)
+    anchors_by_finding, anchor_chunks = _finding_anchors(
+        conn, cited_finding_ids, project_id=project_id
+    )
 
     envelope_claims: list[dict[str, Any]] = []
     direct_chunk_ids: set[str] = set()
@@ -331,7 +361,7 @@ def _shape_envelope(
 
     if not envelope_claims:
         raise ChatEnrichmentError("cited chat turn has no claim-to-citation mapping")
-    direct_chunks = _load_chunks(conn, direct_chunk_ids)
+    direct_chunks = _load_chunks(conn, direct_chunk_ids, project_id=project_id)
     chunks = [
         {key: value for key, value in record.items() if key != "source_snapshot_id"}
         for record in sorted(
@@ -447,7 +477,13 @@ def enrich_chat_turn(
     del langfuse_client
     with engine.connect() as conn:
         row = (
-            conn.execute(select(chat_turn).where(chat_turn.c.id == turn_id))
+            conn.execute(
+                select(chat_turn, conversation.c.project_id)
+                .select_from(
+                    chat_turn.join(conversation, chat_turn.c.conversation_id == conversation.c.id)
+                )
+                .where(chat_turn.c.id == turn_id)
+            )
             .mappings()
             .one_or_none()
         )
@@ -474,6 +510,7 @@ def enrich_chat_turn(
                 payload=payload,
                 answer=row["answer"] if isinstance(row["answer"], str) else "",
                 intent=row["user_message"],
+                project_id=row["project_id"],
             )
         except Exception as exc:
             payload["enrichment"] = _audit(status="failed")

@@ -231,6 +231,38 @@ def test_029_backfill_follows_the_approved_truth_table(
                 ended_at=mid_replan_ended_at,
             )
 
+            # Edge (contract-verifier + /code-review, rev fix): a succeeded run with
+            # no completed turn after it, but where EVERY turn postdates the run's
+            # own ended_at (no turns exist before the boundary at all) — the
+            # mid-replan split's pre-run half would own zero turns.
+            no_pre_run_split_project = _seed_project(conn)
+            no_pre_run_split_ended_at = _BASE_TIME + timedelta(days=3)
+            _seed_capability_run(
+                conn,
+                no_pre_run_split_project,
+                status="succeeded",
+                started_at=_BASE_TIME + timedelta(days=2),
+                ended_at=no_pre_run_split_ended_at,
+            )
+            post_only_turn = _seed_planning_turn(
+                conn,
+                no_pre_run_split_project,
+                created_at=_BASE_TIME + timedelta(days=4),
+            )
+
+            # Edge: a succeeded run whose ended_at is NULL (data-integrity smell) —
+            # closing honestly must not leave closed_at NULL too.
+            succeeded_null_ended_project = _seed_project(conn)
+            succeeded_null_ended_started_at = _BASE_TIME + timedelta(days=2)
+            _seed_planning_turn(conn, succeeded_null_ended_project, created_at=_BASE_TIME)
+            _seed_capability_run(
+                conn,
+                succeeded_null_ended_project,
+                status="succeeded",
+                started_at=succeeded_null_ended_started_at,
+                ended_at=None,
+            )
+
             failed_project = _seed_project(conn)
             _seed_planning_turn(conn, failed_project, created_at=_BASE_TIME)
             _seed_capability_run(
@@ -295,6 +327,28 @@ def test_029_backfill_follows_the_approved_truth_table(
                 ).scalars()
             ) == set(post_run_turns)
             assert sum(row["status"] == "active" for row in mid_replan_conversations) == 1
+
+            no_pre_run_split_conversations = _conversations_for(conn, no_pre_run_split_project)
+            assert len(no_pre_run_split_conversations) == 1
+            assert no_pre_run_split_conversations[0]["status"] == "active"
+            assert set(
+                conn.execute(
+                    select(planning_transcript.c.id).where(
+                        planning_transcript.c.conversation_id
+                        == no_pre_run_split_conversations[0]["id"]
+                    )
+                ).scalars()
+            ) == {post_only_turn}
+
+            succeeded_null_ended_conversation = _conversations_for(
+                conn, succeeded_null_ended_project
+            )
+            assert len(succeeded_null_ended_conversation) == 1
+            assert succeeded_null_ended_conversation[0]["status"] == "closed"
+            assert (
+                succeeded_null_ended_conversation[0]["closed_at"]
+                == succeeded_null_ended_started_at
+            )
 
             assert _conversations_for(conn, failed_project)[0]["status"] == "active"
             abandoned_conversation = _conversations_for(conn, abandoned_project)[0]

@@ -108,6 +108,8 @@ def test_live_adapter_uses_only_read_tools_for_non_terminal_turn() -> None:
         "search_chunks", "query_findings", "lookup"
     }
     assert call["max_completion_tokens"] == 123
+    # Pin regression: gpt-5.6-terra 400s on function tools without this (H3 live check).
+    assert call["reasoning_effort"] == "none"
 
 
 def test_live_adapter_streams_text_then_parses_atomic_answer() -> None:
@@ -127,6 +129,10 @@ def test_live_adapter_streams_text_then_parses_atomic_answer() -> None:
     assert result["answer"].prose == "Hello world."
     assert completions.create_calls[0]["stream"] is True
     assert completions.parse_calls[0]["response_format"] is ChatAnswerWire
+    # Pin regression: gpt-5.6-terra 400s on function tools without this (H3 live check) —
+    # both the streamed-prose call and the structured-parse call carry the pin.
+    assert completions.create_calls[0]["reasoning_effort"] == "none"
+    assert completions.parse_calls[0]["reasoning_effort"] == "none"
 
 
 def test_tool_transcript_is_json_data_not_message_instructions() -> None:

@@ -177,6 +177,49 @@ describe("useChatConversation", () => {
     expect(result.current.optimisticTurns).toMatchObject([{ status: "failed" }]);
   });
 
+  it("parses the turn-creating POST's error envelope instead of discarding it for a bare status number", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (requestInfo(input, init).method === "POST") {
+        return new Response(
+          JSON.stringify({ error: { code: "chat_turn_in_progress", message: "a chat turn is already running" } }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify({ data: [], pagination: { page: 1, page_size: 50, total_items: 0 } }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useChatConversation(conversationId), { wrapper: hookWrapper() });
+
+    await act(async () => {
+      await expect(result.current.sendTurn(optimisticTurn.userMessage, clientTurnId)).rejects.toBeInstanceOf(ChatStreamProtocolError);
+    });
+    expect(result.current.optimisticTurns).toMatchObject([
+      { status: "failed", errorCode: "chat_turn_in_progress", errorMessage: "a chat turn is already running" },
+    ]);
+  });
+
+  it("falls back to status text when the POST failure body isn't the error envelope", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (requestInfo(input, init).method === "POST") {
+        return new Response("Bad Gateway", { status: 502, statusText: "Bad Gateway" });
+      }
+      return new Response(JSON.stringify({ data: [], pagination: { page: 1, page_size: 50, total_items: 0 } }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() => useChatConversation(conversationId), { wrapper: hookWrapper() });
+
+    await act(async () => {
+      await expect(result.current.sendTurn(optimisticTurn.userMessage, clientTurnId)).rejects.toBeInstanceOf(ChatStreamProtocolError);
+    });
+    expect(result.current.optimisticTurns).toMatchObject([
+      { status: "failed", errorMessage: "The chat request failed (502 Bad Gateway)." },
+    ]);
+  });
+
   it("streams an answer and applies a cancel response without double-applying the later terminal frame", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = requestInfo(input, init);

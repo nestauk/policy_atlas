@@ -757,6 +757,7 @@ def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
                 {"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "q", "state": "unchecked"},
                 {"n": 2, "id": "not-a-uuid", "kind": "chunk", "quote": "q", "state": "unchecked"},
             ],
+            project_id=project_id,
         )
         assert resolved[0]["source_title"] == "A real document title"
         assert resolved[0]["source_id"] == str(pss_id)
@@ -765,3 +766,286 @@ def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
         if project_id is not None:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)
+
+
+def test_citation_sources_are_scoped_to_the_calling_project(engine: Engine) -> None:
+    """A snapshot shared by two projects resolves to the calling project's own pss."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.core.schema import chunk as chunk_table
+    from policy_atlas.core.schema import project as project_table
+    from policy_atlas.core.schema import project_source_snapshot, source_snapshot
+
+    project_a, project_b = uuid.uuid4(), uuid.uuid4()
+    snapshot_id, pss_a, pss_b, chunk_id = (
+        uuid.uuid4(),
+        uuid.uuid4(),
+        uuid.uuid4(),
+        uuid.uuid4(),
+    )
+    with engine.begin() as conn:
+        for proj_id in (project_a, project_b):
+            conn.execute(
+                project_table.insert().values(
+                    project_id=proj_id,
+                    created_at=now(),
+                    name="Shared-snapshot test project",
+                    question=None,
+                    status="active",
+                    updated_at=now(),
+                    owner_user_id="chat-owner",
+                )
+            )
+        conn.execute(
+            source_snapshot.insert().values(
+                source_snapshot_id=snapshot_id,
+                content_hash="shared-snapshot-hash",
+                text_basis="full_text",
+                source_locator="test://shared-document",
+                metadata={"title": "Shared document"},
+                created_at=now(),
+            )
+        )
+        for pss_id, proj_id in ((pss_a, project_a), (pss_b, project_b)):
+            conn.execute(
+                project_source_snapshot.insert().values(
+                    project_source_snapshot_id=pss_id,
+                    project_id=proj_id,
+                    source_snapshot_id=snapshot_id,
+                    origin="uploaded",
+                    run_id=None,
+                    ingested_at=now(),
+                )
+            )
+        conn.execute(
+            chunk_table.insert().values(
+                chunk_id=chunk_id,
+                source_snapshot_id=snapshot_id,
+                sequence=0,
+                content="Shared chunk content.",
+                content_hash="shared-chunk-hash",
+                locator={"start": 0, "end": 21},
+                segmentation_policy="manual_v1",
+                created_at=now(),
+            )
+        )
+    try:
+        resolved = _resolve_citation_sources(
+            engine,
+            [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "q", "state": "unchecked"}],
+            project_id=project_b,
+        )
+        assert resolved[0]["source_id"] == str(pss_b)
+        assert resolved[0]["source_id"] != str(pss_a)
+    finally:
+        with engine.begin() as conn:
+            conn.execute(chunk_table.delete().where(chunk_table.c.chunk_id == chunk_id))
+            conn.execute(
+                project_source_snapshot.delete().where(
+                    project_source_snapshot.c.project_source_snapshot_id.in_([pss_a, pss_b])
+                )
+            )
+            conn.execute(
+                source_snapshot.delete().where(
+                    source_snapshot.c.source_snapshot_id == snapshot_id
+                )
+            )
+            conn.execute(
+                project_table.delete().where(project_table.c.project_id.in_([project_a, project_b]))
+            )
+
+
+def test_retry_same_client_turn_id_against_live_pending_conflicts(engine: Engine) -> None:
+    """A live pending row under this client_turn_id refuses a stranger, not a re-run."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        turn_id = uuid.uuid4()
+        client_turn_id = uuid.uuid4()
+        message = "In-flight question"
+        with engine.begin() as conn:
+            conn.execute(
+                chat_turn.insert().values(
+                    id=turn_id,
+                    conversation_id=conversation_id,
+                    turn_index=0,
+                    client_turn_id=client_turn_id,
+                    user_message=message,
+                    answer=None,
+                    answer_payload=None,
+                    capability_run_id=None,
+                    status="pending",
+                    created_at=now(),
+                    completed_at=None,
+                )
+            )
+        backend = CountingChatBackend()
+        with pytest.raises(ApiConflict) as raised:
+            chat_turns.run_chat_turn(
+                engine,
+                project_id=project_id,
+                conversation_id=conversation_id,
+                user_id="chat-owner",
+                message=message,
+                client_turn_id=client_turn_id,
+                chat_backend=backend,
+            )
+        assert raised.value.code == "chat_turn_in_progress"
+        assert backend.calls == 0
+        with engine.connect() as conn:
+            status = conn.execute(
+                select(chat_turn.c.status).where(chat_turn.c.id == turn_id)
+            ).scalar_one()
+        assert status == "pending"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_retry_same_client_turn_id_after_ttl_expiry_succeeds(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ten-minute-stale pending row under its own client_turn_id retries in place."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        turn_id = uuid.uuid4()
+        client_turn_id = uuid.uuid4()
+        message = "Stale question"
+        with engine.begin() as conn:
+            conn.execute(
+                chat_turn.insert().values(
+                    id=turn_id,
+                    conversation_id=conversation_id,
+                    turn_index=0,
+                    client_turn_id=client_turn_id,
+                    user_message=message,
+                    answer=None,
+                    answer_payload=None,
+                    capability_run_id=None,
+                    status="pending",
+                    created_at=now() - timedelta(minutes=11),
+                    completed_at=None,
+                )
+            )
+        result = chat_turns.run_chat_turn(
+            engine,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            user_id="chat-owner",
+            message=message,
+            client_turn_id=client_turn_id,
+            chat_backend=StubChatBackend(),
+        )
+        assert result.status == "completed"
+        assert result.id == turn_id
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_run_chat_turn_reenters_its_own_reservation(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caller's own reserved pending row is retried in place, not conflicted."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        client_turn_id = uuid.uuid4()
+        message = "Route-reserved question"
+        with engine.begin() as conn:
+            reserved = chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=conversation_id,
+                user_id="chat-owner",
+                message=message,
+                client_turn_id=client_turn_id,
+            )
+        assert isinstance(reserved, uuid.UUID)
+        result = chat_turns.run_chat_turn(
+            engine,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            user_id="chat-owner",
+            message=message,
+            client_turn_id=client_turn_id,
+            chat_backend=StubChatBackend(),
+            reserved_turn_id=reserved,
+        )
+        assert result.status == "completed"
+        assert result.id == reserved
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_durable_cancel_after_last_check_wins_at_terminal_commit(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cross-process cancel landing after the loop's last check stays cancelled."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        real_floor = getattr(chat_turns, "apply_citation_floor")  # noqa: B009
+
+        def _sneaky_floor(*args: Any, **kwargs: Any) -> Any:
+            """Apply the real floor, then simulate a racing durable cancel."""
+            floored = real_floor(*args, **kwargs)
+            with engine.begin() as conn:
+                conn.execute(
+                    update(chat_turn)
+                    .where(chat_turn.c.conversation_id == conversation_id)
+                    .values(status="cancelled", completed_at=now(), answer="stale partial")
+                )
+            return floored
+
+        monkeypatch.setattr(chat_turns, "apply_citation_floor", _sneaky_floor)
+        result = chat_turns.run_chat_turn(
+            engine,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            user_id="chat-owner",
+            message="Question",
+            client_turn_id=uuid.uuid4(),
+            chat_backend=StubChatBackend(),
+        )
+        assert result.status == "cancelled"
+        assert result.answer == "stale partial"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mapping handed to run_tool_loop at the chat call site is exactly the allowlist."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+        captured: dict[str, Any] = {}
+        real_run_tool_loop = getattr(chat_turns, "run_tool_loop")  # noqa: B009
+
+        def _capturing_run_tool_loop(*args: Any, tools: dict[str, Any], **kwargs: Any) -> Any:
+            """Record the tool mapping the call site hands to the kernel loop."""
+            captured["tools"] = tools
+            return real_run_tool_loop(*args, tools=tools, **kwargs)
+
+        monkeypatch.setattr(chat_turns, "run_tool_loop", _capturing_run_tool_loop)
+        chat_turns.run_chat_turn(
+            engine,
+            project_id=project_id,
+            conversation_id=conversation_id,
+            user_id="chat-owner",
+            message="Question",
+            client_turn_id=uuid.uuid4(),
+            chat_backend=StubChatBackend(),
+        )
+        assert set(captured["tools"]) == {"search_chunks", "query_findings", "lookup"}
+    finally:
+        _cleanup(engine, project_id)

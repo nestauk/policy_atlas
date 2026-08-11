@@ -59,50 +59,96 @@ def _sentence_around(prose: str, position: int) -> tuple[int, int]:
     return start, end
 
 
+def _marker_anchor_sentence(prose: str, position: int, marker_len: int) -> tuple[int, int]:
+    """Return the sentence ``[start, end)`` a marker at ``position`` anchors.
+
+    The sentence ENDING at the marker — models place markers on either side of
+    the full stop, so a terminator immediately adjacent to the marker belongs
+    to the marker's own sentence, not the one before it.
+    """
+    adjacent_stop = position > 0 and prose[position - 1] in ".!?"
+    lookback = prose[: position - 1 if adjacent_stop else position]
+    start = 0
+    for match in _SENTENCE_END_RE.finditer(lookback):
+        start = match.end()
+    end = position + marker_len
+    while end < len(prose) and prose[end] in ".!?":
+        end += 1
+    return start, end
+
+
 def derive_claims_for_uncovered_citations(
     prose: str, citation_ns: list[int], claims: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """Derive sentence-grain claims for citations no existing claim references.
+    """Derive sentence-grain claims for marker occurrences no claim covers.
+
+    Coverage is judged per ``[n]`` marker OCCURRENCE, not per citation number:
+    a number cited twice can have one occurrence judged by an existing claim
+    while the other is left honestly unjudged — collapsing both to the same
+    verdict would show an unjudged assertion wearing a judged one's verdict.
+    An occurrence is covered when some claim referencing its number has a span
+    overlapping the occurrence's anchoring sentence; a claim with no usable
+    span instead covers only the FIRST uncovered occurrence of its number
+    (preserves the single-occurrence behaviour). Every occurrence still
+    uncovered after that gets its own sentence-grain claim.
 
     Shared by the floor (persist time) and enrichment (which must also handle
-    rows persisted before this derivation existed): each uncovered display
-    number gets the sentence its ``[n]`` marker anchors — the sentence ENDING
-    at the marker (models place markers on either side of the full stop), so
-    the claim text is the asserted sentence, never the following fragment.
+    rows persisted before this derivation existed).
     """
-    covered = {n for claim in claims for n in claim.get("citation_ns") or []}
+    wanted = set(citation_ns)
+    occurrences: dict[int, list[tuple[int, int, int]]] = {}
+    for match in _MARKER_RE.finditer(prose):
+        n = int(match.group(1))
+        if n not in wanted:
+            continue
+        start, end = _marker_anchor_sentence(prose, match.start(), len(match.group(0)))
+        occurrences.setdefault(n, []).append((match.start(), start, end))
+
+    covered: set[tuple[int, int]] = set()  # (citation_n, marker_position)
+
+    # Pass 1: a span-bearing claim covers every occurrence of its number whose
+    # anchoring sentence overlaps the claim's span.
+    for claim in claims:
+        span = claim.get("span")
+        if not (isinstance(span, list) and len(span) == 2):
+            continue
+        claim_start, claim_end = span
+        for n in claim.get("citation_ns") or []:
+            for position, sentence_start, sentence_end in occurrences.get(n, []):
+                if sentence_start < claim_end and sentence_end > claim_start:
+                    covered.add((n, position))
+
+    # Pass 2: a claim with no usable span covers only the first occurrence of
+    # its number that pass 1 left uncovered.
+    for claim in claims:
+        span = claim.get("span")
+        if isinstance(span, list) and len(span) == 2:
+            continue
+        for n in claim.get("citation_ns") or []:
+            for position, _sentence_start, _sentence_end in occurrences.get(n, []):
+                if (n, position) not in covered:
+                    covered.add((n, position))
+                    break
+
     derived: list[dict[str, Any]] = []
     for n in citation_ns:
-        if n in covered:
-            continue
-        marker = f"[{n}]"
-        position = prose.find(marker)
-        if position < 0:
-            continue
-        # Sentence start: the last terminator BEFORE the sentence the marker
-        # closes — skip a terminator immediately adjacent to the marker
-        # ("…data.[1]"), which belongs to the marker's own sentence.
-        adjacent_stop = position > 0 and prose[position - 1] in ".!?"
-        lookback = prose[: position - 1 if adjacent_stop else position]
-        start = 0
-        for match in _SENTENCE_END_RE.finditer(lookback):
-            start = match.end()
-        end = position + len(marker)
-        while end < len(prose) and prose[end] in ".!?":
-            end += 1
-        text = prose[start:end].strip()
-        if not text or text == marker:
-            continue
-        span_start = prose.find(text)
-        derived.append(
-            {
-                "text": text,
-                "span": [span_start, span_start + len(text)] if span_start >= 0 else None,
-                "citation_ns": [n],
-                "derived": True,
-            }
-        )
-        covered.add(n)
+        for position, start, end in occurrences.get(n, []):
+            if (n, position) in covered:
+                continue
+            marker = f"[{n}]"
+            text = prose[start:end].strip()
+            if not text or text == marker:
+                continue
+            span_start = prose.find(text)
+            derived.append(
+                {
+                    "text": text,
+                    "span": [span_start, span_start + len(text)] if span_start >= 0 else None,
+                    "citation_ns": [n],
+                    "derived": True,
+                }
+            )
+            covered.add((n, position))
     return derived
 
 

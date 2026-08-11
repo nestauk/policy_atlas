@@ -6,6 +6,7 @@ import uuid
 from datetime import timedelta
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import artefact, chat_turn, conversation, planning_transcript
@@ -355,6 +356,42 @@ def test_conversation_routes_keep_cross_owner_and_unknown_resources_indistinguis
                 client.get(f"/api/v1/conversations/{conversation_id}/turns", headers=other),
                 client.get(f"/api/v1/conversations/{unknown_conversation}/turns", headers=other),
             ),
+            (
+                client.post(
+                    f"/api/v1/projects/{project_id}/conversations", headers=other, json={}
+                ),
+                client.post(
+                    f"/api/v1/projects/{unknown_project}/conversations", headers=other, json={}
+                ),
+            ),
+            (
+                client.post(
+                    f"/api/v1/conversations/{conversation_id}/turns",
+                    headers=other,
+                    json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
+                ),
+                client.post(
+                    f"/api/v1/conversations/{unknown_conversation}/turns",
+                    headers=other,
+                    json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
+                ),
+            ),
+            (
+                client.post(f"/api/v1/conversations/{conversation_id}/unarchive", headers=other),
+                client.post(
+                    f"/api/v1/conversations/{unknown_conversation}/unarchive", headers=other
+                ),
+            ),
+            (
+                client.post(
+                    f"/api/v1/conversations/{conversation_id}/turns/{uuid.uuid4()}/cancel",
+                    headers=other,
+                ),
+                client.post(
+                    f"/api/v1/conversations/{unknown_conversation}/turns/{uuid.uuid4()}/cancel",
+                    headers=other,
+                ),
+            ),
         )
         for cross_owner, unknown in pairs:
             assert cross_owner.status_code == unknown.status_code == 404
@@ -411,3 +448,99 @@ def test_chat_chunk_context_resolves_quote(engine: Engine, tmp_path: Path) -> No
             if project_id is not None:
                 with engine.begin() as conn:
                     delete_project_data(conn, project_id)
+
+
+def test_patch_title_null_is_422(engine: Engine, tmp_path: Path) -> None:
+    """Clearing title (unlike entry_artefact_id) is not a legal patch shape."""
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = uuid.UUID(create_project(client, owner))
+        chat_id = _conversation(engine, project_id=project_id)
+        response = client.patch(
+            f"/api/v1/conversations/{chat_id}", headers=owner, json={"title": None}
+        )
+        assert response.status_code == 422
+
+
+def _pending_turn(engine: Engine, *, conversation_id: uuid.UUID) -> uuid.UUID:
+    """Insert one pending chat turn with no in-process live cancel handle."""
+    turn_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            chat_turn.insert().values(
+                id=turn_id,
+                conversation_id=conversation_id,
+                turn_index=0,
+                client_turn_id=uuid.uuid4(),
+                user_message="In flight",
+                answer=None,
+                answer_payload=None,
+                capability_run_id=None,
+                status="pending",
+                created_at=now(),
+                completed_at=None,
+            )
+        )
+    return turn_id
+
+
+def test_cancel_cross_owner_and_unknown_are_byte_identical_404(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The cancel endpoint keeps the BOLA-opaque 404 rule, like every other route."""
+    with api_client(tmp_path) as (client, owner, other):
+        project_id = uuid.UUID(create_project(client, owner))
+        chat_id = _conversation(engine, project_id=project_id)
+        turn_id = _pending_turn(engine, conversation_id=chat_id)
+        cross_owner = client.post(
+            f"/api/v1/conversations/{chat_id}/turns/{turn_id}/cancel", headers=other
+        )
+        unknown = client.post(
+            f"/api/v1/conversations/{uuid.uuid4()}/turns/{uuid.uuid4()}/cancel", headers=other
+        )
+        assert cross_owner.status_code == unknown.status_code == 404
+        assert cross_owner.json() == unknown.json()
+
+
+def test_cancel_no_live_generator_cas_and_is_idempotent(engine: Engine, tmp_path: Path) -> None:
+    """A pending row with no live handle cancels via CAS, and repeat cancel is a no-op."""
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = uuid.UUID(create_project(client, owner))
+        chat_id = _conversation(engine, project_id=project_id)
+        turn_id = _pending_turn(engine, conversation_id=chat_id)
+
+        first = client.post(
+            f"/api/v1/conversations/{chat_id}/turns/{turn_id}/cancel", headers=owner
+        )
+        assert first.status_code == 200
+        assert first.json() == {"status": "cancelled"}
+        with engine.connect() as conn:
+            status = conn.execute(
+                select(chat_turn.c.status).where(chat_turn.c.id == turn_id)
+            ).scalar_one()
+        assert status == "cancelled"
+
+        second = client.post(
+            f"/api/v1/conversations/{chat_id}/turns/{turn_id}/cancel", headers=owner
+        )
+        assert second.status_code == 200
+        assert second.json() == {"status": "cancelled"}
+
+
+def test_cancel_after_completion_is_a_conflict_free_no_op(engine: Engine, tmp_path: Path) -> None:
+    """Cancelling an already-terminal turn reports its real status, never an error."""
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = uuid.UUID(create_project(client, owner))
+        chat_id = _conversation(engine, project_id=project_id)
+        turn_id = _chat_turn(
+            engine, conversation_id=chat_id, turn_index=0, user_message="Q", answer="A"
+        )
+        response = client.post(
+            f"/api/v1/conversations/{chat_id}/turns/{turn_id}/cancel", headers=owner
+        )
+        assert response.status_code == 200
+        assert response.json() == {"status": "completed"}
+        with engine.connect() as conn:
+            status = conn.execute(
+                select(chat_turn.c.status).where(chat_turn.c.id == turn_id)
+            ).scalar_one()
+        assert status == "completed"

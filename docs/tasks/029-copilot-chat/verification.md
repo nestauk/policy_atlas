@@ -169,14 +169,231 @@ conversation-aware rail + chats UI.
 
 ## Review findings
 
-_Added at step 7 (fresh conversation)._
+Step 7 ran 2026-08-11 in a fresh conversation (adjudicator ≠ build chat). Lanes:
+contract-verifier (pinned Opus, fresh) · security-auditor · Codex adversarial
+(job task-msowqv0g, family-flipped onto the lead/Claude-authored surfaces) ·
+`/code-review medium` (8 finder angles, adversarially verified) · lead
+live-trace content review (H3 Langfuse traces + dev-DB rows). Review diff:
+`git diff dev HEAD` (straight endpoint diff — the branch's merge-base predates
+merge-day, so triple-dot re-shows merged 026–028 content; local `dev` was
+fast-forwarded to origin first). Generated files and `docs/tasks/**` excluded
+from code lanes. Baseline `make verify` re-confirmed green (exit 0, read
+directly) before any lane ran; the contract-verifier re-ran it independently.
+
+**Convergent findings (multi-family, high confidence) — all adopted + fixed:**
+
+1. **Durable cancel overwritten to `completed`** (Codex MAJOR + security lane,
+   independently): the terminal commit accepted a row a cross-process cancel
+   had durably marked `cancelled` and flipped it. Fixed: terminal predicate
+   narrowed to `pending`; on rowcount 0 the row is re-read and a `cancelled`
+   status is returned as the cancelled outcome; the failure-path UPDATE got
+   the same guard.
+2. **Citation-source resolution not project-scoped** (Codex MAJOR +
+   `/code-review` CONFIRMED, independently): with a snapshot shared across
+   projects, another project's `project_source_snapshot_id` could persist as
+   a citation's `source_id` (click-through 404s; no content exposure — the
+   dossier read still BOLA-404s). Fixed: `project_id` threaded into
+   `_resolve_citation_sources` with project filters on both the chunk and
+   finding branches (the finding branch needed it too).
+3. **Backfill `min()` over an empty sequence aborts the migration**
+   (contract-verifier + `/code-review`, independently): guarded, with a
+   fixture per edge (incl. `succeeded` + `ended_at IS NULL` → honest
+   `closed_at` fallback).
+
+**Adopted + fixed (single-lane):**
+
+- *Security (MEDIUM)*: retry-in-place accepted a live `pending` row — two
+  processes could run one turn concurrently (double provider spend; the route
+  pre-check was TOCTOU and the single-flight lock is process-local). Fixed:
+  the retry gate moved inside the locked+swept section of `_phase_one_turn`;
+  a fresh `pending` row now 409s unless the caller is the worker re-entering
+  its own reservation (`reserved_turn_id`); the DB row is the cross-process
+  single-flight authority.
+- */code-review (CONFIRMED ×6)*: worker-side pre-`try` failures (e.g.
+  `run_active` racing the reservation) orphaned the pending row → router now
+  CASes it `pending → failed` with the real error code · cancel-registry
+  capacity raised **after** the reservation committed, leaking a blocked
+  conversation → registration moved inside the transaction (rollback shape) ·
+  orphaned pending rows could never be retried under their own
+  `client_turn_id` (pre-check fired before any TTL sweep) → pre-check
+  dropped in favour of the locked gate · `useChatTurns` never paginated —
+  chats >50 turns silently lost their newest turns → page loop ·
+  conversation-mutation invalidation used a 5-element key with explicit
+  `undefined`s that TanStack v5 never partial-matches → 3-element prefix ·
+  `PATCH {"title": null}` reached the NOT NULL column as a 500 → 422 ·
+  `ChatSidePanel` sat outside the content ErrorBoundary → wrapped.
+- *Codex (MAJOR)*: floor claim coverage was keyed by citation **number**, so a
+  second `[n]` marker anchoring a different sentence wore the judged claim's
+  verdict unjudged. Fixed: derivation per marker occurrence (span-overlap
+  coverage; span-less claims cover only their first occurrence); enrichment
+  inherits via the shared function.
+- *Live-trace lane (both MAJOR; only observable live — the 013 lesson again)*:
+  (a) **session-per-conversation never reached Langfuse** — langfuse SDK
+  4.13.0 has no `update_current_trace`; the `getattr` guard silently no-oped
+  for chat AND planning, and the tracing tests stubbed the missing method
+  (mock shaped to the code — the same failure class as the build's G-phase
+  mock). Every trace since 2026-08-09 had `sessionId: null`. Fixed with the
+  v4 `propagate_attributes` context manager wrapping observation creation,
+  imported at module top so a future SDK change fails loud; stub tests
+  re-pointed at the real seam. (b) **chat turn traces were hollow** — no
+  GENERATION observation, no I/O at trace or span level (the streaming
+  adapter bypassed the instrumented-client path), so the pinned DB-row↔trace
+  audit hop landed on an empty trace. Fixed: the chat provider call is
+  wrapped in a generation observation with messages/output/usage, and the
+  root span carries question/answer trace I/O.
+- *Contract-verifier (MAJOR/minor)*: failed turns rendered as silence (the
+  honest `failed` row was invisible; `retry` existed unwired) → failed state +
+  Retry rendered · the pre-header error envelope was discarded and
+  `no_completed_run`/`chat_turn_in_progress`/`chat_capacity` had no sentences
+  → parsed + added · composer `disabledReason` unwired → pending-turn reason
+  passed · enrichment `Thread.start()` inside the terminal `try` could emit a
+  second terminal event → moved out · `?chat=` empty-param opened a panel
+  bound to `""` (`has` vs `get`) + a fast first launcher click could mint a
+  spurious blank chat → both gated · duplicated `TIER_LABEL`/`TIER_TEXT` →
+  imported from `ArtefactView` (now exported) · dead model-shaped verdict
+  fallbacks (`citation.verdict`/`grounding_tier`) → deleted · enrichment
+  evidence reads got project filters (security-lane defense-in-depth) ·
+  `reasoning_effort="none"` pin now regression-tested · the tool-allowlist
+  test now pins the mapping handed to `run_tool_loop` at the chat call site.
+- *Test-evidence gap (contract-verifier MAJOR)*: this file's § Streaming
+  claimed five tests that did not exist (stream-level idempotent replay,
+  explicit-cancel endpoint coverage, cancel idempotence/after-completion,
+  bare-disconnect, pre-header envelope errors), and the cancel endpoint — the
+  slice's one new mutating endpoint — had zero backend tests. **Correction
+  and remedy:** the claims were written against service-level coverage plus
+  the live H3 legs; route-level tests now exist for the cancel endpoint
+  (BOLA 404 pair, idempotence, after-completion, no-live-generator CAS),
+  stream replay, pre-header envelope errors, and the four previously
+  uncovered mutating routes' BOLA pairs, plus cross-owner-missing-`quote`
+  asserting 404-not-422. Bare-disconnect completion remains live-H3-only
+  evidence (recorded under Known unverified items).
+
+**Declined, with reasons:**
+
+- *Codex MAJOR "backfill never writes `plan.conversation_id` /
+  `artefact.capability_run_id` for legacy lineages"* — that is the contract:
+  strand 1 pins "all additive, nullable, **no legacy fabrication**" and
+  rubric 13 requires the chain end-to-end **on a new run** with legacy rows
+  carrying honest NULLs. The backfill deliberately links only the transcript
+  rows it can own honestly.
+- *Contract-verifier: `chat_turn.capability_run_id` lacks the composite
+  project guard the contract cites* — the contract's own text is impossible
+  as written (`chat_turn` has no `project_id` column); the single-column FK +
+  the resolver writing only project-resolved run ids is the honest reading.
+  Recorded here rather than silently normalised.
+- *Tool-result channel enters the prompt bounded-but-unsanitized with a
+  collective label* (contract-verifier minor) — inherited synthesis posture,
+  now **recorded** as such: tool results are system-derived from committed
+  corpus rows, bounded by `char_budget`, and covered by the system prompt's
+  data-not-instructions rule; per-field sanitization there would alter the
+  synthesis-shared kernel mid-review for no live channel.
+- */code-review cut-list cleanups* ("New chat" title sentinel across 5 sites ·
+  `list_conversations` latest-turn N+1 · duplicated quote-window logic in
+  `repository.py` · `planningClosed` dot after a failed run) — real but
+  non-defect; deferred to the next touching slice rather than churning the
+  reviewed diff (the N+1 is bounded by the page size; the sentinel is
+  user-visible only for a chat literally renamed "New chat").
+
+**Escalated to the owner (step 9 — behaviour calls the stack must not make):**
+
+1. **`search_chunks` is terminal-run-scoped, not corpus-wide** (contract-
+   verifier MAJOR; verified in `chat_scope.py` → `build_retrieval_scope`).
+   Contract strand 4 pins "the whole shared corpus (all runs' screened-in
+   text)"; as built, retrieval is bounded to the terminal run's evidence
+   scope. Identical behaviour on single-lineage projects (today's dominant
+   shape); divergent only on re-run projects; conservative, no leak.
+   Widening touches cross-scope effective-screening semantics
+   (`effective_screen_rows(run_ids=…)`) — routed to the owner: accept
+   as-built (deferred.md § 029 seams now records it honestly) or schedule the
+   widening. The deferred.md entry shipped by the build claimed corpus-wide
+   search and has been corrected.
+2. **Entry-context hydration works only when the entry artefact is the
+   latest** (contract-verifier MAJOR + Codex minor, convergent): the read
+   model is single-latest; a chat opened from an older artefact silently gets
+   the newest artefact's body and no entry label. Flagged deviation 2's
+   wording is also corrected by this: the degraded path IS budget-trimmed
+   ("regardless of remaining budget" was wrong), and the budget rule's
+   entry-context-full promise has no older-artefact member until the
+   workspace-cluster read-model widening. UI chip behaviour is unaffected.
+
+**Record corrections (this file, reviewed against the diff):**
+
+- Commit `7f5bdc3` shipped two things this file under-recorded: the
+  structured-JSON leak fix (adapter prose-only steering + trailing-blob
+  strip) AND a citation-presentation rework (quote-in-passage popover,
+  dossier sheet, tier chip in the report tooltip). Both are review-phase
+  precursors folded before the stack ran; recorded now.
+- The migration adds `uq_artefact_id_project`, a new unique constraint on the
+  pre-existing production `artefact` table (the composite-FK target for the
+  project-guarded lineage column) — in-vocabulary for the approved strand-1
+  schema gate but absent from the flagged-deviation list; recorded now.
+- Rubric 20's "persisted answer equals the streamed prose" holds up to the
+  floor's honest transforms (marker renumbering, artifact-token scrub,
+  trailing-structured-blob strip); the earlier `<lemma>` disclosure covered
+  only one of the three. Note the deterministic test of that equality is
+  tautological for stub backends (a non-streaming backend legitimately emits
+  the floored prose as its single delta at `chat_turns.py`), so the
+  real-stream equality rests on the live H3 legs — recorded under Known
+  unverified items rather than papered over with a stub assertion.
+- `quote` on the chunk-context route is optional in the published OpenAPI
+  but semantically required (422 after ownership) — a deliberate consequence
+  of the byte-identical-404 incident fix, now recorded.
+
+**Flagged-deviation adjudication (all nine confirmed or contested
+explicitly):** 1 · 3 · 4 · 5 · 7 · 8 · 9 confirmed accurate and adopted
+as-is. 2 adopted with its wording corrected (see owner escalation 2).
+6 ("evidence base is ready" card entry point) remains open — carried to the
+owner at step 9 as a known gap (the artefact-reader + library entry points
+are live; the card lives inside PlanningPane untouched).
+
+**Knowledge adjudication (014 rule — both sources):** from the build's 13
+candidates + the stack's findings, seven new `docs/knowledge/` concepts landed
+(gpt-5.6-terra reasoning_effort pin · silent-SDK-guards/stub-shaped-tests ·
+DB-row-is-the-single-flight-authority · StrictMode mount refs (+ the two
+frontend testing pins folded in) · kernel-extraction-generalize-in-place ·
+chunk-context two keyings · claims-cover-marker-occurrences), one existing
+concept updated (effective-screen-row-read-rule: 029 `run_ids` param +
+project-wide doc resolution), and two failure-log entries (gate-piped-through-
+tail; the four codex/agent composition traps incl. the Docker wedge).
+Declined: the turn-pair-grain/reservation-re-entry subtlety as a standalone
+concept — it is contract/ADR-recorded design, and its review-hardened form now
+lives inside the single-flight concept.
+
+**Review-lane economy (honest overrun note):** the two heavyweight lanes alone
+(contract-verifier ~188K + security ~168K reasoning-class tokens) exceeded the
+≤250K reasoning budget before the Codex lane and fixes — continuing the
+flagged multi-slice pattern. The spend bought 10 MAJOR contract-verifier
+findings and a convergent race set; the economy pin needs a re-think at retro,
+not silent breach.
+
+**Post-fix verify (the step-7 exit gate):**
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (post-review fixes, exit code read directly) | **pass — exit 0** | backend 2106 passed (+19 review-stack tests) · frontend 228 (+16) · okf-validate 117 concepts 0 violations (re-run over the step-8 knowledge files) · 2026-08-11. One intermediate run failed on shared-test-DB residue (a review worker's killed pytest stranded the DB mid-migration-roundtrip — the failure-log 2026-07-16 class + 028 tombstone gotcha); test DB recreated, clean serial re-run is the row above. |
 
 ## Rubric status
 
-_Checked at step 7; build-time self-check: rubric 1–7, 9–21 exercised by the
-suites named above; 8 (review stack) pending; 10a enrichment shipped (the
-contract's cut-line was NOT exercised — no contract revision needed); 19
-docs land with H1._
+Checked at step 7 (contract-verifier per-item audit + this stack's fixes):
+
+- **Hold as built:** 3, 4, 5, 9, 10, 10a, 11, 12, 13, 21.
+- **Hold after stack fixes:** 2 (gate re-run green post-fix), 6 (record
+  corrected + evidence gaps closed), 7 (paused-run entry added), 14
+  (backfill edge guards + fixtures), 15/16/18/20 (cancel-endpoint,
+  stream-replay, pre-header-envelope, mutating-route BOLA and failed-turn
+  visibility fixes; residual live-only evidence recorded under Known
+  unverified items), 17 (tool-result channel posture recorded as inherited),
+  19 (model env var recorded in infra/DEPLOYMENT.md; web-api.md verified
+  accurate).
+- **Owner call at step 9:** 1 — two contract-vs-build divergences
+  (corpus-wide `search_chunks`; entry-context hydration latest-only) and the
+  unwired "evidence base is ready" card (deviation 6) — escalated, not
+  silently accepted.
+- **8 (this stack):** lanes run, findings adjudicated above; closes with the
+  post-fix gate below.
+
+Build-time note kept for the record: 10a's contract cut-line was never
+exercised — enrichment shipped; no contract revision needed.
 
 ## Intent & assumptions
 

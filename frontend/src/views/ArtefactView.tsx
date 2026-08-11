@@ -102,8 +102,10 @@ const APPRAISAL_FALLBACK_HINT =
   "The cited source's appraised evidence strength — five bands from Weak to Very strong, scored from its classified document type.";
 
 /** The grounding-tier vocabulary (demo ui.tsx TIER_LABEL/TIER_TEXT — locked;
- *  unknown tier → the raw value never renders, the chip omits). */
-const TIER_LABEL: Record<string, string> = {
+ *  unknown tier → the raw value never renders, the chip omits). Exported so
+ *  every surface that renders a grounding verdict (chat included) shares
+ *  this one copy instead of re-typing it. */
+export const TIER_LABEL: Record<string, string> = {
   tier_1: "Tier 1 · direct quote",
   tier_2: "Tier 2 · grounded",
   tier_3: "Tier 3 · supported",
@@ -111,7 +113,7 @@ const TIER_LABEL: Record<string, string> = {
   unsupported_mis_cited: "Unsupported — flagged",
 };
 
-const TIER_TEXT: Record<string, string> = {
+export const TIER_TEXT: Record<string, string> = {
   tier_1: "Direct quote, verified against the source",
   tier_2: "Grounded in a specific passage",
   tier_3: "Supported across passages",

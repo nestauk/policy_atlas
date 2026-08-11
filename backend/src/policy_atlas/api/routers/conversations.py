@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, cast
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
@@ -63,6 +64,8 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import ChatBackend
+
+log = structlog.get_logger()
 
 router = APIRouter(
     prefix="/api/v1/conversations",
@@ -321,6 +324,10 @@ def update_conversation(
     if row["kind"] != "chat":
         raise HTTPException(status_code=422, detail="planning conversations cannot be renamed")
     changes = payload.model_dump(exclude_unset=True)
+    if "title" in changes and changes["title"] is None:
+        # Unlike entry_artefact_id, title has no clearable meaning — a chat's
+        # title is only ever replaced, never cleared (rev 3 contract).
+        raise HTTPException(status_code=422, detail="title cannot be cleared")
     entry_artefact_id = changes.get("entry_artefact_id")
     if entry_artefact_id is not None:
         _assert_entry_artefact(
@@ -427,8 +434,10 @@ def _register_cancel(turn_id: uuid.UUID) -> threading.Event:
     with _live_cancels_guard:
         if turn_id not in _live_cancels and len(_live_cancels) >= _LIVE_CANCELS_MAX:
             # Registered events are always live. There is no safe eviction of
-            # a live stop handle, so a saturated registry fails closed at the
-            # route reservation instead of weakening explicit cancellation.
+            # a live stop handle, so a saturated registry fails closed by
+            # raising inside the caller's still-open reservation transaction —
+            # rolling the pending row back with it — instead of weakening
+            # explicit cancellation.
             raise ApiCapacity("chat_capacity", "too many chat turns are in progress")
         return _live_cancels.setdefault(turn_id, threading.Event())
 
@@ -518,13 +527,11 @@ async def create_chat_turn_stream(
         if row is None:
             raise HTTPException(status_code=404, detail="resource not found")
         project_id = row
-        existing_status = conn.execute(
-            select(chat_turn.c.status)
-            .where(chat_turn.c.conversation_id == conversation_id)
-            .where(chat_turn.c.client_turn_id == body.client_turn_id)
-        ).scalar_one_or_none()
-        if existing_status == "pending":
-            raise ApiConflict("chat_turn_in_progress", "a chat turn is already running")
+        # The pending-row pre-check that used to live here read before the
+        # project row lock's serialization point (TOCTOU) and duplicated a
+        # check `_phase_one_turn` already makes correctly inside that lock —
+        # dropped in favour of the single locked-and-swept check (security
+        # review, 2026-08-11).
         try:
             phase_one = _phase_one_turn(
                 conn,
@@ -536,6 +543,13 @@ async def create_chat_turn_stream(
             )
         except LookupError:
             raise HTTPException(status_code=404, detail="resource not found") from None
+        cancel_event: threading.Event | None = None
+        if not isinstance(phase_one, ChatTurnResult):
+            # Registered inside the still-open reservation transaction: a
+            # saturated cancel registry raises here and rolls the pending row
+            # back with it, instead of leaving an orphaned reservation for the
+            # TTL to expire (security review, 2026-08-11).
+            cancel_event = _register_cancel(phase_one)
 
     if isinstance(phase_one, ChatTurnResult):
         async def replay() -> AsyncIterator[bytes]:
@@ -544,11 +558,11 @@ async def create_chat_turn_stream(
         return StreamingResponse(replay(), media_type="application/x-ndjson")
 
     turn_id = phase_one
-    cancel_event = _register_cancel(turn_id)
     events: queue.Queue[Any] = queue.Queue()
 
     def worker() -> None:
         """Complete persistence independently of a consumer disconnect."""
+        completed_result: ChatTurnResult | None = None
         try:
             result = run_chat_turn(
                 engine,
@@ -563,39 +577,70 @@ async def create_chat_turn_stream(
                 on_progress=lambda label: events.put(ProgressEvent(label=label)),
                 on_delta=lambda text: events.put(DeltaEvent(text=text)),
                 cancel_event=cancel_event,
+                reserved_turn_id=turn_id,
             )
             if result.status == "cancelled":
                 events.put(CancelledEvent(turn=_turn_out(result)))
             else:
                 events.put(CompletedEvent(turn=_turn_out(result)))
-                payload = result.answer_payload or {}
-                enrichment = payload.get("enrichment")
-                if (
-                    not result.replayed
-                    and isinstance(enrichment, dict)
-                    and enrichment.get("status") == "pending"
-                ):
-                    threading.Thread(
-                        target=enrich_chat_turn,
-                        kwargs={
-                            "engine": engine,
-                            "turn_id": result.id,
-                            "judge_backend": judge_backend,
-                            "langfuse_client": tracing.get_langfuse(),
-                        },
-                        name=f"policy-atlas-chat-enrichment-{result.id}",
-                        daemon=True,
-                    ).start()
-        except Exception:
+                completed_result = result
+        except Exception as exc:
+            # run_chat_turn can raise before it ever opens its own try block
+            # (e.g. a run_active conflict on re-entering this reservation, or
+            # the non-blocking conversation lock) — that path never touches
+            # the row, so CAS it closed ourselves. Guarded on our own turn_id
+            # and "pending" so a normal post-try failure (which already
+            # marked the row failed) is left alone (code review, 2026-08-11).
+            code = exc.code if isinstance(exc, (ApiConflict, ApiCapacity)) else "chat_turn_failed"
+            with engine.begin() as conn:
+                conn.execute(
+                    update(chat_turn)
+                    .where(chat_turn.c.id == turn_id)
+                    .where(chat_turn.c.status == "pending")
+                    .values(
+                        status="failed",
+                        completed_at=datetime.now(UTC),
+                        answer_payload={"error_code": code},
+                    )
+                )
             events.put(
                 FailedEvent(
-                    error=FailedEventError(code="chat_turn_failed", message="chat turn failed"),
+                    error=FailedEventError(code=code, message="chat turn failed"),
                     turn_id=turn_id,
                 )
             )
         finally:
             _deregister_cancel(turn_id)
             events.put(None)
+
+        # Kept outside the try/except/finally above (contract-verifier
+        # finding, 2026-08-11): a thread-start failure here must only be
+        # logged, never surface as a second terminal event after completed
+        # has already been enqueued.
+        if completed_result is not None:
+            payload = completed_result.answer_payload or {}
+            enrichment = payload.get("enrichment")
+            if (
+                not completed_result.replayed
+                and isinstance(enrichment, dict)
+                and enrichment.get("status") == "pending"
+            ):
+                try:
+                    threading.Thread(
+                        target=enrich_chat_turn,
+                        kwargs={
+                            "engine": engine,
+                            "turn_id": completed_result.id,
+                            "judge_backend": judge_backend,
+                            "langfuse_client": tracing.get_langfuse(),
+                        },
+                        name=f"policy-atlas-chat-enrichment-{completed_result.id}",
+                        daemon=True,
+                    ).start()
+                except Exception:
+                    log.exception(
+                        "chat_enrichment_thread_start_failed", turn_id=str(completed_result.id)
+                    )
 
     threading.Thread(target=worker, name=f"policy-atlas-chat-{turn_id}", daemon=True).start()
 

@@ -183,7 +183,10 @@ export function AppShell() {
   // With a chat open beside the view, the two columns scroll independently —
   // the workspace's own two-pane behaviour (fixed viewport height, each
   // column owns its scroll). Closed, the page keeps its normal scroll.
-  const chatOpen = showChatPanel && new URLSearchParams(location.search).has("chat");
+  // `.get`, not `.has`: `?chat=` (present but empty) must read as closed,
+  // matching `useActiveConversation`'s own non-empty check — otherwise a
+  // bare `?chat=` opens a panel bound to conversation id "".
+  const chatOpen = showChatPanel && Boolean(new URLSearchParams(location.search).get("chat"));
 
   // Pending check-in visibility outside the workspace (contract strand 14):
   // poll cheaply for a pending check-in only while the user isn't already on
@@ -269,8 +272,14 @@ export function AppShell() {
                 rev 3.4): the workspace already hosts the full conversation
                 rail, so the panel mounts everywhere else in the project. */}
             <div className={chatOpen ? "flex min-w-0 lg:h-[calc(100svh-58px)]" : "flex min-w-0"}>
-              {/* Chat on the LEFT — parity with the workspace rail. */}
-              {showChatPanel && <ChatSidePanel projectId={projectId ?? ""} />}
+              {/* Chat on the LEFT — parity with the workspace rail. Its own
+                  boundary: a render error in the chat subtree must not take
+                  out the rest of the shell (nav, the routed view). */}
+              {showChatPanel && (
+                <ErrorBoundary key={projectId}>
+                  <ChatSidePanel projectId={projectId ?? ""} />
+                </ErrorBoundary>
+              )}
               <div className={chatOpen ? "min-w-0 flex-1 lg:overflow-y-auto" : "min-w-0 flex-1"}>
                 <ErrorBoundary key={location.pathname}>
                   <Outlet />

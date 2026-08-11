@@ -22,7 +22,12 @@ export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpen
     (row): row is Extract<(typeof chat.rows)[number], { id: string }> => "id" in row,
   );
   const pendingTurnId = durableRows.find((row) => row.status === "pending")?.id;
+  // A pending durable turn with no local stream (a reload mid-answer, or a
+  // second tab) still fences a send server-side — say so up front instead of
+  // letting the composer accept input the server will just reject.
+  const disabledReason = !chat.isStreaming && pendingTurnId !== undefined ? "Waiting for the current answer…" : null;
   const send = (message: string) => { void chat.sendTurn(message).catch(() => undefined); };
+  const retry = (clientTurnId: string) => { void chat.retry(clientTurnId); };
   const cancel = async () => {
     if (pendingTurnId !== undefined) return void chat.cancelTurn(pendingTurnId);
     // Mid-stream the durable row may not be in the cache yet — resolve it by
@@ -40,5 +45,5 @@ export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpen
     if (row !== undefined) void chat.cancelTurn(row.id);
   };
   const empty = !chat.isPending && chat.rows.length === 0;
-  return <section aria-label="Chat" className="flex h-full min-h-0 flex-col"><div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{empty ? <div className="space-y-2 py-8"><p className="text-meta text-grey">Ask about the evidence.</p>{starterQuestions.map((question) => <button key={question} type="button" onClick={() => send(question)} className="block text-left text-meta font-semibold text-blue hover:underline">{question}</button>)}</div> : <ChatMessages projectId={projectId} rows={chat.rows} onOpenPlanning={onOpenPlanning} />}</div><ContextBar projectId={projectId} conversationId={conversationId} entryArtefactId={conversation.data?.entry_artefact_id ?? null} /><div className="border-t border-line p-4"><ChatComposer conversationId={conversationId} isStreaming={chat.isStreaming} onSend={send} onStop={() => void cancel()} /></div></section>;
+  return <section aria-label="Chat" className="flex h-full min-h-0 flex-col"><div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{empty ? <div className="space-y-2 py-8"><p className="text-meta text-grey">Ask about the evidence.</p>{starterQuestions.map((question) => <button key={question} type="button" onClick={() => send(question)} className="block text-left text-meta font-semibold text-blue hover:underline">{question}</button>)}</div> : <ChatMessages projectId={projectId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />}</div><ContextBar projectId={projectId} conversationId={conversationId} entryArtefactId={conversation.data?.entry_artefact_id ?? null} /><div className="border-t border-line p-4"><ChatComposer conversationId={conversationId} isStreaming={chat.isStreaming} disabledReason={disabledReason} onSend={send} onStop={() => void cancel()} /></div></section>;
 }

@@ -1902,10 +1902,23 @@ out (Out-of-scope list plus seams named in the strands).
   024-recorded seam (§ Steering surface, "Live DB-backed read executors for watch
   deliberation") — chat's tool-loop kernel is a separate call site.
 - **Older-run structured reads / multi-artefact read-model widening
-  (workspace-cluster)** — `search_chunks` spans the whole project corpus, but
-  `query_findings`/`lookup` read only the terminal completed run's outputs;
-  structured reads over an earlier run's findings, and any multi-artefact IA
-  beyond the single entry-context chip, wait on the workspace-cluster slice.
+  (workspace-cluster)** — as built, ALL three chat read tools are bounded to the
+  terminal completed run: `query_findings`/`lookup` read its outputs, and
+  `search_chunks` retrieves within its evidence scope (`chat_scope.py` passes
+  `scope.evidence_scope_id` into `build_retrieval_scope`). The contract's
+  strand-4 "whole shared corpus (all runs' screened-in text)" search is
+  therefore NOT what shipped — on a re-run project, earlier runs'
+  screened-in text is unsearchable from chat (identical behaviour on the
+  dominant single-lineage shape; conservative, no leak). Found by the 029
+  review stack (contract-verifier lane); flagged to the owner at the 029 PR.
+  Corpus-wide retrieval semantics (which screening generation is "effective"
+  across scopes — see `effective_screen_rows(run_ids=…)`) belong with this
+  widening.
+- **Chats while a run is paused** — the turn fence 409s `run_active` for
+  `running` AND `paused` walks (`chat_turns.py`); the contract's owner
+  cut-line ("allow chats while paused — defer unless wanted now") was taken
+  as the defer. Revisit if paused-run reading becomes a real workflow
+  (steering remains the mid-run channel).
 - **Field-level turn provenance** — the audit chain (conversation → plan → run →
   artefact) is walkable at row grain only; which turn produced which specific plan
   *field* is plan-as-object's field-level provenance, still deferred.

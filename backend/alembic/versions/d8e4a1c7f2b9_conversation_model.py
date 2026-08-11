@@ -81,6 +81,7 @@ def _backfill_legacy_planning_conversations() -> None:
         latest_run = bind.execute(
             sa.select(
                 capability_run.c.status,
+                capability_run.c.started_at,
                 capability_run.c.ended_at,
             )
             .where(capability_run.c.project_id == project_id)
@@ -94,6 +95,12 @@ def _backfill_legacy_planning_conversations() -> None:
             status: str,
             closed_at: datetime | None,
         ) -> None:
+            # Mirrors the top-level "zero-turn projects get nothing" rule (contract
+            # truth table): a split branch that ends up owning no turns (e.g. a
+            # mid-replan boundary with no turns before it) gets no conversation
+            # either, never one with a fabricated created_at.
+            if not owned_turns:
+                return
             conversation_id = uuid4()
             bind.execute(
                 conversation.insert().values(
@@ -119,6 +126,7 @@ def _backfill_legacy_planning_conversations() -> None:
             continue
 
         run_status = latest_run["status"]
+        run_started_at = latest_run["started_at"]
         run_ended_at = latest_run["ended_at"]
         if run_status in {"succeeded", "degraded"}:
             post_run_turns = (
@@ -140,7 +148,18 @@ def _backfill_legacy_planning_conversations() -> None:
                 )
                 create_conversation(post_run_turns, status="active", closed_at=None)
             else:
-                create_conversation(turns, status="closed", closed_at=run_ended_at)
+                # A succeeded/degraded run should always carry an ended_at; a NULL
+                # value here is a data-integrity smell the migration must still
+                # close honestly rather than reproduce (truth table: `closed`
+                # always has a `closed_at`). Fall back to the run's own
+                # started_at — a real, non-fabricated timestamp — and to
+                # migration time only if that too is somehow absent.
+                closed_at = (
+                    run_ended_at
+                    if run_ended_at is not None
+                    else (run_started_at if run_started_at is not None else migration_at)
+                )
+                create_conversation(turns, status="closed", closed_at=closed_at)
             continue
 
         if run_status in {"failed", "aborted", "interrupted"}:

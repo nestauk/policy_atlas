@@ -90,7 +90,11 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
   };
 
   const openLatestOrNew = async () => {
-    const rows = chats.data?.data ?? [];
+    // The launcher's create-vs-open decision needs the chats list resolved
+    // first — firing before then reads "no chats" off `undefined` data and
+    // POSTs a spurious blank chat on a fast first click.
+    if (!chats.isSuccess) return;
+    const rows = chats.data.data;
     if (rows.length > 0) return openChat(rows[0].id);
     openChat((await create(null)).id);
   };
@@ -108,8 +112,9 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
         type="button"
         aria-label="Open chat"
         title="Chat"
+        disabled={!chats.isSuccess}
         onClick={() => void openLatestOrNew()}
-        className="fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
+        className="fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-50"
       >
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
           <path d="M3 4.5h14v9H8l-3.5 3v-3H3v-9Z" />

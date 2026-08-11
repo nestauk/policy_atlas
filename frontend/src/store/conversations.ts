@@ -167,11 +167,16 @@ export type ChatStreamEvent =
   | { type: "failed"; error: { code: string; message: string }; turn_id: string }
   | { type: "cancelled"; turn: ChatTurn };
 
-/** A malformed or otherwise invalid NDJSON chat-stream event. */
+/** A malformed or otherwise invalid NDJSON chat-stream event, or a non-2xx
+ *  response to the turn-creating POST before the stream ever opened. */
 export class ChatStreamProtocolError extends Error {
-  constructor(message: string) {
+  /** The server's `error.code`, when the failure carried an envelope. */
+  code?: string;
+
+  constructor(message: string, code?: string) {
     super(message);
     this.name = "ChatStreamProtocolError";
+    this.code = code;
   }
 }
 
@@ -382,7 +387,8 @@ export function useChatConversation(conversationId: string) {
         let response = await postStream();
         if (response.status === 401) response = await postStream(true);
         if (!response.ok) {
-          throw new ChatStreamProtocolError(`The chat request failed (${response.status}).`);
+          const failure = await chatTurnFailureEnvelope(response);
+          throw new ChatStreamProtocolError(failure.message, failure.code);
         }
         if (response.body === null) throw new ChatStreamInterruptedError("The chat stream had no body.");
         await consumeChatStream(response.body, (event) => {
@@ -426,7 +432,7 @@ export function useChatConversation(conversationId: string) {
       } catch (error) {
         if (!terminalSeen && isCurrent() && !controller.signal.aborted) {
           if (error instanceof ChatStreamProtocolError) {
-            dispatch({ type: "failed", clientTurnId, errorMessage: error.message });
+            dispatch({ type: "failed", clientTurnId, errorMessage: error.message, errorCode: error.code });
           } else {
             dispatch({
               type: "interrupted",
@@ -569,6 +575,33 @@ function isFailedEventError(value: unknown): value is { code: string; message: s
   return value !== null && typeof value === "object" && !Array.isArray(value)
     && typeof (value as Record<string, unknown>).code === "string"
     && typeof (value as Record<string, unknown>).message === "string";
+}
+
+/**
+ * Read the turn-creating POST's error envelope so a pre-header failure (a
+ * fenced turn, a capacity conflict) reaches the user with the server's own
+ * code and message instead of a bare status number.
+ *
+ * Args:
+ *   response: The non-ok response to the chat-turn POST.
+ *
+ * Returns:
+ *   The envelope's `code`/`message`, or a status-text fallback when the body
+ *   isn't the `{error:{code,message}}` shape (or isn't JSON at all).
+ */
+async function chatTurnFailureEnvelope(response: Response): Promise<{ code?: string; message: string }> {
+  try {
+    const body: unknown = await response.json();
+    const message = (body as { error?: { message?: unknown } } | null)?.error?.message;
+    if (typeof message === "string" && message) {
+      const code = (body as { error?: { code?: unknown } }).error?.code;
+      return { code: typeof code === "string" ? code : undefined, message };
+    }
+  } catch {
+    // Not a JSON body — fall through to the status-text fallback below.
+  }
+  const status = `${response.status}${response.statusText ? ` ${response.statusText}` : ""}`;
+  return { message: `The chat request failed (${status}).` };
 }
 
 function isTerminal(event: ChatStreamEvent): boolean {

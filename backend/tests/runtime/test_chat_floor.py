@@ -129,6 +129,72 @@ def test_floor_derives_claims_for_uncovered_citations() -> None:
     assert floored.prose[start:end] == derived["text"]
 
 
+def test_floor_derives_a_claim_only_for_the_uncovered_occurrence() -> None:
+    """Two markers of one citation: a span-bearing claim covers only its own sentence."""
+    floored = apply_citation_floor(
+        _answer(
+            "Claim A stands [1]. Claim B stands [1].",
+            ["chunk-a"],
+            [ChatClaimWire(text="Claim B stands", citation_indexes=[1])],
+        ),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert len(floored.citations) == 1
+    assert len(floored.claims) == 2
+    original, derived = floored.claims
+    assert original["text"] == "Claim B stands"
+    assert "derived" not in original
+    assert derived["derived"] is True
+    assert derived["citation_ns"] == [1]
+    assert derived["text"] == "Claim A stands [1]."
+    start, end = derived["span"]
+    assert floored.prose[start:end] == derived["text"]
+
+
+def test_floor_skips_derivation_when_every_occurrence_is_span_covered() -> None:
+    """Two markers of one citation, each covered by its own span-bearing claim."""
+    floored = apply_citation_floor(
+        _answer(
+            "Claim A stands [1]. Claim B stands [1].",
+            ["chunk-a"],
+            [
+                ChatClaimWire(text="Claim A stands", citation_indexes=[1]),
+                ChatClaimWire(text="Claim B stands", citation_indexes=[1]),
+            ],
+        ),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert len(floored.claims) == 2
+    assert all("derived" not in claim for claim in floored.claims)
+
+
+def test_floor_span_less_claim_covers_only_the_first_occurrence() -> None:
+    """A claim with no verbatim-matching span covers only the first occurrence."""
+    floored = apply_citation_floor(
+        _answer(
+            "Claim A stands [1]. Claim B stands [1].",
+            ["chunk-a"],
+            [ChatClaimWire(text="Summary text not verbatim in the prose", citation_indexes=[1])],
+        ),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert len(floored.claims) == 2
+    original, derived = floored.claims
+    assert original["span"] is None
+    assert derived["derived"] is True
+    assert derived["citation_ns"] == [1]
+    assert derived["text"] == "Claim B stands [1]."
+
+
 def test_floor_scrubs_stray_artifact_tokens() -> None:
     """Lone angle-bracket provider tokens never survive into the persisted prose."""
     floored = apply_citation_floor(
