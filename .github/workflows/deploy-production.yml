@@ -1,0 +1,79 @@
+name: deploy production
+run-name: Deploy release ${{ github.event.release.tag_name }} to production
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  validate:
+    name: validate production release
+    # release.published includes prereleases; only stable Releases reach production.
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out released commit and history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a release from dev history
+        shell: bash
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/dev; then
+            echo "Refusing production deployment: release commit is not in dev history." >&2
+            exit 1
+          fi
+      - name: Validate production CDK configuration
+        run: make deploy-check DEPLOY_ENV=production
+
+  deploy:
+    name: deploy release to production
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: production
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: policy-atlas-deploy-production
+      cancel-in-progress: false
+    env:
+      CDK_DEFAULT_ACCOUNT: ${{ secrets.AWS_ACCOUNT_ID }}
+    steps:
+      - name: Check out released commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Set up Python tooling
+        uses: astral-sh/setup-uv@0c5e2b8115b80b4c7c5ddf6ffdd634974642d182 # v5.4.1
+      - name: Set up pnpm
+        uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
+        with:
+          package_json_file: frontend/package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - name: Assume the production deployment role
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: eu-west-2
+          allowed-account-ids: ${{ secrets.AWS_ACCOUNT_ID }}
+          mask-aws-account-id: true
+          role-session-name: policy-atlas-production-${{ github.run_id }}
+          role-duration-seconds: 7200
+          unset-current-credentials: true
+      - name: Deploy production
+        run: make deploy-update DEPLOY_ENV=production

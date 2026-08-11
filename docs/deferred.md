@@ -1757,12 +1757,14 @@ first-class vocabulary. What follows is what it deliberately left out.
 
 ## Infra deployment (task 026 seams)
 
-- **No deploy lock** (026 review, Codex adversarial, 2026-07-28) — `scripts/deploy.sh`
-  assumes one operator: two concurrent runs can interleave stop→migrate→scale (parallel
-  Alembic runs, one deploy booting the API mid-migration of the other). Acceptable while
-  deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
-  lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
-  seam when a second operator or CI-driven deploys appear.
+- **No cross-system deploy lock** (026 review, Codex adversarial, 2026-07-28;
+  narrowed by 030, 2026-08-11) — GitHub Actions now serializes each Environment and
+  never cancels an active stop→migrate→scale→publish run. That discharges overlap
+  between ordinary Action runs, but a local recovery/bootstrap can still interleave
+  with Actions (parallel Alembic runs, one deploy booting the API mid-migration of the
+  other). The runbook requires human coordination. A real S3 conditional-put or
+  DynamoDB lease, plus an Alembic advisory lock, remains the seam if unattended local
+  operations or a second deployment system appears.
 
 ## Frontend uplift (task 027 seams)
 

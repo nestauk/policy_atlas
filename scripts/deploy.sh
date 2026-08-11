@@ -1,19 +1,96 @@
 #!/usr/bin/env bash
-# Deploy the staging v3 stacks and perform the imperative post-CDK steps.
+# Deploy one configured v3 environment and perform the imperative post-CDK steps.
 # This script deliberately never calls sts get-caller-identity: account IDs are
 # sensitive operational metadata and must not be printed by deploy tooling.
 
 set -euo pipefail
 
-readonly DEPLOY_REGION="eu-west-2"
 readonly CERTIFICATE_REGION="us-east-1"
-readonly ENV_NAME="staging"
+readonly ENV_NAME="${PA_DEPLOY_ENV_NAME:-staging}"
 readonly ECS_SERVICE_NAME="policy-atlas-v3-api-service"
 readonly SERVICE_STOP_TIMEOUT_SECONDS=600
 readonly SERVICE_STOP_POLL_SECONDS=5
 
-readonly APP_SECRET_NAME="policy_atlas_v3/app"
-readonly API_BASE_URL="https://api.v3.policyatlas.uk"
+readonly REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Deployment configuration stays in the committed CDK config files. Resolve the
+# small subset needed by this imperative wrapper once, and fail before any AWS call
+# when an environment is missing or internally inconsistent.
+deploy_config="$(python3 - "$REPO_ROOT/infra" "$ENV_NAME" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+config_dir = Path(sys.argv[1])
+env_name = sys.argv[2]
+if re.fullmatch(r"[a-z][a-z0-9-]*", env_name) is None:
+    raise SystemExit(
+        "FAIL: PA_DEPLOY_ENV_NAME must start with a lowercase letter and contain "
+        "only lowercase letters, digits, and hyphens"
+    )
+
+
+def environment_config(filename: str) -> dict:
+    with (config_dir / filename).open(encoding="utf-8") as config_file:
+        environments = json.load(config_file)
+    config = environments.get(env_name)
+    if not isinstance(config, dict):
+        raise SystemExit(
+            f"FAIL: deployment environment {env_name!r} is missing from "
+            f"infra/{filename}"
+        )
+    return config
+
+
+network = environment_config("network_config.json")
+database = environment_config("db_config.json")
+application = environment_config("pa_config.json")
+
+regions = {
+    network.get("aws_region"),
+    database.get("aws_region"),
+    application.get("aws_region"),
+}
+if None in regions or len(regions) != 1:
+    raise SystemExit(
+        f"FAIL: {env_name!r} must use one explicit aws_region across all CDK configs"
+    )
+
+app = application.get("policy_atlas_config", {})
+backend = app.get("backend", {})
+public_domain = network.get("public_domain_name")
+if not public_domain or app.get("domain_name") != public_domain:
+    raise SystemExit(
+        f"FAIL: {env_name!r} must use the same non-empty domain in network_config.json "
+        "and pa_config.json"
+    )
+
+required = {
+    "backend_subdomain": app.get("backend_subdomain"),
+    "cognito_domain_prefix": app.get("cognito_domain_prefix"),
+    "backend.secret_name": backend.get("secret_name"),
+}
+missing = [name for name, value in required.items() if not isinstance(value, str) or not value]
+if missing:
+    raise SystemExit(
+        f"FAIL: {env_name!r} deployment config is missing: {', '.join(missing)}"
+    )
+
+values = [
+    regions.pop(),
+    public_domain,
+    required["backend_subdomain"],
+    required["backend.secret_name"],
+]
+if any("\t" in value or "\n" in value for value in values):
+    raise SystemExit("FAIL: deployment config values may not contain tabs or newlines")
+print("\t".join(values))
+PY
+)"
+IFS=$'\t' read -r DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME <<< "$deploy_config"
+readonly DEPLOY_REGION PUBLIC_DOMAIN BACKEND_SUBDOMAIN APP_SECRET_NAME
+readonly API_BASE_URL="https://${BACKEND_SUBDOMAIN}.${PUBLIC_DOMAIN}"
 
 readonly SSM_CLUSTER_ARN="/policy_atlas_v3/deploy/cluster_arn"
 readonly SSM_PRIVATE_SUBNET_IDS="/policy_atlas_v3/deploy/private_subnet_ids"
@@ -26,10 +103,8 @@ readonly SSM_USER_POOL_ID="/policy_atlas_v3/auth/user_pool_id"
 readonly SSM_OIDC_ISSUER="/policy_atlas_v3/auth/issuer"
 readonly SSM_OIDC_CLIENT_ID="/policy_atlas_v3/auth/client_id"
 
-readonly REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-
 usage() {
-    echo "Usage: $0 {bootstrap|update}" >&2
+    echo "Usage: $0 {bootstrap|update|check}" >&2
 }
 
 fail() {
@@ -70,7 +145,7 @@ require_value() {
 
 check_amazon_nameservers() {
     local nameservers
-    nameservers="$(dig NS v3.policyatlas.uk +short)"
+    nameservers="$(dig NS "$PUBLIC_DOMAIN" +short)"
     [[ -n "$nameservers" ]] && \
         printf '%s\n' "$nameservers" | grep -Eqi '\.awsdns-[0-9]+\.(com|net|org|co\.uk)\.?$'
 }
@@ -128,7 +203,7 @@ check_cognito_user_exists() {
 
 bootstrap_preconditions() {
     echo "Preconditions gate A"
-    gate_check "v3.policyatlas.uk delegates to Amazon Route 53 nameservers" check_amazon_nameservers
+    gate_check "${PUBLIC_DOMAIN} delegates to Amazon Route 53 nameservers" check_amazon_nameservers
     gate_check "CDKToolkit exists in ${DEPLOY_REGION}" check_cdk_bootstrap "$DEPLOY_REGION"
     gate_check "CDKToolkit exists in ${CERTIFICATE_REGION}" check_cdk_bootstrap "$CERTIFICATE_REGION"
     gate_check "app secret exists and has every required key" check_app_secret
@@ -373,7 +448,7 @@ if (( $# != 1 )); then
 fi
 
 case "$1" in
-    bootstrap|update)
+    bootstrap|update|check)
         mode="$1"
         ;;
     *)
@@ -381,6 +456,11 @@ case "$1" in
         exit 2
         ;;
 esac
+
+if [[ "$mode" == "check" ]]; then
+    echo "PASS: deployment configuration '${ENV_NAME}' is complete and internally consistent"
+    exit 0
+fi
 
 if [[ -n "${AWS_REGION:-}" && "$AWS_REGION" != "$DEPLOY_REGION" ]]; then
     fail "AWS_REGION must be ${DEPLOY_REGION}"

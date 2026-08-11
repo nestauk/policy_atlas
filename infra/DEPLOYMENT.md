@@ -1,7 +1,9 @@
 # Policy Atlas v3 — deployment
 
-Operator runbook for `infra/`. Deploys are operator-run (`cdk deploy`, no CI/CD
-pipeline in this slice) via `scripts/deploy.sh`.
+Operator runbook for `infra/`. `scripts/deploy.sh` remains the authoritative
+deployment sequence. GitHub Actions invokes it for steady-state staging and
+production deploys; operators retain the Makefile entry points for first deploys
+and recovery.
 
 ## 1. Overview
 
@@ -30,16 +32,109 @@ context. No IP allowlists or similar operationally sensitive values are committe
 anywhere.
 
 > `scripts/deploy.sh` is the authoritative sequence — on any discrepancy between
-> this file and the script, the script wins. Modes: `bootstrap` (first deploy,
-> gates A/B) and `update` (steady state).
+> this file and the script, the script wins. Modes: `check` (read-only committed
+> config preflight), `bootstrap` (first deploy, gates A/B), and `update` (steady
+> state). Use the Makefile entry points rather than invoking it directly.
 >
-> **One operator at a time.** There is no deploy lock: two concurrent
-> `deploy.sh` runs can interleave migrations and scale-ups. Coordinate
-> human-to-human (deferred seam — see `docs/deferred.md`).
+> **One deploy at a time per environment.** GitHub Actions serializes each
+> environment and never cancels an active deploy. There is no cross-system lock:
+> a local `deploy.sh` can still interleave with Actions, so coordinate local
+> recovery/bootstrap work human-to-human (deferred seam — see `docs/deferred.md`).
+
+### GitHub Actions, Environments, and AWS OIDC
+
+Two workflows automate only steady-state updates:
+
+| Workflow | Trigger | Ref deployed | GitHub Environment |
+| --- | --- | --- | --- |
+| `deploy-staging.yml` | engineer runs `workflow_dispatch` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
+| `deploy-production.yml` | stable GitHub Release is published | immutable Release SHA, accepted only when it is in `dev` history | `production` |
+
+`release.published` includes prereleases; the workflow explicitly skips them. A
+failed configuration/ref validation job never reaches the protected Environment
+and never requests an OIDC token. Deploy jobs have only `contents: read` and
+`id-token: write`. Concurrency queues a later deployment and deliberately does not
+cancel the active stop→migrate→scale→publish sequence.
+
+Create protected GitHub Environments named exactly `staging` and `production`.
+Each needs these Environment **secrets** (not repository variables or committed
+values):
+
+- `AWS_ROLE_ARN` — ARN of that environment's OIDC deployment role.
+- `AWS_ACCOUNT_ID` — expected account; passed to CDK and used by the credential
+  action's confused-deputy check. Account IDs are masked in logs.
+
+Set each IAM role's maximum session duration to at least two hours. Workflows ask
+for a two-hour credential and cap the job at 90 minutes, so a role left at AWS's
+one-hour default fails during credential setup instead of expiring partway through
+an outage-sensitive deploy.
+
+Restrict `staging` deployment branches to `dev`. Restrict `production` deployment
+tags to the repository's release-tag pattern (for example `v*`) and require a
+reviewer for production. These restrictions are security controls, not just UI:
+an environment-based GitHub OIDC token has a subject naming the Environment rather
+than its branch/tag. The workflow performs a second ref check in code.
+
+Create GitHub's OIDC provider in each AWS account with URL
+`https://token.actions.githubusercontent.com` and audience `sts.amazonaws.com`.
+Use one role per account/environment. Its trust policy must bind both audience and
+the exact Environment subject (replace placeholders; do not commit the result):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:nestauk/policy_atlas:environment:<staging-or-production>"
+      }
+    }
+  }]
+}
+```
+
+The example shows this existing repository's default subject shape. If the GitHub
+organisation opts into immutable organisation/repository IDs or a custom OIDC
+subject template, inspect the issued claims and bind the role to that exact subject
+instead. Do not replace the exact match with a repository-wide wildcard.
+
+The role needs the permissions already required by this runbook: use the CDK
+bootstrap deploy/file/image roles; read the named deploy SSM parameters and app
+secret metadata; run/inspect the migration task; update/inspect the ECS service;
+sync the two deployment buckets; create/wait for the CloudFront invalidation; and
+the tightly conditioned `iam:PassRole` grant below. Scope these permissions to the
+environment's account and v3 resources. Do not add static AWS access-key secrets.
+
+**Account isolation:** current v3 stack names, physical resource names, and
+`/policy_atlas_v3/*` SSM namespace are fixed. Staging and production therefore
+must target separate AWS accounts. Supporting both in one account requires a
+separate namespacing design, not a workflow-variable change.
+
+**Production is intentionally fail-closed today.** Add reviewed `production`
+entries to `network_config.json`, `db_config.json`, and `pa_config.json` before
+enabling releases. The values include its domain, globally unique Cognito domain
+prefix, app-secret name, region, and capacity. Until then:
+
+```bash
+make deploy-check DEPLOY_ENV=production
+```
+
+fails before GitHub requests production approval or AWS credentials. Never point
+the production workflow at the `staging` config as a workaround.
 
 ## 2. First-deploy preconditions (gate A)
 
 Before the first `cdk deploy` of any kind, all of the following must hold.
+
+The first deployment is intentionally not release-triggered: satisfy this section
+and run `make deploy-bootstrap DEPLOY_ENV=<environment>` from an attended operator
+session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` runs.
 
 1. **NS delegation live.**
 
@@ -182,6 +277,12 @@ restore service manually with
 `aws ecs update-service --cluster policy-atlas-v3-cluster --service policy-atlas-v3-api-service --desired-count 1`
 (only if the migration step had already passed).
 
+For normal operator recovery use
+`make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
+the same interface. A GitHub rerun uses the same event SHA. For production code
+rollback, publish a new reviewed Release pointing at the chosen prior commit; do
+not move or republish an existing Release tag.
+
 **One-time pending step — encrypting the Aurora cluster (026 review hardening).**
 The committed template sets `StorageEncrypted` (+ deletion protection, 7-day
 backups), but the *live* cluster predates it and encryption cannot be enabled in
@@ -320,6 +421,11 @@ like any other static asset. Binaries never enter the repo or the CDK asset tree
 in committable form — CI's font-guard stays green.
 
 ## 8. Rollback
+
+- **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
+  stop new deploys, then revert the workflow change. This does not repair an
+  already interrupted stop→migrate→scale sequence; use the recovery procedure in
+  § 4 against the exact deployed SHA.
 
 - **Repo:** single squash-revert removes `infra/` plus the two named backend
   touches (auth congruence edit, pool sizing) — both regression-tested by the

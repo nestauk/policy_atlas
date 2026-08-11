@@ -10,9 +10,18 @@ class CognitoAuth(Construct):
     Args:
         scope: Construct scope in which to define the authentication resources.
         construct_id: Construct identifier.
+        domain_name: Public SPA domain used for callback and logout URLs.
+        domain_prefix: Globally unique Cognito hosted-UI domain prefix.
     """
 
-    def __init__(self, scope: Construct, construct_id: str) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        domain_name: str,
+        domain_prefix: str,
+    ) -> None:
         super().__init__(scope, construct_id)
 
         self.user_pool = cognito.UserPool(
@@ -48,12 +57,12 @@ class CognitoAuth(Construct):
                     cognito.OAuthScope.PROFILE,
                 ],
                 callback_urls=[
-                    "https://v3.policyatlas.uk",
-                    "https://v3.policyatlas.uk/",
+                    f"https://{domain_name}",
+                    f"https://{domain_name}/",
                 ],
                 logout_urls=[
-                    "https://v3.policyatlas.uk",
-                    "https://v3.policyatlas.uk/",
+                    f"https://{domain_name}",
+                    f"https://{domain_name}/",
                 ],
             ),
         )
@@ -63,7 +72,7 @@ class CognitoAuth(Construct):
             "HostedUiDomain",
             user_pool=self.user_pool,
             cognito_domain=cognito.CognitoDomainOptions(
-                domain_prefix="policy-atlas-v3",
+                domain_prefix=domain_prefix,
             ),
         )
 
