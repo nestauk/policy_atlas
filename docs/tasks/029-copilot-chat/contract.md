@@ -207,6 +207,20 @@
 > zero-state label cut (supersedes the rev 2.6 wording for that chip's
 > zero-state).
 
+> **rev 3.5 (2026-08-11, owner at the step-9 live test — presentation folds):**
+> chat citation presentation made congruous with the artefact reader (strand 6):
+> citation click opens the reader's "Where this comes from" Sheet (citing
+> claim text · verdict chip + judge-rationale tooltip · highlighted
+> quote-in-passage) replacing the inline popover; inline `[n]` markers take
+> the reader's marker styling + verdict hover tooltip (cancelled turns stay
+> inert); the References footer is a collapsed-by-default "References (N)"
+> disclosure; the chunk-context read no longer retries its designed
+> honest-absence 404 (immediate stored-quote fallback + one honest
+> not-found line). Presentation-layer only — same endpoints, same security
+> posture. Owner items NOT folded (separate decisions): enrichment recheck
+> affordance (public-interface gate — pending owner call) · regenerate a
+> completed answer (stays the named regenerate/branching deferral).
+>
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.

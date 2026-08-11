@@ -390,9 +390,13 @@ test.describe("mock evidence-base journey", () => {
     ).toBeVisible({ timeout: 10_000 });
     await expect(chat.getByRole("button", { name: "[1]" }).first()).toBeVisible();
 
-    // The reference is honestly "unchecked" until the async grounding judge
-    // lands, then upgrades to its tier verdict on the enrichment poll's
-    // second read (mock: the second GET turns response).
+    // The References disclosure starts collapsed (029 Fix D) — expand it to
+    // reach the verdict chip. The reference is honestly "unchecked" until
+    // the async grounding judge lands, then upgrades to its tier verdict on
+    // the enrichment poll's second read (mock: the second GET turns
+    // response); the disclosure stays open across that re-render since it's
+    // native, uncontrolled `<details>` state.
+    await chat.getByText("References (1)").click();
     await expect(chat.getByText("Unchecked · awaiting evidence check")).toBeVisible();
     await expect(chat.getByText("Tier 2 · grounded")).toBeVisible({ timeout: 12_000 });
 

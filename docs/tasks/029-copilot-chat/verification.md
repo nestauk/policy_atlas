@@ -558,6 +558,36 @@ to prove the side-by-side shape (URL stays on `/evidence-base?chat=`,
 panel + artefact visible together) — frontend 212 tests, build, Playwright
 7/7, full `make verify` green.
 
+## Owner step-9 live test → rev 3.5 presentation folds (2026-08-11, post-review)
+
+The owner's live test on the review-fixed branch surfaced one bug and three
+presentation calls, folded as contract rev 3.5 (frontend-only; PR updated):
+
+1. **404 retry storm on citation context** (bug): the chunk-context query
+   retried its DESIGNED honest-absence 404 (non-verbatim model quote) three
+   times, pinning the popover at "Loading context…" ≈7 s. Fixed: `retry:
+   false` + immediate stored-quote fallback + the honest line "Exact passage
+   not found in the source — showing the cited quote." (test asserts exactly
+   one request).
+2. **Citation click opens the artefact reader's Sheet** ("Where this comes
+   from": citing claim text from `claims[]` · verdict chip + judge-rationale
+   tooltip · highlighted quote-in-passage), replacing the inline sticky
+   popover; components imported from the reader, not duplicated.
+3. **Inline marker congruence**: reader's `citation-marker` styling + verdict
+   hover tooltip (TIER vocabulary + rationale; unchecked/warning wording kept;
+   cancelled turns inert).
+4. **References collapsed by default** ("References (N)", native details/
+   summary; e2e updated to expand before asserting — verified the disclosure
+   survives the enrichment re-render in a real browser).
+
+Evidence: frontend 232 tests, typecheck/lint/build clean, Playwright 7/7
+(mock). Backend untouched (git status: three frontend files). Owner items
+explicitly NOT folded: enrichment recheck (gated, owner call pending) ·
+regenerate-completed (named deferral). The judge-grain question was answered
+with the roll-up clarification: judged per claim; References shows worst
+verdict per cited chunk; per-claim grain surfaces at the markers (now
+visibly, via the hover).
+
 ## ⚠️ Gate-integrity incident + correction (2026-08-11)
 
 **Two real test failures were hidden by the build conversation's own gate
