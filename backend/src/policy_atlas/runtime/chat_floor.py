@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -21,6 +22,31 @@ def _scrub_artifact_tokens(prose: str) -> str:
     cleaned = _ARTIFACT_TOKEN_RE.sub("", prose)
     cleaned = re.sub(r"\s*<[a-z_]+>\s*$", "", cleaned)
     return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+def _strip_trailing_structured_blob(prose: str) -> str:
+    """Drop a trailing citations/claims JSON dump from the answer prose.
+
+    The schema-free prose stream can leak the structured payload as text
+    (observed live, 2026-08-11). Only a TERMINAL JSON object that parses and
+    carries the structured-answer keys is stripped — never JSON the answer
+    legitimately quotes mid-prose.
+    """
+    brace = prose.rfind("\n{")
+    starts_with_brace = prose.startswith("{")
+    candidate_start = brace + 1 if brace >= 0 else (0 if starts_with_brace else -1)
+    if candidate_start < 0:
+        return prose
+    candidate = prose[candidate_start:].strip()
+    if not candidate.endswith("}"):
+        return prose
+    try:
+        decoded = json.loads(candidate)
+    except ValueError:
+        return prose
+    if isinstance(decoded, dict) and ("citations" in decoded or "claims" in decoded):
+        return prose[:candidate_start].rstrip()
+    return prose
 
 
 def _sentence_around(prose: str, position: int) -> tuple[int, int]:
@@ -56,7 +82,8 @@ def derive_claims_for_uncovered_citations(
         # Sentence start: the last terminator BEFORE the sentence the marker
         # closes — skip a terminator immediately adjacent to the marker
         # ("…data.[1]"), which belongs to the marker's own sentence.
-        lookback = prose[: position - 1 if position > 0 and prose[position - 1] in ".!?" else position]
+        adjacent_stop = position > 0 and prose[position - 1] in ".!?"
+        lookback = prose[: position - 1 if adjacent_stop else position]
         start = 0
         for match in _SENTENCE_END_RE.finditer(lookback):
             start = match.end()
@@ -192,7 +219,9 @@ def apply_citation_floor(
         compacted = compacted_numbers.get(raw_index)
         return f"[{compacted}]" if compacted is not None else ""
 
-    prose = _scrub_artifact_tokens(_MARKER_RE.sub(compact_marker, marker_checked_prose))
+    prose = _scrub_artifact_tokens(
+        _strip_trailing_structured_blob(_MARKER_RE.sub(compact_marker, marker_checked_prose))
+    )
     citations = [
         {
             "n": compacted_numbers[raw_index],

@@ -121,10 +121,25 @@ class OpenAIChatBackend(ChatBackend):
         on_delta: Callable[[str], None] | None,
     ) -> UsageResult[ChatTurn]:
         completions: Any = self._client.chat.completions
+        # The prose stream is schema-free, and the system prompt describes the
+        # structured answer shape — without this steering the model appends
+        # the citations/claims JSON as text (owner live check, 2026-08-11).
+        prose_messages = [
+            *messages,
+            {
+                "role": "user",
+                "content": (
+                    "Write the answer now as plain prose paragraphs with inline "
+                    "[n] markers only. Do NOT write JSON, braces, or the "
+                    "citations/claims structure here — that is collected in a "
+                    "separate step after your prose."
+                ),
+            },
+        ]
         stream = completions.create(
             model=CHAT_MODEL,
             reasoning_effort="none",
-            messages=messages,
+            messages=prose_messages,
             stream=True,
             max_completion_tokens=max_output_tokens,
         )

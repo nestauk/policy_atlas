@@ -181,7 +181,7 @@ export function highlightParts(text: string, quote: string): HighlightParts {
   };
 }
 
-function HighlightedContext({ text, quote }: { text: string; quote: string }) {
+export function HighlightedContext({ text, quote }: { text: string; quote: string }) {
   const parts = highlightParts(text, quote);
   if (parts.kind === "degrade") {
     return (
@@ -704,7 +704,7 @@ export function AnnotatedProse({
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function SourceDossier({
+export function SourceDossier({
   projectId,
   sourceRef,
   onClose,

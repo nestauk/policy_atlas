@@ -144,3 +144,39 @@ def test_floor_scrubs_stray_artifact_tokens() -> None:
     )
     assert "<lemma>" not in floored.prose
     assert floored.prose == "The evidence supports this [1]."
+
+
+def test_floor_strips_trailing_structured_json_blob() -> None:
+    """A leaked terminal citations/claims JSON dump never reaches the display prose."""
+    blob = (
+        '{"citations":[{"id":"chunk-a","quote":"q"}],'
+        '"claims":[{"text":"x","citations":["chunk-a"]}]}'
+    )
+    floored = apply_citation_floor(
+        _answer(
+            f"The evidence supports this [1].\n\n{blob}",
+            ["chunk-a"],
+            [ChatClaimWire(text="The evidence supports this", citation_indexes=[1])],
+        ),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert floored.prose == "The evidence supports this [1]."
+    assert len(floored.citations) == 1
+
+
+def test_floor_keeps_json_quoted_mid_prose() -> None:
+    """JSON the answer legitimately quotes mid-prose is content, not a leak."""
+    prose = 'The API returns {"status": "ok"} on success [1]. That is the contract.'
+    floored = apply_citation_floor(
+        _answer(
+            prose, ["chunk-a"], [ChatClaimWire(text="That is the contract.", citation_indexes=[1])]
+        ),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert '{"status": "ok"}' in floored.prose

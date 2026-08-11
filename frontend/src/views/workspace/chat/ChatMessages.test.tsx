@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { TooltipProvider } from "../../../ui/radix/Tooltip";
 
 import type { ChatTurn, OptimisticChatTurn } from "../../../store";
 import { ChatMessages } from "./ChatMessages";
@@ -16,7 +17,7 @@ function optimisticTurn(overrides: Partial<OptimisticChatTurn> = {}): Optimistic
 describe("ChatMessages", () => {
   it("renders citation markers, references, verdicts, warnings and handoff", async () => {
     const openPlanning = vi.fn();
-    render(<ChatMessages projectId="p1" rows={[turn({ warning_not_evidence_checked: true, handoff: "evidence_not_held" }), turn({ id: "t2", client_turn_id: "ct2", status: "cancelled", stopped_before_evidence_check: true, answer: "Partial" })]} onOpenPlanning={openPlanning} />);
+    render(<TooltipProvider><ChatMessages projectId="p1" rows={[turn({ warning_not_evidence_checked: true, handoff: "evidence_not_held" }), turn({ id: "t2", client_turn_id: "ct2", status: "cancelled", stopped_before_evidence_check: true, answer: "Partial" })]} onOpenPlanning={openPlanning} /></TooltipProvider>);
     expect(screen.getAllByRole("button", { name: "[1]" })).not.toHaveLength(0);
     expect(screen.getAllByText("Tier 2 · grounded").length).toBeGreaterThan(0);
     expect(screen.getByText("Not evidence-checked")).toBeInTheDocument();
@@ -26,13 +27,13 @@ describe("ChatMessages", () => {
   });
 
   it("shows an unresolved citation as unchecked and a failed one as flagged", () => {
-    render(<ChatMessages projectId="p1" rows={[turn({ id: "t3", client_turn_id: "ct3", answer: "Costs fell [1] and uptake held [2]", citations: [{ id: "chunk-1", quote: "Costs fell" }, { id: "chunk-2", quote: "Uptake held", grounding_tier: "unsupported_mis_cited" }] })]} onOpenPlanning={vi.fn()} />);
+    render(<TooltipProvider><ChatMessages projectId="p1" rows={[turn({ id: "t3", client_turn_id: "ct3", answer: "Costs fell [1] and uptake held [2]", citations: [{ id: "chunk-1", quote: "Costs fell" }, { id: "chunk-2", quote: "Uptake held", grounding_tier: "unsupported_mis_cited" }] })]} onOpenPlanning={vi.fn()} /></TooltipProvider>);
     expect(screen.getByText("Unchecked · awaiting evidence check")).toBeInTheDocument();
     expect(screen.getByText("Unsupported — flagged")).toBeInTheDocument();
   });
 
   it("renders a still-streaming optimistic turn's activity summary and partial prose", () => {
-    render(<ChatMessages projectId="p1" rows={[optimisticTurn({ activityLabels: ["Searching sources", "Reading passages"], answer: "Costs fell so " })]} onOpenPlanning={vi.fn()} />);
+    render(<TooltipProvider><ChatMessages projectId="p1" rows={[optimisticTurn({ activityLabels: ["Searching sources", "Reading passages"], answer: "Costs fell so " })]} onOpenPlanning={vi.fn()} /></TooltipProvider>);
     expect(screen.getByText("Reading passages — 2 searches")).toBeInTheDocument();
     expect(screen.getByText("Costs fell so", { exact: false })).toBeInTheDocument();
   });
