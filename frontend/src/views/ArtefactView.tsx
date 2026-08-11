@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
@@ -22,7 +22,7 @@ import {
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
-import { useConversationMutations } from "./workspace/chat/conversationState";
+import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -824,7 +824,6 @@ export function ArtefactView() {
   const artefact = useArtefact(projectId);
   const chats = useConversations(projectId, { kind: "chat", status: "active" });
   const { create } = useConversationMutations(projectId);
-  const navigate = useNavigate();
   // Cited-scoped distributions for the facts strip: study types and years
   // count what the report CITES, not the whole included corpus (owner,
   // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
@@ -849,6 +848,7 @@ export function ArtefactView() {
       return next;
     });
   };
+  const { setActiveConversation } = useActiveConversation();
   const askAboutAnalysis = async () => {
     // The open artefact is the chat's entry context (a chip and provenance
     // fact, never a scope fence); reuse a blank chat already carrying it.
@@ -857,7 +857,10 @@ export function ArtefactView() {
       (chat) => chat.title === "New chat" && chat.entry_artefact_id === artefactId,
     );
     const conversation = blank ?? await create(artefactId);
-    navigate(`/projects/${projectId}?chat=${conversation.id}`);
+    // Open the side panel HERE (rev 3.4): questions arise while reading, so
+    // the chat lands beside the artefact instead of navigating away.
+    addOpenChatTab(projectId, conversation.id);
+    setActiveConversation(conversation.id);
   };
 
   if (artefact.isPending) {

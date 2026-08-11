@@ -364,10 +364,14 @@ test.describe("mock evidence-base journey", () => {
     ).toBeVisible({ timeout: 5_000 });
 
     await page.getByRole("button", { name: "Ask about this analysis" }).click();
-    await expect(page).toHaveURL(/\/projects\/[^/?]+\?chat=/);
+    // rev 3.4: the chat opens as a side panel BESIDE the artefact — the URL
+    // stays on the evidence-base route and simply gains the chat param.
+    await expect(page).toHaveURL(/\/projects\/[^/?]+\/evidence-base\?chat=/);
+    await expect(page.getByRole("complementary", { name: "Project chat" })).toBeVisible();
+    await expect(page.locator(".artefact-page")).toBeVisible();
 
     // Entry context renders as the removable "Evidence base" chip (rev 2.6)
-    // — scoped to the chat region since the workspace nav also carries an
+    // — scoped to the chat region since the nav also carries an
     // "Evidence base" link.
     const chat = page.getByRole("region", { name: "Chat" });
     await expect(chat.getByRole("link", { name: "Evidence base" })).toBeVisible();

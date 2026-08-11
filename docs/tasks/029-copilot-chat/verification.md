@@ -310,3 +310,24 @@ slice or a 029 contract amendment, not a build-time fix.
 Prompt hashes re-pinned (chat_v1 wording additions). New floor behaviours
 carry deterministic tests (derived-claim anchoring both marker placements,
 artifact-token scrub, source-title resolution).
+
+## Contract rev 3.4 build (2026-08-11, owner-approved amendment)
+
+Chat side by side on every project view: `ChatSidePanel` mounts in AppShell
+on all project-scoped routes outside the workspace — closed, a compact
+right-edge "Chat" toggle (opens the most recent chat or creates one); open,
+a fixed-width panel beside the view hosting the chat thread + composer +
+Chats library, with new-chat and close actions. Open state is
+URL-addressable (`?chat=<cid>` on the current route — the existing
+deep-link grammar), so a chat beside the evidence base survives refresh and
+sharing. The artefact reader's "Ask about this analysis" now opens the
+panel in place (entry-context chip intact) instead of navigating to the
+workspace. Planning stays a workspace surface — the panel's hand-off
+affordance navigates there. Presentation-layer only: same chat engine,
+endpoints and security posture; no API change.
+
+Evidence: `ChatSidePanel` component tests (toggle → latest-or-new, header
+actions, blank-chat reuse), AppShell mock extended, e2e chat leg reworked
+to prove the side-by-side shape (URL stays on `/evidence-base?chat=`,
+panel + artefact visible together) — frontend 212 tests, build, Playwright
+7/7, full `make verify` green.

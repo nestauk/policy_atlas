@@ -11,6 +11,7 @@ import { StatusDot } from "../ui/brand/Card";
 import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
+import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
@@ -259,9 +260,17 @@ export function AppShell() {
                 </NavItem>
               </div>
             )}
-            <ErrorBoundary key={location.pathname}>
-              <Outlet />
-            </ErrorBoundary>
+            {/* Chat beside every project view outside the workspace (029
+                rev 3.4): the workspace already hosts the full conversation
+                rail, so the panel mounts everywhere else in the project. */}
+            <div className="flex min-w-0">
+              <div className="min-w-0 flex-1">
+                <ErrorBoundary key={location.pathname}>
+                  <Outlet />
+                </ErrorBoundary>
+              </div>
+              {base !== null && !inWorkspace && <ChatSidePanel projectId={projectId ?? ""} />}
+            </div>
           </div>
         </TitleMarkerProvider>
       </TooltipProvider>

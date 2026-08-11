@@ -188,6 +188,25 @@
 > details recorded as build-time inputs; declines recorded with reasons (thread-type
 > special-casing, quick-reply chips, hard delete, start-run-from-chat).
 >
+> **rev 3.4 (2026-08-11, owner at the build live check — approved amendment):
+> chat is available side by side on every project view, not just the
+> workspace.** The owner's live pass: questions arise while reading the
+> Evidence base / Findings / Sources / Landscape / Decision-log views, so the
+> chat surface must open beside them. Strand 6 gains: a **chat side panel**
+> mounted on all project-scoped routes outside the workspace — opened by a
+> "Chat" affordance and by the artefact reader's "Ask about this analysis"
+> (which now opens the panel in place rather than navigating to the
+> workspace); the panel is URL-addressable (open iff `?chat=<cid>` on the
+> route — the existing deep-link grammar, refresh-safe); it hosts the chat
+> thread + composer + Chats library; planning stays a workspace surface (the
+> panel's planning affordance navigates there). Same read-only chat engine,
+> endpoints and security posture — a presentation-layer widening only. Also
+> folded at the same live check: per-citation source titles in references,
+> derived claim mapping + artifact-token scrub at the floor, the
+> corpus-membership prompt rule, icon affordances, and the "Whole project"
+> zero-state label cut (supersedes the rev 2.6 wording for that chip's
+> zero-state).
+
 > **Contract-stage adversarial review** (Tier 3+ standard): after owner approval,
 > read-only `codex-rescue` brief over contract + rubric; fall back down the ladder
 > on credit failure per the codex-exhaustion rule.
