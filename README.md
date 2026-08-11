@@ -72,7 +72,7 @@ production, where Cognito is the real issuer):
 cd backend
 uv run python -m policy_atlas.api.dev_issuer init --dir .dev-issuer
 uv run python -m policy_atlas.api.dev_issuer mint --dir .dev-issuer \
-  --sub dev-user --audience policy-atlas-dev   # prints a bearer token — copy it
+  --sub dev-user --client-id policy-atlas-dev  # prints a bearer token — copy it
 ```
 
 **3. Backend dev server** (from `backend/`, or `make -C backend dev` from root):

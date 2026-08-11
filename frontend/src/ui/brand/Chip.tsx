@@ -8,6 +8,8 @@ import { cn } from "./cn";
  * Tone maps to meaning, never meaning to colour alone — pair every toned
  * chip with its text label (labels-not-scores discipline).
  */
+// Pre-sweep brand sizing restored by owner ruling (2026-08-05): 11.5px is a
+// deliberate off-scale chip token — chips sit below caption text.
 const chipVariants = cva(
   "inline-flex items-center gap-1.5 border px-2.5 py-1 text-[11.5px] font-semibold",
   {

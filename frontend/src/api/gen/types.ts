@@ -224,7 +224,7 @@ export interface paths {
         };
         /**
          * Evidence
-         * @description Return a bounded page from the evidence status ladder.
+         * @description Return a bounded page from the evidence status ladder, optionally filtered.
          */
         get: operations["evidence_api_v1_projects__project_id__evidence_get"];
         put?: never;
@@ -244,7 +244,7 @@ export interface paths {
         };
         /**
          * Findings
-         * @description Return a bounded page of IOF and ICF findings.
+         * @description Return a bounded page of IOF and ICF findings, optionally filtered.
          */
         get: operations["findings_api_v1_projects__project_id__findings_get"];
         put?: never;
@@ -304,7 +304,7 @@ export interface paths {
         };
         /**
          * Landscape
-         * @description Return screened-in-only landscape distributions.
+         * @description Return screened-in-only or cited-only landscape distributions.
          */
         get: operations["landscape_api_v1_projects__project_id__landscape_get"];
         put?: never;
@@ -324,7 +324,7 @@ export interface paths {
         };
         /**
          * Get Plan
-         * @description Return the durable approved plan or the surviving local draft session.
+         * @description Return the durable approved plan or latest completed durable draft.
          */
         get: operations["get_plan_api_v1_projects__project_id__plan_get"];
         put?: never;
@@ -342,11 +342,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Planning Turns
+         * @description Return the durable planning transcript in ascending conversation order.
+         */
+        get: operations["list_planning_turns_api_v1_projects__project_id__planning_turns_get"];
         put?: never;
         /**
          * Create Planning Turn
-         * @description Advance one project's real planner conversation once per client turn id.
+         * @description Advance one project's durable planner conversation once per client turn id.
          */
         post: operations["create_planning_turn_api_v1_projects__project_id__planning_turns_post"];
         delete?: never;
@@ -391,6 +395,26 @@ export interface paths {
          * @description Return one owned project's capability run, or the opaque 404.
          */
         get: operations["get_run_api_v1_projects__project_id__runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/sources/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Source Dossier
+         * @description Return one owner-scoped source dossier or an indistinguishable 404.
+         */
+        get: operations["source_dossier_api_v1_projects__project_id__sources__source_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -467,6 +491,8 @@ export interface components {
          *         coverage_snapshot: Embedded coverage snapshot.
          *         sections: Artefact sections, in final page order.
          *         references: Numbered reference list.
+         *         summary: Artefact-level summary, if produced.
+         *         summary_status: Artefact-level summary production state.
          */
         ArtefactOut: {
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
@@ -476,8 +502,88 @@ export interface components {
             references?: components["schemas"]["ReferenceOut"][];
             /** Sections */
             sections?: components["schemas"]["SectionOut"][];
+            /** Summary */
+            summary?: string | null;
+            /** Summary Status */
+            summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
+        };
+        /**
+         * ArtefactSectionCompletedFrame
+         * @description A live-artefact section's whole prose is available.
+         */
+        ArtefactSectionCompletedFrame: {
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Prose */
+            prose: string;
+            /** Sequence */
+            sequence: number;
+            /** Title */
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_completed";
+        };
+        /**
+         * ArtefactSectionSkeleton
+         * @description One planned live-artefact section in presentation order.
+         */
+        ArtefactSectionSkeleton: {
+            /** Focus */
+            focus: string;
+            /** Index */
+            index: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ArtefactSectionStartedFrame
+         * @description A live-artefact section has started generation.
+         */
+        ArtefactSectionStartedFrame: {
+            /** Index */
+            index: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.section_started";
+        };
+        /**
+         * ArtefactSkeletonFrame
+         * @description Presentation-only outline for an artefact being synthesised.
+         */
+        ArtefactSkeletonFrame: {
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Sections */
+            sections: components["schemas"]["ArtefactSectionSkeleton"][];
+            /** Sequence */
+            sequence: number;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "artefact.skeleton";
         };
         /**
          * BlockOut
@@ -487,7 +593,8 @@ export interface components {
          *         block_id: The block's identity.
          *         prose: The block's final persisted prose.
          *         claims: Span-anchored claim annotations over `prose`.
-         *         gaps: Named coverage gaps surfaced for this block.
+         *         gaps: Deprecated legacy coverage gaps. New structured gaps are carried
+         *             by `ClaimOut.gap`; this field remains empty for new artefacts.
          */
         BlockOut: {
             /**
@@ -513,10 +620,17 @@ export interface components {
          *         requires_user_input: Whether picking this option requires an
          *             additional `params` fill-in on the response.
          *         suggested: Whether the server highlights this as the suggested pick.
+         *         why: Visible reason for a run-specific suggestion.
+         *         endorsement: Visible reason when the run endorses this canonical option.
          */
         CheckInOption: {
             /** Description */
             description: string;
+            /**
+             * Endorsement
+             * @default null
+             */
+            endorsement: string | null;
             /** Id */
             id: string;
             /** Label */
@@ -528,6 +642,11 @@ export interface components {
              * @default false
              */
             suggested: boolean;
+            /**
+             * Why
+             * @default null
+             */
+            why: string | null;
         };
         /**
          * CheckInOut
@@ -544,6 +663,7 @@ export interface components {
          *         options: Server-supplied options. The client must never invent
          *             options.
          *         triggers: Fired floor triggers, if any.
+         *         bundle: Scrubbed per-point display data, or ``None`` for legacy pauses.
          *         segment_reentry_allowed: Whether an additive segment re-entry is
          *             available at this boundary.
          *         rerun_component: Component a replacement re-run would target, or
@@ -558,6 +678,13 @@ export interface components {
              * @enum {string}
              */
             boundary: "after_component" | "before_component";
+            /**
+             * Bundle
+             * @default null
+             */
+            bundle: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Check In Id
              * Format: uuid
@@ -686,10 +813,18 @@ export interface components {
             clamped: boolean;
             /** Context */
             context: string;
+            /** Next */
+            next?: string | null;
+            /** Previous */
+            previous?: string | null;
             /** Span End */
             span_end: number;
             /** Span Start */
             span_start: number;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
         };
         /**
          * CitationOut
@@ -699,10 +834,16 @@ export interface components {
          *         citation_id: Durable citation identity — the key for the
          *             chunk-context endpoint (`GET .../citations/{citation_id}/context`).
          *         n: Reference number (matches a `ReferenceOut.n`).
-         *         source_title: Cited source's title.
+         *         source_id: The cited document's project source identity, when the
+         *             citation resolves to one (joins to the sources/dossier surface).
+         *         source_title: Cited source's title (envelope metadata).
          *         quote: The quoted span from the source.
          *         grounding_tier: Optional grounding-judge tier label.
+         *         grounding_rationale: The grounding judge's recorded reason for the
+         *             tier, when one was persisted with the verdict.
          *         appraisal_label: Optional appraisal label.
+         *         evidence_type: The cited document's classified evidence type — the
+         *             input the appraisal rubric scores from.
          */
         CitationOut: {
             /** Appraisal Label */
@@ -712,14 +853,32 @@ export interface components {
              * Format: uuid
              */
             citation_id: string;
+            /** Evidence Type */
+            evidence_type?: string | null;
+            /** Grounding Rationale */
+            grounding_rationale?: string | null;
             /** Grounding Tier */
             grounding_tier?: string | null;
             /** N */
             n: number;
             /** Quote */
             quote: string;
+            /** Source Id */
+            source_id?: string | null;
             /** Source Title */
             source_title: string;
+        };
+        /**
+         * CitedInOut
+         * @description One latest-artefact claim which cites a source.
+         */
+        CitedInOut: {
+            /** Claim */
+            claim: string;
+            /** Quote */
+            quote: string;
+            /** Section Title */
+            section_title: string;
         };
         /**
          * ClaimOut
@@ -732,6 +891,7 @@ export interface components {
          *         span: Character offsets `[start, end]` into the block's `prose`, or
          *             `None`.
          *         citations: Citations attached to this claim (citation-type only).
+         *         theme: Named themes or groups referenced by a theme claim.
          */
         ClaimOut: {
             /** Citations */
@@ -746,6 +906,7 @@ export interface components {
              * @enum {string}
              */
             claim_type: "citation" | "gap" | "reasoning" | "pattern" | "theme" | "unspanned_assertion";
+            gap?: components["schemas"]["GapOut"] | null;
             /** Span */
             span?: [
                 number,
@@ -753,6 +914,9 @@ export interface components {
             ] | null;
             /** Text */
             text: string;
+            theme?: components["schemas"]["ThemeRefOut"] | null;
+            /** Weakly Grounded */
+            weakly_grounded?: boolean | null;
         };
         /**
          * CountryGroupDraft
@@ -782,6 +946,23 @@ export interface components {
             label: string | null;
         };
         /**
+         * CoverageBackendDetailOut
+         * @description Post-run source counts for one public backend.
+         *
+         *     ``relevant`` is deliberately project-wide in C.1; per-query relevance
+         *     was not recorded and is therefore absent.
+         */
+        CoverageBackendDetailOut: {
+            /** Backend */
+            backend: string;
+            /** Queries */
+            queries?: components["schemas"]["CoverageQueryOut"][];
+            /** Relevant */
+            relevant: number;
+            /** Results */
+            results: number;
+        };
+        /**
          * CoverageOut
          * @description The `coverage` read model — the composed one-line coverage sentence.
          *
@@ -790,12 +971,26 @@ export interface components {
          *         base: Structured basis the sentence was composed from.
          */
         CoverageOut: {
+            /** Backends */
+            backends?: string[];
+            /** Backends Detail */
+            backends_detail?: components["schemas"]["CoverageBackendDetailOut"][];
             /** Base */
             base?: {
                 [key: string]: unknown;
             };
             /** Sentence */
             sentence: string;
+        };
+        /**
+         * CoverageQueryOut
+         * @description One completed query and its result count for a public backend.
+         */
+        CoverageQueryOut: {
+            /** Query */
+            query: string;
+            /** Results */
+            results: number;
         };
         /**
          * CoverageSnapshotOut
@@ -879,6 +1074,8 @@ export interface components {
             appraisal_tier?: string | null;
             /** Cited */
             cited: boolean;
+            /** Classification Reason */
+            classification_reason?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
             /**
@@ -886,6 +1083,21 @@ export interface components {
              * @enum {string}
              */
             origin: "OpenAlex" | "Overton" | "Uploaded";
+            /**
+             * Read In Full
+             * @default false
+             */
+            read_in_full: boolean;
+            /** Screen Basis */
+            screen_basis?: string | null;
+            /** Screen Confidence */
+            screen_confidence?: number | null;
+            /** Screen Reason */
+            screen_reason?: string | null;
+            /** Screen Stage */
+            screen_stage?: number | null;
+            /** Screen Status */
+            screen_status?: ("relevant" | "not_relevant" | "excluded_retracted") | null;
             /**
              * Source Id
              * Format: uuid
@@ -924,41 +1136,7 @@ export interface components {
             /** Ungrouped */
             ungrouped: number;
         };
-        /**
-         * FindingOut
-         * @description One row of the paginated findings list.
-         *
-         *     Args:
-         *         finding_id: The finding's identity.
-         *         statement: The finding's text/claim statement.
-         *         source_id: Identity of the source the finding was extracted from.
-         *         source_title: Title of that source.
-         *         profile: Extraction profile the finding came from.
-         *         relevance: Run-scoped B2' relevance mark, when the run has them.
-         */
-        FindingOut: {
-            /**
-             * Finding Id
-             * Format: uuid
-             */
-            finding_id: string;
-            /**
-             * Profile
-             * @enum {string}
-             */
-            profile: "iof" | "icf";
-            /** Relevance */
-            relevance?: ("priority" | "normal") | null;
-            /**
-             * Source Id
-             * Format: uuid
-             */
-            source_id: string;
-            /** Source Title */
-            source_title: string;
-            /** Statement */
-            statement: string;
-        };
+        FindingOut: components["schemas"]["IofFindingOut"] | components["schemas"]["IcfFindingOut"];
         /**
          * FreeTextCompileOut
          * @description The 202 body returned for a `free_text` check-in response.
@@ -1049,6 +1227,29 @@ export interface components {
             selected?: number | null;
         };
         /**
+         * GapCaveatOut
+         * @description The evidence-coverage caveat accompanying a gap claim.
+         */
+        GapCaveatOut: {
+            /** Adequacy Verdict */
+            adequacy_verdict?: string | null;
+            /** Search Space */
+            search_space?: string | null;
+            /** Verdict Origin */
+            verdict_origin?: string | null;
+        };
+        /**
+         * GapOut
+         * @description A structured gap explanation attached to one claim.
+         */
+        GapOut: {
+            caveat?: components["schemas"]["GapCaveatOut"] | null;
+            /** Grade */
+            grade?: string | null;
+            /** Inferred */
+            inferred?: boolean | null;
+        };
+        /**
          * GroupOut
          * @description One group within a grouping facet.
          *
@@ -1080,6 +1281,159 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * IcfFindingOut
+         * @description An implementation-context finding, discriminated by ``profile='icf'``.
+         */
+        IcfFindingOut: {
+            /** Claim */
+            claim: string;
+            /** Claim Basis */
+            claim_basis?: string | null;
+            /** Claim Level */
+            claim_level?: string | null;
+            /** Context Label */
+            context_label?: string | null;
+            /** Context Type */
+            context_type: string;
+            /**
+             * Finding Id
+             * Format: uuid
+             */
+            finding_id: string;
+            /** Groups */
+            groups?: {
+                [key: string]: string;
+            };
+            /** Intervention */
+            intervention: string;
+            /** Level */
+            level?: string | null;
+            /** Outcome */
+            outcome?: string | null;
+            /** Population */
+            population?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            profile: "icf";
+            /** Quote */
+            quote?: string | null;
+            /** Quote Verified */
+            quote_verified?: boolean | null;
+            /** Relevance */
+            relevance?: ("priority" | "normal") | null;
+            /** Resource Requirements */
+            resource_requirements?: string | null;
+            /** Setting */
+            setting?: string | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Title */
+            source_title: string;
+            /** Statement */
+            statement: string;
+            /** Study Design */
+            study_design?: string | null;
+            /** Study Geography */
+            study_geography?: string | null;
+            /** Workforce Requirements */
+            workforce_requirements?: string | null;
+        };
+        /**
+         * IofFindingOut
+         * @description An intervention-outcome finding, discriminated by ``profile='iof'``.
+         */
+        IofFindingOut: {
+            /** Causality By Design */
+            causality_by_design?: string | null;
+            /** Comparator */
+            comparator?: string | null;
+            /** Effect Basis */
+            effect_basis?: string | null;
+            /** Effect Direction */
+            effect_direction: string;
+            /** Estimate Level */
+            estimate_level?: string | null;
+            /**
+             * Finding Id
+             * Format: uuid
+             */
+            finding_id: string;
+            /** Groups */
+            groups?: {
+                [key: string]: string;
+            };
+            /** Intervention */
+            intervention: string;
+            /** Is Primary */
+            is_primary?: boolean | null;
+            /** Outcome */
+            outcome: string;
+            /** Population */
+            population?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            profile: "iof";
+            /** Quote */
+            quote?: string | null;
+            /** Quote Verified */
+            quote_verified?: boolean | null;
+            /** Relevance */
+            relevance?: ("priority" | "normal") | null;
+            /** Setting */
+            setting?: string | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Source Title */
+            source_title: string;
+            /** Statement */
+            statement: string;
+            statistics: components["schemas"]["IofStatisticsOut"];
+            /** Stratum Qualifiers */
+            stratum_qualifiers?: {
+                [key: string]: string;
+            }[];
+            /** Study Design */
+            study_design?: string | null;
+            /** Study Geography */
+            study_geography?: string | null;
+        };
+        /**
+         * IofStatisticsOut
+         * @description Reported IOF statistics, with authentic nulls for absent values.
+         */
+        IofStatisticsOut: {
+            /** Ci Lower */
+            ci_lower?: number | null;
+            /** Ci Upper */
+            ci_upper?: number | null;
+            /** Effect Size */
+            effect_size?: number | null;
+            /** Effect Size Type */
+            effect_size_type?: string | null;
+            /** I Squared */
+            i_squared?: number | null;
+            /** K */
+            k?: number | null;
+            /** N */
+            n?: number | null;
+            /** P Value */
+            p_value?: number | null;
+            /** Standard Error */
+            standard_error?: number | null;
+            /** Tau2 */
+            tau2?: number | null;
         };
         /**
          * LandscapeOut
@@ -1206,6 +1560,12 @@ export interface components {
             data: components["schemas"]["FindingOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
+        /** Page[PlanningTranscriptTurnOut] */
+        Page_PlanningTranscriptTurnOut_: {
+            /** Data */
+            data: components["schemas"]["PlanningTranscriptTurnOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
         /** Page[ProjectOut] */
         Page_ProjectOut_: {
             /** Data */
@@ -1217,6 +1577,75 @@ export interface components {
             /** Data */
             data: components["schemas"]["RunOut"][];
             pagination: components["schemas"]["PageMeta"];
+        };
+        /**
+         * PartChipOut
+         * @description One typed, editable chip attached to a planning part.
+         *
+         *     Args:
+         *         label: Short user-visible chip label.
+         *         kind: Editor type for the chip value.
+         *         value: Machine-readable value consumed by that editor.
+         */
+        PartChipOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "date_range" | "country_list";
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /**
+         * PartOptionOut
+         * @description One selectable option on a sequential planning part.
+         *
+         *     Args:
+         *         id: Stable option identifier within the part.
+         *         label: Short user-visible option label.
+         *         sub: Optional outcome and time-band sub-label.
+         *         primary: Whether this is the single recommended option.
+         *         reason: Optional explanation for the recommendation.
+         */
+        PartOptionOut: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Primary */
+            primary: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Sub */
+            sub?: string | null;
+        };
+        /**
+         * PartProposalOut
+         * @description One structured proposal in the sequential planning conversation.
+         *
+         *     Args:
+         *         id: The proposed planning part.
+         *         step_label: User-visible position and context for the proposal.
+         *         title: Plain-language proposal heading.
+         *         body: Optional supporting explanation.
+         *         chips: Optional typed scope chips.
+         *         options: The available response options.
+         */
+        PartProposalOut: {
+            /** Body */
+            body?: string | null;
+            /** Chips */
+            chips?: components["schemas"]["PartChipOut"][] | null;
+            /** Id */
+            id: string;
+            /** Options */
+            options: components["schemas"]["PartOptionOut"][];
+            /** Step Label */
+            step_label: string;
+            /** Title */
+            title: string;
         };
         /**
          * PlanDraft
@@ -1245,6 +1674,7 @@ export interface components {
          *         assumptions: Visible assumptions and open guesses.
          *         expected_artefact_shape: Deterministic forecast derived from components.
          *         time_band: Deterministic wall-clock band derived from the two axes.
+         *         section_budget: Optional future synthesis cap for ordinary sections.
          *         steps: The composed chain, presentation-labelled, in execution order.
          *         ready: Whether the draft has validated fail-closed into an
          *             executable plan.
@@ -1320,6 +1750,11 @@ export interface components {
              */
             search_effort: ("rapid" | "standard" | "deep") | null;
             /**
+             * Section Budget
+             * @default null
+             */
+            section_budget: number | null;
+            /**
              * Steering Mode
              * @default null
              */
@@ -1368,8 +1803,11 @@ export interface components {
             blurb: string;
             /** Label */
             label: string;
-            /** Stage */
-            stage: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "select" | "extract" | "group" | "synthesise";
         };
         /**
          * PlanUpdatedFrame
@@ -1391,6 +1829,50 @@ export interface components {
             type: "plan.updated";
             /** Version */
             version: number;
+        };
+        /**
+         * PlanningTranscriptTurnOut
+         * @description One durable planning-transcript turn shown in chronological order.
+         *
+         *     Args:
+         *         turn_index: Monotonic per-project conversation coordinate.
+         *         client_turn_id: The caller's idempotency key for this turn — returned
+         *             so a reloaded client can retry its own incomplete latest turn.
+         *         user_message: Submitted user message.
+         *         reply: Planner reply, absent until a pending turn completes.
+         *         suggestions: Planner quick-reply suggestions, if the turn completed.
+         *         part: Structured sequential-planning proposal, absent for legacy turns.
+         *         status: Durable execution state for this turn.
+         *         created_at: Receipt timestamp, retained as display metadata.
+         *         completed_at: Terminal timestamp, absent while still pending.
+         */
+        PlanningTranscriptTurnOut: {
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            part?: components["schemas"]["PartProposalOut"] | null;
+            /** Reply */
+            reply: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed";
+            /** Suggestions */
+            suggestions?: string[];
+            /** Turn Index */
+            turn_index: number;
+            /** User Message */
+            user_message: string;
         };
         /**
          * PlanningTurnCreate
@@ -1420,8 +1902,10 @@ export interface components {
          *         plan: The full current draft plan.
          *         suggestions: The planner's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
+         *         part: Structured sequential-planning proposal, when this turn carries one.
          */
         PlanningTurnOut: {
+            part?: components["schemas"]["PartProposalOut"] | null;
             plan: components["schemas"]["PlanDraft"];
             /** Reply */
             reply: string;
@@ -1685,19 +2169,113 @@ export interface components {
          *         title: Section title.
          *         role: Section role (determines page position).
          *         blocks: The section's prose blocks, in order.
+         *         summary: Verified summary for a single-block section, if available.
+         *         summary_status: Summary production state for a single-block section.
          */
         SectionOut: {
             /** Blocks */
             blocks?: components["schemas"]["BlockOut"][];
+            /** Focus */
+            focus?: string | null;
             /**
              * Role
              * @enum {string}
              */
             role: "key_findings" | "standard" | "conclusions";
+            /** Summary */
+            summary?: string | null;
+            /** Summary Status */
+            summary_status?: ("pending" | "verified" | "failed") | null;
             /** Title */
             title: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
+        /**
+         * SourceDossierOut
+         * @description The optional source dossier, including provenance and latest citations.
+         */
+        SourceDossierOut: {
+            /** Abstract */
+            abstract?: string | null;
+            /** Abstract Source */
+            abstract_source?: ("provider" | "llm_description") | null;
+            /** Appraisal Tier */
+            appraisal_tier?: string | null;
+            /** Cited */
+            cited: boolean;
+            /** Cited By Count */
+            cited_by_count?: number | null;
+            /** Cited In */
+            cited_in?: components["schemas"]["CitedInOut"][];
+            /** Classification Reason */
+            classification_reason?: string | null;
+            /** Doi */
+            doi?: string | null;
+            /** Evidence Type */
+            evidence_type?: string | null;
+            /** Fwci */
+            fwci?: number | null;
+            /** Language */
+            language?: string | null;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "OpenAlex" | "Overton" | "Uploaded";
+            /** Publisher */
+            publisher?: string | null;
+            /**
+             * Read In Full
+             * @default false
+             */
+            read_in_full: boolean;
+            /** Record Type */
+            record_type?: string | null;
+            /** Screen Basis */
+            screen_basis?: string | null;
+            /** Screen Confidence */
+            screen_confidence?: number | null;
+            /** Screen Reason */
+            screen_reason?: string | null;
+            /** Screen Stage */
+            screen_stage?: number | null;
+            /** Screen Status */
+            screen_status?: ("relevant" | "not_relevant" | "excluded_retracted") | null;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable";
+            /** Status Reason */
+            status_reason?: string | null;
+            /** Tags */
+            tags?: components["schemas"]["SourceTagOut"][];
+            /** Title */
+            title: string;
+            /** Url */
+            url?: string | null;
+            /** Venue */
+            venue?: string | null;
+            /** Year */
+            year?: number | null;
+        };
+        /**
+         * SourceTagOut
+         * @description One source tag assertion and its provenance.
+         */
+        SourceTagOut: {
+            /** Asserted By */
+            asserted_by: string;
+            /** Tag */
+            tag: string;
+            /** Tag Type */
+            tag_type: string;
+        };
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
@@ -1796,6 +2374,7 @@ export interface components {
          *         name: Theme name.
          *         size: Number of items in the theme.
          *         description: Short theme description.
+         *         theme_id: Stable theme identity, absent for legacy characterisations.
          */
         ThemeOut: {
             /** Description */
@@ -1804,6 +2383,68 @@ export interface components {
             name: string;
             /** Size */
             size: number;
+            /** Theme Id */
+            theme_id?: string | null;
+        };
+        /**
+         * ThemeRefItemOut
+         * @description One named durable theme or grouping reference.
+         *
+         *     Args:
+         *         name: Display name for the theme or group.
+         *         description: Optional concise description.
+         *         size: Optional number of members.
+         *         facet: Grouping facet, when this is a group reference.
+         *         sources: Resolved member sources, when member identities are available.
+         */
+        ThemeRefItemOut: {
+            /** Description */
+            description?: string | null;
+            /** Facet */
+            facet?: string | null;
+            /** Name */
+            name: string;
+            /** Size */
+            size?: number | null;
+            /** Sources */
+            sources?: components["schemas"]["ThemeSourceOut"][] | null;
+        };
+        /**
+         * ThemeRefOut
+         * @description The durable themes or groups a theme claim describes.
+         *
+         *     Args:
+         *         source: Whether the references are characterisation themes or groups.
+         *         base: Optional source-data basis recorded by synthesis.
+         *         items: Resolved named references.
+         */
+        ThemeRefOut: {
+            /** Base */
+            base?: string | null;
+            /** Items */
+            items: components["schemas"]["ThemeRefItemOut"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "characterisation" | "grouping";
+        };
+        /**
+         * ThemeSourceOut
+         * @description One source contributing to a theme or grouping reference.
+         *
+         *     Args:
+         *         source_id: The project's source identity.
+         *         title: Display title of the source.
+         */
+        ThemeSourceOut: {
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+            /** Title */
+            title: string;
         };
         /**
          * TickFrame
@@ -2259,6 +2900,16 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                status?: ("found" | "screened_out" | "relevant" | "not_selected" | "selected" | "read_in_full" | "findings_extracted" | "cited" | "unavailable" | "Included")[] | null;
+                cited?: boolean | null;
+                sort?: ("title" | "year" | "type" | "strength" | "status" | "relevance") | null;
+                order?: ("asc" | "desc") | null;
+                theme?: string | null;
+                origin?: ("OpenAlex" | "Overton" | "Uploaded") | null;
+                evidence_type?: string | null;
+                strength?: ("Very strong" | "Strong" | "Moderate" | "Limited" | "Weak") | null;
+                year_from?: number | null;
+                year_to?: number | null;
             };
             header?: never;
             path: {
@@ -2293,6 +2944,11 @@ export interface operations {
             query?: {
                 page?: number;
                 page_size?: number;
+                profile?: ("iof" | "icf") | null;
+                facet?: string | null;
+                group?: string | null;
+                group_id?: string | null;
+                source_id?: string | null;
             };
             header?: never;
             path: {
@@ -2386,7 +3042,9 @@ export interface operations {
     };
     landscape_api_v1_projects__project_id__landscape_get: {
         parameters: {
-            query?: never;
+            query?: {
+                scope?: "cited" | null;
+            };
             header?: never;
             path: {
                 project_id: string;
@@ -2433,6 +3091,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_planning_turns_api_v1_projects__project_id__planning_turns_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_PlanningTranscriptTurnOut_"];
                 };
             };
             /** @description Validation Error */
@@ -2569,6 +3261,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    source_dossier_api_v1_projects__project_id__sources__source_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceDossierOut"];
                 };
             };
             /** @description Validation Error */

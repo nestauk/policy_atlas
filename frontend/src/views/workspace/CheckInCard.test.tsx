@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../api/gen/types";
 import type { CheckInOut, StageEntry } from "../../store/types";
+import { ToastProvider } from "../../ui/radix/Toast";
 import { CheckInCard } from "./CheckInCard";
+import { presentCheckInRender } from "./checkInPresentation";
 
 type CheckInOption = components["schemas"]["CheckInOption"];
 
@@ -32,6 +34,7 @@ function baseCheckIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
     stage: "screen",
     status: "pending",
     triggers: [],
+    bundle: null,
     ...overrides,
   };
 }
@@ -43,12 +46,18 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
     description: "",
     requires_user_input: false,
     suggested: false,
+    why: null,
+    endorsement: null,
     ...overrides,
   };
 }
 
 function renderCard(checkIn: CheckInOut, stages: StageEntry[] = []) {
-  return render(<CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} />);
+  return render(
+    <ToastProvider>
+      <CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} />
+    </ToastProvider>,
+  );
 }
 
 describe("CheckInCard — option parameters", () => {
@@ -123,5 +132,62 @@ describe("CheckInCard — stage chip", () => {
 
     const header = screen.getByText("Waiting on your input").parentElement;
     expect(header?.children).toHaveLength(1);
+  });
+});
+
+describe("CheckInCard — deterministic completion render", () => {
+  it("presents a machine completion render with locked labels and keeps its raw record disclosed", () => {
+    const render = "characterise: succeeded | wall_clock=12.7s | counts: appraised=12, skipped=2, internal=9";
+    const presented = presentCheckInRender(render, "characterise", []);
+
+    expect(presented).toEqual({
+      stageLabel: "Mapping the landscape",
+      status: "completed",
+      seconds: "12.7",
+      counts: [
+        { label: "Sources quality-appraised", value: "12" },
+        { label: "Skipped", value: "2" },
+      ],
+    });
+    renderCard(baseCheckIn({ render, stage: "characterise" }));
+    expect(screen.getByText("Mapping the landscape")).toBeInTheDocument();
+    // No decimal completion time, no raw-render disclosure (owner, 2026-08-05).
+    expect(screen.queryByText(/Completed in/)).toBeNull();
+    expect(screen.getByText("Sources quality-appraised: 12")).toBeInTheDocument();
+    expect(screen.getByText("Skipped: 2")).toBeInTheDocument();
+    expect(screen.queryByText("Internal: 9")).toBeNull();
+    expect(screen.queryByText("Technical detail")).toBeNull();
+  });
+
+  it("keeps a non-machine render as scrubbed prose", () => {
+    const render = "Review the evidence base before deciding.";
+    expect(presentCheckInRender(render, "screen", [])).toBeNull();
+    renderCard(baseCheckIn({ render }));
+    expect(screen.getByText(render)).toBeInTheDocument();
+    expect(screen.queryByText("Technical detail")).toBeNull();
+  });
+});
+
+describe("CheckInCard — toast on failure (027 strand 14)", () => {
+  it("shows an error toast alongside the inline notice when the answer mutation errors", async () => {
+    mutate.mockReset();
+    mutate.mockImplementation(
+      (_vars: unknown, options?: { onError?: (error: unknown) => void }) => {
+        options?.onError?.({ code: "already_answered" });
+      },
+    );
+    const user = userEvent.setup();
+    renderCard(baseCheckIn());
+
+    await user.click(screen.getByRole("button", { name: "Stop the analysis" }));
+
+    // Toast complements the inline notice — both carry the same message,
+    // rendered in two places (the toast surfaces even off-screen).
+    expect(await screen.findByText("Check-in update failed")).toBeInTheDocument();
+    const messages = screen.getAllByText(
+      "This check-in has already been answered. Refresh to see the recorded decision.",
+    );
+    expect(messages).toHaveLength(2);
+    expect(screen.getByRole("alert")).toHaveTextContent("already been answered");
   });
 });

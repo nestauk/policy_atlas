@@ -1,0 +1,218 @@
+import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { Link } from "react-router";
+
+import type { components } from "../../../api/gen/types";
+import { scrub } from "../../../lib/scrub";
+import type { RunStreamState, StageEntry } from "../../../store/types";
+import { Card, PaneHeading, StatusDot } from "../../../ui/brand/Card";
+import { Chip } from "../../../ui/brand/Chip";
+import {
+  EvidenceDistributionChart,
+  normaliseGeographies,
+  orderThemes,
+  PublicationYearsChart,
+} from "../../../ui/charts/EvidenceDistributionChart";
+import { CountUp } from "../../../ui/motion/CountUp";
+import { Tooltip } from "../../../ui/radix/Tooltip";
+import { backendLabel } from "../checkInPresentation";
+import {
+  ANALYSIS_DEPTH_LABEL,
+  SEARCH_EFFORT_LABEL,
+  SOURCES_LABEL,
+  STEERING_MODE_LABEL,
+  scopeChips,
+  vocabLabel,
+} from "../planVocabulary";
+import { completionCopy, FUNNEL_STAGES, funnelBarWidth, timelineSummary } from "./presentation";
+
+type PlanDraft = components["schemas"]["PlanDraft"];
+type Funnel = components["schemas"]["FunnelOut"];
+type Coverage = components["schemas"]["CoverageOut"];
+type Groups = components["schemas"]["GroupsOut"];
+type Landscape = components["schemas"]["LandscapeOut"];
+
+function elapsed(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+}
+
+function stageTone(status: StageEntry["status"]): "running" | "complete" | "failed" | "idle" {
+  if (status === "started") return "running";
+  if (status === "completed") return "complete";
+  if (status === "failed") return "failed";
+  return "idle";
+}
+
+/** The right workspace pane during a run: durable read models augment (but
+ * never replace) the stream's authoritative status, stages and check-ins. */
+export function JourneyPane({
+  projectId,
+  stream,
+  plan,
+  funnel,
+  coverage,
+  groups,
+  landscape,
+  checkIn,
+  terminal,
+}: {
+  projectId: string;
+  stream: RunStreamState;
+  plan: PlanDraft | null;
+  funnel?: Funnel;
+  coverage?: Coverage;
+  groups?: Groups;
+  landscape?: Landscape;
+  checkIn?: ReactNode;
+  terminal?: ReactNode;
+}) {
+  const runStatus = stream.run?.status;
+  const hasLandscape = Object.keys(landscape?.evidence_types ?? {}).length > 0 || Object.keys(landscape?.years ?? {}).length > 0 || Object.keys(landscape?.geographies ?? {}).length > 0 || (landscape?.themes?.length ?? 0) > 0;
+  const hasGroups = (groups?.facets?.length ?? 0) > 0;
+  const heading = runStatus === "succeeded" || runStatus === "degraded" ? "Analysis complete" : runStatus === "aborted" || runStatus === "failed" ? "Analysis stopped" : runStatus === "paused" ? "Paused — waiting on you" : "Analysing the evidence…";
+
+  return (
+    <div className="h-full w-full min-w-0 max-w-full overflow-x-hidden overflow-y-auto px-5 py-5" style={{ scrollbarGutter: "stable" }}>
+      {(runStatus === "running" || runStatus === "paused") && <ProgressStrip stages={stream.stages} paused={runStatus === "paused"} />}
+      <PlanRecap plan={plan} />
+
+      <h2 className="mb-4 font-display text-heading font-semibold text-navy">{heading}</h2>
+      <StatusBanner status={runStatus} />
+
+      {/* Card order (owner, 2026-08-05): Done, then the timeline, then the
+          step outputs in REVERSE chronological order — latest stages
+          (themes/landscape) first, Where I looked (search) at the bottom. */}
+      <div className="space-y-5">
+        <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} />
+        <section id="journey-timeline" className="scroll-mt-14">
+          <Card className="anim-rise p-4">
+            <PaneHeading className="mb-2 p-0">{runStatus === "succeeded" || runStatus === "degraded" || runStatus === "aborted" ? "How it got there" : "The plan in motion"}</PaneHeading>
+            <Timeline stages={stream.stages} plan={plan} />
+          </Card>
+        </section>
+        {checkIn}
+        {hasLandscape && <LandscapeEmbed projectId={projectId} landscape={landscape!} />}
+        {hasGroups && <GroupsCard groups={groups!} />}
+        {funnel !== undefined && <FunnelCard funnel={funnel} />}
+        {coverage !== undefined && <CoverageCard coverage={coverage} />}
+        {terminal}
+      </div>
+    </div>
+  );
+}
+
+function StatusBanner({ status }: { status: string | undefined }) {
+  if (status === "paused") return <p className="mb-4 border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">Paused at a check-in — waiting on you. The run continues when you answer.</p>;
+  if (status === "degraded") return <p className="mb-4 border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">Completed with some flagged events — recorded in the decision log, not hidden.</p>;
+  if (status === "aborted") return <p className="mb-4 border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">You stopped this run. Everything completed so far is kept below.</p>;
+  if (status === "failed") return <p className="mb-4 border-l-[3px] border-red bg-red-tint p-3 text-meta text-navy">This run failed. Whatever completed is kept and readable.</p>;
+  return null;
+}
+
+function ProgressStrip({ stages, paused = false }: { stages: StageEntry[]; paused?: boolean }) {
+  if (stages.length === 0) return null;
+  // Paused reads distinct from executing on every segment: the active segment
+  // holds solid orange (no motion) instead of the breathing blue (028 pause
+  // salience — the mock e2e asserts the distinction on every tab).
+  return <div className="mb-3 flex gap-1" aria-label={paused ? "Run progress — paused" : "Run progress"}>{stages.map((stage, index) => <span key={`${stage.stage}-${index}`} className={`h-1 flex-1 ${stage.status === "completed" ? "bg-blue" : stage.status === "failed" || stage.status === "skipped" ? "bg-orange" : paused ? "bg-orange" : "anim-breathe bg-blue"}`} />)}</div>;
+}
+
+function PlanRecap({ plan }: { plan: PlanDraft | null }) {
+  const [open, setOpen] = useState(false);
+  if (plan === null || plan.question === null || plan.question === "") return null;
+  const settings = [
+    ["Search effort", vocabLabel(SEARCH_EFFORT_LABEL, plan.search_effort)],
+    ["Analysis depth", vocabLabel(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)],
+    ["Sources", vocabLabel(SOURCES_LABEL, plan.backend_scope)],
+    ["Check-ins", vocabLabel(STEERING_MODE_LABEL, plan.steering_mode)],
+  ].filter((item): item is [string, string] => item[1] !== null);
+  const constraints = scopeChips(plan.scope_constraints);
+  return <Card className="mb-4 min-w-0">
+    <button className="flex w-full min-w-0 items-baseline gap-3 px-4 py-3 text-left hover:bg-ground" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-label="Toggle plan recap">
+      <PaneHeading className="shrink-0 p-0">The plan</PaneHeading>
+      <span className="min-w-0 flex-1 truncate text-meta font-medium text-navy">{scrub(plan.question)}</span>
+      {plan.time_band !== null && plan.time_band !== "" && <Chip className="max-w-32 shrink truncate" tone="soft">{scrub(plan.time_band)}</Chip>}
+      <span className="shrink-0 text-caption text-grey">{open ? "Hide" : "Details"}</span>
+    </button>
+    {open && <div className="border-t border-line px-4 pb-4 pt-3">
+      {settings.length > 0 && <div className="grid gap-px border border-line bg-line sm:grid-cols-2">{settings.map(([label, value]) => <div key={label} className="bg-paper px-3 py-2"><p className="text-caption font-bold uppercase tracking-wide text-grey">{label}</p><p className="text-caption font-medium text-navy">{value}</p></div>)}</div>}
+      {/* Same grouping as the inline plan card (owner, 2026-08-05): Search
+          filters (backend-applied) then Screening rules (judged per doc). */}
+      {constraints.length > 0 && <div className="mt-3"><PaneHeading className="p-0">Search filters</PaneHeading><div className="mt-1 flex flex-wrap gap-1.5">{constraints.map((chip) => <Chip key={chip} tone="blue">{scrub(chip)}</Chip>)}</div></div>}
+      {((plan.scoping_notes ?? []).length > 0 || (plan.screening_criteria ?? []).length > 0) && <div className="mt-3"><PaneHeading className="p-0">Screening rules</PaneHeading>{(plan.scoping_notes ?? []).length > 0 && <div className="mt-1 flex flex-wrap gap-1.5">{plan.scoping_notes?.map((note) => <Chip key={note} tone="soft">{scrub(note)}</Chip>)}</div>}{(plan.screening_criteria ?? []).length > 0 && <ul className="mt-1 space-y-1 text-caption text-navy">{plan.screening_criteria?.map((criterion) => <li key={criterion}>• {scrub(criterion)}</li>)}</ul>}</div>}
+      {(plan.steps ?? []).length > 0 && <div className="mt-3"><PaneHeading className="p-0">Agreed steps</PaneHeading><ol className="mt-1 space-y-1 text-caption text-navy">{plan.steps?.map((step, index) => <li key={step.stage}>{index + 1}. {scrub(step.label)}{step.blurb !== "" && <span className="text-grey"> — {scrub(step.blurb)}</span>}</li>)}</ol></div>}
+      {(plan.assumptions ?? []).length > 0 && <div className="mt-3"><PaneHeading className="p-0">Assumptions</PaneHeading><ul className="mt-1 space-y-1 text-caption text-grey">{plan.assumptions?.map((assumption) => <li key={assumption}>• {scrub(assumption)}</li>)}</ul></div>}
+    </div>}
+  </Card>;
+}
+
+type TimelineRow = {
+  stage: string;
+  label: string;
+  status: StageEntry["status"] | "upcoming";
+  blurb?: string;
+  summary?: StageEntry["summary"];
+  seconds?: number | null;
+};
+
+function Timeline({ stages, plan }: { stages: StageEntry[]; plan: PlanDraft | null }) {
+  const rows = useMemo<TimelineRow[]>(() => {
+    const seen = new Set(stages.map((entry) => entry.stage));
+    // Plan steps that haven't emitted yet are UPCOMING — never "skipped".
+    // "Skipped" is the server's word for a stage a prior failure took out;
+    // rendering the future that way is a dishonest surface (live-check
+    // finding, 2026-07-29).
+    const upcoming = (plan?.steps ?? [])
+      .filter((step) => !seen.has(step.stage))
+      .map((step) => ({ stage: step.stage, label: step.label, status: "upcoming" as const, blurb: step.blurb, summary: undefined }));
+    return [...stages, ...upcoming];
+  }, [plan?.steps, stages]);
+  if (rows.length === 0) return <p className="text-caption text-grey">Stages will appear as the analysis begins.</p>;
+  return <ol aria-label="Stage timeline" className="space-y-2.5">{rows.map((entry, index) => {
+    const reason = typeof entry.summary?.reason === "string" ? entry.summary.reason : null;
+    const summary = timelineSummary(entry);
+    const tooltip = <div className="space-y-1 text-caption text-navy"><p>{scrub(entry.blurb ?? entry.label)}</p>{entry.status === "completed" && typeof entry.seconds === "number" && <p className="text-grey">Took {elapsed(entry.seconds)}</p>}{reason !== null && <p className="text-red">{scrub(reason)}</p>}</div>;
+    return <li key={`${entry.stage}-${index}`} className="flex min-w-0 items-start gap-2.5 text-meta"><StatusDot className="mt-1" tone={entry.status === "upcoming" ? "idle" : stageTone(entry.status)} /><div className="min-w-0 break-words"><Tooltip content={tooltip}><span className={`font-medium ${entry.status === "skipped" || entry.status === "upcoming" ? "text-grey" : "text-navy"}`}>{scrub(entry.label)}</span></Tooltip>{summary.length > 0 && <span className="ml-1.5 text-grey">— {summary.join(" · ")}</span>}{entry.status === "completed" && typeof entry.seconds === "number" && <span className="ml-1.5 text-grey">· {elapsed(entry.seconds)}</span>}{entry.status === "skipped" && <span className="ml-1.5 text-grey">skipped — a prior step failed</span>}{entry.status === "failed" && <span className="ml-1.5 text-red">stopped — recorded, carrying on</span>}{entry.status === "started" && entry.blurb !== undefined && entry.blurb !== "" && <p className="text-caption text-grey">{scrub(entry.blurb)}</p>}</div></li>;
+  })}</ol>;
+}
+
+function FunnelCard({ funnel }: { funnel: Funnel }) {
+  const max = typeof funnel.found === "number" ? funnel.found : 0;
+  const rows = FUNNEL_STAGES.flatMap(([key, label, definition]) => {
+    const value = funnel[key];
+    return typeof value === "number" ? [{ key, label, definition, value }] : [];
+  });
+  if (rows.length === 0) return null;
+  return <section id="journey-funnel" className="scroll-mt-14"><Card className="anim-rise p-4"><PaneHeading className="mb-3 p-0">From sources to evidence</PaneHeading><div className="space-y-2">{rows.map((row) => <Tooltip key={row.key} content={<p className="text-caption text-navy">{row.definition}</p>}><div className="flex items-center gap-3"><span className="w-28 shrink-0 text-right text-caption font-medium text-navy">{row.label}</span><span className="h-3 flex-1 bg-ground"><span className="anim-bar block h-full bg-blue" style={{ width: `${funnelBarWidth(row.value, max)}%` }} /></span><CountUp value={row.value} className="w-8 shrink-0 text-caption font-bold text-navy" /></div></Tooltip>)}</div></Card></section>;
+}
+
+function CoverageCard({ coverage }: { coverage: Coverage }) {
+  const details = coverage.backends_detail ?? [];
+  return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Where I looked</PaneHeading>{details.length > 0 ? <div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.flatMap((backend) => backendLabel(backend.backend) === null ? [] : [<div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-caption font-bold text-navy">{backendLabel(backend.backend)}</span><span className="shrink-0 whitespace-nowrap text-caption text-grey"><CountUp value={backend.results} className="font-display text-body font-bold text-blue" /> results · <CountUp value={backend.relevant} className="font-display text-body font-bold text-blue" /> relevant</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-caption"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>])}</div> : <p className="break-words text-caption text-navy">{(coverage.backends ?? []).map(backendLabel).filter((label): label is string => label !== null).join(" · ")}</p>}</Card></section>;
+}
+
+function CompletionCard({ projectId, status, funnel }: { projectId: string; status: string | undefined; funnel?: Funnel }) {
+  const copy = completionCopy(status);
+  if (copy === null) return null;
+  const counts = [typeof funnel?.relevant === "number" ? `${funnel.relevant} sources included` : null, typeof funnel?.cited === "number" ? `${funnel.cited} cited` : null].filter((count): count is string => count !== null);
+  // No "Run the analysis again" control (owner, 2026-08-05): a replanned
+  // ready plan starts from its inline plan card in the thread (batch 2
+  // chronology — new approvals after a run keep their Start footer).
+  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-heading font-semibold text-navy">{copy.heading}</h3>{counts.length > 0 && <p className="mt-1 text-meta text-navy">{counts.join(", ")}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-caption font-bold text-white" to={`/projects/${projectId}/evidence-base`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-caption font-bold text-navy" to={`/projects/${projectId}/sources`}>All sources</Link></div></Card>;
+}
+
+function GroupsCard({ groups }: { groups: Groups }) {
+  const facets = groups.facets ?? [];
+  return <section id="journey-groups" className="scroll-mt-14"><Card className="anim-rise p-4"><PaneHeading className="mb-3 p-0">Findings by group</PaneHeading><div className="space-y-4">{facets.map((facet) => { const top = [...(facet.groups ?? [])].sort((a, b) => b.size - a.size).slice(0, 8); const maximum = top[0]?.size ?? 1; return <div key={facet.facet}><p className="mb-1.5 text-caption font-bold uppercase tracking-wide text-grey">{scrub(facet.facet)}</p>{top.map((group) => <div key={group.label} className="mb-1 flex items-center gap-2"><Tooltip content={<p className="text-caption text-navy">{scrub(group.description)}</p>}><span className="w-32 shrink-0 truncate text-right text-caption font-medium text-navy">{scrub(group.label)}</span></Tooltip><span className="h-2 flex-1 bg-ground"><span className="anim-bar block h-full bg-blue" style={{ width: `${funnelBarWidth(group.size, maximum)}%` }} /></span><span className="w-5 text-caption font-bold text-navy">{group.size}</span></div>)}</div>; })}</div></Card></section>;
+}
+
+function LandscapeEmbed({ projectId, landscape }: { projectId: string; landscape: Landscape }) {
+  const evidenceTypes = landscape.evidence_types ?? {};
+  const years = landscape.years ?? {};
+  const geographies = landscape.geographies === null || landscape.geographies === undefined ? {} : normaliseGeographies(landscape.geographies);
+  const themes = orderThemes(landscape.themes ?? []);
+  const hasDistributions = Object.keys(evidenceTypes).length > 0 || Object.keys(years).length > 0 || Object.keys(geographies).length > 0;
+  return <>{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-caption text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/projects/${projectId}/sources?theme=${theme.theme_id}`} className="shrink-0 text-caption font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading>{/* One plot per row — side-by-side was unreadable next to the chat rail
+    (owner, 2026-08-05). */}<div className="grid min-w-0 gap-4">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Where sources were published</p><EvidenceDistributionChart data={geographies} size="compact" /></div>}</div></Card></section>}</>;
+}

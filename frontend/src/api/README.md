@@ -26,6 +26,7 @@ The generated client is schema-first: `gen/types.ts` and the committed
 - `queries.ts` — TanStack Query hooks over the authed client:
   `useProjects`, `useProject`, `useCheckIns`, plus the read-model hooks
   named in task 025 §6 (`useFunnel`, `useLandscape`, `useEvidence`,
-  `useFindings`, `useDecisions`, `useArtefact`). `groups`/`coverage` are in
-  the generated contract too but aren't named in the task brief's hook
-  list — add a hook for either once a view needs it.
+  `useFindings`, `useDecisions`, `useArtefact`) and the task-027 durable
+  transcript/run reads (`usePlanningTurns`, `useRuns`). `groups`/`coverage`
+  are in the generated contract too but aren't named in the task brief's
+  hook list — add a hook for either once a view needs it.

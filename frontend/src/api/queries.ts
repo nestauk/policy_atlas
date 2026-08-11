@@ -17,14 +17,22 @@ export const queryKeys = {
   checkIns: (projectId: string, status?: "pending" | "all") =>
     ["projects", projectId, "check-ins", status] as const,
   funnel: (projectId: string) => ["projects", projectId, "funnel"] as const,
-  landscape: (projectId: string) => ["projects", projectId, "landscape"] as const,
-  evidence: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "evidence", page, pageSize] as const,
-  findings: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "findings", page, pageSize] as const,
+  landscape: (projectId: string, scope?: "cited") =>
+    ["projects", projectId, "landscape", scope] as const,
+  evidence: (projectId: string, query?: EvidenceQuery) =>
+    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
+  findings: (projectId: string, query?: FindingsQuery) =>
+    ["projects", projectId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
   decisions: (projectId: string, page?: number, pageSize?: number) =>
     ["projects", projectId, "decisions", page, pageSize] as const,
+  planningTurns: (projectId: string, page?: number, pageSize?: number) =>
+    ["projects", projectId, "planning-turns", page, pageSize] as const,
+  plan: (projectId: string) => ["projects", projectId, "plan"] as const,
+  runs: (projectId: string, page?: number, pageSize?: number) =>
+    ["projects", projectId, "runs", page, pageSize] as const,
   artefact: (projectId: string) => ["projects", projectId, "artefact"] as const,
+  sourceDossier: (projectId: string, sourceId: string) =>
+    ["projects", projectId, "source-dossier", sourceId] as const,
 };
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
@@ -35,13 +43,55 @@ interface PageQuery {
   page_size?: number;
 }
 
+type EvidenceStatusFilter =
+  | "found"
+  | "screened_out"
+  | "relevant"
+  | "not_selected"
+  | "selected"
+  | "read_in_full"
+  | "findings_extracted"
+  | "cited"
+  | "unavailable"
+  | "Included";
+
+export interface EvidenceQuery extends PageQuery {
+  status?: EvidenceStatusFilter[];
+  cited?: boolean;
+  /** Server-side sort key (default unsorted); `order` is 422 without it. */
+  sort?: "title" | "year" | "type" | "strength" | "status" | "relevance";
+  order?: "asc" | "desc";
+  /** Theme id (`ThemeOut.theme_id`) — collection-true across pages. */
+  theme?: string;
+  origin?: "OpenAlex" | "Overton" | "Uploaded";
+  evidence_type?: string;
+  strength?: "Very strong" | "Strong" | "Moderate" | "Limited" | "Weak";
+  year_from?: number;
+  year_to?: number;
+}
+
+export interface FindingsQuery extends PageQuery {
+  profile?: "iof" | "icf";
+  facet?: string;
+  group?: string;
+  group_id?: string;
+  source_id?: string;
+}
+
 /** One authed `openapi-fetch` client per active `AuthApi` identity. */
 export function useApiClient() {
   const auth = useAuth();
   return useMemo(() => createAuthedApiClient(auth), [auth]);
 }
 
-/** `GET /api/v1/projects` — paginated, owner-scoped. */
+const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
+
+/** `GET /api/v1/projects` — paginated, owner-scoped. Live landing statuses
+ *  (contract strand 14): while any listed project's `latest_run.status` is
+ *  non-terminal, the list refetches on a modest interval so a card never
+ *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
+ *  `refetchIntervalInBackground` defaults to `false`, so this only polls
+ *  while the tab is visible. */
 export function useProjects(query?: { status?: "active" | "archived" | "all"; page?: number; page_size?: number }) {
   const client = useApiClient();
   return useQuery({
@@ -50,6 +100,14 @@ export function useProjects(query?: { status?: "active" | "archived" | "all"; pa
       const { data, error } = await client.GET("/api/v1/projects", { params: { query } });
       if (error) throw error;
       return data;
+    },
+    refetchInterval: (activeQuery) => {
+      const hasActiveRun = activeQuery.state.data?.data.some((project) =>
+        project.latest_run !== null &&
+        project.latest_run !== undefined &&
+        ACTIVE_RUN_STATUSES.has(project.latest_run.status),
+      );
+      return hasActiveRun ? 15_000 : false;
     },
   });
 }
@@ -73,9 +131,15 @@ export function useProject(projectId: string) {
 /**
  * `GET /api/v1/projects/{project_id}/check-ins` — the derived pending card
  * (`status=pending`, the default) or the durable steering history
- * (`status=all`).
+ * (`status=all`). `options.enabled`/`options.refetchInterval` let a caller
+ * outside the workspace (the AppShell nav badge) poll cheaply for a pending
+ * check-in without a live-run stream connection of its own.
  */
-export function useCheckIns(projectId: string, status?: "pending" | "all") {
+export function useCheckIns(
+  projectId: string,
+  status?: "pending" | "all",
+  options?: { enabled?: boolean; refetchInterval?: number | false },
+) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.checkIns(projectId, status),
@@ -86,7 +150,8 @@ export function useCheckIns(projectId: string, status?: "pending" | "all") {
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && (options?.enabled ?? true),
+    refetchInterval: options?.refetchInterval,
   });
 }
 
@@ -121,13 +186,13 @@ export function useFunnel(projectId: string) {
 
 /** `GET /api/v1/projects/{project_id}/landscape` — screened-in-only
  *  distributions, whole-object. */
-export function useLandscape(projectId: string) {
+export function useLandscape(projectId: string, scope?: "cited") {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.landscape(projectId),
+    queryKey: queryKeys.landscape(projectId, scope),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/landscape", {
-        params: { path: { project_id: projectId } },
+        params: { path: { project_id: projectId }, query: scope !== undefined ? { scope } : undefined },
       });
       if (error) throw error;
       return data;
@@ -138,10 +203,10 @@ export function useLandscape(projectId: string) {
 
 /** `GET /api/v1/projects/{project_id}/evidence` — paginated source list
  *  with the status ladder. */
-export function useEvidence(projectId: string, query?: PageQuery) {
+export function useEvidence(projectId: string, query?: EvidenceQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.evidence(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.evidence(projectId, query),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/evidence", {
         params: { path: { project_id: projectId }, query },
@@ -155,10 +220,10 @@ export function useEvidence(projectId: string, query?: PageQuery) {
 
 /** `GET /api/v1/projects/{project_id}/findings` — paginated IOF/ICF
  *  findings. */
-export function useFindings(projectId: string, query?: PageQuery) {
+export function useFindings(projectId: string, query?: FindingsQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.findings(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.findings(projectId, query),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/projects/{project_id}/findings", {
         params: { path: { project_id: projectId }, query },
@@ -167,6 +232,25 @@ export function useFindings(projectId: string, query?: PageQuery) {
       return data;
     },
     enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/sources/{source_id}` — one source's
+ * provenance, latest citations and dossier detail. */
+export function useSourceDossier(projectId: string, sourceId: string | null) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.sourceDossier(projectId, sourceId ?? ""),
+    queryFn: async () => {
+      if (!sourceId) return undefined;
+      const { data, error } = await client.GET(
+        "/api/v1/projects/{project_id}/sources/{source_id}",
+        { params: { path: { project_id: projectId, source_id: sourceId } } },
+      );
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId && sourceId),
   });
 }
 
@@ -187,6 +271,59 @@ export function useDecisions(projectId: string, query?: PageQuery) {
   });
 }
 
+/** `GET /api/v1/projects/{project_id}/planning-turns` — the durable,
+ * paginated planning transcript in ascending `turn_index` order. */
+export function usePlanningTurns(projectId: string, query?: PageQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.planningTurns(projectId, query?.page, query?.page_size),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/planning-turns", {
+        params: { path: { project_id: projectId }, query },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET .../plan` — the approved plan or the latest durable draft. A 404 is a
+ * normal pre-conversation state and resolves to `null`, never an error. */
+export function usePlan(projectId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.plan(projectId),
+    queryFn: async () => {
+      const { data, error, response } = await client.GET(
+        "/api/v1/projects/{project_id}/plan",
+        { params: { path: { project_id: projectId } } },
+      );
+      if (response.status === 404) return null;
+      if (error) throw error;
+      return data ?? null;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/runs` — paginated run blocks for the
+ * planning-thread composition model. */
+export function useRuns(projectId: string, query?: PageQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.runs(projectId, query?.page, query?.page_size),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/runs", {
+        params: { path: { project_id: projectId }, query },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
 /** `GET /api/v1/projects/{project_id}/artefact` — the latest persisted
  *  synthesis artefact (sections, span-anchored claims, citations), or a
  *  shaped absence, whole-object. */
@@ -195,11 +332,16 @@ export function useArtefact(projectId: string) {
   return useQuery({
     queryKey: queryKeys.artefact(projectId),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/artefact", {
-        params: { path: { project_id: projectId } },
-      });
+      const { data, error, response } = await client.GET(
+        "/api/v1/projects/{project_id}/artefact",
+        { params: { path: { project_id: projectId } } },
+      );
+      // No artefact yet is a normal pre-synthesis state, not an error — a
+      // thrown 404 here retries four times and holds a blank skeleton for
+      // ~10s on a fresh project (owner feedback, 2026-07-29).
+      if (response.status === 404) return null;
       if (error) throw error;
-      return data;
+      return data ?? null;
     },
     enabled: Boolean(projectId),
   });
@@ -212,11 +354,14 @@ export function useCoverage(projectId: string) {
   return useQuery({
     queryKey: [...queryKeys.projectRoot(projectId), "coverage"] as const,
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/coverage", {
-        params: { path: { project_id: projectId } },
-      });
+      const { data, error, response } = await client.GET(
+        "/api/v1/projects/{project_id}/coverage",
+        { params: { path: { project_id: projectId } } },
+      );
+      // No coverage record yet (nothing has run) is a normal state.
+      if (response.status === 404) return null;
       if (error) throw error;
-      return data;
+      return data ?? null;
     },
     enabled: Boolean(projectId),
   });

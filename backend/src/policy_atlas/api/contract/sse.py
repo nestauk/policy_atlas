@@ -100,6 +100,37 @@ class StageFailedFrame(_PersistedFrameBase):
     skipped: bool
 
 
+class ArtefactSectionSkeleton(BaseModel):
+    """One planned live-artefact section in presentation order."""
+
+    index: int
+    title: str
+    focus: str
+
+
+class ArtefactSkeletonFrame(_PersistedFrameBase):
+    """Presentation-only outline for an artefact being synthesised."""
+
+    type: Literal["artefact.skeleton"]
+    sections: list[ArtefactSectionSkeleton]
+
+
+class ArtefactSectionStartedFrame(_PersistedFrameBase):
+    """A live-artefact section has started generation."""
+
+    type: Literal["artefact.section_started"]
+    index: int
+
+
+class ArtefactSectionCompletedFrame(_PersistedFrameBase):
+    """A live-artefact section's whole prose is available."""
+
+    type: Literal["artefact.section_completed"]
+    index: int
+    title: str
+    prose: str
+
+
 class CheckinPendingFrame(_PersistedFrameBase):
     """A `steering.pause` — the full check-in resource."""
 
@@ -153,6 +184,9 @@ SseFrame = Annotated[
     | StageStartedFrame
     | StageCompletedFrame
     | StageFailedFrame
+    | ArtefactSkeletonFrame
+    | ArtefactSectionStartedFrame
+    | ArtefactSectionCompletedFrame
     | CheckinPendingFrame
     | CheckinResolvedFrame
     | PlanUpdatedFrame

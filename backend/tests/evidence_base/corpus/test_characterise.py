@@ -981,7 +981,7 @@ def test_harness_characterise_component_success(conn: Connection) -> None:
 
     plan = Plan(component="characterise", evidence_scope_id=scope_id)
     config = compile(plan)
-    run_harness(
+    outcome = run_harness(
         conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
         theme_grouping_backend=StubThemeGroupingBackend(),
     )
@@ -993,14 +993,9 @@ def test_harness_characterise_component_success(conn: Connection) -> None:
     ).scalar_one()
     assert rows == 1
 
-    log_entries = events.read(conn, pid)
-    completed = [
-        e for e in log_entries
-        if e["event_type"] == "component.completed"
-        and e["payload"].get("component") == "characterise"
-    ]
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
+    summary = outcome["summary"]
+    assert summary is not None
+    payload = summary
     assert {"coverage", "themes", "unclustered", "flags", "provenance"} <= set(payload.keys())
 
     run_row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
@@ -1815,6 +1810,34 @@ def test_judgment_instruction_shaped_theme_name_is_stored_as_data(
     assert tag == theme_name
 
 
+def test_characterise_persists_matching_theme_identity_on_result_and_tags(
+    conn: Connection,
+) -> None:
+    """Each persisted theme carries one UUID shared by its source-tag rows."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    _seed_doc(conn, pid, rid, scope_id, title="Report", abstract="Body. [stub-theme: Housing]")
+
+    characterise_scope(
+        conn,
+        project_id=pid,
+        run_id=rid,
+        context=CharacteriseContext(scope_id=scope_id, intent="Test", context={}),
+        theme_grouping_backend=StubThemeGroupingBackend(),
+    )
+
+    themes = conn.execute(
+        select(characterisation_result.c.themes).where(characterisation_result.c.project_id == pid)
+    ).scalar_one()
+    persisted_theme_id = themes["themes"][0]["theme_id"]
+    assert uuid.UUID(persisted_theme_id)
+    assert conn.execute(
+        select(source_tag.c.theme_id)
+        .where(source_tag.c.project_id == pid)
+        .where(source_tag.c.asserted_by == "characterise")
+    ).scalar_one() == uuid.UUID(persisted_theme_id)
+
+
 def test_judgment_socket_deny_characterise_harness_round_trip(
     conn: Connection,
     monkeypatch: pytest.MonkeyPatch,
@@ -1827,7 +1850,7 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
     rid = seed_run(conn, pid)
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    run_harness(
+    outcome = run_harness(
         conn,
         config=config,
         project_id=pid,
@@ -1836,12 +1859,7 @@ def test_judgment_socket_deny_characterise_harness_round_trip(
         theme_grouping_backend=StubThemeGroupingBackend(),
     )
 
-    completed = [
-        event for event in events.read(conn, pid)
-        if event["event_type"] == "component.completed"
-        and event["payload"].get("component") == "characterise"
-    ]
-    assert len(completed) == 1
+    assert outcome["summary"] is not None
 
 
 def test_judgment_tracing_noop_without_keys(monkeypatch: pytest.MonkeyPatch) -> None:

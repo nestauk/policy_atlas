@@ -3,10 +3,15 @@ import { useRef, useState } from "react";
 import { useAnswerCheckIn } from "../../api/mutations";
 import { conflictSentences, isConflictCode } from "../../lib/errors";
 import { scrub } from "../../lib/scrub";
+import { recordSessionAnsweredCheckIn } from "../../store/thread";
 import type { CheckInOut, StageEntry } from "../../store/types";
 import { Button } from "../../ui/brand/Button";
 import { Card } from "../../ui/brand/Card";
 import { Chip } from "../../ui/brand/Chip";
+import { useToast } from "../../ui/radix/Toast";
+import { CheckInBundle, type SectionRow, type ThemeRename } from "./CheckInBundle";
+import { presentCheckInRender, triggerCopy } from "./checkInPresentation";
+import { STEERING_MODE_LABEL, vocabLabel } from "./planVocabulary";
 
 interface CompiledSteer {
   render: string;
@@ -43,31 +48,59 @@ export function CheckInCard({
   stages: StageEntry[];
 }) {
   const answer = useAnswerCheckIn(projectId);
+  const toast = useToast();
   const [freeText, setFreeText] = useState("");
   const [changeModeOpen, setChangeModeOpen] = useState(false);
   const [changeModeValue, setChangeModeValue] = useState<ChangeModeValue>("moderate");
   const [compiled, setCompiled] = useState<CompiledSteer | null>(null);
+  const [steerWords, setSteerWords] = useState<string | null>(null);
+  const [stagedRenames, setStagedRenames] = useState<ThemeRename[]>([]);
+  const [editedSections, setEditedSections] = useState<SectionRow[] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const freeTextRef = useRef<HTMLInputElement>(null);
 
+  // Toast complements the inline `notice` below — it doesn't replace it: the
+  // inline copy is load-bearing right where the user is looking, the toast
+  // makes the failure visible even if they've scrolled away from the card.
   const conflictNotice = (error: unknown) => {
     const code = (error as { code?: string }).code;
-    setNotice(
-      isConflictCode(code)
-        ? conflictSentences[code]
-        : "That couldn't be applied. The check-in is still waiting.",
-    );
+    const message = isConflictCode(code)
+      ? conflictSentences[code]
+      : "That couldn't be applied. The check-in is still waiting.";
+    setNotice(message);
+    toast.toast({ title: "Check-in update failed", description: message, tone: "error" });
   };
 
   const sendOption = (optionId: string, params?: Record<string, unknown>) => {
     setNotice(null);
+    const selected = (checkIn.options ?? []).find((option) => option.id === optionId);
+    // Staged P2 theme renames ride the SINGLE response as validated params on
+    // whichever option answers the card (028 strand 14 — no second response).
+    const withRenames =
+      stagedRenames.length > 0 ? { ...(params ?? {}), renames: stagedRenames } : params;
     answer.mutate(
-      { checkInId: checkIn.check_in_id, body: { kind: "option", option_id: optionId, params: params ?? null } },
-      { onError: conflictNotice },
+      {
+        checkInId: checkIn.check_in_id,
+        body: { kind: "option", option_id: optionId, params: withRenames ?? null },
+      },
+      {
+        onSuccess: () => {
+          if (selected === undefined) return;
+          recordSessionAnsweredCheckIn(
+            checkIn.check_in_id,
+            selected.label,
+            (checkIn.options ?? [])
+              .filter((option) => option.id !== optionId)
+              .map((option) => option.label),
+          );
+        },
+        onError: conflictNotice,
+      },
     );
   };
 
   const stageLabel = findStageLabel(stages, checkIn.stage);
+  const presentedRender = presentCheckInRender(checkIn.render, checkIn.stage, stages);
 
   if (compiled !== null) {
     return (
@@ -75,13 +108,21 @@ export function CheckInCard({
         <div className="flex items-center gap-2">
           <Chip tone="blue">Confirm your steer</Chip>
         </div>
-        <p className="mt-2 text-[12.5px] text-grey">
-          Here's how your instruction compiled into plan changes. Nothing applies until
-          you confirm.
+        {steerWords !== null && (
+          <div className="mt-2 ml-8 border border-blue-tint bg-blue-tint-2 px-3 py-2">
+            <p className="text-caption text-ink">{scrub(steerWords)}</p>
+          </div>
+        )}
+        <p className="mt-2 text-caption font-semibold text-navy">
+          Here's what that would change — apply it?
         </p>
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-caption leading-relaxed text-ink">
           {scrub(compiled.render)}
         </pre>
+        <p className="mt-1.5 text-caption text-grey">
+          If part of your steer can't be honoured, the changes above say which part and why —
+          nothing applies until you confirm.
+        </p>
         <div className="mt-4 flex items-center gap-2">
           <Button
             disabled={answer.isPending}
@@ -119,11 +160,11 @@ export function CheckInCard({
               );
             }}
           >
-            Cancel
+            Discard — back to the options
           </Button>
         </div>
         {notice !== null && (
-          <p role="alert" className="mt-3 text-xs text-red">
+          <p role="alert" className="mt-3 text-caption text-red">
             {notice}
           </p>
         )}
@@ -131,22 +172,95 @@ export function CheckInCard({
     );
   }
 
+  const triggerLines = triggerCopy(checkIn.triggers);
+  // Suggested options (authored from this run's results) get their own block;
+  // the edit_sections channel renders as the bundle's inline row editing, not
+  // a button (028 strand 14 — the retype-everything button retired).
+  const allOptions = checkIn.options ?? [];
+  const canonicalOptions = allOptions.filter(
+    (option) => !option.suggested && option.id !== "edit_sections",
+  );
+  const suggestedOptions = allOptions.filter((option) => option.suggested);
+  const editChannel = allOptions.find((option) => option.id === "edit_sections");
+  const sectionsEdited = editedSections !== null && editChannel !== undefined;
+
+  const bundleRecord =
+    checkIn.bundle !== null && typeof checkIn.bundle === "object" && !Array.isArray(checkIn.bundle)
+      ? (checkIn.bundle as Record<string, unknown>)
+      : null;
+
   return (
-    <Card aria-live="polite" className="border-l-2 border-l-orange p-5">
+    <Card aria-live="polite" className="anim-glow border-l-2 border-l-orange p-5">
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone="yellow">Waiting on your input</Chip>
         {stageLabel !== null && <Chip tone="soft">{scrub(stageLabel)}</Chip>}
       </div>
-      <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-[12.5px] leading-relaxed text-ink">
-        {scrub(checkIn.render)}
-      </pre>
+      {triggerLines.length > 0 && (
+        <p className="mt-2 max-w-prose-measure text-caption leading-relaxed text-grey">{triggerLines.join(" ")}</p>
+      )}
+      {presentedRender === null ? (
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-caption leading-relaxed text-ink">
+          {scrub(checkIn.render)}
+        </pre>
+      ) : (
+        <div className="mt-3 border border-line bg-paper-2 p-3">
+          {/* No decimal completion time, no raw-render disclosure (owner,
+              2026-08-05) — the stage label and counts carry the story. */}
+          <p className="text-caption font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
+          {presentedRender.counts.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {presentedRender.counts.map(({ label, value }) => (
+                <Chip key={label} tone="soft">
+                  {label}: {value}
+                </Chip>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <CheckInBundle
+        bundle={bundleRecord}
+        stagedRenames={stagedRenames}
+        onStageRename={(rename) =>
+          setStagedRenames((staged) => [
+            ...staged.filter((entry) => entry.theme_id !== rename.theme_id),
+            rename,
+          ])
+        }
+        editedSections={editedSections}
+        onEditSections={setEditedSections}
+      />
+
+      {sectionsEdited && (
+        <div className="mt-3 flex flex-col gap-1">
+          <Button
+            size="sm"
+            disabled={answer.isPending}
+            onClick={() =>
+              sendOption("edit_sections", {
+                delta: { synthesis: { sections: editedSections } },
+              })
+            }
+          >
+            Write the report with the edited sections
+          </Button>
+          <p className="text-caption text-grey">
+            Untouched rows carry over exactly as displayed.
+          </p>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-col gap-2">
-        {(checkIn.options ?? []).map((option) => (
+        {canonicalOptions.map((option) => (
           <div key={option.id} className="flex flex-col gap-2">
             <div className="flex items-start gap-2.5">
               <Button
-                variant={option.id === "continue" ? "primary" : "secondary"}
+                variant={
+                  (option.id === "continue" || option.id === "as_proposed") && !sectionsEdited
+                    ? "primary"
+                    : "secondary"
+                }
                 size="sm"
                 disabled={answer.isPending}
                 onClick={() => {
@@ -168,10 +282,16 @@ export function CheckInCard({
               >
                 {scrub(option.label)}
               </Button>
-              {option.suggested && <Chip tone="blue">Suggested</Chip>}
             </div>
+            {option.endorsement != null && option.endorsement !== "" && (
+              // The run's reviewer endorsed this option: its reason renders
+              // here, under the option — never a duplicate button.
+              <p className="text-caption leading-relaxed text-blue">
+                {scrub(option.endorsement)}
+              </p>
+            )}
             {option.description.length > 0 && (
-              <p className="text-xs leading-relaxed text-grey">{scrub(option.description)}</p>
+              <p className="text-caption leading-relaxed text-grey">{scrub(option.description)}</p>
             )}
             {option.id === "change_mode" && changeModeOpen && (
               <form
@@ -189,13 +309,18 @@ export function CheckInCard({
                   id="change-mode-select"
                   value={changeModeValue}
                   onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
-                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-xs focus-visible:outline-2 focus-visible:outline-blue"
+                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-caption focus-visible:outline-2 focus-visible:outline-blue"
                 >
-                  {CHANGE_MODE_VALUES.map((value) => (
-                    <option key={value} value={value}>
-                      {value[0].toUpperCase() + value.slice(1)}
-                    </option>
-                  ))}
+                  {CHANGE_MODE_VALUES.flatMap((value) => {
+                    const label = vocabLabel(STEERING_MODE_LABEL, value);
+                    return label === null
+                      ? []
+                      : [
+                          <option key={value} value={value}>
+                            {label}
+                          </option>,
+                        ];
+                  })}
                 </select>
                 <Button type="submit" size="sm" disabled={answer.isPending}>
                   Send
@@ -205,6 +330,33 @@ export function CheckInCard({
           </div>
         ))}
       </div>
+
+      {suggestedOptions.length > 0 && (
+        <div className="mt-4 border border-blue-tint bg-blue-tint/40 px-3 py-2.5">
+          <p className="text-caption font-bold uppercase tracking-wide text-blue">
+            Suggested from this run's results
+          </p>
+          <div className="mt-2 flex flex-col gap-2">
+            {suggestedOptions.map((option) => (
+              <div key={option.id} className="flex flex-col gap-1">
+                <div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={answer.isPending}
+                    onClick={() => sendOption(option.id)}
+                  >
+                    {scrub(option.label)}
+                  </Button>
+                </div>
+                {option.why != null && option.why !== "" && (
+                  <p className="text-caption leading-relaxed text-grey">{scrub(option.why)}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form
         className="mt-4 border-t border-line pt-4"
@@ -219,6 +371,7 @@ export function CheckInCard({
               onSuccess: (result) => {
                 if (result.kind === "compiled") {
                   setCompiled(result.compiled);
+                  setSteerWords(text);
                   setFreeText("");
                 }
               },
@@ -227,7 +380,7 @@ export function CheckInCard({
           );
         }}
       >
-        <label className="text-xs font-semibold text-navy" htmlFor="check-in-free-text">
+        <label className="text-caption font-semibold text-navy" htmlFor="check-in-free-text">
           Or steer in your own words
         </label>
         <div className="mt-1.5 flex items-center gap-2">
@@ -237,7 +390,7 @@ export function CheckInCard({
             value={freeText}
             onChange={(event) => setFreeText(event.target.value)}
             placeholder="e.g. prioritise UK school-based studies"
-            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-[12.5px] focus-visible:outline-2 focus-visible:outline-blue"
+            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-caption focus-visible:outline-2 focus-visible:outline-blue"
           />
           <Button
             type="submit"
@@ -248,7 +401,7 @@ export function CheckInCard({
             Compile
           </Button>
         </div>
-        <p className="mt-1.5 text-[11px] text-grey">
+        <p className="mt-1.5 text-caption text-grey">
           Your words compile into plan changes you confirm before they apply.
         </p>
       </form>
@@ -262,7 +415,15 @@ export function CheckInCard({
             setNotice(null);
             answer.mutate(
               { checkInId: checkIn.check_in_id, body: { kind: "abort" } },
-              { onError: conflictNotice },
+              {
+                onSuccess: () =>
+                  recordSessionAnsweredCheckIn(
+                    checkIn.check_in_id,
+                    "Stop the analysis",
+                    (checkIn.options ?? []).map((option) => option.label),
+                  ),
+                onError: conflictNotice,
+              },
             );
           }}
         >
@@ -271,7 +432,7 @@ export function CheckInCard({
       </div>
 
       {notice !== null && (
-        <p role="alert" className="mt-3 text-xs text-red">
+        <p role="alert" className="mt-3 text-caption text-red">
           {notice}
         </p>
       )}

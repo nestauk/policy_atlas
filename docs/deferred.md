@@ -1108,9 +1108,24 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   applies flag-not-block; v1 honours the rule through the weakly-grounded mechanism only.
   Policy-conditioned flagging (below-policy support visibly flagged as such) lands with
   the policy surface.
-- **Block summaries / artefact summary / faithfulness judging** — the navigation layer
-  (provenance-grounding § Summaries): co-versioned block summary column, the artefact
-  summary field, flat faithfulness judging. Blocks ship summary-free at `version=1`.
+- **Block summaries / artefact summary / faithfulness judging** — DISCHARGED by task 028
+  (strand 13): co-versioned block summary column + marker, artefact summary field +
+  marker, flat LLM faithfulness judging with bounded regenerate-on-fail, written
+  post-commit in standalone transactions; legacy blocks stay summary-free (the
+  first-sentence fallback renders WITH its marker). Remaining sub-seams: **summary
+  export** (a summary never renders detached from its drill-down — export stays ⏸ per
+  spec) · **multi-block section summaries** (as-built one block per section; a
+  multi-block section omits its summary honestly — `SectionOut.summary` projects the
+  single block only) · **artefact-summary staleness machinery** (flag-and-propose is
+  trivially satisfied while blocks never regenerate — recorded, not built beyond the
+  marker) · **summary/judge calibration** (eval workstream, with the judge seams below).
+- **Theme rename beyond P2** — task 028's `rename_theme` delta is P2-only by constraint
+  (strata are name-keyed downstream; renames land before anything consumed the names).
+  Renaming after selection/grouping needs id-keyed strata plumbing end-to-end.
+- **P4 structural-section editing** — key findings and conclusions are display-only on
+  the report-plan card (never editable/removable, task 028 ruling); a future surface for
+  suppressing/steering structural blocks is a fresh design decision, not an extension of
+  `edit_sections`.
 - **Synthesis structure discovery** (contract rev 7.2 — declined-for-now bundle):
   recon-informed section proposal, structure-mismatch signals, a bounded revision
   checkpoint. Revisit with evidence if one-shot sectioning proves a real problem on live
@@ -1703,11 +1718,6 @@ first-class vocabulary. What follows is what it deliberately left out.
   (`policy_atlas.core.liveness`, best-effort publish points in the search/fetch
   transports). A *designed* per-component progress protocol (typed progress shapes,
   coverage of every component, durable where warranted) is still open.
-- **Licensed font delivery for the deployed web app** (owner + comms, 2026-07-21) —
-  Averta/Zosia are licensed for the web app; binaries are never committed (CI font-guard).
-  Locally they load from an untracked `frontend/public/fonts/`. The deployed app needs a
-  delivery mechanism outside the repo (private bucket injected at build/deploy time) —
-  pure mechanics for the infra slice; no licensing question remains.
 - **Cursor pagination migration path** (025 API pins) — offset + `total_items` is the
   deliberate v1 shape at per-project scale; if cross-project or unbounded-growth listings
   appear, add an opaque `cursor` param alongside (additive, never a breaking reshape).
@@ -1724,27 +1734,133 @@ first-class vocabulary. What follows is what it deliberately left out.
   `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
   API (the dev DB's two live-run projects are the known case). Recovery is a documented
   manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
-- **Deploy invariant: stop-old-before-boot-new** (025 review, adv-M3 + live-check SIGTERM
-  lesson, 2026-07-21) — the startup orphan sweep has no instance-ownership lease, and
-  default SIGTERM lets the walk executor keep running through a graceful drain. Until the
-  cross-instance seam lands (lease riding LISTEN/NOTIFY work), deploys MUST hard-kill the
-  old process before booting the new one, or the sweep/live-walk race interrupts healthy
-  runs. Recorded in web-api.md § Deployment posture; the infra slice's deploy scripts own
-  enforcing it.
-- **`CitationOut.source_id`** (025 live check, 2026-07-21) — the citation→dossier join is
-  title-keyed; a locator-fallback title misses the evidence row (honest empty state).
-  Adding `source_id` to `CitationOut` is small but a contract change (regen + views);
-  next API-touching slice.
+- **`CitationOut.source_id`** (025 live check, 2026-07-21) — **CLOSED at 027 owner
+  feedback (2026-07-29)**: `source_id` (+ `grounding_rationale`) added to `CitationOut`;
+  citation→dossier opens are id-keyed (title stays as the legacy path for references
+  and theme members). The sibling display bug — full-text-grounded citations showing
+  locator URLs — was the envelope/text-snapshot authority split, fixed at the read
+  model (envelope is the sole bibliographic authority; references keyed by document).
+- **Post-re-auth return-to renders the landing route** (026 live check, 2026-07-28) —
+  the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
+  react-router never observes: after any auth round-trip the URL may show the deep link
+  while the landing route renders. Cosmetic (a reload or click recovers); fix is a
+  router-level navigate in `onSigninCallback` — next frontend-touching slice.
+  (A second facet — a persistent OIDC callback error mounting the shell tokenless,
+  flagged by the 026 review's Codex lane — bit the owner live the same day and was
+  **fixed in-slice**: on error the provider renders a "Sign in again" retry that
+  strips consumed `code`/`state` params before stashing the return path; the shell
+  never mounts. Only the router-navigate restoration above remains open.)
 - **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
   exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
   presents under the acquire stage label ("Searching sources" while reading documents) —
   both are workspace-surface polish for the next frontend-touching slice.
-- **Automated FE↔real-API smoke** (025 review, adv-M6) — mock mode intercepts fetch, so
-  transport/auth/base-URL/error-mapping integration is structurally invisible to the
-  Playwright journey (all five live-check integration bugs were in that layer). A thin
-  CI job — real HTTP + dev-issuer auth + SSE against stub backends — closes the gap;
-  belongs with the CI work in the infra slice.
-- **Production build guard for `VITE_OIDC_AUTHORITY`** (025 security lane, info) — a
-  production bundle built without the OIDC authority silently ships the dev token panel
-  (backend still verifies RS256; not a bypass, but a posture smell). A build-time
-  refusal (or explicit dev opt-in flag) rides the infra slice's deploy checklist.
+
+## Infra deployment (task 026 seams)
+
+- **No deploy lock** (026 review, Codex adversarial, 2026-07-28) — `scripts/deploy.sh`
+  assumes one operator: two concurrent runs can interleave stop→migrate→scale (parallel
+  Alembic runs, one deploy booting the API mid-migration of the other). Acceptable while
+  deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
+  lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
+  seam when a second operator or CI-driven deploys appear.
+
+## Frontend uplift (task 027 seams)
+
+- **025 "draft conversation is lost on restart" pin — DISCHARGED** (027 strand 12,
+  2026-07-29): the planning conversation persists in `planning_transcript` (durable
+  idempotency, rehydration, restart-surviving thread — live-checked). No backfill:
+  pre-027 projects have zero turn rows.
+- **Co-pilot Q&A UI seam** — multi-thread chat, Chats library, per-thread artifact
+  context (PR #35 adjudication): the transcript schema is deliberately single-table/
+  planning-only so the co-pilot slice brings its own thread/context model; the rail is
+  single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
+- **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
+  IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
+  journey/evidence components are IA-agnostic and re-mount under it unchanged.
+- **Steering boundary re-pause under FREQUENT mode** (027 live check, 2026-07-29) —
+  **DISCHARGED same day** (owner-directed, commit 4c4a65d): continuation records the
+  parked pause's boundary+component and a continue/adjust/mode_change resume of a
+  decided before-boundary no longer re-presents it (live-path parity; parity tests in
+  test_continuation_parity.py). The original loop: answer → continuation → re-evaluate
+  → pause again, one orchestrator call per cycle (event seq 364–388, project
+  5e08e143…).
+- **Multi-instance turn lock** — the planning 409 primitive is a process-local lock
+  registry by design (one-instance posture); LISTEN/NOTIFY stays the 025 scale-out seam.
+- **Live per-backend search counts** (D‑1 rev 2) — `search.executed` events commit with
+  the acquire component, so mid-stage per-backend counts genuinely cannot stream yet;
+  the journey shows tick-based activity until stage completion. Revisit if tick payloads
+  ever widen (behaviour change, own gate).
+- **Print/share/export CTA** — the evidence-base print stylesheet ships; the share/export
+  product seam stays deferred and undischarged.
+- **Project-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
+  here per its own commitment): the decisions read model derives from every run in the
+  project; the journey card says "attributed across this project". Run-scoped decision
+  views wait on the workspace-cluster IA's run-scoped read models (above).
+- **`DecisionOut.detail` server-side narrowing** (read-model-additions.md rev 2 [D-4],
+  API hygiene): `detail` passes the raw event payload through; the client renders only
+  allowlisted keys. Narrow the server projection when a second consumer appears.
+- **Orphaned `component.started` on hard process death** (027 review, 2026-07-29): the
+  runner commits `component.started` in a standalone transaction before opening the
+  component transaction; a SIGKILL in that gap leaves the pair unclosed on the `runs`
+  row (walk-level recovery via the continuation startup sweep still marks the
+  capability run interrupted, so the user-facing state is honest). A runs-row
+  reconciliation sweep is the seam if that trail ever needs to be self-consistent.
+- **Filter pagination materialises the collection** (027 C.2, by design): evidence and
+  findings pages derive the full project collection per request for collection-true
+  `total_items` (funnel precedent), so a page walk is O(N) per page. Fine at
+  single-project scale; revisit with SQL-level filters if project corpora grow 10×.
+
+## UX refinement (task 028 seams)
+
+- **SSE client read-inactivity watchdog** (leg-B live finding, root-caused at the 028
+  review stack, 2026-08-05): `frontend/src/api/sse.ts`'s reconnect loop is sound, but
+  when an intermediary swallows the upstream close (dev Vite `http-proxy` does; prod
+  CloudFront can), `reader.read()` pends forever and the client stalls silently with
+  `connectionStatus` still "connected" — the server-side close is visible only as the
+  backend's `api.sse_closed` log. The server heartbeats every 15s (`: keep-alive`), so
+  the fix shape is bounded: abort the attempt after ~45s (3× heartbeat) without bytes
+  and fall into the existing backoff/reconnect at the cursor. Deferred because sse.ts's
+  byte-identical state was this slice's rubric-14 evidence and the CloudFront behaviour
+  deserves its own live verification; own small slice.
+- **`summary_status="pending"` is dead vocabulary** (028 review m3): migration CHECK and
+  contract admit it, nothing writes it; the FE keys strictly on `"verified"` so nothing
+  mislabels, but in-flight and never-summarised are indistinguishable to readers. Write
+  `pending` at mint (or drop the vocab) when a consumer needs the distinction.
+- **P1 sample titles are project-wide** (028 review m4): `p1_bundle.sample_titles` takes
+  the five latest `project_source_snapshot` rows for the whole project while counts and
+  queries are scope-filtered — in a multi-question project the card can show another
+  question's documents. Scope the sample when the workspace-cluster/multi-question IA
+  lands.
+- **`_source_reason_maps` scans the full project event log per request** (028 review
+  m5): every evidence page / dossier read JSON-walks all `source.screened`/
+  `source.classified` events (the dossier builds both whole-project maps for one
+  source). Within the funnel_out materialisation precedent, but this is the append-only
+  event log — payload-filtered SQL or a dossier-scoped variant when event logs grow.
+- **`planning_part_dropped` is a structlog warning, not a domain event** (028 review
+  F21): a dropped part card is invisible to the decision log / durable audit. Promote
+  to an `event_log` row (additive event type, own gate) if part-drop auditability is
+  ever needed.
+- **`CheckInOut.bundle` ships as `dict`** (028 review F13): the per-point projection is
+  server-side allowlisted (`checkin_read.py`) but the contract type is open, so the
+  generated client carries no shape and `CheckInBundle.tsx` hand-rolls fail-soft
+  parsers. Type it per-point (discriminated union) when the bundle grammar stabilises.
+- **Shared-DB column-churn migration tests** (028 review-stack incident, 2026-08-05):
+  the 1600-column tuple-descriptor exhaustion documented in
+  docs/knowledge/column-churn-migrations-need-scratch-db.md happened for real — older
+  roundtrip tests (`test_screen_step_rename_migration`, `test_search_migration`,
+  `test_synthesis_refinement_migration`, `test_schema`'s downgrade case) still churn
+  add/drop columns on the long-lived shared `policy_atlas_test`; the first test to trip
+  the limit strands the shared DB downgraded and presents as a hundreds-failed cascade.
+  Migrate them to the scratch-DB pattern (`test_migrations_025/028` are the template);
+  until then the remedy is recreating `policy_atlas_test`.
+- **`plan_stale` vs in-flight turn** (028 review F20): the stale-start fence maxes over
+  completed turns only, so Start can dispatch against the older approved plan while a
+  newer turn is still pending (safe — the pending turn then fails `run_active`, but
+  "start silently wins over a message already sent" is untested UX). Add the race test
+  if the planning surface ever softens the 409 posture.
+- **Summary-runtime niceties** (028 review INFOs): `writer_calls` misses the attempt
+  that raised; regenerate resends an identical seed (no judge-feedback rider — a
+  deterministic/low-temperature writer retries byte-identically); the artefact-summary
+  path re-fetches block prose already fetched; `write_block_summary` doubles as the
+  artefact entry point keyed on `seed["kind"]`. Revisit with the summary/judge
+  calibration eval workstream.

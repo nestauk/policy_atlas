@@ -44,7 +44,9 @@ def test_run_lifecycle_succeeded(conn: Connection) -> None:
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+    run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
 
     # Run record reached succeeded
     row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
@@ -256,7 +258,9 @@ def test_component_failed_persists_structured_exception_reason(
 
     monkeypatch.setattr(harness, "screen_sources", failing_screen_sources)
 
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+    run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
 
     event_log = events.read(conn, pid)
     cf = next(e for e in event_log if e["event_type"] == "component.failed")
@@ -277,17 +281,14 @@ def test_event_log_five_types_in_order(conn: Connection) -> None:
 
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+    outcome = run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
 
     log = events.read(conn, pid)
     types = [e["event_type"] for e in log]
-    assert types == [
-        "run.started",
-        "plan.compiled",
-        "component.started",
-        "component.completed",
-        "run.completed",
-    ]
+    assert types == ["run.started", "plan.compiled", "run.completed"]
+    assert outcome["summary"] is not None
     # Sequences are contiguous and ordered
     seqs = [e["sequence"] for e in log]
     assert seqs == list(range(1, len(seqs) + 1))
@@ -319,7 +320,7 @@ def test_synthesise_completes_with_characterisation_substrate(conn: Connection) 
     events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
     events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
-    run_harness(
+    outcome = run_harness(
         conn,
         config=config,
         project_id=pid,
@@ -332,13 +333,8 @@ def test_synthesise_completes_with_characterisation_substrate(conn: Connection) 
     row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
     assert row.status == "succeeded"
 
-    log = events.read(conn, pid)
-    completed = next(
-        e for e in log
-        if e["event_type"] == "component.completed"
-        and e["payload"].get("component") == "synthesise"
-    )
-    assert completed["payload"]["artefact_id"] is not None
+    assert outcome["summary"] is not None
+    assert outcome["summary"]["artefact_id"] is not None
 
 
 def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> None:

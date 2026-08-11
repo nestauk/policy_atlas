@@ -381,9 +381,7 @@ def test_turn_cap_exhaustion_exits_no_plan_not_abandoned(
 
     monkeypatch.setattr(StubPlannerBackend, "plan_turn", never_ready)
 
-    console = ScriptedConsole(
-        ["What works to reduce childhood obesity?"] + ["anything"] * 10
-    )
+    console = ScriptedConsole(["What works to reduce childhood obesity?"] + ["anything"] * 10)
     result = main(console, engine=engine, backends=_stub_backends())
 
     assert result.exit_code == 2
@@ -419,9 +417,7 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
                     grouping_facets=["outcome"],
                     steering_mode="unattended",
                     steer_point_defaults=[
-                        SteerPointDefaultDraft(
-                            steer_point="deepening_selection", action="stop"
-                        )
+                        SteerPointDefaultDraft(steer_point="deepening_selection", action="stop")
                     ],
                     assumptions=["Stub: unattended proposal."],
                 ),
@@ -432,9 +428,7 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
 
     result = None
     try:
-        console = ScriptedConsole(
-            ["What works to reduce childhood obesity?", "approve"]
-        )
+        console = ScriptedConsole(["What works to reduce childhood obesity?", "approve"])
         result = main(
             console,
             engine=engine,
@@ -481,7 +475,7 @@ def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engin
                     search_effort="standard",
                     analysis_depth="landscape",
                     components=["characterise"],
-                    steering_mode="moderate",
+                    steering_mode="unattended",
                     author_affiliation_countries=["gb", "us"],
                     assumptions=["Stub: scoped proposal."],
                 ),
@@ -492,9 +486,7 @@ def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engin
 
     result = None
     try:
-        console = ScriptedConsole(
-            ["What works to reduce childhood obesity?", "approve"]
-        )
+        console = ScriptedConsole(["What works to reduce childhood obesity?", "approve"])
         result = main(
             console,
             engine=engine,
@@ -572,23 +564,31 @@ def test_canonical_option_deltas_route_by_component() -> None:
     bare selection/synthesis deltas keep the select/synthesise wrap."""
     cases = [
         (
-            "search_exception", "after_component", "acquire", "deepen_search",
+            "search_review",
+            "after_component",
+            "acquire",
+            "deepen_search",
             {"acquire": {"search": {"depth": "deep"}}},
         ),
         (
-            "deepening_selection", "after_component", "select", "strongest_evidence",
+            "deepening_selection",
+            "after_component",
+            "select",
+            "strongest_evidence",
             {"select": {"selection": {"weight_emphasis": {"quality": 2.0}}}},
         ),
         (
-            "deepening_selection", "after_component", "select", "add_extraction_profile",
-            None,  # component-keyed already; asserted below via top-level key
-        ),
-        (
-            "synthesis_shape", "before_component", "synthesise", "regroup_granularity",
+            "finding_groups",
+            "after_component",
+            "group",
+            "regroup_granularity",
             {"group": {"grouping": {"granularity": "coarser"}}},
         ),
         (
-            "synthesis_shape", "before_component", "synthesise", "emphasis_boosts",
+            "synthesis_shape",
+            "before_component",
+            "synthesise",
+            "emphasis_boosts",
             {"synthesise": {"synthesis": {"retrieval_boosts": {"appraisal_tier": {"5": 2.0}}}}},
         ),
     ]
@@ -597,12 +597,7 @@ def test_canonical_option_deltas_route_by_component() -> None:
         console = ScriptedConsole([_canonical_number(payload, option_id)])
         response = CliIO(console).pause(payload, "check-in")
         assert isinstance(response, Adjust), option_id
-        if expected is not None:
-            assert response.directive_deltas == expected, option_id
-        else:
-            # add_extraction_profile: component-qualified, used as-is (top key = extract).
-            assert set(response.directive_deltas) == {"extract"}, option_id
-            assert "extraction" in response.directive_deltas["extract"]
+        assert response.directive_deltas == expected, option_id
 
 
 def test_route_option_delta_wraps_only_bare_selection_and_synthesis() -> None:
@@ -708,6 +703,22 @@ def _compile(
     return RouterCompileWire(fragments=fragments, summary=summary)
 
 
+class _ModerateStubPlanner(StubPlannerBackend):
+    """Stub planner variant for tests that deliberately exercise check-ins."""
+
+    def plan_turn(
+        self,
+        turns: list[dict[str, str]],
+        previous_draft: dict[str, object] | None,
+        *,
+        session_id: uuid.UUID | None = None,
+    ) -> PlannerTurnWire:
+        turn = super().plan_turn(turns, previous_draft, session_id=session_id)
+        return turn.model_copy(
+            update={"plan_draft": turn.plan_draft.model_copy(update={"steering_mode": "moderate"})}
+        )
+
+
 # A known-good pending-component fan-out fragment (group is not yet run at the
 # first pause of a deep chain), mirroring tests/runtime/test_router_compile.py.
 _GROUP_FACET_FRAGMENT = _frag(
@@ -742,7 +753,9 @@ def test_free_text_refusal_re_presents_the_menu(engine: Engine) -> None:
             ]
         )
         # main() constructs the deterministic StubOrchestratorBackend (refuse-all).
-        result = main(console, engine=engine, backends=_stub_backends())
+        result = main(
+            console, engine=engine, planner=_ModerateStubPlanner(), backends=_stub_backends()
+        )
         assert result.exit_code == 0
         assert _printed(console, "None of that could be applied")
     finally:
@@ -773,11 +786,13 @@ def test_confirmed_free_text_steer_applies_in_a_full_run(engine: Engine) -> None
                 "1",
             ]
         )
-        orchestrator = StubOrchestratorBackend(
-            route_responses=[_compile([_GROUP_FACET_FRAGMENT])]
-        )
+        orchestrator = StubOrchestratorBackend(route_responses=[_compile([_GROUP_FACET_FRAGMENT])])
         result = main(
-            console, engine=engine, backends=_stub_backends(), orchestrator=orchestrator
+            console,
+            engine=engine,
+            planner=_ModerateStubPlanner(),
+            backends=_stub_backends(),
+            orchestrator=orchestrator,
         )
         assert result.exit_code == 0
         assert result.outcome is not None
@@ -832,9 +847,7 @@ class _StandingInstructionsPlanner:
     ) -> PlannerTurnWire:
         del previous_draft, session_id
         answers = [turn["text"] for turn in turns if turn["role"] == "user"][1:]
-        defaults = [
-            self._default_for(self._POINTS[i], answer) for i, answer in enumerate(answers)
-        ]
+        defaults = [self._default_for(self._POINTS[i], answer) for i, answer in enumerate(answers)]
         draft = PlanDraftWire(
             title="Unattended review",
             question=turns[0]["text"],
@@ -992,9 +1005,10 @@ def test_no_cost_language_on_any_user_facing_surface() -> None:
         ).model_dump()
     ]
     for point_name, boundary, component in (
-        ("search_exception", "after_component", "acquire"),
+        ("search_review", "after_component", "acquire"),
         ("evidence_base_coverage", "after_component", "characterise"),
         ("deepening_selection", "after_component", "select"),
+        ("finding_groups", "after_component", "group"),
         ("synthesis_shape", "before_component", "synthesise"),
     ):
         payload = _steer_point_payload(

@@ -18,6 +18,8 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     SectionProseWire,
     SectionRepairWire,
     SectionTurn,
+    SummaryJudgeWire,
+    SummaryWire,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
 
@@ -85,8 +87,9 @@ class ScriptedSynthesisBackend:
         intent: str,
         substrate: dict[str, Any],
         rejection: list[str] | None = None,
+        section_budget: int | None = None,
     ) -> UsageResult[SectionProposalWire]:
-        del intent, substrate, rejection
+        del intent, substrate, rejection, section_budget
         if self._proposal is None:
             raise AssertionError(
                 f"{type(self).__name__} has no propose_sections() proposal configured"
@@ -114,6 +117,17 @@ class ScriptedSynthesisBackend:
 
     def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
         return empty_key_findings(seed)
+
+    def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
+        """Return a deterministic summary for protocol completeness in test doubles."""
+        return SummaryWire(summary=str(seed.get("prose", ""))[:200]), None
+
+    def judge_summary(
+        self, *, summary: str, detail: dict[str, Any]
+    ) -> UsageResult[SummaryJudgeWire]:
+        """Return a passing summary verdict for protocol completeness in test doubles."""
+        del summary, detail
+        return SummaryJudgeWire(verdict="pass", reason="test stub"), None
 
     @staticmethod
     def _repair_unchanged(failing: list[dict[str, Any]]) -> SectionRepairWire:

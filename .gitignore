@@ -37,3 +37,10 @@ scripts/eval_ground_truth/results/
 node_modules/
 .vite/
 *.tsbuildinfo
+
+# Task 026: CDK context cache (account-scoped lookups) and synth output
+cdk.context.json
+infra/cdk.out/
+
+# Verification evidence is binary + point-in-time: attach to the task PR, never commit
+docs/tasks/*/evidence/

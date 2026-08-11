@@ -36,6 +36,51 @@ jobs:
       - run: make frontend-install
       - run: make verify
 
+  # Thin integration boundary: built SPA → real HTTP API with a fresh local
+  # dev issuer, real compose Postgres, and the authenticated SSE tail. This
+  # stays independent of the mock-mode Playwright journey in `verify`.
+  fe-api-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: cp backend/.env.example backend/.env
+      - run: make setup
+      - run: make frontend-install
+      - run: cd frontend && pnpm exec playwright install --with-deps chromium
+      - run: make fe-api-smoke
+      - run: make deploy-build-guard-test
+
+  # Mock-mode Playwright journey (027 F.2, contract rev 3.3 — the one
+  # approved CI change): chromium only, VITE_MOCK=1, no backend/Postgres.
+  # Independent of `verify` (typecheck/lint/vitest/build) and `fe-api-smoke`
+  # (real API); exercises the demo journey purely against `src/mock/`.
+  mock-journey:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: make frontend-install
+      - run: cd frontend && pnpm exec playwright install --with-deps chromium
+      - run: cd frontend && pnpm e2e
+
   # Dependency-vulnerability audit (016 contract rev 2.2) — independent job so
   # advisory-database availability never blocks or slows the verify gate.
   audit:

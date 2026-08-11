@@ -38,7 +38,7 @@ class ResumeDecision:
 
 @dataclass(frozen=True)
 class ContinuationState:
-    """The sixteen runner loop fields reconstructed from durable state.
+    """The runner loop fields reconstructed from durable state.
 
     Args:
         capability_run_id: Identity of the parked capability walk.
@@ -57,6 +57,8 @@ class ContinuationState:
         blocked_discretionary: Components blocked by their latest attempt.
         completed_components: Terminal component names.
         last_check_in_payload: Rebuilt latest check-in payload.
+        parked_boundary: Boundary of the parked steering pause.
+        parked_component: Component of the parked steering pause.
         most_recent_attempted_run_id: Latest attempted run id.
         session_id: Persisted trace-session id.
     """
@@ -77,6 +79,8 @@ class ContinuationState:
     blocked_discretionary: dict[str, str]
     completed_components: set[str]
     last_check_in_payload: dict[str, Any] | None
+    parked_boundary: str | None
+    parked_component: str | None
     most_recent_attempted_run_id: uuid.UUID | None
     session_id: uuid.UUID | None
 
@@ -160,6 +164,17 @@ def build(
     )
     if parked is None:
         raise LookupError("parked walk has no run.parked snapshot")
+    pause = next(
+        (entry for entry in reversed(scoped_events) if entry["event_type"] == "steering.pause"),
+        None,
+    )
+    pause_payload = pause["payload"] if pause is not None else {}
+    parked_boundary = pause_payload.get("boundary") if isinstance(pause_payload, dict) else None
+    parked_component = pause_payload.get("component") if isinstance(pause_payload, dict) else None
+    if not isinstance(parked_boundary, str):
+        parked_boundary = None
+    if not isinstance(parked_component, str):
+        parked_component = None
     snapshot = parked["payload"]
     outcomes = [
         _outcome_from_snapshot(value, RunStepOutcome) for value in snapshot["step_outcomes"]
@@ -273,6 +288,8 @@ def build(
         blocked_discretionary=blocked_discretionary,
         completed_components=completed_components,
         last_check_in_payload=last_check_in_payload,
+        parked_boundary=parked_boundary,
+        parked_component=parked_component,
         most_recent_attempted_run_id=most_recent,
         session_id=cap["session_id"],
     )

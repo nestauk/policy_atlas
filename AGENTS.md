@@ -22,42 +22,34 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `025-web-app-foundation` (**BUILD COMPLETE through
-step 6, 2026-07-21** — phases 0–I built and committed on
-`task/025-web-app-foundation`; `make verify` fully green from the hoisted
-monorepo layout (backend suite + mypy strict + ruff + build + audit-paths +
-prompt-guard + font-guard + drift-check + frontend
-typecheck/lint/vitest/build); `verification.md` complete. **The pinned
-I.2 live check RAN 2026-07-21** (~52 min, real browser UI, two dev-issuer
-users, restart while parked∧executing, confirm-gate steer, boundary
-continuation to a succeeded artefact, rename/archive truth) — narrated log
-in docs/tasks/025-web-app-foundation/live-check-log.md; it caught and
-fixed five integration gaps (stub-defaulting API deps, double /api client
-prefix, dict plan-row in confirm-apply, the unwrapped screen directive
-validation branch, missing continuation.claimed SSE frame) plus a test
-hermeticity hardening (conftest key scrub + side-effect-free alembic env
-loading). **Next: the review stack runs in a FRESH conversation
-with `task-cycle-review`** (Tier 4: contract-verifier · /code-review
-medium per review-economy pins · security-auditor lane · codex
-adversarial · live-trace lane · human deep review) — the build
-conversation must not adjudicate its own findings. As-built highlights:
-monorepo hoist (`backend/` + `frontend/` + `infra/`); two approved
-migrations **plus an owner-approved build-time gate expansion
-(`event_log.run_id` nullable, 2026-07-21)**; runner parking + boundary
-continuation (WalkParked, `continuation_state` reducer with G1–G5,
-`run_plan(resume_from)`, answer→claim→drainer protocol, parity harness);
-schema-first API (`policy_atlas.api`) with RS256/JWKS auth + dev issuer,
-BOLA-opaque 404s, error envelope, SSE replay+tail from `event_log`, read
-models incl. the chunk-context clamp; React 19 + pnpm frontend on the
-Nesta brand layer with the demo-validated views, replay-idempotent store,
-mock mode + Playwright journey. New durable events (run.parked class):
-`run.opened` / `run.finished` / `plan.approved` / pause `render`
-persisted. Spec: `docs/specs/system/web-api.md` (new). Sequenced after
-025: **026 co-pilot Q&A + the per-user transcript store**; then the eval
-slice.)
+Implementation — task `028-ux-refinement` **design step 1** (2026-08-03,
+branch `task/028-ux-refinement`, stacked on `task/027-frontend-uplift`):
+interview-driven UX refinement — four internal policy-team interviews on
+the 027 build (type scale + copy diet, expandable composer, sequential
+plan-building fork, artefact contents-sidebar + progressive disclosure,
+key-findings bullets fork, sortable/theme-filterable sources, naming
+pass, tab-IA fork). Contract:
+`docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
+`docs/tasks/028-ux-refinement/design-inputs.md`.
 
-Tasks `001-walking-skeleton` through `024-steering-surface` are
-complete (merged) — the EB chain runs end-to-end live behind the
+Tasks `026-infra-deployment` (draft PR #33, Tier 4 — system **live** at
+`v3.policyatlas.uk`) and `027-frontend-uplift` (PR #36, Tier 3 — review
+stack adjudicated 2026-07-30, 32 fixes re-verified) are both at **step 9:
+human review + merge**. 027 branches from 026; 028 branches from 027;
+each PR re-targets `dev` as its parent merges — if a merge review touches
+files a stacked branch changed, that branch rebases before its own
+review. Known operational state: staging's OpenAI quota exhausted
+2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
+(former 027 draft) stays deferred — contract draft at unpushed
+`a5c9708`.
+
+Tasks `001-walking-skeleton` through `025-web-app-foundation` are
+complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist
+(`backend/` + `frontend/` + `infra/`), schema-first API
+(`policy_atlas.api`, RS256/JWKS auth + dev issuer, SSE replay+tail),
+runner parking + boundary continuation, React 19 + pnpm frontend on
+the Nesta brand layer; spec `docs/specs/system/web-api.md`) — the EB
+chain runs end-to-end live behind the
 024 steering surface (one orchestrator, three moments: planning turn ·
 free-text router · boundary watch; steer-point lattice P1–P4; durable
 steering record on `event_log` + `capability_run` + the
@@ -72,8 +64,9 @@ two-stage clustering engine + the 022 cost/surface work (ADR 0018,
 + vetter, `synthesise_section_v7` (v6 frozen as the cost-harness
 baseline), `synthesise_sections_v2`). 018 trailing lane: **D2
 rehearsal** (owner-scheduled); the `demo-live-run` branch (C4 demo
-surface) stays throwaway — never merges — and is superseded by this
-slice as evidence. After 025: 026 co-pilot Q&A, then the eval slice
-(cost as a first-class axis), then Bedrock, then the workspace
-cluster. All other seams remain deferred (`docs/deferred.md`).
+surface) stays throwaway — never merges — and is superseded by 025
+as evidence. After 026 (infra): co-pilot Q&A + transcript store, then
+the eval slice (cost as a first-class axis), then Bedrock, then the
+workspace cluster. All other seams remain deferred
+(`docs/deferred.md`).
 

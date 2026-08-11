@@ -31,6 +31,10 @@ _CONFLICT_CODES = {
     "already_answered",
     "capacity",
     "planning_turn_in_progress",
+    "stale_turn",
+    # 028 strand 3: the approved plan predates the newest completed planning
+    # turn — review the demoted draft, re-approve, then start.
+    "plan_stale",
 }
 
 
@@ -142,7 +146,12 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        engine = create_engine(settings.database_url, pool_pre_ping=True)
+        engine = create_engine(
+            settings.database_url,
+            pool_pre_ping=True,
+            pool_size=settings.db_pool_size,
+            max_overflow=settings.db_max_overflow,
+        )
         executor = ThreadPoolExecutor(
             max_workers=settings.run_executor_max,
             thread_name_prefix="policy-atlas-walk",

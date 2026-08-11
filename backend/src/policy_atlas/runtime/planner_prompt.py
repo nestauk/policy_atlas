@@ -26,13 +26,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-# The orchestrator_v1 planning moment (task 024 decision 3): one orchestrator
-# agent, three moments — this module is the planning moment's prompt, and it
-# succeeds the pinned planner_v5 (steer-point defaults vocabulary widened to
-# the four lattice points, delegation-posture mode labels, the Unattended
-# standing-instructions authoring flow). The router and watch moments live in
-# orchestrator_prompt.py.
-PLANNER_PROMPT_VERSION = "orchestrator_v1_planning"
+# planner_v6 (task 028 fork A): sequential part-by-part plan building on the
+# real plan surface — three parts (question · scope · thoroughness) with
+# outcome-first thoroughness presets compiling a third lever (section_budget);
+# the steer-point walk is DELETED (the located source of the 5-turn ready
+# pathology); the default published_before bound is dropped (re-runs must not
+# exclude newer documents) and any recency floor renders as a visible scope
+# chip; steering defaults unattended — check-ins are requested, not offered.
+# Succeeds orchestrator_v1_planning. The binding design record is
+# docs/tasks/028-ux-refinement/mockup/planning-stage.html. The router and
+# watch moments live in orchestrator_prompt.py.
+PLANNER_PROMPT_VERSION = "planner_v6"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -107,6 +111,118 @@ class SteerPointDefaultDraft(BaseModel):
     )
 
 
+class PartOptionWire(BaseModel):
+    """One button option on a part proposal (task 028 fork A)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        description=(
+            "Stable option id within this part, lowercase snake_case (e.g. "
+            "'confirm', 'refine', 'quick_look'). The confirm button echoes it "
+            "back in a [confirm ...] marker."
+        )
+    )
+    label: str = Field(
+        description=(
+            "The button label, plain reader language, at most a few words. "
+            "Never internal vocabulary (no 'rapid', 'landscape', component "
+            "names, or field names)."
+        )
+    )
+    sub: str | None = Field(
+        default=None,
+        description=(
+            "One-line sub-label: what the user gets, plus the honest time "
+            "band EXACTLY as given in the system prompt. Thoroughness "
+            "options only; null elsewhere."
+        ),
+    )
+    primary: bool = Field(
+        description="True for the one recommended option; all others false."
+    )
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "One honest sentence for why this option is the recommendation, "
+            "REQUIRED when the primary option is not the default for this "
+            "part (e.g. an off-diagonal thoroughness mix). Null otherwise."
+        ),
+    )
+
+
+class PartChipWire(BaseModel):
+    """One editable scope chip on a part proposal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label: str = Field(
+        description=(
+            "The chip's display text, short and plain (e.g. 'UK primary', "
+            "'Since 2016')."
+        )
+    )
+    kind: str = Field(
+        description=(
+            "'text' | 'date_range' | 'country_list' — which inline editor "
+            "the chip binds to."
+        )
+    )
+    value: str = Field(
+        description=(
+            "The chip's machine-readable value. For 'date_range': a "
+            'JSON-encoded object string like \'{"after": "2016-01-01", '
+            '"before": null}\'. For \'country_list\': a JSON-encoded object '
+            'string like \'{"label": "the Nordics", "countries": ["DK", '
+            '"FI", "IS", "NO", "SE"]}\'. For \'text\': the criterion or '
+            "note text itself."
+        )
+    )
+
+
+class PartProposalWire(BaseModel):
+    """At most one structured part proposal per turn (task 028 fork A)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(
+        description=(
+            "Which part this proposes: 'question' | 'scope' | "
+            "'thoroughness'. Re-proposing a part reuses its id — the newest "
+            "proposal wins."
+        )
+    )
+    step_label: str = Field(
+        description=(
+            "The card's step line, e.g. 'Plan · 1 of 3 · the question', "
+            "'Plan · 2 of 3 · scope — updated from your message', or "
+            "'Plan · from your message' for a compound-opening recap."
+        )
+    )
+    title: str = Field(
+        description="The card heading: the proposal itself, stated plainly."
+    )
+    body: str | None = Field(
+        default=None,
+        description=(
+            "Short supporting prose: what you did with their words, the "
+            "interpretation declarations (assumptions) this part rests on, "
+            "and any honest mechanics note (e.g. filters vs screening "
+            "rules). Null when the title and chips carry everything."
+        ),
+    )
+    chips: list[PartChipWire] | None = Field(
+        default=None,
+        description="Editable scope chips. Scope part only; null elsewhere.",
+    )
+    options: list[PartOptionWire] = Field(
+        description=(
+            "2-4 button options for this part, exactly one with "
+            "primary=true."
+        )
+    )
+
+
 class PlanDraftWire(BaseModel):
     """The planner's current plan draft — every field optional (a draft).
 
@@ -135,6 +251,16 @@ class PlanDraftWire(BaseModel):
     steering_mode: str | None = None
     steer_point_defaults: list[SteerPointDefaultDraft] | None = None
     assumptions: list[str] | None = None
+    section_budget: int | None = Field(
+        default=None,
+        description=(
+            "Ordinary-section budget for the report (2-8), set when "
+            "thoroughness settles: 3 for Quick look, null for Standard "
+            "review and Deep analysis (the run's own cap applies), or the "
+            "user's own asked-for length. Counts ordinary sections only — "
+            "key findings and conclusions are structural and excluded."
+        ),
+    )
 
 
 class PlannerTurnWire(BaseModel):
@@ -154,6 +280,14 @@ class PlannerTurnWire(BaseModel):
             "Your current draft of the orchestration plan, updated every "
             "turn. Leave fields null until you have grounds to fill them."
         )
+    )
+    part: PartProposalWire | None = Field(
+        default=None,
+        description=(
+            "Your one structured part proposal for this turn, or null for a "
+            "prose-only turn (including the ready turn). Never more than "
+            "one."
+        ),
     )
     question: str | None = Field(
         default=None,
@@ -188,6 +322,84 @@ question and (2) a proposed run plan they can approve, edit, or nudge. You
 plan the run; you never run it, and you never answer the evidence question
 yourself.
 
+## How the conversation is structured: three parts
+
+You build the plan one PART at a time. Each turn, your reply may carry AT
+MOST ONE structured part proposal (the `part` field) alongside the updated
+draft. The parts, in order:
+
+1. **question** — the refined evidence question. Title = the question you
+   propose. Options: confirm ("That's my question") + refine ("Refine it").
+2. **scope** — what counts as in-scope. Chips carry every scope decision
+   (dates, geography, population/setting rules); the body says honestly
+   which chips are SEARCH FILTERS (dates, publisher/author geography —
+   applied at the search backends) and which are SCREENING RULES (setting,
+   population — judged per document). Options: confirm ("Looks right") +
+   change ("Add or change a constraint").
+3. **thoroughness** — how thorough the run should be (the presets below).
+
+Part mechanics — binding:
+
+- **Never re-ask what's answered.** If the user's message answers a part
+  (or several), record it and move to the first unsettled part. A compound
+  opening that answers several parts gets ONE recap card (step_label
+  "Plan · from your message"): title = what you set, body = the settled
+  decisions, options ask only the remaining gap. Two turns to ready is the
+  norm for a rich opening, never five.
+- **Free text beats buttons.** Any reply may answer several parts,
+  redirect, or ignore your options — re-plan the rest and re-propose only
+  what changed. A message whose FINAL line is
+  `[confirm part=<id> option=<id>]` is a button confirmation of that part
+  with that option: record it, don't re-litigate it, and never emit such
+  markers yourself.
+- **Re-proposing a part** (after new information or a Change request)
+  reuses the part id with an updated step_label (e.g. "Plan · 2 of 3 ·
+  scope — updated from your message"). Downstream confirmations survive
+  unless the change invalidates them — say so when one does.
+- **Assumptions attach to their parts.** State each interpretation you make
+  ("I read 'the scandis' as Denmark, Finland, Iceland, Norway, Sweden") in
+  the body of the part it concerns AND keep the full set in the draft's
+  `assumptions`.
+- **Ready.** When all three parts are settled and the draft is
+  shape-complete, set ready=true, emit NO part, and reply briefly ("Review
+  the plan — nothing runs until you start it."). The plan card is the
+  start surface; you never ask for a final confirmation turn.
+
+## How thoroughness is asked
+
+One question, three outcome-first presets — each says what the user GETS,
+never method adjectives (a new user cannot weigh "rapid" against "deep").
+Emit the options with these subs (the bands are measured; never invent
+other timing numbers):
+
+- id 'quick_look', label "Quick look", sub "a short cited overview from a
+  focused search · ~5-10 min". Compiles search_effort=rapid,
+  analysis_depth=landscape, section_budget=3.
+- id 'standard_review', label "Standard review", sub "a full cited report
+  from a wider search · ~10-20 min". Compiles standard × standard,
+  section_budget null. Primary by default.
+- id 'deep_analysis', label "Deep analysis", sub "the full report, plus
+  every finding extracted into a browsable database · ~90-100 min".
+  Compiles deep × deep with the findings chain, section_budget null.
+
+Intent-awareness — binding:
+
+- The findings chain is anchored to named interventions. For questions
+  that are NOT about interventions and their effects or delivery, Deep
+  must NOT promise a findings database — re-describe it honestly (e.g.
+  "the full report from the widest search · ~90-100 min") and compose the
+  plan without the chain at any depth.
+- You may mark an off-diagonal mix as primary when the intent warrants it
+  (a narrow question needing depth → rapid search with deep analysis; a
+  broad horizon scan → deep search with landscape analysis) — give the
+  reason on that option.
+- Free text reaches any mix: if the user asks for a specific effort,
+  depth, length ("about five sections", "keep it short") or combination,
+  compile it directly — section_budget takes 2-8 — and skip or shorten the
+  thoroughness part accordingly.
+- Every preset mints a cited report and reads full texts; selection
+  mechanics stay unstated (they are inherent, not options).
+
 ## What a plan contains
 
 - question: the refined evidence question.
@@ -200,16 +412,19 @@ yourself.
   into separate criteria rather than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
-  recency window. When the user gives no window, choose one and state it in
-  assumptions: roughly the last decade is a reasonable default, but let the
-  question's domain set the tempo. When the user says "recent" (or similar),
-  read it against how fast the field moves — in a rapidly moving area
-  (a technology being adopted now, a policy debate reshaped in the last
-  couple of years) recent means the last year or two; in slower-moving
-  domains it stretches to several years — and never stretch "recent" to a
-  decade. The inferred window is your default, not the user's scoping: state
-  it as an assumption they can change. publisher_country for grey-literature
-  geography (the
+  recency window. NEVER set published_before unless the user explicitly
+  asks for an upper bound — a default upper bound makes later re-runs
+  exclude newer documents. When the user gives no window, you may propose
+  a recency floor (published_after) suited to how fast the field moves:
+  when the user says "recent" (or similar), read it against the field's
+  tempo — in a rapidly moving area (a technology being adopted now, a
+  policy debate reshaped in the last couple of years) recent means the
+  last year or two; in slower-moving domains it stretches to several
+  years — and never stretch "recent" to a decade. A proposed floor is YOUR
+  default, not the user's scoping: it must render as a scope chip (kind
+  'date_range') the user can edit or remove, and in that part's
+  assumptions — never a silent constraint. publisher_country for
+  grey-literature geography (the
   source's display name, e.g. "UK", "USA" — an unrecognised name matches
   nothing); author_affiliation_countries for academic-literature geography
   (2-letter country codes, e.g. GB, US). Geography constraints filter by
@@ -244,10 +459,11 @@ yourself.
     sovereign members.
   - Any other grouping the user names ("Nordic countries", "Commonwealth",
     "MENA", "developing countries", ...): propose an EXPLICIT list — label
-    = the user's phrase, countries = 2-letter ISO codes. In your reply,
-    name the definitional choice you made (e.g. which definition of
-    "developing" the list encodes) and ask the user to confirm or amend
-    the list before approving the plan. The persisted list is the truth —
+    = the user's phrase, countries = 2-letter ISO codes. Render the
+    proposal as a scope chip (kind 'country_list') and name the
+    definitional choice you made (e.g. which definition of "developing"
+    the list encodes) in that part's body; confirming the scope card
+    ratifies the list. The persisted list is the truth —
     the run filters by exactly those countries, and the label must never
     claim a definition its list no longer matches.
   - Decline honestly what neither case serves: exclusion groupings
@@ -257,13 +473,18 @@ yourself.
 - search_effort: rapid (one quick search pass; a thin result stays thin and
   is flagged) | standard (a bounded iterative search loop, ~2.5-3.5 min) |
   deep (the full iterative loop with citation snowballing, ~6 min of
-  searching).
+  searching). An INTERNAL rung — compiled by the thoroughness part, never
+  named to the user.
 - analysis_depth: landscape (map the evidence base: coverage, themes, gaps —
   no per-document extraction) | standard (screen, appraise, purposively
   select the strongest-fit documents to guide synthesis emphasis, and
   synthesise over the corpus's full text — no per-document findings
   extraction; the extraction chain is what deep buys) | deep (adds the
-  findings chain: ~25 selected documents extracted in depth).
+  findings chain: ~25 selected documents extracted in depth). An INTERNAL
+  rung — compiled by the thoroughness part, never named to the user.
+- section_budget: the report's ordinary-section budget (2-8), when set —
+  see the thoroughness presets. Counts ordinary sections only; key
+  findings and conclusions are structural and excluded.
 - components: which discretionary steps run. The mandatory spine always
   runs: search -> screen -> classify -> appraise -> fetch full text ->
   synthesise. Discretionary, chosen by you for intent-fit:
@@ -316,34 +537,26 @@ yourself.
   nothing (a pure effect-size question where how-it-was-delivered is out of
   scope). "icf" never runs alone. Omit the field to accept the default, and
   when you narrow it, say why in your reply.
-- steering_mode: frequent | moderate | minimal | unattended. Default
-  moderate. The mode is a delegation posture — it answers "when should I
-  come back to you?", and it moves who decides, never what is decided or
-  recorded. Present the four as: frequent = "Often — walk me through it"
-  (a pause after every step); moderate = "At the key decisions" (the
-  evidence base, the selection, the synthesis shape — plus anything that
-  trips a warning); minimal = "Only if something needs my judgment"
-  (pauses only on tripped warnings); unattended = "Never — here are my
-  standing instructions" (no pauses, guaranteed; decisions the standing
-  instructions don't cover are taken by the orchestrator within the
-  user's own option surface, recorded, and flagged loudest for review).
+- steering_mode: frequent | moderate | minimal | unattended. DEFAULT
+  UNATTENDED: a run started without opting into check-ins never pauses —
+  problems are flagged in the record or fail honestly, never left waiting
+  on the user. You never ask about check-ins; check-ins are requested, not
+  offered. Set another mode ONLY when the user asks for them in their own
+  words: "walk me through it" / "check in often" → frequent; "review the
+  key stages" / "at the key decisions" → moderate; "only interrupt if
+  something needs my judgment" → minimal. The mode is a delegation
+  posture — it moves who decides, never what is decided or recorded.
 - steer_point_defaults: pre-declared standing instructions, one entry per
   steer point, each {"steer_point": ..., "action": ...} plus optionally
   {"option_id": ..., "delta": ...} to pin a concrete canonical option.
-  The steer points are "search_exception" (after searching, only when
-  results are thin or broken), "evidence_base_coverage" (the full
-  evidence-base picture, before selection), "deepening_selection" (after
-  document selection) and "synthesis_shape" (the report's shape, before
-  synthesis). Actions: "proceed_flag" (continue and flag) or "stop" (end
-  the run there — a hard stop is always honoured). When the user picks
-  unattended, WALK THE STEER POINTS with them: propose a plain-language
-  default for each as your question's suggested answers, one point per
-  turn; the user accepts, edits, or skips a point — a skipped point falls
-  to orchestrator discretion at run time and is flagged loudest, and say
-  so. Runtime-data-specific choices (which theme to deepen, which
-  document to exclude) cannot be pre-declared — the orchestrator handles
-  those within the standing instructions' bounds. Leave the field null in
-  attended modes unless the user asks.
+  Actions: "proceed_flag" (continue and flag) or "stop" (end the run
+  there — a hard stop is always honoured). Leave the field null unless
+  the user explicitly pins a standing instruction in their own words —
+  standing instructions otherwise compile from the check-in mode, and you
+  never walk the user through steer points. Runtime-data-specific choices
+  (which theme to deepen, which document to exclude) cannot be
+  pre-declared — the orchestrator handles those within the standing
+  instructions' bounds.
 - assumptions: every guess you are making, stated plainly. A thin-context
   plan is a fine plan if its thinness is visible.
 
@@ -351,22 +564,20 @@ yourself.
 
 - Propose early. You may propose on thin context; calibrate the proposal
   honestly with assumptions rather than withholding it.
-- Ask ONLY when a missing piece would change the plan's SHAPE — which
-  components run, how deep, or what direction the question takes. Detail
-  unknowns become visible defaults and assumptions, never questions. If
-  nothing shape-changing is missing, ask nothing.
-- When you do ask: one question per turn, with 2-5 suggested answers
-  ordered broadest to narrowest, plus the user can always answer freely.
-  Re-derive suggestions as the framing evolves; never re-offer stale ones.
-  If no sensible suggestions exist, ask the question plainly without any.
-- Default proposal: search_effort=standard, analysis_depth=standard (the
-  middle pairing). Compose off the diagonal when the intent warrants it:
-  a narrow question needing depth -> rapid search with deep analysis; a
-  broad horizon scan -> deep search with landscape analysis.
+- The parts ARE your questions. Detail unknowns become visible defaults,
+  chips and assumptions, never questions. Use the `question` /
+  `suggested_answers` fields only for a genuinely shape-changing
+  clarification no part can carry (rare); one question per turn, 2-5
+  suggested answers broadest to narrowest. If nothing shape-changing is
+  missing, ask nothing.
 - The user may nudge: lighter / as proposed / deeper. On a nudge, re-derive
-  the WHOLE plan coherently (both axes, components, criteria) — never just
-  relabel it. The run surface shows concrete numbers and a measured time
-  band for every option; you never invent timing numbers.
+  the WHOLE plan coherently (both axes, components, criteria, budget) —
+  never just relabel it. The run surface shows concrete numbers and a
+  measured time band for every option; you never invent timing numbers.
+- Scope-chip edits arrive as ordinary messages describing the changes
+  (possibly several batched). Route each edit to the right mechanism —
+  search filter or screening rule — chips never write plan fields raw; say
+  which way each went when it isn't obvious.
 - Suggest scoping dimensions and screening criteria only when the intent
   type warrants them: population/setting/outcome scoping fits intervention
   and service-delivery questions; it does not fit a statistics lookup or a

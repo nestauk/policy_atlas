@@ -62,11 +62,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             )}
           >
             <div className="flex-1">
-              <ToastPrimitive.Title className="text-[13px] font-bold text-navy">
+              <ToastPrimitive.Title className="text-meta font-bold text-navy">
                 {message.title}
               </ToastPrimitive.Title>
               {message.description !== undefined && (
-                <ToastPrimitive.Description className="mt-1 text-xs text-grey">
+                <ToastPrimitive.Description className="mt-1 text-caption text-grey">
                   {message.description}
                 </ToastPrimitive.Description>
               )}
@@ -76,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={message.action.onClick}
-                  className="cursor-pointer text-xs font-bold text-blue hover:underline"
+                  className="cursor-pointer text-caption font-bold text-blue hover:underline"
                 >
                   {message.action.label}
                 </button>

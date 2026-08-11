@@ -53,6 +53,10 @@ log = structlog.get_logger()
 
 _UNKNOWN_EVIDENCE_TYPE = "Unknown / Insufficient information"
 
+# Fixed namespace for content-keyed theme identity (task 028 pin 7) — never
+# rotate: theme_id = uuid5(ns, f"{project_id}:{theme_name}").
+_THEME_ID_NAMESPACE = uuid.UUID("6f1cb1e2-9a4e-4b0d-8c6f-028028028028")
+
 # D9/B5 (024 steering surface): characterise's first directive parser.
 # ``themes``: fewer|standard|more scales the derived theme-count bounds;
 # "standard"/absent is byte-identical to as-built (guard-tested).
@@ -690,7 +694,11 @@ def _grouping_provenance(
     }
 
 
-def _theme_payload(themes: list[Theme], assignments: dict[str, str]) -> dict[str, Any]:
+def _theme_payload(
+    themes: list[Theme],
+    assignments: dict[str, str],
+    theme_ids: dict[str, uuid.UUID],
+) -> dict[str, Any]:
     member_ids_by_theme: dict[str, list[str]] = {theme["name"]: [] for theme in themes}
     unclustered_ids: list[str] = []
     for doc_id, theme_name in assignments.items():
@@ -701,6 +709,7 @@ def _theme_payload(themes: list[Theme], assignments: dict[str, str]) -> dict[str
     return {
         "themes": [
             {
+                "theme_id": str(theme_ids[theme["name"]]),
                 "name": theme["name"],
                 "description": theme["description"],
                 "member_ids": member_ids_by_theme[theme["name"]],
@@ -718,19 +727,22 @@ def _insert_theme_tags(
     project_id: uuid.UUID,
     run_id: uuid.UUID,
     assignments: dict[str, str],
+    theme_ids: dict[str, uuid.UUID],
     now: datetime,
 ) -> None:
-    insert_source_tags(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        now=now,
-        assertions=[
-            (uuid.UUID(doc_id), theme_name, "characterise")
-            for doc_id, theme_name in assignments.items()
-            if theme_name != UNCLUSTERED
-        ],
-    )
+    for theme_name, theme_id in theme_ids.items():
+        insert_source_tags(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            now=now,
+            assertions=[
+                (uuid.UUID(doc_id), theme_name, "characterise")
+                for doc_id, assigned_theme in assignments.items()
+                if assigned_theme == theme_name
+            ],
+            theme_id=theme_id,
+        )
 
 
 def _summary(
@@ -849,13 +861,21 @@ def characterise_scope(
         themes=themes_directive,
         guidance=guidance,
     )
-    theme_payload = _theme_payload(themes, assignments)
+    # Content-keyed (project, name) identity: deterministic across re-runs so
+    # stub runs stay byte-identical and a re-characterise that keeps a theme's
+    # name keeps its id (theme-filter bookmarks survive).
+    theme_ids = {
+        theme["name"]: uuid.uuid5(_THEME_ID_NAMESPACE, f"{project_id}:{theme['name']}")
+        for theme in themes
+    }
+    theme_payload = _theme_payload(themes, assignments, theme_ids)
     now = datetime.now(UTC)
     _insert_theme_tags(
         conn,
         project_id=project_id,
         run_id=run_id,
         assignments=assignments,
+        theme_ids=theme_ids,
         now=now,
     )
     conn.execute(

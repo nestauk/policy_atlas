@@ -1,10 +1,17 @@
 import { useParams } from "react-router";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
 
-import { useFunnel, useGroups, useLandscape } from "../api/queries";
+import { useFunnel, useGroups, useLandscape, useProject } from "../api/queries";
+import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
+import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
+import {
+  EvidenceDistributionChart,
+  normaliseGeographies,
+  PublicationYearsChart, orderThemes } from "../ui/charts/EvidenceDistributionChart";
+import { ReauthRedirect } from "../ui/feedback";
 
 const FUNNEL_ORDER = [
   ["found", "Found"],
@@ -16,40 +23,12 @@ const FUNNEL_ORDER = [
   ["cited", "Cited"],
 ] as const;
 
-function DistributionChart({
-  title,
-  data,
-}: {
-  title: string;
-  data: Record<string, number>;
-}) {
-  const rows = Object.entries(data)
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 12);
-  if (rows.length === 0) return null;
-  return (
-    <Card>
-      <PaneHeading>{title}</PaneHeading>
-      <Divider />
-      <div className="h-64 p-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 24 }}>
-            <CartesianGrid horizontal={false} stroke="#e4e4e7" />
-            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: "#646363" }} />
-            <YAxis
-              type="category"
-              dataKey="label"
-              width={150}
-              tick={{ fontSize: 11, fill: "#0f294a" }}
-            />
-            <Bar dataKey="count" fill="#0000FF" isAnimationActive={false} barSize={14} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </Card>
-  );
-}
+const CHART_TOKENS = {
+  grid: "var(--color-line)",
+  text: "var(--color-grey)",
+  navy: "var(--color-navy)",
+  blue: "var(--color-blue)",
+} as const;
 
 /**
  * Landscape: distributions over the screened-in set ONLY (the funnel is the
@@ -58,6 +37,8 @@ function DistributionChart({
  */
 export function LandscapeView() {
   const { projectId = "" } = useParams();
+  const project = useProject(projectId);
+  useDocumentTitle(project.data?.name, "Landscape");
   const landscape = useLandscape(projectId);
   const funnel = useFunnel(projectId);
   const groups = useGroups(projectId);
@@ -67,18 +48,30 @@ export function LandscapeView() {
     return typeof count === "number" ? [{ label: label as string, count }] : [];
   });
 
+  // `not_found` is the server's honest shape for "no landscape/funnel yet"
+  // (screening hasn't run) — that's the expected empty state below, not a
+  // failure to surface as an error.
+  const landscapeErrorCode = landscape.isError ? errorCode(landscape.error) : null;
+  const funnelErrorCode = funnel.isError ? errorCode(funnel.error) : null;
+  const isUnauthenticated =
+    landscapeErrorCode === "unauthenticated" || funnelErrorCode === "unauthenticated";
+  const isError =
+    (landscape.isError && landscapeErrorCode !== "not_found") ||
+    (funnel.isError && funnelErrorCode !== "not_found");
+
   const noData =
     !landscape.isPending &&
     !funnel.isPending &&
+    !isError &&
     funnelRows.length === 0 &&
     Object.keys(landscape.data?.evidence_types ?? {}).length === 0;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
-      <h1 className="mb-1 font-display text-xl font-extrabold text-navy">
+      <h1 className="mb-1 font-display text-title font-extrabold text-navy">
         Evidence landscape
       </h1>
-      <p className="mb-5 text-[12.5px] text-grey">
+      <p className="mb-5 text-caption text-grey">
         Distributions describe the screened-in sources only; the funnel spans the whole
         flow.
       </p>
@@ -91,13 +84,32 @@ export function LandscapeView() {
         </div>
       )}
 
+      {isError &&
+        (isUnauthenticated ? (
+          <ReauthRedirect />
+        ) : (
+          <Card role="alert" className="p-8 text-center text-meta text-navy">
+            The landscape couldn't be loaded.{" "}
+            <button
+              type="button"
+              className="cursor-pointer font-bold text-blue hover:underline"
+              onClick={() => {
+                void landscape.refetch();
+                void funnel.refetch();
+              }}
+            >
+              Retry
+            </button>
+          </Card>
+        ))}
+
       {noData && (
-        <Card role="status" className="p-8 text-center text-[13px] text-grey">
+        <Card role="status" className="p-8 text-center text-meta text-grey">
           The landscape appears once screening has run.
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-2">
         {funnelRows.length > 0 && (
           <Card>
             <PaneHeading>From search to citation</PaneHeading>
@@ -105,19 +117,19 @@ export function LandscapeView() {
             <div className="h-64 p-4">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={funnelRows} layout="vertical" margin={{ left: 8, right: 24 }}>
-                  <CartesianGrid horizontal={false} stroke="#e4e4e7" />
+                  <CartesianGrid horizontal={false} stroke={CHART_TOKENS.grid} />
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: "#646363" }}
+                    tick={{ fontSize: 11, fill: CHART_TOKENS.text }}
                   />
                   <YAxis
                     type="category"
                     dataKey="label"
                     width={120}
-                    tick={{ fontSize: 11, fill: "#0f294a" }}
+                    tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
                   />
-                  <Bar dataKey="count" fill="#0F294A" isAnimationActive={false} barSize={14} />
+                  <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -126,36 +138,51 @@ export function LandscapeView() {
 
         {landscape.data !== undefined &&
           Object.keys(landscape.data.evidence_types ?? {}).length > 0 && (
-            <DistributionChart title="Evidence types" data={landscape.data.evidence_types ?? {}} />
+            <Card className="min-w-0">
+              <PaneHeading>Evidence types</PaneHeading>
+              <Divider />
+              <div className="min-w-0 p-4">
+                <EvidenceDistributionChart data={landscape.data.evidence_types ?? {}} />
+              </div>
+            </Card>
           )}
 
         {landscape.data !== undefined && Object.keys(landscape.data.years ?? {}).length > 0 && (
-          <DistributionChart title="Publication years" data={landscape.data.years ?? {}} />
+          <Card className="min-w-0">
+            <PaneHeading>Publication years</PaneHeading>
+            <Divider />
+            <div className="min-w-0 p-4">
+              <PublicationYearsChart data={landscape.data.years ?? {}} />
+            </div>
+          </Card>
         )}
 
         {landscape.data?.geographies !== null &&
           landscape.data?.geographies !== undefined &&
           Object.keys(landscape.data.geographies).length > 0 && (
-            <div className="lg:col-span-2">
-              <DistributionChart
-                title="Where published (not where conducted)"
-                data={landscape.data.geographies ?? {}}
-              />
+            <div className="min-w-0 lg:col-span-2">
+              <Card className="min-w-0">
+                <PaneHeading>Where sources were published</PaneHeading>
+                <Divider />
+                <div className="min-w-0 p-4">
+                  <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
+                </div>
+              </Card>
             </div>
           )}
       </div>
 
       {landscape.data !== undefined && (landscape.data.themes ?? []).length > 0 && (
         <Card className="mt-4">
-          <PaneHeading>Themes in the evidence</PaneHeading>
+          <PaneHeading>Key themes</PaneHeading>
           <Divider />
           <ul role="list" className="space-y-2.5 p-4">
-            {(landscape.data.themes ?? []).map((theme) => (
+            {orderThemes(landscape.data.themes ?? []).map((theme) => (
               <li key={theme.name} className="flex items-baseline gap-2.5">
                 <Chip tone="blue">{theme.size}</Chip>
                 <div>
-                  <p className="text-[13px] font-semibold text-navy">{scrub(theme.name)}</p>
-                  <p className="text-[12px] text-grey">{scrub(theme.description)}</p>
+                  <p className="text-meta font-semibold text-navy">{scrub(theme.name)}</p>
+                  <p className="text-caption text-grey">{scrub(theme.description)}</p>
                 </div>
               </li>
             ))}
@@ -170,7 +197,7 @@ export function LandscapeView() {
           <div className="space-y-4 p-4">
             {(groups.data.facets ?? []).map((facet) => (
               <div key={facet.facet}>
-                <p className="text-[12px] font-bold uppercase tracking-wide text-grey">
+                <p className="text-caption font-bold uppercase tracking-wide text-grey">
                   {scrub(facet.facet)}
                 </p>
                 <ul role="list" className="mt-1.5 flex flex-wrap gap-1.5">

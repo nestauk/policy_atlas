@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { connectEventStream, consumeEventStream, nextBackoffDelayMs } from "./sse";
-import type { SseFrame } from "./sseFrame";
+import { narrowSseFrame, type SseFrame } from "./sseFrame";
 
 function emptyStreamResponse(status = 200): Response {
   const stream = new ReadableStream<Uint8Array>({
@@ -70,6 +70,21 @@ describe("consumeEventStream — SSE line parsing", () => {
     expect(frames[1]).toMatchObject({ type: "tick", note: "hi" });
     // The tick carries no `id:` line at all and must never move the cursor.
     expect(finalCursor).toBe(5);
+  });
+});
+
+describe("narrowSseFrame — live artefact vocabulary", () => {
+  it("accepts the generated live-section frame types", () => {
+    expect(
+      narrowSseFrame({
+        type: "artefact.section_completed",
+        index: 2,
+        title: "Conclusion",
+        prose: "The evidence is mixed.",
+        occurred_at: "2026-07-28T10:00:00Z",
+        sequence: 7,
+      }),
+    ).toMatchObject({ type: "artefact.section_completed", index: 2, sequence: 7 });
   });
 });
 

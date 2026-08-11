@@ -18,3 +18,11 @@ if (window.HTMLElement.prototype.hasPointerCapture === undefined) {
 if (window.HTMLElement.prototype.scrollIntoView === undefined) {
   window.HTMLElement.prototype.scrollIntoView = () => undefined;
 }
+// jsdom lacks ResizeObserver, which the chat's bottom-pinning uses.
+if (window.ResizeObserver === undefined) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}

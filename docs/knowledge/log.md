@@ -1,5 +1,51 @@
 # Knowledge update log
 
+## 2026-08-05 (task 028 step 9 — owner live review)
+* **Creation**: Added
+  [custom-text-tokens-need-tailwind-merge-registration](custom-text-tokens-need-tailwind-merge-registration.md)
+  — every brand primary shipped ink-on-blue with all gates green (twMerge classified the
+  028 type-scale tokens as colours and stripped text-white); owner-caught on the live app.
+
+## 2026-08-05 (task 028 step 8)
+* **Creation**: Added
+  [retiring-ui-affordance-keeps-grammar-channel](retiring-ui-affordance-keeps-grammar-channel.md),
+  [content-keyed-ids-uuid5](content-keyed-ids-uuid5.md),
+  [server-key-label-maps-one-home-raw-fixtures](server-key-label-maps-one-home-raw-fixtures.md)
+  — task 028 (UX refinement): authored from BOTH the build's knowledge candidates and the
+  review stack's findings (014 retro rule).
+* **Update**: [column-churn-migrations-need-scratch-db](column-churn-migrations-need-scratch-db.md)
+  — the predicted exhaustion happened (TooManyColumns mid-roundtrip → 627-failure cascade,
+  recognition signature + remedy recorded); [tested-in-isolation-is-not-wired](tested-in-isolation-is-not-wired.md)
+  — every offered floor option needs a test that ANSWERS a pause with it (028 M1, dead FG
+  regroup); [delegated-executor-practices](delegated-executor-practices.md) — Codex-authored
+  tests confirmed the dominant delegated-defect surface a third time; shared-file concurrent
+  edits merge but mid-flight typecheck cross-fires;
+  [wire-field-additions-break-all-construction-sites](wire-field-additions-break-all-construction-sites.md)
+  — transport-twin corollary + schema-requires-what-the-prompt-forbids (endorsements,
+  watch_authoring_v2); [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md)
+  — the guard's selector is part of its invariant (prompt-guard filename glob);
+  [live-check-drive-runbook](live-check-drive-runbook.md) — Playwright exact:true vs brand
+  copy, mock/live serialisation, LIVE_ALLOW_API_TAKEOVER.
+* **Declined with reasons**: dev-DB-migrate gotcha (already in the runbook, 027 entry);
+  Codex-no-Docker (already a delegated-practices rule, 027); nulls-first staging
+  (already the wire-additions concept's core); a standalone "review-economy" concept
+  (process, lives in the task-cycle skill + memory, not product knowledge).
+
+## 2026-07-28
+* **Creation**: Added [cdk-poweruser-deploy-boundaries](cdk-poweruser-deploy-boundaries.md),
+  [noop-deploys-dont-reassert-template-pins](noop-deploys-dont-reassert-template-pins.md),
+  [live-idp-cold-path-and-signout](live-idp-cold-path-and-signout.md),
+  [docker-save-layout-image-store](docker-save-layout-image-store.md),
+  [cdk-synth-tests-lookups-and-hidden-lambdas](cdk-synth-tests-lookups-and-hidden-lambdas.md),
+  [pyjwt-aud-verified-by-default](pyjwt-aud-verified-by-default.md),
+  [uv-src-layout-image-pattern](uv-src-layout-image-pattern.md) — task 026 (infra deployment):
+  build knowledge candidates + review-stack findings, authored from both sources (014 retro rule).
+* **Update**: [testing-database](testing-database.md) — persisting harnesses need a disposable
+  per-harness DB (026 smoke); [synthesise-is-run-terminus](synthesise-is-run-terminus.md) — UI/spec
+  assertions target the acquire stage, never characterise (026 smoke spec bite);
+  [macos-swap-presents-as-docker-wedge](macos-swap-presents-as-docker-wedge.md) — second wedge
+  family: VM network path, full process kill required (026 E).
+
 ## 2026-07-15 (task 023 step-9 riders)
 * **Retirement**: [citation-flag-dont-drop](citation-flag-dont-drop.md) marked RETIRED — its mechanism (`produce_grounded_block`'s pre-raise citation/annotation writes) was deleted when the owner directed dissolving `grounding.py` at the step-9 gate (`content_hash` → `core/hashing.py`; the production-dead grounded-block leg + tests removed). The flag-don't-drop principle stays spec-level and lives in the extract-side verification chain.
 

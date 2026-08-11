@@ -55,6 +55,17 @@ export interface StageLiveness {
   occurredAt: string;
 }
 
+/** One presentation-only artefact section received through the live SSE
+ * stream. `index` is the display identity: it deliberately does not rely on
+ * a title, because titles are not unique. */
+export interface LiveSection {
+  index: number;
+  title: string;
+  focus: string;
+  state: "planned" | "writing" | "filled";
+  prose?: string;
+}
+
 /** Liveness key used for `tick` frames with no `stage`. */
 export const GLOBAL_LIVENESS_KEY = "_global";
 
@@ -78,6 +89,9 @@ export interface RunStreamState {
   decisions: ResolvedDecision[];
   plan: PlanState | null;
   project: ProjectSummary;
+  /** Presentation-only live artefact sections, keyed by their display
+   * index. They are not the persisted evidence-base artefact. */
+  liveSections: Record<number, LiveSection>;
   /** Transient: last note per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
    *  cursor). */
@@ -96,6 +110,7 @@ export function createInitialRunStreamState(): RunStreamState {
     decisions: [],
     plan: null,
     project: {},
+    liveSections: {},
     liveness: {},
   };
 }

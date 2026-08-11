@@ -34,6 +34,10 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
             description=str(option.get("description") or ""),
             requires_user_input=option.get("requires_user_input") is True,
             suggested=option.get("suggested") is True,
+            why=option.get("why") if isinstance(option.get("why"), str) else None,
+            endorsement=(
+                option.get("endorsement") if isinstance(option.get("endorsement"), str) else None
+            ),
         )
         for option in payload.get("options", [])
         if isinstance(option, dict) and isinstance(option.get("id"), str)
@@ -59,6 +63,7 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
         render=_render(payload),
         options=options,
         triggers=triggers,
+        bundle=_project_bundle(payload),
         segment_reentry_allowed=payload.get("segment_reentry_allowed") is True,
         rerun_component=(
             payload.get("rerun_component")
@@ -69,3 +74,45 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
         created_at=row["occurred_at"],
         sequence=row["sequence"],
     )
+
+
+def _project_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """Project only the owner-approved display fields from a durable bundle."""
+    bundle = payload.get("bundle")
+    point = payload.get("steer_point")
+    if not isinstance(bundle, dict) or not isinstance(point, str):
+        return None
+    if point == "search_review":
+        return {
+            "backends": bundle.get("backends") if isinstance(bundle.get("backends"), list) else [],
+            "queries": bundle.get("queries") if isinstance(bundle.get("queries"), list) else [],
+            "sample_titles": bundle.get("sample_titles")
+            if isinstance(bundle.get("sample_titles"), list)
+            else [],
+        }
+    if point == "evidence_base_coverage":
+        themes = bundle.get("themes")
+        return {"themes": themes if isinstance(themes, list) else []}
+    if point == "deepening_selection":
+        rows = bundle.get("selection_preview")
+        preview_rows = rows if isinstance(rows, list) else []
+        shortlist = [
+            {"title": row.get("title"), "stratum": row.get("stratum")}
+            for row in preview_rows
+            if isinstance(row, dict)
+        ]
+        return {"shortlist": shortlist}
+    if point == "finding_groups":
+        return {"groups": bundle.get("groups") if isinstance(bundle.get("groups"), list) else []}
+    if point == "synthesis_shape":
+        proposal = bundle.get("proposal")
+        rows = proposal.get("proposed_sections") if isinstance(proposal, dict) else []
+        proposed_rows = rows if isinstance(rows, list) else []
+        return {
+            "proposed_sections": [
+                {"title": row.get("title"), "focus": row.get("focus")}
+                for row in proposed_rows
+                if isinstance(row, dict)
+            ]
+        }
+    return None

@@ -17,6 +17,15 @@ describe("Button", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it("primary keeps white text alongside the type-scale size token", () => {
+    // tailwind-merge treated the unknown text-meta scale token as a text
+    // COLOUR and stripped text-white — ink-on-blue buttons live (028).
+    render(<Button>New project</Button>);
+    const className = screen.getByRole("button", { name: "New project" }).className;
+    expect(className).toContain("text-white");
+    expect(className).toContain("text-meta");
+  });
+
   it("secondary and ghost variants drop the cutout", () => {
     render(
       <>

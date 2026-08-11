@@ -1,6 +1,6 @@
 """SQLAlchemy Core table metadata — twenty-eight tables plus one read view.
 
-No deferred columns (no block/artefact summary, no same_content_as, no lineage key).
+No deferred columns (no same_content_as or lineage key).
 """
 
 from sqlalchemy import (
@@ -50,7 +50,12 @@ artefact = Table(
     Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
     Column("title", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Deferred: artefact summary field + pending/verified/failed marker
+    Column("summary", Text, nullable=True),
+    Column("summary_status", Text, nullable=True),
+    CheckConstraint(
+        "summary_status IN ('pending', 'verified', 'failed')",
+        name="ck_artefact_summary_status",
+    ),
 )
 
 block = Table(
@@ -62,7 +67,13 @@ block = Table(
     Column("content", Text, nullable=False),
     Column("content_hash", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Deferred: co-versioned summary + summary_status marker; block-lineage key; structured blocks
+    Column("summary", Text, nullable=True),
+    Column("summary_status", Text, nullable=True),
+    CheckConstraint(
+        "summary_status IN ('pending', 'verified', 'failed')",
+        name="ck_block_summary_status",
+    ),
+    # Deferred: block-lineage key; structured blocks
 )
 
 addressable_unit = Table(
@@ -608,6 +619,7 @@ source_tag = Table(
     Column("asserted_by", Text, nullable=False),
     Column("created_by_run_id", UUID(as_uuid=True), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("theme_id", UUID(as_uuid=True), nullable=True),
     ForeignKeyConstraint(
         ["project_source_snapshot_id", "project_id"],
         [
@@ -1074,6 +1086,36 @@ orchestration_plan = Table(
         name="ck_oplan_status",
     ),
     CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_oplan_payload_object"),
+)
+
+# --- Durable planning transcript (task 027) ---
+
+planning_transcript = Table(
+    "planning_transcript",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("client_turn_id", UUID(as_uuid=True), nullable=False),
+    # This is the transcript's ordering coordinate. ``created_at`` remains
+    # display metadata only: timestamp ordering is not a conversation order.
+    Column("turn_index", Integer, nullable=False),
+    Column("user_message", Text, nullable=False),
+    Column("reply", Text, nullable=True),
+    # ``planner_state`` is the raw PlanDraftWire dump used as the next call's
+    # ``previous_draft``. ``response`` is the distinct projected API result.
+    Column("planner_state", JSONB, nullable=True),
+    Column("response", JSONB, nullable=True),
+    Column("part", JSONB, nullable=True),
+    Column("suggestions", JSONB, nullable=False),
+    Column("status", Text, nullable=False),  # pending|completed|failed
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("completed_at", DateTime(timezone=True), nullable=True),
+    UniqueConstraint("project_id", "client_turn_id", name="uq_ptr_project_client_turn"),
+    UniqueConstraint("project_id", "turn_index", name="uq_ptr_project_turn_index"),
+    CheckConstraint(
+        "status IN ('pending', 'completed', 'failed')", name="ck_ptr_status"
+    ),
+    CheckConstraint("jsonb_typeof(suggestions) = 'array'", name="ck_ptr_suggestions_array"),
 )
 
 # --- Capability run (task 024) ---

@@ -14,7 +14,7 @@ class Settings:
 
     Args:
         oidc_issuer: Expected OIDC token issuer.
-        oidc_audience: Expected OIDC token audience.
+        oidc_client_id: Expected OIDC client identifier.
         oidc_jwks_url: Remote issuer JWKS URL, used by Cognito-shaped deployments.
         oidc_jwks_path: Local JWKS path, used only by the development issuer.
         app_origin: Sole browser origin allowed by CORS.
@@ -23,10 +23,12 @@ class Settings:
         jwks_cache_ttl_seconds: Duration for which a fetched JWKS is retained.
         sse_poll_interval_seconds: Durable-tail poll cadence for SSE clients.
         sse_heartbeat_seconds: Idle interval before an SSE keep-alive comment.
+        db_pool_size: SQLAlchemy engine connection pool size.
+        db_max_overflow: SQLAlchemy engine pool overflow above ``db_pool_size``.
     """
 
     oidc_issuer: str
-    oidc_audience: str
+    oidc_client_id: str
     oidc_jwks_url: str | None
     oidc_jwks_path: Path | None
     app_origin: str
@@ -35,6 +37,8 @@ class Settings:
     jwks_cache_ttl_seconds: int = 300
     sse_poll_interval_seconds: float = 0.4
     sse_heartbeat_seconds: float = 15.0
+    db_pool_size: int = 5
+    db_max_overflow: int = 10
 
 
 def load_settings() -> Settings:
@@ -53,15 +57,18 @@ def load_settings() -> Settings:
     # an app (live-check finding, 2026-07-21: it flipped the CLI pin test
     # into live mode under socket-deny).
     issuer = _required("OIDC_ISSUER")
-    audience = _required("OIDC_AUDIENCE")
+    client_id = _required("OIDC_CLIENT_ID")
     app_origin = _required("APP_ORIGIN")
     database_url = _required("DATABASE_URL")
     jwks_url = _optional("OIDC_JWKS_URL")
     jwks_path_value = _optional("OIDC_JWKS_PATH")
     if (jwks_url is None) == (jwks_path_value is None):
         raise RuntimeError("set exactly one of OIDC_JWKS_URL or OIDC_JWKS_PATH")
-    if jwks_url is not None and not jwks_url.startswith(("https://", "http://")):
-        raise RuntimeError("OIDC_JWKS_URL must be an HTTP(S) URL")
+    # https only: the JWKS is the verifier's trust root — fetching it over
+    # cleartext would let an on-path attacker mint accepted tokens. Local dev
+    # uses OIDC_JWKS_PATH, never a plain-http URL.
+    if jwks_url is not None and not jwks_url.startswith("https://"):
+        raise RuntimeError("OIDC_JWKS_URL must be an HTTPS URL")
 
     jwks_path = Path(jwks_path_value) if jwks_path_value is not None else None
     if jwks_path is not None and not jwks_path.is_file():
@@ -69,7 +76,7 @@ def load_settings() -> Settings:
 
     return Settings(
         oidc_issuer=issuer,
-        oidc_audience=audience,
+        oidc_client_id=client_id,
         oidc_jwks_url=jwks_url,
         oidc_jwks_path=jwks_path,
         app_origin=app_origin,
@@ -78,6 +85,8 @@ def load_settings() -> Settings:
         jwks_cache_ttl_seconds=_positive_int("OIDC_JWKS_CACHE_TTL_SECONDS", default=300),
         sse_poll_interval_seconds=_positive_float("SSE_POLL_INTERVAL_SECONDS", default=0.4),
         sse_heartbeat_seconds=_positive_float("SSE_HEARTBEAT_SECONDS", default=15.0),
+        db_pool_size=_positive_int("DB_POOL_SIZE", default=5),
+        db_max_overflow=_nonnegative_int("DB_MAX_OVERFLOW", default=10),
     )
 
 
@@ -109,6 +118,20 @@ def _positive_int(name: str, *, default: int) -> int:
         raise RuntimeError(f"{name} must be a positive integer") from exc
     if parsed < 1:
         raise RuntimeError(f"{name} must be a positive integer")
+    return parsed
+
+
+def _nonnegative_int(name: str, *, default: int) -> int:
+    """Load a non-negative integer environment value with a safe default."""
+    value = _optional(name)
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be a non-negative integer") from exc
+    if parsed < 0:
+        raise RuntimeError(f"{name} must be a non-negative integer")
     return parsed
 
 

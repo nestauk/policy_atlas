@@ -18,7 +18,7 @@
         "type": "object"
       },
       "ArtefactOut": {
-        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.",
+        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.\n    summary: Artefact-level summary, if produced.\n    summary_status: Artefact-level summary production state.",
         "properties": {
           "coverage_snapshot": {
             "$ref": "#/components/schemas/CoverageSnapshotOut"
@@ -41,6 +41,33 @@
             "title": "Sections",
             "type": "array"
           },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "summary_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "verified",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Status"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -54,8 +81,138 @@
         "title": "ArtefactOut",
         "type": "object"
       },
+      "ArtefactSectionCompletedFrame": {
+        "description": "A live-artefact section's whole prose is available.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "const": "artefact.section_completed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "index",
+          "title",
+          "prose"
+        ],
+        "title": "ArtefactSectionCompletedFrame",
+        "type": "object"
+      },
+      "ArtefactSectionSkeleton": {
+        "description": "One planned live-artefact section in presentation order.",
+        "properties": {
+          "focus": {
+            "title": "Focus",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "title",
+          "focus"
+        ],
+        "title": "ArtefactSectionSkeleton",
+        "type": "object"
+      },
+      "ArtefactSectionStartedFrame": {
+        "description": "A live-artefact section has started generation.",
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "artefact.section_started",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "index"
+        ],
+        "title": "ArtefactSectionStartedFrame",
+        "type": "object"
+      },
+      "ArtefactSkeletonFrame": {
+        "description": "Presentation-only outline for an artefact being synthesised.",
+        "properties": {
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/ArtefactSectionSkeleton"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "type": {
+            "const": "artefact.skeleton",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type",
+          "sections"
+        ],
+        "title": "ArtefactSkeletonFrame",
+        "type": "object"
+      },
       "BlockOut": {
-        "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Named coverage gaps surfaced for this block.",
+        "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Deprecated legacy coverage gaps. New structured gaps are carried\n        by `ClaimOut.gap`; this field remains empty for new artefacts.",
         "properties": {
           "block_id": {
             "format": "uuid",
@@ -89,11 +246,23 @@
         "type": "object"
       },
       "CheckInOption": {
-        "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.",
+        "description": "One server-supplied option offered at a check-in.\n\nArgs:\n    id: Canonical or authored option id.\n    label: Short user-visible option label.\n    description: Longer user-visible option description.\n    requires_user_input: Whether picking this option requires an\n        additional `params` fill-in on the response.\n    suggested: Whether the server highlights this as the suggested pick.\n    why: Visible reason for a run-specific suggestion.\n    endorsement: Visible reason when the run endorses this canonical option.",
         "properties": {
           "description": {
             "title": "Description",
             "type": "string"
+          },
+          "endorsement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Endorsement"
           },
           "id": {
             "title": "Id",
@@ -111,6 +280,18 @@
             "default": false,
             "title": "Suggested",
             "type": "boolean"
+          },
+          "why": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Why"
           }
         },
         "required": [
@@ -123,7 +304,7 @@
         "type": "object"
       },
       "CheckInOut": {
-        "description": "A pending or decided steering check-in.\n\nArgs:\n    check_in_id: The pause event id.\n    kind: Check-in kind.\n    boundary: Which side of the component boundary the pause sits at.\n    component: Composed-chain component the pause concerns, or `None`.\n    stage: Presentation stage key for the pause, or `None`.\n    render: The deterministic render \u2014 content of record; there is no\n        LLM prose wrap.\n    options: Server-supplied options. The client must never invent\n        options.\n    triggers: Fired floor triggers, if any.\n    segment_reentry_allowed: Whether an additive segment re-entry is\n        available at this boundary.\n    rerun_component: Component a replacement re-run would target, or\n        `None` if unavailable.\n    status: Whether the check-in is still pending or already decided.\n    created_at: When the pause was recorded.\n    sequence: The pause event's `event_log` sequence.",
+        "description": "A pending or decided steering check-in.\n\nArgs:\n    check_in_id: The pause event id.\n    kind: Check-in kind.\n    boundary: Which side of the component boundary the pause sits at.\n    component: Composed-chain component the pause concerns, or `None`.\n    stage: Presentation stage key for the pause, or `None`.\n    render: The deterministic render \u2014 content of record; there is no\n        LLM prose wrap.\n    options: Server-supplied options. The client must never invent\n        options.\n    triggers: Fired floor triggers, if any.\n    bundle: Scrubbed per-point display data, or ``None`` for legacy pauses.\n    segment_reentry_allowed: Whether an additive segment re-entry is\n        available at this boundary.\n    rerun_component: Component a replacement re-run would target, or\n        `None` if unavailable.\n    status: Whether the check-in is still pending or already decided.\n    created_at: When the pause was recorded.\n    sequence: The pause event's `event_log` sequence.",
         "properties": {
           "boundary": {
             "enum": [
@@ -132,6 +313,19 @@
             ],
             "title": "Boundary",
             "type": "string"
+          },
+          "bundle": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bundle"
           },
           "check_in_id": {
             "format": "uuid",
@@ -370,6 +564,28 @@
             "title": "Context",
             "type": "string"
           },
+          "next": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
           "span_end": {
             "title": "Span End",
             "type": "integer"
@@ -377,6 +593,28 @@
           "span_start": {
             "title": "Span Start",
             "type": "integer"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
           }
         },
         "required": [
@@ -389,7 +627,7 @@
         "type": "object"
       },
       "CitationOut": {
-        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_title: Cited source's title.\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    appraisal_label: Optional appraisal label.",
+        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's project source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    grounding_rationale: The grounding judge's recorded reason for the\n        tier, when one was persisted with the verdict.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.",
         "properties": {
           "appraisal_label": {
             "anyOf": [
@@ -406,6 +644,28 @@
             "format": "uuid",
             "title": "Citation Id",
             "type": "string"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "grounding_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grounding Rationale"
           },
           "grounding_tier": {
             "anyOf": [
@@ -426,6 +686,18 @@
             "title": "Quote",
             "type": "string"
           },
+          "source_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
           "source_title": {
             "title": "Source Title",
             "type": "string"
@@ -440,8 +712,32 @@
         "title": "CitationOut",
         "type": "object"
       },
+      "CitedInOut": {
+        "description": "One latest-artefact claim which cites a source.",
+        "properties": {
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "section_title": {
+            "title": "Section Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "quote",
+          "section_title"
+        ],
+        "title": "CitedInOut",
+        "type": "object"
+      },
       "ClaimOut": {
-        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).",
+        "description": "One span-anchored claim annotation within a block.\n\nArgs:\n    claim_id: The claim's identity.\n    claim_type: Annotation type.\n    text: The spanned text.\n    span: Character offsets `[start, end]` into the block's `prose`, or\n        `None`.\n    citations: Citations attached to this claim (citation-type only).\n    theme: Named themes or groups referenced by a theme claim.",
         "properties": {
           "citations": {
             "items": {
@@ -467,6 +763,16 @@
             "title": "Claim Type",
             "type": "string"
           },
+          "gap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GapOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "span": {
             "anyOf": [
               {
@@ -491,6 +797,27 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "theme": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThemeRefOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weakly_grounded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Weakly Grounded"
           }
         },
         "required": [
@@ -552,9 +879,54 @@
         "title": "CountryGroupDraft",
         "type": "object"
       },
+      "CoverageBackendDetailOut": {
+        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately project-wide in C.1; per-query relevance\nwas not recorded and is therefore absent.",
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "queries": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageQueryOut"
+            },
+            "title": "Queries",
+            "type": "array"
+          },
+          "relevant": {
+            "title": "Relevant",
+            "type": "integer"
+          },
+          "results": {
+            "title": "Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "backend",
+          "results",
+          "relevant"
+        ],
+        "title": "CoverageBackendDetailOut",
+        "type": "object"
+      },
       "CoverageOut": {
         "description": "The `coverage` read model \u2014 the composed one-line coverage sentence.\n\nArgs:\n    sentence: The composed coverage sentence (stop condition + adequacy).\n    base: Structured basis the sentence was composed from.",
         "properties": {
+          "backends": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Backends",
+            "type": "array"
+          },
+          "backends_detail": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageBackendDetailOut"
+            },
+            "title": "Backends Detail",
+            "type": "array"
+          },
           "base": {
             "additionalProperties": true,
             "title": "Base",
@@ -569,6 +941,25 @@
           "sentence"
         ],
         "title": "CoverageOut",
+        "type": "object"
+      },
+      "CoverageQueryOut": {
+        "description": "One completed query and its result count for a public backend.",
+        "properties": {
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "title": "Results",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "query",
+          "results"
+        ],
+        "title": "CoverageQueryOut",
         "type": "object"
       },
       "CoverageSnapshotOut": {
@@ -715,6 +1106,17 @@
             "title": "Cited",
             "type": "boolean"
           },
+          "classification_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Reason"
+          },
           "evidence_type": {
             "anyOf": [
               {
@@ -734,6 +1136,71 @@
             ],
             "title": "Origin",
             "type": "string"
+          },
+          "read_in_full": {
+            "default": false,
+            "title": "Read In Full",
+            "type": "boolean"
+          },
+          "screen_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Basis"
+          },
+          "screen_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Confidence"
+          },
+          "screen_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Reason"
+          },
+          "screen_stage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Stage"
+          },
+          "screen_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "relevant",
+                  "not_relevant",
+                  "excluded_retracted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Status"
           },
           "source_id": {
             "format": "uuid",
@@ -841,59 +1308,21 @@
         "type": "object"
       },
       "FindingOut": {
-        "description": "One row of the paginated findings list.\n\nArgs:\n    finding_id: The finding's identity.\n    statement: The finding's text/claim statement.\n    source_id: Identity of the source the finding was extracted from.\n    source_title: Title of that source.\n    profile: Extraction profile the finding came from.\n    relevance: Run-scoped B2' relevance mark, when the run has them.",
-        "properties": {
-          "finding_id": {
-            "format": "uuid",
-            "title": "Finding Id",
-            "type": "string"
+        "discriminator": {
+          "mapping": {
+            "icf": "#/components/schemas/IcfFindingOut",
+            "iof": "#/components/schemas/IofFindingOut"
           },
-          "profile": {
-            "enum": [
-              "iof",
-              "icf"
-            ],
-            "title": "Profile",
-            "type": "string"
-          },
-          "relevance": {
-            "anyOf": [
-              {
-                "enum": [
-                  "priority",
-                  "normal"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Relevance"
-          },
-          "source_id": {
-            "format": "uuid",
-            "title": "Source Id",
-            "type": "string"
-          },
-          "source_title": {
-            "title": "Source Title",
-            "type": "string"
-          },
-          "statement": {
-            "title": "Statement",
-            "type": "string"
-          }
+          "propertyName": "profile"
         },
-        "required": [
-          "finding_id",
-          "statement",
-          "source_id",
-          "source_title",
-          "profile"
-        ],
-        "title": "FindingOut",
-        "type": "object"
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/IofFindingOut"
+          },
+          {
+            "$ref": "#/components/schemas/IcfFindingOut"
+          }
+        ]
       },
       "FreeTextCompileOut": {
         "description": "The 202 body returned for a `free_text` check-in response.\n\nArgs:\n    render: The compiled fan-out render \u2014 the confirm-gate content of\n        record. Nothing applies until confirmed.\n    confirm_token: Opaque token the client echoes back in a\n        `free_text_confirm` response.",
@@ -1057,6 +1486,85 @@
         "title": "FunnelOut",
         "type": "object"
       },
+      "GapCaveatOut": {
+        "description": "The evidence-coverage caveat accompanying a gap claim.",
+        "properties": {
+          "adequacy_verdict": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adequacy Verdict"
+          },
+          "search_space": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Space"
+          },
+          "verdict_origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verdict Origin"
+          }
+        },
+        "title": "GapCaveatOut",
+        "type": "object"
+      },
+      "GapOut": {
+        "description": "A structured gap explanation attached to one claim.",
+        "properties": {
+          "caveat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GapCaveatOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "inferred": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inferred"
+          }
+        },
+        "title": "GapOut",
+        "type": "object"
+      },
       "GroupOut": {
         "description": "One group within a grouping facet.\n\nArgs:\n    label: Group label.\n    description: Short group description.\n    size: Number of members in the group.",
         "properties": {
@@ -1106,6 +1614,549 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IcfFindingOut": {
+        "description": "An implementation-context finding, discriminated by ``profile='icf'``.",
+        "properties": {
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          },
+          "claim_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Basis"
+          },
+          "claim_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Level"
+          },
+          "context_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context Label"
+          },
+          "context_type": {
+            "title": "Context Type",
+            "type": "string"
+          },
+          "finding_id": {
+            "format": "uuid",
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "groups": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Groups",
+            "type": "object"
+          },
+          "intervention": {
+            "title": "Intervention",
+            "type": "string"
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "population": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Population"
+          },
+          "profile": {
+            "const": "icf",
+            "default": "icf",
+            "title": "Profile",
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "quote_verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Verified"
+          },
+          "relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "priority",
+                  "normal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "resource_requirements": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Requirements"
+          },
+          "setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setting"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "study_design": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Design"
+          },
+          "study_geography": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Geography"
+          },
+          "workforce_requirements": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Workforce Requirements"
+          }
+        },
+        "required": [
+          "finding_id",
+          "statement",
+          "source_id",
+          "source_title",
+          "context_type",
+          "claim",
+          "intervention"
+        ],
+        "title": "IcfFindingOut",
+        "type": "object"
+      },
+      "IofFindingOut": {
+        "description": "An intervention-outcome finding, discriminated by ``profile='iof'``.",
+        "properties": {
+          "causality_by_design": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Causality By Design"
+          },
+          "comparator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comparator"
+          },
+          "effect_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Basis"
+          },
+          "effect_direction": {
+            "title": "Effect Direction",
+            "type": "string"
+          },
+          "estimate_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate Level"
+          },
+          "finding_id": {
+            "format": "uuid",
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "groups": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Groups",
+            "type": "object"
+          },
+          "intervention": {
+            "title": "Intervention",
+            "type": "string"
+          },
+          "is_primary": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Primary"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "population": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Population"
+          },
+          "profile": {
+            "const": "iof",
+            "default": "iof",
+            "title": "Profile",
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "quote_verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Verified"
+          },
+          "relevance": {
+            "anyOf": [
+              {
+                "enum": [
+                  "priority",
+                  "normal"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance"
+          },
+          "setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Setting"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_title": {
+            "title": "Source Title",
+            "type": "string"
+          },
+          "statement": {
+            "title": "Statement",
+            "type": "string"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/IofStatisticsOut"
+          },
+          "stratum_qualifiers": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Stratum Qualifiers",
+            "type": "array"
+          },
+          "study_design": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Design"
+          },
+          "study_geography": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Study Geography"
+          }
+        },
+        "required": [
+          "finding_id",
+          "statement",
+          "source_id",
+          "source_title",
+          "intervention",
+          "outcome",
+          "effect_direction",
+          "statistics"
+        ],
+        "title": "IofFindingOut",
+        "type": "object"
+      },
+      "IofStatisticsOut": {
+        "description": "Reported IOF statistics, with authentic nulls for absent values.",
+        "properties": {
+          "ci_lower": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Lower"
+          },
+          "ci_upper": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Upper"
+          },
+          "effect_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Size"
+          },
+          "effect_size_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effect Size Type"
+          },
+          "i_squared": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "I Squared"
+          },
+          "k": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "K"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "p_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Value"
+          },
+          "standard_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Error"
+          },
+          "tau2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tau2"
+          }
+        },
+        "title": "IofStatisticsOut",
         "type": "object"
       },
       "LandscapeOut": {
@@ -1339,6 +2390,26 @@
         "title": "Page[FindingOut]",
         "type": "object"
       },
+      "Page_PlanningTranscriptTurnOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PlanningTranscriptTurnOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[PlanningTranscriptTurnOut]",
+        "type": "object"
+      },
       "Page_ProjectOut_": {
         "properties": {
           "data": {
@@ -1379,8 +2450,140 @@
         "title": "Page[RunOut]",
         "type": "object"
       },
+      "PartChipOut": {
+        "description": "One typed, editable chip attached to a planning part.\n\nArgs:\n    label: Short user-visible chip label.\n    kind: Editor type for the chip value.\n    value: Machine-readable value consumed by that editor.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "text",
+              "date_range",
+              "country_list"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "kind",
+          "value"
+        ],
+        "title": "PartChipOut",
+        "type": "object"
+      },
+      "PartOptionOut": {
+        "description": "One selectable option on a sequential planning part.\n\nArgs:\n    id: Stable option identifier within the part.\n    label: Short user-visible option label.\n    sub: Optional outcome and time-band sub-label.\n    primary: Whether this is the single recommended option.\n    reason: Optional explanation for the recommendation.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "primary": {
+            "title": "Primary",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "sub": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "primary"
+        ],
+        "title": "PartOptionOut",
+        "type": "object"
+      },
+      "PartProposalOut": {
+        "description": "One structured proposal in the sequential planning conversation.\n\nArgs:\n    id: The proposed planning part.\n    step_label: User-visible position and context for the proposal.\n    title: Plain-language proposal heading.\n    body: Optional supporting explanation.\n    chips: Optional typed scope chips.\n    options: The available response options.",
+        "properties": {
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "chips": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PartChipOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chips"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PartOptionOut"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "step_label": {
+            "title": "Step Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "step_label",
+          "title",
+          "options"
+        ],
+        "title": "PartProposalOut",
+        "type": "object"
+      },
       "PlanDraft": {
-        "description": "Draft or approved orchestration plan, as surfaced to the client.\n\nMirrors the runtime `OrchestrationPlan` field-by-field. Every field\nexcept `steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible title for the run.\n    question: Refined evidence question.\n    scoping_notes: User-expressed scoping notes.\n    screening_criteria: Visible inclusion/exclusion criteria for screening.\n    backend_scope: Search backend scope.\n    scope_constraints: Optional recency and publisher-geography constraints.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    components: Discretionary orchestration components only.\n    component_rationale: Visible intent-fit rationale keyed by\n        discretionary component.\n    grouping_facets: Optional grouping facets, valid only when `group`\n        runs.\n    extract_profiles: Optional finding profile short names, valid only\n        when `extract` runs.\n    steering_mode: Steering mode for the run.\n    assumptions: Visible assumptions and open guesses.\n    expected_artefact_shape: Deterministic forecast derived from components.\n    time_band: Deterministic wall-clock band derived from the two axes.\n    steps: The composed chain, presentation-labelled, in execution order.\n    ready: Whether the draft has validated fail-closed into an\n        executable plan.",
+        "description": "Draft or approved orchestration plan, as surfaced to the client.\n\nMirrors the runtime `OrchestrationPlan` field-by-field. Every field\nexcept `steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible title for the run.\n    question: Refined evidence question.\n    scoping_notes: User-expressed scoping notes.\n    screening_criteria: Visible inclusion/exclusion criteria for screening.\n    backend_scope: Search backend scope.\n    scope_constraints: Optional recency and publisher-geography constraints.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    components: Discretionary orchestration components only.\n    component_rationale: Visible intent-fit rationale keyed by\n        discretionary component.\n    grouping_facets: Optional grouping facets, valid only when `group`\n        runs.\n    extract_profiles: Optional finding profile short names, valid only\n        when `extract` runs.\n    steering_mode: Steering mode for the run.\n    assumptions: Visible assumptions and open guesses.\n    expected_artefact_shape: Deterministic forecast derived from components.\n    time_band: Deterministic wall-clock band derived from the two axes.\n    section_budget: Optional future synthesis cap for ordinary sections.\n    steps: The composed chain, presentation-labelled, in execution order.\n    ready: Whether the draft has validated fail-closed into an\n        executable plan.",
         "properties": {
           "analysis_depth": {
             "anyOf": [
@@ -1597,6 +2800,20 @@
             "default": null,
             "title": "Search Effort"
           },
+          "section_budget": {
+            "anyOf": [
+              {
+                "maximum": 8,
+                "minimum": 2,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Section Budget"
+          },
           "steering_mode": {
             "anyOf": [
               {
@@ -1685,6 +2902,17 @@
             "type": "string"
           },
           "stage": {
+            "enum": [
+              "acquire",
+              "screen",
+              "classify",
+              "appraise",
+              "characterise",
+              "select",
+              "extract",
+              "group",
+              "synthesise"
+            ],
             "title": "Stage",
             "type": "string"
           }
@@ -1732,6 +2960,89 @@
         "title": "PlanUpdatedFrame",
         "type": "object"
       },
+      "PlanningTranscriptTurnOut": {
+        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-project conversation coordinate.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    part: Structured sequential-planning proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+        "properties": {
+          "client_turn_id": {
+            "format": "uuid",
+            "title": "Client Turn Id",
+            "type": "string"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "part": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "user_message": {
+            "title": "User Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_index",
+          "client_turn_id",
+          "user_message",
+          "reply",
+          "status",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "PlanningTranscriptTurnOut",
+        "type": "object"
+      },
       "PlanningTurnCreate": {
         "additionalProperties": false,
         "description": "Inbound body for `POST /api/v1/projects/{id}/planning-turns`.\n\nArgs:\n    message: The user's chat message for this planner turn.\n    client_turn_id: Caller-minted UUID making double-submit idempotent \u2014\n        resubmitting the same `client_turn_id` returns the same turn\n        rather than re-running the planner.",
@@ -1742,6 +3053,7 @@
             "type": "string"
           },
           "message": {
+            "maxLength": 10000,
             "minLength": 1,
             "title": "Message",
             "type": "string"
@@ -1755,8 +3067,18 @@
         "type": "object"
       },
       "PlanningTurnOut": {
-        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.",
+        "description": "Response body for one planner turn.\n\nArgs:\n    reply: The planner's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The planner's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-planning proposal, when this turn carries one.",
         "properties": {
+          "part": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartProposalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "plan": {
             "$ref": "#/components/schemas/PlanDraft"
           },
@@ -2218,7 +3540,7 @@
         "type": "object"
       },
       "SectionOut": {
-        "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    blocks: The section's prose blocks, in order.",
+        "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    blocks: The section's prose blocks, in order.\n    summary: Verified summary for a single-block section, if available.\n    summary_status: Summary production state for a single-block section.",
         "properties": {
           "blocks": {
             "items": {
@@ -2226,6 +3548,17 @@
             },
             "title": "Blocks",
             "type": "array"
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Focus"
           },
           "role": {
             "enum": [
@@ -2235,6 +3568,33 @@
             ],
             "title": "Role",
             "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "summary_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "verified",
+                  "failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Status"
           },
           "title": {
             "title": "Title",
@@ -2248,9 +3608,335 @@
         "title": "SectionOut",
         "type": "object"
       },
+      "SourceDossierOut": {
+        "description": "The optional source dossier, including provenance and latest citations.",
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "abstract_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "provider",
+                  "llm_description"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Source"
+          },
+          "appraisal_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Appraisal Tier"
+          },
+          "cited": {
+            "title": "Cited",
+            "type": "boolean"
+          },
+          "cited_by_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cited By Count"
+          },
+          "cited_in": {
+            "items": {
+              "$ref": "#/components/schemas/CitedInOut"
+            },
+            "title": "Cited In",
+            "type": "array"
+          },
+          "classification_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification Reason"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "evidence_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Type"
+          },
+          "fwci": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwci"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "origin": {
+            "enum": [
+              "OpenAlex",
+              "Overton",
+              "Uploaded"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "read_in_full": {
+            "default": false,
+            "title": "Read In Full",
+            "type": "boolean"
+          },
+          "record_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Type"
+          },
+          "screen_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Basis"
+          },
+          "screen_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Confidence"
+          },
+          "screen_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Reason"
+          },
+          "screen_stage": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Stage"
+          },
+          "screen_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "relevant",
+                  "not_relevant",
+                  "excluded_retracted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screen Status"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "found",
+              "screened_out",
+              "relevant",
+              "not_selected",
+              "selected",
+              "read_in_full",
+              "findings_extracted",
+              "cited",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/SourceTagOut"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "venue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Venue"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "source_id",
+          "title",
+          "origin",
+          "status",
+          "cited"
+        ],
+        "title": "SourceDossierOut",
+        "type": "object"
+      },
+      "SourceTagOut": {
+        "description": "One source tag assertion and its provenance.",
+        "properties": {
+          "asserted_by": {
+            "title": "Asserted By",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          },
+          "tag_type": {
+            "title": "Tag Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "tag_type",
+          "asserted_by"
+        ],
+        "title": "SourceTagOut",
+        "type": "object"
+      },
       "SseFrame": {
         "discriminator": {
           "mapping": {
+            "artefact.section_completed": "#/components/schemas/ArtefactSectionCompletedFrame",
+            "artefact.section_started": "#/components/schemas/ArtefactSectionStartedFrame",
+            "artefact.skeleton": "#/components/schemas/ArtefactSkeletonFrame",
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
             "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
             "plan.updated": "#/components/schemas/PlanUpdatedFrame",
@@ -2275,6 +3961,15 @@
           },
           {
             "$ref": "#/components/schemas/StageFailedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSkeletonFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionStartedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ArtefactSectionCompletedFrame"
           },
           {
             "$ref": "#/components/schemas/CheckinPendingFrame"
@@ -2479,7 +4174,7 @@
         "type": "object"
       },
       "ThemeOut": {
-        "description": "One landscape theme.\n\nArgs:\n    name: Theme name.\n    size: Number of items in the theme.\n    description: Short theme description.",
+        "description": "One landscape theme.\n\nArgs:\n    name: Theme name.\n    size: Number of items in the theme.\n    description: Short theme description.\n    theme_id: Stable theme identity, absent for legacy characterisations.",
         "properties": {
           "description": {
             "title": "Description",
@@ -2492,6 +4187,18 @@
           "size": {
             "title": "Size",
             "type": "integer"
+          },
+          "theme_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Id"
           }
         },
         "required": [
@@ -2500,6 +4207,124 @@
           "description"
         ],
         "title": "ThemeOut",
+        "type": "object"
+      },
+      "ThemeRefItemOut": {
+        "description": "One named durable theme or grouping reference.\n\nArgs:\n    name: Display name for the theme or group.\n    description: Optional concise description.\n    size: Optional number of members.\n    facet: Grouping facet, when this is a group reference.\n    sources: Resolved member sources, when member identities are available.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "facet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facet"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ThemeSourceOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ThemeRefItemOut",
+        "type": "object"
+      },
+      "ThemeRefOut": {
+        "description": "The durable themes or groups a theme claim describes.\n\nArgs:\n    source: Whether the references are characterisation themes or groups.\n    base: Optional source-data basis recorded by synthesis.\n    items: Resolved named references.",
+        "properties": {
+          "base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ThemeRefItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "characterisation",
+              "grouping"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "items"
+        ],
+        "title": "ThemeRefOut",
+        "type": "object"
+      },
+      "ThemeSourceOut": {
+        "description": "One source contributing to a theme or grouping reference.\n\nArgs:\n    source_id: The project's source identity.\n    title: Display title of the source.",
+        "properties": {
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "title"
+        ],
+        "title": "ThemeSourceOut",
         "type": "object"
       },
       "TickFrame": {
@@ -3355,7 +5180,7 @@
     },
     "/api/v1/projects/{project_id}/evidence": {
       "get": {
-        "description": "Return a bounded page from the evidence status ladder.",
+        "description": "Return a bounded page from the evidence status ladder, optionally filtered.",
         "operationId": "evidence_api_v1_projects__project_id__evidence_get",
         "parameters": [
           {
@@ -3389,6 +5214,211 @@
               "minimum": 1,
               "title": "Page Size",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "found",
+                      "screened_out",
+                      "relevant",
+                      "not_selected",
+                      "selected",
+                      "read_in_full",
+                      "findings_extracted",
+                      "cited",
+                      "unavailable",
+                      "Included"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cited",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cited"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "title",
+                    "year",
+                    "type",
+                    "strength",
+                    "status",
+                    "relevance"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "asc",
+                    "desc"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Order"
+            }
+          },
+          {
+            "in": "query",
+            "name": "theme",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Theme"
+            }
+          },
+          {
+            "in": "query",
+            "name": "origin",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "OpenAlex",
+                    "Overton",
+                    "Uploaded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Origin"
+            }
+          },
+          {
+            "in": "query",
+            "name": "evidence_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Evidence Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strength",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Very strong",
+                    "Strong",
+                    "Moderate",
+                    "Limited",
+                    "Weak"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strength"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year_from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3000,
+                  "minimum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "year_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3000,
+                  "minimum": 1000,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year To"
             }
           }
         ],
@@ -3427,7 +5457,7 @@
     },
     "/api/v1/projects/{project_id}/findings": {
       "get": {
-        "description": "Return a bounded page of IOF and ICF findings.",
+        "description": "Return a bounded page of IOF and ICF findings, optionally filtered.",
         "operationId": "findings_api_v1_projects__project_id__findings_get",
         "parameters": [
           {
@@ -3461,6 +5491,91 @@
               "minimum": 1,
               "title": "Page Size",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "profile",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "iof",
+                    "icf"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          },
+          {
+            "in": "query",
+            "name": "facet",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Facet"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group"
+            }
+          },
+          {
+            "in": "query",
+            "name": "group_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
             }
           }
         ],
@@ -3597,7 +5712,7 @@
     },
     "/api/v1/projects/{project_id}/landscape": {
       "get": {
-        "description": "Return screened-in-only landscape distributions.",
+        "description": "Return screened-in-only or cited-only landscape distributions.",
         "operationId": "landscape_api_v1_projects__project_id__landscape_get",
         "parameters": [
           {
@@ -3608,6 +5723,23 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "cited",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
             }
           }
         ],
@@ -3646,7 +5778,7 @@
     },
     "/api/v1/projects/{project_id}/plan": {
       "get": {
-        "description": "Return the durable approved plan or the surviving local draft session.",
+        "description": "Return the durable approved plan or latest completed durable draft.",
         "operationId": "get_plan_api_v1_projects__project_id__plan_get",
         "parameters": [
           {
@@ -3694,8 +5826,78 @@
       }
     },
     "/api/v1/projects/{project_id}/planning-turns": {
+      "get": {
+        "description": "Return the durable planning transcript in ascending conversation order.",
+        "operationId": "list_planning_turns_api_v1_projects__project_id__planning_turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_PlanningTranscriptTurnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Planning Turns",
+        "tags": [
+          "planning"
+        ]
+      },
       "post": {
-        "description": "Advance one project's real planner conversation once per client turn id.",
+        "description": "Advance one project's durable planner conversation once per client turn id.",
         "operationId": "create_planning_turn_api_v1_projects__project_id__planning_turns_post",
         "parameters": [
           {
@@ -3937,6 +6139,65 @@
         "summary": "Get Run",
         "tags": [
           "runs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/sources/{source_id}": {
+      "get": {
+        "description": "Return one owner-scoped source dossier or an indistinguishable 404.",
+        "operationId": "source_dossier_api_v1_projects__project_id__sources__source_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceDossierOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Source Dossier",
+        "tags": [
+          "read-models"
         ]
       }
     },

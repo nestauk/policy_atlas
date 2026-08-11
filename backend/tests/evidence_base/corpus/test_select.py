@@ -1716,20 +1716,13 @@ def test_harness_select_component_success(conn: Connection) -> None:
         characterisation_run_id=characterise_run_id,
     )
     config = compile(plan)
-    run_harness(conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider())
+    outcome = run_harness(
+        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+    )
 
-    log_entries = events.read(conn, pid)
-    started = [
-        e for e in log_entries
-        if e["event_type"] == "component.started" and e["payload"].get("component") == "select"
-    ]
-    completed = [
-        e for e in log_entries
-        if e["event_type"] == "component.completed" and e["payload"].get("component") == "select"
-    ]
-    assert len(started) == 1
-    assert len(completed) == 1
-    payload = completed[0]["payload"]
+    summary = outcome["summary"]
+    assert summary is not None
+    payload = summary
     assert {
         "strata", "selected", "excluded", "base", "characterisation_run_id",
         "flags", "provenance",

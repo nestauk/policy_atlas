@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { SseFrame } from "../api/sseFrame";
-import { reduceRunStreamFrame } from "./reducer";
+import { hasTerminalPartialLiveArtefact, reduceRunStreamFrame } from "./reducer";
 import { createInitialRunStreamState } from "./types";
 import type { CheckInOut, PlanDraft, RunStreamState } from "./types";
 
@@ -26,6 +26,7 @@ function planDraft(overrides: Partial<PlanDraft> = {}): PlanDraft {
     scoping_notes: null,
     screening_criteria: null,
     search_effort: null,
+    section_budget: null,
     steering_mode: null,
     time_band: null,
     title: null,
@@ -48,6 +49,7 @@ function checkIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
     stage: "screen",
     status: "pending",
     triggers: [],
+    bundle: null,
     ...overrides,
   };
 }
@@ -295,6 +297,112 @@ describe("reduceRunStreamFrame — new-run reset", () => {
     const atCursor = fold(createInitialRunStreamState(), frames.slice(0, 3));
     const resumed = fold(atCursor, frames);
     expect(resumed).toEqual(once);
+  });
+});
+
+describe("reduceRunStreamFrame — live artefact sections", () => {
+  const OTHER_RUN_ID = "33333333-3333-3333-3333-333333333333";
+
+  function liveFrames(): SseFrame[] {
+    return [
+      {
+        type: "run.status",
+        capability_run_id: PROJECT_RUN_ID,
+        status: "running",
+        occurred_at: "2026-07-28T10:00:00Z",
+        sequence: 1,
+      },
+      {
+        type: "artefact.skeleton",
+        sections: [
+          { index: 0, title: "Key findings", focus: "The headline evidence." },
+          { index: 3, title: "Conclusion", focus: "What the evidence means." },
+        ],
+        occurred_at: "2026-07-28T10:01:00Z",
+        sequence: 2,
+      },
+      {
+        type: "artefact.section_started",
+        index: 3,
+        occurred_at: "2026-07-28T10:01:01Z",
+        sequence: 3,
+      },
+      {
+        type: "artefact.section_completed",
+        index: 3,
+        title: "Conclusion",
+        prose: "The available evidence supports the intervention.",
+        occurred_at: "2026-07-28T10:01:20Z",
+        sequence: 4,
+      },
+    ];
+  }
+
+  it("builds planned, writing, and filled display-indexed sections", () => {
+    const skeleton = fold(createInitialRunStreamState(), liveFrames().slice(0, 2));
+    expect(skeleton.liveSections).toEqual({
+      0: { index: 0, title: "Key findings", focus: "The headline evidence.", state: "planned" },
+      3: { index: 3, title: "Conclusion", focus: "What the evidence means.", state: "planned" },
+    });
+
+    const writing = fold(skeleton, liveFrames().slice(2, 3));
+    expect(writing.liveSections[3].state).toBe("writing");
+
+    const filled = fold(writing, liveFrames().slice(3));
+    expect(filled.liveSections[3]).toEqual({
+      index: 3,
+      title: "Conclusion",
+      focus: "What the evidence means.",
+      state: "filled",
+      prose: "The available evidence supports the intervention.",
+    });
+  });
+
+  it("drops a completed empty-prose slot instead of inventing section content", () => {
+    const state = fold(createInitialRunStreamState(), [
+      ...liveFrames().slice(0, 2),
+      {
+        type: "artefact.section_completed",
+        index: 0,
+        title: "Key findings",
+        prose: "",
+        occurred_at: "2026-07-28T10:01:10Z",
+        sequence: 3,
+      },
+    ]);
+
+    expect(state.liveSections[0]).toBeUndefined();
+    expect(state.liveSections[3]?.state).toBe("planned");
+  });
+
+  it("clears sections only when a different running run starts", () => {
+    let state = fold(createInitialRunStreamState(), liveFrames());
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: PROJECT_RUN_ID,
+      status: "interrupted",
+      occurred_at: "2026-07-28T10:02:00Z",
+      sequence: 5,
+    });
+    expect(state.liveSections[3]?.state).toBe("filled");
+    expect(hasTerminalPartialLiveArtefact(state)).toBe(true);
+
+    state = reduceRunStreamFrame(state, {
+      type: "run.status",
+      capability_run_id: OTHER_RUN_ID,
+      status: "running",
+      occurred_at: "2026-07-28T10:03:00Z",
+      sequence: 6,
+    });
+    expect(state.liveSections).toEqual({});
+    expect(hasTerminalPartialLiveArtefact(state)).toBe(false);
+  });
+
+  it("keeps streamed-section state replay-idempotent", () => {
+    const frames = liveFrames();
+    const once = fold(createInitialRunStreamState(), frames);
+    const twice = fold(once, frames);
+    expect(twice).toEqual(once);
   });
 });
 
