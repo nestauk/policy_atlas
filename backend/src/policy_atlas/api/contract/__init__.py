@@ -9,6 +9,26 @@ imports `policy_atlas.runtime` or `policy_atlas.evidence_base`.
 
 from __future__ import annotations
 
+from .chat import (
+    CHAT_MESSAGE_MAX,
+    CancelledEvent,
+    CancelTurnOut,
+    ChatStreamEvent,
+    ChatTurnCreate,
+    ChatTurnOut,
+    CompletedEvent,
+    ConversationCreate,
+    ConversationKind,
+    ConversationListItemOut,
+    ConversationOut,
+    ConversationStatus,
+    ConversationUpdate,
+    DeltaEvent,
+    FailedEvent,
+    FailedEventError,
+    LatestTurnPreviewOut,
+    ProgressEvent,
+)
 from .check_ins import (
     AbortResponse,
     CheckInBoundary,
@@ -21,19 +41,6 @@ from .check_ins import (
     FreeTextConfirmResponse,
     FreeTextResponse,
     OptionResponse,
-)
-from .chat import (
-    CHAT_MESSAGE_MAX,
-    CancelledEvent,
-    CancelTurnOut,
-    ChatStreamEvent,
-    ChatTurnCreate,
-    ChatTurnOut,
-    CompletedEvent,
-    DeltaEvent,
-    FailedEvent,
-    FailedEventError,
-    ProgressEvent,
 )
 from .common import (
     PAGE_SIZE_DEFAULT,
@@ -174,6 +181,12 @@ __all__ = [
     "CoverageQueryOut",
     "CoverageSnapshotOut",
     "CompletedEvent",
+    "ConversationCreate",
+    "ConversationKind",
+    "ConversationListItemOut",
+    "ConversationOut",
+    "ConversationStatus",
+    "ConversationUpdate",
     "DecidedBy",
     "DecisionOut",
     "DeltaEvent",
@@ -204,6 +217,7 @@ __all__ = [
     "GroupingFacet",
     "LandscapeOut",
     "LatestRun",
+    "LatestTurnPreviewOut",
     "OptionResponse",
     "Page",
     "PageMeta",

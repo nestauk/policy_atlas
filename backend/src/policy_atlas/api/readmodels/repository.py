@@ -2089,6 +2089,50 @@ def chunk_context_out(
     )
 
 
+def chunk_quote_context_out(
+    conn: Connection, project_id: uuid.UUID, chunk_id: uuid.UUID, quote: str
+) -> ChunkContextOut | None:
+    """Return the clamped context window for a chat citation's chunk + quote.
+
+    The chunk must belong to the project's corpus (envelope or full-text
+    snapshot link) — the same ownership boundary every read model enforces.
+    An ambiguous repeated quote has no honest recoverable span (the artefact
+    citation seam's rule), so this returns absence rather than guessing.
+    """
+    row = conn.execute(
+        select(chunk.c.content, chunk.c.sequence, chunk.c.source_snapshot_id)
+        .select_from(
+            chunk.join(
+                project_source_snapshot,
+                (project_source_snapshot.c.source_snapshot_id == chunk.c.source_snapshot_id)
+                | (project_source_snapshot.c.full_text_snapshot_id == chunk.c.source_snapshot_id),
+            )
+        )
+        .where(chunk.c.chunk_id == chunk_id)
+        .where(project_source_snapshot.c.project_id == project_id)
+        .limit(1)
+    ).one_or_none()
+    if row is None:
+        return None
+    text = row.content
+    if text.count(quote) != 1:
+        return None
+    position = text.find(quote)
+    end = position + len(quote)
+    start_window = max(0, position - 800)
+    end_window = min(len(text), end + 800)
+    return ChunkContextOut(
+        context=text[start_window:end_window],
+        span_start=position - start_window,
+        span_end=end - start_window,
+        clamped=start_window > 0 or end_window < len(text),
+        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
+        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
+        year=_chunk_year(conn, project_id, row.source_snapshot_id),
+        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+    )
+
+
 def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
     """Return one adjacent chunk's content when the sequence exists."""
     return conn.execute(

@@ -1038,6 +1038,249 @@
         "title": "CompletedEvent",
         "type": "object"
       },
+      "ConversationCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for creating a follow-up chat conversation.\n\nArgs:\n    entry_artefact_id: Optional project-local artefact used as entry context.",
+        "properties": {
+          "entry_artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Artefact Id"
+          }
+        },
+        "title": "ConversationCreate",
+        "type": "object"
+      },
+      "ConversationListItemOut": {
+        "description": "A conversation plus its latest cross-kind turn preview.\n\nArgs:\n    latest_turn_preview: Most recent chat or planning turn, when one exists.",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "entry_artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Artefact Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "planning",
+              "chat"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "latest_turn_preview": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestTurnPreviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "closed",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "kind",
+          "title",
+          "status",
+          "entry_artefact_id",
+          "created_at",
+          "closed_at",
+          "archived_at",
+          "latest_turn_preview"
+        ],
+        "title": "ConversationListItemOut",
+        "type": "object"
+      },
+      "ConversationOut": {
+        "description": "Durable public projection of one conversation.\n\nArgs:\n    id: Conversation identity.\n    project_id: Owning project identity.\n    kind: Whether this is a planning conversation or a follow-up chat.\n    title: User-visible conversation title.\n    status: Current conversation lifecycle status.\n    entry_artefact_id: Optional project-local entry-context artefact.\n    created_at: When the conversation was created.\n    closed_at: When it closed, if applicable.\n    archived_at: When it was archived, if applicable.",
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "entry_artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Artefact Id"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "planning",
+              "chat"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "closed",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "kind",
+          "title",
+          "status",
+          "entry_artefact_id",
+          "created_at",
+          "closed_at",
+          "archived_at"
+        ],
+        "title": "ConversationOut",
+        "type": "object"
+      },
+      "ConversationUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update for an existing chat conversation.\n\nOmitted fields remain unchanged. An explicitly null ``entry_artefact_id``\nclears its entry-context chip.\n\nArgs:\n    title: Replacement user-visible chat title.\n    entry_artefact_id: Replacement project-local entry context, or null to clear it.",
+        "properties": {
+          "entry_artefact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Artefact Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "ConversationUpdate",
+        "type": "object"
+      },
       "CountryGroupDraft": {
         "description": "Draft mirror of the runtime `CountryGroup`.\n\nArgs:\n    label: Pinned Tier-1 label, or a user/planner label for an explicit\n        Tier-2 country list. `None` while undecided.\n    countries: Explicit ISO-3166 alpha-2 country list for Tier-2 groups.\n    authorship: Provenance of the group membership, when settled.",
         "properties": {
@@ -2522,6 +2765,45 @@
         "title": "LatestRun",
         "type": "object"
       },
+      "LatestTurnPreviewOut": {
+        "description": "The most recent durable turn rendered in a conversations-library row.\n\nArgs:\n    user_message: Bounded user-message preview.\n    reply_snippet: Bounded reply preview, absent for an unfinished turn.\n    at: Turn completion time, absent for an unfinished turn.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "reply_snippet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply Snippet"
+          },
+          "user_message": {
+            "title": "User Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_message",
+          "reply_snippet",
+          "at"
+        ],
+        "title": "LatestTurnPreviewOut",
+        "type": "object"
+      },
       "OptionResponse": {
         "additionalProperties": false,
         "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
@@ -2584,6 +2866,26 @@
         "title": "PageMeta",
         "type": "object"
       },
+      "Page_ChatTurnOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ChatTurnOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[ChatTurnOut]",
+        "type": "object"
+      },
       "Page_CheckInOut_": {
         "properties": {
           "data": {
@@ -2602,6 +2904,26 @@
           "pagination"
         ],
         "title": "Page[CheckInOut]",
+        "type": "object"
+      },
+      "Page_ConversationListItemOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationListItemOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[ConversationListItemOut]",
         "type": "object"
       },
       "Page_DecisionOut_": {
@@ -4754,7 +5076,232 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/conversations/{conversation_id}": {
+      "get": {
+        "description": "Resolve an owned active or closed conversation deep link.",
+        "operationId": "get_conversation_api_v1_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Conversation",
+        "tags": [
+          "conversations"
+        ]
+      },
+      "patch": {
+        "description": "Rename an owned chat and/or set or clear its entry-context artefact.",
+        "operationId": "update_conversation_api_v1_conversations__conversation_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Conversation",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/archive": {
+      "post": {
+        "description": "Idempotently archive one owned chat conversation.",
+        "operationId": "archive_conversation_api_v1_conversations__conversation_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Archive Conversation",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/api/v1/conversations/{conversation_id}/turns": {
+      "get": {
+        "description": "Return an active owned chat's durable turns in ascending turn order.",
+        "operationId": "list_chat_turns_api_v1_conversations__conversation_id__turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ChatTurnOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Chat Turns",
+        "tags": [
+          "conversations"
+        ]
+      },
       "post": {
         "description": "Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.",
         "operationId": "create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post",
@@ -4867,6 +5414,55 @@
           }
         ],
         "summary": "Cancel Chat Turn",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
+    "/api/v1/conversations/{conversation_id}/unarchive": {
+      "post": {
+        "description": "Idempotently restore an owned archived chat to active status.",
+        "operationId": "unarchive_conversation_api_v1_conversations__conversation_id__unarchive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unarchive Conversation",
         "tags": [
           "conversations"
         ]
@@ -5376,6 +5972,76 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/chunks/{chunk_id}/context": {
+      "get": {
+        "description": "Return a clamped context window for a chat citation's chunk + quote.\n\nChat citations carry durable chunk ids (not artefact citation-table ids),\nso the hover quote-in-context read resolves the quote inside the cited\nchunk directly \u2014 same window mechanics as the artefact citation seam.",
+        "operationId": "chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "chunk_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Chunk Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quote",
+            "required": true,
+            "schema": {
+              "maxLength": 500,
+              "minLength": 1,
+              "title": "Quote",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChunkContextOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Chat Chunk Context",
+        "tags": [
+          "read-models"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
       "get": {
         "description": "Return a clamped context window for an artefact citation id.",
@@ -5432,6 +6098,176 @@
         "summary": "Chunk Context",
         "tags": [
           "read-models"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/conversations": {
+      "get": {
+        "description": "List one owned project's conversations, newest first, with turn previews.",
+        "operationId": "list_conversations_api_v1_projects__project_id__conversations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "planning",
+                    "chat"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "closed",
+                    "archived"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ConversationListItemOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Conversations",
+        "tags": [
+          "conversations"
+        ]
+      },
+      "post": {
+        "description": "Create one active chat conversation with optional entry context.",
+        "operationId": "create_conversation_api_v1_projects__project_id__conversations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Conversation",
+        "tags": [
+          "conversations"
         ]
       }
     },

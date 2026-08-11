@@ -1,4 +1,4 @@
-"""Chat-turn request, durable projection, and NDJSON stream contracts."""
+"""Conversation, chat-turn, and NDJSON stream contracts."""
 
 from __future__ import annotations
 
@@ -9,6 +9,88 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 CHAT_MESSAGE_MAX = 10_000
+
+ConversationKind = Literal["planning", "chat"]
+ConversationStatus = Literal["active", "closed", "archived"]
+
+
+class ConversationCreate(BaseModel):
+    """Inbound body for creating a follow-up chat conversation.
+
+    Args:
+        entry_artefact_id: Optional project-local artefact used as entry context.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    entry_artefact_id: uuid.UUID | None = None
+
+
+class ConversationUpdate(BaseModel):
+    """Partial update for an existing chat conversation.
+
+    Omitted fields remain unchanged. An explicitly null ``entry_artefact_id``
+    clears its entry-context chip.
+
+    Args:
+        title: Replacement user-visible chat title.
+        entry_artefact_id: Replacement project-local entry context, or null to clear it.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    title: str | None = Field(default=None, min_length=1)
+    entry_artefact_id: uuid.UUID | None = None
+
+
+class ConversationOut(BaseModel):
+    """Durable public projection of one conversation.
+
+    Args:
+        id: Conversation identity.
+        project_id: Owning project identity.
+        kind: Whether this is a planning conversation or a follow-up chat.
+        title: User-visible conversation title.
+        status: Current conversation lifecycle status.
+        entry_artefact_id: Optional project-local entry-context artefact.
+        created_at: When the conversation was created.
+        closed_at: When it closed, if applicable.
+        archived_at: When it was archived, if applicable.
+    """
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    kind: ConversationKind
+    title: str
+    status: ConversationStatus
+    entry_artefact_id: uuid.UUID | None
+    created_at: datetime
+    closed_at: datetime | None
+    archived_at: datetime | None
+
+
+class LatestTurnPreviewOut(BaseModel):
+    """The most recent durable turn rendered in a conversations-library row.
+
+    Args:
+        user_message: Bounded user-message preview.
+        reply_snippet: Bounded reply preview, absent for an unfinished turn.
+        at: Turn completion time, absent for an unfinished turn.
+    """
+
+    user_message: str
+    reply_snippet: str | None
+    at: datetime | None
+
+
+class ConversationListItemOut(ConversationOut):
+    """A conversation plus its latest cross-kind turn preview.
+
+    Args:
+        latest_turn_preview: Most recent chat or planning turn, when one exists.
+    """
+
+    latest_turn_preview: LatestTurnPreviewOut | None
 
 
 class ChatTurnCreate(BaseModel):
