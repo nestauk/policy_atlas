@@ -330,7 +330,10 @@ Owner refinements (same day): the closed-state launcher is a circular
 bottom-left speech-bubble button ("Open chat", aria-labelled); the open
 panel sits on the LEFT of the view — parity with the workspace rail — and
 is drag/keyboard resizable via a right-edge separator (280–640 px, the
-rail's own clamp and delta geometry).
+rail's own clamp and delta geometry); with a chat open, the panel and the
+view scroll independently (fixed viewport height, each column owns its
+scroll — the workspace's two-pane behaviour; page scroll returns when the
+panel closes).
 
 Evidence: `ChatSidePanel` component tests (launcher → latest-or-new, header
 actions, blank-chat reuse), AppShell mock extended, e2e chat leg reworked

@@ -179,6 +179,11 @@ export function AppShell() {
   const project = useProject(projectId ?? "");
   const base = projectId === undefined ? null : `/projects/${projectId}`;
   const inWorkspace = base !== null && location.pathname === base;
+  const showChatPanel = base !== null && !inWorkspace;
+  // With a chat open beside the view, the two columns scroll independently —
+  // the workspace's own two-pane behaviour (fixed viewport height, each
+  // column owns its scroll). Closed, the page keeps its normal scroll.
+  const chatOpen = showChatPanel && new URLSearchParams(location.search).has("chat");
 
   // Pending check-in visibility outside the workspace (contract strand 14):
   // poll cheaply for a pending check-in only while the user isn't already on
@@ -263,10 +268,10 @@ export function AppShell() {
             {/* Chat beside every project view outside the workspace (029
                 rev 3.4): the workspace already hosts the full conversation
                 rail, so the panel mounts everywhere else in the project. */}
-            <div className="flex min-w-0">
+            <div className={chatOpen ? "flex min-w-0 lg:h-[calc(100svh-58px)]" : "flex min-w-0"}>
               {/* Chat on the LEFT — parity with the workspace rail. */}
-              {base !== null && !inWorkspace && <ChatSidePanel projectId={projectId ?? ""} />}
-              <div className="min-w-0 flex-1">
+              {showChatPanel && <ChatSidePanel projectId={projectId ?? ""} />}
+              <div className={chatOpen ? "min-w-0 flex-1 lg:overflow-y-auto" : "min-w-0 flex-1"}>
                 <ErrorBoundary key={location.pathname}>
                   <Outlet />
                 </ErrorBoundary>
