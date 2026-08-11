@@ -22,25 +22,26 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `029-copilot-chat` **BUILT + REVIEW STACK COMPLETE
-→ PR open for human review (step 9)** (build 2026-08-10→11, phases A–H +
-owner live-check fixes + contract rev 3.4 side panel; review stack
-2026-08-11 — five lanes, findings adjudicated in the task's
-verification.md § Review findings, fixes landed on the branch; two
-contract-vs-build divergences escalated to the owner in the PR): co-pilot
-chat — the unified conversation model. A project holds many conversations,
-Claude-Projects-style: follow-up **chats** (read-only, project-scoped,
-answering across artefacts; streamed NDJSON turns with claim-grained
-citations, deterministic floors + async judge enrichment; tool scope
-`search_chunks` · `lookup` · `query_findings`, no `search`) and
-**planning conversations** (one per plan lineage, closing with its run's
-terminal transaction — supersedes 027's rolling thread; row-grain audit
-chain conversation → plan → run → artefact). Tier 4 (legacy backfill
-migration on live data). Contract rev 3.4 (approved; 3.4 = the owner's
-live-check side-panel amendment) · plan rev 2.2
-(approved, executor marks, phases A–H) · ADR 0029 (Accepted) ·
-mockup + research inputs: `docs/tasks/029-copilot-chat/`. API surface:
-`docs/specs/system/web-api.md` § Conversations.
+Implementation — task `030-organisations` **DESIGN (steps 1–4) in
+progress** (branch `task/030-organisations`, rebased onto merged `dev`
+2026-08-12): organisations & tenancy — app-owned `organisation` +
+`app_user` tables (ops-assigned membership, no IdP changes), project
+`org_id` + `visibility` (`org`|`private`, default org), org members read
+org-visible projects and hold their **own** chats on them (writes stay
+owner-only: first use of the reserved 403 role-failure hook),
+`GET /me`, projects `scope=all|mine` + frontend Organisation/Mine
+switcher. Tier 4 (tenancy + schema + public API + live-DB migration; no
+enrolment backfill — dark-launch). Contract rev 1.1 (🛑 approval
+pending): `docs/tasks/030-organisations/`. 030's migration chains off
+029's head `d8e4a1c7f2b9` (confirmed still the alembic head on dev).
+
+Task `029-copilot-chat` is **MERGED** (dev `5f2e9b1` via PR #47,
+2026-08-12): co-pilot chat — the unified conversation model (many chats
++ one planning conversation per plan lineage; streamed NDJSON turns,
+claim-grained citation floors, async judge enrichment). Contract rev
+3.4 · plan rev 2.2 · ADR 0029 · review stack adjudicated in its
+verification.md. Step-10 close-out belongs to the 029 review
+conversation.
 
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
 `c501022`); system **live** at `v3.policyatlas.uk`. Known operational
