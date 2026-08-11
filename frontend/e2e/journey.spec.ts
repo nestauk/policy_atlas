@@ -340,4 +340,73 @@ test.describe("mock evidence-base journey", () => {
       page.getByText("The analysis is paused — a check-in is waiting on you"),
     ).toBeVisible();
   });
+
+  // (p) Task 029 chat leg: from the completed evidence base, open a chat via
+  // "Ask about this analysis", send a question, and watch the scripted mock
+  // turn (progress -> two deltas -> completed with one citation) render:
+  // the activity label, the inline `[1]` marker, the honestly "unchecked"
+  // reference that upgrades to its tier verdict once the async enrichment
+  // poll's second read lands, and the stop control visible mid-stream. Then
+  // manage the chat itself through the library: it lists, its rename round-
+  // trips, and archiving removes it from the default (active) list.
+  test("chat: ask about the evidence base, watch the citation verdict upgrade, and manage the chat in the library", async ({ page }) => {
+    await openWorkspaceFromLanding(page);
+    await page.getByRole("button", { name: "Start the analysis" }).click();
+    await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
+    const suggestedButton = page.getByRole("button", { name: SUGGESTED_OPTION_LABEL });
+    await suggestedButton.click();
+    await expect(page.getByText("Waiting on your input")).toHaveCount(0);
+
+    await page.getByRole("link", { name: "Evidence base", exact: true }).click();
+    await expect(page.locator(".artefact-page")).toBeVisible();
+    await expect(
+      page.getByText(/Pair school food action with safer active-travel routes/),
+    ).toBeVisible({ timeout: 5_000 });
+
+    await page.getByRole("button", { name: "Ask about this analysis" }).click();
+    await expect(page).toHaveURL(/\/projects\/[^/?]+\?chat=/);
+
+    // Entry context renders as the removable "Evidence base" chip (rev 2.6)
+    // — scoped to the chat region since the workspace nav also carries an
+    // "Evidence base" link.
+    const chat = page.getByRole("region", { name: "Chat" });
+    await expect(chat.getByRole("link", { name: "Evidence base" })).toBeVisible();
+
+    await page.getByPlaceholder("Ask about the evidence").fill("What does the evidence show about breakfast provision?");
+    await chat.getByRole("button", { name: "Send" }).click();
+
+    // The activity label appears, and the stop control is visible while
+    // streaming (no need to click it).
+    await expect(chat.getByText("Searching the evidence…")).toBeVisible();
+    await expect(chat.getByRole("button", { name: "Stop" })).toBeVisible();
+
+    // Streamed prose lands, with its inline `[1]` citation marker.
+    await expect(
+      chat.getByText(/Universal breakfast provision supported more consistent uptake/),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(chat.getByRole("button", { name: "[1]" }).first()).toBeVisible();
+
+    // The reference is honestly "unchecked" until the async grounding judge
+    // lands, then upgrades to its tier verdict on the enrichment poll's
+    // second read (mock: the second GET turns response).
+    await expect(chat.getByText("Unchecked · awaiting evidence check")).toBeVisible();
+    await expect(chat.getByText("Tier 2 · grounded")).toBeVisible({ timeout: 12_000 });
+
+    // Library: opens, lists the chat, rename round-trips, archive removes
+    // it from the default (active) list.
+    await page.getByRole("button", { name: "Chats" }).click();
+    const library = page.getByRole("dialog", { name: "Chats" });
+    await expect(library).toBeVisible();
+    await expect(library.getByRole("button", { name: "New chat", exact: true })).toBeVisible();
+
+    await library.getByRole("button", { name: "Rename New chat" }).click();
+    await library.getByLabel("Chat title").fill("Breakfast provision");
+    await library.getByLabel("Chat title").press("Enter");
+    await expect(library.getByRole("button", { name: "Breakfast provision", exact: true })).toBeVisible();
+
+    await library.getByRole("button", { name: "Archive" }).click();
+    await expect(library.getByRole("button", { name: "Archive" })).toHaveCount(0);
+    await expect(library.getByRole("heading", { name: "Archived" })).toBeVisible();
+    await expect(library.getByRole("button", { name: "Restore" })).toBeVisible();
+  });
 });

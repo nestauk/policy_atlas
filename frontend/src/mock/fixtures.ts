@@ -222,6 +222,7 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
 };
 
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
+  artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",
   question: mockProject.question ?? "",
   coverage_snapshot: { source_count: 46, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
@@ -290,6 +291,28 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
     },
   ],
 };
+
+// --- Chat conversations (task 029 phase G3 mock) ------------------------
+//
+// The chat citation carries a durable chunk id (not the artefact citation
+// table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
+// prefix on from the planning-turn ids above.
+export const MOCK_CHAT_CITATION_CHUNK_ID = "70000000-0000-4000-8000-000000000001";
+
+/** The quote a chat citation resolves to — the same breakfast-provision
+ *  passage the artefact's own citation cites (`mockFindings[0].quote`),
+ *  so `mock/api.ts`'s chunk-context handler can share one context window. */
+export const MOCK_CHAT_CITATION_QUOTE = mockFindings[0].quote ?? "";
+
+/** Two NDJSON `delta` chunks the mock chat stream emits in order; joined,
+ *  they form the turn's persisted `answer` (with its `[1]` marker landing
+ *  in the second chunk, so the marker itself only ever arrives whole). */
+export const MOCK_CHAT_ANSWER_DELTAS = [
+  "Universal breakfast provision supported more consistent uptake ",
+  "when schools removed the separate sign-up step [1].",
+] as const;
+
+export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 
 /**
  * A ready plan draft (contract 027 F.2 fixture item 1b): the mock project

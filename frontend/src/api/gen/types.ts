@@ -642,6 +642,8 @@ export interface components {
          * @description The `artefact` read model — the synthesised evidence base.
          *
          *     Args:
+         *         artefact_id: The artefact's durable identity — the id a chat's
+         *             entry-context chip binds to (029 strand 6).
          *         title: Artefact title.
          *         question: The evidence question the artefact answers.
          *         coverage_snapshot: Embedded coverage snapshot.
@@ -651,6 +653,11 @@ export interface components {
          *         summary_status: Artefact-level summary production state.
          */
         ArtefactOut: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             */
+            artefact_id: string;
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
             /** Question */
             question: string;

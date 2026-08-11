@@ -19,6 +19,10 @@ import {
   mockProject,
   mockSourceDossiers,
   seedPlanningTurns,
+  MOCK_CHAT_ANSWER_DELTAS,
+  MOCK_CHAT_CITATION_CHUNK_ID,
+  MOCK_CHAT_CITATION_QUOTE,
+  MOCK_CHAT_PROGRESS_LABEL,
   MOCK_CHECK_IN_ID,
   MOCK_PLAN_ID,
   MOCK_PROJECT_ID,
@@ -28,6 +32,9 @@ import {
 type RunOut = components["schemas"]["RunOut"];
 type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
 type EvidenceItemOut = components["schemas"]["EvidenceItemOut"];
+type ConversationOut = components["schemas"]["ConversationOut"];
+type ConversationListItemOut = components["schemas"]["ConversationListItemOut"];
+type ChatTurnOut = components["schemas"]["ChatTurnOut"];
 
 const EVIDENCE_STATUS_SORT_RANK: Record<EvidenceItemOut["status"], number> = {
   found: 0,
@@ -127,6 +134,18 @@ let currentRun: RunOut | null = null;
 let planningTurns: PlanningTranscriptTurnOut[] = seedPlanningTurns();
 let nextTurnIndex = 4; // the seed transcript occupies turn_index 1-3
 
+// --- Chat conversations + turns (task 029 phase G3 mock) -----------------
+// A project-scoped conversation library starts empty — chats are created
+// on demand (library "New chat", the artefact reader's "Ask about this
+// analysis"), never pre-seeded, matching the real create-then-populate flow.
+let chatConversations: ConversationOut[] = [];
+let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
+// Counts reads of a still-`pending` turn's enrichment: the first read is the
+// `completed` event's own `invalidateTurns()` refetch (still pending, the
+// honest "unchecked" state); the second is the store's enrichment poll,
+// which this flips to `enriched` — the scripted async-judge fixture.
+let chatTurnEnrichmentReads = new Map<string, number>();
+
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
@@ -136,6 +155,9 @@ export function resetMockScenario() {
   mockProject.latest_run = null;
   planningTurns = seedPlanningTurns();
   nextTurnIndex = 4;
+  chatConversations = [];
+  chatTurnsByConversation = new Map();
+  chatTurnEnrichmentReads = new Map();
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -307,6 +329,23 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const source = mockSourceDossiers[sourceId];
     return source ? json(source) : json({ detail: "resource not found" }, 404);
   }
+  if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/chunks/`) && path.endsWith("/context")) {
+    // Chat citations carry a durable chunk id (never the artefact citation
+    // table's id) — its own read path, sharing the same clamped-context
+    // fixture text as the artefact citation above since both cite the same
+    // breakfast-provision passage.
+    const context = "Recruitment spanned two academic years across ten primary schools. Breakfast participation increased when provision was universal, particularly where uptake carried no separate sign-up. Effects attenuated modestly by the second term but remained significant.";
+    return json({
+      clamped: false,
+      context,
+      previous: "Recruitment spanned two academic years across ten primary schools.",
+      next: "Effects attenuated modestly by the second term but remained significant.",
+      span_start: 0,
+      span_end: context.length,
+      year: 2022,
+      venue: "BMJ Open",
+    });
+  }
   if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/citations/`) && path.endsWith("/context")) {
     // One clamped chunk-context fixture (strand 5): its text literally
     // contains the citation quote used in `mockArtefact`, so the exact-match
@@ -339,7 +378,173 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/decisions`)) return json(page(mockDecisions));
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/artefact`)) return json(mockArtefact);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/coverage`)) return json(mockCoverage);
+
+  // --- Conversations + chat turns (task 029 phase G3 mock) ---------------
+  if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/conversations`)) {
+    const kind = url.searchParams.get("kind");
+    const status = url.searchParams.get("status");
+    const rows = chatConversations
+      .filter((conversation) => (kind === null || conversation.kind === kind) && (status === null || conversation.status === status))
+      .map(conversationListItem)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return json(page(rows));
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/conversations`)) {
+    const body = await requestBody(request, init);
+    const entryArtefactId = isRecord(body) && typeof body.entry_artefact_id === "string" ? body.entry_artefact_id : null;
+    const now = new Date().toISOString();
+    const conversation: ConversationOut = {
+      id: crypto.randomUUID(),
+      project_id: MOCK_PROJECT_ID,
+      kind: "chat",
+      title: "New chat",
+      status: "active",
+      entry_artefact_id: entryArtefactId,
+      created_at: now,
+      closed_at: null,
+      archived_at: null,
+    };
+    chatConversations.push(conversation);
+    return json(conversation, 201);
+  }
+
+  const chatTurnCancelMatch = /\/api\/v1\/conversations\/([^/]+)\/turns\/([^/]+)\/cancel$/.exec(path);
+  if (method === "POST" && chatTurnCancelMatch) {
+    const [, conversationId, turnId] = chatTurnCancelMatch;
+    const turn = (chatTurnsByConversation.get(conversationId) ?? []).find((candidate) => candidate.id === turnId);
+    return json({ status: turn?.status ?? "cancelled" });
+  }
+  const chatTurnsMatch = /\/api\/v1\/conversations\/([^/]+)\/turns$/.exec(path);
+  if (chatTurnsMatch) {
+    const conversationId = chatTurnsMatch[1];
+    if (method === "GET") return json(page(readChatTurns(conversationId)));
+    if (method === "POST") {
+      const body = await requestBody(request, init);
+      const message = isRecord(body) && typeof body.message === "string" ? body.message : "";
+      const clientTurnId = isRecord(body) && typeof body.client_turn_id === "string" ? body.client_turn_id : crypto.randomUUID();
+      return new Response(createMockChatTurnStream(conversationId, clientTurnId, message), {
+        headers: { "Content-Type": "application/x-ndjson" },
+      });
+    }
+  }
+  const chatConversationArchiveMatch = /\/api\/v1\/conversations\/([^/]+)\/archive$/.exec(path);
+  if (method === "POST" && chatConversationArchiveMatch) {
+    const conversation = chatConversations.find((candidate) => candidate.id === chatConversationArchiveMatch[1]);
+    if (conversation === undefined) return json({ detail: "resource not found" }, 404);
+    conversation.status = "archived";
+    conversation.archived_at = new Date().toISOString();
+    return json(conversation);
+  }
+  const chatConversationUnarchiveMatch = /\/api\/v1\/conversations\/([^/]+)\/unarchive$/.exec(path);
+  if (method === "POST" && chatConversationUnarchiveMatch) {
+    const conversation = chatConversations.find((candidate) => candidate.id === chatConversationUnarchiveMatch[1]);
+    if (conversation === undefined) return json({ detail: "resource not found" }, 404);
+    conversation.status = "active";
+    conversation.archived_at = null;
+    return json(conversation);
+  }
+  const chatConversationMatch = /\/api\/v1\/conversations\/([^/]+)$/.exec(path);
+  if (chatConversationMatch) {
+    const conversation = chatConversations.find((candidate) => candidate.id === chatConversationMatch[1]);
+    if (conversation === undefined) return json({ detail: "resource not found" }, 404);
+    if (method === "GET") return json(conversation);
+    if (method === "PATCH") {
+      const body = await requestBody(request, init);
+      if (isRecord(body)) {
+        if (typeof body.title === "string") conversation.title = body.title;
+        if ("entry_artefact_id" in body) conversation.entry_artefact_id = (body.entry_artefact_id as string | null) ?? null;
+      }
+      return json(conversation);
+    }
+  }
+
   return json({ detail: "Mock endpoint not found" }, 404);
+}
+
+/** Project one conversation into its library row shape, deriving the
+ *  preview from its own latest chat turn — mirrors the real read model's
+ *  cross-kind preview join closely enough for the mock library surface. */
+function conversationListItem(conversation: ConversationOut): ConversationListItemOut {
+  const latest = (chatTurnsByConversation.get(conversation.id) ?? []).at(-1);
+  return {
+    id: conversation.id,
+    project_id: conversation.project_id,
+    kind: conversation.kind,
+    title: conversation.title,
+    status: conversation.status,
+    entry_artefact_id: conversation.entry_artefact_id,
+    created_at: conversation.created_at,
+    closed_at: conversation.closed_at,
+    archived_at: conversation.archived_at,
+    latest_turn_preview: latest === undefined
+      ? null
+      : { user_message: latest.user_message, reply_snippet: latest.status === "completed" ? latest.answer : null, at: latest.completed_at },
+  };
+}
+
+/** Advance a conversation's pending enrichment on its second read (task 029
+ *  phase G3 fixture): the first read is the `completed` event's own
+ *  `invalidateTurns()` refetch — still honestly "unchecked" — and the
+ *  second is the client's async-judge poll, which this flips to `enriched`
+ *  with a tier verdict on the one scripted citation. Mutates the stored
+ *  turns in place, matching this module's other scripted-state handlers. */
+function readChatTurns(conversationId: string): ChatTurnOut[] {
+  const turns = chatTurnsByConversation.get(conversationId) ?? [];
+  for (const turn of turns) {
+    if (turn.enrichment === null || turn.enrichment === undefined || turn.enrichment.status !== "pending") continue;
+    const reads = (chatTurnEnrichmentReads.get(turn.id) ?? 0) + 1;
+    chatTurnEnrichmentReads.set(turn.id, reads);
+    if (reads < 2) continue;
+    turn.enrichment = { status: "enriched" };
+    turn.citations = (turn.citations ?? []).map((citation, index) =>
+      index === 0 ? { ...citation, grounding_tier: "tier_2" } : citation);
+  }
+  return turns;
+}
+
+/** Reserve and stream one chat turn's scripted NDJSON lifecycle: one
+ *  `progress` label, two `delta` chunks that concatenate into the answer,
+ *  then a `completed` terminal event carrying one citation with its
+ *  enrichment left honestly "pending" (task 029 phase G3 fixture). Each
+ *  emit is separated by a brief real delay — matching this module's own
+ *  `sleep(500)` before the artefact stream's section fill — so the
+ *  progress/streaming states are reliably Playwright-observable rather than
+ *  flashing and settling within one microtask tick. */
+function createMockChatTurnStream(conversationId: string, clientTurnId: string, message: string): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const emit = (event: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      emit({ type: "progress", label: MOCK_CHAT_PROGRESS_LABEL });
+      await sleep(200);
+      for (const part of MOCK_CHAT_ANSWER_DELTAS) {
+        emit({ type: "delta", text: part });
+        await sleep(50);
+      }
+      const now = new Date().toISOString();
+      const existing = chatTurnsByConversation.get(conversationId) ?? [];
+      const turn: ChatTurnOut = {
+        id: crypto.randomUUID(),
+        conversation_id: conversationId,
+        client_turn_id: clientTurnId,
+        turn_index: existing.length,
+        user_message: message,
+        answer: MOCK_CHAT_ANSWER_DELTAS.join(""),
+        status: "completed",
+        created_at: now,
+        completed_at: now,
+        claims: [],
+        citations: [{ id: MOCK_CHAT_CITATION_CHUNK_ID, n: 1, quote: MOCK_CHAT_CITATION_QUOTE, source_title: mockEvidence[2].title }],
+        enrichment: { status: "pending" },
+        warning_not_evidence_checked: false,
+        handoff: null,
+        stopped_before_evidence_check: false,
+      };
+      chatTurnsByConversation.set(conversationId, [...existing, turn]);
+      emit({ type: "completed", turn });
+      controller.close();
+    },
+  });
 }
 
 /** Install the client-level fetch interceptor only after VITE_MOCK is selected. */

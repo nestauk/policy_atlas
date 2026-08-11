@@ -18,8 +18,13 @@
         "type": "object"
       },
       "ArtefactOut": {
-        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.\n    summary: Artefact-level summary, if produced.\n    summary_status: Artefact-level summary production state.",
+        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    artefact_id: The artefact's durable identity \u2014 the id a chat's\n        entry-context chip binds to (029 strand 6).\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.\n    summary: Artefact-level summary, if produced.\n    summary_status: Artefact-level summary production state.",
         "properties": {
+          "artefact_id": {
+            "format": "uuid",
+            "title": "Artefact Id",
+            "type": "string"
+          },
           "coverage_snapshot": {
             "$ref": "#/components/schemas/CoverageSnapshotOut"
           },
@@ -74,6 +79,7 @@
           }
         },
         "required": [
+          "artefact_id",
           "title",
           "question",
           "coverage_snapshot"

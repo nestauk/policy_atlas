@@ -1,0 +1,69 @@
+import { useState } from "react";
+
+import { useConversations } from "../../../api/queries";
+import type { components } from "../../../api/gen/types";
+import { scrub } from "../../../lib/scrub";
+import { Chip } from "../../../ui/brand/Chip";
+import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./conversationState";
+
+type LibraryRow = components["schemas"]["ConversationListItemOut"];
+
+/** Overlay listing active and archived project chats.
+ *
+ * Args:
+ *   props: Project identity and overlay visibility controls.
+ *
+ * Returns:
+ *   The active and archived conversation library when open.
+ */
+export function ChatsLibrary({ projectId, open, onClose }: { projectId: string; open: boolean; onClose: () => void }) {
+  const active = useConversations(projectId, { kind: "chat", status: "active" });
+  const archived = useConversations(projectId, { kind: "chat", status: "archived" });
+  const { setActiveConversation } = useActiveConversation();
+  const { archive, unarchive, update } = useConversationMutations(projectId);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  if (!open) return null;
+
+  const openChat = (id: string) => {
+    addOpenChatTab(projectId, id);
+    setActiveConversation(id);
+    onClose();
+  };
+  const startRename = (row: LibraryRow) => {
+    setEditing(row.id);
+    setTitle(row.title);
+  };
+  const commitRename = async (id: string) => {
+    if (title.trim()) await update(id, { title: title.trim() });
+    setEditing(null);
+  };
+
+  return (
+    <div role="dialog" aria-modal="true" aria-label="Chats" className="absolute inset-x-3 top-3 z-20 max-h-[calc(100%-24px)] overflow-y-auto border border-line bg-paper p-4 shadow-lg">
+      <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-heading font-bold text-navy">Chats</h2><button type="button" aria-label="Close chats" onClick={onClose}>×</button></div>
+      <LibraryGroups rows={active.data?.data ?? []} onOpen={openChat} editing={editing} title={title} setTitle={setTitle} onRename={startRename} onCommit={commitRename} onArchive={(id) => void archive(id)} />
+      {(archived.data?.data.length ?? 0) > 0 && <><h3 className="mt-5 border-b border-line pb-1 text-caption font-bold uppercase tracking-wider text-grey">Archived</h3><LibraryGroups rows={archived.data?.data ?? []} onOpen={(id) => void unarchive(id).then(() => openChat(id))} editing={editing} title={title} setTitle={setTitle} onRename={startRename} onCommit={commitRename} onArchive={(id) => void unarchive(id)} archived /></>}
+    </div>
+  );
+}
+
+function LibraryGroups({ rows, ...props }: { rows: LibraryRow[]; onOpen: (id: string) => void; editing: string | null; title: string; setTitle: (value: string) => void; onRename: (row: LibraryRow) => void; onCommit: (id: string) => Promise<void>; onArchive: (id: string) => void; archived?: boolean }) {
+  const groups = new Map<string, LibraryRow[]>();
+  for (const row of rows) {
+    const label = dateGroup(row.latest_turn_preview?.at ?? row.created_at);
+    groups.set(label, [...(groups.get(label) ?? []), row]);
+  }
+  return <>{[...groups].map(([label, grouped]) => <section key={label}><h3 className="mt-3 text-caption font-bold uppercase tracking-wider text-grey">{label}</h3>{grouped.map((row) => <LibraryRow key={row.id} row={row} {...props} />)}</section>)}</>;
+}
+
+function LibraryRow({ row, onOpen, editing, title, setTitle, onRename, onCommit, onArchive, archived = false }: { row: LibraryRow; onOpen: (id: string) => void; editing: string | null; title: string; setTitle: (value: string) => void; onRename: (row: LibraryRow) => void; onCommit: (id: string) => Promise<void>; onArchive: (id: string) => void; archived?: boolean }) {
+  const preview = row.latest_turn_preview?.reply_snippet ?? row.latest_turn_preview?.user_message ?? "";
+  return <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-b border-line px-2 py-3 focus-within:outline focus-within:outline-2 focus-within:outline-blue">
+    <div>{editing === row.id ? <input aria-label="Chat title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void onCommit(row.id); }} onBlur={() => void onCommit(row.id)} className="w-full border border-line px-2 py-1 text-meta" /> : <button type="button" onClick={() => onOpen(row.id)} className="text-left text-meta font-semibold text-navy hover:underline">{scrub(row.title)}</button>}<button type="button" aria-label={`Rename ${row.title}`} onClick={() => onRename(row)} className="ml-2 text-caption text-blue hover:underline">Rename</button><p className="mt-1 line-clamp-2 max-w-[60ch] whitespace-pre-wrap text-caption text-grey">{scrub(preview)}</p><div className="mt-1 flex items-center gap-2">{row.entry_artefact_id !== null && <Chip tone="soft">Evidence base</Chip>}<span className="text-caption text-grey">{relativeTime(row.latest_turn_preview?.at ?? row.created_at)}</span></div></div>
+    <button type="button" onClick={() => onArchive(row.id)} className="self-center text-caption font-semibold text-blue hover:underline">{archived ? "Restore" : "Archive"}</button>
+  </div>;
+}
+
+function dateGroup(value: string) { const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000); return days <= 0 ? "Today" : days < 7 ? "This week" : "Earlier"; }
+function relativeTime(value: string) { const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000)); return minutes < 60 ? `${minutes || 1}m ago` : minutes < 1_440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1_440)}d ago`; }

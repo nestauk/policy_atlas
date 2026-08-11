@@ -1,0 +1,81 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { useApiClient } from "../../../api/queries";
+import { scrub } from "../../../lib/scrub";
+import type { ChatConversationRow } from "../../../store";
+import { Button } from "../../../ui/brand/Button";
+import { Chip } from "../../../ui/brand/Chip";
+
+const TIER_LABEL: Record<string, string> = {
+  tier_1: "Tier 1 · direct quote", tier_2: "Tier 2 · grounded", tier_3: "Tier 3 · supported", tier_4: "Tier 4 · reasoning", unsupported_mis_cited: "Unsupported — flagged",
+};
+const TIER_TEXT: Record<string, string> = {
+  tier_1: "Direct quote, verified against the source", tier_2: "Grounded in a specific passage", tier_3: "Supported across passages", tier_4: "Reasoning from the evidence, not a quote", unsupported_mis_cited: "Failed verification — flagged, never hidden",
+};
+
+interface ChatCitation {
+  id?: string;
+  chunk_id?: string;
+  citation_id?: string;
+  n?: number;
+  quote?: string;
+  source_title?: string;
+  title?: string;
+  verdict?: string;
+  grounding_tier?: string;
+}
+
+/** Plain-prose chat thread with citations and durable honesty states.
+ *
+ * Args:
+ *   props: Project-scoped transcript rows and planning hand-off callback.
+ *
+ * Returns:
+ *   User bubbles, assistant prose, and citation affordances.
+ */
+export function ChatMessages({ projectId, rows, onOpenPlanning }: { projectId: string; rows: ChatConversationRow[]; onOpenPlanning: () => void }) {
+  const [citation, setCitation] = useState<ChatCitation | null>(null);
+  const datedRows = useMemo(() => rows.map((row, index) => ({ row, showDate: index === 0 || dayOf(createdAt(row)) !== dayOf(createdAt(rows[index - 1])) })), [rows]);
+  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-caption text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={setCitation} onOpenPlanning={onOpenPlanning} /></div>)}{citation !== null && <CitationPopover projectId={projectId} citation={citation} onClose={() => setCitation(null)} />}</div>;
+}
+
+function AssistantMessage({ turn, onCitation, onOpenPlanning }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenPlanning: () => void }) {
+  const answer = "id" in turn ? turn.answer ?? "" : turn.answer;
+  const citations = citationsOf(turn);
+  const cancelled = "id" in turn && turn.status === "cancelled";
+  const warning = "id" in turn && turn.warning_not_evidence_checked;
+  const handoff = "id" in turn && turn.handoff === "evidence_not_held";
+  const copy = async () => { await navigator.clipboard?.writeText(copyText(answer, citations, turn)); };
+  if (!answer && !("id" in turn && turn.status === "pending")) return null;
+  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} disabled={cancelled} onCitation={onCitation} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-caption text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-caption text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} />}{answer && <button type="button" onClick={() => void copy()} className="text-caption font-semibold text-blue hover:underline">Copy answer</button>}</div>;
+}
+
+function CitationProse({ text, citations, disabled, onCitation }: { text: string; citations: ChatCitation[]; disabled: boolean; onCitation: (citation: ChatCitation) => void }) {
+  const parts = text.split(/(\[\d+\])/g);
+  return <>{parts.map((part, index) => { const match = /^\[(\d+)\]$/.exec(part); const citation = match === null ? null : citations[Number(match[1]) - 1]; return citation !== null && citation !== undefined ? <button key={index} type="button" disabled={disabled} onClick={() => onCitation(citation)} className="align-super text-caption font-bold text-blue hover:underline disabled:text-grey">{part}</button> : <span key={index}>{scrub(part)}</span>; })}</>;
+}
+
+function References({ citations, turn, onCitation }: { citations: ChatCitation[]; turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void }) {
+  return <footer className="border-t border-line pt-2"><p className="text-caption font-bold uppercase tracking-wider text-grey">References</p><div className="mt-2 space-y-2">{citations.map((citation, index) => { const tier = verdictFor(turn, citation); return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className="font-bold text-blue hover:underline">[{citation.n ?? index + 1}]</button> <span>{scrub(citationId(citation) || "Citation")}</span>{citation.quote && <span className="text-grey"> — “{scrub(citation.quote)}”</span>}<span className="ml-2" title={tier === null ? "Awaiting evidence check" : TIER_TEXT[tier]}><Chip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"}>{tier === null ? "Unchecked · awaiting evidence check" : TIER_LABEL[tier]}</Chip></span></div>; })}</div></footer>;
+}
+
+function CitationPopover({ projectId, citation, onClose }: { projectId: string; citation: ChatCitation; onClose: () => void }) {
+  const client = useApiClient();
+  const chunkId = citation.chunk_id ?? citation.id ?? citation.citation_id ?? "";
+  const context = useQuery({ queryKey: ["projects", projectId, "chat-chunk-context", chunkId, citation.quote], enabled: Boolean(chunkId && citation.quote), queryFn: async () => { const { data, error } = await client.GET("/api/v1/projects/{project_id}/chunks/{chunk_id}/context", { params: { path: { project_id: projectId, chunk_id: chunkId }, query: { quote: citation.quote ?? "" } } }); if (data === undefined) throw error; return data; } });
+  return <div role="dialog" aria-label="Citation context" className="sticky bottom-3 ml-auto max-w-md border border-line bg-paper p-4 shadow-lg"><button type="button" aria-label="Close citation context" onClick={onClose} className="float-right text-grey">×</button>{citation.source_title || citation.title ? <p className="text-caption font-bold text-blue">{scrub(citation.source_title ?? citation.title ?? "")}</p> : null}{context.isPending && <p role="status" className="mt-2 text-caption text-grey">Loading context…</p>}{context.data && <div className="mt-2 whitespace-pre-wrap text-caption leading-relaxed text-ink">{context.data.previous && <p className="text-grey">{scrub(context.data.previous)}</p>}<p>{scrub(context.data.context)}</p>{context.data.next && <p className="text-grey">{scrub(context.data.next)}</p>}</div>}{context.isError && citation.quote && <p className="mt-2 text-caption italic text-grey">“{scrub(citation.quote)}”</p>}</div>;
+}
+
+function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p></div>; }
+function DateDivider({ value }: { value: string }) { return <div className="flex items-center gap-2 text-caption text-grey"><span className="h-px flex-1 bg-line" />{new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" })}<span className="h-px flex-1 bg-line" /></div>; }
+function createdAt(row: ChatConversationRow) { return "id" in row ? row.created_at : row.createdAt; }
+function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user_message : row.userMessage; }
+function keyOf(row: ChatConversationRow) { return "id" in row ? row.id : row.clientTurnId; }
+function dayOf(value: string) { return new Date(value).toISOString().slice(0, 10); }
+function activityOf(row: ChatConversationRow) { return "id" in row ? [] : row.activityLabels; }
+function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
+function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
+function citationId(citation: ChatCitation) { return citation.id ?? citation.chunk_id ?? citation.citation_id ?? ""; }
+function verdictFor(turn: ChatConversationRow, citation: ChatCitation): string | null { if (citation.verdict && TIER_LABEL[citation.verdict]) return citation.verdict; if (citation.grounding_tier && TIER_LABEL[citation.grounding_tier]) return citation.grounding_tier; if (!("id" in turn)) return null; for (const claim of turn.claims ?? []) { if (claim !== null && typeof claim === "object") { const candidate = claim as Record<string, unknown>; const ids = Array.isArray(candidate.citation_ids) ? candidate.citation_ids : Array.isArray(candidate.citations) ? candidate.citations : []; if (ids.includes(citationId(citation))) { const value = candidate.verdict ?? candidate.grounding_tier; if (typeof value === "string" && TIER_LABEL[value]) return value; } } } return null; }
+function copyText(answer: string, citations: ChatCitation[], turn: ChatConversationRow) { return [answer, ...citations.map((citation, index) => `[${citation.n ?? index + 1}] ${citationId(citation)}${citation.quote ? ` — ${citation.quote}` : ""} — ${verdictFor(turn, citation) ? TIER_LABEL[verdictFor(turn, citation)!] : "Unchecked · awaiting evidence check"}`)].filter(Boolean).join("\n"); }

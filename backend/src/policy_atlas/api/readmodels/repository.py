@@ -1436,6 +1436,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     reference_years = [reference.year for reference in refs_out if reference.year is not None]
     year_range = (min(reference_years), max(reference_years)) if reference_years else None
     return ArtefactOut(
+        artefact_id=artefact_row["artefact_id"],
         title=artefact_row["title"],
         question=scope or "",
         summary=cast(str | None, artefact_row["summary"]),

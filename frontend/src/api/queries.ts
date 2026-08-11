@@ -33,6 +33,10 @@ export const queryKeys = {
   artefact: (projectId: string) => ["projects", projectId, "artefact"] as const,
   sourceDossier: (projectId: string, sourceId: string) =>
     ["projects", projectId, "source-dossier", sourceId] as const,
+  conversations: (projectId: string, query?: ConversationQuery) =>
+    ["projects", projectId, "conversations", query?.kind, query?.status] as const,
+  conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
+  chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
 };
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
@@ -76,6 +80,12 @@ export interface FindingsQuery extends PageQuery {
   group?: string;
   group_id?: string;
   source_id?: string;
+}
+
+/** Filters for the project conversation library. */
+export interface ConversationQuery {
+  kind?: "planning" | "chat";
+  status?: "active" | "closed" | "archived";
 }
 
 /** One authed `openapi-fetch` client per active `AuthApi` identity. */
@@ -285,6 +295,57 @@ export function usePlanningTurns(projectId: string, query?: PageQuery) {
       return data;
     },
     enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/conversations` — the project chat and
+ * planning-conversation library. */
+export function useConversations(projectId: string, query?: ConversationQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.conversations(projectId, query),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/conversations", {
+        params: { path: { project_id: projectId }, query },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/conversations/{conversation_id}` — one URL-addressable
+ * conversation's durable metadata. */
+export function useConversation(conversationId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.conversation(conversationId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/conversations/{conversation_id}", {
+        params: { path: { conversation_id: conversationId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(conversationId),
+  });
+}
+
+/** `GET /api/v1/conversations/{conversation_id}/turns` — a chat's durable
+ * ascending turn transcript. */
+export function useChatTurns(conversationId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.chatTurns(conversationId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/conversations/{conversation_id}/turns", {
+        params: { path: { conversation_id: conversationId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(conversationId),
   });
 }
 

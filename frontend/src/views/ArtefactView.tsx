@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
@@ -22,6 +22,7 @@ import {
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
+import { useConversationMutations } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -821,6 +822,9 @@ export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const artefact = useArtefact(projectId);
+  const chats = useConversations(projectId, { kind: "chat", status: "active" });
+  const { create } = useConversationMutations(projectId);
+  const navigate = useNavigate();
   // Cited-scoped distributions for the facts strip: study types and years
   // count what the report CITES, not the whole included corpus (owner,
   // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
@@ -844,6 +848,16 @@ export function ArtefactView() {
       next.delete("source");
       return next;
     });
+  };
+  const askAboutAnalysis = async () => {
+    // The open artefact is the chat's entry context (a chip and provenance
+    // fact, never a scope fence); reuse a blank chat already carrying it.
+    const artefactId = artefact.data?.artefact_id ?? null;
+    const blank = chats.data?.data.find(
+      (chat) => chat.title === "New chat" && chat.entry_artefact_id === artefactId,
+    );
+    const conversation = blank ?? await create(artefactId);
+    navigate(`/projects/${projectId}?chat=${conversation.id}`);
   };
 
   if (artefact.isPending) {
@@ -981,6 +995,7 @@ export function ArtefactView() {
         <h1 className="mt-1 font-display text-title font-extrabold leading-tight tracking-[-0.5px] text-navy">
           {scrub(data.title)}
         </h1>
+        <button type="button" onClick={() => void askAboutAnalysis()} className="mt-3 text-caption font-bold text-blue hover:underline">Ask about this analysis</button>
         {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
         {data.summary != null && data.summary !== "" && data.summary_status === "verified" && (
           <p className="mt-3 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-3 py-2 text-body text-ink">

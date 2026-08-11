@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { useParams } from "react-router";
 
-import { useProject } from "../api/queries";
+import { useArtefact, useProject } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { PlanningPane } from "./workspace/PlanningPane";
+import { ChatPane } from "./workspace/chat/ChatPane";
+import { ChatsLibrary } from "./workspace/chat/ChatsLibrary";
+import { ConversationTabs } from "./workspace/chat/ConversationTabs";
+import { useActiveConversation } from "./workspace/chat/conversationState";
 import { RailToggle, useRail } from "./workspace/rail";
 import { RunPane } from "./workspace/RunPane";
 
@@ -19,9 +24,12 @@ import { RunPane } from "./workspace/RunPane";
 export function WorkspaceView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
+  const artefact = useArtefact(projectId);
   const stream = useRunStream(projectId);
   const hasRun = stream.run !== null;
   const rail = useRail("50%");
+  const { activeConversationId, setActiveConversation } = useActiveConversation();
+  const [libraryOpen, setLibraryOpen] = useState(false);
   useDocumentTitle(project.data?.name, "Workspace");
 
   // Query errors are the raw envelope body ({error: {code}}), thrown as-is.
@@ -58,7 +66,18 @@ export function WorkspaceView() {
           <RailToggle collapsed={rail.collapsed} toggleProps={rail.toggleProps} />
         </div>
         <div id={rail.regionId} hidden={rail.collapsed} className="min-h-0 flex-1">
-          <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
+          <div className="relative flex h-full min-h-0 flex-col">
+            <ConversationTabs
+              projectId={projectId}
+              entryArtefactId={null}
+              planningClosed={stream.run !== null && stream.run.status !== "running" && stream.run.status !== "paused"}
+              onOpenLibrary={() => setLibraryOpen(true)}
+            />
+            <div className="min-h-0 flex-1">
+              {activeConversationId === null ? <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} /> : <ChatPane projectId={projectId} conversationId={activeConversationId} sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)} onOpenPlanning={() => setActiveConversation(null)} />}
+            </div>
+            <ChatsLibrary projectId={projectId} open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+          </div>
         </div>
         {!rail.collapsed && (
           <div
