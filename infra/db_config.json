@@ -4,5 +4,11 @@
         "writer_instance_size": "t3.medium",
         "reader_instance_size": "t3.medium",
         "readers": 0
+    },
+    "prod": {
+        "aws_region": "eu-west-2",
+        "writer_instance_size": "t3.medium",
+        "reader_instance_size": "t3.medium",
+        "readers": 0
     }
 }
