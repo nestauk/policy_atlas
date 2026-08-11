@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { useApiClient } from "../../../api/queries";
@@ -7,9 +7,17 @@ import { scrub } from "../../../lib/scrub";
 import type { ChatConversationRow } from "../../../store";
 import { Button } from "../../../ui/brand/Button";
 import { Chip } from "../../../ui/brand/Chip";
-import { Sheet, SheetContent } from "../../../ui/radix/Sheet";
 import { Tooltip } from "../../../ui/radix/Tooltip";
-import { HighlightedContext, SourceDossier, TIER_LABEL, TIER_TEXT } from "../../ArtefactView";
+import {
+  CITATION_SPAN_CLASS,
+  ChipWithTooltip,
+  CitationProvenanceBlock,
+  ProvenanceSheet,
+  SourceDossier,
+  spanSegments,
+  TIER_LABEL,
+  TIER_TEXT,
+} from "../../ArtefactView";
 
 interface ChatCitation {
   id?: string;
@@ -25,7 +33,9 @@ interface ChatCitation {
 
 // The wire shape is `answer_payload.claims[]`: loose (typed as
 // `{[key: string]: unknown}[]` in ChatTurnOut) but the fields chat_floor.py /
-// chat_enrichment.py actually write are stable — text, citation_ns (a claim
+// chat_enrichment.py actually write are stable — text, span (character
+// offsets into `answer`, same Python code-POINT convention the report's
+// ClaimOut.span uses — see ArtefactView.spanSegments), citation_ns (a claim
 // references citations by NUMBER, matching CitationOut.n), verdict/rationale
 // once the judge has run, and a `derived` flag for sentence-grain claims the
 // floor synthesised for an otherwise-uncovered marker occurrence (029 strand
@@ -33,6 +43,7 @@ interface ChatCitation {
 interface ChatClaim {
   claim_id?: string;
   text?: string;
+  span?: [number, number] | null;
   citation_ns?: number[];
   citation_ids?: string[];
   citations?: string[];
@@ -43,6 +54,14 @@ interface ChatClaim {
   derived?: boolean;
 }
 
+/** Either sheet-opening path (030 fold): a citation click (inline marker,
+ *  References row) is citation-keyed — the claim(s) citing it, stacked, over
+ *  that one citation; a claim-span click is claim-keyed — that one claim,
+ *  over every citation it carries. */
+type ActiveProvenance =
+  | { kind: "citation"; turn: ChatConversationRow; citation: ChatCitation }
+  | { kind: "claim"; turn: ChatConversationRow; claim: ChatClaim };
+
 /** Plain-prose chat thread with citations and durable honesty states.
  *
  * Args:
@@ -52,18 +71,16 @@ interface ChatClaim {
  *   User bubbles, assistant prose, and citation affordances.
  */
 export function ChatMessages({ projectId, rows, onOpenPlanning, onRetry }: { projectId: string; rows: ChatConversationRow[]; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
-  // The sheet needs its turn alongside the clicked citation (claim text and
-  // verdict both key off the turn's claims[]) — carry the pair together so
-  // every opener (inline marker, References row) stays a one-arg callback.
-  const [active, setActive] = useState<{ turn: ChatConversationRow; citation: ChatCitation } | null>(null);
+  const [active, setActive] = useState<ActiveProvenance | null>(null);
   const [dossierRef, setDossierRef] = useState<string | null>(null);
   const datedRows = useMemo(() => rows.map((row, index) => ({ row, showDate: index === 0 || dayOf(createdAt(row)) !== dayOf(createdAt(rows[index - 1])) })), [rows]);
-  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-caption text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={(citation) => setActive({ turn: row, citation })} onOpenDossier={setDossierRef} onOpenPlanning={onOpenPlanning} onRetry={onRetry} /></div>)}{active !== null && <CitationSheet projectId={projectId} turn={active.turn} citation={active.citation} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier projectId={projectId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
+  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-caption text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={(citation) => setActive({ kind: "citation", turn: row, citation })} onClaim={(claim) => setActive({ kind: "claim", turn: row, claim })} onOpenDossier={setDossierRef} onOpenPlanning={onOpenPlanning} onRetry={onRetry} /></div>)}{active !== null && <ChatProvenanceSheet projectId={projectId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier projectId={projectId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
 }
 
-function AssistantMessage({ turn, onCitation, onOpenDossier, onOpenPlanning, onRetry }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onOpenDossier: (sourceRef: string) => void; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
+function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlanning, onRetry }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void; onOpenDossier: (sourceRef: string) => void; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
   const answer = "id" in turn ? turn.answer ?? "" : turn.answer;
   const citations = citationsOf(turn);
+  const claims = claimsOf(turn);
   const cancelled = turn.status === "cancelled";
   const failed = turn.status === "failed";
   const warning = "id" in turn && turn.warning_not_evidence_checked;
@@ -77,30 +94,68 @@ function AssistantMessage({ turn, onCitation, onOpenDossier, onOpenPlanning, onR
     const code = errorCodeOf(turn);
     const message = isConflictCode(code) ? conflictSentences[code] : "This answer failed.";
     return <div className="mr-8 space-y-2">
-      {answer && <p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} turn={turn} disabled onCitation={onCitation} /></p>}
+      {answer && <p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
       <p role="alert" className="text-caption text-red">{message}</p>
       <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
     </div>;
   }
   if (!answer && !("id" in turn && turn.status === "pending")) return null;
-  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} turn={turn} disabled={cancelled} onCitation={onCitation} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-caption text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-caption text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
+  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-caption text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-caption text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
 
-/** The prose's inline `[n]` markers (029 Fix C): same `citation-marker` class
- *  the evidence-base reader's citation numbers carry, and the same Tooltip
- *  component previewing the citing claim's verdict — never the full
- *  provenance panel, that is what a click opens (Fix B). A cancelled turn's
- *  markers stay inert (disabled, no tooltip) — the check never ran, so a
- *  hover must not promise a verdict that doesn't exist. */
-function CitationProse({ text, citations, turn, disabled, onCitation }: { text: string; citations: ChatCitation[]; turn: ChatConversationRow; disabled: boolean; onCitation: (citation: ChatCitation) => void }) {
+/** The prose's annotation layer (029 Fix C + 030 fold): span-anchored claims
+ *  wrap their exact prose span in the report's own citation-marker treatment
+ *  (`ArtefactView.CITATION_SPAN_CLASS` — chat claims are never typed beyond
+ *  "citation" for display, per the fold's design), with the existing verdict
+ *  Tooltip on hover and a click/Enter/Space opening the claim-oriented
+ *  provenance sheet for THAT claim's citations. The literal `[n]` marker text
+ *  keeps rendering as its own small button — same class, same Tooltip
+ *  preview — wherever it falls (inside or outside a claim's span), and keeps
+ *  opening the citation-oriented sheet (a marker's click stops propagation so
+ *  a marker nested inside a clickable claim span never also fires the span's
+ *  own click). Overlapping/unspanned claims fall back to marker-only
+ *  behaviour for those regions — `spanSegments` never invents a merge. A
+ *  cancelled turn carries no annotation at all: markers stay inert (disabled,
+ *  no tooltip), matching today. */
+function AnnotatedChatProse({ text, citations, claims, turn, disabled, onCitation, onClaim }: { text: string; citations: ChatCitation[]; claims: ChatClaim[]; turn: ChatConversationRow; disabled: boolean; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void }) {
+  const segments = useMemo(() => spanSegments(text, disabled ? [] : claims), [text, claims, disabled]);
+  return <>{segments.map((segment, index) => {
+    const marked = markedTextParts(segment.text, citations, turn, disabled, onCitation);
+    if (segment.kind === "plain") return <Fragment key={index}>{marked}</Fragment>;
+    const claimCitations = citationsForClaim(citations, segment.claim);
+    const tip = claimCitations.length > 0 ? verdictTooltipContent(turn, claimCitations[0]) : null;
+    const span = (
+      <span
+        role="button"
+        tabIndex={0}
+        onClick={() => onClaim(segment.claim)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onClaim(segment.claim);
+          }
+        }}
+        className={CITATION_SPAN_CLASS}
+      >
+        {marked}
+      </span>
+    );
+    return tip !== null ? <Tooltip key={index} content={tip}>{span}</Tooltip> : <Fragment key={index}>{span}</Fragment>;
+  })}</>;
+}
+
+/** Split one prose segment on literal `[n]` markers into the small marker
+ *  button + verdict-preview Tooltip (029 Fix C) — unchanged whether the
+ *  segment is plain text or the inside of a claim span. */
+function markedTextParts(text: string, citations: ChatCitation[], turn: ChatConversationRow, disabled: boolean, onCitation: (citation: ChatCitation) => void) {
   const parts = text.split(/(\[\d+\])/g);
-  return <>{parts.map((part, index) => {
+  return parts.map((part, index) => {
     const match = /^\[(\d+)\]$/.exec(part);
     const citation = match === null ? null : citations[Number(match[1]) - 1];
     if (citation === null || citation === undefined) return <span key={index}>{scrub(part)}</span>;
-    const marker = <button type="button" disabled={disabled} onClick={() => onCitation(citation)} className="citation-marker align-super text-caption font-bold text-blue hover:underline disabled:text-grey">{part}</button>;
+    const marker = <button type="button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onCitation(citation); }} className="citation-marker align-super text-caption font-bold text-blue hover:underline disabled:text-grey">{part}</button>;
     return disabled ? <span key={index}>{marker}</span> : <Tooltip key={index} content={verdictTooltipContent(turn, citation)}>{marker}</Tooltip>;
-  })}</>;
+  });
 }
 
 // 029 Fix D: collapsed by default — no dedicated Collapsible/Accordion
@@ -121,16 +176,15 @@ function References({ citations, turn, onCitation, onOpenDossier }: { citations:
   })}</div></details></footer>;
 }
 
-/** The judge verdict chip + rationale tooltip (029 Fix B): the exact
- *  Tooltip-wrapping-Chip shape ArtefactView's CitationContext uses for its
- *  grounding-tier chip, kept on chat's own tone/label vocabulary (chat has
+/** The judge verdict chip + rationale tooltip (029 Fix B), over the shared
+ *  `ChipWithTooltip` (030 fold) — chat's own tone/label vocabulary (chat has
  *  no appraisal_label on its citations — only the verdict tier). Shared by
  *  the References row and the citation sheet so there is exactly one copy. */
 function VerdictChip({ turn, citation }: { turn: ChatConversationRow; citation: ChatCitation }) {
   const { tier } = verdictInfoFor(turn, citation);
   const checkFailed = enrichmentStatusOf(turn) === "failed";
   const uncheckedLabel = checkFailed ? "Unchecked · check unavailable" : "Unchecked · awaiting evidence check";
-  return <Tooltip content={verdictTooltipContent(turn, citation)}><span><Chip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"}>{tier === null ? uncheckedLabel : TIER_LABEL[tier]}</Chip></span></Tooltip>;
+  return <ChipWithTooltip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"} label={tier === null ? uncheckedLabel : TIER_LABEL[tier]} content={verdictTooltipContent(turn, citation)} />;
 }
 
 /** The rationale/hint body shared by `VerdictChip` and the inline marker's
@@ -175,59 +229,50 @@ function useChatChunkContext(projectId: string, citation: ChatCitation | null) {
   });
 }
 
-/** The click rung (029 Fix B): the evidence-base reader's own Sheet, titled
- *  the same way, structured like ClaimPanel/CitationContext top to bottom —
- *  the citing claim text(s) as blockquotes, the citation's source/meta/
- *  verdict, then the highlighted quote-in-context (Fix A's no-retry +
- *  honest-fallback line). Replaces the old sticky `CitationPopover`. */
-function CitationSheet({ projectId, turn, citation, onClose, onOpenDossier }: { projectId: string; turn: ChatConversationRow; citation: ChatCitation; onClose: () => void; onOpenDossier: (sourceRef: string) => void }) {
-  const context = useChatChunkContext(projectId, citation);
-  const meta = [context.data?.year, context.data?.venue].filter((value): value is string | number => value !== null && value !== undefined && value !== "");
-  const sourceRef = citation.source_id ?? citation.source_title ?? null;
-  const titleText = scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation");
-  const claims = claimsCiting(turn, citation);
+/** The click rung (029 Fix B, composed over the report's shared shell for
+ *  030): either a citation-keyed open (inline marker, References row — the
+ *  claim(s) citing that one citation, stacked, over its one provenance
+ *  block) or a claim-keyed open (a claim span — that one claim, over every
+ *  citation it carries). Replaces the old sticky `CitationPopover`/bespoke
+ *  `CitationSheet`. */
+function ChatProvenanceSheet({ projectId, active, onClose, onOpenDossier }: { projectId: string; active: ActiveProvenance; onClose: () => void; onOpenDossier: (sourceRef: string) => void }) {
+  const allCitations = citationsOf(active.turn);
+  const claimTexts =
+    active.kind === "citation"
+      ? claimsCiting(active.turn, active.citation).map((claim) => claim.text ?? "")
+      : [active.claim.text ?? ""];
+  const shownCitations = active.kind === "citation" ? [active.citation] : citationsForClaim(allCitations, active.claim);
   return (
-    <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent title="Where this comes from" description="Citation provenance">
-        <div className="space-y-5">
-          {claims.map((claim, index) => typeof claim.text === "string" && claim.text !== "" && (
-            <p key={claim.claim_id ?? index} className="border-l-2 border-l-blue pl-3 text-meta font-medium leading-snug text-navy">
-              {scrub(claim.text)}
-            </p>
-          ))}
-          <div className="border border-line p-4">
-            <p className="text-meta font-bold leading-snug text-blue">
-              [{citation.n ?? "—"}]{" "}
-              {sourceRef !== null ? (
-                <button type="button" className="cursor-pointer text-left hover:underline" onClick={() => onOpenDossier(sourceRef)}>{titleText}</button>
-              ) : (
-                <span>{titleText}</span>
-              )}
-            </p>
-            {meta.length > 0 && <p className="mt-0.5 text-caption text-grey">{meta.map((value) => scrub(String(value))).join(" · ")}</p>}
-            <div className="mt-2"><VerdictChip turn={turn} citation={citation} /></div>
-            <div className="mt-3 space-y-2 text-caption leading-relaxed">
-              {context.isPending && (
-                <p role="status" className="animate-pulse text-caption text-grey">Loading surrounding context…</p>
-              )}
-              {context.data !== undefined && (
-                <>
-                  {typeof context.data.previous === "string" && context.data.previous !== "" && <p className="text-grey">{scrub(context.data.previous)}</p>}
-                  <p className="text-navy"><HighlightedContext text={context.data.context} quote={citation.quote ?? ""} /></p>
-                  {typeof context.data.next === "string" && context.data.next !== "" && <p className="text-grey">{scrub(context.data.next)}</p>}
-                </>
-              )}
-              {context.isError && (
-                <>
-                  {citation.quote && <p className="italic text-grey">“{scrub(citation.quote)}”</p>}
-                  <p className="text-grey">Exact passage not found in the source — showing the cited quote.</p>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </SheetContent>
-    </Sheet>
+    <ProvenanceSheet
+      description={active.kind === "claim" ? "Claim provenance" : "Citation provenance"}
+      claimTexts={claimTexts}
+      onClose={onClose}
+    >
+      {shownCitations.map((citation, index) => (
+        <ChatCitationBlock key={citationId(citation) || index} projectId={projectId} turn={active.turn} citation={citation} onOpenDossier={onOpenDossier} />
+      ))}
+    </ProvenanceSheet>
+  );
+}
+
+/** One citation's provenance block within the sheet above — the shared
+ *  `CitationProvenanceBlock`, fed this chunk's on-demand context (Fix A) and
+ *  the verdict chip (Fix B). */
+function ChatCitationBlock({ projectId, turn, citation, onOpenDossier }: { projectId: string; turn: ChatConversationRow; citation: ChatCitation; onOpenDossier: (sourceRef: string) => void }) {
+  const context = useChatChunkContext(projectId, citation);
+  const sourceRef = citation.source_id ?? citation.source_title ?? null;
+  const titleText = citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation";
+  return (
+    <CitationProvenanceBlock
+      n={citation.n ?? null}
+      sourceTitle={titleText}
+      sourceRef={sourceRef}
+      onOpenDossier={onOpenDossier}
+      chips={<VerdictChip turn={turn} citation={citation} />}
+      context={context}
+      quote={citation.quote ?? ""}
+      fallbackNote="Exact passage not found in the source — showing the cited quote."
+    />
   );
 }
 
@@ -280,6 +325,16 @@ function claimsCiting(turn: ChatConversationRow, citation: ChatCitation): ChatCl
 
 function claimFor(turn: ChatConversationRow, citation: ChatCitation): ChatClaim | null {
   return claimsCiting(turn, citation)[0] ?? null;
+}
+
+// The reverse of `claimsCiting`: every citation a given claim cites, by
+// number (the live shape) or by id (an older/alternate shape) — feeds a
+// claim span's hover preview (its first citation) and its provenance sheet
+// (all of them, as CitationProvenanceBlocks).
+function citationsForClaim(citations: ChatCitation[], claim: ChatClaim): ChatCitation[] {
+  const ns = new Set(Array.isArray(claim.citation_ns) ? claim.citation_ns : []);
+  const ids = new Set([...(claim.citation_ids ?? []), ...(claim.citations ?? [])]);
+  return citations.filter((citation) => (typeof citation.n === "number" && ns.has(citation.n)) || ids.has(citationId(citation)));
 }
 
 function verdictFor(turn: ChatConversationRow, citation: ChatCitation): string | null { return verdictInfoFor(turn, citation).tier; }

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "../../../ui/radix/Tooltip";
@@ -142,5 +142,88 @@ describe("ChatMessages", () => {
     renderChat([turn({ id: "t5", client_turn_id: "ct5", status: "cancelled", stopped_before_evidence_check: true })]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
     expect(marker).toBeDisabled();
+  });
+
+  // 030 fold: chat's answer prose becomes claim-span annotated, mirroring
+  // the report reader's own claim-span affordance (same citation-marker
+  // class, same click/Enter/Space-opens-a-sheet grain) — a distinct entry
+  // point from the literal `[n]` marker button, which keeps its 029 Fix C
+  // behaviour untouched.
+  it("renders a claim span with the report's citation-marker treatment, opening a claim-oriented sheet over the claim's cited source (030 fold)", async () => {
+    mockGet.mockResolvedValueOnce({
+      data: { context: "Costs fell sharply overall.", year: 2024, venue: "Journal of Policy" },
+      error: undefined,
+    });
+    const spanText = "Costs fell sharply";
+    renderChat([
+      turn({
+        answer: `${spanText} [1] this year.`,
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell sharply", source_title: "A breakfast study", state: "verdict:tier_2" }],
+        claims: [{ claim_id: "c1", text: spanText, span: [0, spanText.length], citation_ns: [1], verdict: "tier_2" }],
+      }),
+    ]);
+    const span = screen.getByRole("button", { name: spanText });
+    expect(span.className).toContain("citation-marker");
+    // The literal `[1]` marker stays its own, separate, small button (the
+    // References row below carries a second one) — the span wraps only the
+    // claim's own text, not the trailing marker.
+    expect(screen.getAllByRole("button", { name: "[1]" })).toHaveLength(2);
+    await userEvent.setup().click(span);
+    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    // Appears twice: the claim-text blockquote, and again inside the
+    // highlighted quote-in-context below it.
+    expect(within(sheet).getAllByText(spanText)).toHaveLength(2);
+    expect(within(sheet).getByRole("button", { name: "A breakfast study" })).toBeInTheDocument();
+    expect(await within(sheet).findByText(/overall/)).toBeInTheDocument();
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a claim span with Enter from the keyboard, same as a click", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    const spanText = "Costs fell sharply";
+    renderChat([
+      turn({
+        answer: `${spanText} [1] this year.`,
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell sharply", source_title: "A breakfast study" }],
+        claims: [{ claim_id: "c1", text: spanText, span: [0, spanText.length], citation_ns: [1] }],
+      }),
+    ]);
+    const span = screen.getByRole("button", { name: spanText });
+    span.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(screen.getByRole("dialog", { name: "Where this comes from" })).toBeInTheDocument();
+  });
+
+  it("keeps a marker nested inside a claim span opening only its own citation sheet — no double-open from the enclosing span", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    const withMarker = "Costs fell sharply [1]";
+    renderChat([
+      turn({
+        answer: `${withMarker} this year.`,
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell sharply", source_title: "A breakfast study" }],
+        claims: [{ claim_id: "c1", text: withMarker, span: [0, withMarker.length], citation_ns: [1] }],
+      }),
+    ]);
+    const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(inlineMarker);
+    expect(screen.getAllByRole("dialog", { name: "Where this comes from" })).toHaveLength(1);
+    expect(mockGet).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not annotate a cancelled turn's prose with claim spans — markers alone stay inert", () => {
+    const spanText = "Costs fell sharply";
+    renderChat([
+      turn({
+        id: "t6",
+        client_turn_id: "ct6",
+        status: "cancelled",
+        stopped_before_evidence_check: true,
+        answer: `${spanText} [1] this year.`,
+        claims: [{ claim_id: "c1", text: spanText, span: [0, spanText.length], citation_ns: [1] }],
+      }),
+    ]);
+    expect(screen.queryByRole("button", { name: spanText })).not.toBeInTheDocument();
+    const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
+    expect(inlineMarker).toBeDisabled();
   });
 });

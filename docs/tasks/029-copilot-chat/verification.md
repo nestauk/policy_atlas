@@ -588,6 +588,27 @@ with the roll-up clarification: judged per claim; References shows worst
 verdict per cited chunk; per-claim grain surfaces at the markers (now
 visibly, via the hover).
 
+**Second owner round — parity by construction (owner challenge: "why
+reimplement instead of reuse?"):** the composed provenance UI WAS parallel
+(primitives shared, compositions duplicated); backend generation/judge were
+NOT (kernel extraction verified byte-identical; same judge surface/envelope).
+Fold applied: `ProvenanceSheet` · `CitationProvenanceBlock` ·
+`ChipWithTooltip` · `spanSegments` · `CITATION_SPAN_CLASS` extracted and
+exported from the reader (reader behaviour-preserving — its tests and e2e leg
+pass UNCHANGED); chat's `CitationSheet`/`VerdictChip` replaced by
+compositions with chat's data adapter; chat prose is now claim-span annotated
+from its persisted `claims[]` spans with the reader's exact interaction grain
+(span click → the claim's provenance sheet; nested `[n]` markers keep their
+own affordance). Net +188 LOC, honestly split: the dedup washed out, the
+growth is the new span-annotation behaviour. The mock chat turn now carries a
+server-shape-faithful claim (span computed the floor's way) so the e2e chat
+leg exercises the span path — the G3 lesson (StrictMode-class bugs are
+e2e-only) applied proactively. Evidence: 236 unit tests, typecheck/lint/
+build clean, Playwright 7/7 with the new claim-span assertions. Remaining
+non-parity is data, not presentation: chat citations carry no per-citation
+appraisal label (fast path) — the persist-time label resolution is proposed
+alongside the recheck endpoint as the follow-up interface decision.
+
 ## ⚠️ Gate-integrity incident + correction (2026-08-11)
 
 **Two real test failures were hidden by the build conversation's own gate

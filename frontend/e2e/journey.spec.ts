@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { MOCK_PROJECT_ID, mockCheckIn, mockProject } from "../src/mock/fixtures";
+import { MOCK_CHAT_CLAIM_TEXT, MOCK_PROJECT_ID, mockCheckIn, mockProject } from "../src/mock/fixtures";
 
 /**
  * End-to-end mock journey (task 025 I.1; rewritten 027 F.2 for the uplifted
@@ -389,6 +389,17 @@ test.describe("mock evidence-base journey", () => {
       chat.getByText(/Universal breakfast provision supported more consistent uptake/),
     ).toBeVisible({ timeout: 10_000 });
     await expect(chat.getByRole("button", { name: "[1]" }).first()).toBeVisible();
+
+    // 030 fold: the claim's own span renders with the report's citation-
+    // marker affordance — a distinct clickable region from the literal `[1]`
+    // marker above — and opens the claim-keyed "Where this comes from" sheet
+    // (the claim text as its blockquote) on click.
+    await chat.getByRole("button", { name: MOCK_CHAT_CLAIM_TEXT }).click();
+    const claimSheet = page.getByRole("dialog", { name: "Where this comes from" });
+    await expect(claimSheet).toBeVisible();
+    await expect(claimSheet.getByText(MOCK_CHAT_CLAIM_TEXT)).toBeVisible();
+    await page.getByRole("button", { name: "Close panel" }).click();
+    await expect(claimSheet).toHaveCount(0);
 
     // The References disclosure starts collapsed (029 Fix D) — expand it to
     // reach the verdict chip. The reference is honestly "unchecked" until

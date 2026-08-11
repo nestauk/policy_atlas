@@ -298,6 +298,7 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
 // table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
 // prefix on from the planning-turn ids above.
 export const MOCK_CHAT_CITATION_CHUNK_ID = "70000000-0000-4000-8000-000000000001";
+export const MOCK_CHAT_CLAIM_ID = "70000000-0000-4000-8000-000000000002";
 
 /** The quote a chat citation resolves to — the same breakfast-provision
  *  passage the artefact's own citation cites (`mockFindings[0].quote`),
@@ -311,6 +312,18 @@ export const MOCK_CHAT_ANSWER_DELTAS = [
   "Universal breakfast provision supported more consistent uptake ",
   "when schools removed the separate sign-up step [1].",
 ] as const;
+
+/** The claim-span text the mock chat turn carries over its own answer
+ *  (030 fold e2e coverage): server-shape faithful to what
+ *  `chat_floor.apply_citation_floor` actually persists on `claims[]` —
+ *  `{text, span, citation_ns}`, with `span` the floor's own
+ *  `prose.find(text)` result rather than a hand-picked offset that could
+ *  silently drift from `MOCK_CHAT_ANSWER_DELTAS` above. Deliberately ends
+ *  before the `[1]` marker (like a model's own claim text, which never
+ *  includes the bracket) so the mock exercises the claim-span affordance and
+ *  the literal-marker affordance as the two distinct, non-overlapping
+ *  regions the fold's design specifies. */
+export const MOCK_CHAT_CLAIM_TEXT = "Universal breakfast provision supported more consistent uptake";
 
 export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 

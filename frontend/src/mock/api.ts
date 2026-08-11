@@ -22,6 +22,8 @@ import {
   MOCK_CHAT_ANSWER_DELTAS,
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
+  MOCK_CHAT_CLAIM_ID,
+  MOCK_CHAT_CLAIM_TEXT,
   MOCK_CHAT_PROGRESS_LABEL,
   MOCK_CHECK_IN_ID,
   MOCK_PLAN_ID,
@@ -523,17 +525,33 @@ function createMockChatTurnStream(conversationId: string, clientTurnId: string, 
       }
       const now = new Date().toISOString();
       const existing = chatTurnsByConversation.get(conversationId) ?? [];
+      const answer = MOCK_CHAT_ANSWER_DELTAS.join("");
+      // Server-shape faithful (chat_floor.apply_citation_floor): the floor
+      // computes a claim's span as `prose.find(text)`, never a hand-picked
+      // offset — mirrored here so this fixture can't silently drift from
+      // MOCK_CHAT_ANSWER_DELTAS above.
+      const claimStart = answer.indexOf(MOCK_CHAT_CLAIM_TEXT);
       const turn: ChatTurnOut = {
         id: crypto.randomUUID(),
         conversation_id: conversationId,
         client_turn_id: clientTurnId,
         turn_index: existing.length,
         user_message: message,
-        answer: MOCK_CHAT_ANSWER_DELTAS.join(""),
+        answer,
         status: "completed",
         created_at: now,
         completed_at: now,
-        claims: [],
+        claims:
+          claimStart >= 0
+            ? [
+                {
+                  claim_id: MOCK_CHAT_CLAIM_ID,
+                  text: MOCK_CHAT_CLAIM_TEXT,
+                  span: [claimStart, claimStart + MOCK_CHAT_CLAIM_TEXT.length],
+                  citation_ns: [1],
+                },
+              ]
+            : [],
         citations: [{ id: MOCK_CHAT_CITATION_CHUNK_ID, n: 1, quote: MOCK_CHAT_CITATION_QUOTE, source_title: mockEvidence[2].title }],
         enrichment: { status: "pending" },
         warning_not_evidence_checked: false,
