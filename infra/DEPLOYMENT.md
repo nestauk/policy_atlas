@@ -10,7 +10,7 @@ Four CloudFormation stacks:
 | Stack | Region | Contents |
 | --- | --- | --- |
 | `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert |
-| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda |
+| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox |
 | `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
 
@@ -275,34 +275,48 @@ slower — never to wrong.
 ## 6. Developer DB access
 
 Local dev stays on docker-compose Postgres, untouched. Direct Aurora access from
-a laptop is an SSM port-forward tunnel through the fck-nat instance (no bastion,
-no inbound ports, IAM-gated) — the inspection replacement for v2's deleted
-Supabase Studio. Recipe (verbatim):
+a laptop is an SSM port-forward tunnel through a dedicated, no-ingress jumpbox
+in a private subnet — the inspection replacement for v2's deleted Supabase
+Studio. The jumpbox reaches the public Systems Manager services over HTTPS via
+the existing NAT route in staging. In production, `NetworkStack` creates
+private `ssm` and `ssmmessages` interface endpoints and the jumpbox attaches
+their pre-wired managed-node SG; it has no public HTTPS fallback. The selection
+is explicit in `network_config.json` as `ssm_connectivity: nat` or
+`ssm_connectivity: interface_endpoints`. See
+[`JUMPBOX.md`](../JUMPBOX.md) for the full operator and IAM guidance.
 
 Prereqs: AWS CLI + session-manager-plugin; IAM allowing `ssm:StartSession` on the
-fck-nat instance; the fck-nat SSM role + fck-nat→Aurora 5432 ingress rule.
+jumpbox instance **and only its generated custom Session document**; permission
+to read the database secret. Do not grant the engineer role access to the
+AWS-managed remote-host port-forwarding document, which would let the caller
+choose a different remote target.
 
 ```bash
-# 1. fck-nat instance id (the only EC2 instance in the v3 network stack)
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:aws:cloudformation:stack-name,Values=PaV3NetworkStack" \
-            "Name=instance-state-name,Values=running" \
-  --query 'Reservations[0].Instances[0].InstanceId' --output text)
-
-# 2. DB endpoint + credentials from the generated cluster secret
+# 1. DB credentials from the generated cluster secret
 DB_SECRET=$(aws ssm get-parameter --name /policy_atlas_v3/db/secret_name \
   --query Parameter.Value --output text)
 aws secretsmanager get-secret-value --secret-id "$DB_SECRET" \
   --query SecretString --output text | python3 -m json.tool   # host, port, password
 
-# 3. Port-forward through the fck-nat instance (no bastion, no inbound ports)
-aws ssm start-session --target "$INSTANCE_ID" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters host=<aurora-writer-endpoint>,portNumber=5432,localPortNumber=15432
+# 2. Retrieve and run the fixed-target command emitted by DatabaseStack
+aws cloudformation describe-stacks --stack-name PaV3DatabaseStack \
+  --query "Stacks[0].Outputs[?contains(OutputKey, 'PortForwardingCommand')].OutputValue | [0]" \
+  --output text
+# Run the returned command. The generated document defaults localhost to 15432.
 
-# 4. In another shell
+# 3. In another shell
 psql "postgresql://dbadmin:<password>@localhost:15432/policy_atlas_db?sslmode=require"
 ```
+
+The document pins the Aurora writer endpoint and port 5432. To select a
+different local port, append
+`--parameters '{"localPortNumber":["15433"]}'`; callers cannot override the
+remote target.
+
+This change does not put backend-to-Aurora traffic through the jumpbox or NAT.
+The Fargate task ENIs and Aurora ENIs remain in the same VPC private subnets,
+where AWS's implicit `local` route applies, and Aurora independently allows
+`BackendSG` on port 5432. The NAT route is used only for internet-bound traffic.
 
 **Warning:** a locally booted API pointed at Aurora is a second instance
 sharing the DB — the orphan sweep has no ownership lease and will interrupt the

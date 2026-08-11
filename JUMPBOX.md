@@ -27,6 +27,12 @@ session-manager-plugin
 Your administrator must grant the relevant `ssm:StartSession`,
 `secretsmanager:GetSecretValue`, and resource-discovery permissions.
 
+For remote mode, `ssm:StartSession` should be restricted to both the jumpbox
+instance and the custom Session document created by the stack. The document
+fixes the remote hostname and database port; users can choose only the local
+port. Permission to use AWS-managed port-forwarding documents would bypass that
+target restriction and should not be included in the engineer role.
+
 ## Remote mode: connect from your computer
 
 ### 1. Retrieve the database credentials
@@ -70,10 +76,11 @@ The output will resemble:
 ```bash
 aws ssm start-session \
   --target <jumpbox-instance-id> \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters host="<database-endpoint>",portNumber="5432",localPortNumber="15432"
+  --document-name <stack-generated-session-document>
 ```
 
+The document defaults the local port to `15432`. The database endpoint and
+remote port are embedded in the document and cannot be supplied by the caller.
 Keep this terminal open for as long as you need the database connection.
 
 ### 3. Connect your database client
@@ -135,7 +142,11 @@ has the SSM-managed instance role, and has outbound network access.
 ### Local port already in use
 
 Choose another unused local port, for example `15433`, and configure your
-database client to use the same port.
+database client to use the same port. Append this to the stack output command:
+
+```bash
+--parameters '{"localPortNumber":["15433"]}'
+```
 
 ### Tunnel opens but the database connection times out
 
@@ -149,8 +160,23 @@ have rotated or regenerated the password since it was last copied.
 
 ## Security notes
 
-- Access is controlled by AWS IAM and audited through Systems Manager.
+- Session start and stop activity is controlled by AWS IAM and recorded by AWS.
+  Session Manager cannot log the contents of port-forwarded database traffic;
+  use database audit logging where query-level evidence is required.
 - The jumpbox requires no inbound security-group rules.
+- It has outbound access only to the database port and its configured SSM path.
+  Staging uses HTTPS to the public Systems Manager services through the existing
+  NAT route. Production attaches the managed-node SG created by
+  `SsmVpcEndpoints`, which permits HTTPS only to the private `ssm` and
+  `ssmmessages` endpoint SG.
+- The endpoint construct is VPC-scoped and owned by `NetworkStack`; the jumpbox
+  consumes its pre-wired managed-node SG and never creates or mutates endpoint
+  resources.
+- Local mode installs packages and therefore currently requires NAT-backed SSM
+  connectivity. Endpoint-only mode fails synthesis with local mode enabled
+  until package-repository/S3 connectivity is explicitly designed.
+- The database security group trusts the dedicated jumpbox security group, not
+  the fck-nat security group.
 - Never put database passwords directly in shell commands or source-controlled
   configuration.
 - Use the jumpbox for database administration and inspection only.

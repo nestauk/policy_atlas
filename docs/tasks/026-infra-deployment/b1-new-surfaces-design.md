@@ -76,6 +76,10 @@ hosted zone via `HostedZone.from_lookup`. App wires it with
 
 ## 3. SSM tunnel recipe (pin 15 — D.2 documents this verbatim)
 
+> **Historical design:** task
+> [`030-rds-jumpbox`](../030-rds-jumpbox/contract.md) superseded this fck-nat
+> tunnel on 2026-08-11 with a dedicated fixed-target jumpbox.
+
 Prereqs: AWS CLI + session-manager-plugin; IAM allowing `ssm:StartSession` on the
 fck-nat instance; the fck-nat SSM role + fck-nat→Aurora 5432 ingress landed in A.2.
 

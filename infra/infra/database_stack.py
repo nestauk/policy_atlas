@@ -15,11 +15,13 @@ from aws_cdk import (
 )
 
 from .components.nesta_db_jumpbox import NestaDBJumpbox
+from .components.nesta_ssm_endpoints import SsmConnectivity
 
 
 class DatabaseStack(Stack):
     def __init__(self, scope: Stack, id: str,
-                 db_config: dict, env_name: str, **kwargs) -> None:
+                 db_config: dict, env_name: str,
+                 ssm_connectivity: SsmConnectivity, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         # LH 08/05/2026: As per PR 172, removed the vpc_id lookup and instead look up the VPC directly.
@@ -113,22 +115,10 @@ class DatabaseStack(Stack):
             description="Allow migration Lambda to connect to RDS"
         )
 
-        # Allow the fck-nat instance (NetworkStack) to reach Aurora on 5432.
-        fck_nat_sg_id = ssm.StringParameter.value_for_string_parameter(self,
-            parameter_name="/policy_atlas_v3/network/fck_nat_sg_id")
-        fck_nat_sg = ec2.SecurityGroup.from_security_group_id(
-            self, "FckNatSG", security_group_id=fck_nat_sg_id,
-            allow_all_outbound=False,
-        )
-        db_security_group.add_ingress_rule(
-            peer=fck_nat_sg,
-            connection=ec2.Port.tcp(5432),
-            description="Allow fck-nat instance to connect to RDS"
-        )
-
         # Provide IAM-gated database access without public ingress.
         NestaDBJumpbox(self, "NestaDBJumpbox",
             vpc=vpc,
+            ssm_connectivity=ssm_connectivity,
             db_cluster=cluster,
             remote_mode=True,
             local_mode=False,
