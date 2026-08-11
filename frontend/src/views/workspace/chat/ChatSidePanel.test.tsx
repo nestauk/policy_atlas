@@ -40,7 +40,7 @@ describe("ChatSidePanel", () => {
     const user = userEvent.setup();
     render(<ChatSidePanel projectId="p1" />);
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Chat" }));
+    await user.click(screen.getByRole("button", { name: "Open chat" }));
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
     expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
   });

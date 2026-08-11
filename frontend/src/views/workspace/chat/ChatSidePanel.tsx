@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
@@ -6,6 +6,61 @@ import { scrub } from "../../../lib/scrub";
 import { ChatPane } from "./ChatPane";
 import { ChatsLibrary } from "./ChatsLibrary";
 import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./conversationState";
+
+/** Resize bounds (px) — the workspace rail's own clamp. */
+const PANEL_MIN = 280;
+const PANEL_MAX = 640;
+const PANEL_DEFAULT = 416;
+const KEY_STEP = 24;
+
+/** Drag/keyboard width for the right-hand panel (handle on its LEFT edge,
+ *  so the drag delta inverts relative to the workspace rail). */
+function usePanelWidth() {
+  const [px, setPx] = useState(PANEL_DEFAULT);
+  const dragFrom = useRef<{ x: number; width: number } | null>(null);
+  const clamp = (value: number) => Math.min(Math.max(value, PANEL_MIN), PANEL_MAX);
+
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const panel = (event.currentTarget as HTMLElement).parentElement;
+    if (panel === null) return;
+    dragFrom.current = { x: event.clientX, width: panel.getBoundingClientRect().width };
+    const handle = event.currentTarget as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    const onMove = (move: PointerEvent) => {
+      const from = dragFrom.current;
+      if (from === null) return;
+      setPx(clamp(from.width - (move.clientX - from.x)));
+    };
+    const onUp = () => {
+      dragFrom.current = null;
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+    };
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+  }, []);
+
+  const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    setPx((current) => clamp(current + (event.key === "ArrowLeft" ? KEY_STEP : -KEY_STEP)));
+  }, []);
+
+  return {
+    width: `${px}px`,
+    separatorProps: {
+      role: "separator" as const,
+      "aria-orientation": "vertical" as const,
+      "aria-label": "Resize the chat panel",
+      "aria-valuemin": PANEL_MIN,
+      "aria-valuemax": PANEL_MAX,
+      "aria-valuenow": px,
+      tabIndex: 0 as const,
+      onPointerDown,
+      onKeyDown,
+    },
+  };
+}
 
 /** Side-by-side chat on project views outside the workspace (rev 3.4).
  *
@@ -23,6 +78,7 @@ import { addOpenChatTab, useActiveConversation, useConversationMutations } from 
 export function ChatSidePanel({ projectId }: { projectId: string }) {
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const panel = usePanelWidth();
   const navigate = useNavigate();
   const chats = useConversations(projectId, { kind: "chat", status: "active" });
   const artefact = useArtefact(projectId);
@@ -50,10 +106,14 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
     return (
       <button
         type="button"
+        aria-label="Open chat"
+        title="Chat"
         onClick={() => void openLatestOrNew()}
-        className="fixed right-0 top-1/2 z-10 -translate-y-1/2 border border-r-0 border-line bg-paper px-1.5 py-3 text-caption font-bold uppercase tracking-wider text-grey [writing-mode:vertical-rl] hover:text-blue"
+        className="fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
       >
-        Chat
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
+          <path d="M3 4.5h14v9H8l-3.5 3v-3H3v-9Z" />
+        </svg>
       </button>
     );
   }
@@ -62,8 +122,13 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
   return (
     <aside
       aria-label="Project chat"
-      className="relative flex w-[26rem] shrink-0 flex-col border-l border-line bg-paper lg:h-[calc(100svh-58px)] lg:overflow-hidden"
+      style={{ width: panel.width }}
+      className="relative flex shrink-0 flex-col border-l border-line bg-paper lg:h-[calc(100svh-58px)] lg:overflow-hidden"
     >
+      <div
+        {...panel.separatorProps}
+        className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block"
+      />
       <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
         <span className="min-w-0 flex-1 truncate text-meta font-semibold text-navy">
           {title === undefined ? "Chat" : scrub(title)}

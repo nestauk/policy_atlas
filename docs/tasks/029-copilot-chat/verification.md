@@ -326,7 +326,12 @@ workspace. Planning stays a workspace surface — the panel's hand-off
 affordance navigates there. Presentation-layer only: same chat engine,
 endpoints and security posture; no API change.
 
-Evidence: `ChatSidePanel` component tests (toggle → latest-or-new, header
+Owner refinement (same day): the closed-state launcher is a circular
+bottom-left speech-bubble button ("Open chat", aria-labelled), and the open
+panel is drag/keyboard resizable via a left-edge separator (280–640 px, the
+workspace rail's clamp; delta inverted for the right-hand panel).
+
+Evidence: `ChatSidePanel` component tests (launcher → latest-or-new, header
 actions, blank-chat reuse), AppShell mock extended, e2e chat leg reworked
 to prove the side-by-side shape (URL stays on `/evidence-base?chat=`,
 panel + artefact visible together) — frontend 212 tests, build, Playwright
