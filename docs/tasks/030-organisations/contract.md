@@ -1,6 +1,8 @@
 # Task contract: 030-organisations
 
-> **Status:** drafted 2026-08-11 (rev 1). Contract approved (before planning): _pending_ ·
+> **Status:** drafted 2026-08-11 (rev 1); **rev 1.1, 2026-08-11 (owner):** no separate
+> "org" scope — the user is part of the org, so the org view IS the full visible list;
+> `scope=all|mine`, two-state frontend switcher. Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ · ADR: 0030 (to be drafted with the plan).
 >
 > Owner calls taken at the design interview (2026-08-11), encoded below:
@@ -82,7 +84,9 @@ check.
    colleague.
 5. **API (approval-gated · additive):** `GET /api/v1/me` →
    `{user_id, display_name, organisation: {org_id, name} | null}` ·
-   `GET /projects?scope=all|mine|org` (default `all`; `org` = org-visible not mine) ·
+   `GET /projects?scope=all|mine` (default `all` = everything visible to the caller —
+   own projects incl. private, plus org-visible colleagues' projects; the user is part
+   of the org, so there is no separate "org" scope — owner call, rev 1.1) ·
    `ProjectOut` gains `visibility`, `is_owner`, `owner_display` ·
    `PATCH /projects/{id}` accepts `visibility` (owner-only) · error envelope gains
    403 `forbidden`. `make openapi-sync` regenerates the two generated files.
@@ -90,8 +94,9 @@ check.
    (upsert `app_user`, set `org_id`, optional `display_name`) · assign project to org ·
    de-enrol (the rollback lever). Prod invocation documented in DEPLOYMENT.md (same
    pattern as migrations; no new infra).
-7. **Frontend:** landing switcher **All · Mine · My organisation** (default All — "see
-   both" is the owner's stated default; labels per the just-enough-text principle) ·
+7. **Frontend:** two-state landing switcher **Organisation · Mine** (default
+   Organisation = the full visible list; Mine = owned-by-me filter; labels per the
+   just-enough-text principle) ·
    org cards show `owner_display` · `is_owner=false` hides rename/archive/planning
    composer/run/steering controls (read-only affordances) and shows only own chats ·
    visibility toggle in project settings (owner only) · identity chip renders
