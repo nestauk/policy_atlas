@@ -27,6 +27,7 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     build_envelope,
 )
+from policy_atlas.runtime.chat_floor import derive_claims_for_uncovered_citations
 
 log = structlog.get_logger()
 
@@ -256,6 +257,15 @@ def _shape_envelope(
     if not isinstance(raw_claims, list):
         raise ChatEnrichmentError("chat payload claims are malformed")
     citations_by_n = _citation_map(payload)
+    # Rows persisted before the floor derived claims for uncovered citations
+    # (and any residual model omission) still deserve checking: derive the
+    # sentence-grain mapping here symmetrically rather than failing.
+    derived = derive_claims_for_uncovered_citations(
+        answer, sorted(citations_by_n), raw_claims
+    )
+    if derived:
+        raw_claims = [*raw_claims, *derived]
+        payload["claims"] = raw_claims
     for index, claim in enumerate(raw_claims, start=1):
         if not isinstance(claim, dict):
             raise ChatEnrichmentError("chat payload claim is malformed")

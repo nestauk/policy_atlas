@@ -17,7 +17,7 @@ interface MockChatTurn {
   id: string;
   status: string;
   answer: string;
-  citations?: { grounding_tier?: string }[];
+  citations?: { grounding_tier?: string; state?: string }[];
   enrichment?: { status: string } | null;
 }
 
@@ -223,7 +223,7 @@ describe("mock API", () => {
       const secondRead = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`);
       const { data: secondTurns } = await secondRead.json() as { data: MockChatTurn[] };
       expect(secondTurns[0].enrichment).toMatchObject({ status: "enriched" });
-      expect(secondTurns[0].citations?.[0]?.grounding_tier).toBe("tier_2");
+      expect(secondTurns[0].citations?.[0]?.state).toBe("verdict:tier_2");
     });
 
     it("cancels a turn idempotently by its durable status", async () => {

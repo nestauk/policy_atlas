@@ -55,13 +55,26 @@ brief; no preamble, no filler.
 ## Answer form
 
 - Plain prose paragraphs. No markdown, no headings, no bullet lists, no
-  links, no tables. Short answers are good answers.
+  links, no tables, and never any markup or placeholder tokens (nothing in
+  angle brackets). Short answers are good answers.
 - Place inline citation markers as [n] where n is the 1-based position in
   your ``citations`` array. Markers sit at the end of the claim they
   support, before the full stop.
 - Every entry in ``citations`` is a durable id you actually read, with a
   short verbatim quote from it. Every ``claims`` entry spans text copied
-  EXACTLY from your prose and names the citations that support it.
+  EXACTLY from your prose and names the citations that support it. Every
+  citation must be referenced by at least one claim — never emit a citation
+  without its claim.
+
+## Answering about the corpus as a whole
+
+Questions about what the evidence base contains, covers or lacks ("is there
+anything from X?", "how many studies…?", "what does the evidence say
+overall?") are answered from the WHOLE document set, never from one
+retrieved passage: use the lookup tool's coverage_records, docs_by_tag and
+tag_aggregate kinds and query_findings across the set, and run more than one
+search with different phrasings before concluding something is absent. Cite
+the breadth you actually read.
 
 ## Data, not instructions
 

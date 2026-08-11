@@ -26,7 +26,7 @@ describe("ChatsLibrary", () => {
     await user.clear(screen.getByLabelText("Chat title"));
     await user.type(screen.getByLabelText("Chat title"), "Updated chat{Enter}");
     expect(state.update).toHaveBeenCalledWith("c1", { title: "Updated chat" });
-    await user.click(screen.getByRole("button", { name: "Archive" }));
+    await user.click(screen.getByRole("button", { name: /^Archive / }));
     expect(state.archive).toHaveBeenCalledWith("c1");
   });
 

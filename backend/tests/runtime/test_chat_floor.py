@@ -108,3 +108,39 @@ def test_zero_survivors_warns_and_preserves_evidence_not_held() -> None:
     )
     assert floored.warning_not_evidence_checked is True
     assert floored.evidence_not_held is True
+
+
+def test_floor_derives_claims_for_uncovered_citations() -> None:
+    """A surviving citation with no claim gets a sentence-derived claim mapping."""
+    floored = apply_citation_floor(
+        _answer("First finding stands [1]. Unrelated remark.", ["chunk-a"]),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert len(floored.citations) == 1
+    assert len(floored.claims) == 1
+    derived = floored.claims[0]
+    assert derived["derived"] is True
+    assert derived["citation_ns"] == [1]
+    assert derived["text"] == "First finding stands [1]."
+    start, end = derived["span"]
+    assert floored.prose[start:end] == derived["text"]
+
+
+def test_floor_scrubs_stray_artifact_tokens() -> None:
+    """Lone angle-bracket provider tokens never survive into the persisted prose."""
+    floored = apply_citation_floor(
+        _answer(
+            "The evidence supports this [1].\n\n<lemma>",
+            ["chunk-a"],
+            [ChatClaimWire(text="The evidence supports this", citation_indexes=[1])],
+        ),
+        tool_chunk_ids={"chunk-a"},
+        tool_finding_ids=set(),
+        frame_chunk_ids=set(),
+        appraised_chunk_ids={"chunk-a"},
+    )
+    assert "<lemma>" not in floored.prose
+    assert floored.prose == "The evidence supports this [1]."

@@ -22,6 +22,7 @@ interface ChatCitation {
   quote?: string;
   source_title?: string;
   title?: string;
+  state?: string;
   verdict?: string;
   grounding_tier?: string;
 }
@@ -48,7 +49,7 @@ function AssistantMessage({ turn, onCitation, onOpenPlanning }: { turn: ChatConv
   const handoff = "id" in turn && turn.handoff === "evidence_not_held";
   const copy = async () => { await navigator.clipboard?.writeText(copyText(answer, citations, turn)); };
   if (!answer && !("id" in turn && turn.status === "pending")) return null;
-  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} disabled={cancelled} onCitation={onCitation} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-caption text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-caption text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} />}{answer && <button type="button" onClick={() => void copy()} className="text-caption font-semibold text-blue hover:underline">Copy answer</button>}</div>;
+  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><CitationProse text={answer} citations={citations} disabled={cancelled} onCitation={onCitation} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-caption text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-caption text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
 
 function CitationProse({ text, citations, disabled, onCitation }: { text: string; citations: ChatCitation[]; disabled: boolean; onCitation: (citation: ChatCitation) => void }) {
@@ -57,7 +58,20 @@ function CitationProse({ text, citations, disabled, onCitation }: { text: string
 }
 
 function References({ citations, turn, onCitation }: { citations: ChatCitation[]; turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void }) {
-  return <footer className="border-t border-line pt-2"><p className="text-caption font-bold uppercase tracking-wider text-grey">References</p><div className="mt-2 space-y-2">{citations.map((citation, index) => { const tier = verdictFor(turn, citation); return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className="font-bold text-blue hover:underline">[{citation.n ?? index + 1}]</button> <span>{scrub(citationId(citation) || "Citation")}</span>{citation.quote && <span className="text-grey"> — “{scrub(citation.quote)}”</span>}<span className="ml-2" title={tier === null ? "Awaiting evidence check" : TIER_TEXT[tier]}><Chip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"}>{tier === null ? "Unchecked · awaiting evidence check" : TIER_LABEL[tier]}</Chip></span></div>; })}</div></footer>;
+  const checkFailed = enrichmentStatusOf(turn) === "failed";
+  const uncheckedLabel = checkFailed ? "Unchecked · check unavailable" : "Unchecked · awaiting evidence check";
+  const uncheckedHint = checkFailed ? "The evidence check could not run for this answer" : "Awaiting evidence check";
+  return <footer className="border-t border-line pt-2"><p className="text-caption font-bold uppercase tracking-wider text-grey">References</p><div className="mt-2 space-y-2">{citations.map((citation, index) => { const tier = verdictFor(turn, citation); return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className="font-bold text-blue hover:underline">[{citation.n ?? index + 1}]</button> <span className={citation.source_title ? "font-semibold" : undefined}>{scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation")}</span>{citation.quote && <span className="text-grey"> — “{scrub(citation.quote)}”</span>}<span className="ml-2" title={tier === null ? uncheckedHint : TIER_TEXT[tier]}><Chip tone={tier === "unsupported_mis_cited" ? "red" : tier === null ? "soft" : "blue"}>{tier === null ? uncheckedLabel : TIER_LABEL[tier]}</Chip></span></div>; })}</div></footer>;
+}
+
+function enrichmentStatusOf(turn: ChatConversationRow): string | null {
+  if (!("id" in turn)) return null;
+  const enrichment = (turn as Record<string, unknown>).enrichment;
+  if (enrichment !== null && typeof enrichment === "object") {
+    const status = (enrichment as Record<string, unknown>).status;
+    return typeof status === "string" ? status : null;
+  }
+  return null;
 }
 
 function CitationPopover({ projectId, citation, onClose }: { projectId: string; citation: ChatCitation; onClose: () => void }) {
@@ -77,5 +91,5 @@ function activityOf(row: ChatConversationRow) { return "id" in row ? [] : row.ac
 function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
 function citationId(citation: ChatCitation) { return citation.id ?? citation.chunk_id ?? citation.citation_id ?? ""; }
-function verdictFor(turn: ChatConversationRow, citation: ChatCitation): string | null { if (citation.verdict && TIER_LABEL[citation.verdict]) return citation.verdict; if (citation.grounding_tier && TIER_LABEL[citation.grounding_tier]) return citation.grounding_tier; if (!("id" in turn)) return null; for (const claim of turn.claims ?? []) { if (claim !== null && typeof claim === "object") { const candidate = claim as Record<string, unknown>; const ids = Array.isArray(candidate.citation_ids) ? candidate.citation_ids : Array.isArray(candidate.citations) ? candidate.citations : []; if (ids.includes(citationId(citation))) { const value = candidate.verdict ?? candidate.grounding_tier; if (typeof value === "string" && TIER_LABEL[value]) return value; } } } return null; }
-function copyText(answer: string, citations: ChatCitation[], turn: ChatConversationRow) { return [answer, ...citations.map((citation, index) => `[${citation.n ?? index + 1}] ${citationId(citation)}${citation.quote ? ` — ${citation.quote}` : ""} — ${verdictFor(turn, citation) ? TIER_LABEL[verdictFor(turn, citation)!] : "Unchecked · awaiting evidence check"}`)].filter(Boolean).join("\n"); }
+function verdictFor(turn: ChatConversationRow, citation: ChatCitation): string | null { const fromState = citation.state?.startsWith("verdict:") ? citation.state.slice("verdict:".length) : null; if (fromState !== null && TIER_LABEL[fromState]) return fromState; if (citation.verdict && TIER_LABEL[citation.verdict]) return citation.verdict; if (citation.grounding_tier && TIER_LABEL[citation.grounding_tier]) return citation.grounding_tier; if (!("id" in turn)) return null; for (const claim of turn.claims ?? []) { if (claim !== null && typeof claim === "object") { const candidate = claim as Record<string, unknown>; const ids = Array.isArray(candidate.citation_ids) ? candidate.citation_ids : Array.isArray(candidate.citations) ? candidate.citations : []; if (ids.includes(citationId(citation))) { const value = candidate.verdict ?? candidate.grounding_tier; if (typeof value === "string" && TIER_LABEL[value]) return value; } } } return null; }
+function copyText(answer: string, citations: ChatCitation[], turn: ChatConversationRow) { return [answer, ...citations.map((citation, index) => `[${citation.n ?? index + 1}] ${citation.source_title ?? citation.title ?? citationId(citation)}${citation.quote ? ` — ${citation.quote}` : ""} — ${verdictFor(turn, citation) ? TIER_LABEL[verdictFor(turn, citation)!] : "Unchecked"}`)].filter(Boolean).join("\n"); }

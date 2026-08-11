@@ -114,8 +114,9 @@ journey (7/7, incl. the chat leg).
 
 ## Diff summary
 
-Seven phase commits on `task/029-copilot-chat` (A: 917ae97 · B: 1426ddf ·
-C: 5fea94a · D: 782705b · E: 3e2e060 · F: 4f1f505 · G: _pending_):
+Eight phase commits on `task/029-copilot-chat` (A: 917ae97 · B: 1426ddf ·
+C: 5fea94a · D: 782705b · E: 3e2e060 · F: 4f1f505 · G: 7ed1da0 ·
+H: 07f3519, plus the post-H owner live-check fix commit):
 the unified conversation schema + legacy backfill; planning re-homed onto
 conversations (lifecycle service, seeded successors, closure in the runner's
 terminal transaction, lineage writers); the chat turn engine (tool-loop kernel
@@ -260,3 +261,52 @@ assembler + backend protocol, chunk-context read, all integration fixes.
   never re-applies on remount — always re-assert the ref in the effect's
   mount side. This silently no-ops any callback gated on it (here: every
   chat stream event in dev).
+
+## Owner live-check findings + fixes (2026-08-11, post-H)
+
+The owner's own live pass surfaced four defects and three copy/affordance
+calls; all fixed on the build branch, full `make verify` green:
+
+1. **Judge enrichment stuck "Unchecked"** — root cause: the model emitted a
+   citation with an EMPTY `claims[]`, so the claim-grained judge had no
+   mapping and enrichment terminally failed; separately, the frontend read
+   `citation.verdict` while the server persists `state: "verdict:<tier>"`,
+   so even successful enrichment never displayed (the mock had been shaped
+   to the component, hiding it — mock now emits the server shape and the
+   e2e proves the real path). Fixes: the floor derives sentence-grain
+   claims for any citation no claim references (marker-anchored, handling
+   markers on either side of the full stop); enrichment applies the same
+   derivation symmetrically so pre-fix rows check too; the prompt now
+   requires a claim per citation; the References chip distinguishes
+   terminal-failed ("Unchecked · check unavailable"). The owner's stuck
+   turn was re-enriched live: the judge ruled its citation
+   `unsupported_mis_cited` — honest (the cited chunk did not support the
+   claim), now visible as "Unsupported — flagged".
+2. **`<lemma>` in the answer** — a stray provider artifact token streamed
+   and persisted. Fix: the floor scrubs lone angle-bracket token lines and
+   trailing fragments; the prompt forbids markup/placeholder tokens.
+   (Streaming can still show one transiently; the terminal payload replaces
+   the buffer.)
+3. **References rendered as raw chunk ids** — the payload carried durable
+   ids only. Fix: citation display facts (envelope source title +
+   `source_id`) resolve at persist time (bibliographic-authority rule);
+   the References footer and copy-answer text render titles with id
+   fallback for legacy rows.
+4. **"Answered from an individual document"** — retrieval verified
+   corpus-wide (selection is a soft prior only); the failure was answer
+   craft + the id-only display. Fix: `chat_v1` gains a corpus-membership
+   rule (whole-set questions use coverage/docs_by_tag/tag_aggregate +
+   query_findings and multiple searches before concluding absence). Judge
+   quality on such answers stays routed to the eval slice.
+5. **Copy calls**: "Copy answer" and the library's rename/archive are icon
+   buttons (aria-labelled); the "Whole project" zero-state label is
+   removed (no entry chip → no bar).
+
+**Deferred to owner decision (scope):** opening the chat side-by-side from
+Evidence Base / Sources / other views — a real workspace-shell change (the
+rail exists only in the workspace route today), proposed as a follow-up
+slice or a 029 contract amendment, not a build-time fix.
+
+Prompt hashes re-pinned (chat_v1 wording additions). New floor behaviours
+carry deterministic tests (derived-claim anchoring both marker placements,
+artifact-token scrub, source-title resolution).

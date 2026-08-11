@@ -11,7 +11,9 @@ vi.mock("./conversationState", () => ({ useConversationMutations: () => ({ updat
 describe("ContextBar", () => {
   it("shows the zero state or a removable evidence-base chip", async () => {
     const { rerender } = render(<MemoryRouter><ContextBar projectId="p1" conversationId="c1" entryArtefactId={null} /></MemoryRouter>);
-    expect(screen.getByText("Whole project")).toBeInTheDocument();
+    // No entry context renders NOTHING — the "Whole project" zero-state
+    // label was cut at the owner live check (2026-08-11).
+    expect(screen.queryByText("Whole project")).not.toBeInTheDocument();
     rerender(<MemoryRouter><ContextBar projectId="p1" conversationId="c1" entryArtefactId="a1" /></MemoryRouter>);
     expect(screen.getByText("Evidence base")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "Clear evidence base context" }));

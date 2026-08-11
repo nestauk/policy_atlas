@@ -126,6 +126,108 @@ def _first_question_title(message: str) -> str:
     return normalized[: boundary if boundary > 0 else 80]
 
 
+def _resolve_citation_sources(
+    engine: Engine, citations: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Attach source display facts to floored citations (title + document id).
+
+    References must read as documents, not durable ids (owner live check,
+    2026-08-11). Bibliographic authority is the ENVELOPE snapshot per the
+    artefact read model's rule; the pss id joins to the sources/dossier
+    surface. Resolution failure leaves the honest id-only citation.
+    """
+    from policy_atlas.core.schema import chunk as chunk_table
+    from policy_atlas.core.schema import (
+        implementation_context_finding,
+        intervention_outcome_finding,
+        project_source_snapshot,
+        source_extraction_record,
+        source_snapshot,
+    )
+
+    def _uuids(kind: str) -> set[uuid.UUID]:
+        values: set[uuid.UUID] = set()
+        for citation in citations:
+            if citation.get("kind") != kind:
+                continue
+            try:
+                values.add(uuid.UUID(str(citation.get("id"))))
+            except ValueError:
+                continue
+        return values
+
+    chunk_ids, finding_ids = _uuids("chunk"), _uuids("finding")
+    facts: dict[str, dict[str, Any]] = {}
+    with engine.connect() as conn:
+        if chunk_ids:
+            for row in conn.execute(
+                select(
+                    chunk_table.c.chunk_id,
+                    project_source_snapshot.c.project_source_snapshot_id,
+                    source_snapshot.c.metadata,
+                    source_snapshot.c.source_locator,
+                )
+                .select_from(
+                    chunk_table.join(
+                        project_source_snapshot,
+                        (
+                            project_source_snapshot.c.source_snapshot_id
+                            == chunk_table.c.source_snapshot_id
+                        )
+                        | (
+                            project_source_snapshot.c.full_text_snapshot_id
+                            == chunk_table.c.source_snapshot_id
+                        ),
+                    ).join(
+                        source_snapshot,
+                        source_snapshot.c.source_snapshot_id
+                        == project_source_snapshot.c.source_snapshot_id,
+                    )
+                )
+                .where(chunk_table.c.chunk_id.in_(chunk_ids))
+            ):
+                meta = row.metadata if isinstance(row.metadata, dict) else {}
+                title = meta.get("title") or row.source_locator
+                facts[str(row.chunk_id)] = {
+                    "source_title": title,
+                    "source_id": str(row.project_source_snapshot_id),
+                }
+        if finding_ids:
+            for table in (intervention_outcome_finding, implementation_context_finding):
+                for row in conn.execute(
+                    select(
+                        table.c.finding_id,
+                        project_source_snapshot.c.project_source_snapshot_id,
+                        source_snapshot.c.metadata,
+                        source_snapshot.c.source_locator,
+                    )
+                    .select_from(
+                        table.join(
+                            source_extraction_record,
+                            table.c.extraction_record_id
+                            == source_extraction_record.c.extraction_record_id,
+                        )
+                        .join(
+                            project_source_snapshot,
+                            project_source_snapshot.c.project_source_snapshot_id
+                            == source_extraction_record.c.project_source_snapshot_id,
+                        )
+                        .join(
+                            source_snapshot,
+                            source_snapshot.c.source_snapshot_id
+                            == project_source_snapshot.c.source_snapshot_id,
+                        )
+                    )
+                    .where(table.c.finding_id.in_(finding_ids))
+                ):
+                    meta = row.metadata if isinstance(row.metadata, dict) else {}
+                    facts[str(row.finding_id)] = {
+                        "source_title": meta.get("title") or row.source_locator,
+                        "source_id": str(row.project_source_snapshot_id),
+                    }
+    return [{**citation, **facts.get(str(citation.get("id")), {})} for citation in citations]
+
+
 def _appraised_chunk_ids(transcript: list[ToolExchange]) -> set[str]:
     """Extract ids of appraised chunks actually exposed by chat tool calls."""
     appraised: set[str] = set()
@@ -363,10 +465,10 @@ def _cancelled_result(
 def _turn_was_cancelled(engine: Engine, *, turn_id: uuid.UUID) -> bool:
     """Return whether a racing no-live-generator cancel already changed the row."""
     with engine.connect() as conn:
-        return (
-            conn.execute(select(chat_turn.c.status).where(chat_turn.c.id == turn_id)).scalar_one()
-            == "cancelled"
-        )
+        status = conn.execute(
+            select(chat_turn.c.status).where(chat_turn.c.id == turn_id)
+        ).scalar_one()
+    return bool(status == "cancelled")
 
 
 def run_chat_turn(
@@ -527,7 +629,7 @@ def run_chat_turn(
             )
             payload = {
                 "claims": floored.claims,
-                "citations": floored.citations,
+                "citations": _resolve_citation_sources(engine, floored.citations),
                 "warning_not_evidence_checked": floored.warning_not_evidence_checked,
                 "stripped": floored.stripped,
                 "evidence_not_held": floored.evidence_not_held,

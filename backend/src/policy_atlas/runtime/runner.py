@@ -58,8 +58,8 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
     write_summaries_after_commit,
 )
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
+from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.orchestration_plan import (
     SPINE,

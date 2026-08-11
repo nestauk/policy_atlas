@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
@@ -22,7 +21,6 @@ from policy_atlas.core.schema import (
     source_screening_result,
     source_tag,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolValidationError
 from tests.helpers import now
 from tests.runtime.test_runner import _cleanup, _seed_project
 

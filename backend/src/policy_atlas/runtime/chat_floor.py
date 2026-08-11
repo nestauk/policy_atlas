@@ -9,6 +9,74 @@ from typing import Any
 from policy_atlas.runtime.chat_prompt import ChatAnswerWire
 
 _MARKER_RE = re.compile(r"\[(\d+)\]")
+# Stray provider artifact tokens (e.g. a lone "<lemma>" paragraph) observed
+# leaking from the chat model class; prose is plain text by pin, so a lone
+# angle-bracket token is never legitimate content.
+_ARTIFACT_TOKEN_RE = re.compile(r"^\s*<[a-z_]+>\s*$", re.MULTILINE)
+_SENTENCE_END_RE = re.compile(r"[.!?](?=\s|$)")
+
+
+def _scrub_artifact_tokens(prose: str) -> str:
+    """Drop lone angle-bracket token lines and trailing token fragments."""
+    cleaned = _ARTIFACT_TOKEN_RE.sub("", prose)
+    cleaned = re.sub(r"\s*<[a-z_]+>\s*$", "", cleaned)
+    return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+
+
+def _sentence_around(prose: str, position: int) -> tuple[int, int]:
+    """Return the [start, end) sentence bounds containing ``position``."""
+    start = 0
+    for match in _SENTENCE_END_RE.finditer(prose, 0, position):
+        start = match.end()
+    end_match = _SENTENCE_END_RE.search(prose, position)
+    end = end_match.end() if end_match is not None else len(prose)
+    return start, end
+
+
+def derive_claims_for_uncovered_citations(
+    prose: str, citation_ns: list[int], claims: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Derive sentence-grain claims for citations no existing claim references.
+
+    Shared by the floor (persist time) and enrichment (which must also handle
+    rows persisted before this derivation existed): each uncovered display
+    number gets the sentence its ``[n]`` marker anchors — the sentence ENDING
+    at the marker (models place markers on either side of the full stop), so
+    the claim text is the asserted sentence, never the following fragment.
+    """
+    covered = {n for claim in claims for n in claim.get("citation_ns") or []}
+    derived: list[dict[str, Any]] = []
+    for n in citation_ns:
+        if n in covered:
+            continue
+        marker = f"[{n}]"
+        position = prose.find(marker)
+        if position < 0:
+            continue
+        # Sentence start: the last terminator BEFORE the sentence the marker
+        # closes — skip a terminator immediately adjacent to the marker
+        # ("…data.[1]"), which belongs to the marker's own sentence.
+        lookback = prose[: position - 1 if position > 0 and prose[position - 1] in ".!?" else position]
+        start = 0
+        for match in _SENTENCE_END_RE.finditer(lookback):
+            start = match.end()
+        end = position + len(marker)
+        while end < len(prose) and prose[end] in ".!?":
+            end += 1
+        text = prose[start:end].strip()
+        if not text or text == marker:
+            continue
+        span_start = prose.find(text)
+        derived.append(
+            {
+                "text": text,
+                "span": [span_start, span_start + len(text)] if span_start >= 0 else None,
+                "citation_ns": [n],
+                "derived": True,
+            }
+        )
+        covered.add(n)
+    return derived
 
 
 @dataclass(frozen=True)
@@ -124,7 +192,7 @@ def apply_citation_floor(
         compacted = compacted_numbers.get(raw_index)
         return f"[{compacted}]" if compacted is not None else ""
 
-    prose = _MARKER_RE.sub(compact_marker, marker_checked_prose)
+    prose = _scrub_artifact_tokens(_MARKER_RE.sub(compact_marker, marker_checked_prose))
     citations = [
         {
             "n": compacted_numbers[raw_index],
@@ -144,6 +212,16 @@ def apply_citation_floor(
                 "citation_ns": [compacted_numbers[index] for index in raw_indexes],
             }
         )
+
+    # The judge is claim-grained: a surviving citation no claim references
+    # would be honestly uncheckable, so derive its claim from the sentence
+    # carrying its marker (spans are bound code-side — house rule). Covers
+    # the observed model failure of emitting citations with empty claims[].
+    claims.extend(
+        derive_claims_for_uncovered_citations(
+            prose, [compacted_numbers[raw_index] for raw_index in retained_raw_indexes], claims
+        )
+    )
 
     return FlooredAnswer(
         prose=prose,

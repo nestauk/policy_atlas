@@ -17,7 +17,8 @@ from policy_atlas.core.schema import capability_run, chat_turn, conversation, pr
 from policy_atlas.evidence_base.synthesis.synthesis_tools import build_section_tools
 from policy_atlas.runtime.chat_backend import StubChatBackend
 from tests.helpers import now
-from tests.runtime.test_runner import _cleanup, _seed_project
+from tests.runtime.test_runner import _cleanup as _cleanup
+from tests.runtime.test_runner import _seed_project as _seed_project
 
 
 class CountingChatBackend(StubChatBackend):
@@ -706,3 +707,62 @@ def test_message_over_cap_rejected(engine: Engine) -> None:
             )
     finally:
         _cleanup(engine, project_id)
+
+
+def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
+    """Persisted citations carry the cited document's title and source id."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.core.schema import chunk as chunk_table
+    from tests.helpers import delete_project_data, seed_source
+
+    project_id = None
+    try:
+        with engine.begin() as conn:
+            from tests.helpers import now as _now_helper
+
+            import uuid as _uuid
+
+            from policy_atlas.core.schema import project as project_table
+
+            project_id = _uuid.uuid4()
+            conn.execute(
+                project_table.insert().values(
+                    project_id=project_id,
+                    created_at=_now_helper(),
+                    name="Citation resolution test",
+                    question=None,
+                    status="active",
+                    updated_at=_now_helper(),
+                    owner_user_id="chat-owner",
+                )
+            )
+            snapshot_id, pss_id = seed_source(
+                conn, project_id, {"title": "A real document title"}
+            )
+            chunk_id = _uuid.uuid4()
+            conn.execute(
+                chunk_table.insert().values(
+                    chunk_id=chunk_id,
+                    source_snapshot_id=snapshot_id,
+                    sequence=0,
+                    content="Chunk content.",
+                    content_hash="hash",
+                    locator={"start": 0, "end": 14},
+                    segmentation_policy="manual_v1",
+                    created_at=_now_helper(),
+                )
+            )
+        resolved = _resolve_citation_sources(
+            engine,
+            [
+                {"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "q", "state": "unchecked"},
+                {"n": 2, "id": "not-a-uuid", "kind": "chunk", "quote": "q", "state": "unchecked"},
+            ],
+        )
+        assert resolved[0]["source_title"] == "A real document title"
+        assert resolved[0]["source_id"] == str(pss_id)
+        assert "source_title" not in resolved[1]
+    finally:
+        if project_id is not None:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)

@@ -497,7 +497,7 @@ function readChatTurns(conversationId: string): ChatTurnOut[] {
     if (reads < 2) continue;
     turn.enrichment = { status: "enriched" };
     turn.citations = (turn.citations ?? []).map((citation, index) =>
-      index === 0 ? { ...citation, grounding_tier: "tier_2" } : citation);
+      index === 0 ? { ...citation, state: "verdict:tier_2" } : citation);
   }
   return turns;
 }
