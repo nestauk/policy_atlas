@@ -326,10 +326,11 @@ workspace. Planning stays a workspace surface — the panel's hand-off
 affordance navigates there. Presentation-layer only: same chat engine,
 endpoints and security posture; no API change.
 
-Owner refinement (same day): the closed-state launcher is a circular
-bottom-left speech-bubble button ("Open chat", aria-labelled), and the open
-panel is drag/keyboard resizable via a left-edge separator (280–640 px, the
-workspace rail's clamp; delta inverted for the right-hand panel).
+Owner refinements (same day): the closed-state launcher is a circular
+bottom-left speech-bubble button ("Open chat", aria-labelled); the open
+panel sits on the LEFT of the view — parity with the workspace rail — and
+is drag/keyboard resizable via a right-edge separator (280–640 px, the
+rail's own clamp and delta geometry).
 
 Evidence: `ChatSidePanel` component tests (launcher → latest-or-new, header
 actions, blank-chat reuse), AppShell mock extended, e2e chat leg reworked

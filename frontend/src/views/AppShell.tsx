@@ -264,12 +264,13 @@ export function AppShell() {
                 rev 3.4): the workspace already hosts the full conversation
                 rail, so the panel mounts everywhere else in the project. */}
             <div className="flex min-w-0">
+              {/* Chat on the LEFT — parity with the workspace rail. */}
+              {base !== null && !inWorkspace && <ChatSidePanel projectId={projectId ?? ""} />}
               <div className="min-w-0 flex-1">
                 <ErrorBoundary key={location.pathname}>
                   <Outlet />
                 </ErrorBoundary>
               </div>
-              {base !== null && !inWorkspace && <ChatSidePanel projectId={projectId ?? ""} />}
             </div>
           </div>
         </TitleMarkerProvider>

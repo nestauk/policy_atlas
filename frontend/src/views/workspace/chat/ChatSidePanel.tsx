@@ -13,8 +13,8 @@ const PANEL_MAX = 640;
 const PANEL_DEFAULT = 416;
 const KEY_STEP = 24;
 
-/** Drag/keyboard width for the right-hand panel (handle on its LEFT edge,
- *  so the drag delta inverts relative to the workspace rail). */
+/** Drag/keyboard width for the left-hand panel (handle on its RIGHT edge —
+ *  the workspace rail's own geometry, so the delta math matches it). */
 function usePanelWidth() {
   const [px, setPx] = useState(PANEL_DEFAULT);
   const dragFrom = useRef<{ x: number; width: number } | null>(null);
@@ -29,7 +29,7 @@ function usePanelWidth() {
     const onMove = (move: PointerEvent) => {
       const from = dragFrom.current;
       if (from === null) return;
-      setPx(clamp(from.width - (move.clientX - from.x)));
+      setPx(clamp(from.width + (move.clientX - from.x)));
     };
     const onUp = () => {
       dragFrom.current = null;
@@ -43,7 +43,7 @@ function usePanelWidth() {
   const onKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     event.preventDefault();
-    setPx((current) => clamp(current + (event.key === "ArrowLeft" ? KEY_STEP : -KEY_STEP)));
+    setPx((current) => clamp(current + (event.key === "ArrowRight" ? KEY_STEP : -KEY_STEP)));
   }, []);
 
   return {
@@ -123,11 +123,11 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
     <aside
       aria-label="Project chat"
       style={{ width: panel.width }}
-      className="relative flex shrink-0 flex-col border-l border-line bg-paper lg:h-[calc(100svh-58px)] lg:overflow-hidden"
+      className="relative flex shrink-0 flex-col border-r border-line bg-paper lg:h-[calc(100svh-58px)] lg:overflow-hidden"
     >
       <div
         {...panel.separatorProps}
-        className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block"
+        className="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block"
       />
       <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
         <span className="min-w-0 flex-1 truncate text-meta font-semibold text-navy">
