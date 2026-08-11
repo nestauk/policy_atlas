@@ -76,6 +76,9 @@ class OpenAIChatBackend(ChatBackend):
         self, messages: list[dict[str, Any]], *, max_output_tokens: int | None
     ) -> UsageResult[ChatTurn]:
         completions: Any = self._client.chat.completions
+        # gpt-5.6-terra rejects function tools unless reasoning_effort is
+        # 'none' on /v1/chat/completions (H3 live check, 2026-08-11) — which
+        # also matches the model's fast-conversational selection intent.
         response = completions.create(
             model=CHAT_MODEL,
             messages=messages,
@@ -83,6 +86,7 @@ class OpenAIChatBackend(ChatBackend):
             parallel_tool_calls=True,
             tool_choice="required",
             max_completion_tokens=max_output_tokens,
+            reasoning_effort="none",
         )
         if not response.choices:
             raise RuntimeError("OpenAI chat tool turn returned no choices.")
@@ -119,6 +123,7 @@ class OpenAIChatBackend(ChatBackend):
         completions: Any = self._client.chat.completions
         stream = completions.create(
             model=CHAT_MODEL,
+            reasoning_effort="none",
             messages=messages,
             stream=True,
             max_completion_tokens=max_output_tokens,
@@ -144,6 +149,7 @@ class OpenAIChatBackend(ChatBackend):
         ]
         response = completions.parse(
             model=CHAT_MODEL,
+            reasoning_effort="none",
             messages=structured_messages,
             response_format=ChatAnswerWire,
             max_completion_tokens=max_output_tokens,

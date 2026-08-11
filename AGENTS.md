@@ -35,7 +35,8 @@ terminal transaction — supersedes 027's rolling thread; row-grain audit
 chain conversation → plan → run → artefact). Tier 4 (legacy backfill
 migration on live data). Contract rev 3.3 (approved) · plan rev 2.2
 (approved, executor marks, phases A–H) · ADR 0029 (Accepted) ·
-mockup + research inputs: `docs/tasks/029-copilot-chat/`.
+mockup + research inputs: `docs/tasks/029-copilot-chat/`. API surface:
+`docs/specs/system/web-api.md` § Conversations.
 
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
 `c501022`); system **live** at `v3.policyatlas.uk`. Known operational

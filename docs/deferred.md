@@ -1599,7 +1599,13 @@ first-class vocabulary. What follows is what it deliberately left out.
   portability). 025's co-pilot Q&A needs persisted per-user sessions
   ("multiple persisted sessions; browse previous ones") — the transcript
   companion store (per-user/per-project turn table, session/`capability_run`
-  linkage, window-plus-recall context assembly) lands there.
+  linkage, window-plus-recall context assembly) lands there. **DISCHARGED
+  (task 029, contract §1/§5):** the unified `conversation` + `chat_turn`
+  tables are that companion store — per-project chats (many, read-only),
+  `client_turn_id` idempotency, and a ceiling-windowed context assembler
+  (frame + verbatim turns, no recall-with-summarization yet — see "recall
+  beyond the window" below). Provider-side conversation state stays
+  forbidden, unchanged.
 - **Build-discovered seams (024 build, 2026-07-16)** — surfaced mid-build,
   not pre-registered in the annex:
   - **Live DB-backed read executors for watch deliberation** — the runner
@@ -1774,6 +1780,11 @@ first-class vocabulary. What follows is what it deliberately left out.
   context (PR #35 adjudication): the transcript schema is deliberately single-table/
   planning-only so the co-pilot slice brings its own thread/context model; the rail is
   single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
+  **DISCHARGED (task 029, contract §6):** the conversation-aware rail + Chats library
+  ships — switcher over planning conversations and chats, URL-addressable threads,
+  entry-context chip with "Whole project" zero-state, `chat_v1` as the lead-authored
+  prompt surface. Narrower seams this slice left open are recorded fresh under
+  "Co-pilot chat (task 029 seams)" below.
 - **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
   IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
   journey/evidence components are IA-agnostic and re-mount under it unchanged.
@@ -1864,3 +1875,60 @@ first-class vocabulary. What follows is what it deliberately left out.
   path re-fetches block prose already fetched; `write_block_summary` doubles as the
   artefact entry point keyed on `seed["kind"]`. Revisit with the summary/judge
   calibration eval workstream.
+
+## Co-pilot chat (task 029 seams)
+
+029 shipped the unified `conversation` model — many read-only chats per project plus
+one planning conversation per plan lineage — with streamed NDJSON turns, claim-grained
+citation floors, and async grounding-judge enrichment (contract
+`docs/tasks/029-copilot-chat/contract.md`). What follows is what it deliberately left
+out (Out-of-scope list plus seams named in the strands).
+
+- **Planning-turn streaming** — chat streams prose deltas; planning turns stay
+  blocking (`POST /planning-turns` returns whole). Its own later uplift once the
+  planner's own moment wants it; the NDJSON wire this slice built is reusable.
+- **Recall beyond the window, incl. cross-planning-conversation rationale carry** —
+  chat context is the conversation's own turns under a ceiling-only window (no
+  summarization/recall layer yet — window-first, honestly); a re-plan's rationale
+  ("we excluded pre-2015 because…") does not carry across a lineage's successor
+  conversation by prose recall — only the plan object's own decisions do.
+- **Promotion to artefact block** — a chat answer never becomes artefact content;
+  the spec's block discipline requires the full appraisal bar, which chat's
+  fast-path answers never clear.
+- **Shared-search-request conversion** — the evidence-not-held hand-off renders a
+  typed link to the planning conversation; turning that gap into a structured
+  search request the planner can act on directly stays unbuilt.
+- **Watch executor feed (`read_tools=None`)** — unchanged by this slice; still the
+  024-recorded seam (§ Steering surface, "Live DB-backed read executors for watch
+  deliberation") — chat's tool-loop kernel is a separate call site.
+- **Older-run structured reads / multi-artefact read-model widening
+  (workspace-cluster)** — `search_chunks` spans the whole project corpus, but
+  `query_findings`/`lookup` read only the terminal completed run's outputs;
+  structured reads over an earlier run's findings, and any multi-artefact IA
+  beyond the single entry-context chip, wait on the workspace-cluster slice.
+- **Field-level turn provenance** — the audit chain (conversation → plan → run →
+  artefact) is walkable at row grain only; which turn produced which specific plan
+  *field* is plan-as-object's field-level provenance, still deferred.
+- **Conversation search** — the library lists and previews (title, latest-turn
+  snippet); there is no search-within-conversations or cross-conversation content
+  search.
+- **Project-level standing chat instructions** — no per-project custom/standing
+  instructions layer sits above `chat_v1`; the system prompt is the one
+  lead-authored, version-pinned surface for every chat in every project.
+- **"Continue generating" on a stopped turn** — a cancelled turn keeps its partial
+  prose but offers no resume-this-generation affordance; asking again starts a new
+  turn.
+- **Resumable mid-stream recovery** — a client that reconnects mid-stream re-reads
+  the turn once it lands, never resumes the byte stream itself (a Redis-style delta
+  buffer is additive later, precisely because the DB only ever commits terminal
+  rows).
+- **Thumbs-feedback → Langfuse scores** — named as the eval slice's gold-set seam;
+  that slice decides the surface and scoring mechanics.
+- **LLM auto-titling** — v1 titles a chat from its first question by truncation;
+  async cheap-model titling is a noted, easy upgrade.
+- **Regenerate / edit / branching** — the turn-pair row (question + answer in one
+  row) is the deliberate v1 grain; the named migration seam is the pair→per-message
+  row split these features would need.
+- **Cross-chat memory / recall** — chats stay mutually blind by design; knowledge
+  travels via artefacts, not a shared chat memory (2026 practice keeps cross-thread
+  recall opt-in and memory-mediated, not a default).
