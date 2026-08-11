@@ -5980,7 +5980,7 @@
     },
     "/api/v1/projects/{project_id}/chunks/{chunk_id}/context": {
       "get": {
-        "description": "Return a clamped context window for a chat citation's chunk + quote.\n\nChat citations carry durable chunk ids (not artefact citation-table ids),\nso the hover quote-in-context read resolves the quote inside the cited\nchunk directly \u2014 same window mechanics as the artefact citation seam.",
+        "description": "Return a clamped context window for a chat citation's chunk + quote.\n\nChat citations carry durable chunk ids (not artefact citation-table ids),\nso the hover quote-in-context read resolves the quote inside the cited\nchunk directly \u2014 same window mechanics as the artefact citation seam.\n``quote`` is validated AFTER ownership so cross-owner and unknown ids stay\n404-indistinguishable (the conformance sweep's byte-identical rule).",
         "operationId": "chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get",
         "parameters": [
           {
@@ -6006,12 +6006,19 @@
           {
             "in": "query",
             "name": "quote",
-            "required": true,
+            "required": false,
             "schema": {
-              "maxLength": 500,
-              "minLength": 1,
-              "title": "Quote",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quote"
             }
           }
         ],

@@ -226,17 +226,21 @@ def chunk_context(
 def chat_chunk_context(
     project_id: uuid.UUID,
     chunk_id: uuid.UUID,
-    quote: Annotated[str, Query(min_length=1, max_length=500)],
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
+    quote: Annotated[str | None, Query(min_length=1, max_length=500)] = None,
 ) -> ChunkContextOut:
     """Return a clamped context window for a chat citation's chunk + quote.
 
     Chat citations carry durable chunk ids (not artefact citation-table ids),
     so the hover quote-in-context read resolves the quote inside the cited
     chunk directly — same window mechanics as the artefact citation seam.
+    ``quote`` is validated AFTER ownership so cross-owner and unknown ids stay
+    404-indistinguishable (the conformance sweep's byte-identical rule).
     """
     _owned(conn, project_id, user)
+    if quote is None:
+        raise HTTPException(status_code=422, detail="quote is required")
     result = repository.chunk_quote_context_out(conn, project_id, chunk_id, quote)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")

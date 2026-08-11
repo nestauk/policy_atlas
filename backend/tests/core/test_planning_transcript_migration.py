@@ -57,6 +57,9 @@ def test_planning_transcript_migration_downgrade_roundtrip(engine: Engine) -> No
             "id", "project_id", "client_turn_id", "turn_index", "user_message", "reply",
             "planner_state", "response", "suggestions", "status", "created_at", "completed_at",
             "part",
+            # 029: the unified conversation model additively attaches turns to
+            # their planning conversation (approved schema gate, strand 1).
+            "conversation_id",
         }
     finally:
         command.upgrade(cfg, "head")

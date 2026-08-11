@@ -340,3 +340,40 @@ actions, blank-chat reuse), AppShell mock extended, e2e chat leg reworked
 to prove the side-by-side shape (URL stays on `/evidence-base?chat=`,
 panel + artefact visible together) — frontend 212 tests, build, Playwright
 7/7, full `make verify` green.
+
+## ⚠️ Gate-integrity incident + correction (2026-08-11)
+
+**Two real test failures were hidden by the build conversation's own gate
+mechanics from Phase A onward.** The lead ran background gates as
+`make verify … | tail -N`; the pipe returned tail's exit status, so make's
+red exit was swallowed and every phase gate A→G (and the post-H fix gates)
+was REPORTED green while carrying failures. The baseline run was genuinely
+green. Full audit of the retained gate logs found exactly two distinct
+failures, no others:
+
+1. `test_planning_transcript_migration_downgrade_roundtrip` — failed at
+   EVERY gate from Phase A: the 027 test asserts the planning_transcript
+   exact column shape, which 029's approved additive `conversation_id`
+   extends. Fixed by adding the column to the expected set with a
+   justification comment (an outdated exact-shape assertion for an
+   approved additive migration — not a weakened test).
+2. `test_project_scoped_get_routes_hide_ownership_with_byte_identical_404
+   [/chunks/{chunk_id}/context]` — failed from Phase F: the chunk-context
+   route's required `quote` query param 422'd before ownership resolution,
+   breaking the byte-identical-404 conformance rule (the 422s were
+   themselves byte-identical, so no actual ownership oracle existed — but
+   the route now resolves ownership FIRST and 422s only for a legitimate
+   owner missing the param).
+
+The authoritative gate is the re-run below with the exit code read
+directly (no pipe). Phase commits A–H therefore carried failure #1 (F–H
+also #2) at commit time; the fixes land in the post-H commit series on the
+same branch before review.
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (post-incident, exit code read directly) | **pass — exit 0, 0 FAILED** | the authoritative full gate (2026-08-11; fresh test DB after the 028 TooManyColumns tombstone gotcha recurred at day-scale) |
+
+**Knowledge candidate (process):** never run a gate as `cmd | tail` —
+without pipefail the pipe reports the filter's exit status, and a red gate
+reads green. Write the log to a file and test `$?`, or `set -o pipefail`.

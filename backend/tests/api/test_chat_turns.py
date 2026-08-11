@@ -718,11 +718,10 @@ def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
     project_id = None
     try:
         with engine.begin() as conn:
-            from tests.helpers import now as _now_helper
-
             import uuid as _uuid
 
             from policy_atlas.core.schema import project as project_table
+            from tests.helpers import now as _now_helper
 
             project_id = _uuid.uuid4()
             conn.execute(

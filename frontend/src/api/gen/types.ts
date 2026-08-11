@@ -257,6 +257,8 @@ export interface paths {
          *     Chat citations carry durable chunk ids (not artefact citation-table ids),
          *     so the hover quote-in-context read resolves the quote inside the cited
          *     chunk directly — same window mechanics as the artefact citation seam.
+         *     ``quote`` is validated AFTER ownership so cross-owner and unknown ids stay
+         *     404-indistinguishable (the conformance sweep's byte-identical rule).
          */
         get: operations["chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get"];
         put?: never;
@@ -3484,8 +3486,8 @@ export interface operations {
     };
     chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get: {
         parameters: {
-            query: {
-                quote: string;
+            query?: {
+                quote?: string | null;
             };
             header?: never;
             path: {
