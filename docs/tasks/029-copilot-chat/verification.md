@@ -609,6 +609,46 @@ non-parity is data, not presentation: chat citations carry no per-citation
 appraisal label (fast path) — the persist-time label resolution is proposed
 alongside the recheck endpoint as the follow-up interface decision.
 
+**Third owner round (2026-08-12) — enrichment failures root-caused live +
+final parity deltas:**
+
+1. **Enrichment regression (REVIEW-INTRODUCED, owned honestly):** the
+   security lane's project-scoped `_load_chunks` fix joined only the
+   envelope-snapshot arm; full-text chunks link via
+   `project_source_snapshot.full_text_snapshot_id`, so every full-text
+   citation failed enrichment ("cited chunk is no longer available") before
+   the judge was called — live-diagnosed from the owner's DB rows (4/9
+   judge-eligible turns failed; the failed turns have NO judge trace, the
+   successful one does). Fixed with the same two-arm join
+   `_resolve_citation_sources` uses; a full-text-shaped fixture now pins the
+   arm (the uploaded-shape-only fixture is what let the regression pass).
+2. **Failed enrichment now persists a bounded `reason`** (`judge_timeout` /
+   error message / class-name fallback, ≤200 chars) — the 013
+   persist-the-reason corollary; its absence was itself a review-stack miss,
+   found because the live rows were undiagnosable without traces.
+3. **Quote locator is normalization-tolerant** (NFC/casefold/whitespace/
+   curly-quote folding with raw-span mapping; exact-unique short-circuits;
+   display text stays the true source): "Exact passage not found" now fires
+   only on genuine paraphrase/ambiguity. Why chat missed so often vs the
+   report, recorded: report quotes pass the block discipline's verify+repair
+   at synthesis time; chat quotes are raw model output (quote floor declined
+   by contract — claim support is the judge's job; fidelity measurement
+   stays routed to the eval slice).
+4. **Marker + hover parity closed structurally:** `CITATION_MARKER_CLASS`
+   and `CitationTooltipBody` extracted from the reader and consumed by BOTH
+   surfaces. The first extraction kept a per-surface JSX slot for the tier
+   line — and the slot immediately drifted again (chat injected its full
+   judge rationale where the report shows the tier label only; owner caught
+   it live). **Content-policy lesson, folded:** the slot was removed —
+   `CitationTooltipBody` takes a plain status STRING and renders the whole
+   hover itself (title · quote excerpt · one status line · click hint,
+   identical everywhere); rationale/explainer text lives only in the sheet's
+   chip tooltip on both surfaces. A shared frame with a content slot is not
+   parity — parity is the shared component deciding the content.
+
+Evidence: backend 714 api+runtime tests serial-green + full `make verify`
+(gate row below covers this round); frontend 236 + e2e 7/7.
+
 ## ⚠️ Gate-integrity incident + correction (2026-08-11)
 
 **Two real test failures were hidden by the build conversation's own gate

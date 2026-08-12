@@ -87,13 +87,22 @@ def _load_chunks(
                 chunk_table.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             ).join(
                 project_source_snapshot,
-                chunk_table.c.source_snapshot_id
-                == project_source_snapshot.c.source_snapshot_id,
+                (
+                    chunk_table.c.source_snapshot_id
+                    == project_source_snapshot.c.source_snapshot_id
+                )
+                | (
+                    chunk_table.c.source_snapshot_id
+                    == project_source_snapshot.c.full_text_snapshot_id
+                ),
             )
         )
         .where(chunk_table.c.chunk_id.in_(parsed_ids))
         .where(project_source_snapshot.c.project_id == project_id)
     ).mappings()
+    # A full-text chunk's snapshot can match the project_source_snapshot join via
+    # either arm; the dict build below dedupes by chunk_id (last row wins), so a
+    # duplicate row from matching both arms never surfaces as two chunks.
     chunks = {
         str(row["chunk_id"]): {
             "chunk_record_id": str(row["chunk_id"]),
@@ -417,6 +426,28 @@ def _audit(*, status: str) -> dict[str, Any]:
     }
 
 
+_REASON_MAX_LENGTH = 200
+
+
+def _failure_reason(exc: Exception) -> str:
+    """Return a bounded, honest failure reason for a terminal enrichment payload.
+
+    Never raw stack text. Prefers a dedicated ``judge_timeout`` reason when the
+    retry-exhausted cause was a timeout (``_judge_with_retry`` always wraps its
+    true cause in a ``ChatEnrichmentError``, so the timeout would otherwise be
+    indistinguishable from a generic judge failure); otherwise prefers the
+    ``ChatEnrichmentError``'s own message, and falls back to the exception's
+    class name for anything unanticipated.
+    """
+    if isinstance(exc.__cause__, TimeoutError):
+        reason = "judge_timeout"
+    elif isinstance(exc, ChatEnrichmentError):
+        reason = str(exc)
+    else:
+        reason = type(exc).__name__
+    return reason[:_REASON_MAX_LENGTH]
+
+
 def _apply_verdicts(payload: dict[str, Any], claims: list[dict[str, Any]], response: Any) -> None:
     """Attach a complete judge response to claims and their display citations."""
     verdicts = response.verdicts
@@ -515,6 +546,7 @@ def enrich_chat_turn(
         except Exception as exc:
             payload["enrichment"] = _audit(status="failed")
             payload["enrichment"]["failure"] = type(exc).__name__
+            payload["enrichment"]["reason"] = _failure_reason(exc)
             if not _cas_write(engine, turn_id=turn_id, payload=payload):
                 log.info("chat_enrichment.cas_lost", turn_id=str(turn_id))
             return
@@ -526,6 +558,7 @@ def enrich_chat_turn(
     except Exception as exc:
         payload["enrichment"] = _audit(status="failed")
         payload["enrichment"]["failure"] = type(exc).__name__
+        payload["enrichment"]["reason"] = _failure_reason(exc)
 
     if not _cas_write(engine, turn_id=turn_id, payload=payload):
         log.info("chat_enrichment.cas_lost", turn_id=str(turn_id))

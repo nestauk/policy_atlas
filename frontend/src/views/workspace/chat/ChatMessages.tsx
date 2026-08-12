@@ -9,9 +9,11 @@ import { Button } from "../../../ui/brand/Button";
 import { Chip } from "../../../ui/brand/Chip";
 import { Tooltip } from "../../../ui/radix/Tooltip";
 import {
+  CITATION_MARKER_CLASS,
   CITATION_SPAN_CLASS,
   ChipWithTooltip,
   CitationProvenanceBlock,
+  CitationTooltipBody,
   ProvenanceSheet,
   SourceDossier,
   spanSegments,
@@ -106,24 +108,25 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlan
 /** The prose's annotation layer (029 Fix C + 030 fold): span-anchored claims
  *  wrap their exact prose span in the report's own citation-marker treatment
  *  (`ArtefactView.CITATION_SPAN_CLASS` — chat claims are never typed beyond
- *  "citation" for display, per the fold's design), with the existing verdict
- *  Tooltip on hover and a click/Enter/Space opening the claim-oriented
- *  provenance sheet for THAT claim's citations. The literal `[n]` marker text
- *  keeps rendering as its own small button — same class, same Tooltip
- *  preview — wherever it falls (inside or outside a claim's span), and keeps
- *  opening the citation-oriented sheet (a marker's click stops propagation so
- *  a marker nested inside a clickable claim span never also fires the span's
- *  own click). Overlapping/unspanned claims fall back to marker-only
- *  behaviour for those regions — `spanSegments` never invents a merge. A
- *  cancelled turn carries no annotation at all: markers stay inert (disabled,
- *  no tooltip), matching today. */
+ *  "citation" for display, per the fold's design), with the report-shaped
+ *  title/quote/verdict preview Tooltip on hover (`citationTooltipBody`) and a
+ *  click/Enter/Space opening the claim-oriented provenance sheet for THAT
+ *  claim's citations. The literal `[n]` marker text keeps rendering as its
+ *  own small boxed-chip button (`ArtefactView.CITATION_MARKER_CLASS`) — same
+ *  class, same Tooltip preview — wherever it falls (inside or outside a
+ *  claim's span), and keeps opening the citation-oriented sheet (a marker's
+ *  click stops propagation so a marker nested inside a clickable claim span
+ *  never also fires the span's own click). Overlapping/unspanned claims fall
+ *  back to marker-only behaviour for those regions — `spanSegments` never
+ *  invents a merge. A cancelled turn carries no annotation at all: markers
+ *  stay inert (disabled, no tooltip), matching today. */
 function AnnotatedChatProse({ text, citations, claims, turn, disabled, onCitation, onClaim }: { text: string; citations: ChatCitation[]; claims: ChatClaim[]; turn: ChatConversationRow; disabled: boolean; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void }) {
   const segments = useMemo(() => spanSegments(text, disabled ? [] : claims), [text, claims, disabled]);
   return <>{segments.map((segment, index) => {
     const marked = markedTextParts(segment.text, citations, turn, disabled, onCitation);
     if (segment.kind === "plain") return <Fragment key={index}>{marked}</Fragment>;
     const claimCitations = citationsForClaim(citations, segment.claim);
-    const tip = claimCitations.length > 0 ? verdictTooltipContent(turn, claimCitations[0]) : null;
+    const tip = claimCitations.length > 0 ? citationTooltipBody(turn, claimCitations[0]) : null;
     const span = (
       <span
         role="button"
@@ -145,16 +148,18 @@ function AnnotatedChatProse({ text, citations, claims, turn, disabled, onCitatio
 }
 
 /** Split one prose segment on literal `[n]` markers into the small marker
- *  button + verdict-preview Tooltip (029 Fix C) — unchanged whether the
- *  segment is plain text or the inside of a claim span. */
+ *  button — the report's boxed-chip class (030 parity fold; a muted
+ *  `disabled:` variant for a cancelled turn) — + title/quote/verdict preview
+ *  Tooltip (029 Fix C, 030 parity fold) — unchanged whether the segment is
+ *  plain text or the inside of a claim span. */
 function markedTextParts(text: string, citations: ChatCitation[], turn: ChatConversationRow, disabled: boolean, onCitation: (citation: ChatCitation) => void) {
   const parts = text.split(/(\[\d+\])/g);
   return parts.map((part, index) => {
     const match = /^\[(\d+)\]$/.exec(part);
     const citation = match === null ? null : citations[Number(match[1]) - 1];
     if (citation === null || citation === undefined) return <span key={index}>{scrub(part)}</span>;
-    const marker = <button type="button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onCitation(citation); }} className="citation-marker align-super text-caption font-bold text-blue hover:underline disabled:text-grey">{part}</button>;
-    return disabled ? <span key={index}>{marker}</span> : <Tooltip key={index} content={verdictTooltipContent(turn, citation)}>{marker}</Tooltip>;
+    const marker = <button type="button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onCitation(citation); }} className={CITATION_MARKER_CLASS}>{part}</button>;
+    return disabled ? <span key={index}>{marker}</span> : <Tooltip key={index} content={citationTooltipBody(turn, citation)}>{marker}</Tooltip>;
   });
 }
 
@@ -166,7 +171,7 @@ function References({ citations, turn, onCitation, onOpenDossier }: { citations:
   return <footer className="border-t border-line pt-2"><details><summary className="cursor-pointer text-caption font-bold uppercase tracking-wider text-grey">References ({citations.length})</summary><div className="mt-2 space-y-2">{citations.map((citation, index) => {
     const sourceRef = citation.source_id ?? citation.source_title ?? null;
     const titleText = scrub(citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation");
-    return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className="citation-marker font-bold text-blue hover:underline">[{citation.n ?? index + 1}]</button>{" "}
+    return <div key={citationId(citation) || index} className="text-caption text-ink"><button type="button" onClick={() => onCitation(citation)} className={CITATION_MARKER_CLASS}>[{citation.n ?? index + 1}]</button>{" "}
       {sourceRef !== null
         ? <button type="button" onClick={() => onOpenDossier(sourceRef)} className="cursor-pointer text-left font-semibold hover:underline">{titleText}</button>
         : <span>{titleText}</span>}
@@ -194,6 +199,34 @@ function verdictTooltipContent(turn: ChatConversationRow, citation: ChatCitation
   const checkFailed = enrichmentStatusOf(turn) === "failed";
   const uncheckedHint = checkFailed ? "The evidence check could not run for this answer" : "Awaiting evidence check";
   return <div className="max-w-[280px] space-y-1 text-caption"><p>{tier === null ? uncheckedHint : TIER_TEXT[tier]}</p>{rationale !== null && <p className="text-grey">Judge: {scrub(rationale)}</p>}</div>;
+}
+
+/** The claim-span hover and the bare `[n]` marker hover's shared preview
+ *  (030 parity fold, mirroring ArtefactView's `ClaimSpan` tip exactly):
+ *  the citation's source title · its quote excerpt (180-char clamp) · then
+ *  chat's own verdict line (`verdictTooltipContent` — enriched tier + judge
+ *  rationale, or the Unchecked/check-unavailable wording) — over the
+ *  report's shared `CitationTooltipBody` shell so the two surfaces can never
+ *  drift apart. */
+function citationTooltipBody(turn: ChatConversationRow, citation: ChatCitation) {
+  // Hover content policy is the shared component's (tier label only, no
+  // rationale) — the judge rationale shows in the sheet's VerdictChip
+  // tooltip, exactly where the report shows its own.
+  const { tier } = verdictInfoFor(turn, citation);
+  const checkFailed = enrichmentStatusOf(turn) === "failed";
+  const statusLine =
+    tier !== null
+      ? TIER_LABEL[tier]
+      : checkFailed
+        ? "Unchecked · check unavailable"
+        : "Unchecked · awaiting evidence check";
+  return (
+    <CitationTooltipBody
+      sourceTitle={citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation"}
+      quote={citation.quote ?? ""}
+      statusLine={statusLine}
+    />
+  );
 }
 
 function enrichmentStatusOf(turn: ChatConversationRow): string | null {

@@ -94,6 +94,99 @@ def _seed_chunk(engine: Engine, project_id: uuid.UUID) -> tuple[uuid.UUID, uuid.
     return snapshot_id, chunk_id
 
 
+def _seed_full_text_chunk(
+    engine: Engine, project_id: uuid.UUID
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Create a full-text-shaped chunk, mirroring ``ingest_full_text``'s real link shape.
+
+    The project's corpus document keeps its original envelope (abstract)
+    snapshot as ``project_source_snapshot.source_snapshot_id`` and gains a
+    *different* snapshot for the fetched full text, linked only through
+    ``project_source_snapshot.full_text_snapshot_id``. The chunk hangs off
+    that full-text snapshot, not the envelope one — this is the shape the
+    project-scope join in ``chat_enrichment._load_chunks`` must resolve.
+
+    Returns:
+        ``(envelope_snapshot_id, full_text_snapshot_id, chunk_id)``.
+    """
+    envelope_snapshot_id = uuid.uuid4()
+    full_text_snapshot_id = uuid.uuid4()
+    chunk_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            source_snapshot.insert().values(
+                source_snapshot_id=envelope_snapshot_id,
+                content_hash="chat-enrichment-envelope",
+                text_basis="abstract_only",
+                source_locator="test://chat-enrichment-envelope",
+                metadata={},
+                created_at=now(),
+            )
+        )
+        conn.execute(
+            source_snapshot.insert().values(
+                source_snapshot_id=full_text_snapshot_id,
+                content_hash="chat-enrichment-full-text",
+                text_basis="full_text",
+                source_locator="test://chat-enrichment-full-text",
+                metadata={},
+                created_at=now(),
+            )
+        )
+        conn.execute(
+            project_source_snapshot.insert().values(
+                project_source_snapshot_id=uuid.uuid4(),
+                project_id=project_id,
+                source_snapshot_id=envelope_snapshot_id,
+                origin="uploaded",
+                run_id=None,
+                ingested_at=now(),
+                full_text_snapshot_id=full_text_snapshot_id,
+                full_text_status="ingested",
+            )
+        )
+        conn.execute(
+            chunk_table.insert().values(
+                chunk_id=chunk_id,
+                source_snapshot_id=full_text_snapshot_id,
+                sequence=0,
+                content="Full-text evidence supports the answer.",
+                content_hash="chat-enrichment-full-text-chunk",
+                locator={},
+                segmentation_policy="test_v1",
+                created_at=now(),
+            )
+        )
+    return envelope_snapshot_id, full_text_snapshot_id, chunk_id
+
+
+def _cleanup_full_text_enrichment(
+    engine: Engine,
+    project_id: uuid.UUID | None,
+    *,
+    envelope_snapshot_id: uuid.UUID,
+    full_text_snapshot_id: uuid.UUID,
+) -> None:
+    """Remove the detached full-text-shaped fixture as well as the project fixture."""
+    with engine.begin() as conn:
+        conn.execute(
+            chunk_table.delete().where(chunk_table.c.source_snapshot_id == full_text_snapshot_id)
+        )
+        conn.execute(
+            project_source_snapshot.delete().where(
+                project_source_snapshot.c.source_snapshot_id == envelope_snapshot_id
+            )
+        )
+        conn.execute(
+            source_snapshot.delete().where(
+                source_snapshot.c.source_snapshot_id.in_(
+                    [envelope_snapshot_id, full_text_snapshot_id]
+                )
+            )
+        )
+    _cleanup(engine, project_id)
+
+
 def _completed_turn(
     engine: Engine, *, enrichment_status: str = "pending"
 ) -> tuple[uuid.UUID, dict[str, Any]]:
@@ -218,6 +311,7 @@ def test_judge_failure_is_terminal_unchecked_after_one_retry(engine: Engine) -> 
         payload = _payload(engine, fixture["turn_id"])
         assert judge.calls == 2
         assert payload["enrichment"]["status"] == "failed"
+        assert payload["enrichment"]["reason"] == "chat grounding judge failed"
         assert payload["citations"][0]["state"] == "unchecked"
         with engine.connect() as conn:
             status = conn.execute(
@@ -241,7 +335,29 @@ def test_judge_timeout_is_terminal_unchecked_after_one_retry(
         payload = _payload(engine, fixture["turn_id"])
         assert judge.calls == 2
         assert payload["enrichment"]["status"] == "failed"
+        assert payload["enrichment"]["reason"] == "judge_timeout"
         assert payload["citations"][0]["state"] == "unchecked"
+    finally:
+        _cleanup_enrichment(engine, project_id, fixture["snapshot_id"])
+
+
+def test_failure_reason_falls_back_to_exception_class_for_unanticipated_errors(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failure with no ``ChatEnrichmentError`` message still gets a bounded reason."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, fixture = _completed_turn(engine)
+
+        def _boom(*_args: Any, **_kwargs: Any) -> None:
+            raise ValueError("unexpected shape")
+
+        monkeypatch.setattr(chat_enrichment, "_apply_verdicts", _boom)
+        enrich_chat_turn(engine, turn_id=fixture["turn_id"], judge_backend=CountingJudge())
+        payload = _payload(engine, fixture["turn_id"])
+        assert payload["enrichment"]["status"] == "failed"
+        assert payload["enrichment"]["failure"] == "ValueError"
+        assert payload["enrichment"]["reason"] == "ValueError"
     finally:
         _cleanup_enrichment(engine, project_id, fixture["snapshot_id"])
 
@@ -302,8 +418,57 @@ def test_enrichment_rejects_a_chunk_cited_from_a_different_project(engine: Engin
         result = _payload(engine, turn_id)
         assert result["enrichment"]["status"] == "failed"
         assert result["enrichment"]["failure"] == "ChatEnrichmentError"
+        assert result["enrichment"]["reason"] == "cited chunk is no longer available"
     finally:
         _cleanup(engine, foreign_project_id)
+        _cleanup_enrichment(engine, project_id, fixture["snapshot_id"])
+
+
+def test_enrichment_resolves_a_full_text_chunk_via_the_full_text_snapshot_link(
+    engine: Engine,
+) -> None:
+    """A citation to a full-text chunk resolves through both join arms (regression).
+
+    ``_load_chunks`` must resolve a chunk whose ``source_snapshot_id`` is
+    reachable only via ``project_source_snapshot.full_text_snapshot_id`` — the
+    envelope-only join arm alone leaves every full-text citation "no longer
+    available" and the judge is never called, exactly the live regression this
+    fix root-caused.
+    """
+    project_id: uuid.UUID | None = None
+    envelope_snapshot_id: uuid.UUID | None = None
+    full_text_snapshot_id: uuid.UUID | None = None
+    try:
+        project_id, fixture = _completed_turn(engine)
+        turn_id = fixture["turn_id"]
+        envelope_snapshot_id, full_text_snapshot_id, full_text_chunk_id = (
+            _seed_full_text_chunk(engine, project_id)
+        )
+
+        payload = _payload(engine, turn_id)
+        payload["citations"][0]["id"] = str(full_text_chunk_id)
+        payload["citations"][0]["quote"] = "Full-text evidence supports the answer."
+        payload["claims"][0]["text"] = "Full-text evidence supports the answer."
+        with engine.begin() as conn:
+            conn.execute(
+                chat_turn.update().where(chat_turn.c.id == turn_id).values(answer_payload=payload)
+            )
+
+        judge = CountingJudge()
+        enrich_chat_turn(engine, turn_id=turn_id, judge_backend=judge)
+
+        assert judge.calls == 1
+        result = _payload(engine, turn_id)
+        assert result["enrichment"]["status"] == "enriched"
+        assert result["claims"][0]["verdict"] == "tier_1"
+    finally:
+        if envelope_snapshot_id is not None and full_text_snapshot_id is not None:
+            _cleanup_full_text_enrichment(
+                engine,
+                None,
+                envelope_snapshot_id=envelope_snapshot_id,
+                full_text_snapshot_id=full_text_snapshot_id,
+            )
         _cleanup_enrichment(engine, project_id, fixture["snapshot_id"])
 
 

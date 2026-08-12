@@ -450,6 +450,134 @@ def test_chat_chunk_context_resolves_quote(engine: Engine, tmp_path: Path) -> No
                     delete_project_data(conn, project_id)
 
 
+def test_chat_chunk_context_resolves_normalisation_tolerant_variants(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Curly quotes, case, and collapsed whitespace resolve, with the highlight staying
+    on the true raw span — chat quotes are raw model output, not a verified substring.
+    """
+    from policy_atlas.core.schema import chunk as chunk_table
+    from tests.helpers import delete_project_data, seed_source
+
+    project_id: uuid.UUID | None = None
+    with api_client(tmp_path) as (client, owner_headers, _other_headers):
+        try:
+            project_id = uuid.UUID(create_project(client, owner_headers))
+            chunk_id = uuid.uuid4()
+            raw_span = "The report found “Clear   Evidence”\nacross studies."
+            content = "Before text. " + "x" * 900 + " " + raw_span + " " + "y" * 900
+            with engine.begin() as conn:
+                snapshot_id, _ = seed_source(conn, project_id)
+                conn.execute(
+                    chunk_table.insert().values(
+                        chunk_id=chunk_id,
+                        source_snapshot_id=snapshot_id,
+                        sequence=0,
+                        content=content,
+                        content_hash="test-hash-normalised",
+                        locator={"start": 0, "end": len(content)},
+                        segmentation_policy="manual_v1",
+                        created_at=now(),
+                    )
+                )
+            quote = 'the report found "clear evidence" across studies.'
+            response = client.get(
+                f"/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+                headers=owner_headers,
+                params={"quote": quote},
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert raw_span in body["context"]
+            highlighted = body["context"][body["span_start"] : body["span_end"]]
+            assert highlighted == raw_span
+            assert body["clamped"] is True
+        finally:
+            if project_id is not None:
+                with engine.begin() as conn:
+                    delete_project_data(conn, project_id)
+
+
+def test_chat_chunk_context_ambiguous_after_normalisation_is_404(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A quote that resolves to two normalised matches stays an honest absence."""
+    from policy_atlas.core.schema import chunk as chunk_table
+    from tests.helpers import delete_project_data, seed_source
+
+    project_id: uuid.UUID | None = None
+    with api_client(tmp_path) as (client, owner_headers, _other_headers):
+        try:
+            project_id = uuid.UUID(create_project(client, owner_headers))
+            chunk_id = uuid.uuid4()
+            content = (
+                "The New York pilot launched first. "
+                + "x" * 50
+                + " A second NEW YORK rollout followed later."
+            )
+            with engine.begin() as conn:
+                snapshot_id, _ = seed_source(conn, project_id)
+                conn.execute(
+                    chunk_table.insert().values(
+                        chunk_id=chunk_id,
+                        source_snapshot_id=snapshot_id,
+                        sequence=0,
+                        content=content,
+                        content_hash="test-hash-ambiguous",
+                        locator={"start": 0, "end": len(content)},
+                        segmentation_policy="manual_v1",
+                        created_at=now(),
+                    )
+                )
+            response = client.get(
+                f"/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+                headers=owner_headers,
+                params={"quote": "new york"},
+            )
+            assert response.status_code == 404
+        finally:
+            if project_id is not None:
+                with engine.begin() as conn:
+                    delete_project_data(conn, project_id)
+
+
+def test_chat_chunk_context_genuinely_absent_quote_is_404(engine: Engine, tmp_path: Path) -> None:
+    """A quote with no raw or normalised occurrence stays an honest absence."""
+    from policy_atlas.core.schema import chunk as chunk_table
+    from tests.helpers import delete_project_data, seed_source
+
+    project_id: uuid.UUID | None = None
+    with api_client(tmp_path) as (client, owner_headers, _other_headers):
+        try:
+            project_id = uuid.UUID(create_project(client, owner_headers))
+            chunk_id = uuid.uuid4()
+            content = "The report found evidence of improvement across studies."
+            with engine.begin() as conn:
+                snapshot_id, _ = seed_source(conn, project_id)
+                conn.execute(
+                    chunk_table.insert().values(
+                        chunk_id=chunk_id,
+                        source_snapshot_id=snapshot_id,
+                        sequence=0,
+                        content=content,
+                        content_hash="test-hash-absent",
+                        locator={"start": 0, "end": len(content)},
+                        segmentation_policy="manual_v1",
+                        created_at=now(),
+                    )
+                )
+            response = client.get(
+                f"/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+                headers=owner_headers,
+                params={"quote": "a completely unrelated passage"},
+            )
+            assert response.status_code == 404
+        finally:
+            if project_id is not None:
+                with engine.begin() as conn:
+                    delete_project_data(conn, project_id)
+
+
 def test_patch_title_null_is_422(engine: Engine, tmp_path: Path) -> None:
     """Clearing title (unlike entry_artefact_id) is not a legal patch shape."""
     with api_client(tmp_path) as (client, owner, _):

@@ -89,6 +89,14 @@ const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
  *  re-typed on the chat side. */
 export const CITATION_SPAN_CLASS = `citation-marker cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-blue ${CITATION_TINT}`;
 
+/** The report's [n] citation-number marker's boxed-chip class (marker hook +
+ *  border/bg chrome, `disabled:` variants for a muted look) — exported so
+ *  chat's literal `[n]` markers (both the inline prose marker and the
+ *  References row marker) share this one copy instead of the superscript-link
+ *  treatment drifting apart from the report (029/030 parity fix). */
+export const CITATION_MARKER_CLASS =
+  "citation-marker mx-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80 hover:border-blue/60 hover:text-blue disabled:cursor-default disabled:border-line disabled:bg-ground disabled:text-grey disabled:hover:border-line disabled:hover:text-grey";
+
 /** Claim types whose marking is dev-facing only: the judge's source-check
  *  flags and the writer's connective reasoning have no detail to reveal, so
  *  their prose renders unmarked (owner, 2026-07-29). */
@@ -573,6 +581,41 @@ function ClaimPanel({
   );
 }
 
+/** A citation's hover-preview body (report ClaimSpan `tip`): source title
+ *  (semibold navy), then its quote excerpt (italic grey, clamped at 180
+ *  chars with an ellipsis) — with a caller-supplied tier/verdict node
+ *  beneath. Exported so chat's tooltips (the claim-span hover and the bare
+ *  `[n]` marker hover) mirror this exact shape instead of showing only their
+ *  own verdict line (029/030 parity fix). */
+export function CitationTooltipBody({
+  sourceTitle,
+  quote,
+  statusLine,
+}: {
+  sourceTitle: string;
+  quote: string;
+  statusLine?: string | null;
+}) {
+  // statusLine is a plain string by design: the hover's content policy is
+  // title · quote · ONE short status (tier label or unchecked wording) ·
+  // the click hint — identical on every surface. Rationale/explainer text
+  // lives in the provenance sheet's chip tooltip, never on the hover. A JSX
+  // slot here is what let the chat hover drift twice (owner, 2026-08-12).
+  return (
+    <div className="max-w-[260px] space-y-1.5 text-caption leading-snug">
+      <p className="font-semibold text-navy">{scrub(sourceTitle)}</p>
+      {quote !== "" && (
+        <p className="italic text-grey">
+          “{scrub(quote.slice(0, 180))}
+          {quote.length > 180 ? "…" : ""}”
+        </p>
+      )}
+      {statusLine != null && statusLine !== "" && <p className="text-grey">{statusLine}</p>}
+      <p className="text-caption text-grey">Click to view in context</p>
+    </div>
+  );
+}
+
 /** A claim span in the prose (demo ClaimSpan): the whole span is clickable,
  *  hover previews the first citation, click opens the provenance panel.
  *  Citation numbers ride as one inline chip; typed claims carry their label. */
@@ -592,19 +635,11 @@ function ClaimSpan({
   const tier = first?.grounding_tier ?? null;
   const tip =
     first !== undefined ? (
-      <div className="max-w-[260px] space-y-1.5 text-caption leading-snug">
-        <p className="font-semibold text-navy">{scrub(first.source_title)}</p>
-        {first.quote !== "" && (
-          <p className="italic text-grey">
-            “{scrub(first.quote.slice(0, 180))}
-            {first.quote.length > 180 ? "…" : ""}”
-          </p>
-        )}
-        {tier !== null && TIER_LABEL[tier] !== undefined && (
-          <p className="text-grey">{TIER_LABEL[tier]}</p>
-        )}
-        <p className="text-caption text-grey">Click to view in context</p>
-      </div>
+      <CitationTooltipBody
+        sourceTitle={first.source_title}
+        quote={first.quote}
+        statusLine={tier !== null ? TIER_LABEL[tier] : null}
+      />
     ) : (claim.claim_type === "theme" || claim.claim_type === "pattern") &&
       (claim.theme?.items?.length ?? 0) > 0 ? (
       <div className="max-w-[260px] space-y-1 text-caption leading-snug">
@@ -666,7 +701,7 @@ function ClaimSpan({
           type="button"
           aria-label={`Citations ${citationNumbers.join(", ")}`}
           onClick={() => onOpen(claim)}
-          className="citation-marker mx-1 cursor-pointer border border-blue/25 bg-blue-tint-2 px-1.5 align-[2px] text-caption font-semibold text-blue/80 hover:border-blue/60 hover:text-blue"
+          className={CITATION_MARKER_CLASS}
         >
           [{citationNumbers.join(",")}]
         </button>

@@ -29,3 +29,10 @@ The extraction's tool allowlist is per-call-site: pin the mapping actually
 handed to `run_tool_loop` at each site (the 029 stack added that test after
 finding the allowlist test pinned only the shared builder — a synthesis-driven
 fourth tool would have passed the chat surface's security test).
+
+Corollary for PARITY surfaces (two UIs that must look/behave identically):
+"parameterise what differs" means the DATA, never the content decisions. A
+shared component with a JSX/content slot is not parity — the 029 citation
+hover drifted twice through exactly such a slot (chat injected judge
+rationale where the report shows the tier label) until the slot became a
+plain string and the shared component decided the whole content policy.
