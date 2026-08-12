@@ -22,28 +22,24 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `028-ux-refinement` **design step 1** (2026-08-03,
-branch `task/028-ux-refinement`, stacked on `task/027-frontend-uplift`):
-interview-driven UX refinement — four internal policy-team interviews on
-the 027 build (type scale + copy diet, expandable composer, sequential
-plan-building fork, artefact contents-sidebar + progressive disclosure,
-key-findings bullets fork, sortable/theme-filterable sources, naming
-pass, tab-IA fork). Contract:
-`docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
-`docs/tasks/028-ux-refinement/design-inputs.md`.
+Design — task `031-search-count-honesty` **step 1** (2026-08-12,
+branch `task/031-search-count-honesty`, stacked on `37-hotfix-remove-quota`):
+fix mixed-grain source counts across P1 check-in, Where I looked, and
+publisher-country charts (deep search makes the bugs obvious). Contract:
+`docs/tasks/031-search-count-honesty/contract.md`; plan draft:
+`docs/tasks/031-search-count-honesty/plan.md` (build blocked on contract 🛑).
 
 Tasks `026-infra-deployment` (PR #33, Tier 4 — system **live** at
 `v3.policyatlas.uk`), `027-frontend-uplift` (PR #44, Tier 3 — review
 stack adjudicated 2026-07-30, 32 fixes re-verified) and
 `028-ux-refinement` (PR #45) are **merged to `dev`**.
 
-Search-volume work carries the next two numbers, renumbered 2026-08-06
-when `028` was taken by the UX slice on `dev`: `029-search-volume-cap`
-(record caps per backend per round; standard/deep wall clocks removed —
-was `028-…`) and `030-multi-round-search` (rapid's clock removed, the
-runner-orchestrated round loop wired — was `029-…`). Both are plan-only
-docs; the code landed on branch `37-hotfix-remove-quota`. ADR numbers
-follow: `0028` is the UX slice's, so search-volume work starts at `0029`.
+Search-volume work carries numbers `029-search-volume-cap` and
+`030-multi-round-search` (renumbered 2026-08-06 when `028` was taken by
+the UX slice on `dev`). Both are plan-only docs; the code landed on
+branch `37-hotfix-remove-quota`. `029-copilot-chat` is a separate in-flight
+branch that reused `029` before the renumber — do not collide. ADR numbers:
+`0028` is the UX slice's; search-volume ADRs start at `0029` when written.
 
 Known operational state: staging's OpenAI quota exhausted
 2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
