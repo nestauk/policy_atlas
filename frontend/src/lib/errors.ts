@@ -7,7 +7,10 @@ export type ConflictCode =
   | "planning_turn_in_progress"
   | "stale_turn"
   | "already_answered"
-  | "plan_stale";
+  | "plan_stale"
+  | "no_completed_run"
+  | "chat_turn_in_progress"
+  | "chat_capacity";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -19,6 +22,9 @@ export const conflictSentences: Record<ConflictCode, string> = {
   already_answered: "This check-in has already been answered. Refresh to see the recorded decision.",
   plan_stale:
     "The plan predates your latest planning message. Review the updated plan, then start.",
+  no_completed_run: "This project needs a completed run before you can chat about the evidence.",
+  chat_turn_in_progress: "A chat turn is already running. Refresh to see it finish.",
+  chat_capacity: "Chat is at capacity right now. Try again shortly.",
 };
 
 /**

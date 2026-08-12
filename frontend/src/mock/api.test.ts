@@ -4,12 +4,27 @@ import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
 import { mockFetch, resetMockScenario } from "./api";
 import {
+  MOCK_CHAT_CITATION_CHUNK_ID,
+  MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
   MOCK_PROJECT_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
   mockEvidenceThemeIds,
 } from "./fixtures";
+
+interface MockChatTurn {
+  id: string;
+  status: string;
+  answer: string;
+  citations?: { grounding_tier?: string; state?: string }[];
+  enrichment?: { status: string } | null;
+}
+
+async function readNdjson(response: Response): Promise<Record<string, unknown>[]> {
+  const text = await response.text();
+  return text.trim().split("\n").map((line) => JSON.parse(line) as Record<string, unknown>);
+}
 
 describe("mock API", () => {
   it("serves deterministic, screened-in landscape fixtures", async () => {
@@ -133,5 +148,106 @@ describe("mock API", () => {
     await consumed;
     expect(frames.filter((frame) => frame.type === "artefact.section_completed")).toHaveLength(2);
     expect(frames.at(-1)).toMatchObject({ type: "run.status", status: "failed" });
+  });
+
+  // Task 029 phase G3: the chat conversation library, streamed turns, the
+  // async enrichment poll's second-read flip, and the chat citation's own
+  // chunk-context read.
+  describe("chat conversations", () => {
+    it("creates, lists, updates, and archives/unarchives a conversation", async () => {
+      resetMockScenario();
+      const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, {
+        method: "POST",
+        body: JSON.stringify({ entry_artefact_id: "artefact-1" }),
+      });
+      expect(created.status).toBe(201);
+      const conversation = await created.json() as { id: string; title: string; status: string; entry_artefact_id: string | null };
+      expect(conversation).toMatchObject({ title: "New chat", status: "active", entry_artefact_id: "artefact-1" });
+
+      const listed = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?kind=chat&status=active`);
+      const { data: active } = await listed.json() as { data: { id: string }[] };
+      expect(active.map((row) => row.id)).toContain(conversation.id);
+
+      const fetched = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}`);
+      expect(await fetched.json()).toMatchObject({ id: conversation.id });
+
+      const renamed = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ title: "Breakfast findings" }),
+      });
+      expect(await renamed.json()).toMatchObject({ title: "Breakfast findings" });
+
+      const cleared = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ entry_artefact_id: null }),
+      });
+      expect(await cleared.json()).toMatchObject({ entry_artefact_id: null });
+
+      const archived = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/archive`, { method: "POST" });
+      expect(await archived.json()).toMatchObject({ status: "archived" });
+      const afterArchive = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?kind=chat&status=active`);
+      const { data: activeAfterArchive } = await afterArchive.json() as { data: { id: string }[] };
+      expect(activeAfterArchive.map((row) => row.id)).not.toContain(conversation.id);
+
+      const unarchived = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/unarchive`, { method: "POST" });
+      expect(await unarchived.json()).toMatchObject({ status: "active", archived_at: null });
+    });
+
+    it("streams progress + two deltas + a completed turn with a pending-enrichment citation, then flips to enriched on the second turns read", async () => {
+      resetMockScenario();
+      const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, { method: "POST", body: JSON.stringify({}) });
+      const conversation = await created.json() as { id: string };
+
+      const streamed = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`, {
+        method: "POST",
+        body: JSON.stringify({ client_turn_id: "11111111-1111-4111-8111-111111111111", message: "What does the evidence show?" }),
+      });
+      expect(streamed.headers.get("Content-Type")).toBe("application/x-ndjson");
+      const events = await readNdjson(streamed);
+      expect(events.map((event) => event.type)).toEqual(["progress", "delta", "delta", "completed"]);
+      const completedTurn = events.at(-1)?.turn as MockChatTurn;
+      expect(completedTurn.status).toBe("completed");
+      expect(completedTurn.answer).toContain("[1]");
+      expect(completedTurn.citations?.[0]?.grounding_tier).toBeUndefined();
+      expect(completedTurn.enrichment).toMatchObject({ status: "pending" });
+
+      // First GET turns (the `completed` event's own `invalidateTurns()`
+      // refetch): still honestly unchecked.
+      const firstRead = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`);
+      const { data: firstTurns } = await firstRead.json() as { data: MockChatTurn[] };
+      expect(firstTurns[0].enrichment).toMatchObject({ status: "pending" });
+      expect(firstTurns[0].citations?.[0]?.grounding_tier).toBeUndefined();
+
+      // Second GET turns (the async enrichment poll): now enriched with a
+      // tier verdict on the one citation.
+      const secondRead = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`);
+      const { data: secondTurns } = await secondRead.json() as { data: MockChatTurn[] };
+      expect(secondTurns[0].enrichment).toMatchObject({ status: "enriched" });
+      expect(secondTurns[0].citations?.[0]?.state).toBe("verdict:tier_2");
+    });
+
+    it("cancels a turn idempotently by its durable status", async () => {
+      resetMockScenario();
+      const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, { method: "POST", body: JSON.stringify({}) });
+      const conversation = await created.json() as { id: string };
+      const streamed = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`, {
+        method: "POST",
+        body: JSON.stringify({ client_turn_id: "22222222-2222-4222-8222-222222222222", message: "Cancel me" }),
+      });
+      const events = await readNdjson(streamed);
+      const turn = events.at(-1)?.turn as MockChatTurn;
+
+      const cancelled = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns/${turn.id}/cancel`, { method: "POST" });
+      expect(await cancelled.json()).toEqual({ status: "completed" });
+    });
+
+    it("resolves the chat citation's chunk-context read, distinct from the artefact citation-key read", async () => {
+      const response = await mockFetch(
+        `http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/chunks/${MOCK_CHAT_CITATION_CHUNK_ID}/context?quote=${encodeURIComponent(MOCK_CHAT_CITATION_QUOTE)}`,
+      );
+      const context = await response.json() as { context: string; clamped: boolean };
+      expect(context.context).toContain(MOCK_CHAT_CITATION_QUOTE.slice(0, 30));
+      expect(context.clamped).toBe(false);
+    });
   });
 });

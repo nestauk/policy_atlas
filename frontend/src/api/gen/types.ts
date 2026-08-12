@@ -4,6 +4,114 @@
  */
 
 export interface paths {
+    "/api/v1/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Conversation
+         * @description Resolve an owned active or closed conversation deep link.
+         */
+        get: operations["get_conversation_api_v1_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Conversation
+         * @description Rename an owned chat and/or set or clear its entry-context artefact.
+         */
+        patch: operations["update_conversation_api_v1_conversations__conversation_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Conversation
+         * @description Idempotently archive one owned chat conversation.
+         */
+        post: operations["archive_conversation_api_v1_conversations__conversation_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Chat Turns
+         * @description Return an active owned chat's durable turns in ascending turn order.
+         */
+        get: operations["list_chat_turns_api_v1_conversations__conversation_id__turns_get"];
+        put?: never;
+        /**
+         * Create Chat Turn Stream
+         * @description Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.
+         */
+        post: operations["create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/turns/{turn_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Chat Turn
+         * @description Explicitly stop a pending chat turn, preserving any streamed partial.
+         */
+        post: operations["cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/conversations/{conversation_id}/unarchive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unarchive Conversation
+         * @description Idempotently restore an owned archived chat to active status.
+         */
+        post: operations["unarchive_conversation_api_v1_conversations__conversation_id__unarchive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -135,6 +243,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/chunks/{chunk_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chat Chunk Context
+         * @description Return a clamped context window for a chat citation's chunk + quote.
+         *
+         *     Chat citations carry durable chunk ids (not artefact citation-table ids),
+         *     so the hover quote-in-context read resolves the quote inside the cited
+         *     chunk directly — same window mechanics as the artefact citation seam.
+         *     ``quote`` is validated AFTER ownership so cross-owner and unknown ids stay
+         *     404-indistinguishable (the conformance sweep's byte-identical rule).
+         */
+        get: operations["chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
         parameters: {
             query?: never;
@@ -149,6 +283,30 @@ export interface paths {
         get: operations["chunk_context_api_v1_projects__project_id__citations__citation_key__context_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_id}/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Conversations
+         * @description List one owned project's conversations, newest first, with turn previews.
+         */
+        get: operations["list_conversations_api_v1_projects__project_id__conversations_get"];
+        put?: never;
+        /**
+         * Create Conversation
+         * @description Create one active chat conversation with optional entry context.
+         */
+        post: operations["create_conversation_api_v1_projects__project_id__conversations_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -486,6 +644,8 @@ export interface components {
          * @description The `artefact` read model — the synthesised evidence base.
          *
          *     Args:
+         *         artefact_id: The artefact's durable identity — the id a chat's
+         *             entry-context chip binds to (029 strand 6).
          *         title: Artefact title.
          *         question: The evidence question the artefact answers.
          *         coverage_snapshot: Embedded coverage snapshot.
@@ -495,6 +655,11 @@ export interface components {
          *         summary_status: Artefact-level summary production state.
          */
         ArtefactOut: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             */
+            artefact_id: string;
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
             /** Question */
             question: string;
@@ -608,6 +773,106 @@ export interface components {
             gaps?: string[];
             /** Prose */
             prose: string;
+        };
+        /**
+         * CancelTurnOut
+         * @description The honest durable status observed after a cancel attempt.
+         */
+        CancelTurnOut: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed" | "cancelled";
+        };
+        /**
+         * CancelledEvent
+         * @description The one cancelled terminal stream event, retaining partial prose.
+         */
+        CancelledEvent: {
+            turn: components["schemas"]["ChatTurnOut"];
+            /**
+             * Type
+             * @default cancelled
+             * @constant
+             */
+            type: "cancelled";
+        };
+        /**
+         * ChatTurnCreate
+         * @description One idempotent question submitted to an active chat conversation.
+         */
+        ChatTurnCreate: {
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ChatTurnOut
+         * @description Durable public projection of one chat turn.
+         */
+        ChatTurnOut: {
+            /** Answer */
+            answer: string | null;
+            /** Citations */
+            citations?: {
+                [key: string]: unknown;
+            }[];
+            /** Claims */
+            claims?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Client Turn Id
+             * Format: uuid
+             */
+            client_turn_id: string;
+            /** Completed At */
+            completed_at: string | null;
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Enrichment */
+            enrichment?: {
+                [key: string]: unknown;
+            } | null;
+            /** Handoff */
+            handoff?: "evidence_not_held" | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "completed" | "failed" | "cancelled";
+            /**
+             * Stopped Before Evidence Check
+             * @default false
+             */
+            stopped_before_evidence_check: boolean;
+            /** Turn Index */
+            turn_index: number;
+            /** User Message */
+            user_message: string;
+            /**
+             * Warning Not Evidence Checked
+             * @default false
+             */
+            warning_not_evidence_checked: boolean;
         };
         /**
          * CheckInOption
@@ -919,6 +1184,140 @@ export interface components {
             weakly_grounded?: boolean | null;
         };
         /**
+         * CompletedEvent
+         * @description The one successful terminal stream event.
+         */
+        CompletedEvent: {
+            turn: components["schemas"]["ChatTurnOut"];
+            /**
+             * Type
+             * @default completed
+             * @constant
+             */
+            type: "completed";
+        };
+        /**
+         * ConversationCreate
+         * @description Inbound body for creating a follow-up chat conversation.
+         *
+         *     Args:
+         *         entry_artefact_id: Optional project-local artefact used as entry context.
+         */
+        ConversationCreate: {
+            /** Entry Artefact Id */
+            entry_artefact_id?: string | null;
+        };
+        /**
+         * ConversationListItemOut
+         * @description A conversation plus its latest cross-kind turn preview.
+         *
+         *     Args:
+         *         latest_turn_preview: Most recent chat or planning turn, when one exists.
+         */
+        ConversationListItemOut: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Closed At */
+            closed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Entry Artefact Id */
+            entry_artefact_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "planning" | "chat";
+            latest_turn_preview: components["schemas"]["LatestTurnPreviewOut"] | null;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "closed" | "archived";
+            /** Title */
+            title: string;
+        };
+        /**
+         * ConversationOut
+         * @description Durable public projection of one conversation.
+         *
+         *     Args:
+         *         id: Conversation identity.
+         *         project_id: Owning project identity.
+         *         kind: Whether this is a planning conversation or a follow-up chat.
+         *         title: User-visible conversation title.
+         *         status: Current conversation lifecycle status.
+         *         entry_artefact_id: Optional project-local entry-context artefact.
+         *         created_at: When the conversation was created.
+         *         closed_at: When it closed, if applicable.
+         *         archived_at: When it was archived, if applicable.
+         */
+        ConversationOut: {
+            /** Archived At */
+            archived_at: string | null;
+            /** Closed At */
+            closed_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Entry Artefact Id */
+            entry_artefact_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "planning" | "chat";
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "closed" | "archived";
+            /** Title */
+            title: string;
+        };
+        /**
+         * ConversationUpdate
+         * @description Partial update for an existing chat conversation.
+         *
+         *     Omitted fields remain unchanged. An explicitly null ``entry_artefact_id``
+         *     clears its entry-context chip.
+         *
+         *     Args:
+         *         title: Replacement user-visible chat title.
+         *         entry_artefact_id: Replacement project-local entry context, or null to clear it.
+         */
+        ConversationUpdate: {
+            /** Entry Artefact Id */
+            entry_artefact_id?: string | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
          * CountryGroupDraft
          * @description Draft mirror of the runtime `CountryGroup`.
          *
@@ -1052,6 +1451,20 @@ export interface components {
             summary: string;
         };
         /**
+         * DeltaEvent
+         * @description A provider-neutral prose fragment.
+         */
+        DeltaEvent: {
+            /** Text */
+            text: string;
+            /**
+             * Type
+             * @default delta
+             * @constant
+             */
+            type: "delta";
+        };
+        /**
          * EvidenceItemOut
          * @description One row of the paginated evidence/source list.
          *
@@ -1135,6 +1548,34 @@ export interface components {
             groups?: components["schemas"]["GroupOut"][];
             /** Ungrouped */
             ungrouped: number;
+        };
+        /**
+         * FailedEvent
+         * @description The one failed terminal stream event.
+         */
+        FailedEvent: {
+            error: components["schemas"]["FailedEventError"];
+            /**
+             * Turn Id
+             * Format: uuid
+             */
+            turn_id: string;
+            /**
+             * Type
+             * @default failed
+             * @constant
+             */
+            type: "failed";
+        };
+        /**
+         * FailedEventError
+         * @description Publicly safe post-header failure information.
+         */
+        FailedEventError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
         };
         FindingOut: components["schemas"]["IofFindingOut"] | components["schemas"]["IcfFindingOut"];
         /**
@@ -1492,6 +1933,23 @@ export interface components {
             status: "running" | "paused" | "succeeded" | "degraded" | "failed" | "aborted" | "interrupted";
         };
         /**
+         * LatestTurnPreviewOut
+         * @description The most recent durable turn rendered in a conversations-library row.
+         *
+         *     Args:
+         *         user_message: Bounded user-message preview.
+         *         reply_snippet: Bounded reply preview, absent for an unfinished turn.
+         *         at: Turn completion time, absent for an unfinished turn.
+         */
+        LatestTurnPreviewOut: {
+            /** At */
+            at: string | null;
+            /** Reply Snippet */
+            reply_snippet: string | null;
+            /** User Message */
+            user_message: string;
+        };
+        /**
          * OptionResponse
          * @description Response picking a canonical or authored option.
          *
@@ -1536,10 +1994,22 @@ export interface components {
             /** Total Items */
             total_items: number;
         };
+        /** Page[ChatTurnOut] */
+        Page_ChatTurnOut_: {
+            /** Data */
+            data: components["schemas"]["ChatTurnOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
         /** Page[CheckInOut] */
         Page_CheckInOut_: {
             /** Data */
             data: components["schemas"]["CheckInOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
+        /** Page[ConversationListItemOut] */
+        Page_ConversationListItemOut_: {
+            /** Data */
+            data: components["schemas"]["ConversationListItemOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
         /** Page[DecisionOut] */
@@ -1836,6 +2306,7 @@ export interface components {
          *
          *     Args:
          *         turn_index: Monotonic per-project conversation coordinate.
+         *         conversation_id: Owning planning conversation, absent only on legacy rows.
          *         client_turn_id: The caller's idempotency key for this turn — returned
          *             so a reloaded client can retry its own incomplete latest turn.
          *         user_message: Submitted user message.
@@ -1854,6 +2325,8 @@ export interface components {
             client_turn_id: string;
             /** Completed At */
             completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1903,14 +2376,31 @@ export interface components {
          *         suggestions: The planner's suggested answers to its clarifying
          *             question, rendered as tappable quick replies. Empty when none.
          *         part: Structured sequential-planning proposal, when this turn carries one.
+         *         conversation_id: Planning conversation that produced this turn.
          */
         PlanningTurnOut: {
+            /** Conversation Id */
+            conversation_id?: string | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan: components["schemas"]["PlanDraft"];
             /** Reply */
             reply: string;
             /** Suggestions */
             suggestions?: string[];
+        };
+        /**
+         * ProgressEvent
+         * @description A user-facing read-tool activity emitted before that tool runs.
+         */
+        ProgressEvent: {
+            /** Label */
+            label: string;
+            /**
+             * Type
+             * @default progress
+             * @constant
+             */
+            type: "progress";
         };
         /**
          * ProjectCreate
@@ -2500,6 +2990,235 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    get_conversation_api_v1_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_conversation_api_v1_conversations__conversation_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_conversation_api_v1_conversations__conversation_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_chat_turns_api_v1_conversations__conversation_id__turns_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ChatTurnOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatTurnCreate"];
+            };
+        };
+        responses: {
+            /** @description `application/x-ndjson`: progress/delta events followed by exactly one completed, failed, or cancelled terminal event. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/x-ndjson": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+                turn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelTurnOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unarchive_conversation_api_v1_conversations__conversation_id__unarchive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_projects_api_v1_projects_get: {
         parameters: {
             query?: {
@@ -2765,6 +3484,40 @@ export interface operations {
             };
         };
     };
+    chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get: {
+        parameters: {
+            query?: {
+                quote?: string | null;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+                chunk_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     chunk_context_api_v1_projects__project_id__citations__citation_key__context_get: {
         parameters: {
             query?: never;
@@ -2784,6 +3537,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ChunkContextOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conversations_api_v1_projects__project_id__conversations_get: {
+        parameters: {
+            query?: {
+                kind?: ("planning" | "chat") | null;
+                status?: ("active" | "closed" | "archived") | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ConversationListItemOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_conversation_api_v1_projects__project_id__conversations_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConversationCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationOut"];
                 };
             };
             /** @description Validation Error */

@@ -11,6 +11,16 @@ import type { paths } from "./gen/types";
 const DEFAULT_BASE_URL = "";
 
 /**
+ * Return the base URL shared by generated API calls and raw stream requests.
+ *
+ * Returns:
+ *   The configured API origin, or the same-origin empty base.
+ */
+export function apiBaseUrl(): string {
+  return import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL;
+}
+
+/**
  * Build a typed `openapi-fetch` client bound to the generated `paths`.
  *
  * @param baseUrl - API base URL. Defaults to `VITE_API_BASE_URL`, falling
@@ -18,7 +28,7 @@ const DEFAULT_BASE_URL = "";
  * @returns An `openapi-fetch` client whose request/response shapes are
  *   inferred from the generated OpenAPI types — one schema drives both ends.
  */
-export function createApiClient(baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL) {
+export function createApiClient(baseUrl: string = apiBaseUrl()) {
   return createClient<paths>({ baseUrl });
 }
 
@@ -33,7 +43,7 @@ export function createApiClient(baseUrl: string = import.meta.env.VITE_API_BASE_
  */
 export function createAuthedApiClient(
   auth: AuthApi,
-  baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL,
+  baseUrl: string = apiBaseUrl(),
 ) {
   const client = createClient<paths>({ baseUrl });
   client.use(createAuthMiddleware(auth));

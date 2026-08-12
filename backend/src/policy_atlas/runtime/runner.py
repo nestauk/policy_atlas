@@ -59,6 +59,7 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
 )
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
+from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.orchestration_plan import (
     SPINE,
@@ -4901,11 +4902,12 @@ def _finish_run(
     project_id: uuid.UUID,
 ) -> RunPlanOutcome:
     with engine.begin() as conn:
+        ended_at = datetime.now(UTC)
         conn.execute(
             capability_run.update()
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.project_id == project_id)
-            .values(status=status, ended_at=datetime.now(UTC))
+            .values(status=status, ended_at=ended_at)
         )
         events.append(
             conn,
@@ -4914,6 +4916,11 @@ def _finish_run(
             event_type="run.finished",
             payload={"capability_run_id": str(capability_run_id), "status": status},
         )
+        # A completed run closes its planning conversation atomically with the
+        # terminal status + run.finished event (029 strand 2): a crash can
+        # never leave a succeeded run with an active planning conversation.
+        if status in ("succeeded", "degraded"):
+            close_planning_conversation(conn, project_id=project_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
