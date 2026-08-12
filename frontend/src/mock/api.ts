@@ -552,7 +552,11 @@ function createMockChatTurnStream(conversationId: string, clientTurnId: string, 
                 },
               ]
             : [],
-        citations: [{ id: MOCK_CHAT_CITATION_CHUNK_ID, n: 1, quote: MOCK_CHAT_CITATION_QUOTE, source_title: mockEvidence[2].title }],
+        // appraisal_label/evidence_type (030 fold): server-shape faithful —
+        // the same "moderate" label + `mockEvidence[2].evidence_type` the
+        // artefact fixture's own citation onto this source carries (see
+        // `mockArtefact`'s claims[0].citations[0] in fixtures.ts).
+        citations: [{ id: MOCK_CHAT_CITATION_CHUNK_ID, n: 1, quote: MOCK_CHAT_CITATION_QUOTE, source_title: mockEvidence[2].title, appraisal_label: "moderate", evidence_type: mockEvidence[2].evidence_type }],
         enrichment: { status: "pending" },
         warning_not_evidence_checked: false,
         handoff: null,

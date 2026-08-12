@@ -649,6 +649,35 @@ final parity deltas:**
 Evidence: backend 714 api+runtime tests serial-green + full `make verify`
 (gate row below covers this round); frontend 236 + e2e 7/7.
 
+**Rev 3.6 folds (2026-08-12, owner-approved at the debrief):**
+
+1. **Quote-snap at persist time** — `_resolve_citation_sources` locates each
+   chunk citation's model quote in the cited chunk via the extract chain's
+   own `quote_verify` (`build_basis`/`QuoteMatcher.find` — REUSE): a unique
+   normalized match replaces the stored quote with the verbatim raw span
+   (`quote_snapped: true` only when text actually changed; exact matches
+   unmarked); ambiguous/absent quotes pass through untouched. Downstream
+   (references, hover, copy, the context locator) now reads verbatim source
+   text whenever the model was close.
+2. **Per-citation appraisal label** — `appraisal_label` + `evidence_type`
+   resolve at persist time mirroring `repository.artefact_out`'s CitationOut
+   resolution (latest project-scoped appraisal/classification rows,
+   `SCORE_LABELS`); rendered in chat's provenance sheet by `AppraisalChip`,
+   now extracted from and shared with the reader's `CitationContext` (same
+   placement as the report — sheet block only). Citations live inside the
+   untyped `answer_payload`, so no wire-model/OpenAPI change (confirmed).
+3. **Locator re-based on `quote_verify`** — the round-3 parallel
+   normalization helpers in repository.py are DELETED; both persist-time
+   snap and read-time locate now share the extract chain's one matcher.
+   Known edge, accepted: `quote_verify` doesn't NFC-compose combining marks,
+   so decomposed-vs-composed accented quotes won't match — the same
+   tolerance envelope synthesis verification has always had, now consistent
+   across every quote path; revisit only if it surfaces in real use.
+
+Evidence: backend 27/27 + 13/13 targeted, tests/api 214 + tests/runtime 506
+serial-green, ruff/mypy clean; frontend 238 tests, e2e 7/7 incl. the
+appraisal-chip assertion; full `make verify` gate row appended below.
+
 ## ⚠️ Gate-integrity incident + correction (2026-08-11)
 
 **Two real test failures were hidden by the build conversation's own gate

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import unicodedata
 import uuid
 from collections import Counter
 from collections.abc import Iterable, Mapping
@@ -74,6 +73,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_base.assess.screen import effective_screen_rows
+from policy_atlas.evidence_base.extract.quote_verify import build_basis
 from policy_atlas.runtime.steering_history import steering_history
 
 
@@ -2091,92 +2091,23 @@ def chunk_context_out(
     )
 
 
-# Punctuation/space folds applied to both sides of a normalisation-tolerant quote
-# match — curly quotes and en/em dashes to their straight ASCII equivalent, plus
-# the no-break space (folded to a plain space by the whitespace-collapse step
-# below, same as any other Unicode space character).
-_QUOTE_MATCH_FOLD = {
-    "“": '"',  # left double quotation mark
-    "”": '"',  # right double quotation mark
-    "‘": "'",  # left single quotation mark
-    "’": "'",  # right single quotation mark
-    "–": "-",  # en dash
-    "—": "-",  # em dash
-}
-
-
-def _quote_match_clusters(text: str) -> list[tuple[int, int]]:
-    """Group ``text`` into raw ``(start, end)`` spans of one base char plus any
-    Unicode combining marks immediately following it, so NFC composition (a
-    precomposed char vs. a decomposed base+mark pair) can be applied per
-    cluster without disturbing the raw offset substrate."""
-    clusters: list[tuple[int, int]] = []
-    i = 0
-    n = len(text)
-    while i < n:
-        j = i + 1
-        while j < n and unicodedata.combining(text[j]):
-            j += 1
-        clusters.append((i, j))
-        i = j
-    return clusters
-
-
-def _build_quote_match_norm(text: str) -> tuple[str, list[int], list[int]]:
-    """Fold ``text`` into a matching-tolerant form with an offset map to raw spans.
-
-    NFC-composes each base-plus-combining-mark cluster, casefolds, maps curly
-    quotes/dashes to straight ASCII, and collapses whitespace runs to a single
-    space. The raw offset substrate is never altered — the map only recovers
-    the true source span once a normalised match is found, so the displayed
-    context and highlight stay on the real chunk text.
-
-    Returns:
-        A ``(normalised, raw_start, raw_end)`` triple. ``raw_start[i]`` /
-        ``raw_end[i]`` are the raw offsets the i-th normalised char consumed;
-        the raw interval of a normalised match ``[i, j)`` is
-        ``[raw_start[i], raw_end[j - 1])``.
-    """
-    norm: list[str] = []
-    raw_start: list[int] = []
-    raw_end: list[int] = []
-    prev_space = False
-    for start, end in _quote_match_clusters(text):
-        composed = unicodedata.normalize("NFC", text[start:end])
-        for raw_char in composed:
-            folded = _QUOTE_MATCH_FOLD.get(raw_char, raw_char)
-            if folded.isspace():
-                if prev_space:
-                    raw_end[-1] = end
-                    continue
-                norm.append(" ")
-                raw_start.append(start)
-                raw_end.append(end)
-                prev_space = True
-                continue
-            prev_space = False
-            for folded_char in folded.casefold():
-                norm.append(folded_char)
-                raw_start.append(start)
-                raw_end.append(end)
-    return "".join(norm), raw_start, raw_end
-
-
-def _normalised_quote_span(text: str, quote: str) -> tuple[int, int] | None:
+def _locate_normalised_span(text: str, quote: str) -> tuple[int, int] | None:
     """Locate a unique normalisation-tolerant quote span in raw ``text``.
 
-    Applied only once an exact substring match has failed to be unique. The
-    uniqueness rule is unchanged, just applied on the normalised text: an
-    absent or ambiguous (non-unique) normalised match returns ``None``, the
-    same honest-absence rule the exact-match path already follows.
+    Applied only once an exact substring match has failed to be unique. Reuses
+    ``quote_verify``'s qv_v1 normalise-and-offset-map machinery (``build_basis``)
+    instead of a second, parallel normaliser — only the uniqueness rule stays
+    repository-side: an absent or ambiguous (non-unique) normalised match
+    returns ``None``, the same honest-absence rule the exact-match path
+    already follows.
     """
-    normalised_text, raw_start, raw_end = _build_quote_match_norm(text)
-    normalised_quote = _build_quote_match_norm(quote)[0]
-    if not normalised_quote or normalised_text.count(normalised_quote) != 1:
+    basis = build_basis([(None, text)])
+    normalised_quote = build_basis([(None, quote)]).normalised
+    if not normalised_quote or basis.normalised.count(normalised_quote) != 1:
         return None
-    position = normalised_text.find(normalised_quote)
+    position = basis.normalised.find(normalised_quote)
     last = position + len(normalised_quote) - 1
-    return raw_start[position], raw_end[last]
+    return basis.raw_start[position], basis.raw_end[last]
 
 
 def chunk_quote_context_out(
@@ -2215,7 +2146,7 @@ def chunk_quote_context_out(
         position = text.find(quote)
         end = position + len(quote)
     else:
-        span = _normalised_quote_span(text, quote)
+        span = _locate_normalised_span(text, quote)
         if span is None:
             return None
         position, end = span

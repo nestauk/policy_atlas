@@ -207,6 +207,28 @@
 > zero-state label cut (supersedes the rev 2.6 wording for that chip's
 > zero-state).
 
+> **rev 3.6 (2026-08-12, owner at the step-9 debrief — verbatim-quote +
+> appraisal folds):** (1) **quote-snap at the citation floor's persist step**
+> — each chunk citation's model-emitted quote is located in the cited
+> chunk's text via the extract chain's own `quote_verify` machinery (REUSE,
+> not a third matcher; the round-3 read-time locator is re-based onto it,
+> deleting the parallel normalization helpers); a unique located match
+> replaces the stored quote with the verbatim source span (`quote_snapped`
+> marker), a miss stays honestly untouched. Streaming and the async judge
+> stand unchanged (owner: the fast-path feel is right; parity comes from
+> deterministic floors, not buffering). (2) **per-citation appraisal
+> label** — `appraisal_label` + `evidence_type` resolve at persist time
+> (bibliographic-authority pattern, CitationOut field names) so the shared
+> provenance block renders the reader's evidence-strength chip in chat —
+> the last presentational parity gap closes. Payload-content additions
+> inside `answer_payload` only; no wire-model or endpoint change. Owner
+> items routed to the FOLLOW-UP slice at the same debrief: auto post-stream
+> repair (marked revisions; owner wants to feel it in practice) · `chat_v1`
+> claim-grammar parity behind a replay-diff harness · enrichment recheck
+> (folds into repair) — with judge calibration on chat-shaped claims at the
+> eval slice (live evidence: 14/23 unsupported verdicts with
+> support-conceding rationales).
+>
 > **rev 3.5 (2026-08-11, owner at the step-9 live test — presentation folds):**
 > chat citation presentation made congruous with the artefact reader (strand 6):
 > citation click opens the reader's "Where this comes from" Sheet (citing

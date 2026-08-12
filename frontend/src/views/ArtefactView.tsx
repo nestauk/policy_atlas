@@ -340,6 +340,27 @@ export function CitationProvenanceBlock({
   );
 }
 
+/** The appraisal chip (blue `ChipWithTooltip`) + its evidence-type-aware
+ *  tooltip wording — shared by the reader's `CitationContext` and chat's
+ *  citation-sheet block (030 parity fold) so the wording can never drift.
+ *  Renders unconditionally; callers gate on `appraisal_label` presence
+ *  themselves (honest absence — no chip when the citation carries none). */
+export function AppraisalChip({ label, evidenceType }: { label: string; evidenceType?: string | null }) {
+  return (
+    <ChipWithTooltip
+      tone="blue"
+      label={scrub(label)}
+      content={
+        <span className="text-caption">
+          {typeof evidenceType === "string"
+            ? `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
+            : APPRAISAL_FALLBACK_HINT}
+        </span>
+      }
+    />
+  );
+}
+
 /** One citation's provenance block in the claim panel (demo CitationContext):
  *  the reader's tier + appraisal chips over the shared block. */
 function CitationContext({
@@ -379,17 +400,7 @@ function CitationContext({
             />
           )}
           {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
-            <ChipWithTooltip
-              tone="blue"
-              label={scrub(citation.appraisal_label)}
-              content={
-                <span className="text-caption">
-                  {typeof citation.evidence_type === "string"
-                    ? `${scrub(citation.appraisal_label)} evidence strength — appraised from the document type: ${scrub(citation.evidence_type)}.`
-                    : APPRAISAL_FALLBACK_HINT}
-                </span>
-              }
-            />
+            <AppraisalChip label={citation.appraisal_label} evidenceType={citation.evidence_type} />
           )}
         </>
       }

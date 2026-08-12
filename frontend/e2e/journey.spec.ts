@@ -398,6 +398,10 @@ test.describe("mock evidence-base journey", () => {
     const claimSheet = page.getByRole("dialog", { name: "Where this comes from" });
     await expect(claimSheet).toBeVisible();
     await expect(claimSheet.getByText(MOCK_CHAT_CLAIM_TEXT)).toBeVisible();
+    // 030 fold (Rev 3.6): the sheet's citation block carries the artefact
+    // reader's appraisal chip, in parity — the mock citation's
+    // appraisal_label.
+    await expect(claimSheet.getByText("moderate")).toBeVisible();
     await page.getByRole("button", { name: "Close panel" }).click();
     await expect(claimSheet).toHaveCount(0);
 

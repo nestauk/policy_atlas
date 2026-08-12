@@ -9,6 +9,7 @@ import { Button } from "../../../ui/brand/Button";
 import { Chip } from "../../../ui/brand/Chip";
 import { Tooltip } from "../../../ui/radix/Tooltip";
 import {
+  AppraisalChip,
   CITATION_MARKER_CLASS,
   CITATION_SPAN_CLASS,
   ChipWithTooltip,
@@ -31,6 +32,14 @@ interface ChatCitation {
   source_id?: string;
   title?: string;
   state?: string;
+  // 030 fold: named exactly as the artefact read model's `CitationOut` — the
+  // persist-time fields another 029 strand writes onto `answer_payload`'s
+  // citation dicts. `quote_snapped` needs no UI treatment yet (just
+  // tolerated); the appraisal pair feeds the sheet's citation-block chip
+  // (parity with `ArtefactView.CitationContext` — see `AppraisalChip`).
+  appraisal_label?: string;
+  evidence_type?: string;
+  quote_snapped?: boolean;
 }
 
 // The wire shape is `answer_payload.claims[]`: loose (typed as
@@ -182,9 +191,11 @@ function References({ citations, turn, onCitation, onOpenDossier }: { citations:
 }
 
 /** The judge verdict chip + rationale tooltip (029 Fix B), over the shared
- *  `ChipWithTooltip` (030 fold) — chat's own tone/label vocabulary (chat has
- *  no appraisal_label on its citations — only the verdict tier). Shared by
- *  the References row and the citation sheet so there is exactly one copy. */
+ *  `ChipWithTooltip` (030 fold) — chat's own tone/label vocabulary (the
+ *  verdict tier only; the citation's appraisal pair, when present, renders
+ *  as its own separate `AppraisalChip` — sheet only, see `ChatCitationBlock`).
+ *  Shared by the References row and the citation sheet so there is exactly
+ *  one copy. */
 function VerdictChip({ turn, citation }: { turn: ChatConversationRow; citation: ChatCitation }) {
   const { tier } = verdictInfoFor(turn, citation);
   const checkFailed = enrichmentStatusOf(turn) === "failed";
@@ -289,8 +300,12 @@ function ChatProvenanceSheet({ projectId, active, onClose, onOpenDossier }: { pr
 }
 
 /** One citation's provenance block within the sheet above — the shared
- *  `CitationProvenanceBlock`, fed this chunk's on-demand context (Fix A) and
- *  the verdict chip (Fix B). */
+ *  `CitationProvenanceBlock`, fed this chunk's on-demand context (Fix A), the
+ *  verdict chip (Fix B), and — when the field is present — the appraisal
+ *  chip in exact parity with the artefact reader's `CitationContext` (030
+ *  fold). Absent `appraisal_label` renders no chip (honest absence); this
+ *  is the sheet's citation block only — References rows and hover tooltips
+ *  don't gain it. */
 function ChatCitationBlock({ projectId, turn, citation, onOpenDossier }: { projectId: string; turn: ChatConversationRow; citation: ChatCitation; onOpenDossier: (sourceRef: string) => void }) {
   const context = useChatChunkContext(projectId, citation);
   const sourceRef = citation.source_id ?? citation.source_title ?? null;
@@ -301,7 +316,14 @@ function ChatCitationBlock({ projectId, turn, citation, onOpenDossier }: { proje
       sourceTitle={titleText}
       sourceRef={sourceRef}
       onOpenDossier={onOpenDossier}
-      chips={<VerdictChip turn={turn} citation={citation} />}
+      chips={
+        <>
+          <VerdictChip turn={turn} citation={citation} />
+          {citation.appraisal_label !== null && citation.appraisal_label !== undefined && (
+            <AppraisalChip label={citation.appraisal_label} evidenceType={citation.evidence_type} />
+          )}
+        </>
+      }
       context={context}
       quote={citation.quote ?? ""}
       fallbackNote="Exact passage not found in the source — showing the cited quote."

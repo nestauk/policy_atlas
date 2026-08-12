@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -20,6 +20,7 @@ from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
 from policy_atlas.core.usage import usage_metadata
+from policy_atlas.evidence_base.extract.quote_verify import BasisText, QuoteMatcher, build_basis
 from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     SECTION_TURN_CAP,
     ToolExchange,
@@ -127,6 +128,45 @@ def _first_question_title(message: str) -> str:
     return normalized[: boundary if boundary > 0 else 80]
 
 
+def _latest_by_pss(rows: Iterable[Any], time_key: str) -> dict[uuid.UUID, Any]:
+    """Pick the latest row per ``project_source_snapshot_id``.
+
+    Mirrors ``repository._latest_row_by_id``'s effective-row discipline
+    (latest by timestamp wins) so the per-citation appraisal label agrees
+    with what the ARTEFACT read model would say for the same document.
+    """
+    latest: dict[uuid.UUID, Any] = {}
+    for row in rows:
+        key = cast(uuid.UUID, row.project_source_snapshot_id)
+        previous = latest.get(key)
+        if previous is None or getattr(row, time_key) > getattr(previous, time_key):
+            latest[key] = row
+    return latest
+
+
+def _snapped_chunk_quote(basis: BasisText, quote: str) -> tuple[str, bool] | None:
+    """Locate ``quote`` uniquely in a chunk's ``quote_verify`` basis.
+
+    Reuses ``quote_verify``'s ``build_basis``/``QuoteMatcher`` (qv_v1)
+    machinery instead of a third parallel matcher. Returns the verbatim raw
+    source text of the located span and whether it differs from the model's
+    emitted ``quote`` (i.e. only a normalised, not exact, match). An absent
+    or ambiguous (2+ normalised occurrences) quote returns ``None`` — the
+    read-time locator (``repository.chunk_quote_context_out``) and its own
+    fallback still handle those honestly at hover/click time.
+    """
+    if not quote:
+        return None
+    normalised_quote = build_basis([(None, quote)]).normalised
+    if not normalised_quote or basis.normalised.count(normalised_quote) != 1:
+        return None
+    match = QuoteMatcher(basis).find(quote)
+    if match.status == "failed" or not match.spans:
+        return None
+    span = match.spans[0]
+    return basis.raw_text[span.start : span.end], match.status == "normalised"
+
+
 def _resolve_citation_sources(
     engine: Engine, citations: list[dict[str, Any]], *, project_id: uuid.UUID
 ) -> list[dict[str, Any]]:
@@ -143,15 +183,26 @@ def _resolve_citation_sources(
     boundary, so either lookup left unscoped could resolve another project's
     document onto this project's citation (see
     ``repository.chunk_quote_context_out`` for the same chunk-side filter).
+
+    Also resolves the cited document's ``appraisal_label`` + ``evidence_type``
+    (mirroring ``repository.artefact_out``'s CitationOut resolution exactly —
+    latest appraisal/classification row per project_source_snapshot_id,
+    project-scoped, no narrower join) and, at persist time, snaps a chunk
+    citation's model-emitted ``quote`` to the verbatim source text when
+    ``quote_verify`` locates it uniquely in that chunk's content (marking
+    ``quote_snapped: true`` only when the text actually changed).
     """
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import (
         implementation_context_finding,
         intervention_outcome_finding,
         project_source_snapshot,
+        source_appraisal_result,
+        source_classification_result,
         source_extraction_record,
         source_snapshot,
     )
+    from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 
     def _uuids(kind: str) -> set[uuid.UUID]:
         values: set[uuid.UUID] = set()
@@ -166,11 +217,15 @@ def _resolve_citation_sources(
 
     chunk_ids, finding_ids = _uuids("chunk"), _uuids("finding")
     facts: dict[str, dict[str, Any]] = {}
+    chunk_contents: dict[str, str] = {}
+    appraisal: dict[uuid.UUID, Any] = {}
+    classification: dict[uuid.UUID, Any] = {}
     with engine.connect() as conn:
         if chunk_ids:
             for row in conn.execute(
                 select(
                     chunk_table.c.chunk_id,
+                    chunk_table.c.content,
                     project_source_snapshot.c.project_source_snapshot_id,
                     source_snapshot.c.metadata,
                     source_snapshot.c.source_locator,
@@ -201,6 +256,7 @@ def _resolve_citation_sources(
                     "source_title": title,
                     "source_id": str(row.project_source_snapshot_id),
                 }
+                chunk_contents[str(row.chunk_id)] = row.content
         if finding_ids:
             for table in (intervention_outcome_finding, implementation_context_finding):
                 for row in conn.execute(
@@ -235,7 +291,66 @@ def _resolve_citation_sources(
                         "source_title": meta.get("title") or row.source_locator,
                         "source_id": str(row.project_source_snapshot_id),
                     }
-    return [{**citation, **facts.get(str(citation.get("id")), {})} for citation in citations]
+        if chunk_ids or finding_ids:
+            # Same join/effective-row rules as repository.artefact_out's
+            # CitationOut resolution: project-scoped only (no narrower join),
+            # latest row per project_source_snapshot_id wins.
+            appraisal = _latest_by_pss(
+                conn.execute(
+                    select(
+                        source_appraisal_result.c.project_source_snapshot_id,
+                        source_appraisal_result.c.quality_score,
+                        source_appraisal_result.c.appraised_at,
+                    ).where(source_appraisal_result.c.project_id == project_id)
+                ).all(),
+                "appraised_at",
+            )
+            classification = _latest_by_pss(
+                conn.execute(
+                    select(
+                        source_classification_result.c.project_source_snapshot_id,
+                        source_classification_result.c.primary_evidence_type,
+                        source_classification_result.c.classified_at,
+                    ).where(source_classification_result.c.project_id == project_id)
+                ).all(),
+                "classified_at",
+            )
+
+    basis_cache: dict[str, BasisText] = {}
+    resolved: list[dict[str, Any]] = []
+    for citation in citations:
+        key = str(citation.get("id"))
+        source_facts = facts.get(key, {})
+        merged = {**citation, **source_facts}
+
+        source_id = source_facts.get("source_id")
+        if source_id is not None:
+            pss_id = uuid.UUID(source_id)
+            appraisal_row = appraisal.get(pss_id)
+            if appraisal_row is not None:
+                label = SCORE_LABELS.get(appraisal_row.quality_score)
+                if label is not None:
+                    merged["appraisal_label"] = label
+            classification_row = classification.get(pss_id)
+            if classification_row is not None:
+                merged["evidence_type"] = classification_row.primary_evidence_type
+
+        quote = citation.get("quote")
+        if citation.get("kind") == "chunk" and quote:
+            content = chunk_contents.get(key)
+            if content is not None:
+                basis = basis_cache.get(key)
+                if basis is None:
+                    basis = build_basis([(key, content)])
+                    basis_cache[key] = basis
+                snap = _snapped_chunk_quote(basis, cast(str, quote))
+                if snap is not None:
+                    raw_text, changed = snap
+                    merged["quote"] = raw_text
+                    if changed:
+                        merged["quote_snapped"] = True
+        resolved.append(merged)
+    return resolved
 
 
 def _appraised_chunk_ids(transcript: list[ToolExchange]) -> set[str]:

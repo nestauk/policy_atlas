@@ -854,6 +854,249 @@ def test_citation_sources_are_scoped_to_the_calling_project(engine: Engine) -> N
             )
 
 
+def _seed_citation_chunk(engine: Engine, *, content: str) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Insert a project + source + chunk with the given content.
+
+    Returns:
+        ``(project_id, chunk_id, project_source_snapshot_id)``.
+    """
+    from policy_atlas.core.schema import chunk as chunk_table
+    from policy_atlas.core.schema import project as project_table
+    from tests.helpers import seed_source
+
+    project_id, chunk_id = uuid.uuid4(), uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            project_table.insert().values(
+                project_id=project_id,
+                created_at=now(),
+                name="Citation resolution test",
+                question=None,
+                status="active",
+                updated_at=now(),
+                owner_user_id="chat-owner",
+            )
+        )
+        snapshot_id, pss_id = seed_source(conn, project_id)
+        conn.execute(
+            chunk_table.insert().values(
+                chunk_id=chunk_id,
+                source_snapshot_id=snapshot_id,
+                sequence=0,
+                content=content,
+                content_hash=str(uuid.uuid4()),
+                locator={"start": 0, "end": len(content)},
+                segmentation_policy="manual_v1",
+                created_at=now(),
+            )
+        )
+    return project_id, chunk_id, pss_id
+
+
+def test_citation_quote_snaps_to_verbatim_source_on_near_miss(engine: Engine) -> None:
+    """A near-miss chunk quote (curly quotes/case/whitespace) snaps to verbatim source text."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from tests.helpers import delete_project_data
+
+    raw_span = "The report found “Clear   Evidence”\nacross studies."
+    content = "Before text. " + raw_span + " After text."
+    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    try:
+        resolved = _resolve_citation_sources(
+            engine,
+            [
+                {
+                    "n": 1,
+                    "id": str(chunk_id),
+                    "kind": "chunk",
+                    "quote": 'the report found "clear evidence" across studies.',
+                    "state": "unchecked",
+                }
+            ],
+            project_id=project_id,
+        )
+        assert resolved[0]["quote"] == raw_span
+        assert resolved[0]["quote_snapped"] is True
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
+def test_citation_quote_exact_match_persists_unchanged_without_marker(engine: Engine) -> None:
+    """An exact chunk quote persists verbatim, with no snap marker either way."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from tests.helpers import delete_project_data
+
+    content = "Before text. The exact quoted span. After text."
+    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    try:
+        resolved = _resolve_citation_sources(
+            engine,
+            [
+                {
+                    "n": 1,
+                    "id": str(chunk_id),
+                    "kind": "chunk",
+                    "quote": "The exact quoted span.",
+                    "state": "unchecked",
+                }
+            ],
+            project_id=project_id,
+        )
+        assert resolved[0]["quote"] == "The exact quoted span."
+        assert "quote_snapped" not in resolved[0]
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
+def test_citation_quote_paraphrase_persists_untouched(engine: Engine) -> None:
+    """A paraphrased chunk quote with no located span is left untouched, no marker."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from tests.helpers import delete_project_data
+
+    content = "The report found clear evidence across studies."
+    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    try:
+        resolved = _resolve_citation_sources(
+            engine,
+            [
+                {
+                    "n": 1,
+                    "id": str(chunk_id),
+                    "kind": "chunk",
+                    "quote": "the studies broadly agreed the evidence was clear",
+                    "state": "unchecked",
+                }
+            ],
+            project_id=project_id,
+        )
+        assert resolved[0]["quote"] == "the studies broadly agreed the evidence was clear"
+        assert "quote_snapped" not in resolved[0]
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
+def test_citation_quote_ambiguous_persists_untouched(engine: Engine) -> None:
+    """A chunk quote with two normalised occurrences is left untouched, no marker."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from tests.helpers import delete_project_data
+
+    content = "The New York pilot launched first. A second NEW YORK rollout followed later."
+    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    try:
+        resolved = _resolve_citation_sources(
+            engine,
+            [
+                {
+                    "n": 1,
+                    "id": str(chunk_id),
+                    "kind": "chunk",
+                    "quote": "new york",
+                    "state": "unchecked",
+                }
+            ],
+            project_id=project_id,
+        )
+        assert resolved[0]["quote"] == "new york"
+        assert "quote_snapped" not in resolved[0]
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
+def test_citation_appraisal_label_and_evidence_type_resolve(engine: Engine) -> None:
+    """A cited chunk resolves the appraisal label + evidence type the ARTEFACT read model shows."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from policy_atlas.core.schema import (
+        EVIDENCE_TYPES,
+        evidence_scope,
+        runs,
+        source_appraisal_result,
+        source_classification_result,
+    )
+    from tests.helpers import delete_project_data
+
+    project_id, chunk_id, pss_id = _seed_citation_chunk(
+        engine, content="Chunk content for appraisal resolution."
+    )
+    scope_id, run_id = uuid.uuid4(), uuid.uuid4()
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=scope_id,
+                    project_id=project_id,
+                    intent="test intent",
+                    context={},
+                    created_at=now(),
+                )
+            )
+            conn.execute(
+                runs.insert().values(
+                    run_id=run_id,
+                    project_id=project_id,
+                    status="succeeded",
+                    started_at=now(),
+                )
+            )
+            conn.execute(
+                source_appraisal_result.insert().values(
+                    source_appraisal_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=pss_id,
+                    project_id=project_id,
+                    appraised_by_run_id=run_id,
+                    quality_score=4,
+                    rubric_version="v2",
+                    appraised_at=now(),
+                )
+            )
+            conn.execute(
+                source_classification_result.insert().values(
+                    source_classification_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=pss_id,
+                    project_id=project_id,
+                    classified_by_run_id=run_id,
+                    primary_evidence_type=EVIDENCE_TYPES[0],
+                    classified_at=now(),
+                )
+            )
+        resolved = _resolve_citation_sources(
+            engine,
+            [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
+            project_id=project_id,
+        )
+        assert resolved[0]["appraisal_label"] == "Strong"
+        assert resolved[0]["evidence_type"] == EVIDENCE_TYPES[0]
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
+def test_citation_missing_appraisal_leaves_fields_absent(engine: Engine) -> None:
+    """A cited chunk with no appraisal/classification rows leaves those fields absent."""
+    from policy_atlas.api.chat_turns import _resolve_citation_sources
+    from tests.helpers import delete_project_data
+
+    project_id, chunk_id, _pss_id = _seed_citation_chunk(
+        engine, content="Unappraised chunk content."
+    )
+    try:
+        resolved = _resolve_citation_sources(
+            engine,
+            [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
+            project_id=project_id,
+        )
+        assert "appraisal_label" not in resolved[0]
+        assert "evidence_type" not in resolved[0]
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
 def test_retry_same_client_turn_id_against_live_pending_conflicts(engine: Engine) -> None:
     """A live pending row under this client_turn_id refuses a stranger, not a re-run."""
     project_id: uuid.UUID | None = None

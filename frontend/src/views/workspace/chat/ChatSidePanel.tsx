@@ -149,10 +149,17 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
         </button>
         <button
           type="button"
+          aria-label="Chats"
+          title="Chats"
           onClick={() => setLibraryOpen(true)}
-          className="text-caption font-bold uppercase tracking-wider text-grey hover:text-blue"
+          className="text-grey hover:text-blue"
         >
-          Chats
+          {/* Stacked speech bubbles: the conversations library (same glyph
+              as the workspace rail's Chats button). */}
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M5 4h9v7h-3l-2 2-2-2H5z" />
+            <path d="M3 8H2V1h9v1" />
+          </svg>
         </button>
         <button
           type="button"

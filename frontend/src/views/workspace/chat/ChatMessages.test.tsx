@@ -138,6 +138,31 @@ describe("ChatMessages", () => {
     expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
+  // 030 fold (Rev 3.6): the sheet's citation block gains the artefact
+  // reader's appraisal chip in exact parity, but only there — presence is
+  // gated on `appraisal_label` alone (honest absence when the field's
+  // missing), same as the reader's own `CitationContext`.
+  it("shows the appraisal chip in the citation sheet when appraisal_label is present", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", state: "verdict:tier_2", appraisal_label: "moderate", evidence_type: "Cohort study" }],
+      }),
+    ]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    expect(await screen.findByText("moderate")).toBeInTheDocument();
+  });
+
+  it("omits the appraisal chip in the citation sheet when appraisal_label is absent", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([turn()]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    await userEvent.setup().click(marker);
+    await screen.findByText("Where this comes from");
+    expect(screen.queryByText("moderate")).not.toBeInTheDocument();
+  });
+
   it("keeps a cancelled turn's inline markers inert — clickable but no verdict tooltip promised", async () => {
     renderChat([turn({ id: "t5", client_turn_id: "ct5", status: "cancelled", stopped_before_evidence_check: true })]);
     const [marker] = screen.getAllByRole("button", { name: "[1]" });
