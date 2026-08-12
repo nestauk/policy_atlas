@@ -34,7 +34,7 @@ check.
 
 - [web-api.md](../../specs/system/web-api.md) — § Auth boundary (the BOLA 404 rule and the
   **pre-reserved 403** "for future role failures within an owned scope" — this slice is
-  that future), § Projects, § Conversations (029 surface, unmerged — read on this branch).
+  that future), § Projects, § Conversations (029 surface, merged 2026-08-12).
 - [data-model.md](../../specs/system/data-model.md) — § Entity hierarchy (tenancy sits
   *above* it; nothing inside the project hierarchy changes).
 - `docs/deferred.md` — "NULL-owner pre-025 projects" (posture stands: NOT adopted),
@@ -124,8 +124,9 @@ This slice **is** the approval: schema (three tables touched + one new), auth/te
 semantics, public API additions — all named above; nothing beyond them. No new
 dependencies. No egress change (no new product egress; `/me` and ops CLI are DB-only).
 No CI change. Migration is additive; downgrade drops the additions (and `created_by`).
-**Sequencing pin:** 030's build opens only after 029 merges to `dev`; this branch follows
-the stacked-squash-merge playbook at that point. Generated files only via
+**Sequencing pin — SATISFIED 2026-08-12:** 029 merged to `dev` (`5f2e9b1`, PR #47); this
+branch was rebased onto merged `dev` (playbook `rebase --onto` variant, docs-only delta
+verified); `d8e4a1c7f2b9` confirmed still the alembic head 030 chains off. Generated files only via
 `make openapi-sync`.
 
 ## Public / private boundary
