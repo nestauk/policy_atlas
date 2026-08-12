@@ -17,6 +17,7 @@ from policy_atlas.core.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
+    pss_owns_snapshot,
     source_extraction_record,
     source_snapshot,
 )
@@ -87,14 +88,7 @@ def _load_chunks(
                 chunk_table.c.source_snapshot_id == source_snapshot.c.source_snapshot_id,
             ).join(
                 project_source_snapshot,
-                (
-                    chunk_table.c.source_snapshot_id
-                    == project_source_snapshot.c.source_snapshot_id
-                )
-                | (
-                    chunk_table.c.source_snapshot_id
-                    == project_source_snapshot.c.full_text_snapshot_id
-                ),
+                pss_owns_snapshot(chunk_table.c.source_snapshot_id),
             )
         )
         .where(chunk_table.c.chunk_id.in_(parsed_ids))

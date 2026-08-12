@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useArtefact, useConversations } from "../../../api/queries";
 import { scrub } from "../../../lib/scrub";
 import { ChatPane } from "./ChatPane";
+import { ChatsIcon } from "./ChatsIcon";
 import { ChatsLibrary } from "./ChatsLibrary";
 import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./conversationState";
 
@@ -154,12 +155,7 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
           onClick={() => setLibraryOpen(true)}
           className="text-grey hover:text-blue"
         >
-          {/* Stacked speech bubbles: the conversations library (same glyph
-              as the workspace rail's Chats button). */}
-          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M5 4h9v7h-3l-2 2-2-2H5z" />
-            <path d="M3 8H2V1h9v1" />
-          </svg>
+          <ChatsIcon size={14} />
         </button>
         <button
           type="button"

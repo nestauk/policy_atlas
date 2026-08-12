@@ -23,6 +23,7 @@ from policy_atlas.evidence_base.extract.quote_verify import (
     canonical_strata,
     claim_key,
     dedup_records,
+    locate_unique_span,
     validate_record,
 )
 
@@ -184,6 +185,96 @@ def test_abstract_basis_chunk_id_none() -> None:
     match = matcher.find("only text")
     assert match.status == "exact"
     assert match.spans[0].chunk_id is None
+
+
+# --- locate_unique_span: canonical read-time locator (task 029 delta-review) ----
+
+
+def test_locate_unique_span_exact_hit() -> None:
+    basis = build_basis([("c1", "The intervention reduced admissions by half.")])
+    span = locate_unique_span(basis, "reduced admissions")
+    assert span is not None
+    start, end = span
+    assert basis.raw_text[start:end] == "reduced admissions"
+
+
+def test_locate_unique_span_normalised_hit() -> None:
+    raw = "She said “Clear   Evidence” worked."
+    basis = build_basis([("c1", raw)])
+    span = locate_unique_span(basis, '"clear evidence" worked')
+    assert span is not None
+    start, end = span
+    assert basis.raw_text[start:end] == '“Clear   Evidence” worked'
+
+
+def test_locate_unique_span_absent_quote_is_none() -> None:
+    basis = build_basis([("c1", "nothing to see here")])
+    assert locate_unique_span(basis, "entirely invented sentence") is None
+
+
+def test_locate_unique_span_empty_quote_is_none() -> None:
+    basis = build_basis([("c1", "some text")])
+    assert locate_unique_span(basis, "") is None
+
+
+def test_locate_unique_span_overlap_aware_occurrence_counting_is_ambiguous() -> None:
+    """A step-1 scan finds OVERLAPPING occurrences a non-overlapping ``str.count``
+    (or a stepped scan) would miss: "red blue red" occurs at both offset 0 and
+    offset 9 of "red blue red blue red" (they overlap on the middle "red")."""
+    basis = build_basis([("c1", "RED blue red blue RED")])
+    assert basis.normalised.count("red blue red") == 1  # str.count under-counts
+    assert locate_unique_span(basis, "red blue red") is None  # truly ambiguous
+
+
+def test_locate_unique_span_word_boundary_rejects_embedded_match() -> None:
+    """The sole substring occurrence of "cat" in "concatenate" is rejected: it
+    is embedded in a longer word, not a standalone match."""
+    basis = build_basis([("c1", "Words that concatenate strings are common.")])
+    assert basis.normalised.count("cat") == 1  # unambiguous by count alone
+    assert locate_unique_span(basis, "cat") is None
+
+
+def test_locate_unique_span_word_boundary_accepts_standalone_match() -> None:
+    basis = build_basis([("c1", "The cat sat on the mat.")])
+    span = locate_unique_span(basis, "cat")
+    assert span is not None
+    start, end = span
+    assert basis.raw_text[start:end] == "cat"
+
+
+def test_locate_unique_span_ligature_partial_expansion_rejected() -> None:
+    """"ff" must NOT match inside "oﬃce": the ﬃ ligature casefolds to the three
+    normalised chars "ffi", so any match landing on part of that expansion is
+    rejected — here via the word-boundary guard, since a partial-expansion
+    match is necessarily embedded in the surrounding word."""
+    basis = build_basis([("c1", "The oﬃce building.")])
+    assert locate_unique_span(basis, "ff") is None
+
+
+def test_locate_unique_span_full_ligature_expansion_matches() -> None:
+    """The WHOLE ligature expansion, standing alone (not embedded in a longer
+    word), is a legitimate, unambiguous match."""
+    basis = build_basis([("c1", "ﬃ")])
+    span = locate_unique_span(basis, "ffi")
+    assert span is not None
+    start, end = span
+    assert basis.raw_text[start:end] == "ﬃ"
+
+
+def test_locate_unique_span_composed_decomposed_nfc_pair_is_honest_absence() -> None:
+    """qv_v1 does not perform Unicode NFC composition/decomposition — only
+    casefold, punctuation/whitespace folding and soft-hyphen deletion
+    (``_build_norm``). A composed accented char (NFC, single codepoint) and
+    its decomposed form (base char + combining mark, two codepoints) are
+    therefore different normalised strings and do not match each other, even
+    though they render identically and a Unicode-NFC-aware matcher would
+    consider them equal. This is a documented gap in the envelope, pinned
+    here as an honest absence — not a bug (task 029 delta-review, Fix 1)."""
+    composed = "café"  # "é" is U+00E9, one codepoint
+    decomposed = "café"  # "e" + U+0301 COMBINING ACUTE ACCENT, two codepoints
+    assert composed != decomposed  # confirms these are genuinely different strings
+    basis = build_basis([("c1", f"The word is {composed} in the source.")])
+    assert locate_unique_span(basis, decomposed) is None
 
 
 # --- iof_rules_v1: null-like coercion + enum exemption ---------------------

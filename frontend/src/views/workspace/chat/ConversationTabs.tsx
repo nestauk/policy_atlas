@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { useConversations } from "../../../api/queries";
 import { scrub } from "../../../lib/scrub";
+import { ChatsIcon } from "./ChatsIcon";
 import {
   addOpenChatTab,
   openChatTabs,
@@ -85,11 +86,7 @@ export function ConversationTabs({
       ))}
       <button type="button" aria-label="New chat" onClick={() => void newChat()} className="px-3 text-meta font-bold text-blue hover:bg-blue-tint">+</button>
       <button type="button" aria-label="Chats" title="Chats" onClick={onOpenLibrary} className="ml-auto px-2.5 text-blue hover:bg-blue-tint">
-        {/* Stacked speech bubbles: the conversations library. */}
-        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-          <path d="M5 4h9v7h-3l-2 2-2-2H5z" />
-          <path d="M3 8H2V1h9v1" />
-        </svg>
+        <ChatsIcon size={15} />
       </button>
     </nav>
   );

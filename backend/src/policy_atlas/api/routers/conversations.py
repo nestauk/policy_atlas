@@ -20,7 +20,12 @@ from sqlalchemy.engine import Connection, Engine, RowMapping
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.chat_enrichment import enrich_chat_turn
-from policy_atlas.api.chat_turns import ChatTurnResult, _phase_one_turn, run_chat_turn
+from policy_atlas.api.chat_turns import (
+    ChatTurnResult,
+    _phase_one_turn,
+    apply_appraisal_labels,
+    run_chat_turn,
+)
 from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
@@ -196,7 +201,10 @@ def _chat_turn_out(row: RowMapping) -> ChatTurnOut:
         created_at=row["created_at"],
         completed_at=row["completed_at"],
         claims=claims if isinstance(claims, list) else [],
-        citations=citations if isinstance(citations, list) else [],
+        # Read-time label mapping (task 029 delta-review): the persisted
+        # payload carries appraisal_score, never a label — apply_appraisal_labels
+        # derives appraisal_label fresh on every read.
+        citations=apply_appraisal_labels(citations) if isinstance(citations, list) else [],
         enrichment=(
             payload.get("enrichment") if isinstance(payload.get("enrichment"), dict) else None
         ),
@@ -470,7 +478,8 @@ def _turn_out(result: ChatTurnResult) -> ChatTurnOut:
         created_at=result.created_at,
         completed_at=result.completed_at,
         claims=claims if isinstance(claims, list) else [],
-        citations=citations if isinstance(citations, list) else [],
+        # Read-time label mapping (task 029 delta-review): see _chat_turn_out.
+        citations=apply_appraisal_labels(citations) if isinstance(citations, list) else [],
         enrichment=payload.get("enrichment")
         if isinstance(payload.get("enrichment"), dict)
         else None,

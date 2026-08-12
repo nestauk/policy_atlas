@@ -1006,8 +1006,13 @@ def test_citation_quote_ambiguous_persists_untouched(engine: Engine) -> None:
             delete_project_data(conn, project_id)
 
 
-def test_citation_appraisal_label_and_evidence_type_resolve(engine: Engine) -> None:
-    """A cited chunk resolves the appraisal label + evidence type the ARTEFACT read model shows."""
+def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> None:
+    """A cited chunk resolves the appraisal SCORE (not a label) + evidence type.
+
+    ``evidence_base.assess.appraise`` pins labels as read-time copy, never
+    persisted — ``_resolve_citation_sources`` therefore persists the numeric
+    score; ``chat_turns.apply_appraisal_labels`` is what derives the label,
+    and only at read time (see the point-in-time test below)."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
     from policy_atlas.core.schema import (
         EVIDENCE_TYPES,
@@ -1069,7 +1074,8 @@ def test_citation_appraisal_label_and_evidence_type_resolve(engine: Engine) -> N
             [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
             project_id=project_id,
         )
-        assert resolved[0]["appraisal_label"] == "Strong"
+        assert resolved[0]["appraisal_score"] == 4
+        assert "appraisal_label" not in resolved[0]
         assert resolved[0]["evidence_type"] == EVIDENCE_TYPES[0]
     finally:
         with engine.begin() as conn:
@@ -1090,8 +1096,150 @@ def test_citation_missing_appraisal_leaves_fields_absent(engine: Engine) -> None
             [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
             project_id=project_id,
         )
+        assert "appraisal_score" not in resolved[0]
         assert "appraisal_label" not in resolved[0]
         assert "evidence_type" not in resolved[0]
+    finally:
+        with engine.begin() as conn:
+            delete_project_data(conn, project_id)
+
+
+def test_apply_appraisal_labels_maps_score_to_label() -> None:
+    """The read-time helper maps a persisted score to its current label."""
+    from policy_atlas.api.chat_turns import apply_appraisal_labels
+
+    citations = [{"n": 1, "id": "chunk-1", "kind": "chunk", "appraisal_score": 4}]
+    labelled = apply_appraisal_labels(citations)
+    assert labelled[0]["appraisal_label"] == "Strong"
+    assert "appraisal_score" not in labelled[0]
+    # The input is untouched — the caller may still hold the persisted form.
+    assert citations[0]["appraisal_score"] == 4
+    assert "appraisal_label" not in citations[0]
+
+
+def test_apply_appraisal_labels_absent_score_leaves_citation_untouched() -> None:
+    """A citation carrying no score (id-only resolution failure) passes through."""
+    from policy_atlas.api.chat_turns import apply_appraisal_labels
+
+    citations = [{"n": 1, "id": "chunk-1", "kind": "chunk"}]
+    labelled = apply_appraisal_labels(citations)
+    assert "appraisal_label" not in labelled[0]
+    assert "appraisal_score" not in labelled[0]
+
+
+def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
+    engine: Engine,
+) -> None:
+    """An old turn's label still renders from ITS persisted score after a newer
+    appraisal row lands — the point-in-time pin (task 029 delta-review, Fix 2).
+
+    ``_resolve_citation_sources`` persists the score AT ANSWER TIME, like the
+    judge verdicts; a later re-appraisal must not rewrite an old answer's
+    chip. Since the label is derived fresh from the ALREADY-PERSISTED score
+    (not by re-querying the appraisal table), this is true by construction —
+    pinned here so a future change that re-resolves from the DB at read time
+    would be caught.
+    """
+    from policy_atlas.api.chat_turns import _resolve_citation_sources, apply_appraisal_labels
+    from policy_atlas.core.schema import (
+        EVIDENCE_TYPES,
+        evidence_scope,
+        runs,
+        source_appraisal_result,
+        source_classification_result,
+    )
+    from tests.helpers import delete_project_data
+
+    project_id, chunk_id, pss_id = _seed_citation_chunk(
+        engine, content="Chunk content for point-in-time appraisal."
+    )
+    scope_id, run_id = uuid.uuid4(), uuid.uuid4()
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=scope_id,
+                    project_id=project_id,
+                    intent="test intent",
+                    context={},
+                    created_at=now(),
+                )
+            )
+            conn.execute(
+                runs.insert().values(
+                    run_id=run_id, project_id=project_id, status="succeeded", started_at=now()
+                )
+            )
+            conn.execute(
+                source_appraisal_result.insert().values(
+                    source_appraisal_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=pss_id,
+                    project_id=project_id,
+                    appraised_by_run_id=run_id,
+                    quality_score=4,
+                    rubric_version="v2",
+                    appraised_at=now(),
+                )
+            )
+            conn.execute(
+                source_classification_result.insert().values(
+                    source_classification_result_id=uuid.uuid4(),
+                    evidence_scope_id=scope_id,
+                    project_source_snapshot_id=pss_id,
+                    project_id=project_id,
+                    classified_by_run_id=run_id,
+                    primary_evidence_type=EVIDENCE_TYPES[0],
+                    classified_at=now(),
+                )
+            )
+        # This is what run_chat_turn persists into answer_payload at answer time.
+        persisted_citations = _resolve_citation_sources(
+            engine,
+            [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
+            project_id=project_id,
+        )
+        assert persisted_citations[0]["appraisal_score"] == 4
+
+        # A NEWER appraisal row lands (a rerun on a new scope with a different
+        # rubric outcome — one (evidence_scope_id, pss) pair per row, so the
+        # rerun is a fresh scope).
+        newer_scope_id, newer_run_id = uuid.uuid4(), uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                evidence_scope.insert().values(
+                    evidence_scope_id=newer_scope_id,
+                    project_id=project_id,
+                    intent="rerun intent",
+                    context={},
+                    created_at=now(),
+                )
+            )
+            conn.execute(
+                runs.insert().values(
+                    run_id=newer_run_id,
+                    project_id=project_id,
+                    status="succeeded",
+                    started_at=now(),
+                )
+            )
+            conn.execute(
+                source_appraisal_result.insert().values(
+                    source_appraisal_result_id=uuid.uuid4(),
+                    evidence_scope_id=newer_scope_id,
+                    project_source_snapshot_id=pss_id,
+                    project_id=project_id,
+                    appraised_by_run_id=newer_run_id,
+                    quality_score=1,
+                    rubric_version="v2",
+                    appraised_at=now() + timedelta(minutes=5),
+                )
+            )
+
+        # Rendering the OLD turn's already-persisted citations still shows the
+        # OLD score's label, never the newer row's.
+        rendered = apply_appraisal_labels(persisted_citations)
+        assert rendered[0]["appraisal_label"] == "Strong"
     finally:
         with engine.begin() as conn:
             delete_project_data(conn, project_id)

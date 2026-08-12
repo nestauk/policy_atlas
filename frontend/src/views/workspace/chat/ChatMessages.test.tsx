@@ -235,6 +235,105 @@ describe("ChatMessages", () => {
     expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
+  // Delta-review Fix 1: a derived claim's span ends with its own literal
+  // `[n]` marker (chat_floor's sentence-grain coverage pass shapes them this
+  // way) — hovering that marker must not also open the enclosing claim
+  // span's Tooltip (Radix roots opening in the same pointer-move batch,
+  // empirically two stacked panels).
+  it("opens exactly one tooltip on a derived claim whose span ends in its own marker", async () => {
+    const spanText = "Costs fell sharply [1]";
+    renderChat([
+      turn({
+        answer: `${spanText} this year.`,
+        citations: [{ id: "chunk-1", n: 1, quote: "Costs fell sharply", source_title: "A breakfast study" }],
+        claims: [{ claim_id: "c1", text: spanText, span: [0, spanText.length], citation_ns: [1], derived: true }],
+      }),
+    ]);
+    const [marker] = screen.getAllByRole("button", { name: "[1]" });
+    marker.focus();
+    // Before the fix, the enclosing claim span opened its own Tooltip too
+    // (same content, in the single-citation case) — Radix renders each open
+    // Tooltip's content with role="tooltip", so a stacked-double regresses
+    // this to length 2.
+    expect(await screen.findAllByRole("tooltip")).toHaveLength(1);
+  });
+
+  // Delta-review Fix 2: an uncited claim (empty citation_ns, and no
+  // citation_ids/citations fallback either) is valid uncited reasoning — it
+  // must render as plain prose, never wearing the provenance affordance
+  // (span, CITATION_SPAN_CLASS, or a clickable provenance sheet with zero
+  // citation blocks).
+  it("renders an uncited claim as plain prose, not clickable (no provenance lie)", () => {
+    const spanText = "This seems likely overall";
+    renderChat([
+      turn({
+        answer: `${spanText} based on the pattern.`,
+        citations: [],
+        claims: [{ claim_id: "c1", text: spanText, span: [0, spanText.length], citation_ns: [] }],
+      }),
+    ]);
+    expect(screen.getByText(spanText, { exact: false })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: spanText })).not.toBeInTheDocument();
+  });
+
+  // Delta-review Fix 3: Enter/Space on a focused nested marker must open the
+  // citation sheet, not bubble to the enclosing claim span and open the claim
+  // sheet instead. The claim here cites TWO citations but its inline marker
+  // names only the first — a claim-keyed open (the bug: the keydown bubbles
+  // past the marker's stopPropagation-on-click-only guard) would show BOTH
+  // citations' provenance blocks; a correctly citation-keyed open shows only
+  // the one the marker names.
+  it("opens the citation-keyed sheet from a keyboard Enter on a nested marker, not the claim sheet", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    const withMarker = "Costs fell sharply [1]";
+    renderChat([
+      turn({
+        answer: `${withMarker} this year.`,
+        citations: [
+          { id: "chunk-1", n: 1, quote: "Costs fell sharply", source_title: "Source One" },
+          { id: "chunk-2", n: 2, quote: "", source_title: "Source Two" },
+        ],
+        claims: [{ claim_id: "c1", text: withMarker, span: [0, withMarker.length], citation_ns: [1, 2] }],
+      }),
+    ]);
+    const [inlineMarker] = screen.getAllByRole("button", { name: "[1]" });
+    inlineMarker.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(screen.getAllByRole("dialog", { name: "Where this comes from" })).toHaveLength(1);
+    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    expect(within(sheet).getByRole("button", { name: "Source One" })).toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: "Source Two" })).not.toBeInTheDocument();
+  });
+
+  // Delta-review Fix 4: markers must resolve by `citation.n`, matching every
+  // other lookup on this page, not by array position — a citations array
+  // whose `n` values don't line up with their index (e.g. one dropped
+  // upstream) must still resolve the right source.
+  it("resolves a marker's citation by its n field, not by array position", async () => {
+    mockGet.mockResolvedValueOnce({ data: { context: "context text", year: 2024 }, error: undefined });
+    renderChat([
+      turn({
+        answer: "Costs fell [2]",
+        // citations[0] carries n:2 — a positional lookup on marker "[2]"
+        // would read citations[2 - 1] = citations[1] (n:1, "Wrong One")
+        // instead of the citation actually numbered 2.
+        citations: [
+          { id: "c-two", n: 2, quote: "Costs fell", source_title: "Correct Two" },
+          { id: "c-one", n: 1, quote: "Other quote", source_title: "Wrong One" },
+        ],
+      }),
+    ]);
+    // The prose paragraph renders before the References footer, so the first
+    // "[2]" button is the inline marker under test, not the footer's row
+    // (which keys its own label off `citation.n` directly and would pass
+    // either way).
+    const [marker] = screen.getAllByRole("button", { name: "[2]" });
+    await userEvent.setup().click(marker);
+    const sheet = screen.getByRole("dialog", { name: "Where this comes from" });
+    expect(within(sheet).getByRole("button", { name: "Correct Two" })).toBeInTheDocument();
+    expect(within(sheet).queryByRole("button", { name: "Wrong One" })).not.toBeInTheDocument();
+  });
+
   it("does not annotate a cancelled turn's prose with claim spans — markers alone stay inert", () => {
     const spanText = "Costs fell sharply";
     renderChat([

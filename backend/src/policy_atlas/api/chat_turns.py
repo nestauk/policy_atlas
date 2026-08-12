@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
@@ -20,7 +20,11 @@ from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
 from policy_atlas.core.usage import usage_metadata
-from policy_atlas.evidence_base.extract.quote_verify import BasisText, QuoteMatcher, build_basis
+from policy_atlas.evidence_base.extract.quote_verify import (
+    BasisText,
+    build_basis,
+    locate_unique_span,
+)
 from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     SECTION_TURN_CAP,
     ToolExchange,
@@ -128,43 +132,68 @@ def _first_question_title(message: str) -> str:
     return normalized[: boundary if boundary > 0 else 80]
 
 
-def _latest_by_pss(rows: Iterable[Any], time_key: str) -> dict[uuid.UUID, Any]:
-    """Pick the latest row per ``project_source_snapshot_id``.
+def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Map each citation's persisted ``appraisal_score`` to a read-time label.
 
-    Mirrors ``repository._latest_row_by_id``'s effective-row discipline
-    (latest by timestamp wins) so the per-citation appraisal label agrees
-    with what the ARTEFACT read model would say for the same document.
+    ``evidence_base.assess.appraise`` pins labels as read-time copy, never
+    persisted (``SCORE_LABELS`` — "a stored label could drift from its
+    score"). A chat citation therefore persists the numeric
+    ``appraisal_score`` at answer time (like the judge verdicts, it is the
+    appraisal AT ANSWER TIME — a later re-appraisal does not rewrite an old
+    answer's chip) and this function derives ``appraisal_label`` from it
+    fresh on every read, at the router/read-model serialization boundary —
+    never baked into the durable ``answer_payload`` (task 029 delta-review).
+
+    Args:
+        citations: A turn's citation dicts, as persisted (or freshly
+            resolved). Mutated copies are returned; the input is untouched.
+
+    Returns:
+        The same citations with ``appraisal_label`` set from
+        ``appraisal_score`` (via ``SCORE_LABELS``) wherever a score is
+        present and known; ``appraisal_score`` itself is not re-exposed —
+        the frontend contract has only ever carried the label.
     """
-    latest: dict[uuid.UUID, Any] = {}
-    for row in rows:
-        key = cast(uuid.UUID, row.project_source_snapshot_id)
-        previous = latest.get(key)
-        if previous is None or getattr(row, time_key) > getattr(previous, time_key):
-            latest[key] = row
-    return latest
+    from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
+
+    labelled: list[dict[str, Any]] = []
+    for citation in citations:
+        if not isinstance(citation, dict):
+            labelled.append(citation)
+            continue
+        score = citation.get("appraisal_score")
+        if score is None:
+            labelled.append(citation)
+            continue
+        merged = dict(citation)
+        merged.pop("appraisal_score", None)
+        label = SCORE_LABELS.get(score)
+        if label is not None:
+            merged["appraisal_label"] = label
+        labelled.append(merged)
+    return labelled
 
 
 def _snapped_chunk_quote(basis: BasisText, quote: str) -> tuple[str, bool] | None:
     """Locate ``quote`` uniquely in a chunk's ``quote_verify`` basis.
 
-    Reuses ``quote_verify``'s ``build_basis``/``QuoteMatcher`` (qv_v1)
-    machinery instead of a third parallel matcher. Returns the verbatim raw
-    source text of the located span and whether it differs from the model's
-    emitted ``quote`` (i.e. only a normalised, not exact, match). An absent
-    or ambiguous (2+ normalised occurrences) quote returns ``None`` — the
-    read-time locator (``repository.chunk_quote_context_out``) and its own
-    fallback still handle those honestly at hover/click time.
+    Reuses ``quote_verify.locate_unique_span`` (qv_v1) — the canonical
+    overlap-aware, word-boundary-guarded, case-fold-round-tripped locator —
+    instead of a third parallel matcher. Returns the verbatim raw source text
+    of the located span and whether it differs from the model's emitted
+    ``quote`` (i.e. only a normalised, not exact, match). An absent or
+    ambiguous quote returns ``None`` — the read-time locator
+    (``repository.chunk_quote_context_out``) and its own fallback still
+    handle those honestly at hover/click time.
     """
     if not quote:
         return None
-    normalised_quote = build_basis([(None, quote)]).normalised
-    if not normalised_quote or basis.normalised.count(normalised_quote) != 1:
+    span = locate_unique_span(basis, quote)
+    if span is None:
         return None
-    match = QuoteMatcher(basis).find(quote)
-    if match.status == "failed" or not match.spans:
-        return None
-    span = match.spans[0]
-    return basis.raw_text[span.start : span.end], match.status == "normalised"
+    start, end = span
+    raw_text = basis.raw_text[start:end]
+    return raw_text, raw_text != quote
 
 
 def _resolve_citation_sources(
@@ -184,25 +213,29 @@ def _resolve_citation_sources(
     document onto this project's citation (see
     ``repository.chunk_quote_context_out`` for the same chunk-side filter).
 
-    Also resolves the cited document's ``appraisal_label`` + ``evidence_type``
+    Also resolves the cited document's ``appraisal_score`` + ``evidence_type``
     (mirroring ``repository.artefact_out``'s CitationOut resolution exactly —
     latest appraisal/classification row per project_source_snapshot_id,
-    project-scoped, no narrower join) and, at persist time, snaps a chunk
-    citation's model-emitted ``quote`` to the verbatim source text when
-    ``quote_verify`` locates it uniquely in that chunk's content (marking
-    ``quote_snapped: true`` only when the text actually changed).
+    project-scoped, no narrower join). The score, not the label, is what
+    persists here (``evidence_base.assess.appraise``'s read-time-copy pin —
+    ``apply_appraisal_labels`` derives ``appraisal_label`` fresh on every read
+    instead). At persist time this also snaps a chunk citation's
+    model-emitted ``quote`` to the verbatim source text when ``quote_verify``
+    locates it uniquely in that chunk's content (marking ``quote_snapped:
+    true`` only when the text actually changed).
     """
+    from policy_atlas.api.readmodels.repository import latest_row_by_id
     from policy_atlas.core.schema import chunk as chunk_table
     from policy_atlas.core.schema import (
         implementation_context_finding,
         intervention_outcome_finding,
         project_source_snapshot,
+        pss_owns_snapshot,
         source_appraisal_result,
         source_classification_result,
         source_extraction_record,
         source_snapshot,
     )
-    from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 
     def _uuids(kind: str) -> set[uuid.UUID]:
         values: set[uuid.UUID] = set()
@@ -233,14 +266,7 @@ def _resolve_citation_sources(
                 .select_from(
                     chunk_table.join(
                         project_source_snapshot,
-                        (
-                            project_source_snapshot.c.source_snapshot_id
-                            == chunk_table.c.source_snapshot_id
-                        )
-                        | (
-                            project_source_snapshot.c.full_text_snapshot_id
-                            == chunk_table.c.source_snapshot_id
-                        ),
+                        pss_owns_snapshot(chunk_table.c.source_snapshot_id),
                     ).join(
                         source_snapshot,
                         source_snapshot.c.source_snapshot_id
@@ -291,28 +317,45 @@ def _resolve_citation_sources(
                         "source_title": meta.get("title") or row.source_locator,
                         "source_id": str(row.project_source_snapshot_id),
                     }
-        if chunk_ids or finding_ids:
+        resolved_pss_ids = {uuid.UUID(fact["source_id"]) for fact in facts.values()}
+        if resolved_pss_ids:
             # Same join/effective-row rules as repository.artefact_out's
-            # CitationOut resolution: project-scoped only (no narrower join),
-            # latest row per project_source_snapshot_id wins.
-            appraisal = _latest_by_pss(
+            # CitationOut resolution: project-scoped, latest row per
+            # project_source_snapshot_id wins. Narrowed to the pss ids already
+            # resolved above (task 029 delta-review) — cost proportional to
+            # citations, not to the whole project's appraisal/classification set.
+            appraisal = latest_row_by_id(
                 conn.execute(
                     select(
                         source_appraisal_result.c.project_source_snapshot_id,
                         source_appraisal_result.c.quality_score,
                         source_appraisal_result.c.appraised_at,
-                    ).where(source_appraisal_result.c.project_id == project_id)
+                    )
+                    .where(source_appraisal_result.c.project_id == project_id)
+                    .where(
+                        source_appraisal_result.c.project_source_snapshot_id.in_(
+                            resolved_pss_ids
+                        )
+                    )
                 ).all(),
+                "project_source_snapshot_id",
                 "appraised_at",
             )
-            classification = _latest_by_pss(
+            classification = latest_row_by_id(
                 conn.execute(
                     select(
                         source_classification_result.c.project_source_snapshot_id,
                         source_classification_result.c.primary_evidence_type,
                         source_classification_result.c.classified_at,
-                    ).where(source_classification_result.c.project_id == project_id)
+                    )
+                    .where(source_classification_result.c.project_id == project_id)
+                    .where(
+                        source_classification_result.c.project_source_snapshot_id.in_(
+                            resolved_pss_ids
+                        )
+                    )
                 ).all(),
+                "project_source_snapshot_id",
                 "classified_at",
             )
 
@@ -328,9 +371,10 @@ def _resolve_citation_sources(
             pss_id = uuid.UUID(source_id)
             appraisal_row = appraisal.get(pss_id)
             if appraisal_row is not None:
-                label = SCORE_LABELS.get(appraisal_row.quality_score)
-                if label is not None:
-                    merged["appraisal_label"] = label
+                # The score, not the label, persists (evidence_base.assess.appraise's
+                # read-time-copy pin) — apply_appraisal_labels derives the label
+                # fresh on every read from this score.
+                merged["appraisal_score"] = appraisal_row.quality_score
             classification_row = classification.get(pss_id)
             if classification_row is not None:
                 merged["evidence_type"] = classification_row.primary_evidence_type

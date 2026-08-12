@@ -3,11 +3,14 @@
 No deferred columns (no same_content_as or lineage key).
 """
 
+import uuid
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
     Column,
+    ColumnElement,
     DateTime,
     Float,
     ForeignKey,
@@ -258,6 +261,33 @@ project_source_snapshot = Table(
         name="ck_pss_full_text_error_presence",
     ),
 )
+
+
+def pss_owns_snapshot(snapshot_id: ColumnElement[uuid.UUID] | uuid.UUID) -> ColumnElement[bool]:
+    """Return the corpus-ownership predicate for one candidate snapshot id.
+
+    True when ``snapshot_id`` is either the envelope (``source_snapshot_id``)
+    or the full-text (``full_text_snapshot_id``) snapshot linked by a
+    ``project_source_snapshot`` row — the "does this chunk/snapshot belong to
+    this project" predicate that was hand-written at five call sites across
+    the API layer (task 029 delta-review). ``snapshot_id`` may be a column
+    expression (e.g. ``chunk.c.source_snapshot_id``) or a bound scalar — both
+    compare correctly against ``project_source_snapshot``'s two snapshot
+    columns. Callers still add their own ``project_id`` scoping; this returns
+    only the ownership half of the predicate, suitable for a ``.join()``
+    on-clause or a ``.where()``.
+
+    Args:
+        snapshot_id: The candidate snapshot id/column to test ownership for.
+
+    Returns:
+        A SQLAlchemy boolean clause: ``pss.source_snapshot_id == snapshot_id
+        OR pss.full_text_snapshot_id == snapshot_id``.
+    """
+    return (project_source_snapshot.c.source_snapshot_id == snapshot_id) | (
+        project_source_snapshot.c.full_text_snapshot_id == snapshot_id
+    )
+
 
 chunk = Table(
     "chunk",

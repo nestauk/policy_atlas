@@ -317,6 +317,56 @@ def test_turn_reads_are_ascending_paginated_and_deep_links_hide_archived(
         assert client.get(f"/api/v1/conversations/{archived_id}", headers=owner).status_code == 404
 
 
+def test_turn_read_derives_appraisal_label_from_persisted_score(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The /turns read applies chat_turns.apply_appraisal_labels to persisted citations.
+
+    ``_resolve_citation_sources`` persists ``appraisal_score`` (never a
+    label — evidence_base.assess.appraise's read-time-copy pin); the router's
+    ``_chat_turn_out`` projection is what derives ``appraisal_label`` at read
+    time, from that already-persisted score (task 029 delta-review, Fix 2).
+    """
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = uuid.UUID(create_project(client, owner))
+        chat_id = _conversation(engine, project_id=project_id)
+        turn_id = uuid.uuid4()
+        with engine.begin() as conn:
+            conn.execute(
+                chat_turn.insert().values(
+                    id=turn_id,
+                    conversation_id=chat_id,
+                    turn_index=0,
+                    client_turn_id=uuid.uuid4(),
+                    user_message="What does the evidence say?",
+                    answer="The evidence supports the intervention.",
+                    answer_payload={
+                        "claims": [],
+                        "citations": [
+                            {
+                                "n": 1,
+                                "id": str(uuid.uuid4()),
+                                "kind": "chunk",
+                                "appraisal_score": 4,
+                            }
+                        ],
+                        "warning_not_evidence_checked": False,
+                        "handoff": None,
+                        "stopped_before_evidence_check": False,
+                    },
+                    capability_run_id=None,
+                    status="completed",
+                    created_at=now(),
+                    completed_at=now(),
+                )
+            )
+        turns = client.get(f"/api/v1/conversations/{chat_id}/turns", headers=owner)
+        assert turns.status_code == 200
+        citation = turns.json()["data"][0]["citations"][0]
+        assert citation["appraisal_label"] == "Strong"
+        assert "appraisal_score" not in citation
+
+
 def test_conversation_routes_keep_cross_owner_and_unknown_resources_indistinguishable(
     engine: Engine, tmp_path: Path
 ) -> None:

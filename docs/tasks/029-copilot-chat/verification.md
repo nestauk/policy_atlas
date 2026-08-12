@@ -678,6 +678,76 @@ Evidence: backend 27/27 + 13/13 targeted, tests/api 214 + tests/runtime 506
 serial-green, ruff/mypy clean; frontend 238 tests, e2e 7/7 incl. the
 appraisal-chip assertion; full `make verify` gate row appended below.
 
+## Delta review (2026-08-12) — the post-stack folds get their own two-lane pass
+
+The rev 3.5–3.6 folds accumulated ~2K inserted lines after the review stack's
+adjudication (`b4a405d..HEAD`), lead-specified with the same person
+adjudicating — so a scoped heterogeneous delta review ran: Codex adversarial
+(anchor on the lead-specified backend surfaces; probe-verified findings) +
+`/code-review medium` (8 angles, adversarially verified) over the delta diff
+only. Structural caveat recorded: the delta's adjudicator is the delta's
+author-orchestrator; the human deep review at step 9 is the independent
+backstop, with the quote-snap and appraisal commits flagged for extra
+attention.
+
+**Adopted + fixed (all findings; none declined):**
+
+- *Codex, probe-verified*: quote-snap could store EXPANDED text at case-fold
+  boundaries (ligature `ﬃ` matching `ff` persists `ﬃ` → renormalizes to
+  `ffi`) · overlap-blind uniqueness + in-word matches (`cat` inside
+  `concatenate` snapped) → both closed by the new canonical
+  `quote_verify.locate_unique_span` (overlap-aware scan, word-boundary
+  flanks, raw-span round-trip guard) that BOTH the persist-time snapper and
+  the read-time locator now call — which also discharges `/code-review`'s
+  finding that the offset math + uniqueness rule were duplicated between
+  them · the locator docstring still promised the NFC tolerance the re-base
+  dropped → docstring fixed and the envelope pinned by a composed/decomposed
+  honest-absence test.
+- *Codex MAJOR (honesty)*: a valid UNCITED claim (`citation_ns: []`) still
+  wore the provenance affordance and opened a sheet asserting "every claim
+  links to the exact passage" over zero citations → uncited claims render
+  as plain prose (the reader's own unmarked-types treatment).
+- *Codex MAJOR (records discipline)*: persisting `appraisal_label` violated
+  appraise.py's documented "labels are read-time copy, never persisted"
+  rule and would go stale ambiguously → the SCORE persists (point-in-time
+  by design, like the judge verdicts — a re-appraisal never rewrites an old
+  answer's chip; pinned by test) and the label maps at read time; the
+  per-turn resolution queries also stopped scanning the whole project's
+  appraisal history (`/code-review`: scoped to the cited pss ids) and the
+  copy-pasted latest-row helper was replaced by the repository's own.
+- */code-review, empirically reproduced*: hovering a marker nested in a
+  claim span opened TWO stacked tooltips (the normal shape for every
+  derived claim) → claim segments containing markers no longer double-wrap.
+- */code-review (the earned one)*: the corpus-ownership OR-join
+  (`source_snapshot_id | full_text_snapshot_id`) existed as FIVE
+  hand-written copies — and this PR's own enrichment regression was one
+  copy missing an arm → one shared join helper, every site swept onto it.
+- *Small*: nested-marker keyboard path opened the wrong sheet (stopPropagation
+  on keydown) · positional `citations[n-1]` lookup hardened to key on
+  `citation.n` · the duplicated Chats SVG became one shared `ChatsIcon`.
+
+**Refuted by the verify pass (recorded per lane-economy practice):** the
+nondeterministic chunk→source attribution candidate (blocked by
+`uq_project_source_snapshot`), an unreachable empty-label chip, and a set of
+docstring nits contradicting the file's established style.
+
+**Fix evidence:** frontend — every fix carries a revert-proven regression
+test (each new test verified to fail against the unfixed code); 242 unit
+tests + e2e 7/7. Backend — `locate_unique_span` landed purely additive in
+quote_verify (existing functions byte-unchanged; 12 new probe tests incl.
+the ligature and NFC-envelope pins); the appraisal read-time mapping
+required a disclosed minimal touch of the router's turn serializers; the
+join-helper sweep covered the 3 genuine SQL duplicates with "stays" comments
+on the 2 sites whose shape genuinely differs. One suite observation
+recorded honestly: the ad-hoc three-directory pytest combination
+(`tests/api tests/runtime tests/evidence_base`) shows 7 order-dependent
+failures in UNTOUCHED modules (characterise/ingest log-capture fixtures) —
+reproduced byte-identically on a clean HEAD worktree, so pre-existing
+flakiness, not a regression; the authoritative full `make verify` gate is
+the row below.
+
+_Gate row for the delta fixes appended to the table below._
+
 ## ⚠️ Gate-integrity incident + correction (2026-08-11)
 
 **Two real test failures were hidden by the build conversation's own gate

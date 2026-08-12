@@ -130,9 +130,18 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlan
  *  invents a merge. A cancelled turn carries no annotation at all: markers
  *  stay inert (disabled, no tooltip), matching today. */
 function AnnotatedChatProse({ text, citations, claims, turn, disabled, onCitation, onClaim }: { text: string; citations: ChatCitation[]; claims: ChatClaim[]; turn: ChatConversationRow; disabled: boolean; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void }) {
-  const segments = useMemo(() => spanSegments(text, disabled ? [] : claims), [text, claims, disabled]);
+  // Delta-review Fix 2: an uncited claim (no citation_ns/citation_ids/
+  // citations at all — valid uncited reasoning) carries no provenance to
+  // show, so it must not wear the provenance affordance either. Filtering it
+  // out of spanSegments' input renders it as ordinary plain-segment prose —
+  // the same honest-absence treatment the report reader gives its own
+  // UNMARKED_TYPES reasoning claims.
+  const segments = useMemo(() => {
+    const citedClaims = disabled ? [] : claims.filter(claimHasCitations);
+    return spanSegments(text, citedClaims);
+  }, [text, claims, disabled]);
   return <>{segments.map((segment, index) => {
-    const marked = markedTextParts(segment.text, citations, turn, disabled, onCitation);
+    const { nodes: marked, hasMarker } = markedTextParts(segment.text, citations, turn, disabled, onCitation);
     if (segment.kind === "plain") return <Fragment key={index}>{marked}</Fragment>;
     const claimCitations = citationsForClaim(citations, segment.claim);
     const tip = claimCitations.length > 0 ? citationTooltipBody(turn, claimCitations[0]) : null;
@@ -152,24 +161,77 @@ function AnnotatedChatProse({ text, citations, claims, turn, disabled, onCitatio
         {marked}
       </span>
     );
-    return tip !== null ? <Tooltip key={index} content={tip}>{span}</Tooltip> : <Fragment key={index}>{span}</Fragment>;
+    // Delta-review Fix 1: when the segment's own rendered parts include a
+    // resolved `[n]` marker, that marker carries its own hover preview
+    // already — wrapping the enclosing claim span in a second Tooltip stacks
+    // two Radix roots open on the same pointer-move batch (empirically two
+    // panels, byte-identical in the single-citation case). Only claim spans
+    // with NO marker inside them still show the span-level preview.
+    return !hasMarker && tip !== null ? <Tooltip key={index} content={tip}>{span}</Tooltip> : <Fragment key={index}>{span}</Fragment>;
   })}</>;
+}
+
+/** A claim carries provenance worth marking iff it names at least one
+ *  citation, by any of the wire's shapes (029 Fix C / 030 fold: the live
+ *  shape is `citation_ns`; `citation_ids`/`citations` are the older/
+ *  alternate id shapes `claimsCiting`/`citationsForClaim` also tolerate). */
+function claimHasCitations(claim: ChatClaim): boolean {
+  return (
+    (Array.isArray(claim.citation_ns) && claim.citation_ns.length > 0) ||
+    (Array.isArray(claim.citation_ids) && claim.citation_ids.length > 0) ||
+    (Array.isArray(claim.citations) && claim.citations.length > 0)
+  );
 }
 
 /** Split one prose segment on literal `[n]` markers into the small marker
  *  button — the report's boxed-chip class (030 parity fold; a muted
  *  `disabled:` variant for a cancelled turn) — + title/quote/verdict preview
  *  Tooltip (029 Fix C, 030 parity fold) — unchanged whether the segment is
- *  plain text or the inside of a claim span. */
-function markedTextParts(text: string, citations: ChatCitation[], turn: ChatConversationRow, disabled: boolean, onCitation: (citation: ChatCitation) => void) {
+ *  plain text or the inside of a claim span. Also reports whether it rendered
+ *  at least one resolved marker (delta-review Fix 1: the caller uses that to
+ *  decide whether the enclosing claim span still needs its own Tooltip). */
+function markedTextParts(text: string, citations: ChatCitation[], turn: ChatConversationRow, disabled: boolean, onCitation: (citation: ChatCitation) => void): { nodes: React.ReactNode[]; hasMarker: boolean } {
   const parts = text.split(/(\[\d+\])/g);
-  return parts.map((part, index) => {
+  let hasMarker = false;
+  const nodes = parts.map((part, index) => {
     const match = /^\[(\d+)\]$/.exec(part);
-    const citation = match === null ? null : citations[Number(match[1]) - 1];
-    if (citation === null || citation === undefined) return <span key={index}>{scrub(part)}</span>;
-    const marker = <button type="button" disabled={disabled} onClick={(event) => { event.stopPropagation(); onCitation(citation); }} className={CITATION_MARKER_CLASS}>{part}</button>;
+    const citation = match === null ? null : resolveCitation(citations, Number(match[1]));
+    if (citation === null) return <span key={index}>{scrub(part)}</span>;
+    hasMarker = true;
+    const marker = (
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={(event) => { event.stopPropagation(); onCitation(citation); }}
+        // Delta-review Fix 3: the click handler's stopPropagation only covers
+        // the pointer path — a keyboard Enter/Space on a focused nested
+        // marker fires a `keydown` that still bubbles to the enclosing claim
+        // span's own `role=button` handler, opening the CLAIM sheet instead
+        // of this marker's citation sheet. Stop it here too; the button's own
+        // native Enter/Space activation still fires `onClick` above.
+        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") event.stopPropagation(); }}
+        className={CITATION_MARKER_CLASS}
+      >
+        {part}
+      </button>
+    );
     return disabled ? <span key={index}>{marker}</span> : <Tooltip key={index} content={citationTooltipBody(turn, citation)}>{marker}</Tooltip>;
   });
+  return { nodes, hasMarker };
+}
+
+/** Delta-review Fix 4: resolve a literal `[n]` marker's citation the same way
+ *  every other lookup on this page keys citations — by `citation.n` — rather
+ *  than the array's position. Falls back to the positional read only when no
+ *  citation carries a matching `n` (an older/looser payload shape), so a
+ *  reordered or gapped `citations` array (e.g. one dropped as
+ *  invalid/malformed upstream) still resolves the right source instead of a
+ *  neighbour's. */
+function resolveCitation(citations: ChatCitation[], n: number): ChatCitation | null {
+  const byNumber = citations.find((citation) => citation.n === n);
+  if (byNumber !== undefined) return byNumber;
+  const positional = citations[n - 1];
+  return positional !== undefined ? positional : null;
 }
 
 // 029 Fix D: collapsed by default — no dedicated Collapsible/Accordion
