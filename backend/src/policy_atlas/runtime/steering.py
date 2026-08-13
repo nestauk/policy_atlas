@@ -1949,7 +1949,7 @@ def _validate_directive_delta(
     if component == "acquire":
         _require_keys(component, delta, {"search"})
         try:
-            _, raw_filters, _, _ = parse_search_directive({"search": delta["search"]})
+            _, raw_filters, _ = parse_search_directive({"search": delta["search"]})
             validate_scope_filters(raw_filters, backend_names=_backend_names(backend_scope))
         except SearchDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc

@@ -57,8 +57,14 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     // "Mapping the landscape"/characterise: the orchestrator may omit them.)
     // The timeline entry persists after the component completes, so this
     // assertion has no race against the stub's near-instant execution.
+    // `.first()` because depth-graded search reruns acquire once per round and
+    // the timeline renders a row per stage event — stub mode acquires nothing,
+    // so it always runs to the round cap and emits 2+ identical rows. Asserting
+    // without `.first()` is a strict-mode violation whose element count tracks
+    // the round count (build finding, 2026-08-10). Presence is all this smoke
+    // claims; how repeated stages should read is a UX question, not a test one.
     await expect(
-      page.getByRole("list", { name: "Stage timeline" }).getByText("Searching sources"),
+      page.getByRole("list", { name: "Stage timeline" }).getByText("Searching sources").first(),
     ).toBeVisible({ timeout: 30_000 });
   });
 });

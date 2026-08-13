@@ -171,7 +171,14 @@ class _TransportMixin:
     def _default_fetch(self, url: str, params: dict[str, str]) -> Any:
         if self._client is None:
             raise SearchTransportError(status_code=None, host=_host_from_url(url))
-        response = self._client.get(url, params=params)
+        # Merge params into the URL's own query, never hand them to httpx as
+        # `params=`: httpx REPLACES an existing query string rather than
+        # merging, so the validated Overton `next_page_url` — a fully-formed
+        # URL carrying its own api_key, squery and page — would be stripped of
+        # all three and sent unauthenticated. `copy_merge_params` is
+        # equivalent for a bare URL and keeps the credential for a
+        # query-bearing one, whether `params` is empty or not.
+        response = self._client.get(httpx.URL(url).copy_merge_params(params))
         response.raise_for_status()
         return response.json()
 

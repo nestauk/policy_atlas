@@ -36,7 +36,13 @@ from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, runs
 from policy_atlas.runtime.orchestration_plan import compose
 from policy_atlas.runtime.runner import NullIO, RunPlanOutcome, run_plan
-from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_project
+from tests.runtime.test_runner import (
+    _base_plan,
+    _cleanup,
+    _runner_backends,
+    _seed_project,
+    _with_search_rounds,
+)
 
 
 def _run_walk(engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID) -> RunPlanOutcome:
@@ -73,9 +79,9 @@ def test_two_concurrent_walks_on_different_projects_both_complete(engine: Engine
         # --- both complete -------------------------------------------------
         assert outcome_a.status == "succeeded"
         assert outcome_b.status == "succeeded"
-        expected_components = compose(_base_plan()).components
-        assert [step.component for step in outcome_a.steps] == expected_components
-        assert [step.component for step in outcome_b.steps] == expected_components
+        expected_steps = _with_search_rounds(compose(_base_plan()).components)
+        assert [step.component for step in outcome_a.steps] == expected_steps
+        assert [step.component for step in outcome_b.steps] == expected_steps
         assert all(step.status == "succeeded" for step in outcome_a.steps)
         assert all(step.status == "succeeded" for step in outcome_b.steps)
 

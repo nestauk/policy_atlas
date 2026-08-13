@@ -183,7 +183,9 @@ weights/boosts.**
   return after tag consolidation + hybrid matching over the open layer.
 - **D5 `search.target`** — bounded override of
   `TARGET_CONFIDENT_RELEVANT` ("keep going until ~40 relevant"), clamped
-  (e.g. 5–60), deep/standard loop only. **IN.**
+  (e.g. 5–60), deep/standard loop only. **IN.** *(REMOVED task 029: the
+  constant and the directive died together — the round cap is the search
+  budget. Rebuild at the runner's round gate if ever wanted.)*
 - **D6 `selection.strata_scope`** *(owner review, 2026-07-16)* — scope or
   exclude strata/themes from selection ("only these themes go forward"):
   the post-characterise filtering intent `priority_strata` (boost-only)

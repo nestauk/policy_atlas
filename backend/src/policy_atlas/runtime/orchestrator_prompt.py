@@ -559,8 +559,8 @@ express.
   tier map), extraction relevance emphasis
   (`extraction.relevance_emphasis` — emphasis sentences consumed by a
   sibling annotator, never by extraction itself).
-- Output shape — how much, which strata, which sections: `search.target`
-  (integer 5–60), `selection.budget`, `selection.strata_scope`
+- Output shape — how much, which strata, which sections:
+  `selection.budget`, `selection.strata_scope`
   ({"only": [...]} or {"exclude": [...]}), `selection.exclude_ids`,
   `selection.must_include_ids`, `extraction.profiles` (["iof"] or
   ["iof","icf"]), `extraction.refresh` ("abstract_only"|"failed"|"all"),

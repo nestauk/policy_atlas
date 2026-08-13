@@ -573,6 +573,69 @@ def test_next_page_url_valid_followed_verbatim(monkeypatch: pytest.MonkeyPatch) 
     assert calls[1][1] == {}
 
 
+def test_next_page_url_query_survives_real_httpx_url_building(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The next-page follow must reach the wire with its query string intact.
+
+    Regression guard for a live-only 302: every other test in this module
+    injects a ``fetch`` double that keys off ``url`` and ignores ``params``,
+    so none of them exercise httpx's URL building — where handing ``params`` to
+    ``.get()`` REPLACES (blanks) a URL's existing query instead of merging into
+    it. That stripped the api_key, squery and page off the validated
+    ``next_page_url``, and Overton redirected the resulting bare,
+    unauthenticated request. This test drives the real transport so the merge
+    behaviour is covered.
+
+    The non-empty case is asserted too: guarding only the empty-dict case (the
+    original ``params or None`` fix) left the same hazard live for any future
+    caller that passes a param alongside a query-bearing URL.
+    """
+    _sleep_recorder(monkeypatch)
+    next_url = "https://app.overton.io/documents.php?page=2&api_key=KEY&squery=housing"
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        if len(seen) == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [_overton_stub_record("p1", "UK")],
+                    "next_page_url": next_url,
+                },
+            )
+        return httpx.Response(200, json={"results": [_overton_stub_record("p2", "UK")]})
+
+    backend = OvertonLiveBackend("KEY")
+    assert backend._client is not None
+    backend._client.close()
+    # Real httpx client + client-side transport: URL building is genuine, no sockets.
+    backend._client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    try:
+        records = backend.search("housing", max_results=100)
+
+        assert [record["policy_document_id"] for record in records] == ["p1", "p2"]
+        assert len(seen) == 2
+        followed = seen[1]
+        assert followed.params.get("page") == "2"
+        assert followed.params.get("api_key") == "KEY"
+        assert followed.params.get("squery") == "housing"
+
+        # A non-empty params dict must MERGE through the real fetch path, not
+        # blank the URL's own query: the credential has to survive alongside the
+        # added param. Guarding only the empty case left this broken.
+        backend._default_fetch(next_url, {"pp": "50"})
+        assert len(seen) == 3
+        with_param = seen[2]
+        assert with_param.params.get("api_key") == "KEY"
+        assert with_param.params.get("squery") == "housing"
+        assert with_param.params.get("pp") == "50"
+    finally:
+        backend._client.close()
+
+
 # --- OA_SELECT superset ---
 
 

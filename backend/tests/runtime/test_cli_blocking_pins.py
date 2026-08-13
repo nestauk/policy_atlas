@@ -151,7 +151,11 @@ def test_cli_pause_continue_completes_succeeded_no_paused_status(engine: Engine)
                 "1",  # pick suggestion 1
                 "approve",  # plan review
                 # Continue at every lattice pause a moderate deep run may
-                # present (P1/P2/P3/P4); extra unused continues are harmless.
+                # present (P1 fires per search round — two rounds on
+                # zero-yield stubs, task 029 — plus P2/P3/P4); extra unused
+                # continues are harmless.
+                "1",
+                "1",
                 "1",
                 "1",
                 "1",

@@ -43,10 +43,21 @@ mockup + research inputs: `docs/tasks/029-copilot-chat/`. API surface:
 `docs/specs/system/web-api.md` § Conversations.
 
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
-`c501022`); system **live** at `v3.policyatlas.uk`. Known operational
-state: staging's OpenAI quota exhausted 2026-07-28 (runs fail honest-429
-until billing tops up). The eval slice (former 027 draft) stays
-deferred — contract draft at unpushed `a5c9708`.
+`c501022`); system **live** at `v3.policyatlas.uk`.
+
+Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
+`028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
+caps per backend per round; standard/deep wall clocks removed — was
+`028-…`) and `030-multi-round-search` (rapid's clock removed, the
+runner-orchestrated round loop wired — was `029-…`). The code landed on
+branch `37-hotfix-remove-quota`. **Numbering collision to settle:** `029`
+and ADR `0029` are also the copilot-chat slice's on `dev` — the
+search-volume docs need renumbering (`031`/`032`) or folding into the
+hotfix, no ADRs written for them yet.
+
+Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
+fail honest-429 until billing tops up). The eval slice (former 027 draft)
+stays deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist
