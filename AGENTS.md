@@ -22,33 +22,42 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `028-ux-refinement` **design step 1** (2026-08-03,
-branch `task/028-ux-refinement`, stacked on `task/027-frontend-uplift`):
-interview-driven UX refinement — four internal policy-team interviews on
-the 027 build (type scale + copy diet, expandable composer, sequential
-plan-building fork, artefact contents-sidebar + progressive disclosure,
-key-findings bullets fork, sortable/theme-filterable sources, naming
-pass, tab-IA fork). Contract:
-`docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
-`docs/tasks/028-ux-refinement/design-inputs.md`.
+Implementation — task `029-copilot-chat` **BUILT + REVIEW STACK COMPLETE
+→ PR open for human review (step 9)** (build 2026-08-10→11, phases A–H +
+owner live-check fixes + contract rev 3.4 side panel; review stack
+2026-08-11 — five lanes, findings adjudicated in the task's
+verification.md § Review findings, fixes landed on the branch; two
+contract-vs-build divergences escalated to the owner in the PR): co-pilot
+chat — the unified conversation model. A project holds many conversations,
+Claude-Projects-style: follow-up **chats** (read-only, project-scoped,
+answering across artefacts; streamed NDJSON turns with claim-grained
+citations, deterministic floors + async judge enrichment; tool scope
+`search_chunks` · `lookup` · `query_findings`, no `search`) and
+**planning conversations** (one per plan lineage, closing with its run's
+terminal transaction — supersedes 027's rolling thread; row-grain audit
+chain conversation → plan → run → artefact). Tier 4 (legacy backfill
+migration on live data). Contract rev 3.4 (approved; 3.4 = the owner's
+live-check side-panel amendment) · plan rev 2.2
+(approved, executor marks, phases A–H) · ADR 0029 (Accepted) ·
+mockup + research inputs: `docs/tasks/029-copilot-chat/`. API surface:
+`docs/specs/system/web-api.md` § Conversations.
 
-Tasks `026-infra-deployment` (PR #33, Tier 4 — system **live** at
-`v3.policyatlas.uk`), `027-frontend-uplift` (PR #44, Tier 3 — review
-stack adjudicated 2026-07-30, 32 fixes re-verified) and
-`028-ux-refinement` (PR #45) are **merged to `dev`**.
+Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
+`c501022`); system **live** at `v3.policyatlas.uk`.
 
-Search-volume work carries the next two numbers, renumbered 2026-08-06
-when `028` was taken by the UX slice on `dev`: `029-search-volume-cap`
-(record caps per backend per round; standard/deep wall clocks removed —
-was `028-…`) and `030-multi-round-search` (rapid's clock removed, the
-runner-orchestrated round loop wired — was `029-…`). Both are plan-only
-docs; the code landed on branch `37-hotfix-remove-quota`. ADR numbers
-follow: `0028` is the UX slice's, so search-volume work starts at `0029`.
+Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
+`028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
+caps per backend per round; standard/deep wall clocks removed — was
+`028-…`) and `030-multi-round-search` (rapid's clock removed, the
+runner-orchestrated round loop wired — was `029-…`). The code landed on
+branch `37-hotfix-remove-quota`. **Numbering collision to settle:** `029`
+and ADR `0029` are also the copilot-chat slice's on `dev` — the
+search-volume docs need renumbering (`031`/`032`) or folding into the
+hotfix, no ADRs written for them yet.
 
-Known operational state: staging's OpenAI quota exhausted
-2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
-(former 027 draft) stays deferred — contract draft at unpushed
-`a5c9708`.
+Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
+fail honest-429 until billing tops up). The eval slice (former 027 draft)
+stays deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist

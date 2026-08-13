@@ -1,0 +1,107 @@
+import { createElement, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { AuthContext } from "../auth/AuthContext";
+import type { AuthApi } from "../auth/types";
+import { useChatTurns } from "./queries";
+
+const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+
+function makeAuth(): AuthApi {
+  return {
+    getAccessToken: vi.fn(async () => "token-a"),
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    onUnauthenticated: vi.fn(),
+    user: { sub: "user-1" },
+    status: "authenticated",
+  };
+}
+
+function wrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(
+      AuthContext.Provider,
+      { value: makeAuth() },
+      createElement(QueryClientProvider, { client: queryClient }, children),
+    );
+  };
+}
+
+function chatTurn(index: number) {
+  return {
+    id: `t${index}`,
+    conversation_id: conversationId,
+    turn_index: index,
+    client_turn_id: `ct${index}`,
+    user_message: "q",
+    answer: "a",
+    status: "completed",
+    created_at: "2026-08-11T10:00:00Z",
+    completed_at: "2026-08-11T10:00:02Z",
+    claims: [],
+    citations: [],
+    enrichment: null,
+    warning_not_evidence_checked: false,
+    handoff: null,
+    stopped_before_evidence_check: false,
+  };
+}
+
+beforeEach(() => {
+  // Node's fetch (undici) rejects relative URLs; the app's same-origin ""
+  // base is a browser affordance — an absolute base keeps stubs intercepting.
+  vi.stubEnv("VITE_API_BASE_URL", "http://localhost:3000");
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+describe("useChatTurns", () => {
+  it("walks every page and accumulates turns past the server's page cap (fix: chats >50 turns silently lost the newest ones)", async () => {
+    const totalItems = 210;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      // `input` may be a `Request` (not a bare string/URL) — `String(request)`
+      // is `"[object Request]"`, not its URL, so read `.url` explicitly.
+      const url = new URL(input instanceof Request ? input.url : String(input), "http://localhost:3000");
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const pageSize = Number(url.searchParams.get("page_size") ?? "200");
+      const start = (page - 1) * pageSize;
+      const data = Array.from(
+        { length: Math.max(0, Math.min(pageSize, totalItems - start)) },
+        (_, i) => chatTurn(start + i),
+      );
+      return new Response(
+        JSON.stringify({ data, pagination: { page, page_size: pageSize, total_items: totalItems } }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useChatTurns(conversationId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(totalItems));
+    // 200 (server max) is requested directly, so a 210-turn chat needs
+    // exactly one extra round trip, not five default-sized ones.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.current.data?.data.at(-1)).toMatchObject({ id: "t209" });
+  });
+
+  it("stops after one page when the first page is already short", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ data: [chatTurn(0)], pagination: { page: 1, page_size: 200, total_items: 1 } }),
+        { headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useChatTurns(conversationId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});

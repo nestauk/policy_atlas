@@ -20,6 +20,7 @@ from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.schema import chunk_embedding, project_source_snapshot
 from policy_atlas.core.usage import UsageResult
 from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_base.synthesis import synthesis_tools
 from policy_atlas.evidence_base.synthesis.synthesis_backend import SectionProseWire
 from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     BOOST_CLAMP_MAX,
@@ -1221,6 +1222,8 @@ def test_loop_runner_voluntary_emission_before_cap() -> None:
     assert result["turns_used"] == 1
     assert result["claims"] == _claims()
     assert result["turn_cap_hit"] is False
+    assert result["tool_call_counts"] == {}
+    assert result["rejected_tool_calls"] == 0
 
 
 def test_loop_runner_forces_emission_on_cap_and_limits_tool_turns() -> None:
@@ -1375,6 +1378,13 @@ def test_loop_runner_rejects_empty_non_emitting_turn() -> None:
     backend = ScriptedBackend([{"tool_calls": [], "claims": None}])
     with pytest.raises(RuntimeError, match="no claims"):
         run_section_loop(backend, seed={}, tools={})
+
+
+def test_loop_runner_exhaustion_is_honest(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The defensive exhaustion branch retains its historical error text."""
+    monkeypatch.setattr(synthesis_tools, "range", lambda *_args: (), raising=False)
+    with pytest.raises(RuntimeError, match="^section loop exhausted without emission$"):
+        run_section_loop(ScriptedBackend([]), seed={}, tools={})
 
 
 def test_gathered_ids_extracts_chunks_and_findings() -> None:

@@ -1689,6 +1689,7 @@ def _persist_new_plan_version(
         orchestration_plan.insert().values(
             plan_id=new_plan_id,
             project_id=project_id,
+            conversation_id=_plan_row_value(plan_row, "conversation_id"),
             evidence_scope_id=evidence_scope_id,
             version=new_version,
             status="approved",

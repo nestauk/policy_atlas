@@ -854,6 +854,7 @@ def persist_approved_plan(
     *,
     project_id: uuid.UUID,
     plan: OrchestrationPlan,
+    conversation_id: uuid.UUID | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Persist an approved plan and its execution scope for an existing project.
 
@@ -861,6 +862,7 @@ def persist_approved_plan(
         conn: Open transaction that owns the project and plan writes.
         project_id: Existing project receiving the approved plan.
         plan: Validated plan approved by the caller.
+        conversation_id: Planning conversation that owns this plan lineage.
 
     Returns:
         The new ``(evidence_scope_id, plan_id)`` pair.
@@ -892,6 +894,7 @@ def persist_approved_plan(
         orchestration_plan.insert().values(
             plan_id=plan_id,
             project_id=project_id,
+            conversation_id=conversation_id,
             evidence_scope_id=scope_id,
             version=int(latest_version) + 1,
             status="approved",
