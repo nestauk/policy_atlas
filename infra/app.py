@@ -60,8 +60,14 @@ net_env = Environment(
     region=network_config['aws_region']
 )
 
-NetworkStack(app, "PaV3NetworkStack", network_config=network_config, env=net_env,
-             aws_region=network_config['aws_region'], env_name=env_name)
+network_stack = NetworkStack(
+    app,
+    "PaV3NetworkStack",
+    network_config=network_config,
+    env=net_env,
+    aws_region=network_config['aws_region'],
+    env_name=env_name,
+)
 
 if stage == "all":
     cert_env = Environment(
@@ -82,7 +88,14 @@ if stage == "all":
         region=db_config['aws_region']
     )
 
-    DatabaseStack(app, "PaV3DatabaseStack", db_config=db_config, env=db_env, env_name=env_name)
+    DatabaseStack(
+        app,
+        "PaV3DatabaseStack",
+        db_config=db_config,
+        env=db_env,
+        env_name=env_name,
+        ssm_connectivity=network_stack.ssm_connectivity,
+    )
 
     pa_env = Environment(
         account=account,

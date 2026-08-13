@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Literal, cast
 
 import pytest
 
+from policy_atlas.core import tracing
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.planner import (
@@ -293,19 +296,28 @@ class _FakeObservation:
 
 
 class _FakeLangfuse:
-    def __init__(self) -> None:
-        self.sessions: list[str] = []
-
     def start_as_current_observation(self, *, name: str, as_type: str) -> _FakeObservation:
         del name, as_type
         return _FakeObservation()
 
-    def update_current_trace(self, *, session_id: str) -> None:
-        self.sessions.append(session_id)
 
-
-def test_openai_planner_turn_sets_langfuse_session() -> None:
+def test_openai_planner_turn_propagates_session_before_opening_the_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The installed SDK (4.13.0) has no ``update_current_trace`` — the real seam is
+    ``propagate_attributes``, and the whole observation must open INSIDE its scope
+    (attributes only reach observations opened while the scope is active)."""
     session_id = uuid.uuid4()
+    events: list[str] = []
+
+    @contextmanager
+    def fake_propagate_attributes(*, session_id: str) -> Iterator[None]:
+        events.append(f"session_enter:{session_id}")
+        yield
+        events.append("session_exit")
+
+    monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
+
     parsed = PlannerTurnWire(
         reply="Ready.",
         plan_draft=PlanDraftWire(title="Session test", question="Q?"),
@@ -315,12 +327,23 @@ def test_openai_planner_turn_sets_langfuse_session() -> None:
     )
     backend: OpenAIPlannerBackend = object.__new__(OpenAIPlannerBackend)
     fake_langfuse = _FakeLangfuse()
+    original_start = fake_langfuse.start_as_current_observation
+
+    def recording_start(*, name: str, as_type: str) -> _FakeObservation:
+        events.append(f"observation:{name}")
+        return original_start(name=name, as_type=as_type)
+
+    fake_langfuse.start_as_current_observation = recording_start  # type: ignore[method-assign]
     cast("Any", backend)._client = fake_parse_client(parsed=parsed)
     cast("Any", backend)._langfuse_client = fake_langfuse
 
     backend.plan_turn([_turn("Q?")], None, session_id=session_id)
 
-    assert fake_langfuse.sessions == [str(session_id)]
+    enter_index = events.index(f"session_enter:{session_id}")
+    exit_index = events.index("session_exit")
+    observation_indexes = [i for i, event in enumerate(events) if event.startswith("observation:")]
+    assert observation_indexes
+    assert all(enter_index < index < exit_index for index in observation_indexes)
 
 
 def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:

@@ -21,11 +21,14 @@ from policy_atlas.core.schema import (
     annotation,
     artefact,
     block,
+    capability_run,
     citation,
+    conversation,
     extraction_result,
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
+    orchestration_plan,
     project_source_snapshot,
     runs,
     search_coverage_record,
@@ -84,6 +87,8 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
     propose_synthesis_plan,
     synthesise_scope,
 )
+from policy_atlas.runtime.orchestrate import persist_approved_plan
+from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
 from tests.evidence_base.group.test_group import (
     _group_row,
     seed_extraction,
@@ -948,6 +953,122 @@ def test_missing_referenced_row_fails_structurally(conn: Connection) -> None:
         )
 
     assert _count(conn, artefact, project_id) == 0
+
+
+def test_artefact_records_walkable_conversation_plan_run_lineage(conn: Connection) -> None:
+    """A stub synthesis preserves the row-grain lineage without fabricating legacy links."""
+    project_id, run_id = seed_project_and_run(conn)
+    conversation_id = uuid.uuid4()
+    now_at = now()
+    conn.execute(
+        conversation.insert().values(
+            id=conversation_id,
+            project_id=project_id,
+            kind="planning",
+            title="Planning",
+            entry_artefact_id=None,
+            status="active",
+            created_at=now_at,
+            closed_at=None,
+            archived_at=None,
+        )
+    )
+    plan = OrchestrationPlan(
+        title="Lineage test plan",
+        question="What evidence supports the test intervention?",
+        backend_scope="both",
+        search_effort="rapid",
+        analysis_depth="landscape",
+        components=[],
+        component_rationale={},
+        steering_mode="moderate",
+    )
+    scope_id, plan_id = persist_approved_plan(
+        conn,
+        project_id=project_id,
+        plan=plan,
+        conversation_id=conversation_id,
+    )
+    capability_run_id = uuid.uuid4()
+    conn.execute(
+        capability_run.insert().values(
+            capability_run_id=capability_run_id,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            capability="evidence_base",
+            plan_id=plan_id,
+            plan_version=1,
+            status="running",
+            session_id=None,
+            started_at=now_at,
+            ended_at=None,
+        )
+    )
+    conn.execute(
+        update(runs)
+        .where(runs.c.run_id == run_id)
+        .where(runs.c.project_id == project_id)
+        .values(capability_run_id=capability_run_id)
+    )
+    seed_select_doc(conn, project_id, run_id, scope_id, title="Lineage source")
+
+    summary = _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+    )
+    lineage = conn.execute(
+        select(
+            conversation.c.id,
+            orchestration_plan.c.plan_id,
+            capability_run.c.capability_run_id,
+            artefact.c.capability_run_id,
+        )
+        .join(orchestration_plan, orchestration_plan.c.conversation_id == conversation.c.id)
+        .join(
+            capability_run,
+            (capability_run.c.plan_id == orchestration_plan.c.plan_id)
+            & (capability_run.c.plan_version == orchestration_plan.c.version),
+        )
+        .join(artefact, artefact.c.capability_run_id == capability_run.c.capability_run_id)
+        .where(artefact.c.artefact_id == uuid.UUID(summary["artefact_id"]))
+    ).one()
+    assert lineage == (conversation_id, plan_id, capability_run_id, capability_run_id)
+
+    legacy_plan_id = uuid.uuid4()
+    legacy_artefact_id = uuid.uuid4()
+    conn.execute(
+        orchestration_plan.insert().values(
+            plan_id=legacy_plan_id,
+            project_id=project_id,
+            conversation_id=None,
+            evidence_scope_id=scope_id,
+            version=2,
+            status="superseded",
+            payload=plan.model_dump(mode="json"),
+            created_at=now_at,
+            created_by="user",
+            approved_at=now_at,
+        )
+    )
+    conn.execute(
+        artefact.insert().values(
+            artefact_id=legacy_artefact_id,
+            project_id=project_id,
+            capability_run_id=None,
+            title="Legacy artefact",
+            created_at=now_at,
+        )
+    )
+    assert conn.execute(
+        select(orchestration_plan.c.conversation_id).where(
+            orchestration_plan.c.plan_id == legacy_plan_id
+        )
+    ).scalar_one() is None
+    assert conn.execute(
+        select(artefact.c.capability_run_id).where(artefact.c.artefact_id == legacy_artefact_id)
+    ).scalar_one() is None
 
 
 def test_unmatched_retrieval_boost_recorded_never_fatal(conn: Connection) -> None:

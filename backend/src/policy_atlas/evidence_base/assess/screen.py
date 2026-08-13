@@ -122,7 +122,7 @@ class _Stage2Doc:
     stage1_generation: int
 
 
-def effective_screen_rows() -> Subquery:
+def effective_screen_rows(*, run_ids: set[uuid.UUID] | None = None) -> Subquery:
     """Return the effective non-failed screening row per scope/source.
 
     The effective row is the non-failed row ordering **generation DESC first,
@@ -148,11 +148,15 @@ def effective_screen_rows() -> Subquery:
     ``status == 'relevant'`` already exclude it by construction; consumers
     that want a full status breakdown must read it as its own bucket.
 
+    Args:
+        run_ids: Optional creating-run snapshot applied before choosing the
+            effective generation/stage row for each document.
+
     Returns:
         A SQLAlchemy subquery exposing all ``source_screening_result`` columns
         for the effective row.
     """
-    ranked = (
+    ranked_query = (
         sa_select(
             source_screening_result,
             func.row_number()
@@ -169,8 +173,12 @@ def effective_screen_rows() -> Subquery:
             .label("_screen_rank"),
         )
         .where(source_screening_result.c.status != "failed")
-        .subquery("screen_ranked")
     )
+    if run_ids is not None:
+        ranked_query = ranked_query.where(
+            source_screening_result.c.screened_by_run_id.in_(run_ids)
+        )
+    ranked = ranked_query.subquery("screen_ranked")
     return (
         sa_select(
             *[

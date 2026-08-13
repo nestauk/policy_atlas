@@ -22,29 +22,39 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `031-search-count-honesty` **step 1** (2026-08-12,
-branch `task/031-search-count-honesty`, stacked on `37-hotfix-remove-quota`):
-fix mixed-grain source counts across P1 check-in, Where I looked, and
-publisher-country charts (deep search makes the bugs obvious). Contract:
-`docs/tasks/031-search-count-honesty/contract.md`; plan draft:
-`docs/tasks/031-search-count-honesty/plan.md` (build blocked on contract 🛑).
+Build — task `031-search-count-honesty` **step 5** (contract + plan approved
+2026-08-13, branch `task/031-search-count-honesty`, based on `dev`): fix
+mixed-grain source counts across the P1 check-in, Where I looked, and the
+publisher-country charts (deep search makes the defects obvious). Contract:
+`docs/tasks/031-search-count-honesty/contract.md`; plan:
+`docs/tasks/031-search-count-honesty/plan.md`; rubric alongside. Tier 2.
 
-Tasks `026-infra-deployment` (PR #33, Tier 4 — system **live** at
-`v3.policyatlas.uk`), `027-frontend-uplift` (PR #44, Tier 3 — review
-stack adjudicated 2026-07-30, 32 fixes re-verified) and
-`028-ux-refinement` (PR #45) are **merged to `dev`**.
+Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
+conversation model: a project holds many conversations, Claude-Projects-style.
+Follow-up **chats** (read-only, project-scoped, answering across artefacts;
+streamed NDJSON turns with claim-grained citations, deterministic floors + async
+judge enrichment; tool scope `search_chunks` · `lookup` · `query_findings`, no
+`search`) and **planning conversations** (one per plan lineage, closing with its
+run's terminal transaction — supersedes 027's rolling thread; row-grain audit
+chain conversation → plan → run → artefact). ADR 0029 (Accepted); API surface:
+`docs/specs/system/web-api.md` § Conversations.
 
-Search-volume work carries numbers `029-search-volume-cap` and
-`030-multi-round-search` (renumbered 2026-08-06 when `028` was taken by
-the UX slice on `dev`). Both are plan-only docs; the code landed on
-branch `37-hotfix-remove-quota`. `029-copilot-chat` is a separate in-flight
-branch that reused `029` before the renumber — do not collide. ADR numbers:
-`0028` is the UX slice's; search-volume ADRs start at `0029` when written.
+Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
+`c501022`); system **live** at `v3.policyatlas.uk`.
 
-Known operational state: staging's OpenAI quota exhausted
-2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
-(former 027 draft) stays deferred — contract draft at unpushed
-`a5c9708`.
+Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
+`028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
+caps per backend per round; standard/deep wall clocks removed — was
+`028-…`) and `030-multi-round-search` (rapid's clock removed, the
+runner-orchestrated round loop wired — was `029-…`). Their code is **merged to
+`dev`** (PR #46, the `37-hotfix-remove-quota` hotfix). **Numbering collision
+still to settle:** `029` and ADR `0029` belong to the copilot-chat slice, and
+`031` is now this count-honesty slice — so if the search-volume docs are
+renumbered they need `032`/`033`, not `031`/`032`. No ADRs written for them yet.
+
+Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
+fail honest-429 until billing tops up). The eval slice (former 027 draft)
+stays deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist

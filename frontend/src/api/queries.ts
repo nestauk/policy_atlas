@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "../auth";
 import { createAuthedApiClient } from "./client";
+import type { components } from "./gen/types";
 
 /**
  * Query-key roots, shared with `src/store/useRunStream.ts` so SSE-driven
@@ -33,6 +34,15 @@ export const queryKeys = {
   artefact: (projectId: string) => ["projects", projectId, "artefact"] as const,
   sourceDossier: (projectId: string, sourceId: string) =>
     ["projects", projectId, "source-dossier", sourceId] as const,
+  /** Prefix shared by every filtered variant below — invalidate with this,
+   *  not the filtered key, so a mutation clears every consumer's cache
+   *  regardless of which `kind`/`status` it queried with (partial match
+   *  requires the invalidated key to be an actual prefix of the stored one). */
+  conversationsRoot: (projectId: string) => ["projects", projectId, "conversations"] as const,
+  conversations: (projectId: string, query?: ConversationQuery) =>
+    [...queryKeys.conversationsRoot(projectId), query?.kind, query?.status] as const,
+  conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
+  chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
 };
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
@@ -76,6 +86,12 @@ export interface FindingsQuery extends PageQuery {
   group?: string;
   group_id?: string;
   source_id?: string;
+}
+
+/** Filters for the project conversation library. */
+export interface ConversationQuery {
+  kind?: "planning" | "chat";
+  status?: "active" | "closed" | "archived";
 }
 
 /** One authed `openapi-fetch` client per active `AuthApi` identity. */
@@ -285,6 +301,75 @@ export function usePlanningTurns(projectId: string, query?: PageQuery) {
       return data;
     },
     enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}/conversations` — the project chat and
+ * planning-conversation library. */
+export function useConversations(projectId: string, query?: ConversationQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.conversations(projectId, query),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}/conversations", {
+        params: { path: { project_id: projectId }, query },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(projectId),
+  });
+}
+
+/** `GET /api/v1/conversations/{conversation_id}` — one URL-addressable
+ * conversation's durable metadata. */
+export function useConversation(conversationId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.conversation(conversationId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/conversations/{conversation_id}", {
+        params: { path: { conversation_id: conversationId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(conversationId),
+  });
+}
+
+/** Server page-size cap for `.../turns` (`PAGE_SIZE_MAX`, `contract/common.py`) —
+ *  requesting it directly means a chat past the 50-row default page still
+ *  fetches its newest turns in one extra round trip at most. */
+const CHAT_TURNS_PAGE_SIZE = 200;
+
+/** `GET /api/v1/conversations/{conversation_id}/turns` — a chat's durable
+ *  ascending turn transcript, fully paginated: the server only ever returns
+ *  one page (default 50 rows), so a chat past that length silently lost its
+ *  newest turns until this loop walked every page and accumulated them. The
+ *  enrichment poll's find-by-id (`store/conversations.ts`) reads this same
+ *  query, so it inherits the fix for free. */
+export function useChatTurns(conversationId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.chatTurns(conversationId),
+    queryFn: async () => {
+      const turns: components["schemas"]["ChatTurnOut"][] = [];
+      let page = 1;
+      let pagination: components["schemas"]["PageMeta"] | undefined;
+      for (;;) {
+        const { data, error } = await client.GET("/api/v1/conversations/{conversation_id}/turns", {
+          params: { path: { conversation_id: conversationId }, query: { page, page_size: CHAT_TURNS_PAGE_SIZE } },
+        });
+        if (error) throw error;
+        turns.push(...data.data);
+        pagination = data.pagination;
+        if (data.data.length < CHAT_TURNS_PAGE_SIZE || turns.length >= data.pagination.total_items) break;
+        page += 1;
+      }
+      return { data: turns, pagination: pagination! };
+    },
+    enabled: Boolean(conversationId),
   });
 }
 

@@ -259,12 +259,14 @@ class PlanningTurnOut(BaseModel):
         suggestions: The planner's suggested answers to its clarifying
             question, rendered as tappable quick replies. Empty when none.
         part: Structured sequential-planning proposal, when this turn carries one.
+        conversation_id: Planning conversation that produced this turn.
     """
 
     reply: str
     plan: PlanDraft
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
+    conversation_id: uuid.UUID | None = None
 
 
 class PlanningTranscriptTurnOut(BaseModel):
@@ -272,6 +274,7 @@ class PlanningTranscriptTurnOut(BaseModel):
 
     Args:
         turn_index: Monotonic per-project conversation coordinate.
+        conversation_id: Owning planning conversation, absent only on legacy rows.
         client_turn_id: The caller's idempotency key for this turn — returned
             so a reloaded client can retry its own incomplete latest turn.
         user_message: Submitted user message.
@@ -284,6 +287,7 @@ class PlanningTranscriptTurnOut(BaseModel):
     """
 
     turn_index: int
+    conversation_id: uuid.UUID | None = None
     client_turn_id: uuid.UUID
     user_message: str
     reply: str | None

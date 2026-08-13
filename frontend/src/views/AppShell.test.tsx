@@ -10,6 +10,9 @@ const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 vi.mock("../api/queries", () => ({
   useProject: () => ({ data: { project_id: PROJECT_ID, name: "Acme project" } }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
+  // The chat side panel (029 rev 3.4) mounts on non-workspace project routes.
+  useConversations: () => ({ data: { data: [] } }),
+  useArtefact: () => ({ data: undefined }),
   // The header's project-settings popover (028 F.5) wires the rename/archive
   // mutations, which resolve their API client through this hook — a bare
   // object is enough since these tests never open the popover.
