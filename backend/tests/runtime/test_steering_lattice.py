@@ -492,6 +492,80 @@ def test_p1_bundle_without_an_acquire_run_reports_absence_not_zeros(
         _cleanup_project(engine, project_id)
 
 
+def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
+    engine: Engine,
+) -> None:
+    """A failed round's P1 shows absence, not the previous round's numbers.
+
+    ``successful_runs`` is written only on the success path (`runner.py`), but a
+    failed acquire still presents its boundary. Without the boundary-run gate,
+    round 2's P1 would render round 1's counts and queries under round 2's
+    label — defect 1b inverted, and harder to spot than the zeros it replaced.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        succeeded = runs_by["acquire"]
+        failed_later_round = uuid.uuid4()
+        with engine.begin() as conn:
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=succeeded,
+                event_type="component.completed",
+                payload={
+                    "component": "acquire",
+                    "acquired": 4,
+                    "by_backend": {"openalex": {"acquired": 4}},
+                },
+            )
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=succeeded,
+                event_type="search.executed",
+                payload={
+                    "backend": "openalex",
+                    "query": "round one query",
+                    "status": "ok",
+                    "result_count": 4,
+                    "evidence_scope_id": str(scope_id),
+                },
+            )
+
+        stale = runner_module._build_bundle(
+            engine,
+            name=SEARCH_EXCEPTION,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            successful_runs={"acquire": succeeded},
+            backends=_runner_backends(),
+            section_budget=None,
+            boundary_run_id=failed_later_round,
+        )
+        assert stale is not None
+        assert stale["backends"] == []
+        assert stale["queries"] == []
+
+        # Same call, boundary matching the successful run: the card fills in.
+        current = runner_module._build_bundle(
+            engine,
+            name=SEARCH_EXCEPTION,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            successful_runs={"acquire": succeeded},
+            backends=_runner_backends(),
+            section_budget=None,
+            boundary_run_id=succeeded,
+        )
+        assert current is not None
+        assert current["queries"] == ["round one query"]
+        assert current["backends"] == [{"backend": "openalex", "count": 4}]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
 def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> None:
     """Executed/zero-result queries come from seeded search.executed event payloads."""
     project_id: uuid.UUID | None = None

@@ -22,12 +22,22 @@
 - Touch only what the task requires.
 
 # Current phase
-Build — task `031-search-count-honesty` **step 5** (contract + plan approved
-2026-08-13, branch `task/031-search-count-honesty`, based on `dev`): fix
-mixed-grain source counts across the P1 check-in, Where I looked, and the
-publisher-country charts (deep search makes the defects obvious). Contract:
+Review — task `031-search-count-honesty` **BUILT + REVIEW STACK COMPLETE → PR
+open for human review (step 9)** (contract + plan approved 2026-08-13, branch
+`task/031-search-count-honesty`, based on `dev`; review stack 2026-08-13 — four
+lanes, findings adjudicated in the task's verification.md § Review findings,
+fixes landed on the branch): fix mixed-grain source counts across the P1
+check-in, Where I looked, and the publisher-country charts (deep search makes
+the defects obvious). Contract:
 `docs/tasks/031-search-count-honesty/contract.md`; plan:
 `docs/tasks/031-search-count-honesty/plan.md`; rubric alongside. Tier 2.
+
+Two items escalated to the owner in the PR: the contract's **manual browser
+check was not run** (it needs a live model route; staging's OpenAI quota is
+recorded exhausted below), and **no non-Claude reviewer read this slice** — the
+owner moved phases 1–3 from `codex` to `lead` mid-build, and the Codex CLI is
+not installed in this environment, so the family flip did not happen on either
+side.
 
 Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
 conversation model: a project holds many conversations, Claude-Projects-style.

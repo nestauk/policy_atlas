@@ -311,16 +311,17 @@ def _executed_queries(
             continue
         if run_id is not None and entry["run_id"] != run_id:
             continue
-        entry = {
-            "query": payload.get("query"),
-            "backend": payload.get("backend"),
-            "query_origin": payload.get("query_origin"),
-            "verb": payload.get("verb"),
-            "filters": payload.get("filters"),
-            "status": payload.get("status"),
-            "result_count": payload.get("result_count"),
-        }
-        executed.append(entry)
+        executed.append(
+            {
+                "query": payload.get("query"),
+                "backend": payload.get("backend"),
+                "query_origin": payload.get("query_origin"),
+                "verb": payload.get("verb"),
+                "filters": payload.get("filters"),
+                "status": payload.get("status"),
+                "result_count": payload.get("result_count"),
+            }
+        )
         if payload.get("status") == "ok" and payload.get("result_count") == 0:
             zero_result.append({"query": payload.get("query"), "backend": payload.get("backend")})
     return executed, zero_result

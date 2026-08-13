@@ -1568,6 +1568,7 @@ def _handle_after_component_boundary(
         backends=backends,
         triggers=triggers,
         prebuilt_bundle=observation.bundle,
+        boundary_run_id=boundary_run_id,
     )
     # The P3 select and FG group steer points wire a replacement re-run from
     # their pause (their floors offer re-run options at an after-boundary);
@@ -1938,6 +1939,7 @@ def _pause_options_and_bundle(
     backends: RunnerBackends,
     triggers: list[dict[str, Any]] | None = None,
     prebuilt_bundle: dict[str, Any] | None = None,
+    boundary_run_id: uuid.UUID | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return the canonical options + (P2/P3/P4) bundle for a pause.
 
@@ -1973,6 +1975,7 @@ def _pause_options_and_bundle(
             successful_runs=successful_runs,
             backends=backends,
             section_budget=state.plan.section_budget,
+            boundary_run_id=boundary_run_id,
         )
     )
     if steer_point_name == SYNTHESIS_SHAPE and isinstance(bundle, dict):
@@ -2029,16 +2032,29 @@ def _build_bundle(
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
     section_budget: int | None,
+    boundary_run_id: uuid.UUID | None = None,
 ) -> dict[str, Any] | None:
-    """Build the decision-point bundle for a lattice pause, fail-safe to None."""
+    """Build the decision-point bundle for a lattice pause, fail-safe to None.
+
+    ``boundary_run_id`` is the run the boundary fired for, when the caller knows
+    it. P1 needs it: ``successful_runs`` is written only on the success path, so
+    after a failed round ≥2 acquire it still points at the *previous* round.
+    """
     try:
         with engine.connect() as conn:
             if name == SEARCH_EXCEPTION:
+                acquire_run_id = successful_runs.get("acquire")
+                # P1 describes the acquire run that just finished. If the
+                # boundary fired for a different run, this round's acquire
+                # failed and left nothing to report — honest absence beats the
+                # previous round's counts wearing this round's label.
+                if boundary_run_id is not None and acquire_run_id != boundary_run_id:
+                    acquire_run_id = None
                 return p1_bundle(
                     conn,
                     project_id=project_id,
                     evidence_scope_id=evidence_scope_id,
-                    acquire_run_id=successful_runs.get("acquire"),
+                    acquire_run_id=acquire_run_id,
                 )
             if name == EVIDENCE_BASE_COVERAGE:
                 return p2_bundle(
@@ -3999,6 +4015,7 @@ def _resolve_unattended_boundary(
             successful_runs=successful_runs,
             backends=backends,
             section_budget=state.plan.section_budget,
+            boundary_run_id=event_run_id,
         )
         outcome = discretion_hook(
             _DiscretionContext(
@@ -4401,6 +4418,7 @@ def _watch_observe_boundary(
                 successful_runs=successful_runs,
                 backends=backends,
                 section_budget=state.plan.section_budget,
+                boundary_run_id=event_run_id,
             )
             if steer_point_name is not None
             else None

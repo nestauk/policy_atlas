@@ -1214,15 +1214,18 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                         search_coverage_record.c.project_id == project_id
                     )
                 ).scalar_one()
-                # A relevant source whose provider sent no publisher country.
-                _, countryless_pss = seed_source(
-                    conn, project_id, {"title": "No country reported", "backend": "openalex"}
+                # A second relevant source, and the country goes on THIS one —
+                # the uncited one. The ladder's cited source stays countryless,
+                # so the residual is what the cited scope has to draw. Putting
+                # the country on the cited source instead would make the cited
+                # assertion pass even if the residual were skipped at that
+                # scope, which is the whole thing this test exists to pin.
+                _, uncited_with_country = seed_source(
+                    conn, project_id, {"title": "Reported country", "backend": "openalex"}
                 )
                 seed_screening_result(
-                    conn, project_id, run_id, scope_id, countryless_pss, status="relevant"
+                    conn, project_id, run_id, scope_id, uncited_with_country, status="relevant"
                 )
-                # Give the ladder's own relevant source a country, so the chart
-                # has both a real bar and the residual.
                 for snapshot_id, metadata in conn.execute(
                     select(source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata)
                     .select_from(
@@ -1234,7 +1237,7 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                     )
                     .where(
                         project_source_snapshot.c.project_id == project_id,
-                        source_snapshot.c.metadata["title"].astext == "Selected trial",
+                        source_snapshot.c.metadata["title"].astext == "Reported country",
                     )
                 ).all():
                     conn.execute(
@@ -1252,9 +1255,11 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                 f"/api/v1/projects/{project_id}/landscape?scope=cited", headers=owner
             ).json()
             # The cited scope draws only the artefact's citations, so it sums to
-            # that smaller population — not to the funnel's relevant count.
-            assert sum(cited["geographies"].values()) == 1
-            assert cited["geographies"] == {"GB": 1}
+            # that smaller population — not to the funnel's relevant count. The
+            # residual is what it draws, which is only true because the count
+            # happens inside the loop over the already-narrowed rows.
+            assert cited["geographies"] == {"Not reported": 1}
+            assert sum(cited["geographies"].values()) == 1 != funnel["relevant"]
         finally:
             with engine.begin() as conn:
                 delete_project_data(conn, project_id)

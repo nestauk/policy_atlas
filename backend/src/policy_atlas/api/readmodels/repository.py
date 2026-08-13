@@ -1800,7 +1800,13 @@ def _acquire_run_ids(conn: Connection, project_id: uuid.UUID) -> list[uuid.UUID]
     """Every acquire run that wrote a coverage record for the project, oldest first.
 
     Acquire inserts one coverage record per run, so the column holds one id per
-    round (task 031). Ordering is stable so the read model is deterministic.
+    round (task 031). The order here is for readability only — what makes the
+    read model deterministic is the ``sequence`` ordering on the event select
+    that consumes these ids, not the order of the ids themselves.
+
+    Project-wide, not scope-filtered, per the contract ("all the acquire runs of
+    the project"). A re-planned project mints a new evidence scope, so its
+    superseded question's rounds count here too — see docs/deferred.md.
     """
     return list(
         conn.execute(
@@ -1855,11 +1861,17 @@ def _backend_details(
     """
     events = (
         conn.execute(
-            select(event_log.c.payload).where(
+            select(event_log.c.payload)
+            .where(
                 event_log.c.project_id == project_id,
                 event_log.c.run_id.in_(run_ids),
                 event_log.c.event_type == "search.executed",
             )
+            # Emission order, so the pane lists round 1's queries before round
+            # 2's. Spanning several runs made this load-bearing: without it the
+            # rows come back in physical order and the list is non-deterministic
+            # between identical requests.
+            .order_by(event_log.c.sequence)
         )
         .scalars()
         .all()

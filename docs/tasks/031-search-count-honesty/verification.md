@@ -12,6 +12,8 @@ stack (step 7).
 | `make verify-fast` (phase 1 gate, `1f36fb6`) | pass | 2132 backend tests, mypy 263 files, ruff. |
 | `make verify` (phases 2–3 gate, `d461804`) | pass | 2134 backend, 243 frontend, mypy, ruff, eslint, `drift-check: OK`. |
 | `make verify` (step-6 exit) | pass | See § Step-6 exit run. |
+| `make verify` (step-7 baseline, before review fixes) | pass | exit 0 — 2134 backend, 243 frontend, mypy 263 files, ruff, eslint, `drift-check: OK`. Independently re-run by the contract-verifier lane with matching numbers. |
+| `make verify` (step-7 exit, after the review fixes) | pass | exit 0. |
 
 The plan's gate map allowed phases 2 and 3 to share one gate. Phase 1 gated on
 `verify-fast` as planned. No gate was added or downgraded.
@@ -32,18 +34,30 @@ constraint: the read-model shapes are untouched, only how the numbers are filled
 | `tests/api/test_read_models.py::test_landscape_geography_residual_makes_every_scope_add_up` | 4 (defect 3), both scopes |
 | `src/ui/charts/EvidenceDistributionChart.test.ts` → `normaliseGeographies` | 4 — the residual survives the frontend normaliser |
 
+Added by the review stack (2026-08-13):
+
+| Test | Finding it closes |
+|---|---|
+| `tests/runtime/test_search_rounds.py::test_p1_at_round_two_reports_only_that_round` | R3 — invariants 1 and 2 on a real two-round walk |
+| `tests/runtime/test_steering_lattice.py::test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire` | R1 — a failed round's P1 shows absence, not the previous round's numbers |
+
 Invariant 5 ("unchanged") is covered by the existing suite: the read-model golden test
 and the funnel/plan-in-motion assertions were not edited and stay green.
 
-One assertion is worth naming because it checks the *by-construction* claim against real
-data rather than a fixture: in the first test,
+**Correction (review stack, 2026-08-13).** The step-6 draft named this assertion as the
+check of the *by-construction* claim against real data:
 
 ```
 assert real["acquired"] == sum(stats["acquired"] for stats in real["by_backend"].values())
 ```
 
-runs against a genuine walk's acquire payload. It pins the property that makes invariant 1
-hold — acquire's headline **is** the sum of its per-backend counts.
+The contract verifier ran that walk and found the payload is `acquired = 0`,
+`by_backend = {}` — so the assertion evaluates `0 == sum(())` and would pass however
+acquire computed its headline. The property is real (`acquire.py:911-921`) but that line
+did not pin it. The evidence now comes from
+`tests/runtime/test_search_rounds.py::test_p1_at_round_two_reports_only_that_round`, which
+runs a genuine two-round standard walk (round 1: 9 queries / 18 acquired; round 2: 3 / 6)
+and asserts a non-zero backend line on round 2.
 
 **Manual / browser — NOT DONE.** See § Known unverified items. This is the one contract
 acceptance check outstanding.
@@ -81,8 +95,11 @@ a component already computed").
 **Defect 1b — one-round headline beside every round's queries.** `_executed_queries`
 filters by scope only. `p1_bundle` now passes the acquire run id and gets that round's
 queries. The run id threads in from `successful_runs["acquire"]`, which the walk moves to
-the newest run (`runner.py:192`) — exactly the round that just finished. The seam already
-existed: P2 next door does the same with `characterise`.
+the newest run (`runner.py:1072` — the step-6 draft cited `runner.py:192`, which is the
+unrelated `REPLACEMENT_RERUNS` comment). The seam already existed: P2 next door does the
+same with `characterise`. **Review-stack addition:** `successful_runs` is written *only*
+on the success path, so `p1_bundle` now also gates on the boundary's own run id — see
+finding R1 below.
 
 **Defect 2 — mixed grain in "Where I looked".** `coverage_out` read the newest coverage
 record and passed its `acquired_by_run_id` alone. It now passes every acquire run that
@@ -143,6 +160,130 @@ Safe. No secrets, credentials, traces or raw source text. Test fixtures use inve
 titles ("No country reported", "Selected trial") in the existing pattern. The new copy
 strings are user-facing product text.
 
+## Review findings (step 7, 2026-08-13)
+
+### Lanes run
+
+| Lane | Result |
+|---|---|
+| Contract verifier (`contract-verifier`, pinned Opus, read-only) | 1 MAJOR, 7 MINOR, 3 NOTE. Re-ran `make verify` independently: green |
+| `/code-review` at `medium`, scoped to `backend/src backend/tests frontend/src` | 5 findings (1 medium, 4 low) |
+| `/security-review` | **No HIGH/MEDIUM findings** |
+| Adversarial (`deep-reasoner`, read-only) | 1 MAJOR, 4 MINOR, 6 NOTE |
+| `make verify` after fixes | green |
+| `/simplify` | **Not re-run.** `/code-review` ran the reuse/simplification/efficiency/altitude angles and their findings were adjudicated below; a second same-family cleanup pass over the same diff duplicates it |
+
+**⚠️ Family-flip gap — the heterogeneous pair did not happen.** The Codex CLI is not
+installed in this environment, so `/codex:adversarial-review` and a `codex-rescue` brief
+both failed. Combined with deviation 1 (the owner moved phases 1–3 from `codex` to
+`lead`), **no non-Claude reviewer has read any line of this slice** — neither as author
+nor as reviewer. The adversarial lane was substituted with a same-family
+`deep-reasoner` given an explicitly anti-deferential brief; it found the MAJOR below, so
+the lane earned its place, but it is reviewer *count*, not family diversity. The owner
+should weigh this when deciding review depth at step 9.
+
+### Adjudication
+
+**Adopted and fixed:**
+
+- **R1 (MAJOR, adversarial) — P1 showed the previous round's numbers when acquire failed
+  on round ≥2.** `successful_runs[component]` is written only on the success path
+  (`runner.py:1072`), but the failure path still presents the boundary
+  (`runner.py:1211`). So a round-2 acquire failure rendered **round 1's** counts and
+  queries beside a blank chip. Pre-slice the card was visibly broken (all zeros);
+  post-slice it was plausibly wrong, which is worse at the steer point named
+  "search exception". Fixed by threading `boundary_run_id` into `_build_bundle` and
+  falling back to the already-tested honest-absence branch when the boundary is about a
+  different run. Convergence note: the contract verifier traced the *success* path and
+  correctly found it sound — the two lanes do not disagree, they covered different paths.
+- **R2 (medium, `/code-review`; MINOR-4, contract verifier) — non-deterministic query
+  order.** The `search.executed` select in `_backend_details` had no `ORDER BY`. Spanning
+  several runs made that load-bearing, and the slice's own new test asserted an exact
+  order that only held by accident of physical row order. Added
+  `.order_by(event_log.c.sequence)`; corrected the `_acquire_run_ids` docstring, which
+  claimed a determinism the consuming query did not deliver.
+- **R3 (MAJOR-1, contract verifier) — the multi-round P1 leg had no empirical evidence.**
+  `plan.md` § Phase 1 step 4 asked for a two-round fixture; the shipped test handed
+  `p1_bundle` a run id directly and used a *screen* run as its foil. Added
+  `test_p1_at_round_two_reports_only_that_round`, a genuine two-round standard walk. It
+  asserts the two cards **partition** the scope's calls rather than being disjoint —
+  disjointness is wrong, because the base query is legitimately re-issued each round.
+  Mutation-checked: disabling the `run_id` filter makes it fail.
+- **R4 (MINOR-3, contract verifier; MINOR-3, adversarial) — the cited-scope assertion was
+  tautological.** The countryless source was never cited, so the test would have passed
+  had the residual been skipped at `scope="cited"` entirely. Inverted the fixture: the
+  cited source is now the countryless one, so the cited scope must draw the residual.
+- **R5 (MINOR-6, contract verifier) — a render site contradicted the contract.**
+  `ArtefactOutline.tsx` told the user the map showed "Publisher and author-affiliation
+  geography". `_geography` has never read an affiliation, and the contract's review focus
+  names exactly this substitution. Rewritten to match the other two sites.
+- **R6 (low, `/code-review`) — `_executed_queries` rebound its loop variable.** Harmless
+  before; now the new `run_id` guard reads `entry["run_id"]` off the raw row, so
+  correctness depended on staying above the rebind. Removed the rebind.
+- **R7 (MINOR-2, contract verifier) — verification.md overstated its own evidence**, and
+  **R8 (MINOR-8 / adversarial 4) — mis-anchored line cite.** Both corrected in place
+  above; the original claims are quoted so the change is auditable.
+- **R9 (MINOR-5, contract verifier) — rubric item 7 was not satisfied.** The
+  authorship-country deferral was admitted in verification.md but never written to
+  `docs/deferred.md`. Now entered.
+- **R10 (MINOR-7, contract verifier) — deferred.md over-claimed.** "The display half is
+  DISCHARGED" was too broad: `coverage_out` still reads only the newest coverage row for
+  the pane's `sentence`, `base` and `backends` name list. Entry narrowed to "the
+  per-round *counts* are discharged" with the remainder itemised.
+
+**Adopted as deferred (recorded in `docs/deferred.md`, not fixed here):**
+
+- **R11 (low, `/code-review`; MINOR-2, adversarial; NOTE-11, contract verifier) —
+  `_acquire_run_ids` is project-wide, not scope-filtered.** Three lanes converged. A
+  re-planned project mints a new `evidence_scope`, so the pane would sum a superseded
+  question's rounds beside a sentence from the current question's row. **Declined as a
+  code fix here** because the contract's own § Scope wording is "all the acquire runs of
+  the **project**" — changing the grain is a contract decision, not a review-stack fix.
+  Deferred with the one-clause fix named.
+- **R12 (low, `/code-review`; NOTE-9, contract verifier) — the drawn chart truncates.**
+  Invariant 4 holds in the payload, where the tests assert it; the renderers cut to the
+  top 12 / top 8. Pre-existing, but the residual is typically large and now takes a slot.
+  Deferred.
+
+**Adopted as accepted behaviour (no change):**
+
+- **R13 (NOTE-10, contract verifier; 9, adversarial; low, `/code-review`) — a chart now
+  renders where none did.** `geographies` is non-empty whenever any relevant source
+  exists, so a corpus with no reported venue countries draws a single "Not reported" bar,
+  and `ArtefactOutline`'s section can appear where it previously returned `null`. This is
+  the contract's intended honest absence, not a blemish. `landscape_out` still returns an
+  empty `LandscapeOut()` before the loop on an empty population, so the key is never
+  present at population 0. Worth naming because **no pre-existing test asserted
+  `geographies` at all** — `make verify` green was not evidence of no regression here
+  before this slice's tests.
+- **R14 (11, adversarial) — `_acquired_by_backend` re-implements `runner.py`'s
+  `_find_component_payload`.** `runner` imports `steering_bundles`, so direct reuse would
+  cycle. Declined. Related lead observation: `events.read_for_run` materialises every row
+  of the run to extract one payload, where the sibling `steering_triggers.py` does the
+  same job with `order_by(sequence.desc()).limit(1)` in SQL. Left as-is — one bundle
+  build per steer point is not a hot path — but noted as the cheaper idiom.
+
+**Deviations from the build, re-examined (each confirmed explicitly):**
+
+1. **Phase 1 executor `lead`, not `codex`** — confirmed recorded in `plan.md`. Adopted as
+   the owner's mid-build call. Its consequence is the family-flip gap flagged above, which
+   is now the slice's main residual review risk.
+2. **Counts read from `component.completed`, narrower than plan D1** — confirmed as-built
+   and inside D1's hard constraint ("do not depend on `backends[].count`"). One
+   consequence the build did not state, surfaced by the contract verifier: for an acquire
+   run whose payload carries no `by_backend` (older event rows), the card shows **no
+   backend line**, where a PSS-based recount would have worked retroactively. Adopted —
+   honest absence is the right failure mode — but named for the owner.
+3. **Contract branching note corrected before the build** — confirmed: `dev` is an
+   ancestor of HEAD and carries the multi-round code. No stacking was needed.
+
+**Convergence summary.** R2, R4 and R11 were found independently by two or three lanes —
+highest confidence. R1 was unique to the adversarial lane and R3, R5, R9 and R10 unique to
+the contract verifier; those two lanes each justified their cost. `/code-review` uniquely
+caught R6 and the truncation reach of R12. The security lane found nothing, which is the
+expected result for a read-model slice with no schema, auth or egress change — it is
+recorded as a negative result, not skipped.
+
 ## Review handoff (step-7/8 inputs)
 
 - **Executor provenance:** phases 1–3 authored by the Claude lead. See deviation 1 — the
@@ -179,10 +320,30 @@ strings are user-facing product text.
   seeded project already holds the records the stub returns. An assertion needing a
   non-zero acquire headline must seed one; `assert headline > 0` off a plain walk fails.
 
+## Rubric status (after step 7)
+
+| # | Status |
+|---|---|
+| 1 contract satisfied | ✅ code · ⚠️ the manual browser check is outstanding (below) |
+| 2 `make verify` + declared checks | ✅ automated (re-run green after fixes) · ⚠️ manual outstanding |
+| 3 no ungated approval-gated change | ✅ `drift-check: OK`, no migration, no dep/CI/config change |
+| 4 no generated file or secret hand-edited | ✅ `git diff dev...HEAD -- frontend/src/api/gen` empty |
+| 5 no test deleted, skipped or weakened | ✅ — and the two tests the stack *strengthened* (R3, R4) are recorded above with the reason |
+| 6 verification evidence recorded | ✅ |
+| 7 gaps and deferred items listed | ✅ after R9 (was ✗ at step 6 — the authorship-country deferral was admitted here but absent from `docs/deferred.md`) |
+| 8 review stack ran | ✅ with one recorded exception: the heterogeneous half could not run (Codex CLI absent). See the ⚠️ above |
+| 9 P1 counts and query scoping | ✅ after R1 and R3 |
+| 10 Where I looked cumulative, honest copy | ✅ after R2 |
+| 11 geography residual, both scopes, no authorship country | ✅ after R4 and R5 |
+| 12 funnel and plan-in-motion unchanged | ✅ nothing in the diff can move them |
+| 13 multi-round fixture covers 9 and 10 | ✅ after R3 (was partial — item 10 only) |
+| 14 deferred.md rewrite | ✅ after R10 |
+
 ## Deferred work
 
 Seams left open → [docs/deferred.md](../../deferred.md): the `re_searched_still_thin` P1
 trigger's boundary visibility, timeline round labels, P1 sample-title scoping, per-query
-relevance, and authorship-country geography (not yet written up — see the closing note in
-the task conversation; the data is retained in the slim authorships, so a later slice
-needs no migration).
+relevance, authorship-country geography (**now written up**, R9), and two seams the review
+stack added — the project-wide vs question-scoped grain of `_acquire_run_ids` (R11) and
+the top-12 / top-8 chart truncation that lets the *drawn* bars sum below the population
+even though the payload adds up (R12).
