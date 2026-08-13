@@ -2,7 +2,7 @@
 
 Operator runbook for `infra/`. `scripts/deploy.sh` remains the authoritative
 deployment sequence. GitHub Actions invokes it for steady-state staging and
-production deploys; operators retain the Makefile entry points for first deploys
+prod deploys; operators retain the Makefile entry points for first deploys
 and recovery.
 
 ## 1. Overview
@@ -48,7 +48,7 @@ Two workflows automate only steady-state updates:
 | Workflow | Trigger | Ref deployed | GitHub Environment |
 | --- | --- | --- | --- |
 | `deploy-staging.yml` | engineer runs `workflow_dispatch` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
-| `deploy-production.yml` | stable GitHub Release is published | immutable Release SHA, accepted only when it is in `dev` history | `production` |
+| `deploy-production.yml` | stable GitHub Release is published | immutable Release SHA, accepted only when it is in `dev` history | `prod` |
 
 `release.published` includes prereleases; the workflow explicitly skips them. A
 failed configuration/ref validation job never reaches the protected Environment
@@ -56,7 +56,7 @@ and never requests an OIDC token. Deploy jobs have only `contents: read` and
 `id-token: write`. Concurrency queues a later deployment and deliberately does not
 cancel the active stop→migrate→scale→publish sequence.
 
-Create protected GitHub Environments named exactly `staging` and `production`.
+Create protected GitHub Environments named exactly `staging` and `prod`.
 Each needs these Environment **secrets** (not repository variables or committed
 values):
 
@@ -69,9 +69,9 @@ for a two-hour credential and cap the job at 90 minutes, so a role left at AWS's
 one-hour default fails during credential setup instead of expiring partway through
 an outage-sensitive deploy.
 
-Restrict `staging` deployment branches to `dev`. Restrict `production` deployment
+Restrict `staging` deployment branches to `dev`. Restrict `prod` deployment
 tags to the repository's release-tag pattern (for example `v*`) and require a
-reviewer for production. These restrictions are security controls, not just UI:
+reviewer for prod. These restrictions are security controls, not just UI:
 an environment-based GitHub OIDC token has a subject naming the Environment rather
 than its branch/tag. The workflow performs a second ref check in code.
 
@@ -92,7 +92,7 @@ the exact Environment subject (replace placeholders; do not commit the result):
     "Condition": {
       "StringEquals": {
         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-        "token.actions.githubusercontent.com:sub": "repo:nestauk/policy_atlas:environment:<staging-or-production>"
+        "token.actions.githubusercontent.com:sub": "repo:nestauk/policy_atlas:environment:<staging-or-prod>"
       }
     }
   }]
@@ -112,21 +112,21 @@ the tightly conditioned `iam:PassRole` grant below. Scope these permissions to t
 environment's account and v3 resources. Do not add static AWS access-key secrets.
 
 **Account isolation:** current v3 stack names, physical resource names, and
-`/policy_atlas_v3/*` SSM namespace are fixed. Staging and production therefore
+`/policy_atlas_v3/*` SSM namespace are fixed. Staging and prod therefore
 must target separate AWS accounts. Supporting both in one account requires a
 separate namespacing design, not a workflow-variable change.
 
-**Production is intentionally fail-closed today.** Add reviewed `production`
+**Prod is intentionally fail-closed today.** Add reviewed `prod`
 entries to `network_config.json`, `db_config.json`, and `pa_config.json` before
 enabling releases. The values include its domain, globally unique Cognito domain
 prefix, app-secret name, region, and capacity. Until then:
 
 ```bash
-make deploy-check DEPLOY_ENV=production
+make deploy-check DEPLOY_ENV=prod
 ```
 
-fails before GitHub requests production approval or AWS credentials. Never point
-the production workflow at the `staging` config as a workaround.
+fails before GitHub requests prod approval or AWS credentials. Never point
+the prod workflow at the `staging` config as a workaround.
 
 ## 2. First-deploy preconditions (gate A)
 
@@ -279,7 +279,7 @@ restore service manually with
 
 For normal operator recovery use
 `make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
-the same interface. A GitHub rerun uses the same event SHA. For production code
+the same interface. A GitHub rerun uses the same event SHA. For prod code
 rollback, publish a new reviewed Release pointing at the chosen prior commit; do
 not move or republish an existing Release tag.
 
@@ -380,7 +380,7 @@ Local dev stays on docker-compose Postgres, untouched. Direct Aurora access from
 a laptop is an SSM port-forward tunnel through a dedicated, no-ingress jumpbox
 in a private subnet — the inspection replacement for v2's deleted Supabase
 Studio. The jumpbox reaches the public Systems Manager services over HTTPS via
-the existing NAT route in staging. In production, `NetworkStack` creates
+the existing NAT route in staging. In prod, `NetworkStack` creates
 private `ssm` and `ssmmessages` interface endpoints and the jumpbox attaches
 their pre-wired managed-node SG; it has no public HTTPS fallback. The selection
 is explicit in `network_config.json` as `ssm_connectivity: nat` or
