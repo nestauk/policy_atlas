@@ -1,220 +1,321 @@
 # Task contract: 031-search-count-honesty
 
-One implementation slice. Keep it reviewable. Boundaries are in
-[AGENTS.md](../../../AGENTS.md); specs in [docs/specs/](../../specs/index.md).
+One implementation slice. Keep it reviewable. The boundaries are in
+[AGENTS.md](../../../AGENTS.md). The specs are in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-08-12. Contract approved (before planning): _pending_ ·
-> Plan approved (before implementation): _pending_ · ADR: none expected (grain
-> fix + honest residual; no new design fork).
+> **Status:** drafted 2026-08-12. Contract approved (before planning):
+> 2026-08-13 · owner · Plan approved (before implementation): 2026-08-13 · owner ·
+> ADR: none expected. This slice corrects counts and shows an honest residual. It
+> opens no new design decision.
 >
-> **Branching:** stacks on `37-hotfix-remove-quota` (tasks 029–030 search-volume /
-> multi-round code). Re-target `dev` after that hotfix merges. The worst bugs
-> show on **deep** (3 search rounds). The P1 zero-count bug also hits rapid and
-> standard.
+> **Branching:** `task/031-search-count-honesty` branches from `dev`.
+> **Corrected 2026-08-13:** the draft said this branch stacks on
+> `37-hotfix-remove-quota` for the multi-round code. It does not need to. `dev`
+> already carries the deep-search and multi-round code (`a77c5f0` "Reinstate deep
+> search", an ancestor of this branch, with
+> `backend/tests/runtime/test_search_rounds.py`). The hotfix branch is ahead of
+> `dev` only by a `dev` merge and task 029 (co-pilot chat), which this slice does
+> not touch. The stop condition on the base therefore does not fire.
+>
+> The defects are most visible at **deep** depth, which runs three search rounds.
+> Defect 1a, the zero counts on the P1 check-in, also occurs at rapid and standard
+> depth.
 
 ## Goal
 
-Make every user-facing source count mean one clear thing. Make the numbers
-match across chat check-ins, the journey pane, and the landscape.
+Give each source count that the user sees one clear meaning. Make the numbers
+agree across the chat check-in, the journey pane and the landscape.
 
-Today the same run can show "70 sources found", "OpenAlex 0 · Overton 0",
-"72 results · 200 relevant", and a country chart that sums to ~15 while the
-funnel says 215 relevant. The plan-in-motion screen rows are the only surface
-that already adds up.
+Today one deep run can show all of these numbers together:
+
+| The user sees | The problem | Defect |
+|---|---|---|
+| "Sources found: 70", and below it "OpenAlex 0 · Overton 0" | The parts contradict the total | 1a |
+| "from 56 queries", next to a count for one round | The count covers one round; the queries cover every round | 1b |
+| "72 results · 200 relevant" | Two numbers on one line, with two different grains | 2 |
+| A country chart that adds up to approximately 15, while the funnel reports 215 relevant | The chart drops each source that has no country | 3 |
+
+Only the rows on the plan-in-motion screen add up correctly today.
+
+After this slice, each of these numbers means one thing, and the parts add up to
+the total.
+
+## Terms and screens
+
+Read these two tables first. The rest of the document uses these terms.
+
+This table defines the machinery. The audit below defines the **counts**.
+
+| Term | Meaning |
+|---|---|
+| **Acquire run** | One search pass. It sends the queries to the providers, and it stores the results. A deep run does a maximum of three. |
+| **Screen run** | One relevance pass over the sources that an acquire run stored. |
+| **Round** | One acquire run, plus the screen run that follows it. |
+| **Backend** | One source provider, for example OpenAlex or Overton. |
+| **P1** | The first steer point, `search_exception`. It is a check-in in the chat, and it can fire after an acquire run. See [execution-orchestration.md](../../specs/system/execution-orchestration.md). |
+| **PSS** | A `project_source_snapshot` row. One row is one unique source in the project. |
+| **Coverage record** | A `search_coverage_record` row. Acquire inserts one new row for each acquire run. The row carries a `backends` JSON list, with one entry for each backend that the run used, and an `acquired_by_run_id` column. |
+| **Grain** | The records that a number counts, and the time span that it covers. Two numbers with different grains must not go on one line. |
+| **Query hits** | The records that one provider call returns, before the project removes the duplicates. |
+
+The counts appear on five screens. This slice changes three of them.
+
+| Screen | Where | The numbers it shows | Status |
+|---|---|---|---|
+| **P1 check-in** | Chat, after acquire (`CheckInBundle.tsx`) | Sources found; a count for each backend; the query list; sample titles | **Broken** — defects 1a and 1b |
+| **Where I looked** | Journey pane (`JourneyPane.tsx`) | `results` and `relevant`, for each backend | **Broken** — defect 2 |
+| **Where sources were published** | Journey pane, Landscape (`LandscapeView.tsx`) and the artefact outline (`ArtefactOutline.tsx`, which draws the `cited` scope) | The source count for each publisher country | **Broken** — defect 3 |
+| **Funnel** | Journey pane | `found` and `relevant`, for the whole project | Correct — do not change |
+| **Plan in motion** | Journey pane | The new relevant sources of each screen run | Correct — do not change |
 
 ## Deliverable
 
-One PR that:
+One PR that does these five things:
 
-1. Fixes the P1 check-in backend line (no more permanent zeros).
-2. Aligns "Where I looked" so `results` and `relevant` share one time grain.
-3. Makes the publisher-country chart honest when country metadata is missing.
-4. Locks the count vocabulary in copy and tests.
-5. Leaves funnel totals and plan-in-motion stage metrics unchanged (they are
-   already correct).
+1. It corrects the P1 check-in. The backend counts are no longer always zero, and
+   the query list covers one acquire run. (Defects 1a and 1b.)
+2. It aligns "Where I looked". The `results` count and the `relevant` count use
+   one grain. (Defect 2.)
+3. It makes the publisher-country chart honest when the country metadata is
+   absent. (Defect 3.)
+4. It sets the count vocabulary in the copy and in the tests.
+5. It keeps the funnel totals and the plan-in-motion stage metrics unchanged.
+   These numbers are already correct.
 
 ## Read first
 
 - [web-api.md](../../specs/system/web-api.md) — read models; honest absence.
 - [evidence-base components](../../specs/capabilities/evidence-base/components.md) —
-  acquire coverage record; screen; characterise landscape.
+  the acquire coverage record; screen; characterise landscape.
 - [027 read-model-additions.md](../027-frontend-uplift/read-model-additions.md)
-  §2 item 2 — `backends_detail` wart (project-wide `relevant`).
-- [030-multi-round-search/plan.md](../030-multi-round-search/plan.md) —
-  accepted last-round-only blemish for coverage.
-- [deferred.md](../../deferred.md) — multi-round blemishes (~313) and P1 sample
-  titles (~1901).
+  §2 item 2 — the known defect in `backends_detail`, where `relevant` is
+  project-wide.
+- [030-multi-round-search/plan.md](../030-multi-round-search/plan.md) — the
+  accepted defect where coverage reports only the last round.
+- [deferred.md](../../deferred.md) — the multi-round defects (approximately line
+  313) and the P1 sample titles (approximately line 1901).
 - Code: `api/readmodels/repository.py` (`funnel_out`, `landscape_out`,
   `_geography`, `coverage_out`, `_backend_details`);
   `runtime/steering_bundles.py` (`p1_bundle`);
-  `evidence_base/sourcing/acquire.py` (coverage row write);
+  `evidence_base/sourcing/acquire.py` (the coverage row write);
   frontend `CheckInBundle.tsx`, `journey/JourneyPane.tsx`, `LandscapeView.tsx`.
 
-## Audit (why the numbers disagree)
+## Audit: why the numbers disagree
 
 ### Locked meanings (this slice)
 
+This table locks the meaning of each count that the user sees. The grain column
+uses the definition in **Terms and screens** above.
+
 | Term | Meaning | Grain |
 |---|---|---|
-| **Sources found** / funnel `found` | Unique `project_source_snapshot` rows | All rounds, project |
-| **Acquired** (check-in chip) | New unique sources from **this** acquire run | One round |
-| **Results** (per query) | Records returned by one provider call, before project dedupe | One call |
-| **Results** (per backend, Where I looked) | Sum of that backend's query `result_count` values | **All rounds** after this fix (was: last round only) |
-| **Relevant** | Unique sources with effective screen status `relevant` | All rounds, project |
-| **Publisher country** | Country of the publishing venue when the provider sends it | Per source; often missing |
+| Funnel `found` | Unique `project_source_snapshot` rows | All rounds, project |
+| **Acquired** (check-in chip) | New unique sources from **this** acquire run. The chip field is `acquired`, but the label that the user reads is "Sources found" (`checkInPresentation.ts`). The two names are one number. | One round |
+| **Results** (per query) | Records that one provider call returns, before the project dedupe | One call |
+| **Results** (per backend, Where I looked) | Sum of the `result_count` values of the queries of that backend | **All rounds** after this fix (before the fix: the last round only) |
+| **Relevant** | Unique sources with the effective screen status `relevant` | All rounds, project |
+| **Publisher country** | Country of the publishing venue, when the provider sends it | Per source; frequently absent |
 
-### Bug 1 — Check-in: "Sources found: 70" and "OpenAlex 0 · Overton 0"
+### Defect 1a — the backend counts on the check-in are always zero
 
-**Cause:** `p1_bundle` reads `backends[].count` from every
-`search_coverage_record`. Acquire never writes `count` — only `backend`,
-`trust_class`, `mode`, `depth`. The sum is always 0.
+The check-in shows "Sources found: 70". Below it, the backend line shows
+"OpenAlex 0 · Overton 0".
 
-Titles still list because they come from a separate PSS query. The query
-line uses **all** `search.executed` events for the scope, so deep shows
-"from 56 queries" next to a this-round chip of 70.
+**Cause:** `p1_bundle` reads `backends[].count` from each coverage record.
+Acquire never writes `count`. It writes only `backend`, `trust_class`, `mode`
+and `depth`. The field is always absent, so the sum is always 0.
 
-**Depth:** Broken on rapid, standard, and deep. Deep makes the mismatch
-obvious.
+The sample titles are still correct, because a separate PSS query supplies them.
+Only the counts are wrong.
 
-### Bug 2 — Where I looked: "72 results · 200 relevant"
+**Depth:** the defect occurs at rapid, standard and deep depth.
 
-**Cause:** Two different grains in one line.
+### Defect 1b — the check-in counts one round, but lists the queries of every round
 
-- `results` = sum of `search.executed.result_count` for the **latest**
-  coverage row's acquire run only (last-write-wins; accepted in 030 /
-  deferred.md).
-- `relevant` = **all** effective relevant sources for that backend
-  (project-wide; documented wart from 027 C.1).
+The headline count covers the acquire run that has just finished. The line below
+it says "from 56 queries", which is every query of the whole scope.
 
-After round 3 of deep, last-round hits can be ~72 while cumulative relevant
-is ~200. That is not a screening bug. It is a mixed-grain display bug.
+**Cause:** the query line reads **all** the `search.executed` events of the
+scope. It does not limit them to the acquire run that has just finished.
 
-**Depth:** Rare on rapid (1 round). Common on standard (2). Worst on deep (3).
+**Depth:** invisible at rapid depth, which runs one round. Visible at standard
+depth and deep depth.
 
-### Bug 3 — Country bars sum far below Relevant
+### Defect 2 — Where I looked shows "72 results · 200 relevant"
 
-**Cause:** `_geography` only reads publisher country:
+**Cause:** the line puts two different grains together.
 
+- `results` is the sum of `search.executed.result_count` for **one** acquire run.
+  `coverage_out` reads the newest coverage record row only (`created_at desc`,
+  `limit 1`), and it passes that row's `acquired_by_run_id` to
+  `_backend_details`. That function then filters the events by that single
+  `run_id`. The earlier rows still exist, but this read path ignores them.
+  Therefore the count covers the last round only. Task 030 and deferred.md accept
+  this behaviour.
+- `relevant` is the count of **all** the effective relevant sources of that
+  backend, for the whole project. Task 027 §C.1 records this defect.
+
+After round 3 at deep depth, the hits of the last round can be approximately 72,
+while the cumulative relevant count is approximately 200. This is not a
+screening defect. It is a display defect that mixes two grains.
+
+**Depth:** rare at rapid depth (1 round). Frequent at standard depth (2 rounds).
+Worst at deep depth (3 rounds).
+
+### Defect 3 — the country bars add up to much less than Relevant
+
+**Cause:** `_geography` reads only the publisher country. It tries three sources,
+in this order:
+
+- the direct `publication_country` metadata field, which uploaded sources can
+  carry;
 - Overton: `provider_fields.source.country`
 - OpenAlex: `provider_fields.primary_location.source.country_code`
 
-OpenAlex often omits venue country. Authorship countries are retained in
-slim authorships but **must not** be treated as publisher country. Missing
-country sources are dropped from the chart. There is no residual bucket.
-The chart therefore cannot sum to Relevant.
+Each of the three can be absent, and then the function returns `None`. OpenAlex
+frequently omits the venue country. The slim authorships keep the
+authorship countries, but the code must **not** use an authorship country as the
+publisher country. The chart drops each source that has no country. There is no
+residual bucket. Therefore the chart cannot add up to Relevant.
 
-**Depth:** Worse on deep because OpenAlex volume dominates.
+**Depth:** worse at deep depth, because the OpenAlex volume is dominant.
 
-### Bug 4 — Plan in motion looks right
+### Defect 4 — none. Plan in motion is correct
 
-**Not a bug.** Each Screening row reports new relevants for that screen run.
-Summing those rows matches funnel `relevant`. Keep this surface as the
-reference for per-round yield.
+Each Screening row reports the new relevant sources of that screen run. The sum
+of these rows is equal to the funnel `relevant` count. Keep this screen as the
+reference for the yield of each round.
 
 ## Scope / Out of scope
 
 ### In
 
-- `p1_bundle`: compute backend counts from durable data for the acquire run
-  that just finished; scope queries to that run; keep chip and body aligned.
-- `coverage_out` / `_backend_details`: aggregate query `results` across **all**
-  acquire runs for the project (discharge the last-round-only blemish for this
-  pane). Keep `relevant` as unique project-wide per backend.
-- Copy: short labels so users can see the grain ("query hits" vs "kept after
-  screening" if needed).
-- Landscape / journey geography: add a residual **"Not reported"** count so
-  known countries + not reported = Relevant. Keep publisher-country semantics.
-- Tests for the four invariants below.
-- Update `docs/deferred.md`: remove or rewrite the last-round-only coverage
-  blemish for Where I looked / P1; keep the separate P1 sample-titles
-  multi-question note.
+- **Defects 1a and 1b** — `p1_bundle`: calculate the backend counts from durable
+  data, for the acquire run that has just finished. Limit the queries to that
+  run. Keep the headline count and the body in agreement.
+- **Defect 2** — `coverage_out` and `_backend_details`: add up the query
+  `results` values across **all** the acquire runs of the project. This clears
+  the last-round-only defect for this pane. Keep `relevant` as the unique
+  project-wide count for each backend.
+- **Defect 2** — copy: use short labels that show the grain. For example, "query
+  hits" and "kept after screening".
+- **Defect 3** — geography: add a residual **"Not reported"** count in
+  `landscape_out`. Then the known countries plus the residual add up to the
+  population that the chart draws, at each scope. Keep the publisher-country
+  meaning. The residual reaches all three render sites, because they share the
+  read model.
+- Tests for the five invariants below.
+- Update `docs/deferred.md`. Remove or rewrite the last-round-only coverage
+  defect for Where I looked and for P1. Keep the separate note about the P1
+  sample titles.
 
 ### Out
 
-- Schema migrations / new tables.
-- Changing funnel math or screen stage summaries.
-- Using authorship countries as publisher country.
-- Study geography (finding-level) charts.
-- Per-query relevance (still not recorded).
-- Round labels on the timeline (stays deferred).
-- Scoping P1 sample titles to the evidence scope (stays deferred until
-  multi-question IA).
-- Search volume caps, round caps, or provider behaviour.
-- Prompt / model changes.
+- Schema migrations and new tables.
+- Changes to the funnel calculations or to the screen stage summaries.
+- Use of an authorship country as the publisher country.
+- Study geography charts at finding level.
+- Relevance for each query. The system still does not record it.
+- Round labels on the timeline. They stay deferred.
+- Limitation of the P1 sample titles to the evidence scope. This stays deferred
+  until the multi-question IA.
+- Search volume caps, round caps and provider behaviour.
+- Prompt changes and model changes.
 
 ## Constraints & approval gates
 
-- **No schema migration.** Counts come from existing events and snapshots.
-- **Public read-model shapes stay.** Field names on `CoverageBackendDetailOut`
-  and the P1 bundle stay. This slice changes **how numbers are filled**, not
-  the OpenAPI field set. Owner approval at this contract gate covers that
-  semantic fix.
-- **No new deps, auth, egress, CI, or prod config.**
-- Writing optional `count` onto future coverage JSON is allowed as a
-  belt-and-braces aid; **read path must not require it** (old rows stay
-  correct).
+- **No schema migration.** The counts come from the events and the snapshots
+  that exist today.
+- **The public read-model shapes stay.** The field names on
+  `CoverageBackendDetailOut` and on the P1 bundle do not change. This slice
+  changes **how the numbers are calculated**, not the OpenAPI field set. Owner
+  approval at this contract gate covers that change of meaning.
+- **No new dependencies, auth, egress, CI or production config.**
+- Acquire may also write the optional `count` field onto new coverage JSON, as
+  an additional safeguard. The read path must not need this field, so that the
+  old rows stay correct.
 
 ## Public / private boundary
 
-Public-safe: count vocabulary, residual label, tests, deferred.md edits.
-No raw source text in fixtures beyond existing patterns.
+Public-safe: the count vocabulary, the residual label, the tests and the
+deferred.md changes. The fixtures must contain no raw source text, except in the
+patterns that exist today.
 
 ## Model route
 
-`n/a` — no inference.
+`n/a` — this slice does no inference.
 
 ## Disciplines binding this slice
 
-- Honest absence: missing publisher country → "Not reported", never invented.
-- Don't flatten status.
-- Flag, don't drop.
-- Leave deferred seams in [docs/deferred.md](../../deferred.md).
+- Honest absence: if the publisher country is absent, show "Not reported". Never
+  invent a country.
+- Do not flatten status.
+- Flag, do not drop.
+- Keep the deferred items in [docs/deferred.md](../../deferred.md).
 
 ## Count invariants (acceptance)
 
-After this slice, for any project that has finished at least one acquire+screen
-cycle:
+These five statements must be true after this slice, for each project that has
+completed a minimum of one acquire cycle and one screen cycle:
 
-1. **P1:** If the check-in chip shows `acquired = N` and N > 0, the backend
-   line must not show all zeros. Sum of per-backend new-source counts for that
-   run equals N.
-2. **P1:** Queries listed are from that same acquire run only.
-3. **Where I looked:** For each backend, `results` is the sum of that
-   backend's query hits across **all** rounds. `relevant` stays unique
-   project-wide for that backend. Copy must not imply `relevant ⊆ results`
-   when query hits overlap or when hits are pre-dedupe.
-4. **Geography:** Sum of country bars + "Not reported" = funnel `relevant`
-   (same screened-in population the landscape already uses).
-5. **Unchanged:** Funnel `found` / `relevant` and plan-in-motion screen
-   `relevant` totals stay as today.
+1. **P1, closes defect 1a:** if the check-in chip shows `acquired = N`, and N is
+   more than 0, the backend line must not show only zeros. The per-backend counts
+   of new sources for that run must add up to N.
+2. **P1, closes defect 1b:** the bundle lists the queries of that same acquire
+   run only.
+3. **Where I looked, closes defect 2:** for each backend, `results` is the sum of the query hits
+   of that backend across **all** the rounds. `relevant` stays the unique
+   project-wide count for that backend. The copy must not tell the user that
+   `relevant` is a subset of `results`. The query hits can overlap, and the
+   system counts them before the dedupe.
+4. **Geography, closes defect 3:** the country bars plus "Not reported" add up to
+   the population that the chart draws, and never to less than it.
+   - At the default scope, that population is every relevant source, so the total
+     is equal to the funnel `relevant` count.
+   - At `scope="cited"`, `landscape_out` narrows the population to the sources
+     that the latest artefact cites. The total is then equal to that cited count,
+     **not** to the funnel `relevant` count. Do not "correct" the cited scope to
+     match the funnel.
+5. **Unchanged:** the funnel `found` and `relevant` counts, and the
+   plan-in-motion screen `relevant` totals, stay as they are today.
 
 ## Stop conditions
 
-Halt if: a schema change seems required; OpenAPI field renames are proposed;
-scope grows into authorship-as-publisher or timeline round labels; or the
-hotfix base is not available and `dev` lacks multi-round.
+Stop the work if one of these conditions occurs:
+
+- A schema change appears to be necessary.
+- Someone proposes to rename OpenAPI fields.
+- The scope grows to use an authorship country as the publisher country, or to
+  add round labels to the timeline.
+- The hotfix base is not available, and `dev` does not have the multi-round
+  code.
 
 ## Acceptance checks
 
-- `make verify` green.
-- Unit/API tests for invariants 1–4 (multi-round fixture required for 2–3).
-- Manual / browser: one **deep** (or standard multi-round) run — check-in,
-  Where I looked, geography residual, funnel. Rapid smoke optional.
-- Live full-chain e2e is **not** required; use a focused deep/standard check
-  on the changed surfaces plus existing verify.
+- `make verify` is green.
+- Unit tests and API tests cover invariants 1–4. Invariants 2 and 3 need a
+  multi-round fixture. Invariant 4 needs one default-scope case and one
+  `scope="cited"` case.
+- Manual check in the browser: do one **deep** run, or one standard run with
+  more than one round. Then check the check-in, Where I looked, the geography
+  residual and the funnel. A rapid smoke test is optional.
+- A live full-chain e2e test is **not** necessary. Do a focused deep check or
+  standard check on the changed screens, together with the existing verify.
 
 ## Verification evidence expected
 
-- Commands and test names in `verification.md`.
-- Before/after notes for the four bugs (or fixture assertions that encode them).
-- Confirmation funnel and plan-in-motion were not changed.
-- deferred.md update listed.
+- The commands and the test names, in `verification.md`.
+- Notes before and after for defects 1a, 1b, 2 and 3, or fixture assertions that
+  record them.
+- Confirmation that the funnel and the plan-in-motion screen did not change.
+- A list of the changes to deferred.md.
 
 ## Risk tier & review focus
 
-**Tier 2** — read-model / check-in projection fix; integration tests; human
-review. Not Tier 3: no schema, auth, or egress change; OpenAPI field *set*
-unchanged.
+**Tier 2** — this slice fixes a read model and a check-in projection. It needs
+integration tests and a human review. It is not Tier 3, because it changes no
+schema, no auth and no egress, and because the OpenAPI field *set* stays the
+same.
 
-Focus: mixed grain, deep-search regressions, honest residual, copy clarity,
-no silent authorship→publisher substitution.
+Review focus: mixed grain; regressions at deep depth; the honest residual; clear
+copy; no silent substitution of an authorship country for a publisher country.

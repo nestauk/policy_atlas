@@ -47,6 +47,29 @@ e2e is a deliberate upgrade the gate approves with its wall-time cost named (014
 inherited "skeleton e2e" spent ~50 min of downstream live chain to evidence surfaces
 needing ~2 min). Don't inherit the previous slice's live-check shape by default.
 
+**Design docs must be legible cold** (2026-08-13): the human gate and conversation B both
+read these files without your context. Five habits, cheap now and expensive to retrofit:
+
+- **Define the jargon once, in the contract** — the § Terms stub in the template. One row
+  for each term a cold reader cannot expand: internal labels (`P1`), abbreviations
+  (`PSS`), and any word the slice uses in a special sense (grain, round). The rubric and
+  the plan *point at* that table. They never restate it.
+- **Map what the slice touches, in whatever shape fits it.** For a UI slice that was a
+  table of surface → the number it shows → the file that renders it → broken /
+  correct-do-not-change. The shape is slice-specific; the rule is not. The
+  "do not change" rows carry the same weight as the broken ones.
+- **Number the problems, and use one numbering everywhere.** Goal, deliverable, scope,
+  invariants, plan phases and rubric items all cite the same defect ids. Then any symptom
+  traces to its fix, and an invariant with no defect shows up as a hole.
+- **Split anything that is really two problems.** The tell: it needs two acceptance
+  invariants. One defect, one cause, one invariant.
+- **Resolve name collisions from the code, not by rewording.** When two names in the docs
+  appear to mean one thing, read the source and say which is the field and which is the
+  label. A doc that hedges here teaches the next reader the same confusion.
+
+Prose follows the repo output style (ASD-STE100): short sentences, active voice, plain
+words in place of metaphors — "accepted defect", not "wart" or "blemish".
+
 🛑 **Human approves the contract before planning** (Tier 2+).
 
 **Contract-stage adversarial review** (Tier 3+ standard; Tier 2 on demand): after the
@@ -69,7 +92,9 @@ the step-1 human review and adversarial pass see both.
 
 `/plan` (read-only). Save the accepted plan to `docs/tasks/NNN-slug/plan.md`. For a
 pattern-following slice, the previous slice's `plan.md` is the template — mirror it
-against the **as-built code** (not its own claims; plans drift, code doesn't).
+against the **as-built code** (not its own claims; plans drift, code doesn't). The terms
+and surface tables stay in the contract; the plan cites them and reuses its defect
+numbering (§ Design docs must be legible cold).
 
 **Executor routing is a plan-time decision** (failure-log, 2026-07-05). Mark each plan
 task with its executor — `lead` · `fast-worker` · `deep-reasoner` · `codex` — per
