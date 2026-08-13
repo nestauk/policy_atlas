@@ -49,6 +49,12 @@ rule: no recomputation of anything a component already computed.
   correct for P2's coverage picture and wrong for P1's one-round card. Add the narrowing as
   a parameter with the broad behaviour as the default, and assert **both** halves in one
   test — otherwise a later change quietly narrows the other caller.
+- **When one read path feeds both an aggregate and the records behind it, the records set
+  the grain** (031). `_backend_details` returns `results` *and* `queries[]`. Whether the
+  hit count should span the whole project or one question is genuinely arguable; whether
+  the card should print a superseded question's search strings is not. Pick the grain the
+  itemised list needs, then the aggregate is automatically defensible — the reverse is not
+  true.
 - Same family:
   [success-map-is-stale-on-the-failure-path](success-map-is-stale-on-the-failure-path.md)
   (which run's summary),

@@ -1786,7 +1786,12 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
         base=base,
         backends=backend_names,
         backends_detail=_backend_details(
-            conn, project_id, _acquire_run_ids(conn, project_id), backend_names
+            conn,
+            project_id,
+            # Same row the sentence and the backend list come from, so every
+            # part of this card describes one question.
+            _acquire_run_ids(conn, project_id, row["evidence_scope_id"]),
+            backend_names,
         ),
     )
 
@@ -1796,22 +1801,38 @@ def _public_backend_name(value: str) -> str | None:
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
 
 
-def _acquire_run_ids(conn: Connection, project_id: uuid.UUID) -> list[uuid.UUID]:
-    """Every acquire run that wrote a coverage record for the project, oldest first.
+def _acquire_run_ids(
+    conn: Connection, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Every acquire run of one evidence scope, oldest first.
 
     Acquire inserts one coverage record per run, so the column holds one id per
-    round (task 031). The order here is for readability only — what makes the
-    read model deterministic is the ``sequence`` ordering on the event select
-    that consumes these ids, not the order of the ids themselves.
+    round (task 031) — all of them, which is what makes ``results`` cumulative
+    across rounds instead of last-round-only.
 
-    Project-wide, not scope-filtered, per the contract ("all the acquire runs of
-    the project"). A re-planned project mints a new evidence scope, so its
-    superseded question's rounds count here too — see docs/deferred.md.
+    Scoped to **one question**, not the whole project: approving a plan mints a
+    new ``evidence_scope`` (``orchestrate.py``), so a re-planned project holds
+    the superseded question's coverage records too. Project-wide here would put
+    the abandoned question's query strings and hits into this question's card,
+    beside a ``sentence`` read from the current question's row. Round-cumulative
+    is the fix task 031 wanted; question-cumulative is not (review stack).
+
+    ``relevant`` next door stays project-wide by design — screening re-screens
+    the whole project pool per question (docs/knowledge/
+    coverage-base-project-pool-wide.md), and the contract's invariant 3 requires
+    only that the copy never imply one number contains the other.
+
+    The order here is for readability only — what makes the read model
+    deterministic is the ``sequence`` ordering on the event select that consumes
+    these ids, not the order of the ids themselves.
     """
     return list(
         conn.execute(
             select(search_coverage_record.c.acquired_by_run_id)
-            .where(search_coverage_record.c.project_id == project_id)
+            .where(
+                search_coverage_record.c.project_id == project_id,
+                search_coverage_record.c.evidence_scope_id == evidence_scope_id,
+            )
             .order_by(search_coverage_record.c.created_at)
         ).scalars()
     )

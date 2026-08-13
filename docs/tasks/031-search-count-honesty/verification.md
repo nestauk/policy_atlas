@@ -14,6 +14,7 @@ stack (step 7).
 | `make verify` (step-6 exit) | pass | See § Step-6 exit run. |
 | `make verify` (step-7 baseline, before review fixes) | pass | exit 0 — 2134 backend, 243 frontend, mypy 263 files, ruff, eslint, `drift-check: OK`. Independently re-run by the contract-verifier lane with matching numbers. |
 | `make verify` (step-7 exit, after the review fixes) | pass | exit 0. |
+| `make verify` (after the R11 reversal) | pass | exit 0 — 2137 backend (three added by the stack), 243 frontend, mypy 263 files, ruff, eslint, `drift-check: OK`. |
 
 The plan's gate map allowed phases 2 and 3 to share one gate. Phase 1 gated on
 `verify-fast` as planned. No gate was added or downgraded.
@@ -40,6 +41,11 @@ Added by the review stack (2026-08-13):
 |---|---|
 | `tests/runtime/test_search_rounds.py::test_p1_at_round_two_reports_only_that_round` | R3 — invariants 1 and 2 on a real two-round walk |
 | `tests/runtime/test_steering_lattice.py::test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire` | R1 — a failed round's P1 shows absence, not the previous round's numbers |
+| `tests/api/test_read_models.py::test_coverage_ignores_a_superseded_questions_rounds` | R11 — a re-planned project's card shows this question's rounds, not the abandoned one's |
+
+Both R1's and R11's guards were **mutation-checked**: disabling the production line under
+test turns each red. R3's was too. That check exists because two of the step-6 tests passed
+unconditionally (R4, R7).
 
 Invariant 5 ("unchanged") is covered by the existing suite: the read-model golden test
 and the funnel/plan-in-motion assertions were not edited and stay green.
@@ -137,8 +143,10 @@ untouched, as the contract required.
 
 - "One acquire run" is `successful_runs["acquire"]`, on the documented assumption that
   the walk's reference moves to the newest run. Pinned by the P1 scoping test.
-- `_acquire_run_ids` is project-wide, not scope-filtered, matching the contract's wording
-  ("all the acquire runs of the project"). `coverage_out` itself takes only a project id.
+- ~~`_acquire_run_ids` is project-wide, not scope-filtered, matching the contract's wording
+  ("all the acquire runs of the project").~~ **Reversed by the review stack (R11):** it is
+  now scoped to the evidence scope of the coverage row the rest of the card reads.
+  `coverage_out` still takes only a project id and derives the scope from that row.
 - Query hits can exceed unique sources. That is honest and the copy now says so.
 
 ## Known unverified items
@@ -231,15 +239,33 @@ should weigh this when deciding review depth at step 9.
   the pane's `sentence`, `base` and `backends` name list. Entry narrowed to "the
   per-round *counts* are discharged" with the remainder itemised.
 
+- **R11 (low, `/code-review`; MINOR-2, adversarial; NOTE-11, contract verifier) —
+  `_acquire_run_ids` was project-wide, not scope-filtered. FIXED** (owner's call,
+  2026-08-13; initially deferred by the review lead — see the reversal note below).
+  Approving a plan mints a new `evidence_scope` (`orchestrate.py`), so a re-planned
+  project holds the superseded question's coverage records. Summing project-wide put that
+  question's hits **and its query strings verbatim** into this question's card, beside a
+  `sentence` read from the current question's row. `_acquire_run_ids` now takes the
+  evidence scope of the same coverage row the sentence and backend list come from.
+  Round-cumulative — the whole point of defect 2 — is unchanged and still pinned by its
+  own test.
+
+  **Why the first adjudication was wrong.** The lead declined this on the grounds that
+  the contract's § Scope says "all the acquire runs of the **project**", making the grain
+  a contract decision rather than a review-stack fix. That reasoning treated a phrase
+  written before anyone considered re-planning as a deliberate choice. It also weighed
+  only the *counts*, where a project-wide reading is arguable, and missed that the same
+  code path drives the **query list** — where showing an abandoned question's searches is
+  not arguable at all. The contract's own § Goal ("give each source count that the user
+  sees one clear meaning") governs; the § Scope phrasing was imprecise, not decisive.
+
+  `relevant` deliberately stays project-wide (contract D4), so `results` and `relevant`
+  now have different bases. That is permitted explicitly: invariant 3 requires only that
+  the copy never imply one contains the other, and it does not. Recorded in
+  `docs/deferred.md` so the asymmetry is not "fixed" later by mistake.
+
 **Adopted as deferred (recorded in `docs/deferred.md`, not fixed here):**
 
-- **R11 (low, `/code-review`; MINOR-2, adversarial; NOTE-11, contract verifier) —
-  `_acquire_run_ids` is project-wide, not scope-filtered.** Three lanes converged. A
-  re-planned project mints a new `evidence_scope`, so the pane would sum a superseded
-  question's rounds beside a sentence from the current question's row. **Declined as a
-  code fix here** because the contract's own § Scope wording is "all the acquire runs of
-  the **project**" — changing the grain is a contract decision, not a review-stack fix.
-  Deferred with the one-clause fix named.
 - **R12 (low, `/code-review`; NOTE-9, contract verifier) — the drawn chart truncates.**
   Invariant 4 holds in the payload, where the tests assert it; the renderers cut to the
   top 12 / top 8. Pre-existing, but the residual is typically large and now takes a slot.
@@ -278,7 +304,8 @@ should weigh this when deciding review depth at step 9.
    ancestor of HEAD and carries the multi-round code. No stacking was needed.
 
 **Convergence summary.** R2, R4 and R11 were found independently by two or three lanes —
-highest confidence. R1 was unique to the adversarial lane and R3, R5, R9 and R10 unique to
+highest confidence, and R11 is the cautionary one: three-lane convergence was still
+initially talked down by a single sentence of contract wording. R1 was unique to the adversarial lane and R3, R5, R9 and R10 unique to
 the contract verifier; those two lanes each justified their cost. `/code-review` uniquely
 caught R6 and the truncation reach of R12. The security lane found nothing, which is the
 expected result for a read-model slice with no schema, auth or egress change — it is

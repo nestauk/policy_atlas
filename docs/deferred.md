@@ -324,12 +324,13 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     `sentence`, `base` (stop condition, adequacy, verdict origin) and the `backends` name
     list — only `backends_detail` went cumulative. A backend used in an earlier round but
     absent from the latest row contributes no card, so its hits stay invisible.
-  - `_acquire_run_ids` is project-wide, not evidence-scope-filtered (the task-031
-    contract's own wording). A re-planned project mints a new `evidence_scope`
-    (`orchestrate.py`), so "Where I looked" then sums the superseded question's rounds
-    beside a sentence read from the current question's row — the same mixed-grain shape
-    task 031 set out to remove, one level up. Fix is one `where` clause; it needs a
-    contract decision on whether the pane is project-grained or question-grained.
+  - `backends_detail.relevant` remains **project-wide** per backend while `results` is now
+    one question's rounds (task 027 §C.1; `_acquire_run_ids` was scoped to the evidence
+    scope by the 031 review stack). This is deliberate — screening re-screens the whole
+    project pool per question, so project-wide relevance is the design
+    (`docs/knowledge/coverage-base-project-pool-wide.md`) — and the contract's invariant 3
+    requires only that the copy never imply one number contains the other, which it does
+    not. Revisit if the multi-question IA makes per-question relevance meaningful.
   - The loop-level stop condition is written after the last screen boundary, so the
     `re_searched_still_thin` P1 check-in **trigger** can only see it on a later boundary,
     if at all — task 031 changed the P1 display bundle, not the trigger.

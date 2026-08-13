@@ -1265,6 +1265,89 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                 delete_project_data(conn, project_id)
 
 
+def test_coverage_ignores_a_superseded_questions_rounds(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """"Where I looked" describes one question, cumulatively — not the project.
+
+    Approving a plan mints a new ``evidence_scope`` (``orchestrate.py``), so a
+    re-planned project holds the abandoned question's coverage records too.
+    Summing acquire runs project-wide put that question's query strings and hits
+    into this question's card, beside a sentence read from the current
+    question's row (review stack, task 031). Round-cumulative was the fix;
+    question-cumulative was not.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                old_run = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=old_run,
+                    event_type="search.executed",
+                    payload={
+                        "backend": "openalex",
+                        "query": "abandoned question",
+                        "result_count": 99,
+                    },
+                )
+                # The replan: a second scope, its own acquire run, its own row.
+                new_scope = seed_scope(conn, project_id)
+                new_run = uuid.uuid4()
+                conn.execute(
+                    insert(runs).values(
+                        run_id=new_run,
+                        project_id=project_id,
+                        status="running",
+                        started_at=now(),
+                    )
+                )
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=new_run,
+                    event_type="search.executed",
+                    payload={
+                        "backend": "openalex",
+                        "query": "current question",
+                        "result_count": 7,
+                    },
+                )
+                conn.execute(
+                    insert(search_coverage_record).values(
+                        search_coverage_record_id=uuid.uuid4(),
+                        evidence_scope_id=new_scope,
+                        project_id=project_id,
+                        acquired_by_run_id=new_run,
+                        backends=[{"backend": "openalex", "trust_class": "academic"}],
+                        scope_filters={},
+                        stop_condition="completed",
+                        adequacy_verdict="adequate",
+                        verdict_origin="model",
+                        created_at=now(),
+                    )
+                )
+
+            coverage = client.get(
+                f"/api/v1/projects/{project_id}/coverage", headers=owner
+            ).json()
+            detail = next(
+                row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
+            )
+            assert [query["query"] for query in detail["queries"]] == ["current question"]
+            assert detail["results"] == 7, "the abandoned question's 99 hits must not count"
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
 def test_coverage_backend_results_sum_query_hits_across_every_round(
     tmp_path: Path, engine: Engine
 ) -> None:

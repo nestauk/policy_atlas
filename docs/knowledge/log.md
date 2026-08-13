@@ -17,6 +17,11 @@
   [residual-counted-after-narrowing](residual-counted-after-narrowing.md) — counting
   "Not reported" inside the loop over already-scoped rows makes the add-up invariant true
   at every scope for free; the payload adding up is not the drawn chart adding up.
+* **Update**: [read-the-producing-components-summary](read-the-producing-components-summary.md)
+  — added the grain rule for a read path that returns both an aggregate and the records
+  behind it: `_backend_details` emits `results` and `queries[]`, and the verbatim query
+  list, not the count, is what forces the question-scoped grain. Owner-caught after the
+  review lead had deferred the three-lane finding (failure-log 2026-08-13).
 * **Update**: [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md) — a
   guard can die by evaluating to nothing, not only by being routed around: `0 == sum(())`
   and a scope test whose fixture never entered the narrowed scope both passed
