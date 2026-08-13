@@ -7,6 +7,15 @@ export {
   usePlanningTranscript,
 } from "./transcript";
 export { composePlanningThread } from "./thread";
+export {
+  chatTranscriptRows,
+  consumeChatStream,
+  initialOptimisticChatTranscriptState,
+  reduceOptimisticChatTranscript,
+  retryInputForOptimisticChatTurn,
+  useChatConversation,
+  useComposerDraft,
+} from "./conversations";
 export { useRunStream } from "./useRunStream";
 export {
   createInitialRunStreamState,
@@ -33,6 +42,14 @@ export type {
   OptimisticTranscriptState,
   PlanningTranscriptTurn,
 } from "./transcript";
+export type {
+  ChatConversationRow,
+  ChatStreamEvent,
+  ChatTurn,
+  OptimisticChatTranscriptAction,
+  OptimisticChatTranscriptState,
+  OptimisticChatTurn,
+} from "./conversations";
 export type {
   PlanningThreadDecision,
   PlanningThreadItem,

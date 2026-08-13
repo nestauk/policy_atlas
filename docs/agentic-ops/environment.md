@@ -1,7 +1,9 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–028 — 025 hoists the Python project to `backend/` and adds the `frontend/`
+stands (tasks 001–029 — 029 adds the chat surface: no new env vars required locally,
+`POLICY_ATLAS_CHAT_MODEL` optional with an application default; a live chat turn needs the
+funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`
 joined `make verify` — no AWS/Docker needed) plus `make fe-api-smoke` (real-HTTP Playwright
 smoke against a disposable `policy_atlas_smoke` DB); 027 adds the root `make dev` (backend

@@ -316,6 +316,92 @@ class QuoteMatcher:
         return QuoteMatch(status="normalised", spans=spans)
 
 
+def _is_word_char(char: str) -> bool:
+    """Return whether ``char`` counts as a word char for a boundary check."""
+    return char.isalnum() or char == "_"
+
+
+def _flanks_ok(haystack: str, start: int, end: int) -> bool:
+    """Return whether ``[start, end)`` sits on a word boundary on both sides.
+
+    Mirrors regex ``\\b`` semantics: a boundary exists unless the char just
+    outside the interval and the char just inside it are both word chars —
+    that combination means the interval is embedded in a longer word run
+    (task 029 delta-review: rejects ``"cat"`` matching inside
+    ``"concatenate"``).
+    """
+    if start > 0 and _is_word_char(haystack[start - 1]) and _is_word_char(haystack[start]):
+        return False
+    return not (
+        end < len(haystack) and _is_word_char(haystack[end - 1]) and _is_word_char(haystack[end])
+    )
+
+
+def locate_unique_span(basis: BasisText, quote: str) -> tuple[int, int] | None:
+    """Locate one quote's raw ``[start, end)`` doc-level span iff it is unambiguous.
+
+    The canonical read-time locator (task 029 delta-review) shared by
+    ``chat_turns._snapped_chunk_quote`` and ``repository.chunk_quote_context_out``:
+    unlike :class:`QuoteMatcher` (which grounds an ordered sequence of anchor
+    quotes and repeats the last occurrence past the end), a single candidate
+    quote here is only ever usable when it resolves to exactly one occurrence
+    that survives two further guards. All three run in order — an earlier
+    guard failing skips the later ones:
+
+    1. Overlap-aware occurrence counting on the normalised text: a step-1 scan,
+       not ``str.count`` (which is non-overlapping and can under-count — e.g.
+       ``"red blue red"`` has two OVERLAPPING occurrences in
+       ``"red blue red blue red"`` that a non-overlapping scan sees as one).
+       Anything but exactly one occurrence is ambiguous or absent -> ``None``.
+    2. A word-boundary flank check on that sole occurrence (:func:`_flanks_ok`)
+       — a match embedded inside a longer word (``"cat"`` inside
+       ``"concatenate"``) is rejected even though it is the only substring hit.
+    3. A case-fold round-trip guard: the raw span the normalised match maps
+       back to is itself re-normalised and must equal the normalised quote
+       exactly. This rejects a match that starts or ends mid-expansion of one
+       raw char that casefolds to several normalised chars (e.g. the ``ﬃ``
+       ligature folding to ``"ffi"`` — a normalised match landing on only part
+       of its expansion recovers a raw span that re-normalises to a different
+       length, so it is rejected rather than silently returning a partial
+       ligature as if it were the plain letters).
+
+    This function does not perform Unicode NFC composition/decomposition —
+    only the qv_v1 fold (casefold, punctuation/whitespace folding, soft-hyphen
+    deletion). A composed (``"é"``) vs. decomposed (``"e"`` + combining acute)
+    pair of an otherwise-identical quote is an honest absence, not a match:
+    documented envelope, not a bug (task 029 delta-review).
+
+    Args:
+        basis: The document basis to match against.
+        quote: The candidate quote, raw as emitted/typed.
+
+    Returns:
+        The raw doc-level ``(start, end)`` half-open interval, or ``None`` when
+        the quote is empty, absent, ambiguous, or fails a guard.
+    """
+    normalised_quote = _normalise(quote)
+    if not normalised_quote:
+        return None
+    haystack = basis.normalised
+    quote_len = len(normalised_quote)
+    positions = [
+        i
+        for i in range(len(haystack) - quote_len + 1)
+        if haystack[i : i + quote_len] == normalised_quote
+    ]
+    if len(positions) != 1:
+        return None
+    start = positions[0]
+    end = start + quote_len
+    if not _flanks_ok(haystack, start, end):
+        return None
+    raw_s = basis.raw_start[start]
+    raw_e = basis.raw_end[end - 1]
+    if _normalise(basis.raw_text[raw_s:raw_e]) != normalised_quote:
+        return None
+    return raw_s, raw_e
+
+
 # --- iof_rules_v3 field validation ----------------------------------------
 
 

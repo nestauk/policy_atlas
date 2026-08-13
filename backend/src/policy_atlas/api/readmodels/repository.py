@@ -62,6 +62,7 @@ from policy_atlas.core.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
+    pss_owns_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -73,6 +74,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_base.assess.screen import effective_screen_rows
+from policy_atlas.evidence_base.extract.quote_verify import build_basis, locate_unique_span
 from policy_atlas.runtime.steering_history import steering_history
 
 
@@ -158,7 +160,22 @@ def _origin(origin: str, metadata: Mapping[str, Any]) -> Literal["OpenAlex", "Ov
     return "OpenAlex"
 
 
-def _latest_row_by_id(rows: Iterable[Any], id_key: str, time_key: str) -> dict[uuid.UUID, Any]:
+def latest_row_by_id(rows: Iterable[Any], id_key: str, time_key: str) -> dict[uuid.UUID, Any]:
+    """Pick the latest row per ``id_key``, comparing ``time_key`` timestamps.
+
+    The shared effective-row discipline for every read model that resolves
+    one durable id to its latest appraisal/classification/screen row
+    (task 029 delta-review: exported so ``chat_turns`` reuses this instead of
+    a second, parallel implementation).
+
+    Args:
+        rows: Rows carrying at least the ``id_key`` and ``time_key`` fields.
+        id_key: Attribute name to group rows by.
+        time_key: Attribute name whose later value wins within a group.
+
+    Returns:
+        A mapping from each distinct ``id_key`` value to its latest row.
+    """
     latest: dict[uuid.UUID, Any] = {}
     for row in rows:
         key = cast(uuid.UUID, getattr(row, id_key))
@@ -231,7 +248,7 @@ def _cited_snapshot_ids(conn: Connection, artefact_id: uuid.UUID) -> set[uuid.UU
 def _effective_screens(conn: Connection, project_id: uuid.UUID) -> dict[uuid.UUID, Any]:
     effective = effective_screen_rows()
     rows = conn.execute(select(effective).where(effective.c.project_id == project_id)).all()
-    return _latest_row_by_id(rows, "project_source_snapshot_id", "screened_at")
+    return latest_row_by_id(rows, "project_source_snapshot_id", "screened_at")
 
 
 def funnel_out(conn: Connection, project_id: uuid.UUID) -> FunnelOut:
@@ -344,6 +361,10 @@ def landscape_out(
                     select(project_source_snapshot.c.project_source_snapshot_id).where(
                         project_source_snapshot.c.project_id == project_id,
                         project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids),
+                        # Membership against a SET of candidate snapshots, not
+                        # equality against one column — pss_owns_snapshot's
+                        # `==` shape doesn't fit; stays hand-written (task 029
+                        # delta-review sweep).
                         (
                             project_source_snapshot.c.source_snapshot_id.in_(cited_snapshots)
                             | project_source_snapshot.c.full_text_snapshot_id.in_(cited_snapshots)
@@ -371,7 +392,7 @@ def landscape_out(
         )
         .where(project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids))
     ).all()
-    classifications = _latest_row_by_id(
+    classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -599,7 +620,7 @@ def evidence_page(
     ).all()
     screens = _effective_screens(conn, project_id)
     screen_reasons, classification_reasons = _source_reason_maps(conn, project_id)
-    classifications = _latest_row_by_id(
+    classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -610,7 +631,7 @@ def evidence_page(
         "project_source_snapshot_id",
         "classified_at",
     )
-    appraisals = _latest_row_by_id(
+    appraisals = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.project_source_snapshot_id,
@@ -653,6 +674,9 @@ def evidence_page(
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
         screen = screens.get(row.project_source_snapshot_id)
+        # Python-side membership over an already-fetched row + a precomputed
+        # set, not a SQL join — pss_owns_snapshot doesn't fit here (task 029
+        # delta-review sweep).
         row_cited = (
             row.source_snapshot_id in cited_snapshots
             or row.full_text_snapshot_id in cited_snapshots
@@ -1270,7 +1294,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         if envelope_ids
         else {}
     )
-    appraisal = _latest_row_by_id(
+    appraisal = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.project_source_snapshot_id,
@@ -1283,7 +1307,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     )
     # The classified evidence type is the appraisal rubric's scoring input —
     # surfaced with the label so the UI can say WHY a citation carries a band.
-    citation_classifications = _latest_row_by_id(
+    citation_classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -1436,6 +1460,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     reference_years = [reference.year for reference in refs_out if reference.year is not None]
     year_range = (min(reference_years), max(reference_years)) if reference_years else None
     return ArtefactOut(
+        artefact_id=artefact_row["artefact_id"],
         title=artefact_row["title"],
         question=scope or "",
         summary=cast(str | None, artefact_row["summary"]),
@@ -1893,6 +1918,9 @@ def source_dossier_out(
     cited_ids = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
+    # Python-side membership over an already-fetched row + a precomputed set,
+    # not a SQL join — pss_owns_snapshot doesn't fit here (task 029
+    # delta-review sweep).
     cited = row["source_snapshot_id"] in cited_ids or row["full_text_snapshot_id"] in cited_ids
     if cited:
         status, reason = "cited", None
@@ -1914,7 +1942,7 @@ def source_dossier_out(
         status, reason = "screened_out", screen.screen_basis
     else:
         status, reason = "found", None
-    classification = _latest_row_by_id(
+    classification = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -1928,7 +1956,7 @@ def source_dossier_out(
         "project_source_snapshot_id",
         "classified_at",
     ).get(source_id)
-    appraisal = _latest_row_by_id(
+    appraisal = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.project_source_snapshot_id,
@@ -2089,6 +2117,59 @@ def chunk_context_out(
     )
 
 
+def chunk_quote_context_out(
+    conn: Connection, project_id: uuid.UUID, chunk_id: uuid.UUID, quote: str
+) -> ChunkContextOut | None:
+    """Return the clamped context window for a chat citation's chunk + quote.
+
+    The chunk must belong to the project's corpus (envelope or full-text
+    snapshot link) — the same ownership boundary every read model enforces.
+    Chat quotes are raw model output, so this locates the quote via
+    ``quote_verify.locate_unique_span`` — the canonical overlap-aware,
+    word-boundary-guarded, case-fold-round-tripped locator (task 029
+    delta-review) — rather than a repository-side exact-match fast path plus
+    a second, parallel normaliser. It tolerates casefold, collapsed
+    whitespace and curly quotes/dashes folded to straight — NOT Unicode NFC
+    composition (a composed vs. decomposed accent pair is an honest absence,
+    not a match; see the locator's own docstring) — with the matched span
+    converted back to the true raw span so the displayed context and
+    highlight always show the real source text. An ambiguous or absent
+    quote has no honest recoverable span, so this returns absence rather
+    than guessing.
+    """
+    row = conn.execute(
+        select(chunk.c.content, chunk.c.sequence, chunk.c.source_snapshot_id)
+        .select_from(
+            chunk.join(
+                project_source_snapshot,
+                pss_owns_snapshot(chunk.c.source_snapshot_id),
+            )
+        )
+        .where(chunk.c.chunk_id == chunk_id)
+        .where(project_source_snapshot.c.project_id == project_id)
+        .limit(1)
+    ).one_or_none()
+    if row is None:
+        return None
+    text = row.content
+    span = locate_unique_span(build_basis([(None, text)]), quote)
+    if span is None:
+        return None
+    position, end = span
+    start_window = max(0, position - 800)
+    end_window = min(len(text), end + 800)
+    return ChunkContextOut(
+        context=text[start_window:end_window],
+        span_start=position - start_window,
+        span_end=end - start_window,
+        clamped=start_window > 0 or end_window < len(text),
+        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
+        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
+        year=_chunk_year(conn, project_id, row.source_snapshot_id),
+        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+    )
+
+
 def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
     """Return one adjacent chunk's content when the sequence exists."""
     return conn.execute(
@@ -2113,8 +2194,7 @@ def _chunk_metadata(
         )
         .where(
             project_source_snapshot.c.project_id == project_id,
-            (project_source_snapshot.c.source_snapshot_id == source_snapshot_id)
-            | (project_source_snapshot.c.full_text_snapshot_id == source_snapshot_id),
+            pss_owns_snapshot(source_snapshot_id),
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}

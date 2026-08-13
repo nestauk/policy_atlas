@@ -642,3 +642,40 @@ pre-migration shapes through post-migration helpers.
 **Rule:** every new FK-bearing table lands in `delete_project_data` in the same
 phase as its migration; migration-roundtrip tests seed pre-migration shapes
 inline, never via shared helpers.
+
+## 2026-08-11 — A gate piped through tail reports the filter's exit status (task 029 build)
+
+**What happened:** Every phase gate A→G (and the post-H fix gates) was run as
+`make verify … | tail -N` in the background and REPORTED green while carrying
+two real test failures from Phase A onward (an outdated exact-shape migration
+assertion; a 422-before-ownership BOLA oracle). The baseline run was genuinely
+green; the failures were only found by a full audit of the retained gate logs.
+
+**Root cause:** Without `pipefail`, a pipeline's exit status is the LAST
+command's — `tail` exits 0 regardless of make's failure. Every gate from A
+onward inherited the same invocation shape, so the defect was systematic, not
+a one-off.
+
+**Rule:** never run a gate as `cmd | filter`. Write the log to a file and test
+`$?` directly (`make verify > gate.log 2>&1; echo EXIT=$?`), or `set -o
+pipefail` if a pipe is unavoidable. The 029 review stack's re-runs use the
+file-plus-exit-code shape.
+
+## 2026-08-11 — Codex jobs and agent plumbing: four composition traps (task 029 build)
+
+**What happened / rules, one per trap:**
+
+1. **Agent-tool worktree isolation + backgrounded codex jobs don't compose** —
+   the auto-worktree is reaped the moment the launching subagent returns while
+   the codex job keeps running in the deleted directory. Create a persistent
+   worktree manually and point the job at it.
+2. **Codex job state is per-invoker-session** — jobs launched by a subagent
+   register under the agent's own state dir, invisible to the lead's
+   `scripts/codex_job.sh`. Track the job JSON/log path the launcher reports,
+   or have the subagent itself wait and relay.
+3. **The codex sandbox denies localhost Postgres AND the uv cache** — codex
+   slices ship code plus inspection-grade checks only; the lead runs the
+   suites. Plan the lead-verify roundtrip into wall-clock estimates.
+4. **Docker Desktop VM wedge** (socket answers 500s, VM never boots, "no route
+   to host 192.168.65.7"): `docker desktop restart` also hung; `pkill -9 -f
+   com.docker` + relaunch recovered in ~1 min.

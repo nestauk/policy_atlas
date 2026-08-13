@@ -272,7 +272,79 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   result caps *with per-call distribution quotas*, credit-responsible `select=`, no
   citation floor, and a zero-progress page guard on pagination. The stub remains the
   zero-egress default; the 007 guard now names `search_live.py` as the sole sanctioned
-  HTTP-import home.
+  HTTP-import home. **Amended 2026-08-04:** the "per-call distribution quotas" clause no
+  longer holds — `_distribute_quota` was removed. Dividing a shared per-backend total
+  across the fan-out shrank as the fan-out widened (standard 75 ÷ 15 calls = 5 results
+  per query). `result_cap_per_backend` is now a flat **per-call** target sized against
+  provider page size (rapid 50 / standard 75 / deep 100). See the open seam below.
+
+- **Search total-volume ceiling — DISCHARGED (task 028, 2026-08-04).** The ceiling landed
+  at acquisition, not at search or at screening: `acquire_sources`'s
+  `record_cap_per_backend` (task 029 owner-set: rapid 50 / standard 100 / deep 200, per
+  backend per round) trims each backend's
+  search fan-out after a rank-interleaved merge and after dedup. Acquisition is the right
+  seam because persisting a record is what commits the spend — it is embedded on the spot
+  and screened at `SCREEN_REPS` calls afterwards — and because dedup-then-trim means a
+  capped round still yields a full cap of *new* documents rather than quietly doing less
+  work in later rounds. `dropped_over_cap` makes the trim visible per backend, and
+  `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
+  assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
+  purpose (the deep loop's confident-relevant goal), not measured.
+  `scripts/eval_ground_truth/` (lives on a different branch) scores search recall against
+  published-review ground truth (baseline: mean 2.4%, max 9.1%, at rapid depth under the
+  divided quota) — after this branch and that one merge, re-run it and set the caps from
+  where recall stops improving. With rounds + arms live (task 029) that re-run is the
+  acceptance test for the whole change.
+
+- **Multi-round search wired into the runner — DISCHARGED (task 029, 2026-08-06).** The
+  round loop found unwired on 2026-08-05 (orphaned since task 023's skeleton retirement,
+  `3304df4`) is now runner-orchestrated: after `screen_abstract` completes, a gate at the
+  walk's classify pop re-opens the acquire+screen pair until the depth's `round_cap`
+  (rapid 1 / standard 2 / deep 3) or a yield collapse (`short_circuit`, < 1 new
+  confident-relevant per 50 screened from round 2). Each round is an ordinary step —
+  fresh run rows, steering boundaries, check-ins, SSE frames. The gate recomputes every
+  input from persisted state (coverage rows, the screen run's own rows via
+  `new_confident_relevant_for_run`), so a run parked mid-loop resumes at the correct
+  round. `run_deep_rounds` and `should_escalate` were **deleted** (the runner owns the
+  loop; rapid→deep escalation stays unbuilt — a fresh decision if wanted). The loop-level
+  stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
+  thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
+  `tests/runtime/test_search_rounds.py`.
+  **Accepted blemishes, not fixed:** `successful_runs["acquire"]` is last-write-wins, so
+  the P1 coverage trigger and the "Where I looked" pane read only the final round's
+  coverage row and queries; the loop-level stop condition is written after the last
+  screen boundary, so the `re_searched_still_thin` P1 check-in trigger can only see it on
+  a later boundary, if at all; the frontend timeline shows repeated
+  "Searching sources"/"Screening" rows with no round labels.
+
+- **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
+  2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.
+  `TARGET_CONFIDENT_RELEVANT`, `SEARCH_TARGET_MIN/MAX`, the parser's `target` key, the
+  orchestrator-prompt line advertising it (stale 5–60 range) and the
+  `target_confident_relevant` payload echo are all deleted. Free text like "aim for 30
+  papers" now gets an honest parser refusal instead of compiling to a silent no-op (the
+  plan layer always discarded the value; nothing read the echo). `target_reached` stays
+  in the coverage CHECK constraint as a historical value — no migration. If a
+  "stop early at N" user feature is ever wanted, rebuild it at the runner's round gate,
+  not in the parser.
+
+- **Wall clock removed entirely — recorded (tasks 028–029).** Task 028 removed the
+  standard/deep clocks; task 029 removed rapid's 30 s clock and the whole `stop_all`
+  mechanism with it — no planned call is ever skipped at any depth, and acquire's stop
+  vocabulary is `completed`/`error` (`wall_clock_exceeded` stays in the CHECK constraint
+  as a historical value). Volume is bounded by `record_cap_per_backend`
+  (owner-set 2026-08-06: rapid 50 / standard 100 / deep 200, per backend per round);
+  nothing bounds latency anywhere — rapid's worst case is its ~21 sequential provider
+  calls plus retries. If a latency bound is ever needed it belongs at the runner as a
+  step timeout, not inside the fan-out where it truncates an ordered list of queries.
+
+- **`http_budget` counts logical calls, not HTTP requests — OPEN (2026-08-04).**
+  `http_calls_by_backend` increments once per `execute_call`, but backends paginate
+  internally to satisfy `max_results` (Overton page 50, OpenAlex 200). Holding per-call
+  targets near one page keeps the two roughly equal, which is why the current values are
+  sized that way — but the budget does not enforce that relationship, and
+  `_TransportMixin.http_calls` (the real per-request counter) is incremented and never
+  read. Either consult it, or rename the budget to say what it counts.
 - **Arm-B agentic search loop — DISCHARGED (task 015, ADR 0012).** The R&D direction landed
   as the deep depth: query reformulation from judged exemplars (via the production screen —
   the loop's judge IS `screen_v1`, no shadow relevance judgment), citation snowballing
@@ -376,9 +448,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   episode ran 343 s end-to-end while the loop driver honoured its 150 s budget), and the
   **coverage-record stop-condition grain — DISCHARGED (task 019).** Migration
   `921d3a781f3f` widens the stop-value vocabulary: clean completion now records
-  `completed`, a rapid wall-clock breach records `wall_clock_exceeded`;
-  `breadth_truncated` is retained for historical rows only. The deep-path
-  vocabulary is unchanged.
+  `completed`; `breadth_truncated` is retained for historical rows only.
+  (`wall_clock_exceeded`, task 019's rapid-breach value, joined the historical
+  set when task 029 removed the wall clock.)
 - **Rev-3.10 loop seams** — calibrated recall estimate (Chao capture-recapture /
   Undermind exponential-saturation fit → a user-facing "estimated % of relevant found" on
   the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must
@@ -1599,7 +1671,13 @@ first-class vocabulary. What follows is what it deliberately left out.
   portability). 025's co-pilot Q&A needs persisted per-user sessions
   ("multiple persisted sessions; browse previous ones") — the transcript
   companion store (per-user/per-project turn table, session/`capability_run`
-  linkage, window-plus-recall context assembly) lands there.
+  linkage, window-plus-recall context assembly) lands there. **DISCHARGED
+  (task 029, contract §1/§5):** the unified `conversation` + `chat_turn`
+  tables are that companion store — per-project chats (many, read-only),
+  `client_turn_id` idempotency, and a ceiling-windowed context assembler
+  (frame + verbatim turns, no recall-with-summarization yet — see "recall
+  beyond the window" below). Provider-side conversation state stays
+  forbidden, unchanged.
 - **Build-discovered seams (024 build, 2026-07-16)** — surfaced mid-build,
   not pre-registered in the annex:
   - **Live DB-backed read executors for watch deliberation** — the runner
@@ -1776,6 +1854,11 @@ first-class vocabulary. What follows is what it deliberately left out.
   context (PR #35 adjudication): the transcript schema is deliberately single-table/
   planning-only so the co-pilot slice brings its own thread/context model; the rail is
   single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
+  **DISCHARGED (task 029, contract §6):** the conversation-aware rail + Chats library
+  ships — switcher over planning conversations and chats, URL-addressable threads,
+  entry-context chip with "Whole project" zero-state, `chat_v1` as the lead-authored
+  prompt surface. Narrower seams this slice left open are recorded fresh under
+  "Co-pilot chat (task 029 seams)" below.
 - **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
   IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
   journey/evidence components are IA-agnostic and re-mount under it unchanged.
@@ -1866,3 +1949,73 @@ first-class vocabulary. What follows is what it deliberately left out.
   path re-fetches block prose already fetched; `write_block_summary` doubles as the
   artefact entry point keyed on `seed["kind"]`. Revisit with the summary/judge
   calibration eval workstream.
+
+## Co-pilot chat (task 029 seams)
+
+029 shipped the unified `conversation` model — many read-only chats per project plus
+one planning conversation per plan lineage — with streamed NDJSON turns, claim-grained
+citation floors, and async grounding-judge enrichment (contract
+`docs/tasks/029-copilot-chat/contract.md`). What follows is what it deliberately left
+out (Out-of-scope list plus seams named in the strands).
+
+- **Planning-turn streaming** — chat streams prose deltas; planning turns stay
+  blocking (`POST /planning-turns` returns whole). Its own later uplift once the
+  planner's own moment wants it; the NDJSON wire this slice built is reusable.
+- **Recall beyond the window, incl. cross-planning-conversation rationale carry** —
+  chat context is the conversation's own turns under a ceiling-only window (no
+  summarization/recall layer yet — window-first, honestly); a re-plan's rationale
+  ("we excluded pre-2015 because…") does not carry across a lineage's successor
+  conversation by prose recall — only the plan object's own decisions do.
+- **Promotion to artefact block** — a chat answer never becomes artefact content;
+  the spec's block discipline requires the full appraisal bar, which chat's
+  fast-path answers never clear.
+- **Shared-search-request conversion** — the evidence-not-held hand-off renders a
+  typed link to the planning conversation; turning that gap into a structured
+  search request the planner can act on directly stays unbuilt.
+- **Watch executor feed (`read_tools=None`)** — unchanged by this slice; still the
+  024-recorded seam (§ Steering surface, "Live DB-backed read executors for watch
+  deliberation") — chat's tool-loop kernel is a separate call site.
+- **Older-run structured reads / multi-artefact read-model widening
+  (workspace-cluster)** — as built, ALL three chat read tools are bounded to the
+  terminal completed run: `query_findings`/`lookup` read its outputs, and
+  `search_chunks` retrieves within its evidence scope (`chat_scope.py` passes
+  `scope.evidence_scope_id` into `build_retrieval_scope`). The contract's
+  strand-4 "whole shared corpus (all runs' screened-in text)" search is
+  therefore NOT what shipped — on a re-run project, earlier runs'
+  screened-in text is unsearchable from chat (identical behaviour on the
+  dominant single-lineage shape; conservative, no leak). Found by the 029
+  review stack (contract-verifier lane); flagged to the owner at the 029 PR.
+  Corpus-wide retrieval semantics (which screening generation is "effective"
+  across scopes — see `effective_screen_rows(run_ids=…)`) belong with this
+  widening.
+- **Chats while a run is paused** — the turn fence 409s `run_active` for
+  `running` AND `paused` walks (`chat_turns.py`); the contract's owner
+  cut-line ("allow chats while paused — defer unless wanted now") was taken
+  as the defer. Revisit if paused-run reading becomes a real workflow
+  (steering remains the mid-run channel).
+- **Field-level turn provenance** — the audit chain (conversation → plan → run →
+  artefact) is walkable at row grain only; which turn produced which specific plan
+  *field* is plan-as-object's field-level provenance, still deferred.
+- **Conversation search** — the library lists and previews (title, latest-turn
+  snippet); there is no search-within-conversations or cross-conversation content
+  search.
+- **Project-level standing chat instructions** — no per-project custom/standing
+  instructions layer sits above `chat_v1`; the system prompt is the one
+  lead-authored, version-pinned surface for every chat in every project.
+- **"Continue generating" on a stopped turn** — a cancelled turn keeps its partial
+  prose but offers no resume-this-generation affordance; asking again starts a new
+  turn.
+- **Resumable mid-stream recovery** — a client that reconnects mid-stream re-reads
+  the turn once it lands, never resumes the byte stream itself (a Redis-style delta
+  buffer is additive later, precisely because the DB only ever commits terminal
+  rows).
+- **Thumbs-feedback → Langfuse scores** — named as the eval slice's gold-set seam;
+  that slice decides the surface and scoring mechanics.
+- **LLM auto-titling** — v1 titles a chat from its first question by truncation;
+  async cheap-model titling is a noted, easy upgrade.
+- **Regenerate / edit / branching** — the turn-pair row (question + answer in one
+  row) is the deliberate v1 grain; the named migration seam is the pair→per-message
+  row split these features would need.
+- **Cross-chat memory / recall** — chats stay mutually blind by design; knowledge
+  travels via artefacts, not a shared chat memory (2026 practice keeps cross-thread
+  recall opt-in and memory-mediated, not a default).

@@ -207,6 +207,11 @@ Cognito-backed login end-to-end. Verification includes a real deploy + smoke
    keys enumerated, fonts uploaded to the private bucket, at least one
    operator-created Cognito user, and the NS-delegation `dig` check.
 
+   > **Superseded 2026-08-11:** task
+   > [`030-rds-jumpbox`](../030-rds-jumpbox/contract.md) replaces the original
+   > fck-nat tunnel below with a dedicated, fixed-target SSM jumpbox. The text
+   > below records task 026's accepted scope at the time.
+
    Also documents the **developer DB access path**: local dev stays on docker-compose
    Postgres untouched; direct Aurora access from a laptop is an SSM port-forward tunnel
    through the fck-nat instance (no bastion, no inbound ports, IAM-gated; credentials

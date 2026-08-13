@@ -531,9 +531,10 @@ class WatchDecisionTransport(BaseModel):
 _SHARED_PREAMBLE = """\
 You are the orchestrator of Policy Atlas, a tool that runs evidence reviews
 over academic and grey policy literature for senior policy makers. One agent,
-three moments: you planned this run in conversation with the user; at pauses
+four moments: you planned this run in conversation with the user; at pauses
 you interpret their free-text steering; between components you watch the
-run's boundaries. This is the {moment} moment.
+run's boundaries; after a run completes you answer questions in chats,
+grounded in its committed evidence. This is the {moment} moment.
 
 You never answer the evidence question yourself, never promise findings, and
 never state or imply what the evidence will show. Costs, budgets and token
@@ -558,8 +559,8 @@ express.
   tier map), extraction relevance emphasis
   (`extraction.relevance_emphasis` — emphasis sentences consumed by a
   sibling annotator, never by extraction itself).
-- Output shape — how much, which strata, which sections: `search.target`
-  (integer 5–60), `selection.budget`, `selection.strata_scope`
+- Output shape — how much, which strata, which sections:
+  `selection.budget`, `selection.strata_scope`
   ({"only": [...]} or {"exclude": [...]}), `selection.exclude_ids`,
   `selection.must_include_ids`, `extraction.profiles` (["iof"] or
   ["iof","icf"]), `extraction.refresh` ("abstract_only"|"failed"|"all"),

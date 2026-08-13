@@ -116,6 +116,21 @@ def _base_plan(**overrides: Any) -> OrchestrationPlan:
     return OrchestrationPlan.model_validate(payload)
 
 
+def _with_search_rounds(components: list[str], *, rounds: int = 2) -> list[str]:
+    """Expected step sequence with the acquire+screen pair repeated per round.
+
+    The runner's round gate (task 029) repeats the pair up to the depth's
+    round cap. Zero-yield stub backends stop at exactly two rounds at any
+    depth beyond rapid: standard by its round cap (2), deep by short_circuit
+    (a zero-yield round 2 never buys round 3).
+    """
+    return ["acquire", "screen_abstract"] * rounds + [
+        component
+        for component in components
+        if component not in ("acquire", "screen_abstract")
+    ]
+
+
 def _seed_source_with_finding(
     conn: Connection,
     *,
@@ -389,12 +404,12 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
             session_id=session_id,
         )
 
-        expected_components = compose(plan).components
+        expected_steps = _with_search_rounds(compose(plan).components)
         assert outcome.status == "succeeded"
-        assert [step.component for step in outcome.steps] == expected_components
+        assert [step.component for step in outcome.steps] == expected_steps
         assert all(step.status == "succeeded" for step in outcome.steps)
         assert all(step.wall_clock_s is not None for step in outcome.steps)
-        assert [component for component, _ in io.calls] == expected_components
+        assert [component for component, _ in io.calls] == expected_steps
 
         with engine.connect() as conn:
             run_rows = conn.execute(
@@ -409,7 +424,7 @@ def test_full_stub_chain_commits_each_step_and_checks_in(engine: Engine) -> None
                     == next(step.run_id for step in outcome.steps if step.component == "extract")
                 )
             ).one()
-        assert len(run_rows) == len(expected_components)
+        assert len(run_rows) == len(expected_steps)
         assert {row.status for row in run_rows} == {"succeeded"}
         assert set(extraction_rollup.counts["profiles"]) == {
             IOF_PROFILE_ID,
@@ -537,6 +552,8 @@ def test_standard_depth_composes_select_and_synthesises_referencing_it(
         assert outcome.status == "succeeded"
         assert components == [
             "acquire",
+            "screen_abstract",
+            "acquire",           # round 2 (standard round cap)
             "screen_abstract",
             "classify",
             "appraise",

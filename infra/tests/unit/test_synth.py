@@ -10,9 +10,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 import aws_cdk as cdk
-from aws_cdk import Environment, aws_ecs as ecs
+import pytest
+from aws_cdk import Environment, aws_ec2 as ec2, aws_ecs as ecs, aws_rds as rds
 from aws_cdk.assertions import Template
 
+from infra.components.nesta_db_jumpbox import NestaDBJumpbox
+from infra.components.nesta_ssm_endpoints import (
+    SsmConnectivity,
+    SsmConnectivityMode,
+    SsmVpcEndpoints,
+)
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
 from infra.cognito_auth import CognitoAuth
@@ -87,6 +94,7 @@ DATABASE_STACK = DatabaseStack(
     db_config=DB_CONFIG,
     env=ENV,
     env_name=ENV_NAME,
+    ssm_connectivity=NETWORK_STACK.ssm_connectivity,
 )
 CERT_STACK = PaV3CertStack(
     APP,
@@ -202,7 +210,7 @@ def test_app_stack_deploy_invariant_values_are_template_pinned():
     assert target_group["Properties"]["HealthCheckPath"] == "/readyz"
 
 
-def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress():
+def test_aurora_security_group_has_only_expected_5432_ingress():
     database_rules = _port_5432_ingress(TEMPLATES["database"])
     app_rules = _port_5432_ingress(TEMPLATES["app"])
     assert len(database_rules) + len(app_rules) == 3
@@ -218,14 +226,14 @@ def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress()
     migration_rule = next(
         rule for rule in database_rules if "MigrationLambdaSG" in json.dumps(rule)
     )
-    fck_nat_rule = next(
-        rule
-        for rule in database_rules
-        if "SsmParameterValuepolicyatlasv3networkfcknatsgid" in json.dumps(rule)
+    jumpbox_rule = next(
+        rule for rule in database_rules if "NestaDBJumpbox" in json.dumps(rule)
     )
     assert "MigrationLambdaSG" in json.dumps(migration_rule["SourceSecurityGroupId"])
-    assert "SsmParameterValuepolicyatlasv3networkfcknatsgid" in json.dumps(
-        fck_nat_rule["SourceSecurityGroupId"]
+    assert "NestaDBJumpbox" in json.dumps(jumpbox_rule["SourceSecurityGroupId"])
+    assert not any(
+        "SsmParameterValuepolicyatlasv3networkfcknatsgid" in json.dumps(rule)
+        for rule in database_rules
     )
 
     assert len(app_rules) == 1
@@ -234,6 +242,395 @@ def test_aurora_security_group_has_only_api_migration_and_fck_nat_5432_ingress()
         api_rule["GroupId"]
     )
     assert "BackendSG" in json.dumps(api_rule["SourceSecurityGroupId"])
+
+
+def test_backend_to_aurora_route_is_vpc_local_and_nat_independent():
+    db_sg_id, db_sg = next(
+        resource
+        for resource in _resources(TEMPLATES["database"], "AWS::EC2::SecurityGroup")
+        if resource[0].startswith("DBSecurityGroup")
+    )
+    backend_sg_id, backend_sg = next(
+        resource
+        for resource in _resources(TEMPLATES["app"], "AWS::EC2::SecurityGroup")
+        if resource[0].startswith("BackendSG")
+    )
+    _, db_subnet_group = _resources(
+        TEMPLATES["database"], "AWS::RDS::DBSubnetGroup"
+    )[0]
+    _, backend_service = _resources(TEMPLATES["app"], "AWS::ECS::Service")[0]
+    backend_networking = backend_service["Properties"]["NetworkConfiguration"][
+        "AwsvpcConfiguration"
+    ]
+
+    # Both ENIs are placed in the same private VPC/subnets. AWS's implicit VPC
+    # local route carries this traffic; the default route through fck-nat is
+    # relevant only to internet-bound traffic.
+    assert db_sg["Properties"]["VpcId"] == backend_sg["Properties"]["VpcId"]
+    assert set(db_subnet_group["Properties"]["SubnetIds"]) == set(
+        backend_networking["Subnets"]
+    )
+    private_routes = [
+        resource["Properties"]
+        for logical_id, resource in _resources(
+            TEMPLATES["network"], "AWS::EC2::Route"
+        )
+        if "PrivateSubnet" in logical_id
+    ]
+    assert private_routes
+    assert all(
+        route["DestinationCidrBlock"] == "0.0.0.0/0"
+        and "FckNatInterface" in json.dumps(route["NetworkInterfaceId"])
+        for route in private_routes
+    )
+    assert backend_networking["AssignPublicIp"] == "DISABLED"
+    assert backend_networking["SecurityGroups"] == [
+        {"Fn::GetAtt": [backend_sg_id, "GroupId"]}
+    ]
+
+    api_rule = _port_5432_ingress(TEMPLATES["app"])[0]
+    assert api_rule["SourceSecurityGroupId"] == {
+        "Fn::GetAtt": [backend_sg_id, "GroupId"]
+    }
+    assert "SsmParameterValuepolicyatlasv3dbsecuritygroupid" in json.dumps(
+        api_rule["GroupId"]
+    )
+    assert db_sg_id not in json.dumps(api_rule["GroupId"])
+    assert "fcknat" not in json.dumps(api_rule).lower()
+
+
+def test_jumpbox_document_fixes_the_remote_target_and_port():
+    documents = _resources(TEMPLATES["database"], "AWS::SSM::Document")
+    assert len(documents) == 1
+    document_id, document = documents[0]
+    properties = document["Properties"]
+    content = properties["Content"]
+
+    # Omitting Name lets CloudFormation make this reusable construct unique.
+    assert "Name" not in properties
+    assert properties["DocumentType"] == "Session"
+    assert properties["DocumentFormat"] == "JSON"
+    assert properties["TargetType"] == "/AWS::EC2::Instance"
+    assert properties["UpdateMethod"] == "NewVersion"
+    assert content["sessionType"] == "Port"
+    assert set(content["parameters"]) == {"localPortNumber"}
+    assert content["parameters"]["localPortNumber"]["default"] == "15432"
+    assert content["properties"]["type"] == "LocalPortForwarding"
+    cluster_id = _resources(TEMPLATES["database"], "AWS::RDS::DBCluster")[0][0]
+    assert content["properties"]["host"] == {
+        "Fn::GetAtt": [cluster_id, "Endpoint.Address"]
+    }
+    assert content["properties"]["portNumber"] == "5432"
+    assert content["properties"]["localPortNumber"] == "{{ localPortNumber }}"
+
+    outputs = json.dumps(TEMPLATES["database"]["Outputs"], sort_keys=True)
+    assert "PortForwardingCommand" in outputs
+    assert "NestaDBJumpbox" in outputs
+    assert document_id in outputs
+    assert "AWS-StartPortForwardingSessionToRemoteHost" not in outputs
+    assert "Endpoint.Address" not in outputs
+    assert "host=" not in outputs
+    assert "portNumber=" not in outputs
+
+
+def test_jumpbox_networking_is_deny_by_default_and_database_scoped():
+    database_template = TEMPLATES["database"]
+    jumpbox_sg_id, jumpbox_sg = next(
+        resource
+        for resource in _resources(database_template, "AWS::EC2::SecurityGroup")
+        if "NestaDBJumpbox" in resource[0]
+    )
+    assert jumpbox_sg["Properties"]["SecurityGroupEgress"] == [
+        {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "Allow jumpbox to connect to the internet for SSM",
+            "FromPort": 443,
+            "IpProtocol": "tcp",
+            "ToPort": 443,
+        }
+    ]
+
+    database_egress = next(
+        resource["Properties"]
+        for _, resource in _resources(
+            database_template, "AWS::EC2::SecurityGroupEgress"
+        )
+        if resource["Properties"].get("GroupId")
+        == {"Fn::GetAtt": [jumpbox_sg_id, "GroupId"]}
+    )
+    assert database_egress["FromPort"] == 5432
+    assert database_egress["ToPort"] == 5432
+    assert "DBSecurityGroup" in json.dumps(
+        database_egress["DestinationSecurityGroupId"]
+    )
+
+    _, instance = next(
+        resource
+        for resource in _resources(database_template, "AWS::EC2::Instance")
+        if "NestaDBJumpbox" in resource[0]
+    )
+    instance_properties = instance["Properties"]
+    assert instance_properties["InstanceType"] == "t4g.nano"
+    assert "arm64" in json.dumps(instance_properties["ImageId"])
+    assert instance_properties["NetworkInterfaces"][0][
+        "AssociatePublicIpAddress"
+    ] is False
+    _, launch_template = _resources(
+        database_template, "AWS::EC2::LaunchTemplate"
+    )[0]
+    assert launch_template["Properties"]["LaunchTemplateData"]["MetadataOptions"][
+        "HttpTokens"
+    ] == "required"
+
+    _, instance_role = next(
+        resource
+        for resource in _resources(database_template, "AWS::IAM::Role")
+        if "NestaDBJumpbox" in resource[0]
+    )
+    assert "AmazonSSMManagedInstanceCore" in json.dumps(
+        instance_role["Properties"]["ManagedPolicyArns"]
+    )
+
+
+def test_staging_uses_nat_without_interface_endpoints():
+    assert NETWORK_STACK.ssm_connectivity.mode is SsmConnectivityMode.NAT
+    assert not _resources(TEMPLATES["network"], "AWS::EC2::VPCEndpoint")
+    assert not _resources(TEMPLATES["database"], "AWS::EC2::VPCEndpoint")
+
+
+def test_network_stack_owns_endpoints_when_configured():
+    app = cdk.App(context={"aws:cdk:bundling-stacks": []})
+    config = {**NETWORK_CONFIG, "ssm_connectivity": "interface_endpoints"}
+    stack = NetworkStack(
+        app,
+        "ProductionNetworkStack",
+        network_config=config,
+        env=ENV,
+        aws_region=config["aws_region"],
+        env_name="production",
+    )
+
+    template = Template.from_stack(stack).to_json()
+    assert stack.ssm_connectivity.mode is SsmConnectivityMode.INTERFACE_ENDPOINTS
+    assert stack.ssm_endpoints is not None
+    assert len(_resources(template, "AWS::EC2::VPCEndpoint")) == 2
+
+
+def test_production_database_imports_only_the_network_managed_node_group():
+    app = cdk.App(context={"aws:cdk:bundling-stacks": []})
+    config = {**NETWORK_CONFIG, "ssm_connectivity": "interface_endpoints"}
+    network_stack = NetworkStack(
+        app,
+        "ProductionNetworkStack",
+        network_config=config,
+        env=ENV,
+        aws_region=config["aws_region"],
+        env_name="production",
+    )
+    database_stack = DatabaseStack(
+        app,
+        "ProductionDatabaseStack",
+        db_config=DB_CONFIG,
+        env=ENV,
+        env_name="production",
+        ssm_connectivity=network_stack.ssm_connectivity,
+    )
+
+    app.synth()
+    network_template = Template.from_stack(network_stack).to_json()
+    database_template = Template.from_stack(database_stack).to_json()
+    assert len(_resources(network_template, "AWS::EC2::VPCEndpoint")) == 2
+    assert not _resources(database_template, "AWS::EC2::VPCEndpoint")
+
+    _, instance = next(
+        resource
+        for resource in _resources(database_template, "AWS::EC2::Instance")
+        if "NestaDBJumpbox" in resource[0]
+    )
+    attached_groups = instance["Properties"]["NetworkInterfaces"][0]["GroupSet"]
+    imported_groups = [
+        group for group in attached_groups if "Fn::ImportValue" in group
+    ]
+    assert len(imported_groups) == 1
+    assert "ManagedNodeEndpointSG" in json.dumps(imported_groups[0])
+
+
+def test_endpoint_connectivity_is_network_owned_and_attached_to_jumpbox():
+    app = cdk.App()
+    stack = cdk.Stack(app, "EndpointJumpboxStack", env=ENV)
+    vpc = ec2.Vpc(stack, "Vpc", max_azs=1)
+    endpoints = SsmVpcEndpoints(stack, "SsmEndpoints", vpc=vpc)
+    db_sg = ec2.SecurityGroup(stack, "DatabaseSG", vpc=vpc)
+    cluster = rds.DatabaseCluster.from_database_cluster_attributes(
+        stack,
+        "ImportedCluster",
+        cluster_identifier="imported-cluster",
+        cluster_endpoint_address="database.example.internal",
+        port=5432,
+    )
+
+    NestaDBJumpbox(
+        stack,
+        "EndpointJumpbox",
+        vpc=vpc,
+        ssm_connectivity=endpoints.connectivity,
+        db_cluster=cluster,
+        db_sg=db_sg,
+    )
+
+    template = Template.from_stack(stack).to_json()
+    endpoint_sg_id = next(
+        logical_id
+        for logical_id, _ in _resources(template, "AWS::EC2::SecurityGroup")
+        if "SSMEndpointSG" in logical_id
+    )
+    managed_node_sg_id = next(
+        logical_id
+        for logical_id, _ in _resources(template, "AWS::EC2::SecurityGroup")
+        if "ManagedNodeEndpointSG" in logical_id
+    )
+    jumpbox_sg_id = next(
+        logical_id
+        for logical_id, _ in _resources(template, "AWS::EC2::SecurityGroup")
+        if "EndpointJumpboxEndpointJumpboxSG" in logical_id
+    )
+
+    interface_endpoints = _resources(template, "AWS::EC2::VPCEndpoint")
+    assert len(interface_endpoints) == 2
+    endpoint_services = json.dumps(interface_endpoints, sort_keys=True)
+    assert ".ssm" in endpoint_services
+    assert ".ssmmessages" in endpoint_services
+    assert all(
+        resource["Properties"]["VpcEndpointType"] == "Interface"
+        and resource["Properties"]["PrivateDnsEnabled"] is True
+        and resource["Properties"]["SecurityGroupIds"]
+        == [{"Fn::GetAtt": [endpoint_sg_id, "GroupId"]}]
+        for _, resource in interface_endpoints
+    )
+
+    endpoint_ingress = next(
+        resource["Properties"]
+        for _, resource in _resources(template, "AWS::EC2::SecurityGroupIngress")
+        if resource["Properties"].get("GroupId")
+        == {"Fn::GetAtt": [endpoint_sg_id, "GroupId"]}
+    )
+    assert endpoint_ingress["SourceSecurityGroupId"] == {
+        "Fn::GetAtt": [managed_node_sg_id, "GroupId"]
+    }
+    assert endpoint_ingress["FromPort"] == endpoint_ingress["ToPort"] == 443
+
+    managed_node_egress = next(
+        resource["Properties"]
+        for _, resource in _resources(template, "AWS::EC2::SecurityGroupEgress")
+        if resource["Properties"].get("GroupId")
+        == {"Fn::GetAtt": [managed_node_sg_id, "GroupId"]}
+    )
+    assert managed_node_egress["DestinationSecurityGroupId"] == {
+        "Fn::GetAtt": [endpoint_sg_id, "GroupId"]
+    }
+    assert managed_node_egress["FromPort"] == managed_node_egress["ToPort"] == 443
+
+    _, instance = next(
+        resource
+        for resource in _resources(template, "AWS::EC2::Instance")
+        if "EndpointJumpbox" in resource[0]
+    )
+    attached_groups = instance["Properties"]["NetworkInterfaces"][0]["GroupSet"]
+    assert {"Fn::GetAtt": [jumpbox_sg_id, "GroupId"]} in attached_groups
+    assert {"Fn::GetAtt": [managed_node_sg_id, "GroupId"]} in attached_groups
+    assert "0.0.0.0/0" not in json.dumps(
+        [
+            resource
+            for resource in _resources(template, "AWS::EC2::SecurityGroupEgress")
+            if resource[1]["Properties"].get("FromPort") == 443
+        ]
+    )
+
+
+def test_ssm_connectivity_rejects_incomplete_or_ambiguous_policies():
+    app = cdk.App()
+    stack = cdk.Stack(app, "InvalidConnectivityStack")
+    vpc = ec2.Vpc(stack, "Vpc", max_azs=1)
+    security_group = ec2.SecurityGroup(stack, "ManagedNodeSG", vpc=vpc)
+
+    with pytest.raises(ValueError, match="must not provide"):
+        SsmConnectivity(
+            mode=SsmConnectivityMode.NAT,
+            managed_node_security_group=security_group,
+        )
+    with pytest.raises(ValueError, match="requires a managed-node"):
+        SsmConnectivity(mode=SsmConnectivityMode.INTERFACE_ENDPOINTS)
+    with pytest.raises(ValueError, match="must be a SsmConnectivityMode"):
+        SsmConnectivity(mode="nat")
+
+
+def test_jumpbox_local_mode_does_not_require_a_remote_endpoint():
+    app = cdk.App()
+    stack = cdk.Stack(app, "LocalOnlyJumpboxStack", env=ENV)
+    vpc = ec2.Vpc(stack, "Vpc", max_azs=1)
+    db_sg = ec2.SecurityGroup(stack, "DatabaseSG", vpc=vpc)
+
+    NestaDBJumpbox(
+        stack,
+        "LocalOnlyJumpbox",
+        vpc=vpc,
+        ssm_connectivity=SsmConnectivity.via_nat(),
+        db_sg=db_sg,
+        remote_mode=False,
+        local_mode=True,
+    )
+
+    template = Template.from_stack(stack).to_json()
+    assert not _resources(template, "AWS::SSM::Document")
+    assert "PortForwardingCommand" not in json.dumps(
+        template.get("Outputs", {}), sort_keys=True
+    )
+
+
+def test_imported_cluster_accepts_an_explicit_security_group_override():
+    app = cdk.App()
+    stack = cdk.Stack(app, "ImportedClusterJumpboxStack", env=ENV)
+    vpc = ec2.Vpc(stack, "Vpc", max_azs=1)
+    db_sg = ec2.SecurityGroup(stack, "DatabaseSG", vpc=vpc)
+    cluster = rds.DatabaseCluster.from_database_cluster_attributes(
+        stack,
+        "ImportedCluster",
+        cluster_identifier="imported-cluster",
+        cluster_endpoint_address="database.example.internal",
+        port=5432,
+    )
+
+    NestaDBJumpbox(
+        stack,
+        "ImportedClusterJumpbox",
+        vpc=vpc,
+        ssm_connectivity=SsmConnectivity.via_nat(),
+        db_cluster=cluster,
+        db_sg=db_sg,
+    )
+
+    template = Template.from_stack(stack).to_json()
+    assert len(_resources(template, "AWS::SSM::Document")) == 1
+
+
+@pytest.mark.parametrize("port", [False, 0, 65536, "5432"])
+def test_jumpbox_rejects_invalid_database_ports(port):
+    app = cdk.App()
+    stack = cdk.Stack(app, f"InvalidPortJumpboxStack{str(port).replace('-', '')}")
+    vpc = ec2.Vpc(stack, "Vpc", max_azs=1)
+    db_sg = ec2.SecurityGroup(stack, "DatabaseSG", vpc=vpc)
+
+    with pytest.raises(ValueError, match="db_port must be an integer"):
+        NestaDBJumpbox(
+            stack,
+            "InvalidPortJumpbox",
+            vpc=vpc,
+            ssm_connectivity=SsmConnectivity.via_nat(),
+            db_sg=db_sg,
+            remote_mode=False,
+            local_mode=True,
+            db_port=port,
+        )
 
 
 def test_fck_nat_role_has_ssm_managed_instance_policy():

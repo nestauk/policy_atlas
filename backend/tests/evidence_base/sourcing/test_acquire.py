@@ -153,14 +153,20 @@ def acquire(
 
 
 def assert_invariant(counts: dict[str, Any]) -> None:
-    """acquired + already_acquired + skipped_unusable == results_returned, at both levels."""
+    """acquired + already_acquired + skipped_unusable + dropped_over_cap == results_returned."""
     assert (
-        counts["acquired"] + counts["already_acquired"] + counts["skipped_unusable"]
+        counts["acquired"]
+        + counts["already_acquired"]
+        + counts["skipped_unusable"]
+        + counts["dropped_over_cap"]
         == counts["results_returned"]
     )
     for b in counts["by_backend"].values():
         assert (
-            b["acquired"] + b["already_acquired"] + b["skipped_unusable"]
+            b["acquired"]
+            + b["already_acquired"]
+            + b["skipped_unusable"]
+            + b["dropped_over_cap"]
             == b["results_returned"]
         )
 
@@ -169,7 +175,7 @@ def assert_invariant(counts: dict[str, Any]) -> None:
 
 
 def test_acquire_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 30
+    assert len(metadata.tables) == 32
 
 
 def seed_coverage_row(
@@ -819,9 +825,9 @@ def test_coverage_inadequate_on_zero_usable(conn: Connection) -> None:
     assert_invariant(counts)
 
 
-def test_coverage_wall_clock_exceeded_when_breached_and_no_error(conn: Connection) -> None:
-    """Honest stop attribution (task 019 item 5): a wall-clock breach with no
-    backend error reports 'wall_clock_exceeded', not 'completed' or 'error'."""
+def test_coverage_stop_vocabulary_is_completed_or_error(conn: Connection) -> None:
+    """Stop attribution after task 029: no wall clock exists, so a clean run is
+    'completed' on the coverage row and an errored one is 'error' — nothing else."""
     pid, rid = seed_project_and_run(conn)
     scope_id = seed_scope(conn, pid)
     context = make_context(scope_id)
@@ -833,28 +839,23 @@ def test_coverage_wall_clock_exceeded_when_breached_and_no_error(conn: Connectio
         context=context,
         backends=cast("list[SearchBackend]", backends),
         executed_calls=executed_calls_for(backends, context.intent),
-        wall_clock_breached=True,
     )
     assert counts["adequacy_verdict"] == "adequate"
-    assert counts["stop_condition"] == "wall_clock_exceeded"
+    assert counts["stop_condition"] == "completed"
     row = read_coverage(conn, rid)
-    assert row.stop_condition == "wall_clock_exceeded"
+    assert row.stop_condition == "completed"
 
-
-def test_coverage_error_wins_over_wall_clock_breached(conn: Connection) -> None:
-    """A backend error always reports 'error', even if the wall clock also breached."""
-    pid, rid = seed_project_and_run(conn)
-    scope_id = seed_scope(conn, pid)
-    context = make_context(scope_id)
+    pid2, rid2 = seed_project_and_run(conn)
+    scope_id2 = seed_scope(conn, pid2)
+    context2 = make_context(scope_id2)
     boom = FakeBackend(exc=RuntimeError("backend exploded"))
     counts = acquire_sources(
         conn,
-        project_id=pid,
-        run_id=rid,
-        context=context,
+        project_id=pid2,
+        run_id=rid2,
+        context=context2,
         backends=[boom],
-        executed_calls=executed_calls_for([boom], context.intent),
-        wall_clock_breached=True,
+        executed_calls=executed_calls_for([boom], context2.intent),
     )
     assert counts["stop_condition"] == "error"
 

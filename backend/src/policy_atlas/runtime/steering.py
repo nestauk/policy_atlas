@@ -1689,6 +1689,7 @@ def _persist_new_plan_version(
         orchestration_plan.insert().values(
             plan_id=new_plan_id,
             project_id=project_id,
+            conversation_id=_plan_row_value(plan_row, "conversation_id"),
             evidence_scope_id=evidence_scope_id,
             version=new_version,
             status="approved",
@@ -1948,7 +1949,7 @@ def _validate_directive_delta(
     if component == "acquire":
         _require_keys(component, delta, {"search"})
         try:
-            _, raw_filters, _, _ = parse_search_directive({"search": delta["search"]})
+            _, raw_filters, _ = parse_search_directive({"search": delta["search"]})
             validate_scope_filters(raw_filters, backend_names=_backend_names(backend_scope))
         except SearchDirectiveError as exc:
             raise SteeringAdjustmentError(str(exc)) from exc

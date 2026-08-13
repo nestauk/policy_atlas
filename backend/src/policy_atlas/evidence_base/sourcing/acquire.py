@@ -16,7 +16,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 import structlog
 from sqlalchemy import select
@@ -483,6 +483,41 @@ def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str,
     return []
 
 
+class _Candidate(NamedTuple):
+    """One mapped, not-yet-persisted record and the call it came from."""
+
+    backend_name: str
+    verb: str
+    record: dict[str, Any]
+    mapped: dict[str, Any]
+    text: str
+    chash: str
+
+
+def _interleave(per_call: list[list[_Candidate]]) -> list[_Candidate]:
+    """Merge per-call candidate lists round-robin by rank position.
+
+    Providers return each call's records in rank order (OpenAlex relevance,
+    Overton similarity), so taking every call's rank-1 record, then every
+    rank-2, and so on, is a merge that keeps the fan-out's query diversity: a
+    later trim removes the tail of every query rather than every record of the
+    later queries. Sorting the merged set by score instead would need a score
+    that is comparable across queries, which provider relevance scores are not.
+
+    Args:
+        per_call: One candidate list per call, each already in provider order.
+
+    Returns:
+        A single list, rank-interleaved across the calls in the given order.
+    """
+    merged: list[_Candidate] = []
+    for rank in range(max((len(candidates) for candidates in per_call), default=0)):
+        for candidates in per_call:
+            if rank < len(candidates):
+                merged.append(candidates[rank])
+    return merged
+
+
 def acquire_sources(
     conn: Connection,
     *,
@@ -494,8 +529,8 @@ def acquire_sources(
     executed_calls: Sequence[ExecutedSearchCall],
     depth: str = "rapid",
     scope_wire_params: dict[str, Any] | None = None,
-    wall_clock_breached: bool = False,
     search_guidance: list[str] | None = None,
+    record_cap_per_backend: int | None = None,
 ) -> dict[str, Any]:
     """Acquire metadata-only sources for an evidence scope over the given backends.
 
@@ -517,21 +552,24 @@ def acquire_sources(
         depth: Search-depth directive recorded in events and coverage.
         scope_wire_params: Per-backend executed wire params or variant payloads
             recorded on the coverage record.
-        wall_clock_breached: Whether the calling search strategy's own
-            wall-clock budget was exceeded (task 019: the rapid/standard
-            fan-out's honest stop-grain signal, mirroring the deep loop's
-            ``budget_exhausted``). Ignored when ``any_error`` is true — an
-            error stop is always reported as ``'error'``.
         search_guidance: B1 (024 steering surface) executed ``search.guidance``
             list, echoed verbatim onto ``search_coverage_record.scope_filters``
             as a sibling ``guidance`` key when present.
+        record_cap_per_backend: Maximum records persisted per backend from the
+            ``search`` fan-out, applied after the rank-interleaved merge and
+            after dedup, so a capped round still yields a full cap of *new*
+            documents. ``None`` means uncapped. This is the run's volume brake:
+            each persisted record costs an embedding here and ``SCREEN_REPS``
+            screening calls downstream. Targeted verbs (snowball, suggest) are
+            never trimmed — they carry their own call caps upstream.
 
     Returns:
         Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
-        ``results_returned`` (invariant: the first three sum to it, per backend
-        and in total), ``by_backend`` (with per-backend ``status``/``error``),
-        ``tags_materialised``, ``embed``, ``stop_condition``,
-        ``adequacy_verdict``, ``coverage_record_id``, ``acquired_pss_by_verb``.
+        ``dropped_over_cap``, ``results_returned`` (invariant: the first four
+        sum to it, per backend and in total), ``by_backend`` (with per-backend
+        ``status``/``error``), ``tags_materialised``, ``embed``,
+        ``stop_condition``, ``adequacy_verdict``, ``coverage_record_id``,
+        ``acquired_pss_by_verb``.
     """
     # A backend without a registered mapping (or a duplicate name, which would
     # corrupt by_backend) is a wiring error, not a search failure — fail loud
@@ -590,6 +628,7 @@ def acquire_sources(
             "acquired": 0,
             "already_acquired": 0,
             "skipped_unusable": 0,
+            "dropped_over_cap": 0,
             "tags_materialised": 0,
         }
         for backend in backends
@@ -599,16 +638,18 @@ def acquire_sources(
     tag_assertions: list[tuple[uuid.UUID, str, str, str]] = []
     acquired_pss_by_verb: dict[str, list[str]] = {}
 
-    def process_records(
+    def map_records(
         *,
         backend_name: str,
         verb: str,
         records: list[dict[str, Any]],
         counts: dict[str, Any],
-    ) -> None:
+    ) -> list[_Candidate]:
+        """Map one call's raw records to candidates. No dedup, no writes."""
         counts["results_returned"] += len(records)
         mapper = _MAPPERS[backend_name]  # validated upfront
 
+        candidates: list[_Candidate] = []
         for record in records:
             mapped = mapper(record)
             if mapped is None:
@@ -616,108 +657,139 @@ def acquire_sources(
                 # skip is visible, never silent.
                 counts["skipped_unusable"] += 1
                 continue
+            text = _chunk_text(mapped["envelope"])
+            candidates.append(
+                _Candidate(
+                    backend_name=backend_name,
+                    verb=verb,
+                    record=record,
+                    mapped=mapped,
+                    text=text,
+                    chash=content_hash(text),
+                )
+            )
+        return candidates
 
-            envelope = mapped["envelope"]
-            text = _chunk_text(envelope)
-            chash = content_hash(text)
-            record_id = envelope["backend_record_id"]
-            doi = envelope["doi"]
+    def is_new(candidate: _Candidate) -> bool:
+        """Three identity guards, project-scoped, claiming the keys on a pass.
 
-            # Three identity guards, project-scoped: exact re-run, cross-backend
-            # DOI identity, exact text duplicate.
-            if (
-                (record_id and record_id in seen_record_ids)
-                or (doi and doi in seen_dois)
-                or chash in seen_hashes
-            ):
-                counts["already_acquired"] += 1
-                continue
+        Exact re-run, cross-backend DOI identity, exact text duplicate. Called
+        on the merged stream in keep-order, so the best-ranked copy of a
+        document claims its identity and later copies are the ones dropped.
+        """
+        envelope = candidate.mapped["envelope"]
+        record_id = envelope["backend_record_id"]
+        doi = envelope["doi"]
+        if (
+            (record_id and record_id in seen_record_ids)
+            or (doi and doi in seen_dois)
+            or candidate.chash in seen_hashes
+        ):
+            return False
+        seen_hashes.add(candidate.chash)
+        if record_id:
+            seen_record_ids.add(record_id)
+        if doi:
+            seen_dois.add(doi)
+        return True
 
-            snapshot_id = uuid.uuid4()
-            pss_id = uuid.uuid4()
-            conn.execute(
-                source_snapshot.insert().values(
-                    source_snapshot_id=snapshot_id,
-                    content_hash=chash,
-                    text_basis="abstract_only",  # metadata envelope in hand, not full text
-                    source_locator=mapped["source_locator"],
-                    # None-valued envelope keys are persisted as *absent* —
-                    # authentic absence (contract decision 4), and exactly what
-                    # _stub_screen's fail-open default expects (missing abstract
-                    # -> title_only, no screen changes).
-                    metadata={
-                        **{k: v for k, v in envelope.items() if v is not None},
-                        "abstract_source": mapped["abstract_source"],
-                        # title_source follows abstract_source's None-omission
-                        # pattern: OpenAlex has no translation seam, so it maps
-                        # to None and is left out of persisted metadata.
-                        **(
-                            {"title_source": mapped["title_source"]}
-                            if mapped["title_source"] is not None
-                            else {}
-                        ),
-                        "provider_fields": mapped["provider_fields"],
-                    },
-                    created_at=now,
-                )
-            )
-            conn.execute(
-                chunk_table.insert().values(
-                    chunk_id=uuid.uuid4(),
-                    source_snapshot_id=snapshot_id,
-                    sequence=1,
-                    content=text,
-                    content_hash=chash,
-                    locator={"sequence": 1},
-                    segmentation_policy=SEGMENTATION_POLICY,
-                    created_at=now,
-                )
-            )
-            conn.execute(
-                project_source_snapshot.insert().values(
-                    project_source_snapshot_id=pss_id,
-                    project_id=project_id,
-                    source_snapshot_id=snapshot_id,
-                    origin="acquired",
-                    run_id=run_id,
-                    ingested_at=now,
-                )
-            )
-            tag_pairs = _provider_tags(backend_name, record)
-            if len(tag_pairs) > MAX_TAGS_PER_RECORD:
-                log.warning(
-                    "acquire.tags_truncated",
-                    backend=backend_name,
-                    backend_record_id=record_id,
-                    tag_count=len(tag_pairs),
-                    cap=MAX_TAGS_PER_RECORD,
-                )
-                tag_pairs = tag_pairs[:MAX_TAGS_PER_RECORD]
-            tag_assertions.extend(
-                (pss_id, tag, asserted_by, tag_type) for tag, asserted_by, tag_type in tag_pairs
-            )
-            counts["tags_materialised"] += len(tag_pairs)
-            events.append(
-                conn,
-                project_id=project_id,
-                run_id=run_id,
-                event_type="source.acquired",
-                payload={
-                    "source_snapshot_id": str(snapshot_id),
-                    "project_source_snapshot_id": str(pss_id),
-                    "evidence_scope_id": str(context.scope_id),
-                    "backend": backend_name,
-                    "backend_record_id": record_id,
+    def persist(candidate: _Candidate) -> None:
+        """Write one accepted candidate: snapshot, chunk, project link, tags."""
+        backend_name = candidate.backend_name
+        verb = candidate.verb
+        record = candidate.record
+        mapped = candidate.mapped
+        text = candidate.text
+        chash = candidate.chash
+        envelope = mapped["envelope"]
+        record_id = envelope["backend_record_id"]
+        counts = by_backend[backend_name]
+
+        snapshot_id = uuid.uuid4()
+        pss_id = uuid.uuid4()
+        conn.execute(
+            source_snapshot.insert().values(
+                source_snapshot_id=snapshot_id,
+                content_hash=chash,
+                text_basis="abstract_only",  # metadata envelope in hand, not full text
+                source_locator=mapped["source_locator"],
+                # None-valued envelope keys are persisted as *absent* —
+                # authentic absence (contract decision 4), and exactly what
+                # _stub_screen's fail-open default expects (missing abstract
+                # -> title_only, no screen changes).
+                metadata={
+                    **{k: v for k, v in envelope.items() if v is not None},
+                    "abstract_source": mapped["abstract_source"],
+                    # title_source follows abstract_source's None-omission
+                    # pattern: OpenAlex has no translation seam, so it maps
+                    # to None and is left out of persisted metadata.
+                    **(
+                        {"title_source": mapped["title_source"]}
+                        if mapped["title_source"] is not None
+                        else {}
+                    ),
+                    "provider_fields": mapped["provider_fields"],
                 },
+                created_at=now,
             )
+        )
+        conn.execute(
+            chunk_table.insert().values(
+                chunk_id=uuid.uuid4(),
+                source_snapshot_id=snapshot_id,
+                sequence=1,
+                content=text,
+                content_hash=chash,
+                locator={"sequence": 1},
+                segmentation_policy=SEGMENTATION_POLICY,
+                created_at=now,
+            )
+        )
+        conn.execute(
+            project_source_snapshot.insert().values(
+                project_source_snapshot_id=pss_id,
+                project_id=project_id,
+                source_snapshot_id=snapshot_id,
+                origin="acquired",
+                run_id=run_id,
+                ingested_at=now,
+            )
+        )
+        tag_pairs = _provider_tags(backend_name, record)
+        if len(tag_pairs) > MAX_TAGS_PER_RECORD:
+            log.warning(
+                "acquire.tags_truncated",
+                backend=backend_name,
+                backend_record_id=record_id,
+                tag_count=len(tag_pairs),
+                cap=MAX_TAGS_PER_RECORD,
+            )
+            tag_pairs = tag_pairs[:MAX_TAGS_PER_RECORD]
+        tag_assertions.extend(
+            (pss_id, tag, asserted_by, tag_type) for tag, asserted_by, tag_type in tag_pairs
+        )
+        counts["tags_materialised"] += len(tag_pairs)
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            event_type="source.acquired",
+            payload={
+                "source_snapshot_id": str(snapshot_id),
+                "project_source_snapshot_id": str(pss_id),
+                "evidence_scope_id": str(context.scope_id),
+                "backend": backend_name,
+                "backend_record_id": record_id,
+            },
+        )
 
-            counts["acquired"] += 1
-            acquired_pss_by_verb.setdefault(verb, []).append(str(pss_id))
-            seen_hashes.add(chash)
-            if record_id:
-                seen_record_ids.add(record_id)
-            if doi:
-                seen_dois.add(doi)
+        counts["acquired"] += 1
+        acquired_pss_by_verb.setdefault(verb, []).append(str(pss_id))
+
+    # Per-backend candidate lists, kept apart by verb: the `search` fan-out is
+    # merged and trimmed, targeted verbs are not.
+    search_candidates: dict[str, list[list[_Candidate]]] = {name: [] for name in names}
+    targeted_candidates: dict[str, list[_Candidate]] = {name: [] for name in names}
 
     for call in executed_calls:
         backend = backend_by_name[call.backend_name]
@@ -752,12 +824,16 @@ def acquire_sources(
         )
         if call.status == "ok":
             ok_calls_by_backend[backend.name] += 1
-            process_records(
+            candidates = map_records(
                 backend_name=backend.name,
                 verb=call.verb,
                 records=call.records,
                 counts=counts,
             )
+            if call.verb == "search":
+                search_candidates[backend.name].append(candidates)
+            else:
+                targeted_candidates[backend.name].extend(candidates)
         else:
             errors_by_backend[backend.name].append(error or "unknown search error")
             log.warning(
@@ -766,6 +842,45 @@ def acquire_sources(
                 project_id=str(project_id),
                 run_id=str(run_id),
                 error=error,
+            )
+
+    # Merge, dedup, trim, persist — in that order, per backend. Dedup runs
+    # *before* the trim so a capped round still yields a full cap of new
+    # documents however many repeats the queries returned; and it runs over the
+    # interleaved stream so the best-ranked copy of a document is the one kept.
+    # Targeted verbs are deduped first and never trimmed: snowball and suggest
+    # results are individually chosen, and their arms are capped upstream.
+    for name in names:
+        counts = by_backend[name]
+        for candidate in targeted_candidates[name]:
+            if is_new(candidate):
+                persist(candidate)
+            else:
+                counts["already_acquired"] += 1
+
+        kept = 0
+        for candidate in _interleave(search_candidates[name]):
+            # Cap checked before the identity guards, never after: `is_new`
+            # *claims* the keys it checks, so running it on a record we are
+            # about to drop would make a later backend's genuine record look
+            # already-acquired and lose it.
+            if record_cap_per_backend is not None and kept >= record_cap_per_backend:
+                counts["dropped_over_cap"] += 1
+                continue
+            if not is_new(candidate):
+                counts["already_acquired"] += 1
+                continue
+            persist(candidate)
+            kept += 1
+        if counts["dropped_over_cap"]:
+            log.info(
+                "acquire.capped",
+                backend=name,
+                project_id=str(project_id),
+                run_id=str(run_id),
+                kept=kept,
+                dropped=counts["dropped_over_cap"],
+                cap=record_cap_per_backend,
             )
 
     any_error = False
@@ -799,6 +914,7 @@ def acquire_sources(
             "acquired",
             "already_acquired",
             "skipped_unusable",
+            "dropped_over_cap",
             "results_returned",
             "tags_materialised",
         )
@@ -809,18 +925,10 @@ def acquire_sources(
     # run -> inadequate (nothing screenable came back). An empty-but-successful
     # backend beside a productive one is honest coverage, not inadequacy.
     #
-    # Honest stop attribution (task 019 item 5): a clean run that never hit an
-    # error or its own wall-clock budget is 'completed', not a truncation — the
-    # old default falsely claimed breadth_truncated on every run. A run that
-    # stopped because the calling search strategy's wall clock fired is
-    # 'wall_clock_exceeded', the rapid/standard fan-out's mirror of the deep
-    # loop's budget_exhausted.
-    if any_error:
-        stop_condition = "error"
-    elif wall_clock_breached:
-        stop_condition = "wall_clock_exceeded"
-    else:
-        stop_condition = "completed"
+    # Honest stop attribution (task 019 item 5): a clean run is 'completed',
+    # never a claimed truncation. 'wall_clock_exceeded' left the vocabulary
+    # with the wall clock itself (task 030) — every planned call now runs.
+    stop_condition = "error" if any_error else "completed"
     usable = totals["acquired"] + totals["already_acquired"]
     adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"
 
