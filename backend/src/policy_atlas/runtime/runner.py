@@ -2034,7 +2034,12 @@ def _build_bundle(
     try:
         with engine.connect() as conn:
             if name == SEARCH_EXCEPTION:
-                return p1_bundle(conn, project_id=project_id, evidence_scope_id=evidence_scope_id)
+                return p1_bundle(
+                    conn,
+                    project_id=project_id,
+                    evidence_scope_id=evidence_scope_id,
+                    acquire_run_id=successful_runs.get("acquire"),
+                )
             if name == EVIDENCE_BASE_COVERAGE:
                 return p2_bundle(
                     conn,

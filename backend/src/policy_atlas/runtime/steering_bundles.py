@@ -56,33 +56,46 @@ DROPPED_DIGEST_CAP = 5
 
 
 def p1_bundle(
-    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    acquire_run_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Build the scrubbed P1 search-review display bundle.
+
+    Counts and queries describe **one** acquire run — the round that just
+    finished — so the card cannot pair a one-round headline with all-round
+    detail (task 031, defects 1a and 1b).
+
+    The counts come from that run's ``component.completed`` payload. Acquire
+    defines its headline ``acquired`` total as the sum of the same
+    ``by_backend[*]["acquired"]`` values, so the card equals the headline by
+    construction. Nothing here reads the coverage record's ``backends[].count``,
+    which acquire never writes — the old source of a permanently zero line.
 
     Args:
         conn: Open read connection.
         project_id: Owning project.
         evidence_scope_id: Scope whose search records are displayed.
+        acquire_run_id: The acquire run that just finished. ``None`` means no
+            acquire run is recorded, and yields empty counts and queries rather
+            than figures belonging to another round.
 
     Returns:
         Only backend counts, queries and sample titles for the API card.
     """
-    coverage_rows = conn.execute(
-        sa_select(search_coverage_record.c.backends)
-        .where(search_coverage_record.c.project_id == project_id)
-        .where(search_coverage_record.c.evidence_scope_id == evidence_scope_id)
-    ).all()
     counts: dict[str, int] = {}
-    for row in coverage_rows:
-        for backend in row.backends if isinstance(row.backends, list) else []:
-            if isinstance(backend, dict) and isinstance(backend.get("backend"), str):
-                count = backend.get("count")
-                counts[backend["backend"]] = counts.get(backend["backend"], 0) + (
-                    count if isinstance(count, int) else 0
-                )
-    queries, _ = _executed_queries(conn, project_id=project_id, evidence_scope_id=evidence_scope_id)
-    query_text = [entry["query"] for entry in queries if isinstance(entry.get("query"), str)]
+    query_text: list[str] = []
+    if acquire_run_id is not None:
+        counts = _acquired_by_backend(conn, project_id=project_id, run_id=acquire_run_id)
+        queries, _ = _executed_queries(
+            conn,
+            project_id=project_id,
+            evidence_scope_id=evidence_scope_id,
+            run_id=acquire_run_id,
+        )
+        query_text = [entry["query"] for entry in queries if isinstance(entry.get("query"), str)]
     title_rows = conn.execute(
         sa_select(source_snapshot.c.metadata)
         .join(
@@ -224,8 +237,53 @@ def p2_bundle(
     }
 
 
+def _acquired_by_backend(
+    conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID
+) -> dict[str, int]:
+    """Per-backend new-source counts from one acquire run's completion payload.
+
+    Acquire computes ``by_backend[*]["acquired"]`` and defines its headline
+    ``acquired`` total as their sum (acquire.py), so a caller that reports these
+    values agrees with the headline by construction rather than by a parallel
+    recount. Absent or malformed payloads yield ``{}`` — an empty line, never an
+    invented zero.
+
+    Args:
+        conn: Open read connection.
+        project_id: Owning project.
+        run_id: The acquire run whose completion payload to read.
+
+    Returns:
+        Backend name → count of new unique sources acquired by that run.
+    """
+    payload = next(
+        (
+            entry["payload"]
+            for entry in reversed(events.read_for_run(conn, project_id, run_id))
+            if entry["event_type"] == "component.completed"
+            and isinstance(entry["payload"], dict)
+            and entry["payload"].get("component") == "acquire"
+        ),
+        None,
+    )
+    by_backend = payload.get("by_backend") if isinstance(payload, dict) else None
+    if not isinstance(by_backend, dict):
+        return {}
+    return {
+        name: stats["acquired"]
+        for name, stats in by_backend.items()
+        if isinstance(name, str)
+        and isinstance(stats, dict)
+        and isinstance(stats.get("acquired"), int)
+    }
+
+
 def _executed_queries(
-    conn: Connection, *, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    run_id: uuid.UUID | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Parse ``search.executed`` payloads for the scope, in emission order.
 
@@ -233,6 +291,15 @@ def _executed_queries(
     ``query_origin``/``verb``/``depth``/``filters``/``status``/``result_count``/
     ``error``/``evidence_scope_id`` (+ optional ``post_filter_excluded``). A
     zero-result query is an ``ok`` call whose ``result_count`` is 0.
+
+    Args:
+        conn: Open read connection.
+        project_id: Owning project.
+        evidence_scope_id: Scope whose search calls to read.
+        run_id: When given, restrict the read to this one acquire run. ``None``
+            (default) spans every round, which is what the P2 coverage picture
+            wants; P1 passes a run id because its card describes one round
+            (task 031, defect 1b).
     """
     executed: list[dict[str, Any]] = []
     zero_result: list[dict[str, Any]] = []
@@ -241,6 +308,8 @@ def _executed_queries(
         if not isinstance(payload, dict):
             continue
         if payload.get("evidence_scope_id") != str(evidence_scope_id):
+            continue
+        if run_id is not None and entry["run_id"] != run_id:
             continue
         entry = {
             "query": payload.get("query"),
