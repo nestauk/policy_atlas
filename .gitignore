@@ -44,3 +44,6 @@ docs/tasks/*/evidence/
 
 # Notebook checkpoints
 *checkpoint.ipynb
+
+# Claude worktrees
+.claude/worktrees

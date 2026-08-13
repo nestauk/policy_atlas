@@ -52,8 +52,9 @@ changes neither of them.
 
 ### Phase 1 — P1 check-in counts (defects 1a and 1b)
 
-**Executor:** `codex`. This phase needs judgment, and a machine can check the
-result.
+**Executor:** `lead` — **changed 2026-08-13 by the owner** (the plan gate marked
+`codex`). The phase is one function plus its tests, which is below the volume that
+motivated delegation.
 **Design brief:** `lead`. The interface passes the acquire `run_id` into
 `p1_bundle`.
 
@@ -146,7 +147,7 @@ and updates the phase pointer in AGENTS.md at review time.
 |---|---|---|
 | 0 | lead, inline | One baseline verify |
 | 1, design of the `run_id` interface | lead | The signature and the meaning of the interface |
-| 1–3, implementation | codex | The default doer. The tests define "done". |
+| 1–3, implementation | `lead` (owner's call, 2026-08-13; the plan gate marked `codex`) | Small, self-contained edits. The tests define "done". |
 | 4, deferred sweep | fast-worker | A mechanical document change, against the list in the contract |
 | 4, verification.md | lead | The evidence narrative needs judgment |
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
@@ -1776,7 +1776,7 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
         base=base,
         backends=backend_names,
         backends_detail=_backend_details(
-            conn, project_id, row["acquired_by_run_id"], backend_names
+            conn, project_id, _acquire_run_ids(conn, project_id), backend_names
         ),
     )
 
@@ -1784,6 +1784,21 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
 def _public_backend_name(value: str) -> str | None:
     """Translate a durable backend key into the closed public vocabulary."""
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
+
+
+def _acquire_run_ids(conn: Connection, project_id: uuid.UUID) -> list[uuid.UUID]:
+    """Every acquire run that wrote a coverage record for the project, oldest first.
+
+    Acquire inserts one coverage record per run, so the column holds one id per
+    round (task 031). Ordering is stable so the read model is deterministic.
+    """
+    return list(
+        conn.execute(
+            select(search_coverage_record.c.acquired_by_run_id)
+            .where(search_coverage_record.c.project_id == project_id)
+            .order_by(search_coverage_record.c.created_at)
+        ).scalars()
+    )
 
 
 def _coverage_backend_names(backends: Any) -> list[str]:
@@ -1802,20 +1817,44 @@ def _coverage_backend_names(backends: Any) -> list[str]:
 def _backend_details(
     conn: Connection,
     project_id: uuid.UUID,
-    run_id: uuid.UUID,
+    run_ids: Sequence[uuid.UUID],
     backend_names: list[str],
 ) -> list[CoverageBackendDetailOut]:
-    """Project post-run query counts and the documented project-wide relevance wart."""
+    """Query hits across every acquire round, beside project-wide relevance.
+
+    ``results`` sums the query hits of every acquire run given, not just the
+    newest round's (task 031, defect 2). Before this slice the caller passed the
+    latest coverage row's ``acquired_by_run_id`` alone, so a deep run's third
+    round reported ~72 hits beside ~200 cumulative relevant sources — two grains
+    on one line.
+
+    ``relevant`` stays the project-wide unique count per backend (the documented
+    task 027 §C.1 behaviour). The two numbers are now both cumulative, but they
+    still count different things: hits are per call and pre-dedupe, so
+    ``relevant`` is not a subset of ``results``.
+
+    Args:
+        conn: Open read connection.
+        project_id: Owning project.
+        run_ids: Every acquire run whose query hits belong in the total. Empty
+            yields empty query lists rather than a silent last-round figure.
+        backend_names: Public backend names to report, in display order.
+
+    Returns:
+        One detail row per backend name, in the order given.
+    """
     events = (
         conn.execute(
             select(event_log.c.payload).where(
                 event_log.c.project_id == project_id,
-                event_log.c.run_id == run_id,
+                event_log.c.run_id.in_(run_ids),
                 event_log.c.event_type == "search.executed",
             )
         )
         .scalars()
         .all()
+        if run_ids
+        else []
     )
     queries: dict[str, list[CoverageQueryOut]] = {name: [] for name in backend_names}
     for payload in events:
