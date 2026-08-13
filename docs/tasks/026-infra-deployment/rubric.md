@@ -30,6 +30,10 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 
 Slice-specific:
 
+> Criterion 13 records task 026's original acceptance state. It was superseded
+> 2026-08-11 by the dedicated, fixed-target jumpbox in
+> [`030-rds-jumpbox`](../030-rds-jumpbox/contract.md).
+
 9.  [ ] **Copy-first discipline holds:** every ported file is diffable against its v2
         source; edits are targeted; no wholesale rewrites. Fresh code exists only for
         surfaces with no v2 precedent (Cognito, font bucket, migration runner swap).

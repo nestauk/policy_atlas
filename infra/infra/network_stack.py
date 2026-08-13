@@ -22,6 +22,8 @@ from aws_cdk import (
 
 from cdk_fck_nat import FckNatInstanceProvider, FckNatInstanceProps
 
+from .components.nesta_ssm_endpoints import SsmConnectivity, SsmVpcEndpoints
+
 class NetworkStack(Stack):
     def __init__(self, scope: Stack, id: str,
                  network_config: dict, aws_region: str, env_name: str, **kwargs,) -> None:
@@ -51,10 +53,27 @@ class NetworkStack(Stack):
             ]
         )
 
+        ssm_connectivity_mode = network_config["ssm_connectivity"]
+        self.ssm_endpoints: SsmVpcEndpoints | None = None
+        if ssm_connectivity_mode == "nat":
+            self.ssm_connectivity = SsmConnectivity.via_nat()
+        elif ssm_connectivity_mode == "interface_endpoints":
+            self.ssm_endpoints = SsmVpcEndpoints(
+                self,
+                "SsmVpcEndpoints",
+                vpc=vpc,
+            )
+            self.ssm_connectivity = self.ssm_endpoints.connectivity
+        else:
+            raise ValueError(
+                "network_config.ssm_connectivity must be either 'nat' or "
+                "'interface_endpoints'."
+            )
+
         fck_nat.security_group.add_ingress_rule(peer=ec2.Peer.ipv4(vpc.vpc_cidr_block), connection=ec2.Port.all_traffic())
 
-        # Attach AmazonSSMManagedInstanceCore to the fck-nat instance role so the
-        # NAT instances are reachable via SSM Session Manager (no SSH key/bastion).
+        # Keep the NAT instance maintainable through SSM without inbound SSH.
+        # It is not trusted by Aurora and is not the database tunnel target.
         fck_nat.role.add_managed_policy(
             iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore")
         )
@@ -65,8 +84,8 @@ class NetworkStack(Stack):
             string_value=vpc.vpc_id
         )
 
-        # Export the fck-nat security group ID so DatabaseStack can add an ingress
-        # rule allowing NAT-instance-originated traffic to reach Aurora.
+        # Retain the fck-nat security group ID for network diagnostics. Database
+        # access is granted only to application, migration, and jumpbox SGs.
         ssm.StringParameter(self, "FckNatSGParameter",
             parameter_name="/policy_atlas_v3/network/fck_nat_sg_id",
             string_value=fck_nat.security_group.security_group_id
