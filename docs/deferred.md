@@ -310,12 +310,19 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
   thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
   `tests/runtime/test_search_rounds.py`.
-  **Accepted blemishes, not fixed:** `successful_runs["acquire"]` is last-write-wins, so
-  the P1 coverage trigger and the "Where I looked" pane read only the final round's
-  coverage row and queries; the loop-level stop condition is written after the last
-  screen boundary, so the `re_searched_still_thin` P1 check-in trigger can only see it on
-  a later boundary, if at all; the frontend timeline shows repeated
-  "Searching sources"/"Screening" rows with no round labels.
+  **Accepted blemishes — the display half is DISCHARGED (task 031, 2026-08-13).** The
+  "Where I looked" pane now sums query hits across every acquire run that wrote a
+  coverage record for the project, so `results` and `relevant` are both cumulative. The
+  P1 check-in reports the counts and queries of the single acquire run that just
+  finished, taken from that run's `component.completed` payload rather than the coverage
+  record's never-written `backends[].count`. `successful_runs["acquire"]` is still
+  last-write-wins, which is the *wanted* behaviour at P1 — that run is the round that
+  just finished.
+  **Still open:** the loop-level stop condition is written after the last screen
+  boundary, so the `re_searched_still_thin` P1 check-in **trigger** can only see it on a
+  later boundary, if at all — task 031 changed the P1 display bundle, not the trigger;
+  the frontend timeline still shows repeated "Searching sources"/"Screening" rows with no
+  round labels.
 
 - **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
   2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.
