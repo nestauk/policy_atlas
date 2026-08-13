@@ -30,7 +30,7 @@ jobs:
             exit 1
           fi
       - name: Validate production CDK configuration
-        run: make deploy-check DEPLOY_ENV=production
+        run: make deploy-check DEPLOY_ENV=prod
 
   deploy:
     name: deploy release to production
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment:
-      name: production
+      name: prod
     permissions:
       contents: read
       id-token: write
@@ -76,4 +76,4 @@ jobs:
           role-duration-seconds: 7200
           unset-current-credentials: true
       - name: Deploy production
-        run: make deploy-update DEPLOY_ENV=production
+        run: make deploy-update DEPLOY_ENV=prod

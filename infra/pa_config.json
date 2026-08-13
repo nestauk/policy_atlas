@@ -21,7 +21,7 @@
         "policy_atlas_config": {
             "domain_name": "policyatlas.uk",
             "backend_subdomain": "api",
-            "cognito_domain_prefix": "policy-atlas-v3",
+            "cognito_domain_prefix": "policy-atlas-v3-prod",
             "backend": {
                 "cpu": 2048,
                 "memory_limit_mib": 8192,
