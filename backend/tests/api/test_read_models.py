@@ -1189,6 +1189,77 @@ def test_landscape_cited_scope_uses_only_latest_artefact_members(
                 delete_project_data(conn, project_id)
 
 
+def test_landscape_geography_residual_makes_every_scope_add_up(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 031 invariant 4: country bars + "Not reported" = the population drawn.
+
+    A second relevant source is seeded with no publisher country. Before this
+    slice `_geography` returning ``None`` dropped it from the chart, so the bars
+    summed below the funnel's relevant count (defect 3). The cited scope keeps
+    its own, smaller total — it must not be "corrected" to the funnel's.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                scope_id = conn.execute(
+                    select(search_coverage_record.c.evidence_scope_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                run_id = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                # A relevant source whose provider sent no publisher country.
+                _, countryless_pss = seed_source(
+                    conn, project_id, {"title": "No country reported", "backend": "openalex"}
+                )
+                seed_screening_result(
+                    conn, project_id, run_id, scope_id, countryless_pss, status="relevant"
+                )
+                # Give the ladder's own relevant source a country, so the chart
+                # has both a real bar and the residual.
+                for snapshot_id, metadata in conn.execute(
+                    select(source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata)
+                    .select_from(
+                        source_snapshot.join(
+                            project_source_snapshot,
+                            project_source_snapshot.c.source_snapshot_id
+                            == source_snapshot.c.source_snapshot_id,
+                        )
+                    )
+                    .where(
+                        project_source_snapshot.c.project_id == project_id,
+                        source_snapshot.c.metadata["title"].astext == "Selected trial",
+                    )
+                ).all():
+                    conn.execute(
+                        update(source_snapshot)
+                        .where(source_snapshot.c.source_snapshot_id == snapshot_id)
+                        .values(metadata={**metadata, "publication_country": "GB"})
+                    )
+
+            funnel = client.get(f"/api/v1/projects/{project_id}/funnel", headers=owner).json()
+            whole = client.get(f"/api/v1/projects/{project_id}/landscape", headers=owner).json()
+            assert whole["geographies"] == {"GB": 1, "Not reported": 1}
+            assert sum(whole["geographies"].values()) == funnel["relevant"] == 2
+
+            cited = client.get(
+                f"/api/v1/projects/{project_id}/landscape?scope=cited", headers=owner
+            ).json()
+            # The cited scope draws only the artefact's citations, so it sums to
+            # that smaller population — not to the funnel's relevant count.
+            assert sum(cited["geographies"].values()) == 1
+            assert cited["geographies"] == {"GB": 1}
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
 def test_coverage_backend_results_sum_query_hits_across_every_round(
     tmp_path: Path, engine: Engine
 ) -> None:

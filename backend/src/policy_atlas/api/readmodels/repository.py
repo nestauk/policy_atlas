@@ -128,6 +128,12 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
     return f"https://doi.org/{doi}" if doi is not None else None
 
 
+#: Residual bucket for sources whose provider sent no publisher country (task
+#: 031). A stable, public-vocabulary string: the frontend must not rename or
+#: drop it, or the chart stops adding up to the population it draws.
+GEOGRAPHY_NOT_REPORTED = "Not reported"
+
+
 def _geography(metadata: Mapping[str, Any]) -> str | None:
     """Read provider publication geography when the acquired snapshot carries it."""
     direct = _metadata_text(metadata, "publication_country")
@@ -414,9 +420,13 @@ def landscape_out(
         year = _year(metadata)
         if year is not None:
             years[str(year)] += 1
+        # Honest absence (task 031, defect 3): a source whose provider sent no
+        # publisher country is counted, never dropped, so the bars plus the
+        # residual always equal the population drawn — at either scope, because
+        # base_rows is already narrowed. An authorship country is never
+        # substituted here; the slim authorships answer a different question.
         geography = _geography(metadata)
-        if geography is not None:
-            geographies[geography] += 1
+        geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
         .where(characterisation_result.c.project_id == project_id)
