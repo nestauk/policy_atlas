@@ -4,6 +4,24 @@
         "policy_atlas_config": {
             "domain_name": "v3.policyatlas.uk",
             "backend_subdomain": "api",
+            "cognito_domain_prefix": "policy-atlas-v3",
+            "backend": {
+                "cpu": 2048,
+                "memory_limit_mib": 8192,
+                "internal_port": 8000,
+                "secret_name": "policy_atlas_v3/app",
+                "run_executor_max": 10,
+                "db_pool_size": 15,
+                "db_max_overflow": 10
+            }
+        }
+    },
+    "prod": {
+        "aws_region": "eu-west-2",
+        "policy_atlas_config": {
+            "domain_name": "policyatlas.uk",
+            "backend_subdomain": "api",
+            "cognito_domain_prefix": "policy-atlas-v3-prod",
             "backend": {
                 "cpu": 2048,
                 "memory_limit_mib": 8192,

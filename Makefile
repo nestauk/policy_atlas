@@ -1,4 +1,4 @@
-.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test staging-user
+.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap staging-user
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -159,6 +159,23 @@ fe-api-smoke:
 # It deliberately reports a clear skip while that documented interface is absent.
 deploy-build-guard-test:
 	bash scripts/test_deploy_build_guard.sh
+
+# GitHub Actions and operators share these deployment entry points. DEPLOY_ENV
+# selects one committed environment across infra/*_config.json; deploy-check is
+# intentionally side-effect-free so workflows can fail before requesting OIDC.
+infra-setup:
+	$(MAKE) -C infra setup
+
+deploy-check:
+	@test -n "$(DEPLOY_ENV)" || \
+		{ echo "usage: make deploy-check DEPLOY_ENV=<environment>" >&2; exit 2; }
+	PA_DEPLOY_ENV_NAME="$(DEPLOY_ENV)" bash scripts/deploy.sh check
+
+deploy-update: deploy-check infra-setup
+	PA_DEPLOY_ENV_NAME="$(DEPLOY_ENV)" bash scripts/deploy.sh update
+
+deploy-bootstrap: deploy-check infra-setup
+	PA_DEPLOY_ENV_NAME="$(DEPLOY_ENV)" bash scripts/deploy.sh bootstrap
 
 verify:
 	@if ! docker compose exec db pg_isready -U policy_atlas -q 2>/dev/null; then \

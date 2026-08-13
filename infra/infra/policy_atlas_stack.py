@@ -132,7 +132,12 @@ class PolicyAtlasStack(Stack):
 
         # --- Backend ---
 
-        auth = CognitoAuth(self, "CognitoAuth")
+        auth = CognitoAuth(
+            self,
+            "CognitoAuth",
+            domain_name=domain_name,
+            domain_prefix=pa_app_config["cognito_domain_prefix"],
+        )
         backend_image = ecs.ContainerImage.from_asset("../backend",
             platform=ecr_assets.Platform.LINUX_AMD64,
         )
@@ -162,7 +167,7 @@ class PolicyAtlasStack(Stack):
                 "LOG_FORMAT": "json",
                 # Tags deployed traces so they filter apart from local-dev
                 # runs inside the shared dev Langfuse project.
-                "LANGFUSE_TRACING_ENVIRONMENT": "staging",
+                "LANGFUSE_TRACING_ENVIRONMENT": env_name,
             },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),

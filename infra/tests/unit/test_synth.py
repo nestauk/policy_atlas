@@ -22,6 +22,7 @@ from infra.components.nesta_ssm_endpoints import (
 )
 from infra.database_stack import DatabaseStack
 from infra.cert_stack import PaV3CertStack
+from infra.cognito_auth import CognitoAuth
 from infra.network_stack import NetworkStack
 from infra.policy_atlas_stack import PolicyAtlasStack
 
@@ -709,6 +710,26 @@ def test_cognito_spa_client_is_public_code_flow_with_exact_redirects():
 def test_cognito_hosted_ui_uses_the_fixed_prefix():
     _, domain = _resources(TEMPLATES["app"], "AWS::Cognito::UserPoolDomain")[0]
     assert domain["Properties"]["Domain"] == "policy-atlas-v3"
+
+
+def test_cognito_auth_uses_supplied_public_and_hosted_ui_domains():
+    app = cdk.App()
+    stack = cdk.Stack(app, "ConfigurableCognitoStack")
+    CognitoAuth(
+        stack,
+        "CognitoAuth",
+        domain_name="policy.example.test",
+        domain_prefix="policy-atlas-production-test",
+    )
+    template = Template.from_stack(stack).to_json()
+
+    _, client = _resources(template, "AWS::Cognito::UserPoolClient")[0]
+    urls = ["https://policy.example.test", "https://policy.example.test/"]
+    assert client["Properties"]["CallbackURLs"] == urls
+    assert client["Properties"]["LogoutURLs"] == urls
+
+    _, domain = _resources(template, "AWS::Cognito::UserPoolDomain")[0]
+    assert domain["Properties"]["Domain"] == "policy-atlas-production-test"
 
 
 def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():

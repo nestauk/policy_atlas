@@ -55,6 +55,19 @@ a ~1-month user migration, in the same AWS account.
    AWS account id is env-injected (`CDK_DEFAULT_ACCOUNT`), never committed —
    the repo is public.
 
+### 2026-08-11 automation amendment (task 030)
+
+Decision 6's later slice has landed. The deployment *decision* remains attended:
+an engineer explicitly dispatches `dev` to the one staging environment, and a
+stable published Release is the production promotion event. GitHub Actions now
+executes the unchanged authoritative stop→migrate→scale→publish wrapper using
+short-lived, Environment-scoped AWS OIDC credentials. First deployments and
+failure recovery remain attended Makefile operations. Per-environment concurrency
+queues without cancellation; GitHub Environment protection plus in-workflow ref
+validation forms the promotion boundary. The fixed v3 resource names/SSM prefix
+mean staging and production use separate AWS accounts unless a future namespacing
+decision changes the CDK.
+
 ## Consequences
 
 - v2 users are structurally isolated from every v3 operation, including rollback

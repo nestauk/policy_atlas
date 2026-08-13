@@ -7,5 +7,14 @@
         "public_domain_name": "v3.policyatlas.uk",
         "azs": 3,
         "ssm_connectivity": "nat"
+    },
+    "prod": {
+        "aws_region": "eu-west-2",
+        "fck_nat": {
+            "instance_type": "t4g.nano"
+        },
+        "public_domain_name": "policyatlas.uk",
+        "azs": 3,
+        "ssm_connectivity": "nat"
     }
 }
