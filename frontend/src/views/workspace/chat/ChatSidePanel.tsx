@@ -81,7 +81,12 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const panel = usePanelWidth();
   const navigate = useNavigate();
-  const chats = useConversations(projectId, { kind: "chat", status: "active" });
+  // Dropped `kind` (rev 032 G14) so this shares its cache key with
+  // `ChatsLibrary`'s own "active" query — both mount together whenever the
+  // panel is open. The panel only ever hosts chats (see docstring above), so
+  // planning rows are filtered out client-side rather than re-split by kind.
+  const chats = useConversations(projectId, { status: "active" });
+  const chatRows = (chats.data?.data ?? []).filter((row) => row.kind === "chat");
   const artefact = useArtefact(projectId);
   const { create } = useConversationMutations(projectId);
 
@@ -95,13 +100,12 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
     // first — firing before then reads "no chats" off `undefined` data and
     // POSTs a spurious blank chat on a fast first click.
     if (!chats.isSuccess) return;
-    const rows = chats.data.data;
-    if (rows.length > 0) return openChat(rows[0].id);
+    if (chatRows.length > 0) return openChat(chatRows[0].id);
     openChat((await create(null)).id);
   };
 
   const newChat = async () => {
-    const blank = (chats.data?.data ?? []).find(
+    const blank = chatRows.find(
       (chat) => chat.title === "New chat" && chat.entry_artefact_id === null,
     );
     openChat(blank !== undefined ? blank.id : (await create(null)).id);
@@ -124,7 +128,7 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
     );
   }
 
-  const title = (chats.data?.data ?? []).find((chat) => chat.id === activeConversationId)?.title;
+  const title = chatRows.find((chat) => chat.id === activeConversationId)?.title;
   return (
     <aside
       aria-label="Project chat"

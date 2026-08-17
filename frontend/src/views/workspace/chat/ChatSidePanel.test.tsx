@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatSidePanel } from "./ChatSidePanel";
 
+const CHAT_ROW = { id: "c1", kind: "chat", status: "active", closed_at: null, title: "Cost barriers", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null };
+
 const state = vi.hoisted(() => ({
   activeConversationId: null as string | null,
   setActiveConversation: vi.fn(),
@@ -11,12 +13,16 @@ const state = vi.hoisted(() => ({
   create: vi.fn(async () => ({ id: "c-new" })),
   navigate: vi.fn(),
   chatsResolved: true,
+  rows: [] as unknown[],
 }));
 
 vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
 vi.mock("../../../api/queries", () => ({
+  // Dropped the `kind: "chat"` filter (rev 032 G14) so this shares its cache
+  // key with `ChatsLibrary`'s own "active" query — the mocked rows can carry
+  // either kind, exercising the panel's own client-side chat-only filter.
   useConversations: () => ({
-    data: { data: [{ id: "c1", title: "Cost barriers", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null }] },
+    data: { data: state.rows },
     isSuccess: state.chatsResolved,
   }),
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
@@ -39,6 +45,7 @@ vi.mock("./ChatsLibrary", () => ({
 describe("ChatSidePanel", () => {
   beforeEach(() => {
     state.chatsResolved = true;
+    state.rows = [CHAT_ROW];
     state.setActiveConversation.mockClear();
     state.addOpenChatTab.mockClear();
     state.create.mockClear();
@@ -85,5 +92,18 @@ describe("ChatSidePanel", () => {
     render(<ChatSidePanel projectId="p1" />);
     await user.click(screen.getByRole("button", { name: "New chat" }));
     expect(state.create).toHaveBeenCalledWith(null);
+  });
+
+  it("ignores a newer planning conversation when picking the latest chat to open — the panel only ever hosts chats", async () => {
+    state.activeConversationId = null;
+    state.rows = [
+      { id: "plan-1", kind: "planning", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null },
+      CHAT_ROW,
+    ];
+    const user = userEvent.setup();
+    render(<ChatSidePanel projectId="p1" />);
+    await user.click(screen.getByRole("button", { name: "Open chat" }));
+    expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
+    expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
   });
 });

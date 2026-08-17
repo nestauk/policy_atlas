@@ -67,10 +67,14 @@ export function mergeHistory(
   decisions: readonly DecisionLike[] | undefined,
   turns: readonly TurnLike[] | undefined,
 ): HistoryRow[] {
-  const rows: Array<HistoryRow & { tiebreak: number }> = [];
+  // The tiebreak rides alongside the row rather than on it, so it cannot leak
+  // into what the view renders.
+  const rows: Array<{ row: HistoryRow; tiebreak: number }> = [];
 
   for (const turn of turns ?? []) {
     rows.push({
+      tiebreak: turn.turn_index,
+      row: {
       id: `turn-${turn.turn_index}`,
       at: turn.created_at,
       // The opening turn is the question that started the task; the rest are
@@ -85,7 +89,7 @@ export function mergeHistory(
         turn.reply != null && turn.reply !== ""
           ? [{ label: "The planner replied", value: turn.reply }]
           : undefined,
-      tiebreak: turn.turn_index,
+      },
     });
   }
 
@@ -99,17 +103,22 @@ export function mergeHistory(
       value: String(detail.value),
     }));
     rows.push({
+      tiebreak: decision.sequence,
+      row: {
       id: `decision-${decision.kind}-${decision.sequence}`,
       at: decision.occurred_at,
       category: category.label,
       tone: category.tone,
       sentence: decision.summary,
       details: details.length > 0 ? details : undefined,
-      tiebreak: decision.sequence,
+      },
     });
   }
 
   return rows
-    .sort((left, right) => left.at.localeCompare(right.at) || left.tiebreak - right.tiebreak)
-    .map(({ tiebreak: _tiebreak, ...row }) => row);
+    .sort(
+      (left, right) =>
+        left.row.at.localeCompare(right.row.at) || left.tiebreak - right.tiebreak,
+    )
+    .map((entry) => entry.row);
 }
