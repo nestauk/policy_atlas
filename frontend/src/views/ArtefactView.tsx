@@ -1133,7 +1133,7 @@ export function ArtefactView() {
     snapshotCells.push([
       "Sources",
       `${snapshot.source_count} cited out of ${snapshot.included} included`,
-      `/projects/${projectId}/sources?cited=true`,
+      `/projects/${projectId}/sources/all?cited=true`,
     ]);
   }
   if (shownTypes.length > 0) {
@@ -1155,7 +1155,7 @@ export function ArtefactView() {
     snapshotCells.push([
       "Screened out",
       `${snapshot.screened_out}`,
-      `/projects/${projectId}/sources?status=screened_out`,
+      `/projects/${projectId}/sources/all?status=screened_out`,
     ]);
   }
 

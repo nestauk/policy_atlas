@@ -268,7 +268,7 @@ function FindingRow({
         </td>
         <td className="max-w-[220px] px-3 py-3 text-caption leading-snug">
           <Link
-            to={`/projects/${projectId}/sources?source=${encodeURIComponent(finding.source_id)}`}
+            to={`/projects/${projectId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
             className="text-grey hover:text-blue hover:underline"
           >
             {scrub(finding.source_title)}

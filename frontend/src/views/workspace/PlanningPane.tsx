@@ -332,7 +332,7 @@ function RunBlock({
         <div className="anim-rise mr-8 border border-green-tint bg-green-tint/40 px-4 py-3">
           <p className="text-meta font-semibold text-navy">The evidence base is ready.</p>
           <Link
-            to={`/projects/${projectId}/evidence-base`}
+            to={`/projects/${projectId}/results`}
             className="cutout mt-2 inline-block bg-blue px-3 py-2 text-caption font-bold text-white"
           >
             Read the evidence base

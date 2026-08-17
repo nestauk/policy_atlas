@@ -9,7 +9,9 @@ import { LandingView } from "./views/LandingView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { NewTaskView } from "./views/NewTaskView";
 import { ShareView } from "./views/ShareView";
+import { SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
+import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
 
@@ -53,35 +55,22 @@ export const router = createBrowserRouter([
         path: "/projects/:projectId/sources",
         element: (
           <LifecycleRoute tab="sources">
-            <SourcesView />
+            <SourcesLayout />
           </LifecycleRoute>
         ),
-      },
-      {
-        path: "/projects/:projectId/sources/all",
-        element: (
-          <LifecycleRoute tab="sources">
-            <SourcesView />
-          </LifecycleRoute>
-        ),
-      },
-      {
-        path: "/projects/:projectId/sources/landscape",
-        element: (
-          <LifecycleRoute tab="sources">
-            <Suspense fallback={<LandscapeFallback />}>
-              <LandscapeView />
-            </Suspense>
-          </LifecycleRoute>
-        ),
-      },
-      {
-        path: "/projects/:projectId/sources/findings",
-        element: (
-          <LifecycleRoute tab="sources">
-            <FindingsView />
-          </LifecycleRoute>
-        ),
+        children: [
+          { index: true, element: <ThemesView /> },
+          {
+            path: "landscape",
+            element: (
+              <Suspense fallback={<LandscapeFallback />}>
+                <LandscapeView />
+              </Suspense>
+            ),
+          },
+          { path: "all", element: <SourcesView /> },
+          { path: "findings", element: <FindingsView /> },
+        ],
       },
       {
         path: "/projects/:projectId/share",

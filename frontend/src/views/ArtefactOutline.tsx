@@ -214,7 +214,7 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
               <span className="text-grey">
                 {" "}
                 · this section covers only the cited sources —{" "}
-                <Link to={`/projects/${projectId}/landscape`} className="text-blue hover:underline">
+                <Link to={`/projects/${projectId}/sources/landscape`} className="text-blue hover:underline">
                   the Landscape tab
                 </Link>{" "}
                 shows the whole search
@@ -251,7 +251,7 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
                     <span className="min-w-0 flex-1 truncate">{scrub(theme.name)}</span>
                     {theme.theme_id != null ? (
                       <Link
-                        to={`/projects/${projectId}/sources?theme=${theme.theme_id}`}
+                        to={`/projects/${projectId}/sources/all?theme=${theme.theme_id}`}
                         className="shrink-0 text-caption text-blue hover:underline"
                       >
                         {theme.size === 1 ? "1 document →" : `${theme.size} documents →`}
