@@ -22,22 +22,27 @@
 - Touch only what the task requires.
 
 # Current phase
-Review — task `031-search-count-honesty` **BUILT + REVIEW STACK COMPLETE → PR
-open for human review (step 9)** (contract + plan approved 2026-08-13, branch
-`task/031-search-count-honesty`, based on `dev`; review stack 2026-08-13 — four
-lanes, findings adjudicated in the task's verification.md § Review findings,
-fixes landed on the branch): fix mixed-grain source counts across the P1
-check-in, Where I looked, and the publisher-country charts (deep search makes
-the defects obvious). Contract:
-`docs/tasks/031-search-count-honesty/contract.md`; plan:
-`docs/tasks/031-search-count-honesty/plan.md`; rubric alongside. Tier 2.
+Design — task `032-task-lifecycle-ia` **CONTRACT + RUBRIC DRAFTED → awaiting
+human approval (step 1 🛑)** (drafted 2026-08-17, branch
+`task/032-task-lifecycle-ia`, based on `dev`): reshape the app around one task
+and one lifecycle, and add a named grouping above tasks. Screen word **Task** =
+the existing `project` row; screen word **Project** = a new `portfolio` row.
+Thirteen gaps G1–G13; the planning conversation is deliberately untouched. Case
+studies are parked by the owner (they need a new synthesis pass). Contract:
+`docs/tasks/032-task-lifecycle-ia/contract.md`; rubric alongside; plan not yet
+written. **Tier 3** — new table + new public routes + one prompt-surface field
+(`nav_label`) are three approval gates. ADR expected for the portfolio layer.
+Design reference: the owner's prototype at
+`scripts/scratchpad/frontend_v20260817/Policy Atlas_new search standalone.html`
+(a bundled artifact — see the contract's § Reading the prototype).
 
-Two items escalated to the owner in the PR: the contract's **manual browser
-check was not run** (it needs a live model route; staging's OpenAI quota is
-recorded exhausted below), and **no non-Claude reviewer read this slice** — the
-owner moved phases 1–3 from `codex` to `lead` mid-build, and the Codex CLI is
-not installed in this environment, so the family flip did not happen on either
-side.
+Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
+clear meaning per user-visible source count across the P1 check-in, Where I
+looked and the publisher-country charts. Two items were escalated to the owner
+in that PR and remain true of it: the **manual browser check was not run** (it
+needs a live model route; staging's OpenAI quota is recorded exhausted below),
+and **no non-Claude reviewer read the slice** (the Codex CLI is not installed in
+this environment, so the family flip did not happen).
 
 Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
 conversation model: a project holds many conversations, Claude-Projects-style.
