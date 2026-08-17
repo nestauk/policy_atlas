@@ -6,6 +6,8 @@ import { ArtefactView } from "./views/ArtefactView";
 import { DecisionsView } from "./views/DecisionsView";
 import { FindingsView } from "./views/FindingsView";
 import { LandingView } from "./views/LandingView";
+import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
+import { ShareView } from "./views/ShareView";
 import { SourcesView } from "./views/SourcesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
@@ -32,19 +34,78 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { path: "/", element: <LandingView /> },
+
+      // The task lifecycle: Plan · Results · Sources · Share · History.
+      // Every stage past Plan is gated on run state, so a locked stage is
+      // unreachable by URL as well as by click.
       { path: "/projects/:projectId", element: <WorkspaceView /> },
-      { path: "/projects/:projectId/evidence-base", element: <ArtefactView /> },
-      { path: "/projects/:projectId/findings", element: <FindingsView /> },
-      { path: "/projects/:projectId/sources", element: <SourcesView /> },
       {
-        path: "/projects/:projectId/landscape",
+        path: "/projects/:projectId/results",
         element: (
-          <Suspense fallback={<LandscapeFallback />}>
-            <LandscapeView />
-          </Suspense>
+          <LifecycleRoute tab="results">
+            <ArtefactView />
+          </LifecycleRoute>
         ),
       },
-      { path: "/projects/:projectId/decisions", element: <DecisionsView /> },
+      {
+        path: "/projects/:projectId/sources",
+        element: (
+          <LifecycleRoute tab="sources">
+            <SourcesView />
+          </LifecycleRoute>
+        ),
+      },
+      {
+        path: "/projects/:projectId/sources/all",
+        element: (
+          <LifecycleRoute tab="sources">
+            <SourcesView />
+          </LifecycleRoute>
+        ),
+      },
+      {
+        path: "/projects/:projectId/sources/landscape",
+        element: (
+          <LifecycleRoute tab="sources">
+            <Suspense fallback={<LandscapeFallback />}>
+              <LandscapeView />
+            </Suspense>
+          </LifecycleRoute>
+        ),
+      },
+      {
+        path: "/projects/:projectId/sources/findings",
+        element: (
+          <LifecycleRoute tab="sources">
+            <FindingsView />
+          </LifecycleRoute>
+        ),
+      },
+      {
+        path: "/projects/:projectId/share",
+        element: (
+          <LifecycleRoute tab="share">
+            <ShareView />
+          </LifecycleRoute>
+        ),
+      },
+      {
+        path: "/projects/:projectId/history",
+        element: (
+          <LifecycleRoute tab="history">
+            <DecisionsView />
+          </LifecycleRoute>
+        ),
+      },
+
+      // Retired paths. Every URL that was bookmarkable before the reshape
+      // still resolves — a reorganisation is not a reason to break someone's
+      // saved link.
+      { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
+      { path: "/projects/:projectId/findings", element: <RedirectToPath suffix="/sources/findings" /> },
+      { path: "/projects/:projectId/landscape", element: <RedirectToPath suffix="/sources/landscape" /> },
+      { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
+
       // Catch-all: an unknown URL still gets the app chrome and an honest
       // "nothing here" view rather than a router error page.
       { path: "*", element: <NotFoundView /> },

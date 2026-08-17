@@ -8,7 +8,10 @@ import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
 import { StatusDot } from "../ui/brand/Card";
+import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
+import { COPY } from "../lib/vocabulary";
+import { lifecycleTabs } from "./lifecycle";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
@@ -176,7 +179,12 @@ export function AppShell() {
   const { projectId } = useParams();
   const location = useLocation();
   const auth = useAuth();
-  const project = useProject(projectId ?? "");
+  // Locking reads `latest_run.status`, so the shell needs it fresh while a run
+  // moves. The run stream already invalidates this query on the two pages that
+  // mount it (Plan and Results), so polling only has to cover the pages that
+  // don't — the same shape as the pending check-in poll below. Mounting a
+  // third `useRunStream` here would double-connect on those two pages.
+  const project = useProject(projectId ?? "", { pollWhileRunning: true });
   const base = projectId === undefined ? null : `/projects/${projectId}`;
   const inWorkspace = base !== null && location.pathname === base;
   const showChatPanel = base !== null && !inWorkspace;
@@ -221,24 +229,22 @@ export function AppShell() {
               </div>
               <div className="flex items-center gap-5">
                 {base !== null && (
-                  <>
-                    <NavItem to={base}>
-                      <span className="inline-flex items-center gap-1.5">
-                        Workspace
-                        {hasPendingCheckIn && (
-                          <>
-                            <StatusDot tone="paused" />
-                            <span className="sr-only">Check-in pending</span>
-                          </>
-                        )}
-                      </span>
-                    </NavItem>
-                    <NavItem to={`${base}/evidence-base`}>Evidence base</NavItem>
-                    <NavItem to={`${base}/findings`}>Findings</NavItem>
-                    <NavItem to={`${base}/sources`}>Sources</NavItem>
-                    <NavItem to={`${base}/landscape`}>Landscape</NavItem>
-                    <NavItem to={`${base}/decisions`}>Decision log</NavItem>
-                  </>
+                  <LifecycleBar
+                    hint={COPY.lockedHint}
+                    items={lifecycleTabs(base, project.data?.latest_run?.status).map((item) =>
+                      item.tab === "plan" && hasPendingCheckIn
+                        ? {
+                            ...item,
+                            marker: (
+                              <>
+                                <StatusDot tone="paused" />
+                                <span className="sr-only">Check-in pending</span>
+                              </>
+                            ),
+                          }
+                        : item,
+                    )}
+                  />
                 )}
                 {/* 026 live-check gap: the AuthApi always had signOut; nothing
                     rendered it — Cognito users had no way out of a session. */}

@@ -128,8 +128,13 @@ export function useProjects(query?: { status?: "active" | "archived" | "all"; pa
   });
 }
 
-/** `GET /api/v1/projects/{project_id}`. */
-export function useProject(projectId: string) {
+/** `GET /api/v1/projects/{project_id}`.
+ *
+ *  `options.pollWhileRunning` keeps `latest_run.status` fresh for a caller
+ *  with no run stream of its own — the app shell's lifecycle locking. On the
+ *  pages that do mount `useRunStream`, the stream already invalidates this
+ *  query, so those callers leave it off rather than pay for both. */
+export function useProject(projectId: string, options?: { pollWhileRunning?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.project(projectId),
@@ -141,6 +146,11 @@ export function useProject(projectId: string) {
       return data;
     },
     enabled: Boolean(projectId),
+    refetchInterval: (activeQuery) => {
+      if (options?.pollWhileRunning !== true) return false;
+      const status = activeQuery.state.data?.latest_run?.status;
+      return status !== undefined && ACTIVE_RUN_STATUSES.has(status) ? 15_000 : false;
+    },
   });
 }
 
