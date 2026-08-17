@@ -4,7 +4,9 @@ import { useParams } from "react-router";
 import { useArtefact, useProject } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
+import { Button } from "../ui/brand/Button";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
+import { PlanDocument } from "./workspace/PlanDocument";
 import { PlanningPane } from "./workspace/PlanningPane";
 import { ChatPane } from "./workspace/chat/ChatPane";
 import { ChatsLibrary } from "./workspace/chat/ChatsLibrary";
@@ -30,7 +32,10 @@ export function WorkspaceView() {
   const rail = useRail("50%");
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const [libraryOpen, setLibraryOpen] = useState(false);
-  useDocumentTitle(project.data?.name, "Workspace");
+  // The plan opens on request rather than sitting open: progressive
+  // disclosure, and the thread stays the surface a person works in.
+  const [planOpen, setPlanOpen] = useState(false);
+  useDocumentTitle(project.data?.name, "Plan");
 
   // Query errors are the raw envelope body ({error: {code}}), thrown as-is.
   const errorCode = (project.error as { error?: { code?: string } } | null)?.error?.code;
@@ -42,10 +47,12 @@ export function WorkspaceView() {
     // Full-bleed white page (no grey gutters, no column borders — owner,
     // 2026-08-05); the readable measure lives on the inner column.
     return (
-      <main className="h-[calc(100svh-58px)] bg-paper">
+      <main className="relative h-[calc(100svh-58px)] bg-paper">
         <div className="mx-auto h-full max-w-[760px]">
           <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
         </div>
+        <OpenPlanButton onOpen={() => setPlanOpen(true)} />
+        {planOpen && <PlanDocument projectId={projectId} onClose={() => setPlanOpen(false)} />}
       </main>
     );
   }
@@ -56,7 +63,7 @@ export function WorkspaceView() {
   // "the workspace expands too wide").
   return (
     <main
-      className="mx-auto grid min-h-[calc(100svh-58px)] max-w-[1440px] grid-cols-1 lg:h-[calc(100svh-58px)] lg:grid-cols-[minmax(0,var(--chat))_minmax(0,1fr)]"
+      className="relative mx-auto grid min-h-[calc(100svh-58px)] max-w-[1440px] grid-cols-1 lg:h-[calc(100svh-58px)] lg:grid-cols-[minmax(0,var(--chat))_minmax(0,1fr)]"
       style={{ "--chat": rail.width } as React.CSSProperties}
     >
       {/* lg: fixed viewport height so chat and journey scroll independently;
@@ -89,6 +96,19 @@ export function WorkspaceView() {
       <div className="min-w-0 bg-ground lg:overflow-hidden">
         <RunPane projectId={projectId} stream={stream} />
       </div>
+      <OpenPlanButton onOpen={() => setPlanOpen(true)} />
+      {planOpen && <PlanDocument projectId={projectId} onClose={() => setPlanOpen(false)} />}
     </main>
+  );
+}
+
+/** The one affordance that opens the plan as a document. */
+function OpenPlanButton({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div className="absolute top-2 right-4 z-10">
+      <Button variant="ghost" size="sm" onClick={onOpen}>
+        Open the plan
+      </Button>
+    </div>
   );
 }

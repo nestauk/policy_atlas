@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useCheckIns, useDecisions, useRuns } from "../../api/queries";
+import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { composePlanningThread, usePlanningTranscript } from "../../store";
 import type {
@@ -364,6 +365,9 @@ export function PlanningPane({
   const checkInsQuery = useCheckIns(projectId, "all");
   const [message, setMessage] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
+  // The plan document's "Change this" seeds this composer rather than writing
+  // to the plan — editing a plan stays conversational.
+  useComposerSeed(setMessage);
 
   const durableTurns = (transcript.data?.data ?? []) as PlanningThreadTurn[];
   const { boundaries, runDecisions } = threadInputs(
