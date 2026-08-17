@@ -10,5 +10,5 @@ export function ReauthRedirect() {
     void auth.onUnauthenticated();
   }, [auth]);
 
-  return <p role="status" className="text-meta text-grey">Your session expired. Taking you back to sign in…</p>;
+  return <p role="status" className="text-body text-grey">Your session expired. Taking you back to sign in…</p>;
 }

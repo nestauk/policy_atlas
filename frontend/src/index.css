@@ -72,9 +72,15 @@
   --text-heading--line-height: 1.3;
   --text-title: 30px; /* page titles */
   --text-title--line-height: 1.2;
+  --text-display: 36px; /* the one statement per page: report and entry titles */
+  --text-display--line-height: 1.15;
 
-  /* prose line-length cap (strand 1): ~66-72ch wherever paragraphs render */
-  --container-prose-measure: 72ch;
+  /* Prose line-length cap. Retuned from 72ch to the prototype's 44em (032
+     G15): at the 16px floor, 72ch runs wider than a comfortable read. */
+  --container-prose-measure: 44em;
+
+  /* Uppercase label tracking, matching the prototype (032 G15). */
+  --tracking-label: 0.06em;
 
   /* Nesta core palette */
   --color-blue: #0000ff; /* hero — one hero colour per layout */

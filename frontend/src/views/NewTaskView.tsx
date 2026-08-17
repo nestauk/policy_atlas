@@ -113,7 +113,7 @@ function QuestionForm() {
       <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
         Evidence search
       </p>
-      <h1 className="mt-2 font-display text-title font-extrabold tracking-[-0.5px] text-navy">
+      <h1 className="mt-2 font-display text-display font-extrabold tracking-[-0.5px] text-navy">
         What do you need evidence on?
       </h1>
       <p className="mt-3 max-w-prose text-lead text-grey">
@@ -205,7 +205,7 @@ export function NewTaskView() {
         <QuestionForm />
       ) : (
         <>
-          <h1 className="font-display text-title font-extrabold tracking-[-0.5px] text-navy">
+          <h1 className="font-display text-display font-extrabold tracking-[-0.5px] text-navy">
             {COPY.newTask}
           </h1>
           <p className="mt-3 max-w-prose text-lead text-grey">

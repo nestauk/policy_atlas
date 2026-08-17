@@ -38,9 +38,9 @@ export function ThemesView() {
   const isEmpty = !isPending && !isError && themes.length === 0 && facets.length === 0;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
+    <main className="mx-auto max-w-[1180px] px-6 py-8">
       <h1 className="mb-1 font-display text-title font-extrabold text-navy">Themes</h1>
-      <p className="mb-5 text-caption text-grey">
+      <p className="mb-5 text-lead text-grey">
         The recurring themes and groups found across the screened-in sources.
       </p>
 
@@ -56,7 +56,7 @@ export function ThemesView() {
         (isUnauthenticated ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="p-8 text-center text-meta text-navy">
+          <Card role="alert" className="p-8 text-center text-body text-navy">
             Themes couldn't be loaded.{" "}
             <button
               type="button"
@@ -72,7 +72,7 @@ export function ThemesView() {
         ))}
 
       {isEmpty && (
-        <Card role="status" className="p-8 text-center text-meta text-grey">
+        <Card role="status" className="p-8 text-center text-body text-grey">
           Themes appear once screening has run.
         </Card>
       )}

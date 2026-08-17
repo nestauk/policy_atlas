@@ -82,16 +82,16 @@ function DefinitionRow({ label, value }: { label: string; value: string | null }
 function ExactWords({ quote, verified }: { quote?: string | null; verified?: boolean | null }) {
   return (
     <div>
-      <h3 className="mb-2 text-caption font-bold uppercase tracking-wider text-grey">
+      <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
         The exact words
       </h3>
       {typeof quote === "string" && quote !== "" ? (
-        <p className="text-caption italic leading-relaxed text-grey">
+        <p className="text-body italic leading-relaxed text-grey">
           “{scrub(quote)}”{" "}
           {verified === true && <span className="not-italic text-green">✓ verified</span>}
         </p>
       ) : (
-        <p className="text-caption text-grey">No anchoring quote recorded.</p>
+        <p className="text-body text-grey">No anchoring quote recorded.</p>
       )}
     </div>
   );
@@ -103,11 +103,11 @@ function IofExpansion({ finding }: { finding: IofFinding }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-caption font-bold uppercase tracking-wider text-grey">
+        <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
           Reported numbers
         </h3>
         {stats.length === 0 && finding.estimate_level === null ? (
-          <p className="text-caption text-grey">
+          <p className="text-body text-grey">
             No numbers reported — recorded as direction only.
           </p>
         ) : (
@@ -154,7 +154,7 @@ function IcfExpansion({ finding }: { finding: IcfFinding }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-caption font-bold uppercase tracking-wider text-grey">
+        <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
           Context detail
         </h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-caption">
@@ -234,10 +234,10 @@ function FindingRow({
             )}
           </td>
         )}
-        <td className="max-w-[260px] px-3 py-3 text-meta font-medium leading-snug text-navy">
+        <td className="max-w-[260px] px-3 py-3 text-body font-medium leading-snug text-navy">
           {scrub(finding.intervention)}
         </td>
-        <td className="max-w-[240px] px-3 py-3 text-meta leading-snug text-navy">
+        <td className="max-w-[240px] px-3 py-3 text-body leading-snug text-navy">
           {finding.profile === "iof" ? scrub(finding.outcome) : scrub(finding.claim)}
         </td>
         <td className="px-3 py-3">
@@ -266,7 +266,7 @@ function FindingRow({
         <td className="px-3 py-3">
           {group !== null && <Chip tone="soft">{scrub(group)}</Chip>}
         </td>
-        <td className="max-w-[220px] px-3 py-3 text-caption leading-snug">
+        <td className="max-w-[220px] px-3 py-3 text-body leading-snug">
           <Link
             to={`/projects/${projectId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
             className="text-grey hover:text-blue hover:underline"
@@ -339,7 +339,7 @@ export function FindingsView() {
   return (
     <main className="mx-auto max-w-[1180px] px-6 py-8">
       <h1 className="font-display text-title font-extrabold text-navy">Findings</h1>
-      <p className="mt-1 text-meta text-grey">
+      <p className="mt-1 text-lead text-grey">
         Every finding pulled from the sources — what was found, and the exact words it rests on.
       </p>
 
@@ -425,7 +425,7 @@ export function FindingsView() {
         (errorCode(findings.error) === "unauthenticated" ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="mt-5 p-8 text-center text-meta text-navy">
+          <Card role="alert" className="mt-5 p-8 text-center text-body text-navy">
             Findings couldn't be loaded.{" "}
             <button
               type="button"
@@ -485,7 +485,7 @@ export function FindingsView() {
                   <tr>
                     <td
                       colSpan={showKind ? 7 : 6}
-                      className="px-4 py-8 text-center text-meta text-grey"
+                      className="px-4 py-8 text-center text-body text-grey"
                     >
                       {profile !== undefined || group !== undefined
                         ? "No findings match these filters."

@@ -110,16 +110,16 @@ export function CheckInCard({
         </div>
         {steerWords !== null && (
           <div className="mt-2 ml-8 border border-blue-tint bg-blue-tint-2 px-3 py-2">
-            <p className="text-caption text-ink">{scrub(steerWords)}</p>
+            <p className="text-body text-ink">{scrub(steerWords)}</p>
           </div>
         )}
-        <p className="mt-2 text-caption font-semibold text-navy">
+        <p className="mt-2 text-body font-semibold text-navy">
           Here's what that would change — apply it?
         </p>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-caption leading-relaxed text-ink">
+        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body leading-relaxed text-ink">
           {scrub(compiled.render)}
         </pre>
-        <p className="mt-1.5 text-caption text-grey">
+        <p className="mt-1.5 text-body text-grey">
           If part of your steer can't be honoured, the changes above say which part and why —
           nothing applies until you confirm.
         </p>
@@ -164,7 +164,7 @@ export function CheckInCard({
           </Button>
         </div>
         {notice !== null && (
-          <p role="alert" className="mt-3 text-caption text-red">
+          <p role="alert" className="mt-3 text-body text-red">
             {notice}
           </p>
         )}
@@ -196,17 +196,17 @@ export function CheckInCard({
         {stageLabel !== null && <Chip tone="soft">{scrub(stageLabel)}</Chip>}
       </div>
       {triggerLines.length > 0 && (
-        <p className="mt-2 max-w-prose-measure text-caption leading-relaxed text-grey">{triggerLines.join(" ")}</p>
+        <p className="mt-2 max-w-prose-measure text-body leading-relaxed text-grey">{triggerLines.join(" ")}</p>
       )}
       {presentedRender === null ? (
-        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-caption leading-relaxed text-ink">
+        <pre className="mt-3 overflow-x-auto whitespace-pre-wrap border border-line bg-paper-2 p-3 font-sans text-body leading-relaxed text-ink">
           {scrub(checkIn.render)}
         </pre>
       ) : (
         <div className="mt-3 border border-line bg-paper-2 p-3">
           {/* No decimal completion time, no raw-render disclosure (owner,
               2026-08-05) — the stage label and counts carry the story. */}
-          <p className="text-caption font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
+          <p className="text-body font-semibold text-navy">{scrub(presentedRender.stageLabel)}</p>
           {presentedRender.counts.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {presentedRender.counts.map(({ label, value }) => (
@@ -245,7 +245,7 @@ export function CheckInCard({
           >
             Write the report with the edited sections
           </Button>
-          <p className="text-caption text-grey">
+          <p className="text-body text-grey">
             Untouched rows carry over exactly as displayed.
           </p>
         </div>
@@ -286,12 +286,12 @@ export function CheckInCard({
             {option.endorsement != null && option.endorsement !== "" && (
               // The run's reviewer endorsed this option: its reason renders
               // here, under the option — never a duplicate button.
-              <p className="text-caption leading-relaxed text-blue">
+              <p className="text-body leading-relaxed text-blue">
                 {scrub(option.endorsement)}
               </p>
             )}
             {option.description.length > 0 && (
-              <p className="text-caption leading-relaxed text-grey">{scrub(option.description)}</p>
+              <p className="text-body leading-relaxed text-grey">{scrub(option.description)}</p>
             )}
             {option.id === "change_mode" && changeModeOpen && (
               <form
@@ -309,7 +309,7 @@ export function CheckInCard({
                   id="change-mode-select"
                   value={changeModeValue}
                   onChange={(event) => setChangeModeValue(event.target.value as ChangeModeValue)}
-                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-caption focus-visible:outline-2 focus-visible:outline-blue"
+                  className="flex-1 border border-line-2 bg-paper px-2.5 py-1.5 text-meta focus-visible:outline-2 focus-visible:outline-blue"
                 >
                   {CHANGE_MODE_VALUES.flatMap((value) => {
                     const label = vocabLabel(STEERING_MODE_LABEL, value);
@@ -333,7 +333,7 @@ export function CheckInCard({
 
       {suggestedOptions.length > 0 && (
         <div className="mt-4 border border-blue-tint bg-blue-tint/40 px-3 py-2.5">
-          <p className="text-caption font-bold uppercase tracking-wide text-blue">
+          <p className="text-caption font-bold uppercase tracking-[0.06em] text-blue">
             Suggested from this run's results
           </p>
           <div className="mt-2 flex flex-col gap-2">
@@ -350,7 +350,7 @@ export function CheckInCard({
                   </Button>
                 </div>
                 {option.why != null && option.why !== "" && (
-                  <p className="text-caption leading-relaxed text-grey">{scrub(option.why)}</p>
+                  <p className="text-body leading-relaxed text-grey">{scrub(option.why)}</p>
                 )}
               </div>
             ))}
@@ -380,7 +380,7 @@ export function CheckInCard({
           );
         }}
       >
-        <label className="text-caption font-semibold text-navy" htmlFor="check-in-free-text">
+        <label className="text-body font-semibold text-navy" htmlFor="check-in-free-text">
           Or steer in your own words
         </label>
         <div className="mt-1.5 flex items-center gap-2">
@@ -390,7 +390,7 @@ export function CheckInCard({
             value={freeText}
             onChange={(event) => setFreeText(event.target.value)}
             placeholder="e.g. prioritise UK school-based studies"
-            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-caption focus-visible:outline-2 focus-visible:outline-blue"
+            className="flex-1 border border-line-2 bg-paper px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-blue"
           />
           <Button
             type="submit"
@@ -401,7 +401,7 @@ export function CheckInCard({
             Compile
           </Button>
         </div>
-        <p className="mt-1.5 text-caption text-grey">
+        <p className="mt-1.5 text-body text-grey">
           Your words compile into plan changes you confirm before they apply.
         </p>
       </form>

@@ -113,7 +113,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-meta [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-body [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
         <Button
           type="submit"
@@ -197,13 +197,13 @@ function DurableTurn({
         />
       )}
       {turn.status === "pending" && (
-        <p role="status" className="mr-8 px-3.5 text-caption text-grey">
+        <p role="status" className="mr-8 px-3.5 text-body text-grey">
           This turn didn't finish — it will retry or expire shortly.
         </p>
       )}
       {turn.status === "failed" && (
         <div className="mr-8 border border-red-tint bg-red-tint/40 px-3.5 py-2.5">
-          <p className="text-caption text-ink">This turn didn't complete.</p>
+          <p className="text-body text-ink">This turn didn't complete.</p>
           {isLatest && (
             <Button
               size="sm"
@@ -314,7 +314,7 @@ function RunBlock({
           key={decision.sequence}
           className="mx-4 border-l-2 border-l-yellow bg-yellow-tint/50 px-3 py-2"
         >
-          <p className="text-caption text-ink">
+          <p className="text-body text-ink">
             {scrub(decision.summary)}{decision.count > 1 ? ` × ${decision.count}` : ""}
           </p>
         </div>
@@ -330,10 +330,10 @@ function RunBlock({
           a completed run's last word shouldn't be a quiet stage echo. */}
       {complete && (
         <div className="anim-rise mr-8 border border-green-tint bg-green-tint/40 px-4 py-3">
-          <p className="text-meta font-semibold text-navy">The evidence base is ready.</p>
+          <p className="text-body font-semibold text-navy">The evidence base is ready.</p>
           <Link
             to={`/projects/${projectId}/results`}
-            className="cutout mt-2 inline-block bg-blue px-3 py-2 text-caption font-bold text-white"
+            className="cutout mt-2 inline-block bg-blue px-3 py-2 text-meta font-bold text-white"
           >
             Read the evidence base
           </Link>
@@ -447,7 +447,7 @@ export function PlanningPane({
         <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
         <div ref={contentRef} className="space-y-3">
         {transcript.isPending && (
-          <div role="status" className="anim-breathe text-caption text-grey">
+          <div role="status" className="anim-breathe text-body text-grey">
             Loading your planning conversation…
           </div>
         )}
@@ -455,7 +455,7 @@ export function PlanningPane({
           (errorCode(transcript.error) === "unauthenticated" ? (
             <ReauthRedirect />
           ) : (
-            <div role="status" className="text-caption text-grey">
+            <div role="status" className="text-body text-grey">
               <p>Your planning conversation couldn't be loaded.</p>
               <Button
                 size="sm"
@@ -511,7 +511,7 @@ export function PlanningPane({
             {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} />}
             {turn.status === "failed" && (
               <div className="mr-8 border border-line bg-paper px-3.5 py-2.5">
-                <p className="text-caption text-ink">
+                <p className="text-body text-ink">
                   {isConflictCode(turn.errorCode)
                     ? conflictSentences[turn.errorCode]
                     : "That turn couldn't be processed. Your draft so far is unchanged."}
@@ -544,7 +544,7 @@ export function PlanningPane({
         ))}
 
         {transcript.isSubmitting && (
-          <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-caption text-grey">
+          <div role="status" className="anim-breathe mr-8 flex items-center gap-2 px-3.5 text-body text-grey">
             <span aria-hidden="true" className="h-2 w-2 bg-blue" />
             Planning…
           </div>
@@ -579,7 +579,7 @@ export function PlanningPane({
 
       <div className="border-t border-line px-4 py-3">
         {runActive && (
-          <p role="status" className="mb-2 text-caption leading-relaxed text-grey">
+          <p role="status" className="mb-2 text-body leading-relaxed text-grey">
             {runStatus === "paused"
               ? "The analysis is paused at a check-in above. Replanning unlocks when the run finishes."
               : "The analysis is running — steer it from its check-ins. Replanning unlocks when it finishes."}

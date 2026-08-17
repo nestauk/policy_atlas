@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <main className="mx-auto max-w-2xl px-6 py-16">
           <Card role="alert" className="p-6">
             <h1 className="font-display text-title text-navy">Something went wrong</h1>
-            <p className="mt-3 text-meta text-grey">Reload the page to try again.</p>
+            <p className="mt-3 text-body text-grey">Reload the page to try again.</p>
           </Card>
         </main>
       );

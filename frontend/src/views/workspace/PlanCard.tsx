@@ -74,10 +74,10 @@ export function PlanCard({
         aria-expanded={detailsOpen}
         aria-label="Toggle plan details"
       >
-        <span className="shrink-0 text-caption font-bold uppercase tracking-wide text-grey">
+        <span className="shrink-0 text-caption font-bold uppercase tracking-[0.06em] text-grey">
           The plan
         </span>
-        <span className="min-w-0 flex-1 truncate text-meta font-semibold text-navy">
+        <span className="min-w-0 flex-1 truncate text-body font-semibold text-navy">
           {plan.question !== null && plan.question !== "" ? scrub(plan.question) : "Not set yet"}
         </span>
         <Chip className="shrink-0" tone="green">
@@ -92,8 +92,8 @@ export function PlanCard({
             <div className="grid gap-px border border-line bg-line sm:grid-cols-2">
               {knownSettings.map(([label, value]) => (
                 <div key={label} className="min-w-0 bg-paper px-3 py-2">
-                  <p className="text-caption font-bold uppercase tracking-wide text-grey">{label}</p>
-                  <p className="break-words text-caption font-medium text-navy">{value}</p>
+                  <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
+                  <p className="break-words text-meta font-medium text-navy">{value}</p>
                 </div>
               ))}
             </div>
@@ -125,7 +125,7 @@ export function PlanCard({
                 </div>
               )}
               {screeningCriteria.length > 0 && (
-                <ul className="mt-1 space-y-1 text-caption text-navy">
+                <ul className="mt-1 space-y-1 text-body text-navy">
                   {screeningCriteria.map((criterion) => (
                     <li key={criterion} className="break-words">
                       • {scrub(criterion)}
@@ -138,7 +138,7 @@ export function PlanCard({
           {steps.length > 0 && (
             <div className="mt-3">
               <PaneHeading className="p-0">Steps</PaneHeading>
-              <ol className="mt-1 space-y-1 text-caption text-navy">
+              <ol className="mt-1 space-y-1 text-body text-navy">
                 {steps.map((step, index) => (
                   <li key={step.stage} className="break-words">
                     {index + 1}. {scrub(step.label)}
@@ -151,7 +151,7 @@ export function PlanCard({
           {componentLabels.length > 0 && steps.length === 0 && (
             <div className="mt-3">
               <PaneHeading className="p-0">Planned components</PaneHeading>
-              <ul className="mt-1 space-y-1 text-caption text-navy">
+              <ul className="mt-1 space-y-1 text-body text-navy">
                 {componentLabels.map((label) => (
                   <li key={label}>{label}</li>
                 ))}
@@ -161,7 +161,7 @@ export function PlanCard({
           {(plan.assumptions ?? []).length > 0 && (
             <div className="mt-3">
               <PaneHeading className="p-0">Assumptions</PaneHeading>
-              <ul className="mt-1 space-y-1 text-caption text-grey">
+              <ul className="mt-1 space-y-1 text-body text-grey">
                 {plan.assumptions?.map((assumption) => (
                   <li key={assumption} className="break-words">
                     • {scrub(assumption)}
@@ -193,7 +193,7 @@ export function PlanCard({
         >
           {starting ? "Starting…" : "Start the analysis"}
         </Button>
-        <p className="text-caption text-grey">
+        <p className="text-body text-grey">
           {plan.time_band !== null && plan.time_band !== "" ? scrub(plan.time_band) : ""}
           {!unattended &&
             `${plan.time_band !== null && plan.time_band !== "" ? " · " : ""}You can steer or pause at any check-in.`}
@@ -201,7 +201,7 @@ export function PlanCard({
       </div>
       )}
       {startNotice !== null && (
-        <p role="alert" className="border-t border-line px-4 py-2 text-caption text-red">
+        <p role="alert" className="border-t border-line px-4 py-2 text-body text-red">
           {startNotice}
         </p>
       )}

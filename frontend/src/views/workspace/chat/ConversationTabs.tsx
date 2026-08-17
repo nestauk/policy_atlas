@@ -71,14 +71,14 @@ export function ConversationTabs({
       <button
         type="button"
         onClick={() => setActiveConversation(null)}
-        className={`flex min-w-0 items-center gap-2 px-3 py-2 text-caption font-semibold ${activeConversationId === null ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
+        className={`flex min-w-0 items-center gap-2 px-3 py-2 text-meta font-semibold ${activeConversationId === null ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
       >
         <span aria-hidden="true" className={`h-2 w-2 rounded-full ${planningClosed ? "bg-line-2" : "bg-blue"}`} />
         <span className="truncate">Planning</span>
       </button>
       {tabs.map((chat) => (
         <div key={chat.id} className={`group flex min-w-0 items-center ${activeConversationId === chat.id ? "border-b-2 border-blue" : ""}`}>
-          <button type="button" onClick={() => select(chat.id)} className="min-w-0 px-3 py-2 text-caption font-semibold text-navy hover:bg-ground">
+          <button type="button" onClick={() => select(chat.id)} className="min-w-0 px-3 py-2 text-meta font-semibold text-navy hover:bg-ground">
             <span className="block max-w-32 truncate">{scrub(chat.title)}</span>
           </button>
           <button type="button" aria-label={`Archive ${chat.title}`} onClick={() => void close(chat.id)} className="mr-1 hidden px-1 text-grey hover:text-navy group-hover:block focus:block">×</button>

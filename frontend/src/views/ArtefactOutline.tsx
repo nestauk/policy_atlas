@@ -75,14 +75,14 @@ export function ContentsSidebar({
       aria-label="Contents"
       className="sticky top-20 hidden max-h-[calc(100svh-6rem)] w-56 shrink-0 self-start overflow-y-auto pr-4 xl:block"
     >
-      <p className="text-caption font-bold uppercase tracking-wide text-grey">Contents</p>
+      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Contents</p>
       <ul className="mt-2 space-y-1 border-l border-line">
         {entries.map((entry) => (
           <li key={entry.id}>
             <a
               href={`#${entry.id}`}
               aria-current={activeId === entry.id ? "location" : undefined}
-              className={`block border-l-2 py-0.5 pl-3 text-caption leading-snug hover:text-navy ${
+              className={`block border-l-2 py-0.5 pl-3 text-body leading-snug hover:text-navy ${
                 activeId === entry.id
                   ? "border-l-blue font-semibold text-navy"
                   : "border-l-transparent text-grey"
@@ -146,7 +146,7 @@ export function SectionDisclosure({
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
       {!expanded && summary !== null && (
-        <p className="mt-1.5 max-w-prose-measure text-meta text-grey">{scrub(summary.text)}</p>
+        <p className="mt-1.5 max-w-prose-measure text-body text-grey">{scrub(summary.text)}</p>
       )}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
     </section>
@@ -204,12 +204,12 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
         </span>
       </button>
       {!open && funnelLine !== null && (
-        <p className="mt-1.5 text-meta text-grey">{funnelLine}</p>
+        <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
       )}
       {open && (
         <div className="mt-3 space-y-4">
           {funnelLine !== null && (
-            <p className="text-meta text-navy">
+            <p className="text-body text-navy">
               {funnelLine}
               <span className="text-grey">
                 {" "}
@@ -223,17 +223,17 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
           )}
           {distributions.map((row) => (
             <div key={row.label}>
-              <p className="text-caption font-bold uppercase tracking-wide text-grey">{row.label}</p>
+              <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{row.label}</p>
               <ul className="mt-1 space-y-0.5">
                 {row.entries.slice(0, 8).map(([label, count]) => (
-                  <li key={label} className="flex items-baseline gap-2 text-meta text-navy">
+                  <li key={label} className="flex items-baseline gap-2 text-body text-navy">
                     <span className="min-w-0 flex-1 truncate">{scrub(label)}</span>
                     <span className="text-grey">{count === 1 ? "1 document" : `${count} documents`}</span>
                   </li>
                 ))}
               </ul>
               {row.label === "Where published" && (
-                <p className="mt-1 text-caption text-grey">
+                <p className="mt-1 text-body text-grey">
                   {/* Task 031: the read model reads the publishing venue's country only —
                       never the authors' affiliations, and never where the study was set. */}
                   The country of the publishing venue, when the database reports it — not where
@@ -244,10 +244,10 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
           ))}
           {(cited?.themes ?? []).length > 0 && (
             <div>
-              <p className="text-caption font-bold uppercase tracking-wide text-grey">Key themes</p>
+              <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Key themes</p>
               <ul className="mt-1 space-y-0.5">
                 {(cited?.themes ?? []).map((theme) => (
-                  <li key={theme.name} className="flex items-baseline gap-2 text-meta text-navy">
+                  <li key={theme.name} className="flex items-baseline gap-2 text-body text-navy">
                     <span className="min-w-0 flex-1 truncate">{scrub(theme.name)}</span>
                     {theme.theme_id != null ? (
                       <Link

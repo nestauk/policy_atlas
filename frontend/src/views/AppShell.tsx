@@ -105,7 +105,7 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
               className="w-full border border-line-2 bg-paper px-2 py-1.5 text-meta font-bold text-navy focus-visible:outline-2 focus-visible:outline-blue"
             />
             {update.isError && (
-              <p role="alert" className="mt-2 text-caption text-red">
+              <p role="alert" className="mt-2 text-body text-red">
                 The project couldn't be renamed. Try again.
               </p>
             )}
@@ -128,12 +128,12 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
               Rename
             </button>
             {archive.isError && (
-              <p role="alert" className="text-caption text-red">
+              <p role="alert" className="text-body text-red">
                 The project couldn't be archived. Try again.
               </p>
             )}
             {confirmingArchive ? (
-              <div className="space-y-2 text-caption text-grey">
+              <div className="space-y-2 text-body text-grey">
                 <p>Archiving removes this project from your active projects.</p>
                 <div className="flex gap-2">
                   <Button
@@ -268,7 +268,7 @@ export function AppShell() {
             {hasPendingCheckIn && base !== null && (
               <div role="status" className="border-b border-orange bg-orange/10 px-5 py-2">
                 <NavItem to={base}>
-                  <span className="text-meta font-semibold text-navy">
+                  <span className="text-body font-semibold text-navy">
                     The analysis is paused — a check-in is waiting on you. Go to the check-in →
                   </span>
                 </NavItem>

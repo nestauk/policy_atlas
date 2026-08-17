@@ -294,7 +294,7 @@ export function CitationProvenanceBlock({
   );
   return (
     <div className="border border-line p-4">
-      <p className="text-meta font-bold leading-snug text-blue">
+      <p className="text-body font-bold leading-snug text-blue">
         [{n ?? "—"}]{" "}
         {sourceRef !== null ? (
           <button
@@ -309,12 +309,12 @@ export function CitationProvenanceBlock({
         )}
       </p>
       {meta.length > 0 && (
-        <p className="mt-0.5 text-caption text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
+        <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
-      <div className="mt-3 space-y-2 text-caption leading-relaxed">
+      <div className="mt-3 space-y-2 text-body leading-relaxed">
         {context.isPending && (
-          <p role="status" className="animate-pulse text-caption text-grey">
+          <p role="status" className="animate-pulse text-body text-grey">
             Loading surrounding context…
           </p>
         )}
@@ -353,7 +353,7 @@ export function AppraisalChip({ label, evidenceType }: { label: string; evidence
       tone="blue"
       label={scrub(label)}
       content={
-        <span className="text-caption">
+        <span className="text-meta">
           {typeof evidenceType === "string"
             ? `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
             : APPRAISAL_FALLBACK_HINT}
@@ -391,7 +391,7 @@ function CitationContext({
               tone="soft"
               label={TIER_LABEL[tier]}
               content={
-                <div className="max-w-[280px] space-y-1 text-caption">
+                <div className="max-w-[280px] space-y-1 text-meta">
                   <p>{TIER_TEXT[tier]}</p>
                   {typeof citation.grounding_rationale === "string" &&
                     citation.grounding_rationale !== "" && (
@@ -442,14 +442,14 @@ export function ProvenanceSheet({
             .map((text, index) => (
               <p
                 key={index}
-                className="border-l-2 border-l-blue pl-3 text-meta font-medium leading-snug text-navy"
+                className="border-l-2 border-l-blue pl-3 text-body font-medium leading-snug text-navy"
               >
                 {scrub(text)}
               </p>
             ))}
           {extras}
           {children}
-          <p className="border-t border-line pt-3 text-caption text-grey">
+          <p className="border-t border-line pt-3 text-body text-grey">
             Every claim links to the exact passage it came from.
           </p>
         </div>
@@ -478,13 +478,13 @@ function ClaimPanel({
   const extras = (
     <>
       {claim.claim_type === "gap" && (
-        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-meta leading-relaxed text-navy">
+        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-body leading-relaxed text-navy">
           <p>
             This is a recorded evidence gap: the analysis looked and found the base thin here.
             Gaps are part of the answer, never glossed over.
           </p>
           {gap !== null && (
-            <div className="mt-1.5 space-y-0.5 text-caption text-grey">
+            <div className="mt-1.5 space-y-0.5 text-body text-grey">
               {typeof gap.grade === "string" && GAP_GRADE_TEXT[gap.grade] !== undefined && (
                 <p>{GAP_GRADE_TEXT[gap.grade]}</p>
               )}
@@ -509,19 +509,19 @@ function ClaimPanel({
       )}
       {claim.claim_type !== "gap" &&
         claim.claim_type !== "citation" &&
-        hint !== undefined && <p className="text-caption text-grey">{hint}</p>}
+        hint !== undefined && <p className="text-body text-grey">{hint}</p>}
       {(claim.theme?.items?.length ?? 0) > 0 && (
         <div className="border-l-[3px] border-violet bg-blue-tint-2 p-3">
           {(claim.theme?.items ?? []).map((item, index) => (
             <div key={index} className={index > 0 ? "mt-2.5" : undefined}>
-              <p className="text-meta font-semibold text-navy">{scrub(item.name ?? "")}</p>
+              <p className="text-body font-semibold text-navy">{scrub(item.name ?? "")}</p>
               {typeof item.description === "string" && item.description !== "" && (
-                <p className="mt-0.5 text-caption leading-relaxed text-navy">
+                <p className="mt-0.5 text-body leading-relaxed text-navy">
                   {scrub(item.description)}
                 </p>
               )}
               {(item.sources?.length ?? 0) > 0 ? (
-                <details className="mt-0.5 text-caption text-grey">
+                <details className="mt-0.5 text-body text-grey">
                   <summary className="cursor-pointer hover:text-navy">
                     Identified across {item.sources?.length} source
                     {(item.sources?.length ?? 0) === 1 ? "" : "s"} — show them
@@ -543,7 +543,7 @@ function ClaimPanel({
                   </ul>
                 </details>
               ) : typeof item.size === "number" ? (
-                <p className="mt-0.5 text-caption text-grey">
+                <p className="mt-0.5 text-body text-grey">
                   Identified across {item.size} sources
                 </p>
               ) : null}
@@ -561,14 +561,14 @@ function ClaimPanel({
             </div>
           ))}
           {typeof claim.theme?.base === "string" && claim.theme.base !== "" && (
-            <p className="mt-2 border-t border-line pt-2 text-caption text-grey">
+            <p className="mt-2 border-t border-line pt-2 text-body text-grey">
               Basis: {scrub(claim.theme.base)}
             </p>
           )}
         </div>
       )}
       {claim.weakly_grounded === true && (
-        <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">
+        <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-body text-navy">
           The grounding review could not fully verify this claim against its source — read it
           with that in mind.
         </p>
@@ -615,7 +615,7 @@ export function CitationTooltipBody({
   // lives in the provenance sheet's chip tooltip, never on the hover. A JSX
   // slot here is what let the chat hover drift twice (owner, 2026-08-12).
   return (
-    <div className="max-w-[260px] space-y-1.5 text-caption leading-snug">
+    <div className="max-w-[260px] space-y-1.5 text-meta leading-snug">
       <p className="font-semibold text-navy">{scrub(sourceTitle)}</p>
       {quote !== "" && (
         <p className="italic text-grey">
@@ -624,7 +624,7 @@ export function CitationTooltipBody({
         </p>
       )}
       {statusLine != null && statusLine !== "" && <p className="text-grey">{statusLine}</p>}
-      <p className="text-caption text-grey">Click to view in context</p>
+      <p className="text-meta text-grey">Click to view in context</p>
     </div>
   );
 }
@@ -655,7 +655,7 @@ function ClaimSpan({
       />
     ) : (claim.claim_type === "theme" || claim.claim_type === "pattern") &&
       (claim.theme?.items?.length ?? 0) > 0 ? (
-      <div className="max-w-[260px] space-y-1 text-caption leading-snug">
+      <div className="max-w-[260px] space-y-1 text-meta leading-snug">
         {(claim.theme?.items ?? []).slice(0, 3).map((item, index) => (
           <div key={index}>
             <p className="font-semibold text-navy">Theme: {scrub(item.name ?? "")}</p>
@@ -663,23 +663,23 @@ function ClaimSpan({
               <p className="text-grey">{scrub(item.description)}</p>
             )}
             {typeof item.size === "number" && (
-              <p className="text-caption text-grey">{item.size} sources</p>
+              <p className="text-meta text-grey">{item.size} sources</p>
             )}
           </div>
         ))}
-        <p className="text-caption text-grey">Click for detail</p>
+        <p className="text-meta text-grey">Click for detail</p>
       </div>
     ) : claim.claim_type === "gap" ? (
-      <div className="max-w-[260px] space-y-1 text-caption leading-snug">
+      <div className="max-w-[260px] space-y-1 text-meta leading-snug">
         <p className="font-semibold text-navy">Evidence gap</p>
         <p className="text-grey">
           {(typeof claim.gap?.grade === "string" ? GAP_GRADE_TEXT[claim.gap.grade] : undefined) ??
             TYPE_HINT.gap}
         </p>
-        <p className="text-caption text-grey">Click for the coverage detail</p>
+        <p className="text-meta text-grey">Click for the coverage detail</p>
       </div>
     ) : (
-      <span className="text-caption">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
+      <span className="text-meta">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
     );
   const typeLabel = TYPE_LABEL[claim.claim_type];
   const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
@@ -851,12 +851,12 @@ export function AnnotatedProse({
           ))}
         </ul>
         {crossing.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+          <p key={claim.claim_id} className="mt-2 text-body text-grey">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
         {unspanned.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+          <p key={claim.claim_id} className="mt-2 text-body text-grey">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
@@ -877,7 +877,7 @@ export function AnnotatedProse({
         })}
       </p>
       {unspanned.map((claim) => (
-        <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+        <p key={claim.claim_id} className="mt-2 text-body text-grey">
           <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
@@ -921,15 +921,15 @@ export function SourceDossier({
         description="Source dossier"
       >
         {evidence.isPending && (
-          <p role="status" className="animate-pulse text-caption text-grey">
+          <p role="status" className="animate-pulse text-body text-grey">
             Loading the dossier…
           </p>
         )}
-        {dossier.isPending && <p role="status" className="animate-pulse text-caption text-grey">Loading the dossier…</p>}
-        {dossier.isError && <p role="alert" className="text-caption text-navy">This source dossier couldn't be loaded.</p>}
+        {dossier.isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
+        {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {!byId && evidence.data !== undefined && source === undefined && (
-          <p className="text-caption text-grey">This source isn't in the evidence list yet.</p>
+          <p className="text-body text-grey">This source isn't in the evidence list yet.</p>
         )}
       </SheetContent>
     </Sheet>
@@ -954,7 +954,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
       {terminalPartial ? (
         <div
           role="alert"
-          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-caption leading-relaxed text-navy"
+          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-body leading-relaxed text-navy"
         >
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
@@ -964,7 +964,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
           </p>
         </div>
       ) : (
-        <p role="status" className="flex items-center gap-2 text-caption text-grey">
+        <p role="status" className="flex items-center gap-2 text-body text-grey">
           <span aria-hidden="true" className="anim-breathe inline-block h-2 w-2 bg-blue" />
           Being written now — sections appear as they are drafted
         </p>
@@ -977,18 +977,18 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
               {scrub(section.prose ?? "")}
             </p>
           ) : section.state === "writing" && !terminalPartial ? (
-            <p role="status" className="anim-breathe mt-2 text-meta text-grey">
+            <p role="status" className="anim-breathe mt-2 text-body text-grey">
               Writing this section now…
             </p>
           ) : (
-            <p className="mt-2 text-meta italic text-grey">
+            <p className="mt-2 text-body italic text-grey">
               {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
             </p>
           )}
         </section>
       ))}
       {!terminalPartial && (
-        <p className="mt-10 border-t border-line pt-4 text-caption text-grey">
+        <p className="mt-10 border-t border-line pt-4 text-body text-grey">
           Citations and source provenance are attached when the write-up completes and is
           checked.
         </p>
@@ -1152,7 +1152,7 @@ export function ArtefactView() {
     if (code !== "not_found") {
       return (
         <main className="mx-auto max-w-3xl px-6 py-10">
-          <Card role="alert" className="p-8 text-center text-meta text-navy">
+          <Card role="alert" className="p-8 text-center text-body text-navy">
             The evidence base couldn't be loaded.{" "}
             <button
               type="button"
@@ -1177,7 +1177,7 @@ export function ArtefactView() {
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Card role="status" className="p-8 text-center">
           <h1 className="font-display text-title font-bold text-navy">No evidence base yet</h1>
-          <p className="mt-1.5 text-meta text-grey">
+          <p className="mt-1.5 text-body text-grey">
             The evidence base appears here once an analysis reaches synthesis.
           </p>
         </Card>
@@ -1270,14 +1270,14 @@ export function ArtefactView() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1060px] justify-center gap-6 px-4">
+    <div className="mx-auto flex max-w-[1180px] justify-center gap-6 px-4">
       <ContentsSidebar entries={outlineEntries} />
       <main className="artefact-page anim-rise my-8 min-w-0 max-w-[780px] flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
       <header className="mb-8">
         <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
           Evidence base
         </p>
-        <h1 className="mt-1 font-display text-title font-extrabold leading-tight tracking-[-0.5px] text-navy">
+        <h1 className="mt-1 font-display text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
           {scrub(data.title)}
         </h1>
         <button type="button" onClick={() => void askAboutAnalysis()} className="mt-3 text-caption font-bold text-blue hover:underline">Ask about this analysis</button>
@@ -1288,8 +1288,8 @@ export function ArtefactView() {
             {snapshotCells.map(([label, value, href]) => {
               const content = (
                 <>
-                  <p className="text-caption font-bold uppercase tracking-wider text-grey">{label}</p>
-                  <p className="mt-1 text-caption font-medium leading-snug text-navy">{scrub(value)}</p>
+                  <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
+                  <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
                 </>
               );
               return href !== null ? (
@@ -1383,13 +1383,13 @@ function ReferencesSection({
         </span>
       </button>
       {!open && (
-        <p className="mt-1.5 text-meta text-grey">
+        <p className="mt-1.5 text-body text-grey">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
           in this report
         </p>
       )}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-caption text-ink">
+        <ol className="mt-3 space-y-1.5 text-body text-ink">
           {references.map((reference) => (
             <li key={reference.n} className="flex gap-2">
               <span className="font-bold text-blue">[{reference.n}]</span>

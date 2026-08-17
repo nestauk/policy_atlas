@@ -237,7 +237,7 @@ export function PartCard({
 
   return (
     <div data-testid="part-card" className="anim-rise mr-8 border border-line-2 bg-paper px-4 py-3 shadow-sm">
-      <p className="text-caption font-bold uppercase tracking-wide text-grey">
+      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
         {scrub(part.step_label)}
       </p>
       <h3 className="mt-1 max-w-prose-measure text-body font-bold text-navy">
@@ -250,7 +250,7 @@ export function PartCard({
           <summary className="cursor-pointer text-caption font-semibold text-grey hover:text-navy">
             Notes
           </summary>
-          <p className="mt-1 text-meta text-grey">{scrub(part.body)}</p>
+          <p className="mt-1 text-body text-grey">{scrub(part.body)}</p>
         </details>
       )}
 
@@ -267,7 +267,7 @@ export function PartCard({
           {interactive && !adding && (
             <button
               type="button"
-              className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-caption font-semibold text-grey hover:text-navy"
+              className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-grey hover:text-navy"
               onClick={() => setAdding(true)}
             >
               + add
@@ -304,7 +304,7 @@ export function PartCard({
       {staged.length > 0 && (
         <div className="mt-2 border border-yellow bg-yellow-tint/40 px-3 py-2">
           <p className="text-caption font-bold text-navy">Staged changes</p>
-          <ul className="mt-1 space-y-0.5 text-caption text-ink">
+          <ul className="mt-1 space-y-0.5 text-body text-ink">
             {staged.map((edit, index) => (
               <li key={`${edit.kind}-${edit.label}-${index}`}>
                 {edit.kind === "remove"
@@ -334,12 +334,12 @@ export function PartCard({
       )}
 
       {confirmedOption !== null ? (
-        <p className="mt-2 text-meta font-bold text-green-strong">
+        <p className="mt-2 text-body font-bold text-green-strong">
           ✓ Confirmed{confirmedOption.label !== "" ? ` — ${scrub(confirmedOption.label)}` : ""}
           {state.live && (
             <button
               type="button"
-              className="ml-2 cursor-pointer text-caption font-semibold text-grey underline"
+              className="ml-2 cursor-pointer text-meta font-semibold text-grey underline"
               disabled={disabled}
               onClick={() => onPrefill("Change this part: ")}
             >
@@ -374,7 +374,7 @@ export function PartCard({
               <span className="text-left">
                 {scrub(option.label)}
                 {option.sub != null && option.sub !== "" && (
-                  <span className="block text-caption font-normal opacity-85">
+                  <span className="block text-body font-normal opacity-85">
                     {scrub(option.sub)}
                   </span>
                 )}
@@ -384,14 +384,14 @@ export function PartCard({
         </div>
       )}
       {confirmedOption === null && part.options.some((option) => option.reason != null && option.reason !== "") && (
-        <p className="mt-1.5 max-w-prose-measure text-caption text-grey">
+        <p className="mt-1.5 max-w-prose-measure text-body text-grey">
           {part.options
             .filter((option) => option.reason != null && option.reason !== "")
             .map((option) => scrub(option.reason ?? ""))}
         </p>
       )}
       {!state.live && state.confirmedOptionId === null && (
-        <p className="mt-2 text-caption text-grey">Updated below — this version is kept for the record.</p>
+        <p className="mt-2 text-body text-grey">Updated below — this version is kept for the record.</p>
       )}
     </div>
   );

@@ -67,11 +67,11 @@ export function LandscapeView() {
     Object.keys(landscape.data?.evidence_types ?? {}).length === 0;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
+    <main className="mx-auto max-w-[1180px] px-6 py-8">
       <h1 className="mb-1 font-display text-title font-extrabold text-navy">
         Evidence landscape
       </h1>
-      <p className="mb-5 text-caption text-grey">
+      <p className="mb-5 text-lead text-grey">
         Distributions describe the screened-in sources only; the funnel spans the whole
         flow.
       </p>
@@ -88,7 +88,7 @@ export function LandscapeView() {
         (isUnauthenticated ? (
           <ReauthRedirect />
         ) : (
-          <Card role="alert" className="p-8 text-center text-meta text-navy">
+          <Card role="alert" className="p-8 text-center text-body text-navy">
             The landscape couldn't be loaded.{" "}
             <button
               type="button"
@@ -104,7 +104,7 @@ export function LandscapeView() {
         ))}
 
       {noData && (
-        <Card role="status" className="p-8 text-center text-meta text-grey">
+        <Card role="status" className="p-8 text-center text-body text-grey">
           The landscape appears once screening has run.
         </Card>
       )}
@@ -167,7 +167,7 @@ export function LandscapeView() {
                 <div className="min-w-0 p-4">
                   {/* Task 031: publisher country only — never the authors'
                       countries, which answer a different question. */}
-                  <p className="mb-3 break-words text-caption text-grey">
+                  <p className="mb-3 break-words text-body text-grey">
                     The country of the publishing venue, when the database reports it. Sources
                     without one are counted as “Not reported”.
                   </p>
@@ -187,8 +187,8 @@ export function LandscapeView() {
               <li key={theme.name} className="flex items-baseline gap-2.5">
                 <Chip tone="blue">{theme.size}</Chip>
                 <div>
-                  <p className="text-meta font-semibold text-navy">{scrub(theme.name)}</p>
-                  <p className="text-caption text-grey">{scrub(theme.description)}</p>
+                  <p className="text-body font-semibold text-navy">{scrub(theme.name)}</p>
+                  <p className="text-body text-grey">{scrub(theme.description)}</p>
                 </div>
               </li>
             ))}
@@ -203,7 +203,7 @@ export function LandscapeView() {
           <div className="space-y-4 p-4">
             {(groups.data.facets ?? []).map((facet) => (
               <div key={facet.facet}>
-                <p className="text-caption font-bold uppercase tracking-wide text-grey">
+                <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
                   {scrub(facet.facet)}
                 </p>
                 <ul role="list" className="mt-1.5 flex flex-wrap gap-1.5">

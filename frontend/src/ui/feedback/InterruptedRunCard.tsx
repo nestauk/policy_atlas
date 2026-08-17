@@ -6,7 +6,7 @@ export function InterruptedRunCard({ onStartFreshRun }: { onStartFreshRun: () =>
   return (
     <Card className="border-orange p-4">
       <h2 className="font-display text-heading text-navy">This run was interrupted</h2>
-      <p className="mt-1 text-meta text-grey">Its partial results remain available. Start a new run when you are ready.</p>
+      <p className="mt-1 text-body text-grey">Its partial results remain available. Start a new run when you are ready.</p>
       <Button className="mt-4" onClick={() => void onStartFreshRun()}>Start a fresh run</Button>
     </Card>
   );

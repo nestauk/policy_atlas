@@ -201,7 +201,7 @@ export function TasksListView() {
                   </span>
                   <time
                     dateTime={row.updated_at}
-                    className="w-28 shrink-0 text-right text-meta tabular-nums text-grey"
+                    className="w-28 shrink-0 text-right text-caption tabular-nums text-grey"
                   >
                     {new Date(row.updated_at).toLocaleDateString()}
                   </time>

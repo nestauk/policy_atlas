@@ -16,6 +16,6 @@ export function ChatComposer({ conversationId, isStreaming, disabledReason, onSe
   const [draft, setDraft] = useComposerDraft(conversationId);
   const [submitting, setSubmitting] = useState(false);
   const send = () => { const message = draft.trim(); if (!message || submitting || isStreaming || disabledReason) return; setSubmitting(true); setDraft(""); Promise.resolve(onSend(message)).finally(() => setSubmitting(false)); };
-  if (isStreaming) return <div><div className="flex items-center justify-between border border-line bg-ground px-3 py-2 text-caption text-grey"><span>Checking the evidence…</span><Button size="sm" variant="secondary" onClick={onStop}>Stop</Button></div></div>;
-  return <div>{disabledReason && <p className="mb-2 text-caption text-grey">{disabledReason}</p>}<Composer value={draft} onChange={setDraft} onSubmit={send} placeholder="Ask about the evidence" disabled={Boolean(disabledReason)} sendDisabled={submitting || Boolean(disabledReason)} /></div>;
+  if (isStreaming) return <div><div className="flex items-center justify-between border border-line bg-ground px-3 py-2 text-body text-grey"><span>Checking the evidence…</span><Button size="sm" variant="secondary" onClick={onStop}>Stop</Button></div></div>;
+  return <div>{disabledReason && <p className="mb-2 text-body text-grey">{disabledReason}</p>}<Composer value={draft} onChange={setDraft} onSubmit={send} placeholder="Ask about the evidence" disabled={Boolean(disabledReason)} sendDisabled={submitting || Boolean(disabledReason)} /></div>;
 }
