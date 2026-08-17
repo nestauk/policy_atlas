@@ -5,6 +5,8 @@ import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
+import { mostRelevantSources, sectionNavLabel } from "./artefactPresentation";
+import type { TopSource } from "./artefactPresentation";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -999,6 +1001,93 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
  *  ordering, typed annotated prose, citation ladder, shared dossier
  *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
  *  while synthesis writes. */
+/**
+ * The report's opening statement.
+ *
+ * Only a verified summary is shown as the answer: an unverified one has not
+ * passed the faithfulness check, and presenting it as the answer would be the
+ * report vouching for something it has not checked. `pending` and `failed`
+ * each say what is true instead, and the report still opens correctly at Key
+ * findings beneath.
+ */
+function AnswerCallout({
+  summary,
+  status,
+}: {
+  summary: string | null;
+  status: "pending" | "verified" | "failed" | null;
+}) {
+  if (status === "verified" && summary != null && summary !== "") {
+    return (
+      <p className="mt-4 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-4 py-3 text-lead text-ink">
+        {scrub(summary)}
+      </p>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
+        The summary is still being checked. The findings below are complete.
+      </p>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
+        A summary couldn't be verified for this report, so none is shown. The
+        findings below are complete.
+      </p>
+    );
+  }
+  return null;
+}
+
+/**
+ * The handful of sources the report leans on most.
+ *
+ * Every line is a fact the data already asserts — how often it is cited, its
+ * appraisal tier, its evidence type, which sections use it. It never says why
+ * a study matters: that is a judgement nobody made, and asserting it would be
+ * the report inventing authority for itself.
+ */
+function MostRelevantSources({
+  sources,
+  onOpenDossier,
+}: {
+  sources: TopSource[];
+  onOpenDossier: (title: string) => void;
+}) {
+  if (sources.length === 0) return null;
+  return (
+    <section className="mt-8 border-t border-line pt-6">
+      <h2 className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+        Most cited sources
+      </h2>
+      <ul role="list" className="mt-3 space-y-3">
+        {sources.map((source) => (
+          <li key={source.sourceId} className="border border-line p-3">
+            <button
+              type="button"
+              onClick={() => onOpenDossier(source.title)}
+              className="cursor-pointer text-left text-body font-semibold text-navy hover:underline"
+            >
+              {scrub(source.title)}
+            </button>
+            <p className="mt-1 text-body text-grey">
+              Cited by {source.citationCount === 1 ? "1 claim" : `${source.citationCount} claims`}
+              {source.appraisalLabel != null && ` · ${scrub(source.appraisalLabel)}`}
+              {source.evidenceType != null && ` · ${scrub(source.evidenceType)}`}
+            </p>
+            <p className="mt-1 text-body text-grey">
+              In {source.citedInSections.map((title) => scrub(title)).join(", ")}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
@@ -1158,11 +1247,23 @@ export function ArtefactView() {
       `/projects/${projectId}/sources/all?status=screened_out`,
     ]);
   }
+  // The report states when it was made. The run's end is the honest answer —
+  // the artefact read model carries no timestamp of its own. There is
+  // deliberately no author line: the backend has no author for an artefact,
+  // and inventing one would have the report assert something nobody wrote.
+  const lastUpdated = project.data?.latest_run?.ended_at;
+  if (lastUpdated != null) {
+    snapshotCells.push(["Last updated", new Date(lastUpdated).toLocaleDateString(), null]);
+  }
+
+  const topSources = mostRelevantSources(sections);
 
   const outlineEntries = [
     ...sections.map((section, index) => ({
       id: sectionAnchor(section.title, index),
-      title: section.title,
+      // The contents list is for scanning, so it uses the short nav label
+      // when synthesis produced one and a shortened title otherwise.
+      title: sectionNavLabel(section, 28),
     })),
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
     { id: "gathered", title: "How the evidence was gathered" },
@@ -1181,11 +1282,7 @@ export function ArtefactView() {
         </h1>
         <button type="button" onClick={() => void askAboutAnalysis()} className="mt-3 text-caption font-bold text-blue hover:underline">Ask about this analysis</button>
         {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
-        {data.summary != null && data.summary !== "" && data.summary_status === "verified" && (
-          <p className="mt-3 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-3 py-2 text-body text-ink">
-            {scrub(data.summary)}
-          </p>
-        )}
+        <AnswerCallout summary={data.summary ?? null} status={data.summary_status ?? null} />
         {snapshotCells.length > 0 && (
           <div className="mt-5 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value, href]) => {
@@ -1231,6 +1328,8 @@ export function ArtefactView() {
           ))}
         </SectionDisclosure>
       ))}
+
+      <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
 
       {(data.references ?? []).length > 0 && (
         <ReferencesSection
