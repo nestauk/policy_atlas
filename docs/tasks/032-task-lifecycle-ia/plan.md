@@ -1,7 +1,8 @@
 # Implementation plan: 032-task-lifecycle-ia
 
-> **Status:** drafted 2026-08-17. Contract approved 2026-08-17 · owner. Plan
-> approved: _date · who_. ADR: 0031 expected (the portfolio layer).
+> **Status:** Contract approved 2026-08-17 · owner. Plan approved 2026-08-17 ·
+> owner (with the two reductions in § Gates and § Review stack). ADR: 0031
+> expected (the portfolio layer).
 >
 > Terms, the G1–G15 gap numbers, the locking table and the type mapping are in
 > [contract.md](contract.md). This plan cites them and does not restate them.
@@ -44,7 +45,36 @@ code, not assumed.
 | **D4** | Creating a task | `POST /projects {name, question}` then `POST /projects/{id}/planning-turns {message, client_turn_id}` with the same question. Two calls, no backend change. |
 | **D5** | The task's name at creation | Derived client-side from the question (trimmed, question mark dropped, truncated). The planner's own `plan.title` is **not** written back to the project name — that would need a new behaviour. A task therefore displays its derived name until renamed. Record this as a known gap, not a defect. |
 | **D6** | Assigning a task to a project | `PATCH /projects/{id} {portfolio_id}` after creation, and from the project detail page. **`POST /projects` is left alone** — keeping `portfolio_id` off the create call keeps the gated public-interface surface smaller. |
-| **D7** | Executor family | Codex is **not available** — `codex` is not on PATH. Every phase routes inside the Claude family. See § Executor summary and § Tier 3 shortfall. |
+| **D7** | Executor family | Codex is **not available** — `codex` is not on PATH. Every phase routes inside the Claude family. See § Executor summary. |
+| **D8** | Review stack | **Owner decision, 2026-08-17: standard review, no adversarial lanes.** See § Review stack. |
+| **D9** | The per-phase gate for frontend phases | **`make frontend-verify`, not `make verify-fast`.** This corrects the plan's first draft. `verify-fast` is `backend/verify-fast` — backend test-fast, typecheck and lint, and **no frontend at all**. On a slice that is ~90% frontend it would have reported green while proving nothing about the work. `frontend-verify` is `pnpm typecheck && lint && test && build`, needs no database, and actually exercises the changed code. |
+
+## Gates
+
+**Three full `make verify` runs** (owner decision, 2026-08-17 — reduced from
+eight). Full `verify` is expensive: it resets the test database, runs the whole
+backend suite, the infra tests, the audit and guard targets, then the frontend.
+The spine makes three classes mandatory, and those three are exactly what is
+kept:
+
+| # | When | Class |
+|---|---|---|
+| 1 | Phase 0 | build-open baseline |
+| 2 | End of Phase 2 | schema and schema-adjacent — Phases 1 and 2 are adjacent and in the same class, so they share one run |
+| 3 | End of Phase 12 | step-6 exit |
+
+Every other phase gates on the cheap target that actually covers it:
+
+- **Phases 1–2** (backend): `make verify-fast`, plus `make drift-check` after the
+  OpenAPI regeneration so a stale `gen/types.ts` cannot pass.
+- **Phases 3–11** (frontend): `make frontend-verify`, per D9.
+
+**The risk this accepts, stated plainly:** a regression in Phases 3–11 that only
+the *backend* suite or an infra/guard target would catch is not seen until the
+Phase 12 exit gate. That risk is small and bounded — those phases add and rewire
+frontend files and touch no backend code — but it is real, and it is the trade
+being made for the wall-clock saving. The one crossing point is Phase 11's
+`font-guard` and `prompt-guard` exposure; both run at the exit gate.
 
 ## Phases
 
@@ -91,7 +121,8 @@ tests from the list below, which is an exact spec.
 
 **Done when:** rubric items 34, 35, 36 and 38 hold.
 
-**Gate:** full `make verify` — mandatory, schema class.
+**Gate:** `make verify-fast`. The full run is deferred to the end of Phase 2, which
+is adjacent and in the same schema class (§ Gates).
 
 ### Phase 2 — Two additive fields (G6, G12)
 
@@ -120,8 +151,10 @@ the OpenAPI regeneration, which is mechanical.
 
 **Done when:** rubric items 21, 30 (the count half) and 37 hold.
 
-**Gate:** full `make verify` — mandatory, schema-adjacent (OpenAPI contract plus
-a pinned prompt version).
+**Gate:** `make drift-check`, then **full `make verify`** — gate 2 of 3. This is
+the schema and schema-adjacent class for Phases 1 and 2 together: the migration,
+the new routes, the OpenAPI contract and the pinned prompt version are all
+checked here, before any frontend is built against them.
 
 ### Phase 3 — Vocabulary, routes and the lifecycle bar (G3, naming)
 
@@ -157,7 +190,7 @@ off, and the locking rules are the contract's core invariant.
 
 **Done when:** rubric items 9, 13, 14 and 15 hold.
 
-**Gate:** `make verify-fast`.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 4 — New task entry (G1, G2)
 
@@ -179,7 +212,7 @@ taste-bearing entry surfaces. `fast-worker` for the tests from the rules below.
 
 **Done when:** rubric items 11 and 12 hold.
 
-**Gate:** `make verify-fast`.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 5 — The plan document (G4)
 
@@ -200,11 +233,9 @@ taste-bearing entry surfaces. `fast-worker` for the tests from the rules below.
 
 **Done when:** rubric items 16, 17 and 18 hold.
 
-**Gate:** full `make verify` — the shared gate for Phases 3–5. Argued: all three
-add or rewire frontend files with no schema and no read-model contact, so three
-separate full runs would carry the same signal. Consolidating here still leaves
-the route wiring and the untouched-planning claim checked by the whole suite
-before the next group starts.
+**Gate:** `make frontend-verify` (D9). Note the untouched-planning claim
+(rubric 18) rests on the existing planning tests, which `frontend-verify` runs —
+so this phase's central invariant is covered by the cheap gate.
 
 ### Phase 6 — Sources subviews and Themes (G8, G9)
 
@@ -224,7 +255,7 @@ the exact rules below. `lead` reviews the Themes copy.
 
 **Done when:** rubric items 24, 25 and 26 hold.
 
-**Gate:** `make verify-fast`.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 7 — Results additions (G5, G6 client, G7)
 
@@ -250,7 +281,7 @@ the three summary states are an honesty rule.
 
 **Done when:** rubric items 19, 20, 21, 22 and 23 hold.
 
-**Gate:** `make verify-fast`.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 8 — History and Share (G10, G11)
 
@@ -269,8 +300,7 @@ judgement.
 
 **Done when:** rubric items 27, 28 and 29 hold.
 
-**Gate:** full `make verify` — the shared gate for Phases 6–8. Same argument as
-Phase 5: presentational work, no schema contact.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 9 — Planning in the chats overlay (G14)
 
@@ -291,7 +321,7 @@ exact rules. No backend work.
 
 **Done when:** rubric items 40–44 hold.
 
-**Gate:** `make verify-fast`.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 10 — Tasks list, finder, and the projects views (G12, G13 frontend)
 
@@ -312,7 +342,7 @@ decides the list's column set and the empty-state copy.
 
 **Done when:** rubric items 30, 31, 32, 33 and 35 hold.
 
-**Gate:** full `make verify` — the shared gate for Phases 9–10.
+**Gate:** `make frontend-verify` (D9).
 
 ### Phase 11 — Type scale and layout (G15)
 
@@ -341,8 +371,16 @@ structural diff.
 
 **Done when:** rubric items 45–50 hold.
 
-**Gate:** full `make verify`. Not consolidated: this phase touches shared brand
-components, which is the exact failure class the 028 note records.
+**Gate:** `make frontend-verify` (D9), which runs the sync guard and the
+`Button.test.tsx` colour guard.
+
+**Correcting the first draft:** it argued this phase needed its own full `verify`
+because it touches shared brand components — the 028 failure class. That argument
+does not hold. When 028 shipped ink-on-blue buttons, the **full suite was green**;
+the full run has no power here. What actually catches this failure is the sync
+guard test, the colour guard, and the eye-check in the live checklist — all of
+which run at this gate or by hand. The full run stays at the exit gate, which is
+adjacent.
 
 ### Phase 12 — ADR, deferred seams, docs and verification
 
@@ -370,7 +408,8 @@ list below.
 
 **Done when:** rubric items 6, 7 and 10 hold.
 
-**Gate:** full `make verify` — the step-6 exit class.
+**Gate:** **full `make verify`** — gate 3 of 3, the step-6 exit class. This is
+the first full run since Phase 2, so it is the one that clears Phases 3–11.
 
 ## Executor summary
 
@@ -398,25 +437,33 @@ list below.
 Marking it and rerouting mid-build is precisely the rationalisation the executor
 column exists to prevent (failure log, 2026-07-05).
 
-## 🛑 Tier 3 shortfall — needs an owner decision before the build starts
+## Review stack (D8)
 
-This is Tier 3, so the cycle requires adversarial review at the contract stage,
-the plan stage **and** on the code, and the mechanism is the other model family
-through `codex-rescue`. The Codex CLI is **not installed in this environment**, so
-none of those three lanes can run as specified. The same gap was escalated on
-task 031 and is still open.
+**Owner decision, 2026-08-17: standard review, no adversarial lanes.** The stack
+that runs at step 7:
 
-Three ways forward. The owner picks one, and `verification.md` records it:
+| Lane | Runs? |
+|---|---|
+| `contract-verifier`, fresh context | yes |
+| `/code-review` | yes |
+| `/security-review` | yes — new public routes and a new owner-scoped table |
+| `/simplify` | yes |
+| Adversarial review (contract · plan · code) | **no — waived by the owner** |
 
-1. **Install the Codex CLI before the build.** The only option that satisfies
-   Tier 3 as written. Recommended — this slice adds a table and public routes,
-   which is exactly what a second family is good at attacking.
-2. **Same-family adversarial lanes.** A fresh `deep-reasoner` briefed read-only to
-   attack the contract, the plan and the diff. Weaker than a family flip, because
-   it shares the author's blind spots, but not nothing.
-3. **Accept the gap.** Record it in `verification.md` and in the PR, as 031 did.
+The waiver is a deliberate reduction below what the tier prescribes, so it is
+recorded rather than absorbed. **The risk tier itself does not change**: a new
+table and new public routes are a hard gate, so this stays Tier 3, and the
+security lane and the human deep review stay with it. What is given up is the
+fresh-context attack on the design — the lane that finds the unstated assumption
+and the missed requirement rather than the local bug. The two places that would
+most have benefited are the portfolio table's tenancy rules and the additive-only
+claim; `/security-review` covers the first, and the OpenAPI diff test covers the
+second, so the exposure is narrower than a blanket waiver would suggest.
 
-Do not silently proceed with the lanes missing.
+It was also unavailable as specified: the mechanism is the other model family
+through `codex-rescue`, and the Codex CLI is not installed here — the same gap
+escalated on task 031. Either way, `verification.md` and the PR must state that
+adversarial review did not run and that the owner waived it.
 
 ## Out of plan (do not do)
 

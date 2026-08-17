@@ -7,8 +7,11 @@ file points there and does not restate them.
 ## Standard
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
-2. [ ] `make verify` passes; the declared manual checks pass or are explicitly
-       recorded as not run, with the reason.
+2. [ ] The three full `make verify` runs passed — baseline, end of Phase 2, and
+       the step-6 exit ([plan.md](plan.md) § Gates). Every other phase gated
+       green on `make frontend-verify` (frontend) or `make verify-fast`
+       (backend). The declared manual checks pass or are explicitly recorded as
+       not run, with the reason.
 3. [ ] No approval-gated change snuck in unapproved. The three gates in the
        contract (schema · public interface · prompt surface) were each approved
        before the work started, and nothing outside them was touched.
@@ -20,9 +23,12 @@ file points there and does not restate them.
        [docs/deferred.md](../../deferred.md) — at minimum case studies, the
        prose "why this source matters", mobile navigation, the full briefing
        page, and what remains of the workspace-cluster IA.
-8. [ ] The Tier 3 review stack ran: contract verifier · code review · security
-       review · adversarial review on the code · simplification. Findings
-       adjudicated in [verification.md](verification.md).
+8. [ ] The agreed review stack ran: fresh-context contract verifier ·
+       `/code-review` · `/security-review` · `/simplify`. Findings adjudicated in
+       [verification.md](verification.md).
+8a. [ ] **Adversarial review is recorded as waived**, not silently missing.
+       `verification.md` and the PR both state that the owner waived it on
+       2026-08-17 and that the slice stays Tier 3 regardless.
 
 ## Naming
 

@@ -39,12 +39,15 @@ new public routes + one prompt-surface field (`nav_label`) are three approval
 gates, each to be signed off before its phase starts. ADR 0031 expected for the
 portfolio layer.
 
-**🛑 Open decision blocking the build:** Tier 3 requires adversarial review at
-the contract, plan and code stages via the other model family, and the Codex CLI
-is **not installed here** (`codex` is not on PATH), so no phase routes to it and
-none of those three lanes can run as specified. The plan's § Tier 3 shortfall
-puts three options to the owner (install Codex · same-family lanes · accept and
-record). Same gap as task 031, still open.
+**Owner decisions, 2026-08-17, both recorded in the plan:** (1) **standard
+review, no adversarial lanes** — contract verifier, `/code-review`,
+`/security-review`, `/simplify` and the human deep review run; adversarial review
+at the contract, plan and code stages is waived, and `verification.md` plus the
+PR must say so. The tier stays 3. (2) **Three full `make verify` runs**, not
+eight — baseline, end of Phase 2, step-6 exit. Frontend phases gate on
+`make frontend-verify`, because `make verify-fast` is backend-only and would
+prove nothing on a ~90%-frontend slice. No phase routes to `codex`: the CLI is
+not installed here (`codex` is not on PATH).
 
 Design reference: the owner's prototype at
 `scripts/scratchpad/frontend_v20260817/Policy Atlas_new search standalone.html`

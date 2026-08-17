@@ -488,9 +488,18 @@ public-safety confirmation.
 ## Risk tier & review focus
 
 **Tier 3.** A new table and new public routes are a hard gate, and a hard gate is
-never below Tier 3. The review stack therefore includes the security lane,
-adversarial review at the contract stage and the plan stage and on the code, and
-a human deep review.
+never below Tier 3.
+
+**Review stack — owner decision, 2026-08-17: standard review, no adversarial
+lanes.** So the stack is the fresh-context contract verifier, `/code-review`,
+`/security-review` (kept — new public routes and a new owner-scoped table) and
+`/simplify`, plus the human deep review. Adversarial review at the contract, plan
+and code stages is **waived**.
+
+The tier does not change; only the review depth does. What is given up is the
+fresh-context attack on the *design* rather than the code. `verification.md` and
+the PR must both state that adversarial review did not run and that the owner
+waived it — see [plan.md](plan.md) § Review stack for what that leaves exposed.
 
 Review focus, in order:
 
