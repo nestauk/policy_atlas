@@ -310,12 +310,49 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
   thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
   `tests/runtime/test_search_rounds.py`.
-  **Accepted blemishes, not fixed:** `successful_runs["acquire"]` is last-write-wins, so
-  the P1 coverage trigger and the "Where I looked" pane read only the final round's
-  coverage row and queries; the loop-level stop condition is written after the last
-  screen boundary, so the `re_searched_still_thin` P1 check-in trigger can only see it on
-  a later boundary, if at all; the frontend timeline shows repeated
-  "Searching sources"/"Screening" rows with no round labels.
+  **Accepted blemishes — the per-round *counts* are DISCHARGED (task 031, 2026-08-13).**
+  The "Where I looked" pane now sums query hits across every acquire run that wrote a
+  coverage record for the project, so `results` and `relevant` are both cumulative. The
+  P1 check-in reports the counts and queries of the single acquire run that just
+  finished, taken from that run's `component.completed` payload rather than the coverage
+  record's never-written `backends[].count`. `successful_runs["acquire"]` is
+  last-write-wins, which is the *wanted* behaviour at P1 — but it is written only on the
+  success path, so P1 now gates on the boundary's own run id and shows honest absence
+  when the round it fired for failed (review stack, 2026-08-13).
+  **Still open:**
+  - `coverage_out` still reads only the **newest** coverage row for the pane's
+    `sentence`, `base` (stop condition, adequacy, verdict origin) and the `backends` name
+    list — only `backends_detail` went cumulative. A backend used in an earlier round but
+    absent from the latest row contributes no card, so its hits stay invisible.
+  - `backends_detail.relevant` remains **project-wide** per backend while `results` is now
+    one question's rounds (task 027 §C.1; `_acquire_run_ids` was scoped to the evidence
+    scope by the 031 review stack). This is deliberate — screening re-screens the whole
+    project pool per question, so project-wide relevance is the design
+    (`docs/knowledge/coverage-base-project-pool-wide.md`) — and the contract's invariant 3
+    requires only that the copy never imply one number contains the other, which it does
+    not. Revisit if the multi-question IA makes per-question relevance meaningful.
+  - The loop-level stop condition is written after the last screen boundary, so the
+    `re_searched_still_thin` P1 check-in **trigger** can only see it on a later boundary,
+    if at all — task 031 changed the P1 display bundle, not the trigger.
+  - The frontend timeline still shows repeated "Searching sources"/"Screening" rows with
+    no round labels.
+
+- **Publisher-country charts truncate, so the drawn bars can sum below the population**
+  (task 031, 2026-08-13). `landscape_out` guarantees the *payload* adds up (known
+  countries + `"Not reported"` = the population drawn, at either scope), and the tests
+  assert it there. The renderers then cut to the top 12
+  (`EvidenceDistributionChart.tsx`) or top 8 (`ArtefactOutline.tsx`), so a corpus with
+  more buckets than that shows bars summing below the total. Pre-existing truncation, but
+  the residual is typically large and now occupies one of those slots, pushing one real
+  country off the chart. Wanted: a "+N more" row, or render the residual outside the cut.
+
+- **Authorship-country geography is not offered anywhere** (task 031, 2026-08-13).
+  `_geography` reads the publishing venue's country only, and the contract explicitly
+  forbids substituting an author affiliation for it — the two answer different questions
+  and conflating them was part of defect 3. The slim authorships already retain the
+  authorship countries, so a later slice can offer them as their **own** clearly-labelled
+  dimension with no migration. Not started; needs a product decision on whether the
+  question ("where are the authors based?") is one users want.
 
 - **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
   2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.

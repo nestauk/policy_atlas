@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
@@ -126,6 +126,12 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
         return provider_url
     doi = _metadata_text(metadata, "doi")
     return f"https://doi.org/{doi}" if doi is not None else None
+
+
+#: Residual bucket for sources whose provider sent no publisher country (task
+#: 031). A stable, public-vocabulary string: the frontend must not rename or
+#: drop it, or the chart stops adding up to the population it draws.
+GEOGRAPHY_NOT_REPORTED = "Not reported"
 
 
 def _geography(metadata: Mapping[str, Any]) -> str | None:
@@ -414,9 +420,13 @@ def landscape_out(
         year = _year(metadata)
         if year is not None:
             years[str(year)] += 1
+        # Honest absence (task 031, defect 3): a source whose provider sent no
+        # publisher country is counted, never dropped, so the bars plus the
+        # residual always equal the population drawn — at either scope, because
+        # base_rows is already narrowed. An authorship country is never
+        # substituted here; the slim authorships answer a different question.
         geography = _geography(metadata)
-        if geography is not None:
-            geographies[geography] += 1
+        geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
         .where(characterisation_result.c.project_id == project_id)
@@ -1776,7 +1786,12 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
         base=base,
         backends=backend_names,
         backends_detail=_backend_details(
-            conn, project_id, row["acquired_by_run_id"], backend_names
+            conn,
+            project_id,
+            # Same row the sentence and the backend list come from, so every
+            # part of this card describes one question.
+            _acquire_run_ids(conn, project_id, row["evidence_scope_id"]),
+            backend_names,
         ),
     )
 
@@ -1784,6 +1799,43 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
 def _public_backend_name(value: str) -> str | None:
     """Translate a durable backend key into the closed public vocabulary."""
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
+
+
+def _acquire_run_ids(
+    conn: Connection, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Every acquire run of one evidence scope, oldest first.
+
+    Acquire inserts one coverage record per run, so the column holds one id per
+    round (task 031) — all of them, which is what makes ``results`` cumulative
+    across rounds instead of last-round-only.
+
+    Scoped to **one question**, not the whole project: approving a plan mints a
+    new ``evidence_scope`` (``orchestrate.py``), so a re-planned project holds
+    the superseded question's coverage records too. Project-wide here would put
+    the abandoned question's query strings and hits into this question's card,
+    beside a ``sentence`` read from the current question's row. Round-cumulative
+    is the fix task 031 wanted; question-cumulative is not (review stack).
+
+    ``relevant`` next door stays project-wide by design — screening re-screens
+    the whole project pool per question (docs/knowledge/
+    coverage-base-project-pool-wide.md), and the contract's invariant 3 requires
+    only that the copy never imply one number contains the other.
+
+    The order here is for readability only — what makes the read model
+    deterministic is the ``sequence`` ordering on the event select that consumes
+    these ids, not the order of the ids themselves.
+    """
+    return list(
+        conn.execute(
+            select(search_coverage_record.c.acquired_by_run_id)
+            .where(
+                search_coverage_record.c.project_id == project_id,
+                search_coverage_record.c.evidence_scope_id == evidence_scope_id,
+            )
+            .order_by(search_coverage_record.c.created_at)
+        ).scalars()
+    )
 
 
 def _coverage_backend_names(backends: Any) -> list[str]:
@@ -1802,20 +1854,50 @@ def _coverage_backend_names(backends: Any) -> list[str]:
 def _backend_details(
     conn: Connection,
     project_id: uuid.UUID,
-    run_id: uuid.UUID,
+    run_ids: Sequence[uuid.UUID],
     backend_names: list[str],
 ) -> list[CoverageBackendDetailOut]:
-    """Project post-run query counts and the documented project-wide relevance wart."""
+    """Query hits across every acquire round, beside project-wide relevance.
+
+    ``results`` sums the query hits of every acquire run given, not just the
+    newest round's (task 031, defect 2). Before this slice the caller passed the
+    latest coverage row's ``acquired_by_run_id`` alone, so a deep run's third
+    round reported ~72 hits beside ~200 cumulative relevant sources — two grains
+    on one line.
+
+    ``relevant`` stays the project-wide unique count per backend (the documented
+    task 027 §C.1 behaviour). The two numbers are now both cumulative, but they
+    still count different things: hits are per call and pre-dedupe, so
+    ``relevant`` is not a subset of ``results``.
+
+    Args:
+        conn: Open read connection.
+        project_id: Owning project.
+        run_ids: Every acquire run whose query hits belong in the total. Empty
+            yields empty query lists rather than a silent last-round figure.
+        backend_names: Public backend names to report, in display order.
+
+    Returns:
+        One detail row per backend name, in the order given.
+    """
     events = (
         conn.execute(
-            select(event_log.c.payload).where(
+            select(event_log.c.payload)
+            .where(
                 event_log.c.project_id == project_id,
-                event_log.c.run_id == run_id,
+                event_log.c.run_id.in_(run_ids),
                 event_log.c.event_type == "search.executed",
             )
+            # Emission order, so the pane lists round 1's queries before round
+            # 2's. Spanning several runs made this load-bearing: without it the
+            # rows come back in physical order and the list is non-deterministic
+            # between identical requests.
+            .order_by(event_log.c.sequence)
         )
         .scalars()
         .all()
+        if run_ids
+        else []
     )
     queries: dict[str, list[CoverageQueryOut]] = {name: [] for name in backend_names}
     for payload in events:

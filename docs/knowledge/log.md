@@ -1,5 +1,33 @@
 # Knowledge update log
 
+## 2026-08-13 (task 031 step 8)
+* **Creation**: Added
+  [success-map-is-stale-on-the-failure-path](success-map-is-stale-on-the-failure-path.md)
+  — `successful_runs` is written only on the success path, but the runner still presents
+  the component's steer point when it fails, so P1 rendered round 1's counts and queries
+  under round 2's label. Found by the adversarial lane after the contract verifier had
+  certified the success path; both were right about different paths.
+* **Creation**: Added
+  [read-the-producing-components-summary](read-the-producing-components-summary.md) — the
+  read model displays the number the producing component already persisted rather than
+  recounting the same population, so the check-in chip and its per-backend line cannot
+  disagree. Carries the shared-read-helper corollary (`_executed_queries` right for P2,
+  wrong for P1).
+* **Creation**: Added
+  [residual-counted-after-narrowing](residual-counted-after-narrowing.md) — counting
+  "Not reported" inside the loop over already-scoped rows makes the add-up invariant true
+  at every scope for free; the payload adding up is not the drawn chart adding up.
+* **Update**: [read-the-producing-components-summary](read-the-producing-components-summary.md)
+  — added the grain rule for a read path that returns both an aggregate and the records
+  behind it: `_backend_details` emits `results` and `queries[]`, and the verbatim query
+  list, not the count, is what forces the question-scoped grain. Owner-caught after the
+  review lead had deferred the three-lane finding (failure-log 2026-08-13).
+* **Update**: [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md) — a
+  guard can die by evaluating to nothing, not only by being routed around: `0 == sum(())`
+  and a scope test whose fixture never entered the narrowed scope both passed
+  unconditionally. Ask what value would make it fail; mutation-check when unsure. Plus
+  the stub-search fixture trap (a plain walk acquires 0 new sources).
+
 ## 2026-08-06 (task 030)
 * **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — caps
   owner-set at rapid 50 / standard 100 / deep 200 per backend per round; the wall clock is gone at

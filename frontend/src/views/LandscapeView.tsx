@@ -165,6 +165,12 @@ export function LandscapeView() {
                 <PaneHeading>Where sources were published</PaneHeading>
                 <Divider />
                 <div className="min-w-0 p-4">
+                  {/* Task 031: publisher country only — never the authors'
+                      countries, which answer a different question. */}
+                  <p className="mb-3 break-words text-caption text-grey">
+                    The country of the publishing venue, when the database reports it. Sources
+                    without one are counted as “Not reported”.
+                  </p>
                   <EvidenceDistributionChart data={normaliseGeographies(landscape.data.geographies ?? {})} />
                 </div>
               </Card>

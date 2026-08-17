@@ -17,6 +17,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core.schema import search_coverage_record
 from policy_atlas.evidence_base.sourcing.acquire import BackendCaps
 from policy_atlas.evidence_base.sourcing.search_loop import DEPTH_CONSTANTS
+from policy_atlas.runtime import steering_bundles
 from policy_atlas.runtime.runner import NullIO, RunnerBackends, run_plan
 from tests.helpers import oa_record
 from tests.runtime.test_runner import _base_plan, _cleanup, _seed_project
@@ -265,6 +266,56 @@ def test_thin_corpus_overlays_re_searched_still_thin(engine: Engine) -> None:
         assert outcome.status in ("succeeded", "degraded")
         rows = _coverage_rows(engine, project_id)
         assert rows[-1].stop_condition == "re_searched_still_thin"
+    finally:
+        if project_id is not None:
+            _cleanup(engine, project_id)
+
+
+def test_p1_at_round_two_reports_only_that_round(engine: Engine) -> None:
+    """Task 031 invariants 1 and 2, on a real two-round walk.
+
+    The existing P1 tests hand ``p1_bundle`` a run id directly, so nothing
+    exercised the thing plan.md § Phase 1 step 4 actually asked for: after the
+    *second* acquire round, the card must show that round's counts and that
+    round's queries — not round 1's, and not both rounds'.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        outcome = _run(engine, project_id, scope_id, search_effort="standard")
+        assert outcome.status in ("succeeded", "degraded")
+
+        rows = _coverage_rows(engine, project_id)
+        assert len(rows) == 2, "the fixture must really run two acquire rounds"
+        round_one, round_two = (row.acquired_by_run_id for row in rows)
+        assert round_one != round_two
+
+        with engine.connect() as conn:
+            first = steering_bundles.p1_bundle(
+                conn, project_id=project_id, evidence_scope_id=scope_id,
+                acquire_run_id=round_one,
+            )
+            second = steering_bundles.p1_bundle(
+                conn, project_id=project_id, evidence_scope_id=scope_id,
+                acquire_run_id=round_two,
+            )
+
+        # Each card lists its own round's calls only. Disjointness would be the
+        # wrong test — the base query is legitimately re-issued each round — so
+        # pin the partition instead: the two cards together are exactly the
+        # scope's calls, once each. Defect 1b made each card show all of them,
+        # which doubles this sum.
+        with engine.connect() as conn:
+            every_round, _ = steering_bundles._executed_queries(
+                conn, project_id=project_id, evidence_scope_id=scope_id
+            )
+        assert first["queries"] and second["queries"]
+        assert len(first["queries"]) + len(second["queries"]) == len(every_round)
+
+        # Invariant 1 on the round that just finished: the per-backend counts
+        # are the acquire run's own, and never the permanently-zero line.
+        assert second["backends"], "round 2 acquired new records, so the line must not be empty"
+        assert sum(entry["count"] for entry in second["backends"]) > 0
     finally:
         if project_id is not None:
             _cleanup(engine, project_id)

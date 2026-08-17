@@ -22,24 +22,31 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `029-copilot-chat` **BUILT + REVIEW STACK COMPLETE
-→ PR open for human review (step 9)** (build 2026-08-10→11, phases A–H +
-owner live-check fixes + contract rev 3.4 side panel; review stack
-2026-08-11 — five lanes, findings adjudicated in the task's
-verification.md § Review findings, fixes landed on the branch; two
-contract-vs-build divergences escalated to the owner in the PR): co-pilot
-chat — the unified conversation model. A project holds many conversations,
-Claude-Projects-style: follow-up **chats** (read-only, project-scoped,
-answering across artefacts; streamed NDJSON turns with claim-grained
-citations, deterministic floors + async judge enrichment; tool scope
-`search_chunks` · `lookup` · `query_findings`, no `search`) and
-**planning conversations** (one per plan lineage, closing with its run's
-terminal transaction — supersedes 027's rolling thread; row-grain audit
-chain conversation → plan → run → artefact). Tier 4 (legacy backfill
-migration on live data). Contract rev 3.4 (approved; 3.4 = the owner's
-live-check side-panel amendment) · plan rev 2.2
-(approved, executor marks, phases A–H) · ADR 0029 (Accepted) ·
-mockup + research inputs: `docs/tasks/029-copilot-chat/`. API surface:
+Review — task `031-search-count-honesty` **BUILT + REVIEW STACK COMPLETE → PR
+open for human review (step 9)** (contract + plan approved 2026-08-13, branch
+`task/031-search-count-honesty`, based on `dev`; review stack 2026-08-13 — four
+lanes, findings adjudicated in the task's verification.md § Review findings,
+fixes landed on the branch): fix mixed-grain source counts across the P1
+check-in, Where I looked, and the publisher-country charts (deep search makes
+the defects obvious). Contract:
+`docs/tasks/031-search-count-honesty/contract.md`; plan:
+`docs/tasks/031-search-count-honesty/plan.md`; rubric alongside. Tier 2.
+
+Two items escalated to the owner in the PR: the contract's **manual browser
+check was not run** (it needs a live model route; staging's OpenAI quota is
+recorded exhausted below), and **no non-Claude reviewer read this slice** — the
+owner moved phases 1–3 from `codex` to `lead` mid-build, and the Codex CLI is
+not installed in this environment, so the family flip did not happen on either
+side.
+
+Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
+conversation model: a project holds many conversations, Claude-Projects-style.
+Follow-up **chats** (read-only, project-scoped, answering across artefacts;
+streamed NDJSON turns with claim-grained citations, deterministic floors + async
+judge enrichment; tool scope `search_chunks` · `lookup` · `query_findings`, no
+`search`) and **planning conversations** (one per plan lineage, closing with its
+run's terminal transaction — supersedes 027's rolling thread; row-grain audit
+chain conversation → plan → run → artefact). ADR 0029 (Accepted); API surface:
 `docs/specs/system/web-api.md` § Conversations.
 
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
@@ -49,11 +56,11 @@ Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
 `028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
 caps per backend per round; standard/deep wall clocks removed — was
 `028-…`) and `030-multi-round-search` (rapid's clock removed, the
-runner-orchestrated round loop wired — was `029-…`). The code landed on
-branch `37-hotfix-remove-quota`. **Numbering collision to settle:** `029`
-and ADR `0029` are also the copilot-chat slice's on `dev` — the
-search-volume docs need renumbering (`031`/`032`) or folding into the
-hotfix, no ADRs written for them yet.
+runner-orchestrated round loop wired — was `029-…`). Their code is **merged to
+`dev`** (PR #46, the `37-hotfix-remove-quota` hotfix). **Numbering collision
+still to settle:** `029` and ADR `0029` belong to the copilot-chat slice, and
+`031` is now this count-honesty slice — so if the search-volume docs are
+renumbered they need `032`/`033`, not `031`/`032`. No ADRs written for them yet.
 
 Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
 fail honest-429 until billing tops up). The eval slice (former 027 draft)

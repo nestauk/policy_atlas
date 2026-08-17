@@ -234,7 +234,10 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
               </ul>
               {row.label === "Where published" && (
                 <p className="mt-1 text-caption text-grey">
-                  Publisher and author-affiliation geography — not where each study was set.
+                  {/* Task 031: the read model reads the publishing venue's country only —
+                      never the authors' affiliations, and never where the study was set. */}
+                  The country of the publishing venue, when the database reports it — not where
+                  each study was set. Sources without one are counted as “Not reported”.
                 </p>
               )}
             </div>

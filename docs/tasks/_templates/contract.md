@@ -15,6 +15,16 @@ What changes, in user or system terms. One slice — not a roadmap.
 
 The concrete thing produced (PR + the artefact/behaviour it lands). What "shipped" looks like.
 
+## Terms
+
+One row for each term a cold reader cannot expand: internal labels (`P1`), abbreviations
+(`PSS`), and any word this slice uses in a special sense. The rubric and the plan point
+here; they do not restate it. Delete this section only if the slice introduces no such term.
+
+| Term | Meaning |
+|---|---|
+| **<term>** | <one or two short sentences. Name the table, file or spec that owns it.> |
+
 ## Read first
 
 Specs this slice depends on (route via [specs/index.md](../../specs/index.md)). Read the source
