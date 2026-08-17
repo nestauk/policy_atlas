@@ -71,6 +71,12 @@ from .planning import (
     SearchEffort,
     SteeringMode,
 )
+from .portfolios import (
+    PORTFOLIO_NAME_MAX,
+    PortfolioCreate,
+    PortfolioOut,
+    PortfolioUpdate,
+)
 from .projects import (
     PROJECT_NAME_MAX,
     LatestRun,
@@ -145,6 +151,7 @@ __all__ = [
     "CHAT_MESSAGE_MAX",
     "PAGE_SIZE_DEFAULT",
     "PAGE_SIZE_MAX",
+    "PORTFOLIO_NAME_MAX",
     "PROJECT_NAME_MAX",
     "STAGE_KEYS",
     "ArtefactSectionCompletedFrame",
@@ -231,6 +238,9 @@ __all__ = [
     "PlanningTranscriptTurnOut",
     "PlanningTurnCreate",
     "PlanningTurnOut",
+    "PortfolioCreate",
+    "PortfolioOut",
+    "PortfolioUpdate",
     "ProjectCreate",
     "ProjectOut",
     "ProjectStatus",

@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-two tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-three tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -28,6 +28,16 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 metadata = MetaData()
 
+portfolio = Table(
+    "portfolio",
+    metadata,
+    Column("portfolio_id", UUID(as_uuid=True), primary_key=True),
+    Column("owner_user_id", Text, nullable=True),
+    Column("name", Text, nullable=False),
+    Column("description", Text, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
 project = Table(
     "project",
     metadata,
@@ -39,6 +49,12 @@ project = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("archived_at", DateTime(timezone=True), nullable=True),
     Column("owner_user_id", Text, nullable=True),
+    Column(
+        "portfolio_id",
+        UUID(as_uuid=True),
+        ForeignKey("portfolio.portfolio_id"),
+        nullable=True,
+    ),
     CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",

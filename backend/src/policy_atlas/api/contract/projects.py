@@ -45,12 +45,15 @@ class ProjectUpdate(BaseModel):
         name: New display name, when renaming. Omit to leave unchanged.
         question: New evidence question, when changing it. Omit to leave
             unchanged.
+        portfolio_id: Portfolio to assign this project to, or an explicit
+            `null` to unassign it. Omit to leave the assignment unchanged.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=PROJECT_NAME_MAX)
     question: str | None = None
+    portfolio_id: uuid.UUID | None = None
 
 
 class LatestRun(BaseModel):
@@ -83,6 +86,8 @@ class ProjectOut(BaseModel):
         archived_at: When the project was archived, or `None` if active.
         latest_run: The derived latest-run read model, or `None` before any
             run has been created.
+        portfolio_id: The portfolio this project belongs to, or `None` when it
+            belongs to none. Unassigned is a normal state, not an error.
     """
 
     project_id: uuid.UUID
@@ -93,3 +98,4 @@ class ProjectOut(BaseModel):
     updated_at: datetime
     archived_at: datetime | None = None
     latest_run: LatestRun | None = None
+    portfolio_id: uuid.UUID | None = None

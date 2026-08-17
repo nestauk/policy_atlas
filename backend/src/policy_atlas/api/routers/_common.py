@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, ProjectOut, RunOut
-from policy_atlas.core.schema import capability_run, project
+from policy_atlas.core.schema import capability_run, portfolio, project
 
 
 def owned_project(
@@ -44,6 +44,36 @@ def owned_project(
     if for_update:
         statement = statement.with_for_update()
     row = conn.execute(statement).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return row
+
+
+def owned_portfolio(
+    conn: Connection,
+    *,
+    portfolio_id: uuid.UUID,
+    user_id: str,
+) -> RowMapping:
+    """Return an owned portfolio or the contract's indistinguishable 404.
+
+    Args:
+        conn: Open database connection.
+        portfolio_id: Requested portfolio identity.
+        user_id: Authenticated owner's subject.
+
+    Returns:
+        The owned portfolio row.
+
+    Raises:
+        HTTPException: Always 404 for missing or cross-owner rows, so an
+            unknown portfolio and someone else's are indistinguishable.
+    """
+    row = conn.execute(
+        select(portfolio)
+        .where(portfolio.c.portfolio_id == portfolio_id)
+        .where(portfolio.c.owner_user_id == user_id)
+    ).mappings().one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return row
@@ -87,4 +117,5 @@ def project_out(conn: Connection, row: RowMapping | dict[str, Any]) -> ProjectOu
         updated_at=row["updated_at"],
         archived_at=row["archived_at"],
         latest_run=latest_out,
+        portfolio_id=row["portfolio_id"],
     )
