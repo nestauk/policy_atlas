@@ -43,6 +43,8 @@ export const queryKeys = {
     [...queryKeys.conversationsRoot(projectId), query?.kind, query?.status] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
+  portfolios: (page?: number, pageSize?: number) => ["portfolios", "list", page, pageSize] as const,
+  portfolio: (portfolioId: string) => ["portfolios", portfolioId, "detail"] as const,
 };
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
@@ -125,6 +127,35 @@ export function useProjects(query?: { status?: "active" | "archived" | "all"; pa
       );
       return hasActiveRun ? 15_000 : false;
     },
+  });
+}
+
+/** `GET /api/v1/portfolios` — the screen's Projects, with a derived task count. */
+export function usePortfolios(query?: { page?: number; page_size?: number }) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.portfolios(query?.page, query?.page_size),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/portfolios", { params: { query } });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/** `GET /api/v1/portfolios/{portfolio_id}`. */
+export function usePortfolio(portfolioId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.portfolio(portfolioId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/portfolios/{portfolio_id}", {
+        params: { path: { portfolio_id: portfolioId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(portfolioId),
   });
 }
 

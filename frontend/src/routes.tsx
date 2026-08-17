@@ -7,6 +7,7 @@ import { DecisionsView } from "./views/DecisionsView";
 import { FindingsView } from "./views/FindingsView";
 import { LandingView } from "./views/LandingView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
+import { NewTaskView } from "./views/NewTaskView";
 import { ShareView } from "./views/ShareView";
 import { SourcesView } from "./views/SourcesView";
 import { WorkspaceView } from "./views/WorkspaceView";
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { path: "/", element: <LandingView /> },
+      { path: "/new", element: <NewTaskView /> },
 
       // The task lifecycle: Plan · Results · Sources · Share · History.
       // Every stage past Plan is gated on run state, so a locked stage is
