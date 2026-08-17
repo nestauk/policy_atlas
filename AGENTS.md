@@ -22,8 +22,8 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `032-task-lifecycle-ia` **CONTRACT + RUBRIC DRAFTED → awaiting
-human approval (step 1 🛑)** (drafted 2026-08-17, branch
+Design — task `032-task-lifecycle-ia` **CONTRACT APPROVED 2026-08-17 · PLAN
+DRAFTED → awaiting plan approval (step 3 🛑)** (branch
 `task/032-task-lifecycle-ia`, based on `dev`): reshape the app around one task
 and one lifecycle, and add a named grouping above tasks. Screen word **Task** =
 the existing `project` row; screen word **Project** = a new `portfolio` row.
@@ -32,9 +32,20 @@ untouched, but G14 lists it in the chats overlay once it stops being the live
 surface, and G15 is a type-scale pass (the frontend uses 12px 250 times against
 its own declared 16px floor). Case studies are parked by the owner (they need a
 new synthesis pass). Contract:
-`docs/tasks/032-task-lifecycle-ia/contract.md`; rubric alongside; plan not yet
-written. **Tier 3** — new table + new public routes + one prompt-surface field
-(`nav_label`) are three approval gates. ADR expected for the portfolio layer.
+`docs/tasks/032-task-lifecycle-ia/contract.md`; plan and rubric alongside.
+Thirteen build phases; the two gated backend phases run FIRST so a refused gate
+surfaces before frontend is built against the field. **Tier 3** — new table +
+new public routes + one prompt-surface field (`nav_label`) are three approval
+gates, each to be signed off before its phase starts. ADR 0031 expected for the
+portfolio layer.
+
+**🛑 Open decision blocking the build:** Tier 3 requires adversarial review at
+the contract, plan and code stages via the other model family, and the Codex CLI
+is **not installed here** (`codex` is not on PATH), so no phase routes to it and
+none of those three lanes can run as specified. The plan's § Tier 3 shortfall
+puts three options to the owner (install Codex · same-family lanes · accept and
+record). Same gap as task 031, still open.
+
 Design reference: the owner's prototype at
 `scripts/scratchpad/frontend_v20260817/Policy Atlas_new search standalone.html`
 (a bundled artifact — see the contract's § Reading the prototype).

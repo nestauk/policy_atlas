@@ -3,9 +3,10 @@
 One implementation slice. Keep it reviewable. The boundaries are in
 [AGENTS.md](../../../AGENTS.md). The specs are in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-08-17. Contract approved (before planning): _date · who_ ·
-> Plan approved (before implementation): _date · who_ · ADR: one expected (the
-> portfolio layer, G13 — a new entity above the existing project row).
+> **Status:** drafted 2026-08-17. Contract approved (before planning):
+> 2026-08-17 · owner · Plan approved (before implementation): _date · who_ ·
+> ADR: 0031 expected (the portfolio layer, G13 — a new entity above the existing
+> project row).
 >
 > **Branching:** `task/032-task-lifecycle-ia` branches from `dev`.
 > Task 031 is **already merged** into `dev` (PR #51, `23b3dfa`), so there is no
