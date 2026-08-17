@@ -88,6 +88,10 @@ class ProjectOut(BaseModel):
             run has been created.
         portfolio_id: The portfolio this project belongs to, or `None` when it
             belongs to none. Unassigned is a normal state, not an error.
+        source_count: How many sources this project has gathered, or `None`
+            when no run has started. `None` and `0` differ: `None` means the
+            question has not been asked yet, `0` means a run asked and found
+            nothing.
     """
 
     project_id: uuid.UUID
@@ -99,3 +103,4 @@ class ProjectOut(BaseModel):
     archived_at: datetime | None = None
     latest_run: LatestRun | None = None
     portfolio_id: uuid.UUID | None = None
+    source_count: int | None = None

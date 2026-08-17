@@ -1393,7 +1393,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
             )
         )
-    section_entries: dict[tuple[str, str, str | None], list[uuid.UUID]] = {}
+    section_entries: dict[tuple[str, str, str | None, str | None], list[uuid.UUID]] = {}
     for spec, block_id in parsed_specs:
         role: str = cast(
             str,
@@ -1403,15 +1403,23 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         )
         title = cast(str, spec.get("title") or "")
         focus = cast(str | None, spec.get("focus")) if isinstance(spec.get("focus"), str) else None
-        section_entries.setdefault((title, role, focus), []).append(block_id)
+        # Absent on every artefact synthesised before task 032 — the client
+        # falls back to a shortened title rather than treating it as an error.
+        nav_label = (
+            cast(str | None, spec.get("nav_label"))
+            if isinstance(spec.get("nav_label"), str)
+            else None
+        )
+        section_entries.setdefault((title, role, focus, nav_label), []).append(block_id)
     sections: list[SectionOut] = []
-    for (title, role, focus), section_block_ids in section_entries.items():
+    for (title, role, focus, nav_label), section_block_ids in section_entries.items():
         single_block = block_rows.get(section_block_ids[0]) if len(section_block_ids) == 1 else None
         sections.append(
             SectionOut(
                 title=title,
                 role=cast(Any, role),
                 focus=focus,
+                nav_label=nav_label,
                 blocks=[
                     BlockOut(
                         block_id=block_id,

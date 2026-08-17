@@ -74,7 +74,10 @@ log = structlog.get_logger()
 # it opens (or drops), titles form a visible hierarchy — and honours the
 # plan's ordinary-section budget (strand 3's report-length lever) via the
 # code-assembled budget clause.
-SECTIONS_PROMPT_VERSION = "synthesise_sections_v3"
+# v4 (task 032 G6): sections additionally propose an optional short
+# ``nav_label`` for the contents list. It is a navigation affordance only —
+# full titles are unchanged and stay the section's real name.
+SECTIONS_PROMPT_VERSION = "synthesise_sections_v4"
 # v8 (task 024 B2′ / ADR 0023): the version is v8 ALWAYS — the section surface
 # changed the moment the priority-findings block became renderable. The block
 # itself renders CONDITIONALLY (only when the run carries relevance
@@ -122,6 +125,11 @@ SYNTHESIS_MODEL = "gpt-5.5"
 # (the directive grammar's 200 is contract-pinned and unchanged).
 SECTION_TITLE_MAX = 200
 SECTION_FOCUS_MAX = 300
+# The contents-list label (task 032 G6). Short enough to scan in a sidebar,
+# and unlike the two bounds above it REJECTS rather than truncates: a label
+# the writer had to be told to keep short is a proposal defect, and silently
+# clipping one produces a mid-word stub no reader can use.
+NAV_LABEL_MAX = 28
 
 # Forbidden generic section titles — the 012 label set, shared verbatim
 # (contract rev 8 M5), plus the section-shaped catch-alls of the same kind.
@@ -156,6 +164,7 @@ class SectionWire(BaseModel):
 
     title: str
     focus: str
+    nav_label: str | None = None
     group_ids: list[str] = []
 
 
@@ -586,6 +595,12 @@ Instructions:
   characters) saying what evidence the section will present. Sections must be
   led by the intent: name aspects of the question and of the available
   evidence, in the vocabulary of both.
+- Also give each section a "nav_label": a short scannable name for the
+  contents list, at most {NAV_LABEL_MAX} characters, written in the
+  vocabulary of that section's own title. It names the same aspect the title
+  names, more briefly — it is not a different or broader topic, and it is
+  never a generic word like "Overview" or "Findings". Stay within the limit;
+  an over-long label is rejected, not shortened for you.
 - The section list must read as ONE coherent narrative, not a pile of
   parallel topics. The reader meets the sections in order: each section's
   title should make sense given the titles before it, and together the

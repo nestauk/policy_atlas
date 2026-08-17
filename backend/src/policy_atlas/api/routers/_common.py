@@ -6,11 +6,16 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, ProjectOut, RunOut
-from policy_atlas.core.schema import capability_run, portfolio, project
+from policy_atlas.core.schema import (
+    capability_run,
+    portfolio,
+    project,
+    project_source_snapshot,
+)
 
 
 def owned_project(
@@ -101,12 +106,23 @@ def project_out(conn: Connection, row: RowMapping | dict[str, Any]) -> ProjectOu
         .limit(1)
     ).mappings().one_or_none()
     latest_out = None
+    source_count = None
     if latest is not None:
         latest_out = LatestRun(
             capability_run_id=latest["capability_run_id"],
             status=latest["status"],
             started_at=latest["started_at"],
             ended_at=latest["ended_at"],
+        )
+        # Same population the funnel's ``found`` counts. Derived per read and
+        # only once a run exists: before that, ``None`` says the question has
+        # not been asked, which is not the same as a run that found nothing.
+        source_count = int(
+            conn.execute(
+                select(func.count())
+                .select_from(project_source_snapshot)
+                .where(project_source_snapshot.c.project_id == row["project_id"])
+            ).scalar_one()
         )
     return ProjectOut(
         project_id=row["project_id"],
@@ -118,4 +134,5 @@ def project_out(conn: Connection, row: RowMapping | dict[str, Any]) -> ProjectOu
         archived_at=row["archived_at"],
         latest_run=latest_out,
         portfolio_id=row["portfolio_id"],
+        source_count=source_count,
     )
