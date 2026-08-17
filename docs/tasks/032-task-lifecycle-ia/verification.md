@@ -43,7 +43,8 @@ fallback was taken, so the full G6/G12/G13 scope shipped.
 | `make frontend-verify` (Phase 6) | pass | 294 tests / 50 files |
 | `make verify` (step-6 exit, first run) | pass | `EXIT=0` · backend 2160 passed · mypy 266 files · ruff clean · frontend 330 tests / 54 files |
 | `pnpm exec playwright test` (mock journey) | pass | 11 tests, after the rewrite for the new IA |
-| `make verify` (step-6 exit, after the four defect fixes) | pass | see below |
+| `make verify` (step-6 exit, after the four defect fixes) | pass | `EXIT=0` · backend 2160 passed · mypy 266 files · ruff clean · frontend 330 tests / 54 files |
+| `pnpm exec playwright test` (mock journey + eye-check) | pass | 11 tests, `EXIT=0` |
 
 **Gate-map deviation, at the owner's direction.** The plan's gate map puts a
 `make frontend-verify` at every frontend phase boundary. From Phase 7 onward the owner
