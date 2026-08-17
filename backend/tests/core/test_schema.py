@@ -26,6 +26,7 @@ from policy_atlas.core.schema import (
     source_screening_result,
     source_snapshot,
     source_tag,
+    user_feedback,
 )
 from policy_atlas.core.schema import (
     chunk as chunk_table,
@@ -370,3 +371,71 @@ def test_effect_basis_literal_matches_effect_bases() -> None:
     explicit, independently discoverable test (not just a collection-time
     side effect)."""
     assert get_args(EffectBasis) == EFFECT_BASES
+
+
+def _seed_project_and_source(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
+    """Return (project_id, project_source_snapshot_id) for one owned source."""
+    pid, _run_id = seed_project_and_run(conn)
+    _snap_id, pss_id = seed_source(conn, pid)
+    return pid, pss_id
+
+
+def test_user_feedback_shape_check_rejects_mixed_kinds(conn: Connection) -> None:
+    """ck_ufb_shape rejects a flag carrying a body and a report carrying a source."""
+    pid, pss_id = _seed_project_and_source(conn)
+    with pytest.raises(IntegrityError, match="ck_ufb_shape"):
+        conn.execute(user_feedback.insert().values(
+            user_feedback_id=uuid.uuid4(), project_id=pid, kind="source_not_relevant",
+            user_id="sub-1", project_source_snapshot_id=pss_id, body="a note",
+            page_path=None, created_at=now(),
+        ))
+
+
+def test_user_feedback_issue_report_rejects_source_reference(conn: Connection) -> None:
+    """An issue_report row may not name a source, and must carry a body."""
+    pid, pss_id = _seed_project_and_source(conn)
+    with pytest.raises(IntegrityError, match="ck_ufb_shape"):
+        conn.execute(user_feedback.insert().values(
+            user_feedback_id=uuid.uuid4(), project_id=pid, kind="issue_report",
+            user_id="sub-1", project_source_snapshot_id=pss_id, body="something broke",
+            page_path=None, created_at=now(),
+        ))
+
+
+def test_user_feedback_kind_check_rejects_unknown_kind(conn: Connection) -> None:
+    """ck_ufb_kind pins the discriminator's vocabulary."""
+    pid, _pss_id = _seed_project_and_source(conn)
+    with pytest.raises(IntegrityError, match="ck_ufb_kind"):
+        conn.execute(user_feedback.insert().values(
+            user_feedback_id=uuid.uuid4(), project_id=pid, kind="applause",
+            user_id="sub-1", project_source_snapshot_id=None, body="nice",
+            page_path=None, created_at=now(),
+        ))
+
+
+def test_user_feedback_source_flag_is_unique_per_user(conn: Connection) -> None:
+    """ux_ufb_source_flag makes a repeated flag a database-level no-op target."""
+    pid, pss_id = _seed_project_and_source(conn)
+    values = dict(
+        project_id=pid, kind="source_not_relevant", user_id="sub-1",
+        project_source_snapshot_id=pss_id, body=None, page_path=None, created_at=now(),
+    )
+    conn.execute(user_feedback.insert().values(user_feedback_id=uuid.uuid4(), **values))
+    with pytest.raises(IntegrityError, match="ux_ufb_source_flag"):
+        conn.execute(user_feedback.insert().values(user_feedback_id=uuid.uuid4(), **values))
+
+
+def test_user_feedback_issue_reports_are_not_deduplicated(conn: Connection) -> None:
+    """The partial index leaves issue reports alone — two identical reports both land."""
+    pid, _pss_id = _seed_project_and_source(conn)
+    values = dict(
+        project_id=pid, kind="issue_report", user_id="sub-1",
+        project_source_snapshot_id=None, body="same words twice", page_path="/x",
+        created_at=now(),
+    )
+    conn.execute(user_feedback.insert().values(user_feedback_id=uuid.uuid4(), **values))
+    conn.execute(user_feedback.insert().values(user_feedback_id=uuid.uuid4(), **values))
+    stored = conn.execute(
+        select(user_feedback.c.user_feedback_id).where(user_feedback.c.project_id == pid)
+    ).all()
+    assert len(stored) == 2

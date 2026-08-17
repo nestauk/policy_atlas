@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-two tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-three tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -1264,4 +1264,58 @@ chat_turn = Table(
         "status IN ('pending', 'completed', 'failed', 'cancelled')",
         name="ck_chat_turn_status",
     ),
+)
+
+# --- User feedback (task 032) ---
+#
+# Human-authored feedback, append-only, never read by the pipeline: a source
+# relevance disagreement and a free-text issue report share one table because
+# they share a lifecycle and an authorization rule (the project's owner). The
+# `kind` discriminator carries the shape, pinned by ck_ufb_shape so a row can
+# never be half of both. No LLM ever touches these rows.
+
+user_feedback = Table(
+    "user_feedback",
+    metadata,
+    Column("user_feedback_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("kind", Text, nullable=False),  # source_not_relevant|issue_report
+    # The token subject, matching project.owner_user_id's type — who said it,
+    # kept for audit even though today's single-owner model makes it redundant.
+    Column("user_id", Text, nullable=False),
+    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=True),
+    Column("body", Text, nullable=True),
+    Column("page_path", Text, nullable=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # MATCH SIMPLE is what makes the nullable half legal: an issue_report row
+    # (NULL snapshot id) satisfies the pair-FK without a project_source_snapshot.
+    ForeignKeyConstraint(
+        ["project_source_snapshot_id", "project_id"],
+        [
+            "project_source_snapshot.project_source_snapshot_id",
+            "project_source_snapshot.project_id",
+        ],
+        name="fk_ufb_pss_project",
+        match="SIMPLE",
+    ),
+    CheckConstraint(
+        "kind IN ('source_not_relevant', 'issue_report')",
+        name="ck_ufb_kind",
+    ),
+    CheckConstraint(
+        "(kind = 'source_not_relevant'"
+        " AND project_source_snapshot_id IS NOT NULL AND body IS NULL)"
+        " OR (kind = 'issue_report'"
+        " AND project_source_snapshot_id IS NULL AND body IS NOT NULL)",
+        name="ck_ufb_shape",
+    ),
+    # Makes flag-on idempotent in the database, not just in the handler.
+    Index(
+        "ux_ufb_source_flag",
+        "project_source_snapshot_id",
+        "user_id",
+        unique=True,
+        postgresql_where=text("kind = 'source_not_relevant'"),
+    ),
+    Index("ix_ufb_project_kind", "project_id", "kind"),
 )

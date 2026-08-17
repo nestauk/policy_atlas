@@ -50,6 +50,13 @@ from .common import (
     Page,
     PageMeta,
 )
+from .feedback import (
+    ISSUE_REPORT_BODY_MAX,
+    IssueReportCreate,
+    IssueReportOut,
+    SourceFeedbackOut,
+    SourceFeedbackUpdate,
+)
 from .planning import (
     AnalysisDepth,
     BackendScope,
@@ -143,6 +150,7 @@ from .sse import (
 __all__ = [
     "EVIDENCE_STATUS_INCLUDED",
     "CHAT_MESSAGE_MAX",
+    "ISSUE_REPORT_BODY_MAX",
     "PAGE_SIZE_DEFAULT",
     "PAGE_SIZE_MAX",
     "PROJECT_NAME_MAX",
@@ -208,6 +216,8 @@ __all__ = [
     "IcfFindingOut",
     "IofFindingOut",
     "IofStatisticsOut",
+    "IssueReportCreate",
+    "IssueReportOut",
     "FreeTextCompileOut",
     "FreeTextConfirmResponse",
     "FreeTextResponse",
@@ -247,6 +257,8 @@ __all__ = [
     "SectionOut",
     "SectionRole",
     "SourceDossierOut",
+    "SourceFeedbackOut",
+    "SourceFeedbackUpdate",
     "SourceTagOut",
     "SseFrame",
     "StageCompletedFrame",

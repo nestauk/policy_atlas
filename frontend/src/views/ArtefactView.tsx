@@ -925,7 +925,7 @@ export function SourceDossier({
         )}
         {dossier.isPending && <p role="status" className="animate-pulse text-caption text-grey">Loading the dossier…</p>}
         {dossier.isError && <p role="alert" className="text-caption text-navy">This source dossier couldn't be loaded.</p>}
-        {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
+        {dossier.data && <SourceDossierBody projectId={projectId} source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {!byId && evidence.data !== undefined && source === undefined && (
           <p className="text-caption text-grey">This source isn't in the evidence list yet.</p>
         )}

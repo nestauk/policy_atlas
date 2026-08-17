@@ -188,6 +188,8 @@ class EvidenceItemOut(BaseModel):
         appraisal_tier: Optional appraisal tier label.
         cited: Whether this source is cited in the artefact.
         url: Optional source URL.
+        not_relevant: Whether a human has flagged this source as not relevant.
+            Feedback only — it never moves the source on the status ladder.
     """
 
     source_id: uuid.UUID
@@ -211,6 +213,10 @@ class EvidenceItemOut(BaseModel):
     screen_reason: str | None = None
     classification_reason: str | None = None
     read_in_full: bool = False
+    # 032 feedback (additive): the human relevance flag, read back so the user
+    # can see and undo it. Deliberately not folded into `status`/`screen_status`
+    # — the ladder stays machine-derived.
+    not_relevant: bool = False
 
 
 class FindingBaseOut(BaseModel):

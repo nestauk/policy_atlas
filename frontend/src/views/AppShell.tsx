@@ -10,6 +10,7 @@ import { Button } from "../ui/brand/Button";
 import { StatusDot } from "../ui/brand/Card";
 import { NavBar, NavItem, NavLogo } from "../ui/brand/Nav";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
+import { ReportIssueButton } from "../ui/feedback/ReportIssueButton";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
@@ -238,6 +239,13 @@ export function AppShell() {
                     <NavItem to={`${base}/sources`}>Sources</NavItem>
                     <NavItem to={`${base}/landscape`}>Landscape</NavItem>
                     <NavItem to={`${base}/decisions`}>Decision log</NavItem>
+                    {/* Feedback with no LLM in it, on every project page
+                        including the workspace. Needs a project because every
+                        report is filed against one. Its own boundary — a broken
+                        feedback form must never take down the nav. */}
+                    <ErrorBoundary key={`report-${projectId}`}>
+                      <ReportIssueButton projectId={projectId ?? ""} />
+                    </ErrorBoundary>
                   </>
                 )}
                 {/* 026 live-check gap: the AuthApi always had signOut; nothing

@@ -4,8 +4,10 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockEvidence, mockLandscape } from "../mock/fixtures";
+import { ToastProvider } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { SourcesView } from "./SourcesView";
+import * as mutations from "../api/mutations";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
@@ -15,6 +17,12 @@ vi.mock("../api/queries", () => ({
   useFindings: vi.fn(),
   useSourceDossier: vi.fn(),
 }));
+
+vi.mock("../api/mutations", () => ({
+  useSetSourceNotRelevant: vi.fn(),
+}));
+
+const setNotRelevant = vi.fn();
 
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -36,6 +44,7 @@ function LocationProbe() {
 
 function renderSources() {
   return render(
+    <ToastProvider>
     <TooltipProvider>
       <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/sources`]}>
         <Routes>
@@ -50,7 +59,8 @@ function renderSources() {
           />
         </Routes>
       </MemoryRouter>
-    </TooltipProvider>,
+    </TooltipProvider>
+    </ToastProvider>,
   );
 }
 
@@ -60,6 +70,12 @@ function lastEvidenceQuery() {
 }
 
 beforeEach(() => {
+  setNotRelevant.mockClear();
+  vi.mocked(mutations.useSetSourceNotRelevant).mockReturnValue(
+    { mutate: setNotRelevant, isPending: false } as unknown as ReturnType<
+      typeof mutations.useSetSourceNotRelevant
+    >,
+  );
   vi.mocked(queries.useProject).mockReturnValue(
     { data: { name: "Tower Hamlets project" } } as unknown as ReturnType<typeof queries.useProject>,
   );
@@ -252,5 +268,57 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     expect(screen.getAllByText("Read in full").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Abstract only").length).toBeGreaterThan(0);
     expect(screen.queryByText("Cited in the evidence base")).toBeNull();
+  });
+});
+
+describe("SourcesView — not-relevant feedback (032)", () => {
+  it("flags an unflagged row and reflects the server's flag state", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    const flags = screen.getAllByRole("button", { name: "Flag as not relevant" });
+    expect(flags).toHaveLength(mockEvidence.length);
+    await user.click(flags[0]);
+    expect(setNotRelevant).toHaveBeenCalledTimes(1);
+    expect(setNotRelevant.mock.calls[0][0]).toEqual({
+      sourceId: mockEvidence[0].source_id,
+      notRelevant: true,
+    });
+  });
+
+  it("offers the undo on an already-flagged row and sends false", async () => {
+    const user = userEvent.setup();
+    vi.mocked(queries.useEvidence).mockReturnValue({
+      data: evidencePage([{ ...mockEvidence[0], not_relevant: true }]),
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof queries.useEvidence>);
+    renderSources();
+    const undo = screen.getByRole("button", { name: "Flagged as not relevant — undo" });
+    expect(undo).toHaveAttribute("aria-pressed", "true");
+    await user.click(undo);
+    expect(setNotRelevant.mock.calls[0][0]).toEqual({
+      sourceId: mockEvidence[0].source_id,
+      notRelevant: false,
+    });
+  });
+
+  it("leaves the machine-derived row untouched when a source is flagged", () => {
+    // mockEvidence[7] is the cited row. Feedback only means the flag changes
+    // the flag and nothing else — same status, strength, citation state.
+    const rowText = (notRelevant: boolean) => {
+      vi.mocked(queries.useEvidence).mockReturnValue({
+        data: evidencePage([{ ...mockEvidence[7], not_relevant: notRelevant }]),
+        isPending: false,
+        isError: false,
+        refetch: vi.fn(),
+      } as unknown as ReturnType<typeof queries.useEvidence>);
+      const view = renderSources();
+      const row = screen.getAllByRole("row")[1];
+      const text = row.textContent;
+      view.unmount();
+      return text;
+    };
+    expect(rowText(true)).toEqual(rowText(false));
   });
 });

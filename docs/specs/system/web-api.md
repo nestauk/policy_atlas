@@ -325,6 +325,23 @@ project's rows).
   `source_id` (the evidence row's source id; no match returns an empty
   page).
 
+### User feedback
+
+Two human-authored, LLM-free write paths. Both are owner-scoped and stored in
+`user_feedback`; nothing in the pipeline reads either back.
+
+- `PATCH .../sources/{source_id}` — body `{not_relevant: bool}`, returns
+  `{source_id, not_relevant}`. Sets or clears the caller's "not relevant"
+  flag on one source, idempotent in both directions. A `source_id` outside
+  the project is the usual indistinguishable 404. **Feedback only**: the flag
+  surfaces as the additive `not_relevant` field on `evidence` rows and the
+  source dossier, and never moves a source on the evidence status ladder,
+  out of selection, or out of the artefact's citations.
+- `POST .../issue-reports` — body `{body, page_path?}`, returns
+  `{feedback_id, created_at}` (201). Free text, 1–4000 characters after
+  whitespace stripping (a blank report is 422). No model is invoked and there
+  is no reply surface: the report is recorded, not answered.
+
 ### SSE
 
 `GET /api/v1/projects/{id}/events?cursor=<sequence>` — fetch-stream with

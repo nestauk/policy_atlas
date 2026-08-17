@@ -453,6 +453,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_id}/issue-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Issue Report
+         * @description Record one free-text issue report against the project.
+         */
+        post: operations["create_issue_report_api_v1_projects__project_id__issue_reports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_id}/landscape": {
         parameters: {
             query?: never;
@@ -578,7 +598,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Set Source Feedback
+         * @description Set or clear the caller's not-relevant flag on one source.
+         *
+         *     Idempotent in both directions: setting an already-set flag leaves the one
+         *     row alone (the partial unique index makes that a database guarantee), and
+         *     clearing an absent flag is a no-op.
+         */
+        patch: operations["set_source_feedback_api_v1_projects__project_id__sources__source_id__patch"];
         trace?: never;
     };
     "/healthz": {
@@ -1481,6 +1509,8 @@ export interface components {
          *         appraisal_tier: Optional appraisal tier label.
          *         cited: Whether this source is cited in the artefact.
          *         url: Optional source URL.
+         *         not_relevant: Whether a human has flagged this source as not relevant.
+         *             Feedback only — it never moves the source on the status ladder.
          */
         EvidenceItemOut: {
             /** Appraisal Tier */
@@ -1491,6 +1521,11 @@ export interface components {
             classification_reason?: string | null;
             /** Evidence Type */
             evidence_type?: string | null;
+            /**
+             * Not Relevant
+             * @default false
+             */
+            not_relevant: boolean;
             /**
              * Origin
              * @enum {string}
@@ -1875,6 +1910,42 @@ export interface components {
             standard_error?: number | null;
             /** Tau2 */
             tau2?: number | null;
+        };
+        /**
+         * IssueReportCreate
+         * @description Inbound body for `POST /api/v1/projects/{id}/issue-reports`.
+         *
+         *     Args:
+         *         body: What the user noticed, 1-4000 characters. Outer whitespace is
+         *             stripped before the length constraint is applied
+         *             (`str_strip_whitespace`), so a whitespace-only report is rejected.
+         *         page_path: The in-app path the report was raised from, when known.
+         */
+        IssueReportCreate: {
+            /** Body */
+            body: string;
+            /** Page Path */
+            page_path?: string | null;
+        };
+        /**
+         * IssueReportOut
+         * @description A recorded issue report's receipt.
+         *
+         *     Args:
+         *         feedback_id: The stored feedback row's identity.
+         *         created_at: When the report was recorded.
+         */
+        IssueReportOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Feedback Id
+             * Format: uuid
+             */
+            feedback_id: string;
         };
         /**
          * LandscapeOut
@@ -2707,6 +2778,11 @@ export interface components {
             /** Language */
             language?: string | null;
             /**
+             * Not Relevant
+             * @default false
+             */
+            not_relevant: boolean;
+            /**
              * Origin
              * @enum {string}
              */
@@ -2752,6 +2828,35 @@ export interface components {
             venue?: string | null;
             /** Year */
             year?: number | null;
+        };
+        /**
+         * SourceFeedbackOut
+         * @description The caller's feedback state for one source.
+         *
+         *     Args:
+         *         source_id: The source the flag applies to.
+         *         not_relevant: The flag's state after the write.
+         */
+        SourceFeedbackOut: {
+            /** Not Relevant */
+            not_relevant: boolean;
+            /**
+             * Source Id
+             * Format: uuid
+             */
+            source_id: string;
+        };
+        /**
+         * SourceFeedbackUpdate
+         * @description Inbound body for `PATCH /api/v1/projects/{id}/sources/{source_id}`.
+         *
+         *     Args:
+         *         not_relevant: Whether the caller marks this source as not relevant.
+         *             Idempotent in both directions.
+         */
+        SourceFeedbackUpdate: {
+            /** Not Relevant */
+            not_relevant: boolean;
         };
         /**
          * SourceTagOut
@@ -3864,6 +3969,41 @@ export interface operations {
             };
         };
     };
+    create_issue_report_api_v1_projects__project_id__issue_reports_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueReportCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueReportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     landscape_api_v1_projects__project_id__landscape_get: {
         parameters: {
             query?: {
@@ -4117,6 +4257,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceDossierOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_source_feedback_api_v1_projects__project_id__sources__source_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceFeedbackUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceFeedbackOut"];
                 };
             };
             /** @description Validation Error */

@@ -131,3 +131,47 @@ export function useAnswerCheckIn(projectId: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot(projectId) }),
   });
 }
+
+/** `PATCH .../sources/{id}` — set or clear the human "not relevant" flag.
+ *  Feedback only: the flag never moves the source on the evidence status
+ *  ladder. Idempotent in both directions, so a double-click is harmless. */
+export function useSetSourceNotRelevant(projectId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { sourceId: string; notRelevant: boolean }) => {
+      const { data, error, response } = await client.PATCH(
+        "/api/v1/projects/{project_id}/sources/{source_id}",
+        {
+          params: { path: { project_id: projectId, source_id: input.sourceId } },
+          body: { not_relevant: input.notRelevant },
+        },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    // The project root is a prefix of both queryKeys.evidence(...) and
+    // queryKeys.sourceDossier(...), so one invalidate refreshes the table row
+    // and an open dossier together.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot(projectId) }),
+  });
+}
+
+/** `POST .../issue-reports` — free-text issue report. No LLM, and nothing
+ *  reads these back in-app, so there is no cache to invalidate. */
+export function useReportIssue(projectId: string) {
+  const client = useApiClient();
+  return useMutation({
+    mutationFn: async (input: { body: string; pagePath?: string }) => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/projects/{project_id}/issue-reports",
+        {
+          params: { path: { project_id: projectId } },
+          body: { body: input.body, page_path: input.pagePath ?? null },
+        },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+  });
+}

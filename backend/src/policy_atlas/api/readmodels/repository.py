@@ -71,6 +71,7 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     synthesis_result,
+    user_feedback,
 )
 from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_base.assess.screen import effective_screen_rows
@@ -554,6 +555,23 @@ def _source_reason_maps(
     return screen_reasons, classification_reasons
 
 
+def _not_relevant_sources(conn: Connection, project_id: uuid.UUID) -> set[uuid.UUID]:
+    """Sources a human has flagged as not relevant in this project.
+
+    Scoped by project rather than by caller: only the project's owner can read
+    these read models at all, so a per-user filter would partition a set of
+    one. Revisit if projects ever gain collaborators.
+    """
+    return set(
+        conn.execute(
+            select(user_feedback.c.project_source_snapshot_id).where(
+                user_feedback.c.project_id == project_id,
+                user_feedback.c.kind == "source_not_relevant",
+            )
+        ).scalars()
+    )
+
+
 def _expand_evidence_statuses(values: Iterable[str]) -> set[str]:
     """Expand the `Included` filter shortcut into its ladder positions."""
     expanded: set[str] = set()
@@ -658,6 +676,7 @@ def evidence_page(
     cited_snapshots = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
+    not_relevant = _not_relevant_sources(conn, project_id)
     themed_sources = (
         set(
             conn.execute(
@@ -753,6 +772,7 @@ def evidence_page(
                         row.project_source_snapshot_id
                     ),
                     read_in_full=row.full_text_status == "ingested",
+                    not_relevant=row.project_source_snapshot_id in not_relevant,
                 ),
                 appraisal.quality_score if appraisal is not None else None,
             )
@@ -2006,6 +2026,7 @@ def source_dossier_out(
         screen_reason=screen_reasons.get(source_id),
         classification_reason=classification_reasons.get(source_id),
         read_in_full=row["full_text_status"] == "ingested",
+        not_relevant=source_id in _not_relevant_sources(conn, project_id),
         abstract=abstract,
         abstract_source="llm_description"
         if raw_abstract_source == "llm_description"

@@ -1568,7 +1568,7 @@
         "type": "object"
       },
       "EvidenceItemOut": {
-        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
+        "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.\n    not_relevant: Whether a human has flagged this source as not relevant.\n        Feedback only \u2014 it never moves the source on the status ladder.",
         "properties": {
           "appraisal_tier": {
             "anyOf": [
@@ -1606,6 +1606,11 @@
               }
             ],
             "title": "Evidence Type"
+          },
+          "not_relevant": {
+            "default": false,
+            "title": "Not Relevant",
+            "type": "boolean"
           },
           "origin": {
             "enum": [
@@ -2680,6 +2685,56 @@
           }
         },
         "title": "IofStatisticsOut",
+        "type": "object"
+      },
+      "IssueReportCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/projects/{id}/issue-reports`.\n\nArgs:\n    body: What the user noticed, 1-4000 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`), so a whitespace-only report is rejected.\n    page_path: The in-app path the report was raised from, when known.",
+        "properties": {
+          "body": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "page_path": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Path"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "IssueReportCreate",
+        "type": "object"
+      },
+      "IssueReportOut": {
+        "description": "A recorded issue report's receipt.\n\nArgs:\n    feedback_id: The stored feedback row's identity.\n    created_at: When the report was recorded.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "feedback_id": {
+            "format": "uuid",
+            "title": "Feedback Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "feedback_id",
+          "created_at"
+        ],
+        "title": "IssueReportOut",
         "type": "object"
       },
       "LandscapeOut": {
@@ -4371,6 +4426,11 @@
             ],
             "title": "Language"
           },
+          "not_relevant": {
+            "default": false,
+            "title": "Not Relevant",
+            "type": "boolean"
+          },
           "origin": {
             "enum": [
               "OpenAlex",
@@ -4551,6 +4611,41 @@
           "cited"
         ],
         "title": "SourceDossierOut",
+        "type": "object"
+      },
+      "SourceFeedbackOut": {
+        "description": "The caller's feedback state for one source.\n\nArgs:\n    source_id: The source the flag applies to.\n    not_relevant: The flag's state after the write.",
+        "properties": {
+          "not_relevant": {
+            "title": "Not Relevant",
+            "type": "boolean"
+          },
+          "source_id": {
+            "format": "uuid",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "not_relevant"
+        ],
+        "title": "SourceFeedbackOut",
+        "type": "object"
+      },
+      "SourceFeedbackUpdate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}/sources/{source_id}`.\n\nArgs:\n    not_relevant: Whether the caller marks this source as not relevant.\n        Idempotent in both directions.",
+        "properties": {
+          "not_relevant": {
+            "title": "Not Relevant",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "not_relevant"
+        ],
+        "title": "SourceFeedbackUpdate",
         "type": "object"
       },
       "SourceTagOut": {
@@ -6995,6 +7090,65 @@
         ]
       }
     },
+    "/api/v1/projects/{project_id}/issue-reports": {
+      "post": {
+        "description": "Record one free-text issue report against the project.",
+        "operationId": "create_issue_report_api_v1_projects__project_id__issue_reports_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueReportCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueReportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Issue Report",
+        "tags": [
+          "feedback"
+        ]
+      }
+    },
     "/api/v1/projects/{project_id}/landscape": {
       "get": {
         "description": "Return screened-in-only or cited-only landscape distributions.",
@@ -7483,6 +7637,73 @@
         "summary": "Source Dossier",
         "tags": [
           "read-models"
+        ]
+      },
+      "patch": {
+        "description": "Set or clear the caller's not-relevant flag on one source.\n\nIdempotent in both directions: setting an already-set flag leaves the one\nrow alone (the partial unique index makes that a database guarantee), and\nclearing an absent flag is a no-op.",
+        "operationId": "set_source_feedback_api_v1_projects__project_id__sources__source_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceFeedbackUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceFeedbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Source Feedback",
+        "tags": [
+          "feedback"
         ]
       }
     },

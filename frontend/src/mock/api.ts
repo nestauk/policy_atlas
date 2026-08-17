@@ -148,6 +148,11 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 // which this flips to `enriched` — the scripted async-judge fixture.
 let chatTurnEnrichmentReads = new Map<string, number>();
 
+// Sources the user flagged as not relevant this session — an overlay on the
+// read-only fixtures, so the toggle round-trips in mock mode instead of
+// snapping back on the invalidate.
+let notRelevantSources = new Set<string>();
+
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
@@ -160,6 +165,12 @@ export function resetMockScenario() {
   chatConversations = [];
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
+  notRelevantSources = new Set();
+}
+
+/** Apply the session's flag overlay to one fixture row. */
+function withNotRelevant<T extends { source_id: string }>(item: T): T {
+  return { ...item, not_relevant: notRelevantSources.has(item.source_id) };
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -324,12 +335,28 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       const direction = order ?? (sort === "year" || sort === "relevance" ? "desc" : "asc");
       rows = [...rows].sort((left, right) => compareMockEvidenceSort(left, right, sort, direction));
     }
-    return json(page(rows));
+    return json(page(rows.map(withNotRelevant)));
   }
   if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/sources/`)) {
     const sourceId = path.split("/").at(-1) ?? "";
     const source = mockSourceDossiers[sourceId];
-    return source ? json(source) : json({ detail: "resource not found" }, 404);
+    return source ? json(withNotRelevant(source)) : json({ detail: "resource not found" }, 404);
+  }
+  // --- User feedback (task 032) -------------------------------------------
+  if (method === "PATCH" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/sources/`)) {
+    const sourceId = path.split("/").at(-1) ?? "";
+    const body = await requestBody(request, init);
+    const notRelevant = isRecord(body) && body.not_relevant === true;
+    if (notRelevant) notRelevantSources.add(sourceId);
+    else notRelevantSources.delete(sourceId);
+    return json({ source_id: sourceId, not_relevant: notRelevant });
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/issue-reports`)) {
+    const body = await requestBody(request, init);
+    if (!isRecord(body) || typeof body.body !== "string" || body.body.trim().length === 0) {
+      return json({ error: { code: "validation_error", message: "body is required" } }, 422);
+    }
+    return json({ feedback_id: crypto.randomUUID(), created_at: new Date().toISOString() }, 201);
   }
   if (method === "GET" && path.includes(`/api/v1/projects/${MOCK_PROJECT_ID}/chunks/`) && path.endsWith("/context")) {
     // Chat citations carry a durable chunk id (never the artefact citation

@@ -33,6 +33,8 @@ node_modules/
 .vite/
 *.tsbuildinfo
 cdk.context.json
+*checkpoint.ipynb
+notebooks/
 
 # Tests are not needed to install or run the production project.
 tests/

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
+import { useSetSourceNotRelevant } from "../api/mutations";
 import { useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
@@ -12,6 +13,7 @@ import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
+import { useToast } from "../ui/radix/Toast";
 import { Tooltip } from "../ui/radix/Tooltip";
 import {
   abstractSourceLabel,
@@ -280,6 +282,7 @@ export function SourcesView() {
                   onSort={handleSort}
                 />
                 <th className="px-3 py-3">Cited</th>
+                <th className="px-3 py-3">Not relevant</th>
               </tr>
             </thead>
             <tbody>
@@ -336,6 +339,13 @@ export function SourcesView() {
                   <td className="px-3 py-3 align-top">
                     {item.cited && <Chip tone="green">Cited</Chip>}
                   </td>
+                  <td className="px-3 py-3 align-top">
+                    <NotRelevantToggle
+                      projectId={projectId}
+                      sourceId={item.source_id}
+                      notRelevant={item.not_relevant}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -370,6 +380,7 @@ export function SourcesView() {
       )}
 
       <SourceDossier
+        projectId={projectId}
         sourceId={sourceId}
         source={dossier.data}
         isPending={dossier.isPending}
@@ -379,6 +390,74 @@ export function SourcesView() {
         onClose={() => updateParams((next) => next.delete("source"))}
       />
     </main>
+  );
+}
+
+/** The human "not relevant" flag: a pressed-state toggle on one source.
+ *
+ *  Feedback only — it records disagreement for us to read, and deliberately
+ *  changes nothing about the row's status, selection or citations. Idempotent
+ *  server-side, so a double-click is harmless; failure toasts and leaves the
+ *  flag where the server still has it (the invalidate re-reads the truth). */
+function NotRelevantToggle({
+  projectId,
+  sourceId,
+  notRelevant,
+  withLabel = false,
+}: {
+  projectId: string;
+  sourceId: string;
+  notRelevant: boolean;
+  withLabel?: boolean;
+}) {
+  const setNotRelevant = useSetSourceNotRelevant(projectId);
+  const toast = useToast();
+  const label = notRelevant ? "Flagged as not relevant — undo" : "Flag as not relevant";
+  return (
+    <button
+      type="button"
+      aria-pressed={notRelevant}
+      aria-label={label}
+      title={label}
+      disabled={setNotRelevant.isPending}
+      onClick={() => {
+        // No inline notice here: a table cell has nowhere to put one, so the
+        // toast is the whole failure surface for this control.
+        setNotRelevant.mutate(
+          { sourceId, notRelevant: !notRelevant },
+          {
+            onError: () =>
+              toast.toast({
+                title: "That flag couldn't be saved",
+                description: "Nothing was recorded. Try again in a moment.",
+                tone: "error",
+              }),
+          },
+        );
+      }}
+      className={`inline-flex cursor-pointer items-center gap-1.5 text-caption focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-default disabled:opacity-50 ${
+        notRelevant ? "font-semibold text-red" : "text-grey hover:text-navy"
+      }`}
+    >
+      <FlagIcon filled={notRelevant} />
+      {withLabel && <span>{notRelevant ? "Not relevant" : "Not relevant?"}</span>}
+    </button>
+  );
+}
+
+function FlagIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      className="h-4 w-4 shrink-0"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinejoin="round"
+    >
+      <path d="M4 14V2.5h8L10 6l2 3.5H4" />
+    </svg>
   );
 }
 
@@ -632,6 +711,7 @@ function RelevantCell({ item }: { item: Parameters<typeof screeningDetails>[0] }
 }
 
 function SourceDossier({
+  projectId,
   sourceId,
   source,
   isPending,
@@ -640,6 +720,7 @@ function SourceDossier({
   findingsPending,
   onClose,
 }: {
+  projectId: string;
   sourceId: string | null;
   source: components["schemas"]["SourceDossierOut"] | undefined;
   isPending: boolean;
@@ -654,7 +735,14 @@ function SourceDossier({
       <SheetContent title={source ? scrub(source.title) : "Source dossier"} description="Source dossier">
         {isPending && <p role="status" className="animate-pulse text-caption text-grey">Loading the dossier…</p>}
         {isError && <p role="alert" className="text-caption text-navy">This source dossier couldn't be loaded.</p>}
-        {source && <SourceDossierBody source={source} findings={findings} findingsPending={findingsPending} />}
+        {source && (
+          <SourceDossierBody
+            projectId={projectId}
+            source={source}
+            findings={findings}
+            findingsPending={findingsPending}
+          />
+        )}
       </SheetContent>
     </Sheet>
   );
@@ -662,10 +750,12 @@ function SourceDossier({
 
 /** Full source provenance, used by every route into the source dossier sheet. */
 export function SourceDossierBody({
+  projectId,
   source,
   findings,
   findingsPending,
 }: {
+  projectId: string;
   source: components["schemas"]["SourceDossierOut"];
   findings: components["schemas"]["FindingOut"][] | undefined;
   findingsPending: boolean;
@@ -693,6 +783,14 @@ export function SourceDossierBody({
           <Chip tone="soft">{scrub(source.origin)}</Chip>
           {source.appraisal_tier && <Chip tone="soft">{scrub(source.appraisal_tier)}</Chip>}
           {href && <a className="border border-blue px-2.5 py-1 text-caption font-semibold text-blue hover:underline" href={href} target="_blank" rel="noreferrer">Open original</a>}
+        </div>
+        <div className="mt-3">
+          <NotRelevantToggle
+            projectId={projectId}
+            sourceId={source.source_id}
+            notRelevant={source.not_relevant}
+            withLabel
+          />
         </div>
       </header>
       {source.abstract && (

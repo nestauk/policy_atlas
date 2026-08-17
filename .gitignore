@@ -41,3 +41,9 @@ infra/cdk.out/
 
 # Verification evidence is binary + point-in-time: attach to the task PR, never commit
 docs/tasks/*/evidence/
+
+# Notebook checkpoints
+*checkpoint.ipynb
+
+# Claude worktrees
+.claude/worktrees
