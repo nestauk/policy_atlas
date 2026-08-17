@@ -47,11 +47,13 @@ export function WorkspaceView() {
     // Full-bleed white page (no grey gutters, no column borders — owner,
     // 2026-08-05); the readable measure lives on the inner column.
     return (
-      <main className="relative h-[calc(100svh-58px)] bg-paper">
-        <div className="mx-auto h-full max-w-[760px]">
+      <main className="relative flex h-[calc(100svh-58px)] flex-col bg-paper">
+        <div className="flex justify-end px-4 pt-2">
+          <OpenPlanButton onOpen={() => setPlanOpen(true)} />
+        </div>
+        <div className="mx-auto min-h-0 w-full max-w-[760px] flex-1">
           <PlanningPane projectId={projectId} runStatus={stream.run?.status} stream={stream} />
         </div>
-        <OpenPlanButton onOpen={() => setPlanOpen(true)} />
         {planOpen && <PlanDocument projectId={projectId} onClose={() => setPlanOpen(false)} />}
       </main>
     );
@@ -69,7 +71,12 @@ export function WorkspaceView() {
       {/* lg: fixed viewport height so chat and journey scroll independently;
           below lg the stacked panes keep the page scroll. */}
       <div className="relative flex min-w-0 flex-col border-r border-line bg-paper lg:overflow-hidden">
-        <div className="flex justify-end border-b border-line p-1">
+        {/* Both controls share this row, in normal flow. The plan button used
+            to be absolutely positioned against the whole <main>, which put it
+            on top of the rail toggle once the grid collapsed to one column
+            below lg — the toggle became unclickable at narrow widths. */}
+        <div className="flex items-center justify-between border-b border-line p-1">
+          <OpenPlanButton onOpen={() => setPlanOpen(true)} />
           <RailToggle collapsed={rail.collapsed} toggleProps={rail.toggleProps} />
         </div>
         <div id={rail.regionId} hidden={rail.collapsed} className="min-h-0 flex-1">
@@ -96,7 +103,6 @@ export function WorkspaceView() {
       <div className="min-w-0 bg-ground lg:overflow-hidden">
         <RunPane projectId={projectId} stream={stream} />
       </div>
-      <OpenPlanButton onOpen={() => setPlanOpen(true)} />
       {planOpen && <PlanDocument projectId={projectId} onClose={() => setPlanOpen(false)} />}
     </main>
   );
@@ -105,10 +111,8 @@ export function WorkspaceView() {
 /** The one affordance that opens the plan as a document. */
 function OpenPlanButton({ onOpen }: { onOpen: () => void }) {
   return (
-    <div className="absolute top-2 right-4 z-10">
-      <Button variant="ghost" size="sm" onClick={onOpen}>
-        Open the plan
-      </Button>
-    </div>
+    <Button variant="ghost" size="sm" onClick={onOpen}>
+      Open the plan
+    </Button>
   );
 }

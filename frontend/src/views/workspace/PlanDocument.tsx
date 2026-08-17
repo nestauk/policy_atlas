@@ -6,6 +6,14 @@ import { seedComposer } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { COPY } from "../../lib/vocabulary";
 import { Button } from "../../ui/brand/Button";
+import {
+  ANALYSIS_DEPTH_LABEL,
+  COMPONENT_LABEL,
+  SEARCH_EFFORT_LABEL,
+  STEERING_MODE_LABEL,
+  scopeChips,
+  vocabLabel,
+} from "./planVocabulary";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 
@@ -62,39 +70,37 @@ const PARTS: readonly Part[] = [
   {
     key: "scope_constraints",
     label: "Limits on the evidence",
+    // The plan card's own chip builder, reused: it already applies the
+    // geography-collapse rule and renders a country group as its label, not
+    // as the object it actually is.
     value: (plan) => {
-      const constraints = plan.scope_constraints;
-      if (constraints == null) return null;
-      const countries = constraints.author_affiliation_countries;
-      const parts = [
-        constraints.published_after != null ? `Published on or after ${constraints.published_after}` : null,
-        constraints.published_before != null ? `Published on or before ${constraints.published_before}` : null,
-        constraints.publisher_country != null ? `Publisher in ${constraints.publisher_country}` : null,
-        countries != null && countries.length > 0
-          ? `Authors affiliated in ${countries.join(", ")}`
-          : null,
-        constraints.country_group != null ? `Country group: ${constraints.country_group}` : null,
-      ].filter((part): part is string => part !== null);
-      return parts.length > 0 ? list(parts) : null;
+      const chips = scopeChips(plan.scope_constraints as Parameters<typeof scopeChips>[0]);
+      return chips.length > 0 ? list(chips) : null;
     },
     seed: "I'd like to change the limits on the evidence: ",
   },
   {
     key: "search_effort",
     label: "How widely to search",
-    value: (plan) => text(plan.search_effort),
+    value: (plan) => text(vocabLabel(SEARCH_EFFORT_LABEL, plan.search_effort)),
     seed: "I'd like to change how widely we search: ",
   },
   {
     key: "analysis_depth",
     label: "How deeply to analyse",
-    value: (plan) => text(plan.analysis_depth),
+    value: (plan) => text(vocabLabel(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)),
     seed: "I'd like to change how deeply we analyse: ",
   },
   {
     key: "components",
     label: "What the analysis will do",
-    value: (plan) => list(plan.components),
+    // The locked component vocabulary, so no raw stage key reaches the screen.
+    value: (plan) =>
+      list(
+        (plan.components ?? [])
+          .map((component) => vocabLabel(COMPONENT_LABEL, component))
+          .filter((label): label is string => label !== null),
+      ),
     seed: "I'd like to change what the analysis does: ",
   },
   {
@@ -119,7 +125,7 @@ const PARTS: readonly Part[] = [
   {
     key: "steering_mode",
     label: "When to check in with you",
-    value: (plan) => text(plan.steering_mode),
+    value: (plan) => text(vocabLabel(STEERING_MODE_LABEL, plan.steering_mode)),
     seed: "I'd like to change when you check in with me: ",
   },
   {

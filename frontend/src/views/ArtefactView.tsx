@@ -551,7 +551,7 @@ function ClaimPanel({
                 <p className="mt-0.5 text-caption">
                   <Link
                     className="font-semibold text-blue hover:underline"
-                    to={`/projects/${projectId}/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
+                    to={`/projects/${projectId}/sources/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
                     onClick={onClose}
                   >
                     See the findings in this theme

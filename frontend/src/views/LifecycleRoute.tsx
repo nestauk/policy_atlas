@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Navigate, useParams } from "react-router";
+import { Navigate, useLocation, useParams } from "react-router";
 
 import { useProject } from "../api/queries";
 import { isTabOpen } from "./lifecycle";
@@ -27,8 +27,16 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   return <>{children}</>;
 }
 
-/** Send a retired path to its new home, keeping the project in the URL. */
+/**
+ * Send a retired path to its new home, keeping the project AND the query.
+ *
+ * The search string carries the filter, the open dossier and the selected
+ * theme. Dropping it makes a redirect look like it worked — the page loads,
+ * nothing 404s — while quietly landing the reader on an unfiltered view. That
+ * is a worse failure than a broken link, because nothing announces it.
+ */
 export function RedirectToPath({ suffix }: { suffix: string }) {
   const { projectId } = useParams();
-  return <Navigate to={`/projects/${projectId}${suffix}`} replace />;
+  const { search } = useLocation();
+  return <Navigate to={`/projects/${projectId}${suffix}${search}`} replace />;
 }

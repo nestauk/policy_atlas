@@ -4,14 +4,15 @@ import { MOCK_CHAT_CLAIM_TEXT, MOCK_PROJECT_ID, mockCheckIn, mockProject } from 
 
 /**
  * End-to-end mock journey (task 025 I.1; rewritten 027 F.2 for the uplifted
- * demo surfaces). Runs against the dev server in `VITE_MOCK=1` mode (see
- * `playwright.config.ts`), so every step drives the scripted fixture project
- * + SSE narrative in `src/mock/`. The mock project starts with no run — the
- * journey begins at the plan pane and starts the analysis itself, matching
- * the "resumed session" fixture (a durable planning transcript already
- * formed a ready plan; see `src/mock/fixtures.ts`). Selectors favour
- * roles/labels/text over CSS — the same accessible surface a screen-reader
- * or keyboard user would rely on.
+ * demo surfaces; rewritten again for 032's task-lifecycle IA — Plan · Results
+ * · Sources · Share · History replacing the old flat nav). Runs against the
+ * dev server in `VITE_MOCK=1` mode (see `playwright.config.ts`), so every
+ * step drives the scripted fixture project + SSE narrative in `src/mock/`.
+ * The mock project starts with no run — the journey begins at the plan pane
+ * and starts the analysis itself, matching the "resumed session" fixture (a
+ * durable planning transcript already formed a ready plan; see
+ * `src/mock/fixtures.ts`). Selectors favour roles/labels/text over CSS — the
+ * same accessible surface a screen-reader or keyboard user would rely on.
  */
 
 const SUGGESTED_OPTION_LABEL = (mockCheckIn.options ?? []).find(
@@ -22,56 +23,101 @@ if (!SUGGESTED_OPTION_LABEL) throw new Error("fixture check-in has no suggested 
 const CITED_SOURCE_TITLE = "Universal breakfast clubs and diet quality";
 const CITATION_QUOTE = "Breakfast participation increased when provision was universal.";
 
-/** Locate the landing page's project card (the `<li>`, not just the link —
- *  the run-status chip and rename/archive controls sit beside the link, not
- *  inside it). */
-function projectCard(page: Page, name: string) {
-  return page.locator("li").filter({ has: page.getByRole("link", { name }) });
+/** The top app-shell nav, which carries the five-stage lifecycle bar (Plan ·
+ *  Results · Sources · Share · History). It is always the first `<nav>` in
+ *  the DOM — the shell renders before any routed view's own nav (e.g. the
+ *  Sources layout's subview tabs) — so `.first()` reliably scopes to it even
+ *  on pages that mount a second nav of their own. */
+function lifecycleNav(page: Page) {
+  return page.locator("nav").first();
 }
 
-/** (a) Landing renders the mock project card, then (b) navigating into it
- *  opens the workspace. */
+/** The journey pane's completion card carries its own "Read the evidence
+ *  base" link — pre-existing, and identical to the one the planning thread's
+ *  run block shows inline, so the same accessible name appears twice on the
+ *  page once a run succeeds. Scoping to this region (rather than asserting
+ *  the bare role+name) is what keeps every such assertion a single-element
+ *  match. */
+function journeyCompletionLink(page: Page) {
+  return page
+    .getByRole("region", { name: "Analysis progress" })
+    .getByRole("link", { name: "Read the evidence base" });
+}
+
+/** (a) Tasks list renders the mock task's row, then (b) navigating into it
+ *  opens the workspace (Plan). */
 async function openWorkspaceFromLanding(page: Page): Promise<void> {
   await page.goto("/");
-  const card = projectCard(page, mockProject.name);
-  await expect(card).toBeVisible();
-  await card.getByRole("link", { name: mockProject.name }).click();
+  const link = page.getByRole("link", { name: mockProject.name });
+  await expect(link).toBeVisible();
+  await link.click();
   await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}`));
 }
 
-test.describe("mock evidence-base journey", () => {
-  test("landing rename/archive, plan through run, evidence base, findings and sources", async ({ page }) => {
-    // (a) Landing: inline rename (cancel restores the original, then a real
-    // save) and the two-step archive confirm (exercised, then cancelled —
-    // the project carries on into the rest of the journey below). There is
-    // only one fixture project, so these interactions use page-level
-    // locators directly — the card's own `<Link>` disappears while editing
-    // (the form replaces it), so a locator scoped to "the li with that
-    // link" stops matching mid-flow.
+/** Drive a run from a fresh workspace through to "succeeded": start the
+ *  analysis, wait for the check-in, answer it with the suggested option, and
+ *  wait for the completion card's "Read the evidence base" link — the same
+ *  drive several tests below need before they can reach a stage the
+ *  lifecycle only opens once a run has finished. */
+async function driveRunToSuccess(page: Page): Promise<void> {
+  await openWorkspaceFromLanding(page);
+  await page.getByRole("button", { name: "Start the analysis" }).click();
+  await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: SUGGESTED_OPTION_LABEL }).click();
+  await expect(page.getByText("Waiting on your input")).toHaveCount(0);
+  await expect(journeyCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+}
+
+test.describe("mock task-lifecycle journey", () => {
+  test("plan through run, results, sources and history", async ({ page }) => {
+    // (a) Tasks list: the mock task's row, no per-row rename/archive (task
+    // 032 moved that into the header's "Project settings" popover, reachable
+    // only once inside a task).
     await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
     await expect(page.getByRole("link", { name: mockProject.name })).toBeVisible();
 
-    await page.getByRole("button", { name: "Rename project" }).click();
-    await page.getByLabel("Project name").fill("A name that gets cancelled");
-    await page.getByRole("button", { name: "Cancel rename" }).click();
-    await expect(page.getByRole("heading", { name: mockProject.name })).toBeVisible();
-
-    const renamedName = "Healthier childhoods in Tower Hamlets (2026 pass)";
-    await page.getByRole("button", { name: "Rename project" }).click();
-    await page.getByLabel("Project name").fill(renamedName);
-    await page.getByRole("button", { name: "Save name" }).click();
-
-    await page.getByRole("button", { name: "Archive project" }).click();
-    await expect(page.getByRole("button", { name: "Confirm archive" })).toBeVisible();
-    await expect(page.getByText("Archiving removes this project")).toBeVisible();
-    await page.getByRole("button", { name: "Cancel archive" }).click();
-    await expect(page.getByRole("button", { name: "Archive project" })).toBeVisible();
-
-    // (b) Into the workspace.
+    // (b) Into the workspace (Plan).
     await page.getByRole("link", { name: mockProject.name }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}`));
 
-    // (c) Pre-run, the workspace is a centred single-column chat (028 strand
+    // (c) Rename/archive now lives in the header's "Project settings"
+    // popover: inline rename (cancel restores the original, then a real
+    // save) and the two-step archive confirm (exercised, then cancelled —
+    // the task carries on into the rest of the journey below).
+    const settings = page.getByRole("button", { name: "Project settings" });
+    await settings.click();
+
+    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByLabel("Project name").fill("A name that gets cancelled");
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByLabel("Project name")).toHaveCount(0);
+    await expect(page.getByText(mockProject.name)).toBeVisible();
+
+    const renamedName = "Healthier childhoods in Tower Hamlets (2026 pass)";
+    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByLabel("Project name").fill(renamedName);
+    await page.getByRole("button", { name: "Save name" }).click();
+    await expect(page.getByText(renamedName)).toBeVisible();
+
+    await page.getByRole("button", { name: "Archive" }).click();
+    await expect(page.getByRole("button", { name: "Confirm archive" })).toBeVisible();
+    await expect(page.getByText("Archiving removes this project")).toBeVisible();
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
+    await settings.click(); // close the popover
+
+    // (d) The lifecycle bar shows all five stages from the first moment —
+    // with no run yet, only Plan is open; Results/Sources/Share/History
+    // render but are locked (a `<span aria-disabled>`, not a link).
+    const nav = lifecycleNav(page);
+    await expect(nav.getByRole("link", { name: "Plan", exact: true })).toBeVisible();
+    for (const label of ["Results", "Sources", "Share", "History"]) {
+      await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+      await expect(nav.getByText(label)).toBeVisible();
+    }
+
+    // (e) Pre-run, the workspace is a centred single-column chat (028 strand
     // 3): no planning rail, no two-pane split — the conversation itself is
     // the surface. The durable seed transcript renders as structured part
     // cards rather than plain reply bubbles: turn 1's question part shows
@@ -85,7 +131,7 @@ test.describe("mock evidence-base journey", () => {
     await expect(page.getByRole("button", { name: "Looks right" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add or change a constraint" })).toBeVisible();
 
-    // (d) The ready plan renders as a card inline at the foot of the thread
+    // (f) The ready plan renders as a card inline at the foot of the thread
     // — a compact disclosure: the header button carries the question + ready
     // chip, and ready-draft fields with locked-vocabulary labels (never a raw
     // enum key like "rapid") only render once expanded. Details render
@@ -100,10 +146,10 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("button", { name: "Toggle plan details" }).click();
     await expect(page.getByText("Rapid — top sources, fast pass")).toBeVisible();
 
-    // (e) Start the analysis — the two-pane layout (chat + collapsible rail
+    // (g) Start the analysis — the two-pane layout (chat + collapsible rail
     // on the left, journey on the right) appears for the first time. The
     // mock races through every pre-synthesise stage with no artificial
-    // delay, straight to the paused check-in (see step (f)) — so "Analysing
+    // delay, straight to the paused check-in (see step (h)) — so "Analysing
     // the evidence…" is never reliably observable as its own state here; the
     // timeline and the settled paused heading below are the robust checks.
     await page.getByRole("button", { name: "Start the analysis" }).click();
@@ -114,15 +160,24 @@ test.describe("mock evidence-base journey", () => {
     await expect(page.getByText("Where I looked")).toBeVisible();
     await expect(page.getByText("OpenAlex · academic research")).toBeVisible();
 
-    // (f) The check-in card appears; the run genuinely parks here. Paused
+    // (h) The check-in card appears; the run genuinely parks here. Paused
     // reads distinct from executing on this tab (028 contract: pause
     // salience) — the journey heading and its status banner both change;
-    // the cross-tab variant of this same check is its own test below.
+    // the cross-tab variant of this same check is its own test below. While
+    // paused, Results/Sources/Share are locked — rendered but not links —
+    // and Plan/History stay open (the lifecycle contract's locking table).
     await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(mockCheckIn.render)).toBeVisible();
     const journeyPane = page.getByRole("region", { name: "Analysis progress" });
     await expect(journeyPane.getByRole("heading", { name: "Paused — waiting on you" })).toBeVisible();
     await expect(journeyPane.getByText("Paused at a check-in")).toBeVisible();
+
+    await expect(nav.getByRole("link", { name: "Plan", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "History", exact: true })).toBeVisible();
+    for (const label of ["Results", "Sources", "Share"]) {
+      await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
+      await expect(nav.getByText(label)).toBeVisible();
+    }
 
     // Answering the suggested option collapses the card to the "Answered" echo.
     const suggestedButton = page.getByRole("button", { name: SUGGESTED_OPTION_LABEL });
@@ -131,14 +186,19 @@ test.describe("mock evidence-base journey", () => {
     await expect(page.getByText("Waiting on your input")).toHaveCount(0);
     await expect(page.getByText("Answered")).toBeVisible();
 
-    // (g) Evidence base: A4 frame, the live artefact streaming states
+    // (i) The run has now reached "succeeded" — all five stages open. The
+    // completion card's "Read the evidence base" link is also on the page,
+    // pointing at `/results`.
+    await expect(journeyCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+    for (const label of ["Plan", "Results", "Sources", "Share", "History"]) {
+      await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
+    }
+
+    // (j) Results: A4 frame, the live artefact streaming states
     // (skeleton -> writing -> filled) from the scripted fixture, then the
-    // citation claim popover and the source dossier ladder. The run has
-    // reached "succeeded" by now, so the completion card's own "Read the
-    // evidence base" link is also on the page — `exact` keeps this on the
-    // nav tab (Playwright's default name match is a case-insensitive
-    // substring, which "Read the evidence base" also satisfies).
-    await page.getByRole("link", { name: "Evidence base", exact: true }).click();
+    // citation claim popover and the source dossier ladder.
+    await nav.getByRole("link", { name: "Results", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: "What appears to help" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Implications for local action" })).toBeVisible();
@@ -178,14 +238,25 @@ test.describe("mock evidence-base journey", () => {
     await expect(
       themePanel.getByRole("button", { name: /Childhood obesity prevention in urban primary schools/ }),
     ).toBeVisible();
+    // The facet/group filter must survive the navigation — landing on an
+    // unfiltered Findings table would look like it worked while quietly
+    // showing the wrong thing.
     await themePanel.getByRole("link", { name: "See the findings in this theme" }).click();
-    await expect(page).toHaveURL(/findings\?facet=.*group=/);
+    await expect(page).toHaveURL(
+      new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/findings\\?facet=.*group=`),
+    );
     await page.goBack();
 
-    // (h) Findings: kind filter chips are server-side and URL-addressable;
-    // an IOF row expands to "Reported numbers", an ICF row to "Context
-    // detail".
-    await page.getByRole("link", { name: "Findings" }).click();
+    // (k) Sources: Themes is the index subview; Findings and All sources are
+    // reached through the Sources layout's own subnav (task 032 folded the
+    // old flat "Findings"/"Sources" tabs under one Sources stage).
+    await nav.getByRole("link", { name: "Sources", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources$`));
+    await expect(page.getByRole("heading", { name: "Themes" })).toBeVisible();
+
+    const sourcesSubnav = page.getByRole("navigation", { name: "Sources" });
+    await sourcesSubnav.getByRole("link", { name: "Findings" }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/findings$`));
     const kindFilter = page.getByRole("group", { name: "Finding kind" });
     await kindFilter.getByRole("button", { name: "Intervention–outcome" }).click();
     await expect(page).toHaveURL(/[?&]profile=iof/);
@@ -197,11 +268,10 @@ test.describe("mock evidence-base journey", () => {
     await page.getByRole("button", { name: /Expand finding: Active-travel offers/ }).click();
     await expect(page.getByRole("heading", { name: "Context detail" })).toBeVisible();
 
-    // (i) Sources: a server-side status filter changes the URL and the
-    // collection-true shown count. `exact` again keeps this on the nav tab,
-    // not the completion card's "All sources" link (same substring-match
-    // ambiguity as "Evidence base" above).
-    await page.getByRole("link", { name: "Sources", exact: true }).click();
+    // (l) All sources: a server-side status filter changes the URL and the
+    // collection-true shown count.
+    await sourcesSubnav.getByRole("link", { name: "All sources" }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/all$`));
     const sourceRows = page.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
     // Default view = All, sorted on the relevance spectrum.
@@ -216,20 +286,27 @@ test.describe("mock evidence-base journey", () => {
     await expect(page).toHaveURL(/[?&]status=screened_out/);
     await expect(sourceRows).toHaveCount(2);
 
-    // (j) An unknown route renders the honest "nothing here" view.
+    // (m) An unknown route renders the honest "nothing here" view.
     await page.goto("/this-route-does-not-exist");
     await expect(page.getByRole("heading", { name: "This project is unavailable" })).toBeVisible();
   });
 
-  // (k) Keyboard check: Tab to a citation marker and open it with Enter.
-  // The evidence-base artefact is served statically in mock mode (no run
-  // gating), so this is exercised as an isolated, direct-navigation check
-  // rather than re-running the whole journey.
+  // (n) Keyboard check: Tab to a citation marker and open it with Enter.
+  // Results is now gated on run state (task 032's locking table), so a bare
+  // direct navigation no longer reaches it — the run has to actually
+  // succeed first, unlike the old evidence-base route, which was ungated.
   test("keyboard: tab to a citation marker and open it with Enter", async ({ page }) => {
-    await page.goto(`/projects/${MOCK_PROJECT_ID}/evidence-base`);
+    await driveRunToSuccess(page);
+    await journeyCompletionLink(page).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(
       page.getByRole("heading", { name: "Policy options for healthier childhoods" }),
     ).toBeVisible();
+    // Let a citation marker actually attach before tabbing through the page:
+    // right after this client-side navigation there's a brief window where
+    // the DOM hasn't finished settling, which flakes how many tab presses it
+    // takes to reach the first one.
+    await expect(page.getByRole("button", { name: /^Citations 1/ })).toBeVisible();
 
     let found = false;
     for (let i = 0; i < 60 && !found; i++) {
@@ -245,7 +322,7 @@ test.describe("mock evidence-base journey", () => {
     await expect(page.getByText(CITATION_QUOTE).first()).toBeVisible();
   });
 
-  // (l) `prefers-reduced-motion` emulation runs the workspace — through
+  // (o) `prefers-reduced-motion` emulation runs the workspace — through
   // starting a run and reaching the pending check-in — without console errors.
   test("prefers-reduced-motion: the workspace runs cleanly with no console errors", async ({
     page,
@@ -267,8 +344,8 @@ test.describe("mock evidence-base journey", () => {
     expect(pageErrors).toEqual([]);
   });
 
-  // (m) At 1280 and 768 widths, no horizontal body scroll — checked on the
-  // landing view, the pre-run centred single-column workspace, and the
+  // (p) At 1280 and 768 widths, no horizontal body scroll — checked on the
+  // tasks list, the pre-run centred single-column workspace, and the
   // two-pane workspace once a run exists (the widest layout in the app —
   // the rail appears only from this point on, so it is never assumed
   // pre-run).
@@ -298,6 +375,8 @@ test.describe("mock evidence-base journey", () => {
       ).toBe(true);
 
       // Same check with the planning rail collapsed — the other rail state.
+      // This runs at BOTH widths: the toggle used to be unclickable below
+      // `lg`, where the plan button overlapped it, and that is now fixed.
       await page.getByRole("button", { name: "Collapse the planning rail" }).click();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -306,7 +385,7 @@ test.describe("mock evidence-base journey", () => {
     }
   });
 
-  // (n) The rail collapse control is keyboard-operable: focus, activate with
+  // (q) The rail collapse control is keyboard-operable: focus, activate with
   // Enter, re-activate with Space — state follows each activation. The rail
   // only exists once a run has started (pre-run is a single-column chat with
   // no rail at all), so this drives the flow to a started run first.
@@ -324,24 +403,26 @@ test.describe("mock evidence-base journey", () => {
     await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible();
   });
 
-  // (o) Paused reads distinct from executing on every OTHER tab too (028
+  // (r) Paused reads distinct from executing on every OTHER tab too (028
   // contract: pause salience) — a cross-tab banner appears everywhere
   // except the workspace itself (where the check-in card already is the
   // live source of truth), naming the waiting check-in explicitly. Kept as
   // its own test: the workspace-tab half of this same check lives inline in
-  // the main journey above, at the check-in step.
+  // the main journey above, at the check-in step. Sources is locked while
+  // paused (task 032), so History — which stays open — is the tab used to
+  // leave the workspace and observe the banner from elsewhere.
   test("paused run: the cross-tab banner appears on other tabs while a check-in waits", async ({ page }) => {
     await openWorkspaceFromLanding(page);
     await page.getByRole("button", { name: "Start the analysis" }).click();
     await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
 
-    await page.getByRole("link", { name: "Sources" }).click();
+    await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
     await expect(
       page.getByText("The analysis is paused — a check-in is waiting on you"),
     ).toBeVisible();
   });
 
-  // (p) Task 029 chat leg: from the completed evidence base, open a chat via
+  // (s) Task 029 chat leg: from the completed results page, open a chat via
   // "Ask about this analysis", send a question, and watch the scripted mock
   // turn (progress -> two deltas -> completed with one citation) render:
   // the activity label, the inline `[1]` marker, the honestly "unchecked"
@@ -350,14 +431,10 @@ test.describe("mock evidence-base journey", () => {
   // manage the chat itself through the library: it lists, its rename round-
   // trips, and archiving removes it from the default (active) list.
   test("chat: ask about the evidence base, watch the citation verdict upgrade, and manage the chat in the library", async ({ page }) => {
-    await openWorkspaceFromLanding(page);
-    await page.getByRole("button", { name: "Start the analysis" }).click();
-    await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
-    const suggestedButton = page.getByRole("button", { name: SUGGESTED_OPTION_LABEL });
-    await suggestedButton.click();
-    await expect(page.getByText("Waiting on your input")).toHaveCount(0);
+    await driveRunToSuccess(page);
 
-    await page.getByRole("link", { name: "Evidence base", exact: true }).click();
+    await journeyCompletionLink(page).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(
       page.getByText(/Pair school food action with safer active-travel routes/),
@@ -365,14 +442,14 @@ test.describe("mock evidence-base journey", () => {
 
     await page.getByRole("button", { name: "Ask about this analysis" }).click();
     // rev 3.4: the chat opens as a side panel BESIDE the artefact — the URL
-    // stays on the evidence-base route and simply gains the chat param.
-    await expect(page).toHaveURL(/\/projects\/[^/?]+\/evidence-base\?chat=/);
+    // stays on the results route and simply gains the chat param.
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results\\?chat=`));
     await expect(page.getByRole("complementary", { name: "Project chat" })).toBeVisible();
     await expect(page.locator(".artefact-page")).toBeVisible();
 
     // Entry context renders as the removable "Evidence base" chip (rev 2.6)
-    // — scoped to the chat region since the nav also carries an
-    // "Evidence base" link.
+    // — scoped to the chat region since the nav also carries a "Results"
+    // link.
     const chat = page.getByRole("region", { name: "Chat" });
     await expect(chat.getByRole("link", { name: "Evidence base" })).toBeVisible();
 
@@ -432,4 +509,48 @@ test.describe("mock evidence-base journey", () => {
     await expect(library.getByRole("heading", { name: "Archived" })).toBeVisible();
     await expect(library.getByRole("button", { name: "Restore" })).toBeVisible();
   });
+
+  // --- Two regressions this slice introduced, found while updating this
+  // suite and since FIXED. Kept as ordinary tests so they stay exercised.
+
+  // The theme panel's "See the findings in this theme" link pointed at the
+  // retired `/findings` path, and `RedirectToPath` dropped `location.search`
+  // on the way through — so the facet/group filter vanished in transit and
+  // the reader landed on the unfiltered table. Both were fixed: the link now
+  // addresses `/sources/findings` directly, and the redirect forwards its
+  // query string for every retired path, not just this one.
+  test(
+    "the theme panel's findings deep link keeps its facet/group filter",
+    async ({ page }) => {
+      await driveRunToSuccess(page);
+      await journeyCompletionLink(page).click();
+      await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
+      await page.getByRole("button", { name: /Implications for local action/ }).click();
+      await page.getByRole("button", { name: "pattern" }).click();
+      await page
+        .getByRole("dialog", { name: "Where this comes from" })
+        .getByRole("link", { name: "See the findings in this theme" })
+        .click();
+      await expect(page).toHaveURL(/sources\/findings\?facet=.*group=/);
+    },
+  );
+
+  // The "Open the plan" button was absolutely positioned against the whole
+  // `<main>`, so below `lg` — where the two-column grid collapses to one —
+  // it landed on top of the rail's collapse toggle and swallowed its clicks.
+  // A real user on a narrow viewport could not collapse the rail. Fixed by
+  // putting both controls in one normal-flow row.
+  test(
+    "below the lg breakpoint, the rail collapse toggle is still clickable beside the plan button",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 768, height: 900 });
+      await openWorkspaceFromLanding(page);
+      await page.getByRole("button", { name: "Start the analysis" }).click();
+      await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible({
+        timeout: 15_000,
+      });
+      await page.getByRole("button", { name: "Collapse the planning rail" }).click({ timeout: 3_000 });
+      await expect(page.getByRole("button", { name: "Expand the planning rail" })).toBeVisible();
+    },
+  );
 });
