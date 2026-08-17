@@ -130,6 +130,40 @@ file points there and does not restate them.
 36. [ ] The portfolio row carries a name, a description and an owner, and
         nothing else. No status, no lifecycle, no cached counts.
 
+## Conversations (G14)
+
+40. [ ] The chats overlay and the chat side-panel list show both conversation
+        kinds, newest first, with planning rows badged and showing whether they
+        are open or closed.
+41. [ ] A planning row offers **no** rename and **no** archive control anywhere.
+        The API 422s on both, so the control must not exist. Asserted by test.
+42. [ ] Selecting a planning row lands on that task's Plan tab. It never opens
+        inside the chat panel, and no read-only planning reader was built.
+43. [ ] Chats keep their existing behaviour: they open in the panel, and they
+        still rename and archive.
+44. [ ] Several closed planning rows on one task render correctly — one per plan
+        lineage is the expected state, not an error.
+
+## Type scale and layout (G15)
+
+45. [ ] The mapping in the contract's § Type scale and layout was applied. No
+        sentence a person is meant to read renders below 16px; `text-caption`
+        survives only on labels, chips, badges, status pills, timestamps and
+        table column headers.
+46. [ ] The new `text-display` token is in `index.css` **and** in the
+        tailwind-merge registration in `ui/brand/cn.ts`, in the same commit. A
+        test asserts the two lists are in sync, and the existing
+        `Button.test.tsx` colour-plus-size guard still passes.
+47. [ ] A primary button renders white text on blue in the built app, confirmed
+        by eye. The 028 failure this repeats was invisible to typecheck, lint,
+        185 tests and the mock e2e.
+48. [ ] One page width and one report reading measure, applied consistently
+        rather than per-view `max-w-*` choices.
+49. [ ] The type pass is its own commit, separable from the structural steps, so
+        review can read it alone.
+50. [ ] `verification.md` states plainly that the mapping is verified by eye and
+        at review, not by tests — no implied coverage that does not exist.
+
 ## Compatibility
 
 37. [ ] Every changed API response is additive. No existing field changed type,

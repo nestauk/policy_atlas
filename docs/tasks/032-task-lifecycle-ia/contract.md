@@ -45,9 +45,13 @@ After this slice:
   Findings.
 - There is a **list of every task** and a way to search it by name.
 - Tasks can belong to a **project**, and a project page lists its tasks.
+- A **planning conversation appears in the chats overlay** once it is no longer
+  the live surface, so a past plan lineage can still be read.
+- Reading surfaces are **set at the app's own type floor** instead of below it.
 
-The planning conversation itself does not change. The chat stays the main place
-where a person interacts with the system and where run progress is reported.
+The planning conversation's own behaviour does not change. The chat stays the
+main place where a person interacts with the system and where run progress is
+reported.
 
 ## Deliverable
 
@@ -55,7 +59,11 @@ One PR on `task/032-task-lifecycle-ia` containing:
 
 - The reshaped frontend: new routes, the task lifecycle bar, the new-task entry,
   the plan document panel, the report additions, the merged Sources page, the
-  History page, the Share notice, the tasks list and the projects list.
+  History page, the Share notice, the tasks list, the projects list, and
+  planning conversations listed in the chats overlay.
+- One type-scale and layout pass, in its own commit, applying the mapping in
+  § Type scale and layout — plus one new `text-display` token, registered with
+  tailwind-merge in the same commit.
 - One new backend table (`portfolio`) with its migration, its endpoints, and a
   nullable link column on `project`.
 - One additive field on the project list row (`source_count`).
@@ -79,6 +87,10 @@ the code and the screen, deliberately, and the mapping is fixed here.
 | **Plan document** | The whole approved or draft plan, shown as a document in a panel opened on request. It renders the `OrchestrationPlan` fields — see [plan-as-object.md](../../specs/system/plan-as-object.md). |
 | **Answer callout** | The report's opening statement, taken from the existing artefact-level summary (`ArtefactOut.summary`). Not new prose. |
 | **Nav label** | A short scannable name for a report section, at most 28 characters, used only in the contents list. New optional field on the section proposal. |
+| **Planning conversation** | The negotiation that produced a plan. One per plan lineage; it closes when its run reaches its terminal transaction (ADR 0029). Its turns live in `planning_transcript` and are read through `/planning-turns`, never `/conversations/{cid}/turns`. |
+| **Chat** | A follow-up thread that reads across a task's artefacts and never mutates anything (task 029). This is the "ask" conversation. |
+| **Chats overlay** | The conversation library, `ChatsLibrary.tsx`. Today it lists chats only; G14 makes it list both kinds. |
+| **Type floor** | 16px, `--text-body` in `index.css`, declared there as "running prose — the floor". A sentence meant to be read never renders below it. |
 | **Prototype** | The owner's supplied HTML, frozen at [docs/specs/sources/task-lifecycle-ux/](../../specs/sources/task-lifecycle-ux/README.md). A design reference, never a source of behaviour the backend does not have. |
 
 ## Reading the prototype
@@ -118,6 +130,8 @@ Every step in the plan, and every rubric item, cites one of these numbers.
 | **G11** | Share does not exist and is not named as missing. | — |
 | **G12** | There is no list of every task, and no way to find one by name. | `LandingView.tsx` shows project cards only |
 | **G13** | There is no structure above a task. Related tasks cannot be grouped or named. | no such table |
+| **G14** | The planning conversation is reachable from one place only. Every conversation surface hard-filters to `kind: "chat"`, and the planning thread is a hard-coded tab on the workspace. Once a run starts, planning goes read-only; when the run ends, the conversation closes. After that its thread is reachable only from Plan, and an earlier plan lineage is reachable from nowhere. | `chat/ChatsLibrary.tsx`, `chat/ChatSidePanel.tsx`, `chat/ConversationTabs.tsx` |
+| **G15** | The app is built below its own type floor, so reading surfaces are cramped. `index.css` declares 16px as "running prose — the floor", and the frontend then uses 12px 250 times and 14px 83 times against 16 uses of the body token. In the report and evidence views alone that is 122 uses below the floor against 6 at it. | `index.css` type scale, and nearly every view |
 
 ## Read first
 
@@ -143,6 +157,12 @@ Read the source sections, not the headings.
 - [deferred.md](../../deferred.md) § Web app, § Frontend uplift, § UX
   refinement — the recorded workspace-cluster and multi-question seams. This
   slice discharges part of the IA seam and must record what it leaves.
+- [ADR 0029](../../adr/0029-unified-conversation-model-copilot-chat.md) — the
+  conversation model G14 builds on: one planning conversation per plan lineage,
+  closing with its run; chats are read-only and never mutate a plan.
+- [custom-text-tokens-need-tailwind-merge-registration](../../knowledge/custom-text-tokens-need-tailwind-merge-registration.md)
+  — read before touching the type scale (G15). It records a production failure
+  that every automated gate missed.
 
 ## Scope
 
@@ -166,6 +186,11 @@ Read the source sections, not the headings.
   ordered by time.
 - G11 — Share notice.
 - G12 — tasks list and the find-a-task overlay.
+- G14 — the chats overlay and the chat side panel list planning conversations
+  alongside chats. No backend work: `GET /projects/{id}/conversations` already
+  returns both kinds, and each row already carries `kind`, `status`, `closed_at`
+  and a preview read from whichever turn table its kind uses.
+- G15 — the type-scale and layout pass, per § Type scale and layout.
 
 **In — backend, each gated (see § Constraints):**
 
@@ -287,6 +312,85 @@ event type names, no component identifiers.
 a shortened title. A `nav_label` longer than 28 characters is a validation
 failure at the proposal boundary, not something the client truncates.
 
+**Planning in the chats overlay (G14).** The overlay and the side-panel list show
+both kinds of conversation, newest first. A planning row is badged as planning
+and shows whether it is open or closed.
+
+A planning row is a **record, not a live thread**, and the rules follow from
+that:
+
+- **It opens at its home.** Selecting a planning row goes to that task's Plan
+  tab, where the thread already renders beside the plan it produced. It does not
+  open inside the chat panel. This is not a shortcut: posting a planning turn is
+  409-fenced while a run executes or parks, and the conversation is closed once
+  the run reaches its terminal transaction, so there is no live thread for the
+  panel to host. Rebuilding a read-only planning reader inside the panel would
+  duplicate the Plan tab and give the user a second, worse copy.
+- **No rename, no archive.** The API rejects both on a planning conversation
+  (422). The controls must not be rendered on a planning row — offering a button
+  that can only fail is the defect this rule prevents.
+- **Chats are unchanged.** They still open in the panel, and still rename and
+  archive.
+
+Several closed planning rows over a task's life is the expected state, not a
+bug: there is one planning conversation per plan lineage, each closing with its
+run. Listing them is how a reader answers "which plan did we agree for the
+second run".
+
+## Type scale and layout (G15)
+
+The prototype is not a different design language. It is the **same font
+(Archivo) and nearly the same scale**, used at the right rungs. Its whole type
+census is five sizes — 14, 16, 19, 24 and 36px — and its workhorses are 16px
+(160 uses) and 19px (142 uses). Nothing carries body copy below 14px.
+
+The app already declares that scale, and then does not use it:
+
+| Token | Size | Uses in the frontend today |
+|---|---|---|
+| `text-caption` | 12px | **250** |
+| `text-meta` | 14px | 83 |
+| `text-body` | 16px — the declared floor for running prose | 16 |
+| `text-lead` | 19px | 4 |
+| `text-heading` | 24px | 13 |
+| `text-title` | 30px | 12 |
+
+So 333 of 378 type declarations sit below the app's own stated floor. That, not
+the scale, is why the prototype reads better. **This step is a re-mapping, not a
+redesign.** The mapping:
+
+| Surface | Today | Becomes |
+|---|---|---|
+| Answer callout, section ledes | caption / meta | `text-lead` (19px) |
+| All other running prose in the report — block prose, key findings, section bodies, gap and theme detail | caption / meta | `text-body` (16px) |
+| Report title | `text-title` (30px) | `text-display` (36px) — one new token |
+| The new-task question heading | — | `text-display` (36px) |
+| Contents list, metadata strip, source cards, evidence table cells, theme blocks | caption (12px) | `text-body` (16px) inside the reading column; `text-meta` (14px) at minimum elsewhere |
+| Chat and planning messages | meta (14px) | `text-body` (16px) |
+| Eyebrows, chips, badges, status pills, timestamps, table column headers | caption (12px) | **unchanged** — this is what caption is for |
+| Page container width | a mix of `max-w-4xl`, `5xl`, `6xl` | one page width, 1180px, matching the prototype |
+| Report reading measure | `--container-prose-measure: 72ch` | retuned to the prototype's 44em |
+| Uppercase label tracking | `tracking-wide` / `tracking-wider` | 0.06em, matching the prototype |
+
+Two rules bind this step:
+
+1. **No running prose below 16px.** `text-caption` is for labels, chips, badges
+   and fine print only. A sentence a person is meant to read is never 12px.
+2. **The new token must be registered with tailwind-merge in the same commit that
+   adds it to `@theme`.** This is a recorded production failure, not a
+   hypothetical: in task 028 an unregistered scale token was classified as a text
+   *colour*, silently stripping `text-white` from every primary button, with
+   typecheck, lint, 185 tests and the mock e2e all green. See
+   [custom-text-tokens-need-tailwind-merge-registration](../../knowledge/custom-text-tokens-need-tailwind-merge-registration.md)
+   and the `Button.test.tsx` guard.
+
+**Honest limit on verification.** Rule 2 and the token/registration sync are
+mechanically testable, and they will be tested. Whether each surface landed on
+the *right* rung is a judgement, checked by eye at the live check and at review.
+A test asserting class names per surface would be brittle and would not measure
+readability, so none is written. Say this plainly in `verification.md` rather
+than implying the mapping is test-covered.
+
 ## Public / private boundary
 
 Public-safe and committable: the task documents, the migration, the API
@@ -339,8 +443,10 @@ or the turn or token budget is spent. Report the blocker; do not push through.
   callout's three summary states, the most-relevant-sources ranking, the
   Findings view's availability rule, the History merge order, the `nav_label`
   validation boundary and its client fallback, the portfolio endpoints
-  including the not-found and cross-owner cases, and the additive-only shape of
-  every changed response.
+  including the not-found and cross-owner cases, the additive-only shape of
+  every changed response, the chats overlay listing both conversation kinds with
+  no rename or archive control on a planning row, and the type-scale tokens in
+  `index.css` staying in sync with the tailwind-merge registration in `cn.ts`.
 - **Migration round-trip** — up and down, against a scratch database.
 - **No AI eval applies.** The one prompt change adds a short label field; its
   quality is a judgement call at the live check, not a scored eval.
@@ -356,6 +462,13 @@ or the turn or token budget is spent. Report the blocker; do not push through.
   6. History: the question and the plan drafting appear above the run events.
   7. Tasks list and find-a-task; one task assigned to a project; the projects
      list showing the right count.
+  8. The chats overlay on a task whose run has finished: the planning
+     conversation is listed and badged, selecting it lands on Plan, and it offers
+     no rename or archive control.
+  9. **Read the app by eye** on the report, Sources and the chat, at a normal
+     window size, and confirm no sentence renders at 12px. Confirm a primary
+     button still shows white text — the 028 tailwind-merge failure was invisible
+     to every automated gate and was caught this way.
   A full live end-to-end run is **not** in scope for this check. If the staging
   model route is unavailable (the OpenAI quota was recorded exhausted
   2026-07-28), say so plainly in `verification.md` and name which checks could
@@ -364,10 +477,12 @@ or the turn or token budget is spent. Report the blocker; do not push through.
 ## Verification evidence expected
 
 In [verification.md](verification.md): the `make verify` output; the migration
-round-trip output; the manual-check notes for all seven checks above, each
-either passed with what was observed or explicitly not run with the reason; a
-diff summary by step; which fallback was taken if a gate was refused; the new
-`docs/deferred.md` entries; and a public-safety confirmation.
+round-trip output; the manual-check notes for all nine checks above, each either
+passed with what was observed or explicitly not run with the reason; a diff
+summary by step; which fallback was taken if a gate was refused; the plain
+statement that the type mapping is eye-verified rather than test-covered
+(§ Type scale and layout); the new `docs/deferred.md` entries; and a
+public-safety confirmation.
 
 ## Risk tier & review focus
 
@@ -391,3 +506,10 @@ Review focus, in order:
    creeping back in.
 6. **Over-abstraction** — the portfolio row must stay a name, a description and
    an owner. No status, no lifecycle, no cached counts.
+7. **The type pass reviewed on its own.** It lands as its own commit precisely so
+   it can be read separately from the structural work — a large mechanical diff
+   mixed into a large structural diff is how a real defect hides. Check the
+   tailwind-merge registration first, then whether any sentence is still 12px,
+   then whether caption survived where caption belongs.
+8. **Planning rows offer nothing that 422s.** No rename or archive control on a
+   planning conversation, anywhere.

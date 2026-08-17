@@ -27,8 +27,11 @@ human approval (step 1 🛑)** (drafted 2026-08-17, branch
 `task/032-task-lifecycle-ia`, based on `dev`): reshape the app around one task
 and one lifecycle, and add a named grouping above tasks. Screen word **Task** =
 the existing `project` row; screen word **Project** = a new `portfolio` row.
-Thirteen gaps G1–G13; the planning conversation is deliberately untouched. Case
-studies are parked by the owner (they need a new synthesis pass). Contract:
+Fifteen gaps G1–G15; the planning conversation's own behaviour is deliberately
+untouched, but G14 lists it in the chats overlay once it stops being the live
+surface, and G15 is a type-scale pass (the frontend uses 12px 250 times against
+its own declared 16px floor). Case studies are parked by the owner (they need a
+new synthesis pass). Contract:
 `docs/tasks/032-task-lifecycle-ia/contract.md`; rubric alongside; plan not yet
 written. **Tier 3** — new table + new public routes + one prompt-surface field
 (`nav_label`) are three approval gates. ADR expected for the portfolio layer.
