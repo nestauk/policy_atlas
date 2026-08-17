@@ -76,6 +76,38 @@ artefact, groups) are whole-object.
   event on first archive only). 409 `run_active` while a run is executing
   or parked. There is no hard delete.
 
+**Vocabulary (task 032, ADR 0031).** On screen a `project` row is a **Task**
+and a `portfolio` row is a **Project**. The API keeps the code words; only the
+UI translates, from one shared module. Nothing below the project row was
+re-parented.
+
+Two additive fields on the project read shape:
+`portfolio_id` (the portfolio it belongs to, or `null` — unassigned is a
+normal state), and `source_count` (sources gathered, or `null` when no run
+exists — `null` and `0` differ: `null` means the question has not been asked,
+`0` means a run asked and found nothing).
+
+### Portfolios
+
+A portfolio is a named grouping **above** the project. It holds no plan, no
+run and no evidence of its own, and carries a name, a description and an owner
+— no status, no lifecycle, no cached counts (ADR 0031).
+
+- `GET /api/v1/portfolios` — paginated, owner-scoped. Each item carries a
+  `task_count` **derived per read** from the caller's active projects.
+- `POST /api/v1/portfolios` `{name, description?}` → 201 portfolio.
+- `GET /api/v1/portfolios/{id}` → portfolio with its derived `task_count`.
+- `PATCH /api/v1/portfolios/{id}` `{name?, description?}` — partial.
+- `PATCH /api/v1/projects/{id}` additively accepts `portfolio_id`, including
+  an explicit `null` to unassign. Assigning a portfolio the caller does not
+  own is 404 and does not write — otherwise the route would be an existence
+  oracle for another owner's rows.
+
+Owner scoping matches projects exactly: an unknown portfolio and a
+cross-owner one are the same indistinguishable 404. There is no portfolio
+archive route and no `archived_at` on the row; both land together if archiving
+is wanted (`docs/deferred.md` § Task lifecycle IA).
+
 ### Planning turns
 
 - `POST /api/v1/projects/{id}/planning-turns`
@@ -287,6 +319,14 @@ clamps context to a character window around the cited span — the 008
 seam's named consumer) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
+
+- Artefact `SectionOut.nav_label` (task 032) is an optional short label for the
+  contents list, at most 28 characters, produced by the section proposal
+  (`synthesise_sections_v4`). Over-length is **rejected at the proposal
+  boundary**, never truncated downstream — unlike the title and focus bounds
+  beside it, which clamp. There is no backfill: an artefact synthesised before
+  the field existed reads `null`, and the client falls back to a shortened
+  title. Absence is a normal state, not an error.
 
 - Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
   or grouping references to named items (`name`, optional `description` and

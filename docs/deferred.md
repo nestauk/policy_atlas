@@ -2056,3 +2056,67 @@ out (Out-of-scope list plus seams named in the strands).
 - **Cross-chat memory / recall** — chats stay mutually blind by design; knowledge
   travels via artefacts, not a shared chat memory (2026 practice keeps cross-thread
   recall opt-in and memory-mediated, not a default).
+
+## Task lifecycle IA (task 032 seams)
+
+032 reshaped the app around one task and one lifecycle, and added a named grouping
+above tasks (contract `docs/tasks/032-task-lifecycle-ia/contract.md`; ADR 0031 for
+the portfolio layer). What follows is what it deliberately left out — seams, not
+omissions.
+
+- **Case studies** — parked by the owner, 2026-08-17: producing them needs a new
+  synthesis pass, and the slice's rule was that where the prototype shows an output
+  the backend does not have, no new backend process is built for it. The parked
+  design, so it is recoverable: a **deterministic IOF shortlist** (pick candidate
+  studies by the finding layer's own fields — effect basis, evidence type, appraisal
+  tier — with no model call), followed by **one prose pass modelled on the
+  key-findings pass** (same shape: a bounded emission, spans bound to the source,
+  claims verified against quoted chunks). It is a second synthesis surface with its
+  own prompt version and its own cost, which is exactly why it is its own slice.
+- **The prose "why this source matters"** — Most cited sources states only facts the
+  data asserts (citation count, appraisal tier, evidence type, which sections cite
+  it). The prototype shows a sentence explaining a study's importance; nothing in
+  the system has made that judgement, so writing one would be the report inventing
+  authority. It needs either a scored relevance model or a synthesis pass, both of
+  which are new surfaces.
+- **Mobile and narrow-viewport navigation** — owner: later. Existing responsive
+  behaviour was preserved and not regressed, but the lifecycle bar, the tasks list
+  and the Sources tab strip have no narrow-viewport treatment of their own.
+- **A full briefing page** — owner: one page for the report is enough. A separate
+  briefing surface (an executive-audience rendering distinct from the report) stays
+  unbuilt.
+- **Writing `plan.title` back to the task name** (plan D5) — a task's name is derived
+  client-side from its question at creation and never updated from the planner's own
+  `plan.title`. So a task keeps its derived name until renamed by hand, even after
+  planning settles on a better one. Writing it back is new behaviour (which write
+  wins, and when) rather than a display fix.
+- **Portfolio soft-delete** — the `portfolio` row has no `archived_at` and there is
+  no archive route (ADR 0031 decision 3). Both land together when archiving a project
+  is actually wanted.
+- **Portfolio membership beyond one** — a task belongs to at most one project, by the
+  single nullable FK. Many-to-many needs a join table and a decision about what a
+  task in two projects means for counts.
+- **What remains of the workspace-cluster IA** — this slice discharged the
+  *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
+  destination per task state. It did **not** re-parent plan, run or artefact onto a
+  task entity, so the code word `project` still means what the screen calls a Task,
+  and the vocabulary split recorded in ADR 0031 persists. The cluster slice remains
+  the place where that split is finally resolved.
+- **Sharing and export** — the Share stage says sharing is coming soon and does
+  nothing else. The download control reuses the evidence-base print stylesheet that
+  already ships; any other format says coming soon. The share/export product seam is
+  unchanged from `docs/deferred.md` § Web app.
+- **The three unbuilt capabilities** — scoping policy options, theory of change and
+  map stakeholders are listed on the new-task page as coming soon, with no route and
+  no behaviour. Each is its own capability slice.
+- **Per-surface type-scale assertions** — the G15 mapping is verified by eye and at
+  review, not by test. A test asserting class names per surface would be brittle and
+  would not measure readability. What IS mechanically guarded is that the
+  `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
+  (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
+  028.
+- **Portfolio surfaces in the mock API** — `src/mock/api.ts` serves no
+  `/api/v1/portfolios`, so the projects list, the project detail page and find-a-task
+  cannot be driven in mock mode or in the CI mock journey. Their coverage is backend
+  route tests plus frontend unit tests only. Extending the mock fixture would let the
+  contract's live check 7 be driven in a browser.
