@@ -19,7 +19,7 @@ import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
 /** Project settings affordance (028 F.5): rename + archive, wired to the
- *  existing project mutations — the LandingView.tsx ProjectCard pattern,
+ *  existing project mutations — the project-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
  *  explicit confirm step before the mutation fires. */
 function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; projectName: string }) {

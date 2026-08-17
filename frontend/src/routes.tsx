@@ -3,14 +3,15 @@ import { createBrowserRouter } from "react-router";
 
 import { AppShell } from "./views/AppShell";
 import { ArtefactView } from "./views/ArtefactView";
-import { DecisionsView } from "./views/DecisionsView";
 import { FindingsView } from "./views/FindingsView";
-import { LandingView } from "./views/LandingView";
+import { HistoryView } from "./views/HistoryView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { NewTaskView } from "./views/NewTaskView";
+import { PortfolioDetailView, PortfoliosView } from "./views/PortfoliosView";
 import { ShareView } from "./views/ShareView";
 import { SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
+import { TasksListView } from "./views/TasksListView";
 import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
@@ -36,8 +37,10 @@ export const router = createBrowserRouter([
   {
     element: <AppShell />,
     children: [
-      { path: "/", element: <LandingView /> },
+      { path: "/", element: <TasksListView /> },
       { path: "/new", element: <NewTaskView /> },
+      { path: "/portfolios", element: <PortfoliosView /> },
+      { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
 
       // The task lifecycle: Plan · Results · Sources · Share · History.
       // Every stage past Plan is gated on run state, so a locked stage is
@@ -84,7 +87,7 @@ export const router = createBrowserRouter([
         path: "/projects/:projectId/history",
         element: (
           <LifecycleRoute tab="history">
-            <DecisionsView />
+            <HistoryView />
           </LifecycleRoute>
         ),
       },
