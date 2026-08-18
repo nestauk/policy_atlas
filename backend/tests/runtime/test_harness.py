@@ -15,7 +15,7 @@ from policy_atlas.evidence_base.corpus.theme_grouping import StubThemeGroupingBa
 from policy_atlas.evidence_base.synthesis.grounding_judge import StubGroundingJudgeBackend
 from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.runtime import harness
-from policy_atlas.runtime.harness import run_harness
+from policy_atlas.runtime.harness import run_harness, scoped_search_backends
 from policy_atlas.runtime.run_spec import Plan, compile
 from tests.evidence_base.corpus.test_characterise import _RaisingDiscoverBackend, _seed_doc
 from tests.helpers import (
@@ -33,6 +33,20 @@ from tests.helpers import (
 # annotations) has no surviving equivalent component, so these repoint onto
 # acquire (plain lifecycle) and characterise (a real failure path with a
 # structured partial-progress payload, mirroring the old block_id check).
+
+
+def test_scoped_search_backends_keeps_openalex_for_academic_only() -> None:
+    class _Named:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+    backends = [_Named("openalex"), _Named("overton")]
+    academic = scoped_search_backends(backends, "academic_only")
+    grey = scoped_search_backends(backends, "grey_lit_only")
+    both = scoped_search_backends(backends, "both")
+    assert [backend.name for backend in academic] == ["openalex"]
+    assert [backend.name for backend in grey] == ["overton"]
+    assert [backend.name for backend in both] == ["openalex", "overton"]
 
 
 def test_run_lifecycle_succeeded(conn: Connection) -> None:

@@ -43,6 +43,8 @@ export const queryKeys = {
     [...queryKeys.conversationsRoot(projectId), query?.kind, query?.status] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
+  portfolios: (page?: number, pageSize?: number) => ["portfolios", "list", page, pageSize] as const,
+  portfolio: (portfolioId: string) => ["portfolios", portfolioId, "detail"] as const,
 };
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
@@ -128,8 +130,42 @@ export function useProjects(query?: { status?: "active" | "archived" | "all"; pa
   });
 }
 
-/** `GET /api/v1/projects/{project_id}`. */
-export function useProject(projectId: string) {
+/** `GET /api/v1/portfolios` — the screen's Projects, with a derived task count. */
+export function usePortfolios(query?: { page?: number; page_size?: number }) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.portfolios(query?.page, query?.page_size),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/portfolios", { params: { query } });
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+/** `GET /api/v1/portfolios/{portfolio_id}`. */
+export function usePortfolio(portfolioId: string) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.portfolio(portfolioId),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/portfolios/{portfolio_id}", {
+        params: { path: { portfolio_id: portfolioId } },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: Boolean(portfolioId),
+  });
+}
+
+/** `GET /api/v1/projects/{project_id}`.
+ *
+ *  `options.pollWhileRunning` keeps `latest_run.status` fresh for a caller
+ *  with no run stream of its own — the app shell's lifecycle locking. On the
+ *  pages that do mount `useRunStream`, the stream already invalidates this
+ *  query, so those callers leave it off rather than pay for both. */
+export function useProject(projectId: string, options?: { pollWhileRunning?: boolean }) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.project(projectId),
@@ -141,6 +177,11 @@ export function useProject(projectId: string) {
       return data;
     },
     enabled: Boolean(projectId),
+    refetchInterval: (activeQuery) => {
+      if (options?.pollWhileRunning !== true) return false;
+      const status = activeQuery.state.data?.latest_run?.status;
+      return status !== undefined && ACTIVE_RUN_STATUSES.has(status) ? 15_000 : false;
+    },
   });
 }
 

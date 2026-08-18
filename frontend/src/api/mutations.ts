@@ -31,12 +31,82 @@ export function useCreateProject() {
   });
 }
 
+/**
+ * Start a task from a question (plan D4).
+ *
+ * Two calls, no backend change: create the project, then post the same
+ * question as its first planning turn, so the conversation opens with the
+ * words the person actually typed rather than a system greeting.
+ *
+ * The task's name is derived from the question here (D5). The planner's own
+ * `plan.title` is deliberately not written back — that would be new
+ * behaviour — so a task shows its derived name until renamed.
+ */
+export function useCreateTask() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { question: string; portfolioId?: string | null }) => {
+      const question = input.question.trim();
+      const { data: project, error, response } = await client.POST("/api/v1/projects", {
+        body: { name: taskNameFromQuestion(question), question },
+      });
+      if (project === undefined) raise(error, response.status);
+
+      if (input.portfolioId != null) {
+        await client.PATCH("/api/v1/projects/{project_id}", {
+          params: { path: { project_id: project.project_id } },
+          body: { portfolio_id: input.portfolioId },
+        });
+      }
+
+      // The opening turn. A failure here leaves a real, usable task whose
+      // conversation is simply empty, so it is not worth unwinding the
+      // creation — the person can just type the question again.
+      await client.POST("/api/v1/projects/{project_id}/planning-turns", {
+        params: { path: { project_id: project.project_id } },
+        body: { message: question, client_turn_id: crypto.randomUUID() },
+      });
+      return project;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+  });
+}
+
+/** A short display name from the question (plan D5): no trailing question
+ *  mark, and clipped on a word boundary rather than mid-word. */
+export function taskNameFromQuestion(question: string, max = 80): string {
+  const cleaned = question.trim().replace(/\s+/g, " ").replace(/\?+$/, "").trim();
+  if (cleaned.length <= max) return cleaned;
+  const clipped = cleaned.slice(0, max);
+  const lastSpace = clipped.lastIndexOf(" ");
+  return `${(lastSpace > max / 2 ? clipped.slice(0, lastSpace) : clipped).trimEnd()}…`;
+}
+
+/** `POST /api/v1/portfolios` — create a project (the screen word). */
+export function useCreatePortfolio() {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { name: string; description?: string | null }) => {
+      const { data, error, response } = await client.POST("/api/v1/portfolios", { body });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portfolios"] }),
+  });
+}
+
 /** `PATCH .../{id}` — partial update (rename and/or question edit). */
 export function useUpdateProject(projectId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: { name?: string | null; question?: string | null }) => {
+    mutationFn: async (body: {
+      name?: string | null;
+      question?: string | null;
+      portfolio_id?: string | null;
+    }) => {
       const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}", {
         params: { path: { project_id: projectId } },
         body,
@@ -84,6 +154,23 @@ export function usePlanningTurn(projectId: string) {
           body: { message: input.message, client_turn_id: input.clientTurnId },
         },
       );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot(projectId) }),
+  });
+}
+
+/** `PATCH .../plan` — persist typed document edits onto the approved plan. */
+export function usePatchPlan(projectId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["PlanPatchIn"]) => {
+      const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}/plan", {
+        params: { path: { project_id: projectId } },
+        body,
+      });
       if (data === undefined) raise(error, response.status);
       return data;
     },

@@ -4,6 +4,7 @@ export const MOCK_PROJECT_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
+export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
@@ -409,13 +410,13 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       client_turn_id: MOCK_PLANNING_TURN_IDS.second,
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
-      reply: "What counts as in-scope? Edit any chip directly.",
+      reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
       suggestions: [],
       part: {
         id: "scope",
         step_label: "Plan · 2 of 3 · scope",
         title: "What counts as in-scope?",
-        body: "Dates filter the search itself; setting and population become screening rules judged per document.",
+        body: null,
         chips: [
           { label: "UK primary", kind: "text", value: "UK as the primary study setting" },
           { label: "Since 2016", kind: "date_range", value: '{"after": "2016-01-01", "before": null}' },

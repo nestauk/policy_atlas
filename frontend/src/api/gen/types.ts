@@ -112,6 +112,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Portfolios
+         * @description List the authenticated user's portfolios with a derived task count.
+         */
+        get: operations["list_portfolios_api_v1_portfolios_get"];
+        put?: never;
+        /**
+         * Create Portfolio
+         * @description Create one portfolio owned by the authenticated subject.
+         */
+        post: operations["create_portfolio_api_v1_portfolios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Portfolio
+         * @description Return one portfolio when it belongs to the caller.
+         */
+        get: operations["get_portfolio_api_v1_portfolios__portfolio_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Portfolio
+         * @description Apply the supplied portfolio fields without changing omitted fields.
+         */
+        patch: operations["update_portfolio_api_v1_portfolios__portfolio_id__patch"];
+        trace?: never;
+    };
     "/api/v1/projects": {
         parameters: {
             query?: never;
@@ -490,7 +538,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Patch Plan
+         * @description Apply typed edits to the current plan and persist a new approved version.
+         */
+        patch: operations["patch_plan_api_v1_projects__project_id__plan_patch"];
         trace?: never;
     };
     "/api/v1/projects/{project_id}/planning-turns": {
@@ -2036,6 +2088,12 @@ export interface components {
             data: components["schemas"]["PlanningTranscriptTurnOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
+        /** Page[PortfolioOut] */
+        Page_PortfolioOut_: {
+            /** Data */
+            data: components["schemas"]["PortfolioOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
         /** Page[ProjectOut] */
         Page_ProjectOut_: {
             /** Data */
@@ -2244,7 +2302,7 @@ export interface components {
         };
         /**
          * PlanOut
-         * @description Response body for `GET /api/v1/projects/{id}/plan`.
+         * @description Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.
          *
          *     Args:
          *         plan: The current plan (draft or approved).
@@ -2257,6 +2315,48 @@ export interface components {
             status: string;
             /** Version */
             version: number;
+        };
+        /**
+         * PlanPatchIn
+         * @description Inbound body for `PATCH /api/v1/projects/{id}/plan`.
+         *
+         *     Omitted fields stay as they are. An empty string on a date or geography
+         *     field clears that constraint. The merged result must still be a valid
+         *     executable plan.
+         *
+         *     Args:
+         *         question: Replacement evidence question.
+         *         backend_scope: Search backend scope.
+         *         search_effort: Acquisition effort rung.
+         *         analysis_depth: Analysis component and budget rung.
+         *         steering_mode: Check-in cadence for the run.
+         *         screening_criteria: Replacement inclusion/exclusion criteria.
+         *         published_after: Lower publication-date bound (`YYYY-MM-DD`), or
+         *             empty to clear.
+         *         published_before: Upper publication-date bound (`YYYY-MM-DD`), or
+         *             empty to clear.
+         *         geography: Country, ISO code, or pinned group label, or empty to
+         *             clear geography filters.
+         */
+        PlanPatchIn: {
+            /** Analysis Depth */
+            analysis_depth?: ("landscape" | "standard" | "deep") | null;
+            /** Backend Scope */
+            backend_scope?: ("academic_only" | "grey_lit_only" | "both") | null;
+            /** Geography */
+            geography?: string | null;
+            /** Published After */
+            published_after?: string | null;
+            /** Published Before */
+            published_before?: string | null;
+            /** Question */
+            question?: string | null;
+            /** Screening Criteria */
+            screening_criteria?: string[] | null;
+            /** Search Effort */
+            search_effort?: ("rapid" | "standard" | "deep") | null;
+            /** Steering Mode */
+            steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
         };
         /**
          * PlanStep
@@ -2389,6 +2489,66 @@ export interface components {
             suggestions?: string[];
         };
         /**
+         * PortfolioCreate
+         * @description Inbound body for `POST /api/v1/portfolios`.
+         *
+         *     Args:
+         *         name: Portfolio display name, 1-200 characters. Outer whitespace is
+         *             stripped before the length constraint is applied.
+         *         description: Optional free-text description.
+         */
+        PortfolioCreate: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+        };
+        /**
+         * PortfolioOut
+         * @description A portfolio resource.
+         *
+         *     Args:
+         *         portfolio_id: The portfolio's identity.
+         *         name: Current display name.
+         *         description: Current description, or `None` if not set.
+         *         created_at: When the portfolio was created.
+         *         task_count: How many of the caller's active projects are assigned to
+         *             this portfolio, derived per request and never cached on the row.
+         */
+        PortfolioOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Task Count */
+            task_count: number;
+        };
+        /**
+         * PortfolioUpdate
+         * @description Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).
+         *
+         *     Args:
+         *         name: New display name, when renaming. Omit to leave unchanged.
+         *         description: New description, when changing it. Omit to leave
+         *             unchanged.
+         */
+        PortfolioUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
+        };
+        /**
          * ProgressEvent
          * @description A user-facing read-tool activity emitted before that tool runs.
          */
@@ -2432,6 +2592,12 @@ export interface components {
          *         archived_at: When the project was archived, or `None` if active.
          *         latest_run: The derived latest-run read model, or `None` before any
          *             run has been created.
+         *         portfolio_id: The portfolio this project belongs to, or `None` when it
+         *             belongs to none. Unassigned is a normal state, not an error.
+         *         source_count: How many sources this project has gathered, or `None`
+         *             when no run has started. `None` and `0` differ: `None` means the
+         *             question has not been asked yet, `0` means a run asked and found
+         *             nothing.
          */
         ProjectOut: {
             /** Archived At */
@@ -2444,6 +2610,8 @@ export interface components {
             latest_run?: components["schemas"]["LatestRun"] | null;
             /** Name */
             name: string;
+            /** Portfolio Id */
+            portfolio_id?: string | null;
             /**
              * Project Id
              * Format: uuid
@@ -2451,6 +2619,8 @@ export interface components {
             project_id: string;
             /** Question */
             question?: string | null;
+            /** Source Count */
+            source_count?: number | null;
             /**
              * Status
              * @enum {string}
@@ -2470,10 +2640,14 @@ export interface components {
          *         name: New display name, when renaming. Omit to leave unchanged.
          *         question: New evidence question, when changing it. Omit to leave
          *             unchanged.
+         *         portfolio_id: Portfolio to assign this project to, or an explicit
+         *             `null` to unassign it. Omit to leave the assignment unchanged.
          */
         ProjectUpdate: {
             /** Name */
             name?: string | null;
+            /** Portfolio Id */
+            portfolio_id?: string | null;
             /** Question */
             question?: string | null;
         };
@@ -2658,6 +2832,9 @@ export interface components {
          *     Args:
          *         title: Section title.
          *         role: Section role (determines page position).
+         *         nav_label: Short scannable name for the contents list, or `None` for
+         *             an artefact produced before the label existed. Absence is a normal
+         *             state: the client falls back to a shortened title.
          *         blocks: The section's prose blocks, in order.
          *         summary: Verified summary for a single-block section, if available.
          *         summary_status: Summary production state for a single-block section.
@@ -2667,6 +2844,8 @@ export interface components {
             blocks?: components["schemas"]["BlockOut"][];
             /** Focus */
             focus?: string | null;
+            /** Nav Label */
+            nav_label?: string | null;
             /**
              * Role
              * @enum {string}
@@ -3206,6 +3385,137 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_portfolios_api_v1_portfolios_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_PortfolioOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_portfolio_api_v1_portfolios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_portfolio_api_v1_portfolios__portfolio_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_portfolio_api_v1_portfolios__portfolio_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioOut"];
                 };
             };
             /** @description Validation Error */
@@ -3907,6 +4217,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_plan_api_v1_projects__project_id__plan_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanPatchIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -24,7 +24,7 @@ function ReconnectingContent() {
   }, []);
 
   return (
-    <div role="status" className="border-b border-yellow bg-yellow-tint px-4 py-2 text-caption text-navy">
+    <div role="status" className="border-b border-yellow bg-yellow-tint px-4 py-2 text-body text-navy">
       Reconnecting to live updates…{stale ? " Updates may be stale." : ""}
     </div>
   );

@@ -62,7 +62,7 @@ export function orderThemes<T extends { size: number }>(themes: T[]): T[] {
 }
 
 /** One tooltip style across every landscape chart (token colours, 0 radius). */
-function ChartTooltip({
+export function DistributionChartTooltip({
   active,
   payload,
   label,
@@ -127,7 +127,7 @@ export function EvidenceDistributionChart({
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<ChartTooltip />} />
+          <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<DistributionChartTooltip />} />
           <Bar dataKey="count" fill={CHART_TOKENS.blue} isAnimationActive={false} barSize={14} />
         </BarChart>
       </ResponsiveContainer>
@@ -165,7 +165,7 @@ export function PublicationYearsChart({
             axisLine={false}
             tickLine={false}
           />
-          <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<ChartTooltip />} />
+          <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<DistributionChartTooltip />} />
           <Bar dataKey="count" fill={CHART_TOKENS.blue} isAnimationActive={false} maxBarSize={36} />
         </BarChart>
       </ResponsiveContainer>

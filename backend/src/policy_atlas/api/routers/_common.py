@@ -6,11 +6,16 @@ import uuid
 from typing import Any
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, ProjectOut, RunOut
-from policy_atlas.core.schema import capability_run, project
+from policy_atlas.core.schema import (
+    capability_run,
+    portfolio,
+    project,
+    project_source_snapshot,
+)
 
 
 def owned_project(
@@ -49,6 +54,36 @@ def owned_project(
     return row
 
 
+def owned_portfolio(
+    conn: Connection,
+    *,
+    portfolio_id: uuid.UUID,
+    user_id: str,
+) -> RowMapping:
+    """Return an owned portfolio or the contract's indistinguishable 404.
+
+    Args:
+        conn: Open database connection.
+        portfolio_id: Requested portfolio identity.
+        user_id: Authenticated owner's subject.
+
+    Returns:
+        The owned portfolio row.
+
+    Raises:
+        HTTPException: Always 404 for missing or cross-owner rows, so an
+            unknown portfolio and someone else's are indistinguishable.
+    """
+    row = conn.execute(
+        select(portfolio)
+        .where(portfolio.c.portfolio_id == portfolio_id)
+        .where(portfolio.c.owner_user_id == user_id)
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return row
+
+
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:
     """Project one capability-run row into its public contract shape."""
     return RunOut(
@@ -71,12 +106,23 @@ def project_out(conn: Connection, row: RowMapping | dict[str, Any]) -> ProjectOu
         .limit(1)
     ).mappings().one_or_none()
     latest_out = None
+    source_count = None
     if latest is not None:
         latest_out = LatestRun(
             capability_run_id=latest["capability_run_id"],
             status=latest["status"],
             started_at=latest["started_at"],
             ended_at=latest["ended_at"],
+        )
+        # Same population the funnel's ``found`` counts. Derived per read and
+        # only once a run exists: before that, ``None`` says the question has
+        # not been asked, which is not the same as a run that found nothing.
+        source_count = int(
+            conn.execute(
+                select(func.count())
+                .select_from(project_source_snapshot)
+                .where(project_source_snapshot.c.project_id == row["project_id"])
+            ).scalar_one()
         )
     return ProjectOut(
         project_id=row["project_id"],
@@ -87,4 +133,6 @@ def project_out(conn: Connection, row: RowMapping | dict[str, Any]) -> ProjectOu
         updated_at=row["updated_at"],
         archived_at=row["archived_at"],
         latest_run=latest_out,
+        portfolio_id=row["portfolio_id"],
+        source_count=source_count,
     )

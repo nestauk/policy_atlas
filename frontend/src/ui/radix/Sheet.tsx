@@ -45,7 +45,7 @@ export function SheetContent({
             {description === undefined ? (
               <VisuallyHiddenDescription />
             ) : (
-              <DialogPrimitive.Description className="mt-1 text-caption text-grey">
+              <DialogPrimitive.Description className="mt-1 text-body text-grey">
                 {description}
               </DialogPrimitive.Description>
             )}

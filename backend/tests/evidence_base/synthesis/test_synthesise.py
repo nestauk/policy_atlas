@@ -47,6 +47,7 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     UnspannedAssertionWire,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+    NAV_LABEL_MAX,
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
@@ -868,6 +869,83 @@ def test_section_budget_validator_never_exceeds_the_global_section_cap() -> None
         section_budget=SECTION_CAP + 10,
     )
     assert reasons == [f"section_count_out_of_range: 1..{SECTION_CAP}"]
+
+
+def test_section_validation_accepts_a_valid_nav_label() -> None:
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title="Evidence aspect",
+                focus="A focused evidence aspect.",
+                nav_label="Short label",
+            )
+        ]
+    )
+    sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert normalisations == []
+    assert [section.nav_label for section in sections] == ["Short label"]
+
+
+def test_section_validation_accepts_a_nav_label_at_the_max_boundary() -> None:
+    nav_label = "a" * NAV_LABEL_MAX
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title="Evidence aspect",
+                focus="A focused evidence aspect.",
+                nav_label=nav_label,
+            )
+        ]
+    )
+    sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert normalisations == []
+    assert sections[0].nav_label == nav_label
+
+
+def test_section_validation_rejects_an_over_long_nav_label_without_truncating() -> None:
+    """rev 8 M5: nav_label is rejected at the boundary, never clamped."""
+    nav_label = "a" * (NAV_LABEL_MAX + 1)
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title="Evidence aspect",
+                focus="A focused evidence aspect.",
+                nav_label=nav_label,
+            )
+        ]
+    )
+    _sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert len(reasons) == 1
+    assert "nav_label_too_long" in reasons[0]
+    assert normalisations == []
+
+
+def test_section_validation_allows_an_omitted_nav_label() -> None:
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(title="Evidence aspect", focus="A focused evidence aspect.")
+        ]
+    )
+    sections, reasons, _normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert sections[0].nav_label is None
+
+
+def test_section_validation_rejects_a_blank_nav_label() -> None:
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title="Evidence aspect",
+                focus="A focused evidence aspect.",
+                nav_label="   ",
+            )
+        ]
+    )
+    _sections, reasons, _normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert len(reasons) == 1
+    assert "nav_label_invalid" in reasons[0]
 
 
 def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None:

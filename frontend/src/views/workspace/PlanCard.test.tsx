@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../api/gen/types";
@@ -14,6 +15,7 @@ vi.mock("../../api/queries", () => ({
 
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
@@ -52,36 +54,33 @@ function renderCard(overrides: Partial<Parameters<typeof PlanCard>[0]> = {}) {
   return render(<PlanCard projectId={PROJECT_ID} runActive={false} {...overrides} />);
 }
 
-describe("PlanCard — the only start surface", () => {
+describe("PlanCard — ready actions", () => {
   it("renders null when the plan isn't approved", () => {
     mockPlanQuery({ plan: basePlan(), status: "draft", version: 1 });
     const { container } = renderCard();
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders null when there is no plan at all", () => {
-    mockPlanQuery(undefined);
-    const { container } = renderCard();
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("renders null when the plan is approved but not yet ready", () => {
-    mockPlanQuery({ plan: basePlan({ ready: false }), status: "approved", version: 1 });
-    const { container } = renderCard();
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("renders the card with the Start affordance when approved and ready", () => {
+  it("renders Review the plan and Start search when approved and ready", () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
     renderCard();
-    expect(screen.getByTestId("plan-card")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Start the analysis/ })).toBeInTheDocument();
+    expect(screen.getByTestId("plan-ready-actions")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start search" }).className).toContain("bg-green");
   });
 
-  it("hides the Start footer once the approval has been consumed by a run", () => {
+  it("calls onReviewPlan when Review the plan is clicked", async () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
-    renderCard({ started: true });
-    expect(screen.getByTestId("plan-card")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Start the analysis/ })).toBeNull();
+    const onReviewPlan = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ onReviewPlan });
+    await user.click(screen.getByRole("button", { name: "Review the plan" }));
+    expect(onReviewPlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("withdraws once the approval has been consumed by a run", () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    const { container } = renderCard({ started: true });
+    expect(container).toBeEmptyDOMElement();
   });
 });

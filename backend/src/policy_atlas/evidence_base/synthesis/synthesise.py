@@ -72,6 +72,7 @@ from policy_atlas.evidence_base.synthesis.summary_prompts import (
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     FORBIDDEN_SECTION_TITLES,
     KEY_FINDINGS_PROMPT_VERSION,
+    NAV_LABEL_MAX,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
     SECTION_TITLE_MAX,
@@ -345,6 +346,10 @@ class SectionSpec:
     title: str
     focus: str
     group_ids: list[str] = field(default_factory=list)
+    # Short contents-list label (task 032 G6). Optional: artefacts produced
+    # before that slice carry none, and the client falls back to a shortened
+    # title rather than treating absence as an error.
+    nav_label: str | None = None
     # Composition role (ADR 0015 §8): "standard" for proposed/directive
     # sections, "conclusions" for the code-injected foot section, "key_findings"
     # for the final key-findings pass. Roll-up only — never a block-table column.
@@ -1779,6 +1784,21 @@ def _validate_sections(
                 f"sections[{index}].focus_invalid: focus must be a non-empty "
                 "string with no control characters"
             )
+        nav_label = section.nav_label
+        if nav_label is not None:
+            if has_control_character(nav_label) or not nav_label.strip():
+                reasons.append(
+                    f"sections[{index}].nav_label_invalid: nav_label must be a "
+                    "non-empty string with no control characters, or omitted"
+                )
+            elif len(nav_label) > NAV_LABEL_MAX:
+                # Rejected, not clamped: unlike an overlong title this is a
+                # navigation label, and a mid-word stub is worse to scan than
+                # the shortened title the client would otherwise fall back to.
+                reasons.append(
+                    f"sections[{index}].nav_label_too_long: nav_label must be "
+                    f"at most {NAV_LABEL_MAX} characters"
+                )
         group_ids = list(section.group_ids)
         if grouping_group_ids is None and group_ids:
             group_ids = []
@@ -1792,7 +1812,9 @@ def _validate_sections(
                     f"{GROUP_ID_EXPECTED_FORM}, copy ids exactly from the grouping "
                     "records, or omit group_ids"
                 )
-        parsed.append(SectionSpec(title=title, focus=focus, group_ids=group_ids))
+        parsed.append(
+            SectionSpec(title=title, focus=focus, group_ids=group_ids, nav_label=nav_label)
+        )
     return parsed, reasons, normalisations
 
 
@@ -1802,6 +1824,7 @@ def _sections_from_directive(sections: list[dict[str, Any]]) -> list[SectionSpec
             title=cast("str", section["title"]),
             focus=cast("str", section["focus"]),
             group_ids=list(cast("list[str]", section.get("group_ids", []))),
+            nav_label=cast("str | None", section.get("nav_label")),
         )
         for section in sections
     ]
@@ -4114,6 +4137,7 @@ def _blocks_rollup(
     return {
         "title": section.title,
         "focus": section.focus,
+        "nav_label": section.nav_label,
         "role": section.role,
         "block_id": block_id,
         "group_ids": section.group_ids,

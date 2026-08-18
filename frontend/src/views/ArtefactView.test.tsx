@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialRunStreamState } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { AnnotatedProse, highlightParts, LiveArtefactBody, orderSections } from "./ArtefactView";
+import { AnnotatedProse, highlightParts, LiveArtefactBody, orderSections, showLiveArtefact } from "./ArtefactView";
 
 describe("highlightParts", () => {
   it("finds an exact quote", () => {
@@ -61,23 +61,25 @@ function streamWith(
   const state = createInitialRunStreamState();
   return {
     ...state,
-    run: { id: "r1", status: runStatus },
+    run: { id: "r1", status: runStatus, startedAt: "2026-07-21T10:00:00Z" },
     liveSections: Object.fromEntries(sections.map((section) => [section.index, section])),
   };
 }
 
+const LIVE_SECTIONS: LiveSection[] = [
+  { index: 0, title: "Key findings", focus: "Headline claims.", state: "planned" },
+  { index: 1, title: "Costs", focus: "What it costs.", state: "writing" },
+  {
+    index: 2,
+    title: "Effects <script>alert(1)</script>",
+    focus: "",
+    state: "filled",
+    prose: "Prose arrived <img src=x onerror=alert(1)> safely.",
+  },
+];
+
 describe("LiveArtefactBody", () => {
-  const sections: LiveSection[] = [
-    { index: 0, title: "Key findings", focus: "Headline claims.", state: "planned" },
-    { index: 1, title: "Costs", focus: "What it costs.", state: "writing" },
-    {
-      index: 2,
-      title: "Effects <script>alert(1)</script>",
-      focus: "",
-      state: "filled",
-      prose: "Prose arrived <img src=x onerror=alert(1)> safely.",
-    },
-  ];
+  const sections = LIVE_SECTIONS;
 
   it("renders planned/writing/filled states in place while running", () => {
     render(<LiveArtefactBody stream={streamWith(sections, "running")} />);
@@ -196,5 +198,48 @@ describe("AnnotatedProse", () => {
     expect(spans[0]).toHaveTextContent("Plain");
     // The prose renders complete despite the dropped spans.
     expect(screen.getByText(/stays whole/)).toBeInTheDocument();
+  });
+});
+
+describe("showLiveArtefact", () => {
+  const latest = {
+    capability_run_id: "r1",
+    status: "succeeded" as const,
+    started_at: "2026-07-21T10:00:00Z",
+    ended_at: "2026-07-21T10:12:00Z",
+  };
+
+  it("does not swap to LiveArtefactBody while replaying a succeeded run", () => {
+    const stream = streamWith(LIVE_SECTIONS, "running");
+    expect(showLiveArtefact(stream, latest)).toBe(false);
+  });
+
+  it("still shows the live body for an in-flight run", () => {
+    const stream = streamWith(LIVE_SECTIONS, "running");
+    expect(
+      showLiveArtefact(stream, {
+        ...latest,
+        status: "running",
+        ended_at: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("still shows the live body when a new run id is streaming", () => {
+    const stream = streamWith(LIVE_SECTIONS, "running");
+    expect(
+      showLiveArtefact(stream, { ...latest, capability_run_id: "r-previous" }),
+    ).toBe(true);
+  });
+
+  it("keeps the terminal-partial view after a failed run", () => {
+    const stream = streamWith(LIVE_SECTIONS, "failed");
+    expect(
+      showLiveArtefact(stream, {
+        ...latest,
+        status: "failed",
+        ended_at: "2026-07-21T10:12:00Z",
+      }),
+    ).toBe(true);
   });
 });

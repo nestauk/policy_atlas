@@ -28,7 +28,7 @@ export function Tooltip({
           sideOffset={6}
           className={cn(
             "z-50 max-w-sm border border-line-2 bg-paper px-3 py-2",
-            "text-caption text-ink shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
+            "text-meta text-ink shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
             className,
           )}
           {...props}

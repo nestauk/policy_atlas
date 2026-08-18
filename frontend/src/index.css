@@ -72,9 +72,15 @@
   --text-heading--line-height: 1.3;
   --text-title: 30px; /* page titles */
   --text-title--line-height: 1.2;
+  --text-display: 36px; /* the one statement per page: report and entry titles */
+  --text-display--line-height: 1.15;
 
-  /* prose line-length cap (strand 1): ~66-72ch wherever paragraphs render */
-  --container-prose-measure: 72ch;
+  /* Prose line-length cap. Retuned from 72ch to the prototype's 44em (032
+     G15): at the 16px floor, 72ch runs wider than a comfortable read. */
+  --container-prose-measure: 44em;
+
+  /* Uppercase label tracking, matching the prototype (032 G15). */
+  --tracking-label: 0.06em;
 
   /* Nesta core palette */
   --color-blue: #0000ff; /* hero — one hero colour per layout */
@@ -144,11 +150,11 @@
   );
 }
 
-/* Growing-underline nav state (brand token: current page fills its
-   container width with a Nesta-blue underline). */
+/* Growing-underline nav state (prototype chrome: 3px Nesta-blue rule
+   under the active item). */
 @utility nav-underline {
-  padding-bottom: 3px;
-  border-bottom: 2px solid transparent;
+  padding-bottom: 4px;
+  border-bottom: 3px solid transparent;
 }
 @utility nav-underline-on {
   border-bottom-color: var(--color-blue);
@@ -218,16 +224,31 @@
   }
 }
 
-/* Print stylesheet (027 strand 14) — the evidence-base page only. Honest
-   browser-print behaviour: no dedicated share/export CTA (that seam stays
-   deferred), just what's already on screen made print-legible. */
+/* Print stylesheet (027 strand 14, 032 download): the evidence-base page
+   via the browser print dialog (Save as PDF). Chrome outside the paper is
+   hidden; the app-shell scroll lock is released so the full report prints. */
 @media print {
+  html,
+  body,
+  #root {
+    height: auto !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+  }
   nav,
-  [data-radix-popper-content-wrapper] {
+  footer,
+  aside,
+  [data-radix-popper-content-wrapper],
+  .print-hide {
     display: none !important;
   }
-  .artefact-page button:not(.citation-marker) {
-    display: none !important;
+  .overflow-hidden,
+  .overflow-y-auto,
+  .h-svh,
+  .min-h-0 {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
   body {
     background: #fff !important;
@@ -256,9 +277,15 @@
 @layer base {
   html {
     scrollbar-gutter: stable;
+    background: var(--color-ground);
+  }
+  body,
+  #root {
+    min-height: 100svh;
+    width: 100%;
+    background: var(--color-ground);
   }
   body {
-    background: var(--color-ground);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;

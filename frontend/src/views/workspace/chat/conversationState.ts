@@ -1,10 +1,36 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
+import type { components } from "../../../api/gen/types";
 import { queryKeys, useApiClient } from "../../../api/queries";
 
+type ConversationOut = components["schemas"]["ConversationOut"];
+type ConversationListPage = components["schemas"]["Page_ConversationListItemOut_"];
+
 const OPEN_TABS_PREFIX = "policy-atlas.open-chat-tabs.";
+
+/** URL token for the planning thread in the chat overlay (`?chat=planning`)
+ *  when the project has no planning-conversation row yet. */
+export const PLANNING_TAB_ID = "planning";
+
+/** The planning conversation to select in the overlay strip — the newest
+ *  planning row, or `PLANNING_TAB_ID` when none exists yet. */
+export function planningConversationId(
+  rows: ReadonlyArray<{ id: string; kind: string }>,
+): string {
+  return rows.find((row) => row.kind === "planning")?.id ?? PLANNING_TAB_ID;
+}
+
+/** True when the overlay is showing the planning thread, not a follow-up chat. */
+export function isPlanningConversation(
+  conversationId: string | null,
+  rows: ReadonlyArray<{ id: string; kind: string }>,
+): boolean {
+  if (conversationId === null) return false;
+  if (conversationId === PLANNING_TAB_ID) return true;
+  return rows.find((row) => row.id === conversationId)?.kind === "planning";
+}
 
 /** Read and update the URL-addressable active conversation.
  *
@@ -89,9 +115,14 @@ export function useConversationMutations(projectId: string) {
       body: entryArtefactId === null ? {} : { entry_artefact_id: entryArtefactId },
     });
     if (data === undefined) throw error;
+    // Write the row into the list cache before invalidate-refetch, or the
+    // tab strip filters it out (id in session storage, not yet in `data`)
+    // and the composer still sends against a conversation the strip doesn't
+    // show.
+    seedCreatedConversation(queryClient, projectId, data);
     refresh();
     return data;
-  }, [client, projectId, refresh]);
+  }, [client, projectId, queryClient, refresh]);
 
   const archive = useCallback(async (conversationId: string) => {
     const { data, error } = await client.POST("/api/v1/conversations/{conversation_id}/archive", {
@@ -123,6 +154,23 @@ export function useConversationMutations(projectId: string) {
   }, [client, queryClient, refresh]);
 
   return { create, archive, unarchive, update };
+}
+
+function seedCreatedConversation(
+  queryClient: QueryClient,
+  projectId: string,
+  created: ConversationOut,
+) {
+  const item = { ...created, latest_turn_preview: null };
+  queryClient.setQueriesData(
+    { queryKey: queryKeys.conversationsRoot(projectId) },
+    (current: ConversationListPage | undefined) => {
+      if (current == null || !Array.isArray(current.data)) return current;
+      if (current.data.some((row) => row.id === created.id)) return current;
+      return { ...current, data: [item, ...current.data] };
+    },
+  );
+  queryClient.setQueryData(queryKeys.conversation(created.id), created);
 }
 
 function tabKey(projectId: string) {

@@ -11,7 +11,7 @@ import functools
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, TypedDict
+from typing import Any, Protocol, TypedDict
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -544,6 +544,36 @@ def build_graph() -> Any:
     return g.compile()
 
 
+class _HasBackendName(Protocol):
+    """Anything the scope filter can decide by ``name`` alone."""
+
+    name: str
+
+
+def scoped_search_backends[TBackend: _HasBackendName](
+    backends: list[TBackend],
+    search_backend_scope: str,
+) -> list[TBackend]:
+    """Restrict injected search backends to the plan's declared scope.
+
+    ``both`` leaves the list unchanged so test doubles with non-production
+    names keep working. ``academic_only`` keeps OpenAlex; ``grey_lit_only``
+    keeps Overton.
+
+    Args:
+        backends: Injected acquire backends, in search order.
+        search_backend_scope: Plan-declared backend scope.
+
+    Returns:
+        The backends that scope permits, preserving input order.
+    """
+    if search_backend_scope == "academic_only":
+        return [backend for backend in backends if backend.name == "openalex"]
+    if search_backend_scope == "grey_lit_only":
+        return [backend for backend in backends if backend.name == "overton"]
+    return list(backends)
+
+
 def _default_search_backends(search_backend_scope: str) -> list[SearchBackend]:
     """Return the default (empty) search-backend set for a scope.
 
@@ -671,10 +701,13 @@ def run_harness(
         "project_id": project_id,
         "run_id": run_id,
         "provider": provider,
-        "search_backends": (
-            search_backends
-            if search_backends is not None
-            else _default_search_backends(config.search_backend_scope)
+        "search_backends": scoped_search_backends(
+            (
+                search_backends
+                if search_backends is not None
+                else _default_search_backends(config.search_backend_scope)
+            ),
+            config.search_backend_scope,
         ),
         "search_generation_backend": (
             search_generation_backend

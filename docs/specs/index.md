@@ -20,8 +20,9 @@ When two of them disagree on such an area, the lower number wins (ratified from 
 4. [evidence-base-ux-handoff.md](sources/evidence-base-ux/evidence-base-ux-handoff.md) — locked product decisions + repo-safe constraints; overrides visual shorthand below on those points.
 5. [evidence-base-wireframes.html](sources/evidence-base-ux/evidence-base-wireframes.html) — static UX reference; product intent only, never a schema/contract source.
 6. [nesta-brand-tokens.md](sources/evidence-base-ux/nesta-brand-tokens.md) + [hifi.css](sources/evidence-base-ux/hifi.css) — visual language / token cues.
+7. [task-lifecycle-ux/](sources/task-lifecycle-ux/README.md) — the 2026-08-17 clickable prototype for the task-lifecycle IA (workspace level + the five task stages). Product intent only, never a schema/contract source; it contains outputs the backend deliberately does not produce. Read its README for how to unpack it.
 
-Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6).
+Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7).
 
 ## Distilled specs in this repo
 

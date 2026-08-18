@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "../../store";
-import { Composer, presentRunDecisions, threadInputs } from "./PlanningPane";
+import { Composer, planningComposerPlaceholder, presentRunDecisions, threadInputs } from "./PlanningPane";
 
 function turn(index: number, createdAt: string): PlanningThreadTurn {
   return {
@@ -121,17 +121,40 @@ describe("Composer", () => {
     renderComposer({
       disabled: true,
       sendDisabled: true,
-      placeholder: "Replanning is available after the run",
+      placeholder: "Replanning unlocks when this run finishes.",
     });
 
     const textarea = screen.getByLabelText("Message the planner");
     expect(textarea).toBeDisabled();
-    expect(textarea).toHaveAttribute("placeholder", "Replanning is available after the run");
+    expect(textarea).toHaveAttribute("placeholder", "Replanning unlocks when this run finishes.");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
   it("shows the Enter/Shift+Enter hint line", () => {
     renderComposer();
     expect(screen.getByText("Enter to send · Shift+Enter for a new line")).toBeInTheDocument();
+  });
+});
+
+describe("planningComposerPlaceholder", () => {
+  it("matches the run state", () => {
+    expect(planningComposerPlaceholder(undefined)).toBe(
+      "Describe the policy question you need evidence for.",
+    );
+    expect(planningComposerPlaceholder(undefined, true)).toBe(
+      "Suggest changes here, or edit directly in the plan.",
+    );
+    expect(planningComposerPlaceholder("running")).toBe(
+      "Replanning unlocks when this run finishes.",
+    );
+    expect(planningComposerPlaceholder("paused")).toBe(
+      "Replanning unlocks when this run finishes.",
+    );
+    expect(planningComposerPlaceholder("succeeded", true)).toBe(
+      "Describe a change to the plan to run again.",
+    );
+    expect(planningComposerPlaceholder("failed")).toBe(
+      "Describe what to change, then start again.",
+    );
   });
 });

@@ -21,6 +21,7 @@ from policy_atlas.runtime.planner import (
 )
 from policy_atlas.runtime.planner_prompt import (
     PLANNER_PROMPT_VERSION,
+    PLANNER_SYSTEM_PROMPT,
     PlanDraftWire,
     PlannerTurnWire,
 )
@@ -46,9 +47,26 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    # task 028 fork A: planner_v6 (sequential parts, outcome-first
-    # thoroughness, steer-point walk deleted) succeeds orchestrator_v1_planning.
-    assert PLANNER_PROMPT_VERSION == "planner_v6"
+    # planner_v8: Analysis level screen words; report not review; search caps.
+    assert PLANNER_PROMPT_VERSION == "planner_v8"
+
+
+def test_planner_prompt_plain_language_and_ready_update() -> None:
+    assert "## How to talk" in PLANNER_SYSTEM_PROMPT
+    assert "Never name internals" in PLANNER_SYSTEM_PROMPT
+    assert 'Never say "nothing runs until you start it"' in PLANNER_SYSTEM_PROMPT
+    assert "on an update" in PLANNER_SYSTEM_PROMPT
+
+
+def test_planner_prompt_thoroughness_screen_words_and_caps() -> None:
+    assert 'label "Standard report"' in PLANNER_SYSTEM_PROMPT
+    assert 'label "Detailed report"' in PLANNER_SYSTEM_PROMPT
+    assert "up to 50 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "up to 100 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "up to 200 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "Evidence overview / Full-text synthesis / Findings synthesis" in PLANNER_SYSTEM_PROMPT
+    assert "Standard review" not in PLANNER_SYSTEM_PROMPT
+    assert "Detailed review" not in PLANNER_SYSTEM_PROMPT
 
 
 def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:

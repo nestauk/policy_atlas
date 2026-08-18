@@ -43,7 +43,9 @@ describe("Nav", () => {
     render(<RouterProvider router={router} />);
     const active = screen.getByRole("link", { name: "Workspace" });
     const inactive = screen.getByRole("link", { name: "Sources" });
-    expect(active.className).toContain("nav-underline-on");
-    expect(inactive.className).not.toContain("nav-underline-on");
+    expect(active.className).toContain("border-blue");
+    expect(inactive.className).not.toContain("border-blue");
+    expect(screen.getByRole("navigation").className).toContain("w-full");
+    expect(screen.getByRole("navigation").innerHTML).not.toContain("max-w-[1180px]");
   });
 });

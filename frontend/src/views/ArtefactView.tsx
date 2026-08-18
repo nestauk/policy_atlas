@@ -5,6 +5,9 @@ import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
+import { mostRelevantSources, sectionNavLabel } from "./artefactPresentation";
+import type { TopSource } from "./artefactPresentation";
+import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -14,12 +17,15 @@ import { Card } from "../ui/brand/Card";
 import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
+import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
 import {
   ContentsSidebar,
   GatheredSection,
   type OutlineSection,
   SectionDisclosure,
   sectionAnchor,
+  useOpenWhenNavigated,
+  useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
@@ -27,6 +33,7 @@ import { addOpenChatTab, useActiveConversation, useConversationMutations } from 
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
+type LatestRun = components["schemas"]["LatestRun"];
 
 // Structural view of the artefact's blocks/claims: the generated schema
 // renders `span` as `number[]` in the inlined response type, so the view
@@ -67,20 +74,18 @@ interface SectionLike {
    citation/gap — reasoning · pattern/theme · source-check, styled per type
    with inline chips. Unknown types render as plain prose (honest absence). */
 
-/** Demo-validated span styling (EvidenceBase.tsx SPAN_STYLE): typed dotted/
- *  dashed underlines with a hover tint — the annotation layer lives IN the
- *  text and the whole span is the affordance. */
-const CITATION_TINT = "border-b border-dotted border-blue/30 hover:border-blue/60 hover:bg-blue-tint-2";
+/** Claim-span hover tint. The annotation layer lives in the text and the
+ *  whole span is the affordance; rest state is unmarked so the report body
+ *  stays uncluttered (no dotted underlines). */
+const CITATION_TINT = "hover:bg-blue-tint-2";
 
 const SPAN_STYLE: Partial<Record<ClaimLike["claim_type"], string>> = {
-  // Deliberately quiet (owner, 2026-07-29): the underline is a hint, not a
-  // highlight — muted tones at rest, the tint only on hover.
   // reasoning + unspanned_assertion carry no user-facing detail (owner,
   // 2026-07-29): they render as plain prose — see UNMARKED_TYPES.
   citation: CITATION_TINT,
-  gap: "border-b border-dotted border-yellow/60 hover:border-yellow hover:bg-yellow-tint",
-  pattern: "border-b border-dotted border-violet/50 hover:border-violet hover:bg-blue-tint-2",
-  theme: "border-b border-dotted border-violet/50 hover:border-violet hover:bg-blue-tint-2",
+  gap: "hover:bg-yellow-tint",
+  pattern: "hover:bg-blue-tint-2",
+  theme: "hover:bg-blue-tint-2",
 };
 
 /** The claim-span affordance's full class string for the report's "citation"
@@ -292,7 +297,7 @@ export function CitationProvenanceBlock({
   );
   return (
     <div className="border border-line p-4">
-      <p className="text-meta font-bold leading-snug text-blue">
+      <p className="text-body font-bold leading-snug text-blue">
         [{n ?? "—"}]{" "}
         {sourceRef !== null ? (
           <button
@@ -307,12 +312,12 @@ export function CitationProvenanceBlock({
         )}
       </p>
       {meta.length > 0 && (
-        <p className="mt-0.5 text-caption text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
+        <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
-      <div className="mt-3 space-y-2 text-caption leading-relaxed">
+      <div className="mt-3 space-y-2 text-body leading-relaxed">
         {context.isPending && (
-          <p role="status" className="animate-pulse text-caption text-grey">
+          <p role="status" className="animate-pulse text-body text-grey">
             Loading surrounding context…
           </p>
         )}
@@ -351,7 +356,7 @@ export function AppraisalChip({ label, evidenceType }: { label: string; evidence
       tone="blue"
       label={scrub(label)}
       content={
-        <span className="text-caption">
+        <span className="text-meta">
           {typeof evidenceType === "string"
             ? `${scrub(label)} evidence strength — appraised from the document type: ${scrub(evidenceType)}.`
             : APPRAISAL_FALLBACK_HINT}
@@ -389,7 +394,7 @@ function CitationContext({
               tone="soft"
               label={TIER_LABEL[tier]}
               content={
-                <div className="max-w-[280px] space-y-1 text-caption">
+                <div className="max-w-[280px] space-y-1 text-meta">
                   <p>{TIER_TEXT[tier]}</p>
                   {typeof citation.grounding_rationale === "string" &&
                     citation.grounding_rationale !== "" && (
@@ -440,14 +445,14 @@ export function ProvenanceSheet({
             .map((text, index) => (
               <p
                 key={index}
-                className="border-l-2 border-l-blue pl-3 text-meta font-medium leading-snug text-navy"
+                className="border-l-2 border-l-blue pl-3 text-body font-medium leading-snug text-navy"
               >
                 {scrub(text)}
               </p>
             ))}
           {extras}
           {children}
-          <p className="border-t border-line pt-3 text-caption text-grey">
+          <p className="border-t border-line pt-3 text-body text-grey">
             Every claim links to the exact passage it came from.
           </p>
         </div>
@@ -476,13 +481,13 @@ function ClaimPanel({
   const extras = (
     <>
       {claim.claim_type === "gap" && (
-        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-meta leading-relaxed text-navy">
+        <div className="border-l-[3px] border-yellow bg-yellow-tint p-3 text-body leading-relaxed text-navy">
           <p>
             This is a recorded evidence gap: the analysis looked and found the base thin here.
             Gaps are part of the answer, never glossed over.
           </p>
           {gap !== null && (
-            <div className="mt-1.5 space-y-0.5 text-caption text-grey">
+            <div className="mt-1.5 space-y-0.5 text-body text-grey">
               {typeof gap.grade === "string" && GAP_GRADE_TEXT[gap.grade] !== undefined && (
                 <p>{GAP_GRADE_TEXT[gap.grade]}</p>
               )}
@@ -507,19 +512,19 @@ function ClaimPanel({
       )}
       {claim.claim_type !== "gap" &&
         claim.claim_type !== "citation" &&
-        hint !== undefined && <p className="text-caption text-grey">{hint}</p>}
+        hint !== undefined && <p className="text-body text-grey">{hint}</p>}
       {(claim.theme?.items?.length ?? 0) > 0 && (
         <div className="border-l-[3px] border-violet bg-blue-tint-2 p-3">
           {(claim.theme?.items ?? []).map((item, index) => (
             <div key={index} className={index > 0 ? "mt-2.5" : undefined}>
-              <p className="text-meta font-semibold text-navy">{scrub(item.name ?? "")}</p>
+              <p className="text-body font-semibold text-navy">{scrub(item.name ?? "")}</p>
               {typeof item.description === "string" && item.description !== "" && (
-                <p className="mt-0.5 text-caption leading-relaxed text-navy">
+                <p className="mt-0.5 text-body leading-relaxed text-navy">
                   {scrub(item.description)}
                 </p>
               )}
               {(item.sources?.length ?? 0) > 0 ? (
-                <details className="mt-0.5 text-caption text-grey">
+                <details className="mt-0.5 text-body text-grey">
                   <summary className="cursor-pointer hover:text-navy">
                     Identified across {item.sources?.length} source
                     {(item.sources?.length ?? 0) === 1 ? "" : "s"} — show them
@@ -541,7 +546,7 @@ function ClaimPanel({
                   </ul>
                 </details>
               ) : typeof item.size === "number" ? (
-                <p className="mt-0.5 text-caption text-grey">
+                <p className="mt-0.5 text-body text-grey">
                   Identified across {item.size} sources
                 </p>
               ) : null}
@@ -549,7 +554,7 @@ function ClaimPanel({
                 <p className="mt-0.5 text-caption">
                   <Link
                     className="font-semibold text-blue hover:underline"
-                    to={`/projects/${projectId}/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
+                    to={`/projects/${projectId}/sources/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
                     onClick={onClose}
                   >
                     See the findings in this theme
@@ -559,14 +564,14 @@ function ClaimPanel({
             </div>
           ))}
           {typeof claim.theme?.base === "string" && claim.theme.base !== "" && (
-            <p className="mt-2 border-t border-line pt-2 text-caption text-grey">
+            <p className="mt-2 border-t border-line pt-2 text-body text-grey">
               Basis: {scrub(claim.theme.base)}
             </p>
           )}
         </div>
       )}
       {claim.weakly_grounded === true && (
-        <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-meta text-navy">
+        <p className="border-l-[3px] border-orange bg-yellow-tint p-3 text-body text-navy">
           The grounding review could not fully verify this claim against its source — read it
           with that in mind.
         </p>
@@ -613,7 +618,7 @@ export function CitationTooltipBody({
   // lives in the provenance sheet's chip tooltip, never on the hover. A JSX
   // slot here is what let the chat hover drift twice (owner, 2026-08-12).
   return (
-    <div className="max-w-[260px] space-y-1.5 text-caption leading-snug">
+    <div className="max-w-[260px] space-y-1.5 text-meta leading-snug">
       <p className="font-semibold text-navy">{scrub(sourceTitle)}</p>
       {quote !== "" && (
         <p className="italic text-grey">
@@ -622,7 +627,7 @@ export function CitationTooltipBody({
         </p>
       )}
       {statusLine != null && statusLine !== "" && <p className="text-grey">{statusLine}</p>}
-      <p className="text-caption text-grey">Click to view in context</p>
+      <p className="text-meta text-grey">Click to view in context</p>
     </div>
   );
 }
@@ -653,7 +658,7 @@ function ClaimSpan({
       />
     ) : (claim.claim_type === "theme" || claim.claim_type === "pattern") &&
       (claim.theme?.items?.length ?? 0) > 0 ? (
-      <div className="max-w-[260px] space-y-1 text-caption leading-snug">
+      <div className="max-w-[260px] space-y-1 text-meta leading-snug">
         {(claim.theme?.items ?? []).slice(0, 3).map((item, index) => (
           <div key={index}>
             <p className="font-semibold text-navy">Theme: {scrub(item.name ?? "")}</p>
@@ -661,23 +666,23 @@ function ClaimSpan({
               <p className="text-grey">{scrub(item.description)}</p>
             )}
             {typeof item.size === "number" && (
-              <p className="text-caption text-grey">{item.size} sources</p>
+              <p className="text-meta text-grey">{item.size} sources</p>
             )}
           </div>
         ))}
-        <p className="text-caption text-grey">Click for detail</p>
+        <p className="text-meta text-grey">Click for detail</p>
       </div>
     ) : claim.claim_type === "gap" ? (
-      <div className="max-w-[260px] space-y-1 text-caption leading-snug">
+      <div className="max-w-[260px] space-y-1 text-meta leading-snug">
         <p className="font-semibold text-navy">Evidence gap</p>
         <p className="text-grey">
           {(typeof claim.gap?.grade === "string" ? GAP_GRADE_TEXT[claim.gap.grade] : undefined) ??
             TYPE_HINT.gap}
         </p>
-        <p className="text-caption text-grey">Click for the coverage detail</p>
+        <p className="text-meta text-grey">Click for the coverage detail</p>
       </div>
     ) : (
-      <span className="text-caption">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
+      <span className="text-meta">{TYPE_HINT[claim.claim_type] ?? "Claim"}</span>
     );
   const typeLabel = TYPE_LABEL[claim.claim_type];
   const citationNumbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
@@ -826,7 +831,7 @@ export function AnnotatedProse({
     }
     if (current.length > 0) bullets.push(current);
     return (
-      <div className="max-w-prose-measure text-body text-ink">
+      <div className="max-w-prose-measure text-lead text-ink">
         <ul className="list-none space-y-1.5">
           {bullets.map((bullet, bulletIndex) => (
             <li key={bulletIndex} className="flex gap-2">
@@ -849,12 +854,12 @@ export function AnnotatedProse({
           ))}
         </ul>
         {crossing.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
         {unspanned.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
@@ -863,7 +868,7 @@ export function AnnotatedProse({
   }
 
   return (
-    <div className="max-w-prose-measure text-body text-ink">
+    <div className="max-w-prose-measure text-lead text-ink">
       <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
@@ -875,7 +880,7 @@ export function AnnotatedProse({
         })}
       </p>
       {unspanned.map((claim) => (
-        <p key={claim.claim_id} className="mt-2 text-caption text-grey">
+        <p key={claim.claim_id} className="mt-2 text-lead text-grey">
           <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
@@ -919,19 +924,49 @@ export function SourceDossier({
         description="Source dossier"
       >
         {evidence.isPending && (
-          <p role="status" className="animate-pulse text-caption text-grey">
+          <p role="status" className="animate-pulse text-body text-grey">
             Loading the dossier…
           </p>
         )}
-        {dossier.isPending && <p role="status" className="animate-pulse text-caption text-grey">Loading the dossier…</p>}
-        {dossier.isError && <p role="alert" className="text-caption text-navy">This source dossier couldn't be loaded.</p>}
+        {dossier.isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
+        {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {!byId && evidence.data !== undefined && source === undefined && (
-          <p className="text-caption text-grey">This source isn't in the evidence list yet.</p>
+          <p className="text-body text-grey">This source isn't in the evidence list yet.</p>
         )}
       </SheetContent>
     </Sheet>
   );
+}
+
+/**
+ * Whether Results should show the in-progress artefact instead of the
+ * committed page.
+ *
+ * SSE replay of a finished succeeded/degraded run briefly looks like a live
+ * write (status "running", sections filling). That must not replace the
+ * persisted page. A still-running run, a new run id, and a terminal-partial
+ * failed write still take the live view.
+ *
+ * Args:
+ *   stream: Live SSE state for the project's current run.
+ *   latestRun: The project's persisted latest-run read model, if loaded.
+ *
+ * Returns:
+ *   True when `LiveArtefactBody` should render.
+ */
+export function showLiveArtefact(
+  stream: RunStreamState,
+  latestRun: LatestRun | null | undefined,
+): boolean {
+  if (Object.keys(stream.liveSections).length === 0) return false;
+  const replayingFinished =
+    latestRun?.ended_at != null &&
+    latestRun.ended_at !== "" &&
+    stream.run?.id === latestRun.capability_run_id &&
+    (latestRun.status === "succeeded" || latestRun.status === "degraded");
+  if (replayingFinished) return false;
+  return stream.run?.status === "running" || hasTerminalPartialLiveArtefact(stream);
 }
 
 /**
@@ -948,11 +983,11 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
     (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
   );
   return (
-    <main className="artefact-page anim-rise mx-auto my-8 max-w-[780px] bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
       {terminalPartial ? (
         <div
           role="alert"
-          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-caption leading-relaxed text-navy"
+          className="border-l-[3px] border-l-red bg-red-tint px-3.5 py-2.5 text-body leading-relaxed text-navy"
         >
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
@@ -962,31 +997,31 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
           </p>
         </div>
       ) : (
-        <p role="status" className="flex items-center gap-2 text-caption text-grey">
+        <p role="status" className="flex items-center gap-2 text-body text-grey">
           <span aria-hidden="true" className="anim-breathe inline-block h-2 w-2 bg-blue" />
           Being written now — sections appear as they are drafted
         </p>
       )}
       {visible.map((section) => (
         <section key={section.index} className="mt-9">
-          <h2 className="font-display text-heading font-bold text-navy">{scrub(section.title)}</h2>
+          <h2 className="text-heading font-bold text-navy">{scrub(section.title)}</h2>
           {section.state === "filled" && (section.prose ?? "") !== "" ? (
-            <p className="anim-rise mt-2 max-w-prose-measure whitespace-pre-line text-body text-ink">
+            <p className="anim-rise mt-2 max-w-prose-measure whitespace-pre-line text-lead text-ink">
               {scrub(section.prose ?? "")}
             </p>
           ) : section.state === "writing" && !terminalPartial ? (
-            <p role="status" className="anim-breathe mt-2 text-meta text-grey">
+            <p role="status" className="anim-breathe mt-2 text-body text-grey">
               Writing this section now…
             </p>
           ) : (
-            <p className="mt-2 text-meta italic text-grey">
+            <p className="mt-2 text-body italic text-grey">
               {section.focus !== "" ? scrub(section.focus) : "Waiting to be written."}
             </p>
           )}
         </section>
       ))}
       {!terminalPartial && (
-        <p className="mt-10 border-t border-line pt-4 text-caption text-grey">
+        <p className="mt-10 border-t border-line pt-4 text-body text-grey">
           Citations and source provenance are attached when the write-up completes and is
           checked.
         </p>
@@ -999,6 +1034,93 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
  *  ordering, typed annotated prose, citation ladder, shared dossier
  *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
  *  while synthesis writes. */
+/**
+ * The report's opening statement.
+ *
+ * Only a verified summary is shown as the answer: an unverified one has not
+ * passed the faithfulness check, and presenting it as the answer would be the
+ * report vouching for something it has not checked. `pending` and `failed`
+ * each say what is true instead, and the report still opens correctly at Key
+ * findings beneath.
+ */
+function AnswerCallout({
+  summary,
+  status,
+}: {
+  summary: string | null;
+  status: "pending" | "verified" | "failed" | null;
+}) {
+  if (status === "verified" && summary != null && summary !== "") {
+    return (
+      <p className="mt-4 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-4 py-3 text-lead text-ink">
+        {scrub(summary)}
+      </p>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
+        The summary is still being checked. The findings below are complete.
+      </p>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
+        A summary couldn't be verified for this report, so none is shown. The
+        findings below are complete.
+      </p>
+    );
+  }
+  return null;
+}
+
+/**
+ * The handful of sources the report leans on most.
+ *
+ * Every line is a fact the data already asserts — how often it is cited, its
+ * appraisal tier, its evidence type, which sections use it. It never says why
+ * a study matters: that is a judgement nobody made, and asserting it would be
+ * the report inventing authority for itself.
+ */
+function MostRelevantSources({
+  sources,
+  onOpenDossier,
+}: {
+  sources: TopSource[];
+  onOpenDossier: (title: string) => void;
+}) {
+  if (sources.length === 0) return null;
+  return (
+    <section className="mt-8 border-t border-line pt-6">
+      <h2 className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+        Most cited sources
+      </h2>
+      <ul role="list" className="mt-3 space-y-3">
+        {sources.map((source) => (
+          <li key={source.sourceId} className="border border-line p-3">
+            <button
+              type="button"
+              onClick={() => onOpenDossier(source.title)}
+              className="cursor-pointer text-left text-body font-semibold text-navy hover:underline"
+            >
+              {scrub(source.title)}
+            </button>
+            <p className="mt-1 text-body text-grey">
+              Cited by {source.citationCount === 1 ? "1 claim" : `${source.citationCount} claims`}
+              {source.appraisalLabel != null && ` · ${scrub(source.appraisalLabel)}`}
+              {source.evidenceType != null && ` · ${scrub(source.evidenceType)}`}
+            </p>
+            <p className="mt-1 text-body text-grey">
+              In {source.citedInSections.map((title) => scrub(title)).join(", ")}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
@@ -1046,7 +1168,7 @@ export function ArtefactView() {
 
   if (artefact.isPending) {
     return (
-      <main aria-busy="true" aria-label="Loading the evidence base" className="mx-auto max-w-3xl px-6 py-10">
+      <main aria-busy="true" aria-label="Loading the evidence base" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="mb-4 h-24 animate-pulse border border-line bg-paper-2" />
         ))}
@@ -1062,8 +1184,8 @@ export function ArtefactView() {
     // that is the expected empty state, not a failure to surface.
     if (code !== "not_found") {
       return (
-        <main className="mx-auto max-w-3xl px-6 py-10">
-          <Card role="alert" className="p-8 text-center text-meta text-navy">
+        <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+          <Card role="alert" className="p-8 text-center text-body text-navy">
             The evidence base couldn't be loaded.{" "}
             <button
               type="button"
@@ -1081,14 +1203,14 @@ export function ArtefactView() {
   if (artefact.isError || artefact.data === undefined || artefact.data === null) {
     // No committed artefact: show the in-progress skeleton when sections are
     // streaming (or streamed before a bad ending) — otherwise the empty state.
-    if (Object.keys(stream.liveSections).length > 0) {
+    if (showLiveArtefact(stream, project.data?.latest_run)) {
       return <LiveArtefactBody stream={stream} />;
     }
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         <Card role="status" className="p-8 text-center">
-          <h1 className="font-display text-title font-bold text-navy">No evidence base yet</h1>
-          <p className="mt-1.5 text-meta text-grey">
+          <h1 className="text-title font-bold text-navy">No evidence base yet</h1>
+          <p className="mt-1.5 text-body text-grey">
             The evidence base appears here once an analysis reaches synthesis.
           </p>
         </Card>
@@ -1102,11 +1224,9 @@ export function ArtefactView() {
   // and if that run dies mid-write, the terminal-partial view stays up in
   // place of the stale committed page: the user's latest run ended badly and
   // hiding that behind the old artefact would be dishonest (live-check
-  // adjudication, 2026-07-29). A new run or a fresh mount clears it.
-  if (
-    (stream.run?.status === "running" || hasTerminalPartialLiveArtefact(stream)) &&
-    Object.keys(stream.liveSections).length > 0
-  ) {
+  // adjudication, 2026-07-29). A new run or a fresh mount clears it. Replay
+  // of a finished succeeded run must not flash through this view.
+  if (showLiveArtefact(stream, project.data?.latest_run)) {
     return <LiveArtefactBody stream={stream} />;
   }
 
@@ -1122,10 +1242,9 @@ export function ArtefactView() {
     .filter(Number.isInteger);
   const sections = orderSections((data.sections ?? []) as SectionLike[]);
 
-  // Sources and Screened out link into the sources view, filtered to match
-  // (028 F.5): `cited` and `status` are SourcesView's existing URL params —
-  // there is no `status=cited` value, so the cited count routes through the
-  // boolean `cited=true` param instead.
+  // Sources links into the sources view, filtered to the cited set
+  // (028 F.5): there is no `status=cited` value, so the cited count routes
+  // through the boolean `cited=true` param.
   const snapshotCells: Array<[string, string, string | null]> = [];
   if (typeof snapshot?.source_count === "number" && typeof snapshot?.included === "number") {
     // Transcription trap 3: `source_count` is the cited/reference count —
@@ -1133,7 +1252,7 @@ export function ArtefactView() {
     snapshotCells.push([
       "Sources",
       `${snapshot.source_count} cited out of ${snapshot.included} included`,
-      `/projects/${projectId}/sources?cited=true`,
+      `/projects/${projectId}/sources/all?cited=true`,
     ]);
   }
   if (shownTypes.length > 0) {
@@ -1146,53 +1265,57 @@ export function ArtefactView() {
   }
   if (citedYears.length > 0) {
     snapshotCells.push([
-      "Years",
+      "Years covered",
       `${Math.min(...citedYears)}–${Math.max(...citedYears)}`,
       null,
     ]);
   }
-  if (typeof snapshot?.screened_out === "number") {
-    snapshotCells.push([
-      "Screened out",
-      `${snapshot.screened_out}`,
-      `/projects/${projectId}/sources?status=screened_out`,
-    ]);
+  // The report states when it was made. The run's end is the honest answer —
+  // the artefact read model carries no timestamp of its own. There is
+  // deliberately no author line: the backend has no author for an artefact,
+  // and inventing one would have the report assert something nobody wrote.
+  const lastUpdated = project.data?.latest_run?.ended_at;
+  if (lastUpdated != null) {
+    snapshotCells.push(["Last updated", new Date(lastUpdated).toLocaleDateString(), null]);
   }
 
+  const topSources = mostRelevantSources(sections);
+
   const outlineEntries = [
-    ...sections.map((section, index) => ({
+    ...orderSections((data.sections ?? []) as SectionLike[]).map((section, index) => ({
       id: sectionAnchor(section.title, index),
-      title: section.title,
+      title: sectionNavLabel(section, 28),
     })),
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
     { id: "gathered", title: "How the evidence was gathered" },
   ];
 
   return (
-    <div className="mx-auto flex max-w-[1060px] justify-center gap-6 px-4">
+    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 md:flex-row">
       <ContentsSidebar entries={outlineEntries} />
-      <main className="artefact-page anim-rise my-8 min-w-0 max-w-[780px] flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line">
+      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
       <header className="mb-8">
-        <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
-          Evidence base
-        </p>
-        <h1 className="mt-1 font-display text-title font-extrabold leading-tight tracking-[-0.5px] text-navy">
-          {scrub(data.title)}
-        </h1>
-        <button type="button" onClick={() => void askAboutAnalysis()} className="mt-3 text-caption font-bold text-blue hover:underline">Ask about this analysis</button>
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+              Evidence base
+            </p>
+            <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
+              {scrub(data.title)}
+            </h1>
+          </div>
+          <ArtefactDownload artefact={data} />
+        </div>
+        <button type="button" onClick={() => void askAboutAnalysis()} className="print-hide mt-3 text-caption font-bold text-blue hover:underline">Ask about this analysis</button>
         {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
-        {data.summary != null && data.summary !== "" && data.summary_status === "verified" && (
-          <p className="mt-3 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-3 py-2 text-body text-ink">
-            {scrub(data.summary)}
-          </p>
-        )}
+        <AnswerCallout summary={data.summary ?? null} status={data.summary_status ?? null} />
         {snapshotCells.length > 0 && (
-          <div className="mt-5 grid grid-cols-2 border border-line sm:grid-cols-4">
+          <div className="mt-5 grid grid-cols-4 border border-line">
             {snapshotCells.map(([label, value, href]) => {
               const content = (
                 <>
-                  <p className="text-caption font-bold uppercase tracking-wider text-grey">{label}</p>
-                  <p className="mt-1 text-caption font-medium leading-snug text-navy">{scrub(value)}</p>
+                  <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
+                  <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
                 </>
               );
               return href !== null ? (
@@ -1232,6 +1355,8 @@ export function ArtefactView() {
         </SectionDisclosure>
       ))}
 
+      <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
+
       {(data.references ?? []).length > 0 && (
         <ReferencesSection
           references={data.references ?? []}
@@ -1270,27 +1395,29 @@ function ReferencesSection({
   onOpenReference: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  useOpenWhenNavigated("references", setOpen);
+  useExpandForPrint(setOpen);
   return (
-    <section aria-label="References" id="references" className="mt-12 scroll-mt-20 border-t border-line pt-6">
+    <section aria-label="References" id="references" className="mt-12 border-t border-line pt-6">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 font-display text-heading font-bold text-navy">References</h2>
-        <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+        <h2 className="flex-1 text-heading font-bold text-navy">References</h2>
+        <span aria-hidden="true" className="print-hide shrink-0 text-meta font-bold text-blue">
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && (
-        <p className="mt-1.5 text-meta text-grey">
+        <p className="mt-1.5 text-lead text-grey">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
           in this report
         </p>
       )}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-caption text-ink">
+        <ol className="mt-3 space-y-1.5 text-lead text-ink">
           {references.map((reference) => (
             <li key={reference.n} className="flex gap-2">
               <span className="font-bold text-blue">[{reference.n}]</span>

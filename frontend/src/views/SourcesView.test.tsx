@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mockEvidence, mockLandscape } from "../mock/fixtures";
+import { mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
@@ -14,6 +14,7 @@ vi.mock("../api/queries", () => ({
   useEvidence: vi.fn(),
   useFindings: vi.fn(),
   useSourceDossier: vi.fn(),
+  useFunnel: vi.fn(),
 }));
 
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
@@ -71,6 +72,9 @@ beforeEach(() => {
   );
   vi.mocked(queries.useSourceDossier).mockReturnValue(
     { data: undefined, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useSourceDossier>,
+  );
+  vi.mocked(queries.useFunnel).mockReturnValue(
+    { data: mockFunnel } as unknown as ReturnType<typeof queries.useFunnel>,
   );
   vi.mocked(queries.useEvidence).mockReturnValue({
     data: evidencePage(),

@@ -54,11 +54,27 @@ export function reduceRunStreamFrame(state: RunStreamState, frame: SseFrame): Ru
       // A `run.status(running)` for a different run than the one the store
       // currently tracks is a fresh walk — its timeline must not inherit
       // the previous (possibly interrupted) run's stage entries or liveness.
-      const previousRunId = base.run?.id;
-      const isNewRun = frame.status === "running" && frame.capability_run_id !== previousRunId;
+      const current = base.run;
+      const isNewRun = frame.status === "running" && frame.capability_run_id !== current?.id;
+      const sameRun = current !== null && current.id === frame.capability_run_id;
+      const isTerminal =
+        frame.status === "succeeded" ||
+        frame.status === "failed" ||
+        frame.status === "aborted" ||
+        frame.status === "interrupted" ||
+        frame.status === "degraded";
       return {
         ...base,
-        run: { id: frame.capability_run_id, status: frame.status },
+        run: {
+          id: frame.capability_run_id,
+          status: frame.status,
+          startedAt: sameRun ? current.startedAt : frame.occurred_at,
+          ...(isTerminal
+            ? { endedAt: frame.occurred_at }
+            : sameRun && current.endedAt !== undefined
+              ? { endedAt: current.endedAt }
+              : {}),
+        },
         runs: { ...base.runs, [frame.capability_run_id]: frame.status },
         stages: isNewRun ? [] : base.stages,
         liveness: isNewRun ? {} : base.liveness,
