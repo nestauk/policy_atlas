@@ -8,14 +8,22 @@
 setup:
 	docker compose up -d db
 	@echo "Waiting for Postgres to be healthy..."
-	@# pg_isready alone races the postgres image's init-phase temporary server
-	@# (it answers ready, then shuts down for the real start — seen in CI).
-	@# Probe the actual database with a real query instead.
-	@until docker compose exec -T db psql -U policy_atlas -d policy_atlas -tc "SELECT 1" >/dev/null 2>&1; do sleep 1; done
+	@# The postgres image starts a temporary server during init, answers
+	@# queries, then shuts down for the real start. One successful SELECT is
+	@# not enough — require two in a row, then retry createdb until it sticks.
+	@ready=0; \
+	until [ $$ready -ge 2 ]; do \
+	  if docker compose exec -T db psql -U policy_atlas -d policy_atlas -tc "SELECT 1" >/dev/null 2>&1; then \
+	    ready=$$((ready + 1)); \
+	  else \
+	    ready=0; \
+	  fi; \
+	  sleep 1; \
+	done
 	@echo "DB ready."
-	@docker compose exec -T db psql -U policy_atlas -tc \
-		"SELECT 1 FROM pg_database WHERE datname='policy_atlas_test'" | grep -q 1 \
-		|| docker compose exec -T db createdb -U policy_atlas policy_atlas_test
+	@until docker compose exec -T db psql -U policy_atlas -tc \
+		"SELECT 1 FROM pg_database WHERE datname='policy_atlas_test'" 2>/dev/null | grep -q 1 \
+		|| docker compose exec -T db createdb -U policy_atlas policy_atlas_test; do sleep 1; done
 	@echo "Test DB ready (policy_atlas_test)."
 	$(MAKE) -C backend setup
 

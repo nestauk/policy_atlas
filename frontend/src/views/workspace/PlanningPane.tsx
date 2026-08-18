@@ -321,6 +321,22 @@ export function presentRunDecisions(
   }, []);
 }
 
+function AnsweredCheckIns({
+  answered,
+  checkIns,
+}: {
+  answered: ResolvedDecision[];
+  checkIns: ReturnType<typeof useCheckIns>["data"];
+}) {
+  return answered.map((decision) => (
+    <AnsweredCheckIn
+      key={decision.checkInId}
+      decision={decision}
+      checkIn={checkIns?.data.find((checkIn) => checkIn.check_in_id === decision.checkInId)}
+    />
+  ));
+}
+
 function RunBlock({
   projectId,
   run,
@@ -356,13 +372,7 @@ function RunBlock({
           </p>
         </div>
       ))}
-      {answered.map((decision) => (
-        <AnsweredCheckIn
-          key={decision.checkInId}
-          decision={decision}
-          checkIn={checkIns?.data.find((checkIn) => checkIn.check_in_id === decision.checkInId)}
-        />
-      ))}
+      <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
       {complete && (
@@ -589,6 +599,7 @@ export function PlanningPane({
             ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
               <div key="live-run-block" className="space-y-6">
                 {liveCard}
+                <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
               </div>
             ) : (
@@ -681,6 +692,7 @@ export function PlanningPane({
         {liveCard !== null && !threadHasLiveRun && (
           <div key="live-run-fallback" className="space-y-6">
             {liveCard}
+            <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
           </div>
         )}
