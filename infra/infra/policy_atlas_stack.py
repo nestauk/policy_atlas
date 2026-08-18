@@ -316,6 +316,13 @@ class PolicyAtlasStack(Stack):
             zone=hosted_zone,
             target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
         )
+
+        r53.ARecord(self, "FrontendARecordWWW",
+            zone=hosted_zone,
+            record_name='www'
+            target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
+        )
+
         r53.AaaaRecord(self, "FrontendAaaaRecord",
             zone=hosted_zone,
             target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
