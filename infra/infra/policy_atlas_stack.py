@@ -282,17 +282,47 @@ class PolicyAtlasStack(Stack):
         # Review-stack hardening (026 step 7): baseline security headers (HSTS,
         # X-Frame-Options, nosniff, referrer policy) on every response.
         security_headers = cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS
+        # www is a courtesy alias only: 301 to the apex so Cognito callback
+        # URLs and the API's single-origin CORS stay canonical (#53 follow-up).
+        www_redirect = cloudfront.Function(self, "WwwRedirectFunction",
+            code=cloudfront.FunctionCode.from_inline(
+                "function handler(event) {\n"
+                "    var request = event.request;\n"
+                "    var host = request.headers.host.value;\n"
+                "    if (host.indexOf('www.') === 0) {\n"
+                "        var qs = '';\n"
+                "        var keys = Object.keys(request.querystring);\n"
+                "        for (var i = 0; i < keys.length; i++) {\n"
+                "            var q = request.querystring[keys[i]];\n"
+                "            qs += (qs ? '&' : '?') + keys[i] + (q.value ? '=' + q.value : '');\n"
+                "        }\n"
+                "        return {\n"
+                "            statusCode: 301,\n"
+                "            statusDescription: 'Moved Permanently',\n"
+                "            headers: {location: {value: 'https://' + host.slice(4) + request.uri + qs}}\n"
+                "        };\n"
+                "    }\n"
+                "    return request;\n"
+                "}\n"
+            ),
+        )
+        www_redirect_association = cloudfront.FunctionAssociation(
+            function=www_redirect,
+            event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+        )
         distribution = cloudfront.Distribution(self, "FrontendDistribution",
             default_behavior=cloudfront.BehaviorOptions(
                 origin=frontend_origin,
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
                 response_headers_policy=security_headers,
+                function_associations=[www_redirect_association],
             ),
             additional_behaviors={
                 "/index.html": cloudfront.BehaviorOptions(
                     origin=frontend_origin,
                     cache_policy=index_html_cache_policy,
                     response_headers_policy=security_headers,
+                    function_associations=[www_redirect_association],
                 ),
             },
             certificate=certificate,
