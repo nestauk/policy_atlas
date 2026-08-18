@@ -319,7 +319,7 @@ class PolicyAtlasStack(Stack):
 
         r53.ARecord(self, "FrontendARecordWWW",
             zone=hosted_zone,
-            record_name='www'
+            record_name='www',
             target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
         )
 
