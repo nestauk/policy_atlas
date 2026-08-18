@@ -739,7 +739,7 @@ def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():
 
     _, distribution = _resources(app_template, "AWS::CloudFront::Distribution")[0]
     config = distribution["Properties"]["DistributionConfig"]
-    assert config["Aliases"] == ["v3.policyatlas.uk"]
+    assert config["Aliases"] == ["v3.policyatlas.uk", "www.v3.policyatlas.uk"]
     assert config["DefaultRootObject"] == "index.html"
     assert "PaV3CertStack" in json.dumps(
         config["ViewerCertificate"]["AcmCertificateArn"]
@@ -770,7 +770,7 @@ def test_cloudfront_uses_oac_with_spa_fallback_and_certificate():
     assert index_policy["Properties"]["CachePolicyConfig"]["MaxTTL"] == 60
 
 
-def test_frontend_apex_has_a_and_aaaa_cloudfront_aliases():
+def test_frontend_apex_and_www_have_a_and_aaaa_cloudfront_aliases():
     distribution_id = _resources(
         TEMPLATES["app"], "AWS::CloudFront::Distribution"
     )[0][0]
@@ -780,8 +780,13 @@ def test_frontend_apex_has_a_and_aaaa_cloudfront_aliases():
         if resource["Properties"].get("AliasTarget", {}).get("DNSName")
         == {"Fn::GetAtt": [distribution_id, "DomainName"]}
     ]
-    assert {record["Type"] for record in cloudfront_aliases} == {"A", "AAAA"}
-    assert all(record["Name"] == "v3.policyatlas.uk." for record in cloudfront_aliases)
+    names_to_types = {}
+    for record in cloudfront_aliases:
+        names_to_types.setdefault(record["Name"], set()).add(record["Type"])
+    assert names_to_types == {
+        "v3.policyatlas.uk.": {"A", "AAAA"},
+        "www.v3.policyatlas.uk.": {"A", "AAAA"},
+    }
 
 
 def test_frontend_and_fonts_buckets_are_private_and_fonts_are_destroyed():
@@ -817,11 +822,11 @@ def test_auth_and_deploy_ssm_exports_are_present():
     } <= parameter_names
 
 
-def test_cert_stack_is_dns_validated_for_the_apex_only():
+def test_cert_stack_is_dns_validated_for_the_apex_and_www():
     _, certificate = _resources(TEMPLATES["cert"], "AWS::CertificateManager::Certificate")[0]
     properties = certificate["Properties"]
     assert properties["DomainName"] == "v3.policyatlas.uk"
-    assert "SubjectAlternativeNames" not in properties
+    assert properties["SubjectAlternativeNames"] == ["www.v3.policyatlas.uk"]
     assert properties["ValidationMethod"] == "DNS"
 
 

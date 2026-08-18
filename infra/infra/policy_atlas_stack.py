@@ -296,7 +296,7 @@ class PolicyAtlasStack(Stack):
                 ),
             },
             certificate=certificate,
-            domain_names=[domain_name],
+            domain_names=[domain_name, f"www.{domain_name}"],
             default_root_object="index.html",
             error_responses=[
                 cloudfront.ErrorResponse(
@@ -325,6 +325,12 @@ class PolicyAtlasStack(Stack):
 
         r53.AaaaRecord(self, "FrontendAaaaRecord",
             zone=hosted_zone,
+            target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
+        )
+
+        r53.AaaaRecord(self, "FrontendAaaaRecordWWW",
+            zone=hosted_zone,
+            record_name='www',
             target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
         )
 
