@@ -822,6 +822,24 @@ def test_auth_and_deploy_ssm_exports_are_present():
     } <= parameter_names
 
 
+def test_www_requests_are_redirected_to_the_apex():
+    functions = _resources(TEMPLATES["app"], "AWS::CloudFront::Function")
+    assert len(functions) == 1
+    function_id, function = functions[0]
+    code = function["Properties"]["FunctionCode"]
+    assert "www." in code and "301" in code
+
+    _, distribution = _resources(TEMPLATES["app"], "AWS::CloudFront::Distribution")[0]
+    config = distribution["Properties"]["DistributionConfig"]
+    behaviors = [config["DefaultCacheBehavior"], *config["CacheBehaviors"]]
+    for behavior in behaviors:
+        associations = behavior["FunctionAssociations"]
+        assert associations == [{
+            "EventType": "viewer-request",
+            "FunctionARN": {"Fn::GetAtt": [function_id, "FunctionARN"]},
+        }]
+
+
 def test_cert_stack_is_dns_validated_for_the_apex_and_www():
     _, certificate = _resources(TEMPLATES["cert"], "AWS::CertificateManager::Certificate")[0]
     properties = certificate["Properties"]
