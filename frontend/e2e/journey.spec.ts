@@ -177,15 +177,14 @@ test.describe("mock task-lifecycle journey", () => {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
 
-    // (j) Results: A4 frame, the live artefact streaming states
-    // (skeleton -> writing -> filled) from the scripted fixture, then the
-    // citation claim popover and the source dossier ladder.
+    // (j) Results: the committed A4 report. Live "writing this section"
+    // cannot be seen here — Results stays locked until the run succeeds,
+    // and a finished run must not replay the in-progress view.
     await nav.getByRole("link", { name: "Results", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: "What appears to help" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Implications for local action" })).toBeVisible();
-    await expect(page.getByText("Writing this section now…")).toBeVisible();
     await expect(
       page.getByText(/Pair school food action with safer active-travel routes/),
     ).toBeVisible({ timeout: 5_000 });
