@@ -21,13 +21,15 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     await page.goto("/");
     await loadedProjects;
 
-    await expect(page.getByRole("heading", { name: "No projects yet" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
   });
 
   test("creates a project through the real authenticated POST", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "New project" }).first().click();
-    await page.getByLabel("Project name").fill("FE API smoke project");
+    await page.getByRole("link", { name: "New", exact: true }).click();
+    await page.getByRole("button", { name: "Evidence search" }).click();
+    await page.getByLabel("Your question").fill("FE API smoke project");
 
     const created = page.waitForResponse(
       (response) =>
@@ -35,7 +37,7 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
         response.request().method() === "POST" &&
         response.status() === 201,
     );
-    await page.getByRole("button", { name: "Create project" }).click();
+    await page.getByRole("button", { name: "Start" }).click();
     await created;
 
     await expect(page).toHaveURL(/\/projects\/[^/]+$/);

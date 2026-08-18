@@ -23,13 +23,10 @@ if (!SUGGESTED_OPTION_LABEL) throw new Error("fixture check-in has no suggested 
 const CITED_SOURCE_TITLE = "Universal breakfast clubs and diet quality";
 const CITATION_QUOTE = "Breakfast participation increased when provision was universal.";
 
-/** The top app-shell nav, which carries the five-stage lifecycle bar (Plan ·
- *  Results · Sources · Share · History). It is always the first `<nav>` in
- *  the DOM — the shell renders before any routed view's own nav (e.g. the
- *  Sources layout's subview tabs) — so `.first()` reliably scopes to it even
- *  on pages that mount a second nav of their own. */
+/** The task-stage bar (Plan · Results · Sources · Share · History).
+ *  The global App nav sits above it; Sources has its own subnav below. */
 function lifecycleNav(page: Page) {
-  return page.locator("nav").first();
+  return page.getByRole("navigation", { name: "Task" });
 }
 
 /** The in-thread running card's completion link. */

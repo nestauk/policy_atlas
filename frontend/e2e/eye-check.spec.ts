@@ -63,6 +63,9 @@ test.describe("type scale, checked on the rendered page", () => {
       const offenders: { text: string; size: string }[] = [];
       for (const node of Array.from(document.querySelectorAll("p, li, dd, td"))) {
         if (node.querySelector("p, li, dd, td") !== null) continue;
+        // Caption is the fine-print rung (footer disclaimer, chips). The
+        // 16px floor is for body prose, not chrome.
+        if (node.closest("footer") !== null) continue;
         const text = (node.textContent ?? "").trim();
         // Prose, not a label: long, and more than a handful of words.
         if (text.length < 60 || text.split(/\s+/).length < 10) continue;

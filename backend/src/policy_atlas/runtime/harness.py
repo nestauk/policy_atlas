@@ -11,7 +11,7 @@ import functools
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, TypedDict
+from typing import Any, Protocol, TypedDict
 
 import structlog
 from langgraph.graph import END, StateGraph
@@ -544,10 +544,16 @@ def build_graph() -> Any:
     return g.compile()
 
 
-def scoped_search_backends(
-    backends: list[SearchBackend],
+class _HasBackendName(Protocol):
+    """Anything the scope filter can decide by ``name`` alone."""
+
+    name: str
+
+
+def scoped_search_backends[TBackend: _HasBackendName](
+    backends: list[TBackend],
     search_backend_scope: str,
-) -> list[SearchBackend]:
+) -> list[TBackend]:
     """Restrict injected search backends to the plan's declared scope.
 
     ``both`` leaves the list unchanged so test doubles with non-production
