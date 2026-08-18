@@ -18,7 +18,9 @@ import { Tooltip } from "../../../ui/radix/Tooltip";
 import { backendLabel } from "../checkInPresentation";
 import {
   ANALYSIS_DEPTH_LABEL,
+  ANALYSIS_TITLE,
   SEARCH_EFFORT_LABEL,
+  SEARCH_SCOPE_TITLE,
   SOURCES_LABEL,
   STEERING_MODE_LABEL,
   scopeChips,
@@ -122,8 +124,8 @@ function PlanRecap({ plan }: { plan: PlanDraft | null }) {
   const [open, setOpen] = useState(false);
   if (plan === null || plan.question === null || plan.question === "") return null;
   const settings = [
-    ["Search effort", vocabLabel(SEARCH_EFFORT_LABEL, plan.search_effort)],
-    ["Analysis depth", vocabLabel(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)],
+    [SEARCH_SCOPE_TITLE, vocabLabel(SEARCH_EFFORT_LABEL, plan.search_effort)],
+    [ANALYSIS_TITLE, vocabLabel(ANALYSIS_DEPTH_LABEL, plan.analysis_depth)],
     ["Sources", vocabLabel(SOURCES_LABEL, plan.backend_scope)],
     ["Check-ins", vocabLabel(STEERING_MODE_LABEL, plan.steering_mode)],
   ].filter((item): item is [string, string] => item[1] !== null);

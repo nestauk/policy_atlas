@@ -14,6 +14,8 @@ import { SourcesView } from "./views/SourcesView";
 import { TasksListView } from "./views/TasksListView";
 import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
+import { PrivacyView } from "./views/legal/PrivacyView";
+import { TermsView } from "./views/legal/TermsView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
 
 // Lazy: `recharts` is a substantial dependency only the landscape route
@@ -41,6 +43,8 @@ export const router = createBrowserRouter([
       { path: "/new", element: <NewTaskView /> },
       { path: "/portfolios", element: <PortfoliosView /> },
       { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
+      { path: "/privacy", element: <PrivacyView /> },
+      { path: "/terms", element: <TermsView /> },
 
       // The task lifecycle: Plan · Results · Sources · Share · History.
       // Every stage past Plan is gated on run state, so a locked stage is

@@ -28,7 +28,7 @@ function channels(color: string): [number, number, number] {
 test.describe("type scale, checked on the rendered page", () => {
   test("a primary button renders white text on blue — the 028 failure", async ({ page }) => {
     await page.goto("/");
-    const primary = page.getByRole("link", { name: "New task" });
+    const primary = page.getByRole("main").getByRole("link", { name: "New task" });
     await expect(primary).toBeVisible();
 
     const style = await primary.evaluate((node) => {

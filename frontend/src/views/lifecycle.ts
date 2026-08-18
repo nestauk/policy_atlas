@@ -35,7 +35,7 @@ function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[]
   switch (status) {
     case "running":
     case "paused":
-      return ["plan", "history"];
+      return ["plan", "sources", "history"];
     case "succeeded":
     case "degraded":
       return LIFECYCLE_TABS;

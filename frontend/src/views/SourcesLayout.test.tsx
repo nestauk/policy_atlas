@@ -9,11 +9,15 @@ vi.mock("../api/queries", () => ({
   useFunnel: vi.fn(),
 }));
 
+vi.mock("../store", () => ({
+  useRunStream: () => ({ run: null, stages: [] }),
+}));
+
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
-function renderLayout() {
+function renderLayout(path = `/projects/${PROJECT_ID}/sources`) {
   return render(
-    <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/sources`]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/projects/:projectId/sources" element={<SourcesLayout />}>
           <Route index element={<div>themes child</div>} />
@@ -73,5 +77,33 @@ describe("SourcesLayout — the four Sources subview tabs", () => {
     mockFunnel(34);
     renderLayout();
     expect(screen.getByText("themes child")).toBeInTheDocument();
+  });
+
+  it("does not show the funnel summary — that belongs on All sources", () => {
+    vi.mocked(queries.useFunnel).mockReturnValue(
+      {
+        data: { findings: 34, found: 128, relevant: 46, cited: 12 },
+      } as unknown as ReturnType<typeof queries.useFunnel>,
+    );
+    renderLayout();
+    expect(screen.queryByText(/Showing \d+ of \d+ sources/)).toBeNull();
+  });
+
+  it("spans the subview tabs across the content column", () => {
+    mockFunnel(34);
+    renderLayout();
+    const nav = screen.getByRole("navigation", { name: "Sources" });
+    expect(nav).toHaveClass("flex");
+    expect(nav).not.toHaveClass("justify-end");
+    expect(screen.getByRole("link", { name: "Themes" })).toHaveClass("flex-1");
+    expect(screen.getByRole("link", { name: "Landscape" })).toHaveClass("flex-1");
+  });
+
+  it("uses the wide column for every Sources subview, including Themes", () => {
+    mockFunnel(34);
+    renderLayout();
+    expect(screen.getByRole("navigation", { name: "Sources" }).closest(".mx-auto")).toHaveClass(
+      "max-w-[1180px]",
+    );
   });
 });

@@ -1,4 +1,4 @@
-.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap staging-user
+.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap staging-user prod-user cognito-user
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -19,18 +19,25 @@ setup:
 	@echo "Test DB ready (policy_atlas_test)."
 	$(MAKE) -C backend setup
 
-# Create a staging Cognito test user (self-signup is off by design; accounts
-# are operator-created). The pool's sign-in identifier is email-FORMAT but
-# needs no real inbox — the invite email is suppressed and the password set
-# directly (permanent, no forced change). Password recovery for fake
-# addresses is CLI-only: admin-set-user-password again.
-# Needs ambient AWS credentials (e.g. AWS_PROFILE=pa-dev, fresh SSO).
-# Usage: make staging-user EMAIL=tester1@policyatlas.uk PASSWORD='...'
-# NB the password is visible in shell history and process listings — use
-# throwaway test credentials, never a real person's real password.
-staging-user:
-	@test -n "$(EMAIL)" -a -n "$(PASSWORD)" || \
-		{ echo "usage: make staging-user EMAIL=<email-format-username> PASSWORD='<password>'" >&2; exit 2; }
+# Create a Cognito user (self-signup is off by design; accounts are
+# operator-created). The pool's sign-in identifier is email-FORMAT. Invite
+# email is suppressed and the password set directly (permanent, no forced
+# change). Needs ambient AWS credentials for the *target* account — staging
+# and prod are separate accounts sharing the same SSM path.
+# NB the password is visible in shell history and process listings.
+# Staging (test users; fake inboxes OK; recovery is CLI-only):
+#   AWS_PROFILE=pa-dev make staging-user EMAIL=tester1@policyatlas.uk PASSWORD='...'
+# Prod (real users; prod-account credentials, not pa-dev):
+#   AWS_PROFILE=<prod-profile> make prod-user EMAIL=name@policyatlas.uk PASSWORD='...'
+staging-user: SIGNIN_URL=https://v3.policyatlas.uk
+staging-user: cognito-user
+
+prod-user: SIGNIN_URL=https://policyatlas.uk
+prod-user: cognito-user
+
+cognito-user:
+	@test -n "$(EMAIL)" -a -n "$(PASSWORD)" -a -n "$(SIGNIN_URL)" || \
+		{ echo "usage: make staging-user|prod-user EMAIL=<email-format-username> PASSWORD='<password>'" >&2; exit 2; }
 	@POOL_ID=$$(AWS_REGION=eu-west-2 aws ssm get-parameter \
 		--name /policy_atlas_v3/auth/user_pool_id \
 		--query Parameter.Value --output text) && \
@@ -41,7 +48,7 @@ staging-user:
 	AWS_REGION=eu-west-2 aws cognito-idp admin-set-user-password \
 		--user-pool-id "$$POOL_ID" --username "$(EMAIL)" \
 		--password "$(PASSWORD)" --permanent && \
-	echo "Created $(EMAIL) — sign in at https://v3.policyatlas.uk"
+	echo "Created $(EMAIL) — sign in at $(SIGNIN_URL)"
 
 # Run the whole app locally: API on :8000 + Vite on :5173, one Ctrl-C stops
 # both. Self-contained auth: initialises the dev issuer on first run

@@ -1,6 +1,5 @@
 /** Stacked speech bubbles: the conversations-library glyph, shared by the
- *  workspace rail's `ConversationTabs` and the side-panel `ChatSidePanel` —
- *  previously copy-pasted between the two (delta-review Fix 5). */
+ *  overlay `ConversationTabs` and the side-panel library button. */
 export function ChatsIcon({ size }: { size: number }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

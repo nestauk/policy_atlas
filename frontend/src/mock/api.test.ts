@@ -7,6 +7,7 @@ import {
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
+  MOCK_PLANNING_CONVERSATION_ID,
   MOCK_PROJECT_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
@@ -130,8 +131,41 @@ describe("mock API", () => {
     expect(plan.plan.search_effort).toBe("rapid");
 
     const turnsResponse = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/planning-turns`);
-    const turns = await turnsResponse.json() as { data: { status: string }[] };
+    const turns = await turnsResponse.json() as {
+      data: {
+        status: string;
+        reply: string | null;
+        part: {
+          id: string;
+          body: string | null;
+          chips: { kind: string; label: string }[] | null;
+        } | null;
+      }[];
+    };
     expect(turns.data.some((turn) => turn.status === "failed")).toBe(true);
+    const scope = turns.data.find((turn) => turn.part?.id === "scope");
+    expect(scope?.part?.body).toBeNull();
+    expect(scope?.reply).toContain("I'll search from 2016 onward");
+    expect(scope?.part?.chips).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "text", label: "UK primary" }),
+        expect.objectContaining({ kind: "date_range", label: "Since 2016" }),
+      ]),
+    );
+  });
+
+  it("persists a PATCH onto the current mock plan", async () => {
+    resetMockScenario();
+    const patched = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/plan`, {
+      method: "PATCH",
+      body: JSON.stringify({ backend_scope: "academic_only" }),
+    });
+    expect(patched.status).toBe(200);
+    const body = await patched.json() as { plan: { backend_scope: string } };
+    expect(body.plan.backend_scope).toBe("academic_only");
+    const reread = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/plan`);
+    const again = await reread.json() as { plan: { backend_scope: string } };
+    expect(again.plan.backend_scope).toBe("academic_only");
   });
 
   it("streams a terminal-partial banner fixture (failed after a partial artefact)", async () => {
@@ -154,6 +188,22 @@ describe("mock API", () => {
   // async enrichment poll's second-read flip, and the chat citation's own
   // chunk-context read.
   describe("chat conversations", () => {
+    it("lists the seeded planning conversation when kind is not filtered to chat", async () => {
+      resetMockScenario();
+      const listed = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?status=active`);
+      const { data } = await listed.json() as { data: { id: string; kind: string; title: string }[] };
+      expect(data).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: MOCK_PLANNING_CONVERSATION_ID,
+          kind: "planning",
+          title: "Planning",
+        }),
+      ]));
+      const chatsOnly = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?kind=chat&status=active`);
+      const { data: chats } = await chatsOnly.json() as { data: { id: string }[] };
+      expect(chats.map((row) => row.id)).not.toContain(MOCK_PLANNING_CONVERSATION_ID);
+    });
+
     it("creates, lists, updates, and archives/unarchives a conversation", async () => {
       resetMockScenario();
       const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, {

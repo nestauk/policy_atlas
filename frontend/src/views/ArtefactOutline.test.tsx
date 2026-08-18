@@ -1,8 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { SectionDisclosure, sectionSummary } from "./ArtefactOutline";
+import { ContentsSidebar, SectionDisclosure, sectionSummary } from "./ArtefactOutline";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { AnnotatedProse } from "./ArtefactView";
 
@@ -79,6 +79,19 @@ describe("SectionDisclosure", () => {
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
   });
 
+  it("expands collapsed prose when the browser is about to print", () => {
+    render(
+      <SectionDisclosure id="s-print" section={section} collapsible defaultOpen={false}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    expect(screen.queryByText("Full cited prose.")).toBeNull();
+    act(() => {
+      window.dispatchEvent(new Event("beforeprint"));
+    });
+    expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+  });
+
   it("a claim span inside the section survives collapse then re-expand", async () => {
     const user = userEvent.setup();
     const prose = "Universal provision raised uptake in the review.";
@@ -111,6 +124,51 @@ describe("SectionDisclosure", () => {
 
     await user.click(screen.getByRole("button", { expanded: false }));
     expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
+  });
+
+  it("expands a collapsed section when its contents link is clicked", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    HTMLElement.prototype.scrollTo = scrollTo;
+    render(
+      <>
+        <ContentsSidebar entries={[{ id: "s1", title: section.title }]} />
+        <SectionDisclosure id="s1" section={section} collapsible defaultOpen={false}>
+          <p>Full cited prose.</p>
+        </SectionDisclosure>
+      </>,
+    );
+    expect(screen.queryByText("Full cited prose.")).toBeNull();
+    await user.click(screen.getByRole("link", { name: section.title }));
+    expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: section.title })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+    expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    history.replaceState(null, "", window.location.pathname);
+  });
+
+  it("scrolls to a section that is already expanded", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    HTMLElement.prototype.scrollTo = scrollTo;
+    render(
+      <>
+        <ContentsSidebar entries={[{ id: "s1", title: section.title }]} />
+        <SectionDisclosure id="s1" section={section} collapsible defaultOpen>
+          <p>Full cited prose.</p>
+        </SectionDisclosure>
+      </>,
+    );
+    await user.click(screen.getByRole("link", { name: section.title }));
+    expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    history.replaceState(null, "", window.location.pathname);
   });
 });
 

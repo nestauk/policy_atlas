@@ -3490,7 +3490,7 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET /api/v1/projects/{id}/plan`.\n\nArgs:\n    plan: The current plan (draft or approved).\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
+        "description": "Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.\n\nArgs:\n    plan: The current plan (draft or approved).\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
         "properties": {
           "plan": {
             "$ref": "#/components/schemas/PlanDraft"
@@ -3510,6 +3510,138 @@
           "status"
         ],
         "title": "PlanOut",
+        "type": "object"
+      },
+      "PlanPatchIn": {
+        "additionalProperties": false,
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.",
+        "properties": {
+          "analysis_depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "landscape",
+                  "standard",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Analysis Depth"
+          },
+          "backend_scope": {
+            "anyOf": [
+              {
+                "enum": [
+                  "academic_only",
+                  "grey_lit_only",
+                  "both"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend Scope"
+          },
+          "geography": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geography"
+          },
+          "published_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published After"
+          },
+          "published_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Before"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "screening_criteria": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Screening Criteria"
+          },
+          "search_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rapid",
+                  "standard",
+                  "deep"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Effort"
+          },
+          "steering_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "frequent",
+                  "moderate",
+                  "minimal",
+                  "unattended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steering Mode"
+          }
+        },
+        "title": "PlanPatchIn",
         "type": "object"
       },
       "PlanStep": {
@@ -7486,6 +7618,63 @@
           }
         ],
         "summary": "Get Plan",
+        "tags": [
+          "planning"
+        ]
+      },
+      "patch": {
+        "description": "Apply typed edits to the current plan and persist a new approved version.",
+        "operationId": "patch_plan_api_v1_projects__project_id__plan_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanPatchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Patch Plan",
         "tags": [
           "planning"
         ]

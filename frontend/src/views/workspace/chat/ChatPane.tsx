@@ -17,7 +17,10 @@ import { ContextBar } from "./ContextBar";
 export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpenPlanning }: { projectId: string; conversationId: string; sectionTitles?: string[]; onOpenPlanning: () => void }) {
   const conversation = useConversation(conversationId);
   const chat = useChatConversation(conversationId);
-  const starterQuestions = useMemo(() => sectionTitles.slice(0, 3).map((title) => `What does ${title} show?`), [sectionTitles]);
+  const starterQuestions = useMemo(
+    () => sectionTitles.slice(0, 3).map((title) => `Tell me more about "${title}"`),
+    [sectionTitles],
+  );
   const durableRows = chat.rows.filter(
     (row): row is Extract<(typeof chat.rows)[number], { id: string }> => "id" in row,
   );
@@ -25,7 +28,11 @@ export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpen
   // A pending durable turn with no local stream (a reload mid-answer, or a
   // second tab) still fences a send server-side — say so up front instead of
   // letting the composer accept input the server will just reject.
-  const disabledReason = !chat.isStreaming && pendingTurnId !== undefined ? "Waiting for the current answer…" : null;
+  const disabledReason = conversation.isError
+    ? "This chat couldn't be opened."
+    : !chat.isStreaming && pendingTurnId !== undefined
+      ? "Waiting for the current answer…"
+      : null;
   const send = (message: string) => { void chat.sendTurn(message).catch(() => undefined); };
   const retry = (clientTurnId: string) => { void chat.retry(clientTurnId); };
   const cancel = async () => {
@@ -45,5 +52,44 @@ export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpen
     if (row !== undefined) void chat.cancelTurn(row.id);
   };
   const empty = !chat.isPending && chat.rows.length === 0;
-  return <section aria-label="Chat" className="flex h-full min-h-0 flex-col"><div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{empty ? <div className="space-y-2 py-8"><p className="text-body text-grey">Ask about the evidence.</p>{starterQuestions.map((question) => <button key={question} type="button" onClick={() => send(question)} className="block text-left text-meta font-semibold text-blue hover:underline">{question}</button>)}</div> : <ChatMessages projectId={projectId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />}</div><ContextBar projectId={projectId} conversationId={conversationId} entryArtefactId={conversation.data?.entry_artefact_id ?? null} /><div className="border-t border-line p-4"><ChatComposer conversationId={conversationId} isStreaming={chat.isStreaming} disabledReason={disabledReason} onSend={send} onStop={() => void cancel()} /></div></section>;
+  return (
+    <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        {empty ? (
+          <div className="space-y-2 py-8">
+            <p className="text-body text-grey">
+              {conversation.isError ? "This chat couldn't be opened." : "Ask about the evidence."}
+            </p>
+            {!conversation.isError &&
+              starterQuestions.map((question) => (
+                <button
+                  key={question}
+                  type="button"
+                  onClick={() => send(question)}
+                  className="block text-left text-meta font-semibold text-blue hover:underline"
+                >
+                  {question}
+                </button>
+              ))}
+          </div>
+        ) : (
+          <ChatMessages projectId={projectId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
+        )}
+      </div>
+      <ContextBar
+        projectId={projectId}
+        conversationId={conversationId}
+        entryArtefactId={conversation.data?.entry_artefact_id ?? null}
+      />
+      <div className="border-t border-line p-4">
+        <ChatComposer
+          conversationId={conversationId}
+          isStreaming={chat.isStreaming}
+          disabledReason={disabledReason}
+          onSend={send}
+          onStop={() => void cancel()}
+        />
+      </div>
+    </section>
+  );
 }

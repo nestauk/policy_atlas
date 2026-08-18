@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { components } from "../../api/gen/types";
 import { COPY } from "../../lib/vocabulary";
+import { TooltipProvider } from "../../ui/radix/Tooltip";
 import { PlanDocument } from "./PlanDocument";
 import * as queries from "../../api/queries";
 
@@ -14,28 +15,15 @@ vi.mock("../../api/queries", () => ({
   usePlan: vi.fn(),
 }));
 
+vi.mock("../../api/mutations", () => ({
+  useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
+  usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
-/** Every part label, read verbatim from `PlanDocument.tsx`'s `PARTS` array,
- *  in the order the document renders them. */
-const PART_LABELS = [
-  "The question",
-  "Scope",
-  "What counts as relevant",
-  "Limits on the evidence",
-  "How widely to search",
-  "How deeply to analyse",
-  "What the analysis will do",
-  "How findings are grouped",
-  "What to extract",
-  "How long the report should be",
-  "When to check in with you",
-  "The agreed steps",
-  "Assumptions we are making",
-  "Roughly how long it will take",
-];
+const PANEL_LABELS = ["Research question", "Settings", "Search filters", "Screening rules"];
 
-/** A plan with every field null/empty — every part is undecided. */
 function emptyPlan(): PlanDraft {
   return {
     analysis_depth: null,
@@ -60,7 +48,6 @@ function emptyPlan(): PlanDraft {
   };
 }
 
-/** A plan with every field populated — every part has a value. */
 function fullPlan(): PlanDraft {
   return {
     ...emptyPlan(),
@@ -77,14 +64,10 @@ function fullPlan(): PlanDraft {
     },
     search_effort: "standard",
     analysis_depth: "standard",
-    components: ["screen_full", "extract"],
-    grouping_facets: ["intervention"],
-    extract_profiles: ["iof"],
-    section_budget: 5,
+    backend_scope: "both",
     steering_mode: "moderate",
-    steps: [{ label: "Search the literature", blurb: "Cast a wide net", stage: "acquire" }],
-    assumptions: ["Assumes uptake is measured consistently across studies"],
     time_band: "2-3 days",
+    steps: [{ label: "Search the literature", blurb: "Cast a wide net", stage: "acquire" }],
   };
 }
 
@@ -94,13 +77,27 @@ function mockUsePlan(overrides: { data?: PlanOut | null; isPending?: boolean; is
       data: undefined,
       isPending: false,
       isError: false,
+      refetch: vi.fn(),
       ...overrides,
     } as unknown as ReturnType<typeof queries.usePlan>,
   );
 }
 
 function planOut(plan: PlanDraft): PlanOut {
-  return { plan, status: "draft", version: 1 };
+  return { plan, status: "approved", version: 1 };
+}
+
+function renderPlan(onOverlayChange = vi.fn(), overlay = {}) {
+  return render(
+    <TooltipProvider delayDuration={0}>
+      <PlanDocument
+        projectId={PROJECT_ID}
+        onClose={vi.fn()}
+        overlay={overlay}
+        onOverlayChange={onOverlayChange}
+      />
+    </TooltipProvider>,
+  );
 }
 
 beforeEach(() => {
@@ -108,75 +105,246 @@ beforeEach(() => {
 });
 
 describe("PlanDocument", () => {
-  it("renders every part", () => {
+  it("renders the trimmed plan sections", () => {
     mockUsePlan({ data: planOut(fullPlan()) });
-    render(<PlanDocument projectId={PROJECT_ID} onClose={vi.fn()} />);
-    for (const label of PART_LABELS) {
+    renderPlan();
+    for (const label of PANEL_LABELS) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    expect(screen.queryByText("How findings are grouped")).toBeNull();
+    expect(screen.getByText("Plan steps")).toBeInTheDocument();
+    expect(screen.getByText("Expected run time: ~10-20 min")).toBeInTheDocument();
+    expect(screen.getByText("Searching")).toBeInTheDocument();
+    expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
+    expect(screen.getByText("2015–2024")).toBeInTheDocument();
+    expect(screen.getByText("Document geography")).toBeInTheDocument();
+    expect(screen.getByText("Academic + Policy (OpenAlex, Overton)")).toBeInTheDocument();
+    expect(screen.getByText("Thoroughness")).toBeInTheDocument();
+    expect(screen.getByText("Standard report")).toBeInTheDocument();
+    expect(screen.getByText("Analysis level")).toBeInTheDocument();
+    expect(screen.getByText("Full-text synthesis")).toBeInTheDocument();
   });
 
-  it("shows every undecided part rather than hiding it", () => {
+  it("shows none-selected for unset year and geography filters", () => {
     mockUsePlan({ data: planOut(emptyPlan()) });
-    render(<PlanDocument projectId={PROJECT_ID} onClose={vi.fn()} />);
-    for (const label of PART_LABELS) {
-      expect(screen.getByText(label)).toBeInTheDocument();
-    }
-    expect(screen.getAllByText(COPY.notDecided)).toHaveLength(PART_LABELS.length);
+    renderPlan();
+    expect(screen.getByText("Publication years")).toBeInTheDocument();
+    expect(screen.getAllByText("No preference")).toHaveLength(2);
+    expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
   });
 
-  it("shows a populated part's value instead of the not-decided copy", () => {
-    const plan = { ...emptyPlan(), question: "How effective are school meals?" };
-    mockUsePlan({ data: planOut(plan) });
-    render(<PlanDocument projectId={PROJECT_ID} onClose={vi.fn()} />);
-    expect(screen.getByText("How effective are school meals?")).toBeInTheDocument();
-    expect(screen.getAllByText(COPY.notDecided)).toHaveLength(PART_LABELS.length - 1);
-  });
-
-  it("seeds the composer and closes the panel without touching the plan", async () => {
+  it("updates expected run time and agreed steps from local settings", () => {
     mockUsePlan({ data: planOut(fullPlan()) });
-    const onClose = vi.fn();
-    const seedSpy = vi.fn();
-    window.addEventListener("policy-atlas:seed-composer", seedSpy);
-    try {
-      const user = userEvent.setup();
-      render(<PlanDocument projectId={PROJECT_ID} onClose={onClose} />);
-      const [firstChangeThis] = screen.getAllByRole("button", { name: "Change this" });
-      await user.click(firstChangeThis);
+    renderPlan(vi.fn(), { search_effort: "rapid", analysis_depth: "deep" });
+    expect(screen.getByText("Expected run time: ~75-90 min")).toBeInTheDocument();
+    expect(screen.getByText("Extracting findings")).toBeInTheDocument();
+    expect(screen.getByText("Grouping findings")).toBeInTheDocument();
+    expect(screen.getByText("Custom")).toBeInTheDocument();
+  });
 
-      expect(seedSpy).toHaveBeenCalledTimes(1);
-      const event = seedSpy.mock.calls[0][0] as CustomEvent<string>;
-      expect(typeof event.detail).toBe("string");
-      expect(event.detail.length).toBeGreaterThan(0);
+  it("adapts the searching step to the selected sources filter", () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    renderPlan(vi.fn(), { backend_scope: "academic_only" });
+    expect(screen.getByText("Querying academic databases.")).toBeInTheDocument();
+    expect(screen.queryByText("Querying academic and policy databases.")).toBeNull();
+  });
 
-      // The component imports no mutation — "Change this" only dispatches the
-      // seed event and asks the panel to close. There is no PATCH/fetch path
-      // to assert against, so the honest check is: the event fired once and
-      // the panel's onClose fired, with nothing else in between.
-      expect(onClose).toHaveBeenCalledTimes(1);
-    } finally {
-      window.removeEventListener("policy-atlas:seed-composer", seedSpy);
-    }
+  it("picks a settings option from the app-chrome menu, not a native select", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onOverlayChange = vi.fn();
+    const user = userEvent.setup();
+    renderPlan(onOverlayChange);
+
+    const edits = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(edits[1]);
+    expect(screen.queryByRole("combobox")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Search scope" }));
+    await user.click(screen.getByRole("option", { name: "Focused" }));
+    expect(screen.getByRole("button", { name: "Thoroughness" })).toHaveTextContent("Custom");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOverlayChange).toHaveBeenCalledWith(
+      expect.objectContaining({ search_effort: "rapid", analysis_depth: "standard" }),
+    );
+  });
+
+  it("snaps both axes when a research-approach preset is picked", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onOverlayChange = vi.fn();
+    const user = userEvent.setup();
+    renderPlan(onOverlayChange);
+
+    const edits = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(edits[1]);
+    await user.click(screen.getByRole("button", { name: "Thoroughness" }));
+    await user.click(screen.getByRole("option", { name: "Rapid overview" }));
+    expect(screen.getByRole("button", { name: "Search scope" })).toHaveTextContent("Focused");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOverlayChange).toHaveBeenCalledWith(
+      expect.objectContaining({ search_effort: "rapid", analysis_depth: "landscape" }),
+    );
+  });
+
+  it("keeps the search-scope caps in an info hover, not as body copy", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const user = userEvent.setup();
+    renderPlan();
+    expect(screen.queryByText(/up to 50 relevant results per database/)).toBeNull();
+    await user.hover(screen.getByRole("button", { name: "About Search scope" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Focused: up to 50 relevant results per database");
+  });
+
+  it("keeps the analysis-level descriptions in an info hover, not as body copy", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const user = userEvent.setup();
+    renderPlan();
+    expect(screen.queryByText(/Themes, coverage and gaps across the screened evidence/)).toBeNull();
+    await user.hover(screen.getByRole("button", { name: "About Analysis level" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Overview: Themes, coverage and gaps across the screened evidence",
+    );
+  });
+
+  it("saves the research question locally without a planner turn", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onOverlayChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          onClose={vi.fn()}
+          overlay={{}}
+          onOverlayChange={onOverlayChange}
+        />
+      </TooltipProvider>,
+    );
+    const [questionEdit] = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(questionEdit);
+    const field = screen.getByDisplayValue("How effective are school meals at raising uptake?");
+    await user.clear(field);
+    await user.type(field, "A new question");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onOverlayChange).toHaveBeenCalledWith({ question: "A new question" });
   });
 
   it("calls onClose when the close button is clicked", async () => {
     mockUsePlan({ data: planOut(fullPlan()) });
     const onClose = vi.fn();
     const user = userEvent.setup();
-    render(<PlanDocument projectId={PROJECT_ID} onClose={onClose} />);
-    await user.click(screen.getByRole("button", { name: "Close the plan" }));
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          onClose={onClose}
+          overlay={{}}
+          onOverlayChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Close the search plan" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a loading line while the plan is pending", () => {
-    mockUsePlan({ isPending: true });
-    render(<PlanDocument projectId={PROJECT_ID} onClose={vi.fn()} />);
-    expect(screen.getByText("Loading the plan…")).toBeInTheDocument();
+  it("docks from the centre overlay and offers Start search", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onDock = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          placement="center"
+          onClose={vi.fn()}
+          onDock={onDock}
+          overlay={{}}
+          onOverlayChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Start search" }).className).toContain("bg-green");
+    await user.click(screen.getByRole("button", { name: "Move the plan to the side" }));
+    expect(onDock).toHaveBeenCalledTimes(1);
   });
 
-  it("shows an alert when the plan fails to load", () => {
-    mockUsePlan({ isError: true });
-    render(<PlanDocument projectId={PROJECT_ID} onClose={vi.fn()} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("The plan couldn't be loaded.");
+  it("hides the dock control when already on the side", () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          placement="side"
+          onClose={vi.fn()}
+          onDock={vi.fn()}
+          overlay={{}}
+          onOverlayChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Move the plan to the side" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
+  });
+
+  it("keeps the title left-aligned in the same column as the sections", () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          placement="center"
+          onClose={vi.fn()}
+          onDock={vi.fn()}
+          overlay={{}}
+          onOverlayChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    const title = screen.getByRole("heading", { name: "Search plan" });
+    expect(title.className).not.toContain("text-center");
+    expect(title.parentElement?.className).not.toContain("text-center");
+    const column = title.closest("header")?.parentElement?.parentElement;
+    expect(column).toContainElement(screen.getByRole("heading", { name: "Research question" }));
+  });
+
+  it("renders dock and close as matching icon buttons", () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          placement="center"
+          onClose={vi.fn()}
+          onDock={vi.fn()}
+          overlay={{}}
+          onOverlayChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    const dock = screen.getByRole("button", { name: "Move the plan to the side" });
+    const close = screen.getByRole("button", { name: "Close the search plan" });
+    expect(dock.className).toBe(close.className);
+    expect(dock.querySelector("svg")?.getAttribute("class")).toBe(
+      close.querySelector("svg")?.getAttribute("class"),
+    );
+  });
+
+  it("hides Edit and Start search when the plan is a read-only record", () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument
+          projectId={PROJECT_ID}
+          readOnly
+          onClose={vi.fn()}
+          overlay={{}}
+          onOverlayChange={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start search" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Research question" })).toBeInTheDocument();
   });
 });

@@ -50,11 +50,12 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByLabel("Message the planner").fill("landscape only");
     await page.getByRole("button", { name: "Send" }).click();
-    await page.getByRole("button", { name: "Start the analysis" }).click();
+    await page.getByRole("button", { name: "Start search" }).click();
 
-    // "Searching sources" is the acquire stage — the one component every
-    // stub plan starts with. (Never assert discretionary stages such as
-    // "Mapping the landscape"/characterise: the orchestrator may omit them.)
+    // "Searching" is the acquire stage — the one component every stub plan
+    // starts with. Labels come from the plan-panel vocabulary, not SSE copy.
+    // (Never assert discretionary stages such as "Mapping"/characterise: the
+    // orchestrator may omit them.)
     // The timeline entry persists after the component completes, so this
     // assertion has no race against the stub's near-instant execution.
     // `.first()` because depth-graded search reruns acquire once per round and
@@ -64,7 +65,7 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     // the round count (build finding, 2026-08-10). Presence is all this smoke
     // claims; how repeated stages should read is a UX question, not a test one.
     await expect(
-      page.getByRole("list", { name: "Stage timeline" }).getByText("Searching sources").first(),
+      page.getByRole("list", { name: "Stage timeline" }).getByText("Searching").first(),
     ).toBeVisible({ timeout: 30_000 });
   });
 });

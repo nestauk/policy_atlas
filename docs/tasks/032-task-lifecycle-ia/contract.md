@@ -201,11 +201,12 @@ Read the source sections, not the headings.
 - G13 — `portfolio` table, nullable `project.portfolio_id`, and the portfolio
   endpoints.
 
-**The planning conversation is untouched.** `PlanningPane`, `ChatPane`,
-`JourneyPane`, `CheckInCard` and the conversation rail keep their current
-behaviour. There is no Plan/Run toggle and no second run monitor: the journey
-pane stays where it is, and the chat thread's existing run block stays the place
-run progress is reported. Owner decision, 2026-08-17.
+**Run progress lives in the planning conversation.** After Start search the
+workspace stays a single-column chat. `JourneyPane` is not shown. A running
+card in the thread reports stages; a collapsed status pins above the composer
+only if that card scrolls out of view. Sources is open while a run executes or
+is paused so finished intermediate work can be read there. Owner decision,
+2026-08-18, superseding the 2026-08-17 "journey pane stays" rule.
 
 ## Out of scope
 
@@ -265,14 +266,15 @@ never from whether its page would be empty.
 | State of the task | Plan | Results | Sources | Share | History |
 |---|---|---|---|---|---|
 | No run yet | open | locked | locked | locked | locked |
-| Run executing or paused | open | locked | locked | locked | open |
+| Run executing or paused | open | locked | open | locked | open |
 | Run succeeded or degraded | open | open | open | open | open |
 | Run failed, interrupted or aborted | open | locked | open | locked | open |
 
 A locked tab is rendered, is visibly unavailable, and is not focusable as a
-link. Sources stays open after a failed run because the corpus that was gathered
-is real and readable — that is the flag-don't-drop discipline, not a special
-case.
+link. Sources stays open while a run executes or is paused, and after a failed
+run, because the corpus that was gathered is real and readable — that is the
+flag-don't-drop discipline, not a special case. Results stays locked until the
+write-up exists (succeeded or degraded).
 
 **Routing by state (G12).** A task row in the tasks list routes by lifecycle
 state: a succeeded task opens Results, any other state opens Plan. One

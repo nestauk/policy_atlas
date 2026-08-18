@@ -53,8 +53,8 @@ file points there and does not restate them.
 ## Lifecycle bar (G3)
 
 13. [ ] Tab availability matches the contract's locking table exactly, including
-        the failed-run row where Sources stays open. Asserted by test for every
-        row.
+        Sources open while a run is executing or paused, and the failed-run row
+        where Sources stays open. Asserted by test for every row.
 14. [ ] A locked tab is rendered, is visibly unavailable, and is not reachable by
         keyboard or by typing its URL — a locked route redirects to Plan rather
         than showing an empty page.
@@ -68,10 +68,12 @@ file points there and does not restate them.
         yet" and is not hidden.
 17. [ ] "Change this" on a part seeds the chat composer and focuses it. It never
         writes to the plan.
-18. [ ] The planning conversation is unchanged. `PlanningPane`, `ChatPane`,
-        `JourneyPane`, `CheckInCard` and the conversation rail keep their
-        behaviour, and their existing tests pass untouched. No Plan/Run toggle
-        and no second run monitor were added.
+18. [ ] After Start search the workspace stays a single-column chat. Run
+        progress is a green card in the planning thread (minimisable; a
+        collapsed status pins above the composer only when the card is off
+        screen). `JourneyPane` is not mounted. Check-ins stay in the thread.
+        Finished stages that have a tab signpost a link (Sources, Landscape,
+        Findings, Results).
 
 ## Report (G5, G6, G7)
 

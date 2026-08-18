@@ -21,6 +21,10 @@ export interface StageEntry {
 export interface RunRef {
   id: string;
   status: RunStatus;
+  /** First `run.status` / `occurred_at` seen for this run id. */
+  startedAt: string;
+  /** Terminal `run.status` / `occurred_at` — omitted while the run is live. */
+  endedAt?: string;
 }
 
 /** One entry in the resolved-decisions log (a `checkin.resolved` frame,

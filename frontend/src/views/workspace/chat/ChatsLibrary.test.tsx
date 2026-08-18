@@ -103,15 +103,15 @@ describe("ChatsLibrary", () => {
     expect(screen.getByRole("button", { name: "Archive Cost barriers" })).toBeInTheDocument();
   });
 
-  it("navigates to the project's Plan tab and closes the overlay when a planning row is selected — never opening it in the chat panel", async () => {
+  it("opens a planning row in the chat panel, not by navigating to Plan", async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<ChatsLibrary projectId="proj-9" open onClose={onClose} />);
     await user.click(screen.getByRole("button", { name: "Plan for Task Alpha" }));
-    expect(state.navigate).toHaveBeenCalledWith("/projects/proj-9");
+    expect(state.setActiveConversation).toHaveBeenCalledWith("p1");
     expect(onClose).toHaveBeenCalledOnce();
     expect(state.addOpenChatTab).not.toHaveBeenCalled();
-    expect(state.setActiveConversation).not.toHaveBeenCalled();
+    expect(state.navigate).not.toHaveBeenCalled();
   });
 
   it("still opens a chat row in the panel when selected", async () => {

@@ -10,8 +10,8 @@ const LOCKING_TABLE: ReadonlyArray<{
   open: readonly LifecycleTab[];
 }> = [
   { state: "no run yet", status: null, open: ["plan"] },
-  { state: "running", status: "running", open: ["plan", "history"] },
-  { state: "paused", status: "paused", open: ["plan", "history"] },
+  { state: "running", status: "running", open: ["plan", "sources", "history"] },
+  { state: "paused", status: "paused", open: ["plan", "sources", "history"] },
   { state: "succeeded", status: "succeeded", open: [...LIFECYCLE_TABS] },
   { state: "degraded", status: "degraded", open: [...LIFECYCLE_TABS] },
   { state: "failed", status: "failed", open: ["plan", "sources", "history"] },
@@ -63,7 +63,7 @@ describe("lifecycleTabs", () => {
     const locked = lifecycleTabs("/projects/p1", "running")
       .filter((entry) => entry.locked)
       .map((entry) => entry.tab);
-    expect(locked).toEqual(["results", "sources", "share"]);
+    expect(locked).toEqual(["results", "share"]);
   });
 });
 

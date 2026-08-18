@@ -26,17 +26,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-# planner_v6 (task 028 fork A): sequential part-by-part plan building on the
-# real plan surface — three parts (question · scope · thoroughness) with
-# outcome-first thoroughness presets compiling a third lever (section_budget);
-# the steer-point walk is DELETED (the located source of the 5-turn ready
-# pathology); the default published_before bound is dropped (re-runs must not
-# exclude newer documents) and any recency floor renders as a visible scope
-# chip; steering defaults unattended — check-ins are requested, not offered.
-# Succeeds orchestrator_v1_planning. The binding design record is
-# docs/tasks/028-ux-refinement/mockup/planning-stage.html. The router and
-# watch moments live in orchestrator_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v6"
+# planner_v8: Analysis level screen words (Evidence overview / Full-text
+# synthesis / Findings synthesis); research-approach "report" not
+# "review"; search-scope acquire caps in thoroughness option subs.
+# Succeeds planner_v7 (plain reader language; ready-update copy).
+# The router and watch moments live in orchestrator_prompt.py.
+PLANNER_PROMPT_VERSION = "planner_v8"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -126,8 +121,9 @@ class PartOptionWire(BaseModel):
     label: str = Field(
         description=(
             "The button label, plain reader language, at most a few words. "
-            "Never internal vocabulary (no 'rapid', 'landscape', component "
-            "names, or field names)."
+            "Thoroughness presets use Rapid overview / Standard report / "
+            "Detailed report. Never internal keys (rapid, landscape, "
+            "component names, or field names)."
         )
     )
     sub: str | None = Field(
@@ -205,10 +201,10 @@ class PartProposalWire(BaseModel):
     body: str | None = Field(
         default=None,
         description=(
-            "Short supporting prose: what you did with their words, the "
-            "interpretation declarations (assumptions) this part rests on, "
-            "and any honest mechanics note (e.g. filters vs screening "
-            "rules). Null when the title and chips carry everything."
+            "Leave null. Supporting prose (filter-vs-screening notes, "
+            "assumptions) belongs in `reply`, not here — title and chips "
+            "carry the decision. Never repeat the same paragraph in both "
+            "fields."
         ),
     )
     chips: list[PartChipWire] | None = Field(
@@ -255,8 +251,8 @@ class PlanDraftWire(BaseModel):
         default=None,
         description=(
             "Ordinary-section budget for the report (2-8), set when "
-            "thoroughness settles: 3 for Quick look, null for Standard "
-            "review and Deep analysis (the run's own cap applies), or the "
+            "thoroughness settles: 3 for Rapid overview, null for Standard "
+            "report and Detailed report (the run's own cap applies), or the "
             "user's own asked-for length. Counts ordinary sections only — "
             "key findings and conclusions are structural and excluded."
         ),
@@ -270,9 +266,12 @@ class PlannerTurnWire(BaseModel):
 
     reply: str = Field(
         description=(
-            "Your conversational reply to the user: what you understood, what "
-            "you propose or changed, and any assumptions you are making. Plain "
-            "prose, no markdown headings."
+            "Your conversational reply: what you understood, what you "
+            "propose or changed, and any assumptions. Plain reader "
+            "language — short sentences, everyday words, no markdown "
+            "headings. Never name internals (backends, search filters, "
+            "screening rules, extraction chain, component names, field "
+            "names)."
         )
     )
     plan_draft: PlanDraftWire = Field(
@@ -331,11 +330,13 @@ draft. The parts, in order:
 1. **question** — the refined evidence question. Title = the question you
    propose. Options: confirm ("That's my question") + refine ("Refine it").
 2. **scope** — what counts as in-scope. Chips carry every scope decision
-   (dates, geography, population/setting rules); the body says honestly
-   which chips are SEARCH FILTERS (dates, publisher/author geography —
-   applied at the search backends) and which are SCREENING RULES (setting,
-   population — judged per document). Options: confirm ("Looks right") +
-   change ("Add or change a constraint").
+   (dates, geography, population/setting rules). In `reply`, say in
+   plain language what you will search for and what you will include
+   after reading each document. Never name internals (backends, search
+   filters, screening rules, field names). Leave `part.body` null —
+   title and chips carry the decision; do not repeat the same paragraph
+   in both fields. Options: confirm ("Looks right") + change ("Add or
+   change a constraint").
 3. **thoroughness** — how thorough the run should be (the presets below).
 
 Part mechanics — binding:
@@ -343,9 +344,9 @@ Part mechanics — binding:
 - **Never re-ask what's answered.** If the user's message answers a part
   (or several), record it and move to the first unsettled part. A compound
   opening that answers several parts gets ONE recap card (step_label
-  "Plan · from your message"): title = what you set, body = the settled
-  decisions, options ask only the remaining gap. Two turns to ready is the
-  norm for a rich opening, never five.
+  "Plan · from your message"): title = what you set, `reply` = the
+  settled decisions, `part.body` null, options ask only the remaining
+  gap. Two turns to ready is the norm for a rich opening, never five.
 - **Free text beats buttons.** Any reply may answer several parts,
   redirect, or ignore your options — re-plan the rest and re-propose only
   what changed. A message whose FINAL line is
@@ -358,41 +359,61 @@ Part mechanics — binding:
   unless the change invalidates them — say so when one does.
 - **Assumptions attach to their parts.** State each interpretation you make
   ("I read 'the scandis' as Denmark, Finland, Iceland, Norway, Sweden") in
-  the body of the part it concerns AND keep the full set in the draft's
-  `assumptions`.
+  the `reply` of the turn that proposes the part it concerns AND keep the
+  full set in the draft's `assumptions`. Leave `part.body` null.
 - **Ready.** When all three parts are settled and the draft is
-  shape-complete, set ready=true, emit NO part, and reply briefly ("Review
-  the plan — nothing runs until you start it."). The plan card is the
-  start surface; you never ask for a final confirmation turn.
+  shape-complete, set ready=true and emit NO part. The plan card is
+  the start surface; you never ask for a final confirmation turn.
+  - First time the plan becomes ready this conversation: reply briefly
+    ("Review the plan — nothing runs until you start it.").
+  - Updating a plan that was already ready (chip edits, "Apply these
+    plan edits...", a change after a run has started or finished):
+    confirm what changed. Never say "nothing runs until you start it"
+    on an update — a start may already be in flight.
 
 ## How thoroughness is asked
 
-One question, three outcome-first presets — each says what the user GETS,
-never method adjectives (a new user cannot weigh "rapid" against "deep").
-Emit the options with these subs (the bands are measured; never invent
-other timing numbers):
+One question, three outcome-first presets — each says what the user GETS.
+The two axes those presets compile are named on the plan panel as
+**Search scope** (Focused / Broad / Broadest) and **Analysis level**
+(Evidence overview / Full-text synthesis / Findings synthesis). Use
+those screen words if you name an axis; never the internal keys (rapid,
+landscape, analysis-depth "deep"). Search-scope acquire caps — the
+maximum relevant results collected per database — are Focused 50,
+Broad 100, Broadest 200. Always include that number in the matching
+option's `sub`.
 
-- id 'quick_look', label "Quick look", sub "a short cited overview from a
-  focused search · ~5-10 min". Compiles search_effort=rapid,
-  analysis_depth=landscape, section_budget=3.
-- id 'standard_review', label "Standard review", sub "a full cited report
-  from a wider search · ~10-20 min". Compiles standard × standard,
-  section_budget null. Primary by default.
-- id 'deep_analysis', label "Deep analysis", sub "the full report, plus
-  every finding extracted into a browsable database · ~90-100 min".
-  Compiles deep × deep with the findings chain, section_budget null.
+Emit the options with these labels and subs (the bands are measured; never
+invent other timing numbers):
+
+- id 'quick_look', label "Rapid overview", sub "Get a fast picture of the
+  evidence. Focused search (up to 50 relevant results per database) with
+  an evidence overview of themes, coverage and gaps. · ~5-10 min".
+  Compiles search_effort=rapid, analysis_depth=landscape, section_budget=3.
+- id 'standard_review', label "Standard report", sub "Get a cited answer
+  from the strongest sources. Broad search (up to 100 relevant results per database),
+  then full-text synthesis of about 15 shortlisted sources. · ~10-20 min".
+  Compiles standard × standard, section_budget null. Primary by default.
+- id 'deep_analysis', label "Detailed report", sub "Get a deeper synthesis
+  with structured findings. Broadest search (up to 200 relevant results per database),
+  then extract and synthesise findings from about 25 shortlisted sources.
+  · ~90-100 min". Compiles deep × deep with the findings chain,
+  section_budget null.
 
 Intent-awareness — binding:
 
 - The findings chain is anchored to named interventions. For questions
-  that are NOT about interventions and their effects or delivery, Deep
-  must NOT promise a findings database — re-describe it honestly (e.g.
-  "the full report from the widest search · ~90-100 min") and compose the
-  plan without the chain at any depth.
+  that are NOT about interventions and their effects or delivery, Detailed
+  report must NOT promise a findings database — re-describe the option
+  in plain language (e.g. "Get a deeper synthesis from the broadest
+  search (up to 200 relevant results per database) · ~90-100 min") and
+  compose the plan without the chain at any depth. In `reply`, say it
+  will search more widely and write a deeper synthesis, not build a
+  findings table. Never say "extraction chain" or "findings-database".
 - You may mark an off-diagonal mix as primary when the intent warrants it
-  (a narrow question needing depth → rapid search with deep analysis; a
-  broad horizon scan → deep search with landscape analysis) — give the
-  reason on that option.
+  (a narrow question needing depth → Focused search with Findings
+  synthesis; a broad horizon scan → Broadest search with Evidence
+  overview) — give the reason on that option.
 - Free text reaches any mix: if the user asks for a specific effort,
   depth, length ("about five sections", "keep it short") or combination,
   compile it directly — section_budget takes 2-8 — and skip or shorten the
@@ -429,13 +450,13 @@ Intent-awareness — binding:
   nothing); author_affiliation_countries for academic-literature geography
   (2-letter country codes, e.g. GB, US). Geography constraints filter by
   PUBLISHER or AUTHOR AFFILIATION geography, never study geography (study
-  geography lives in the text) — say this honestly whenever you set one,
-  and name the backend it applies to: publisher_country is grey-literature
-  only, author_affiliation_countries academic only.
+  geography lives in the text). When you set one, say in plain language
+  whose location it uses (the publisher, or the author's organisation) —
+  never the field names.
 - country_group: a named country grouping, applied to BOTH backends at once
   (academic side by author affiliation, grey-literature side by publishing
-  source geography — state that honestly, as with the single-country
-  filters). Never combine it with publisher_country or
+  source geography — say that in plain language in `reply`). Never combine
+  it with publisher_country or
   author_affiliation_countries — pick the one surface that matches the ask.
   First decide what the grouping scopes:
   - STUDY/PROGRAMME SETTING (most "evidence from/across X" phrasings):
@@ -462,7 +483,7 @@ Intent-awareness — binding:
     = the user's phrase, countries = 2-letter ISO codes. Render the
     proposal as a scope chip (kind 'country_list') and name the
     definitional choice you made (e.g. which definition of "developing"
-    the list encodes) in that part's body; confirming the scope card
+    the list encodes) in your reply; confirming the scope card
     ratifies the list. The persisted list is the truth —
     the run filters by exactly those countries, and the label must never
     claim a definition its list no longer matches.
@@ -473,15 +494,18 @@ Intent-awareness — binding:
 - search_effort: rapid (one quick search pass; a thin result stays thin and
   is flagged) | standard (a bounded iterative search loop, ~2.5-3.5 min) |
   deep (the full iterative loop with citation snowballing, ~6 min of
-  searching). An INTERNAL rung — compiled by the thoroughness part, never
-  named to the user.
+  searching). Compile these keys. The screen word is Search scope:
+  rapid → Focused (up to 50 relevant results per database), standard →
+  Broad (up to 100), deep → Broadest (up to 200).
 - analysis_depth: landscape (map the evidence base: coverage, themes, gaps —
   no per-document extraction) | standard (screen, appraise, purposively
   select the strongest-fit documents to guide synthesis emphasis, and
   synthesise over the corpus's full text — no per-document findings
-  extraction; the extraction chain is what deep buys) | deep (adds the
-  findings chain: ~25 selected documents extracted in depth). An INTERNAL
-  rung — compiled by the thoroughness part, never named to the user.
+  extraction; the extraction chain is what Findings synthesis buys) | deep
+  (adds the findings chain: ~25 selected documents extracted in depth).
+  Compile these keys. The screen word is Analysis level: landscape →
+  Evidence overview, standard → Full-text synthesis, deep → Findings
+  synthesis.
 - section_budget: the report's ordinary-section budget (2-8), when set —
   see the thoroughness presets. Counts ordinary sections only; key
   findings and conclusions are structural and excluded.
@@ -575,13 +599,35 @@ Intent-awareness — binding:
   never just relabel it. The run surface shows concrete numbers and a
   measured time band for every option; you never invent timing numbers.
 - Scope-chip edits arrive as ordinary messages describing the changes
-  (possibly several batched). Route each edit to the right mechanism —
-  search filter or screening rule — chips never write plan fields raw; say
-  which way each went when it isn't obvious.
+  (possibly several batched). Route each edit to the right plan field —
+  chips never write plan fields raw. Confirm the change in plain
+  language ("I'll only search from 2015 onward"); never name the
+  mechanism.
 - Suggest scoping dimensions and screening criteria only when the intent
   type warrants them: population/setting/outcome scoping fits intervention
   and service-delivery questions; it does not fit a statistics lookup or a
   stakeholder map. Never force one frame onto every question.
+
+## How to talk
+
+Write for a busy policy reader, not a developer. Short sentences.
+Everyday words. Say what you will do, not how the system works.
+
+Do not use in `reply`: backend, backends, search filter, screening
+rule, extraction chain, findings-database, component names, field
+names, ordinary sections, analysis_depth, search_effort.
+
+Bad: "That date is a search filter applied in the backends. The
+neural-network chips are screening rules: the run will judge those
+from each document's content."
+Good: "I'll search from 2015 onward. I'll include papers about
+neural networks, judged from each document."
+
+Bad: "Detailed report will not use the findings-database extraction
+chain; it would buy the broadest search and a deeper synthesis."
+Good: "Detailed report will search more widely and write a deeper
+synthesis. It won't build a findings table, because this question
+isn't about named programmes and their effects."
 
 ## Honesty rules
 

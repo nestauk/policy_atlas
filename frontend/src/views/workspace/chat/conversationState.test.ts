@@ -5,7 +5,13 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { queryKeys } from "../../../api/queries";
-import { useActiveConversation, useConversationMutations } from "./conversationState";
+import {
+  isPlanningConversation,
+  PLANNING_TAB_ID,
+  planningConversationId,
+  useActiveConversation,
+  useConversationMutations,
+} from "./conversationState";
 
 const post = vi.fn(async () => ({ data: { id: "c-new" }, error: undefined }));
 
@@ -60,7 +66,36 @@ describe("useConversationMutations", () => {
     });
 
     expect(
+      queryClient.getQueryData(queryKeys.conversations("p1", { kind: "chat", status: "active" })),
+    ).toEqual({ data: [{ id: "c-new", latest_turn_preview: null }] });
+    expect(queryClient.getQueryData(queryKeys.conversation("c-new"))).toEqual({ id: "c-new" });
+    expect(
       queryClient.getQueryState(queryKeys.conversations("p1", { kind: "chat", status: "active" }))?.isInvalidated,
     ).toBe(true);
+  });
+});
+
+describe("planningConversationId", () => {
+  it("returns the newest planning row, falling back to the planning tab token", () => {
+    expect(planningConversationId([])).toBe(PLANNING_TAB_ID);
+    expect(
+      planningConversationId([
+        { id: "c1", kind: "chat" },
+        { id: "p1", kind: "planning" },
+      ]),
+    ).toBe("p1");
+  });
+});
+
+describe("isPlanningConversation", () => {
+  it("treats the planning tab token and a planning row id as planning", () => {
+    const rows = [
+      { id: "c1", kind: "chat" },
+      { id: "p1", kind: "planning" },
+    ];
+    expect(isPlanningConversation(null, rows)).toBe(false);
+    expect(isPlanningConversation("c1", rows)).toBe(false);
+    expect(isPlanningConversation("p1", rows)).toBe(true);
+    expect(isPlanningConversation(PLANNING_TAB_ID, rows)).toBe(true);
   });
 });

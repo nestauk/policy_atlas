@@ -3,63 +3,30 @@ import { useNavigate, useSearchParams } from "react-router";
 
 import { usePortfolios } from "../api/queries";
 import { useCreateTask } from "../api/mutations";
+import { CAPABILITIES } from "../lib/capabilities";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
-
-/**
- * The kinds of work the system can do.
- *
- * Three are listed but cannot run. Listing them is the honest move: the shape
- * of the product is visible, and a person can tell that scoping options is
- * planned rather than forgotten. They are not links and have no route, so
- * there is nothing to click that would fail.
- */
-const CAPABILITIES = [
-  {
-    key: "evidence_base",
-    name: "Evidence search",
-    description: "Find, screen and synthesise research evidence on a policy question.",
-    available: true,
-  },
-  {
-    key: "scoping_policy_options",
-    name: "Scoping policy options",
-    description: "Lay out the options open to a policymaker and what each would involve.",
-    available: false,
-  },
-  {
-    key: "theory_of_change",
-    name: "Theory of change",
-    description: "Trace how an intervention is meant to lead to its intended outcome.",
-    available: false,
-  },
-  {
-    key: "map_stakeholders",
-    name: "Map stakeholders",
-    description: "Identify who is affected by a policy area and how they are positioned.",
-    available: false,
-  },
-] as const;
-
-const EXAMPLE_QUESTION =
-  "What works to reduce childhood obesity in primary schools?";
+import { cn } from "../ui/brand/cn";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 
 /** Step one: pick a kind of work. Only one of the four can run. */
 function CapabilityList({ onPick }: { onPick: () => void }) {
   return (
-    <ul role="list" className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <ul role="list" className="mt-10 flex flex-col">
       {CAPABILITIES.map((capability) =>
         capability.available ? (
           <li key={capability.key}>
             <button
               type="button"
               onClick={onPick}
-              className="h-full w-full cursor-pointer border border-line-2 bg-paper p-5 text-left hover:border-navy focus-visible:outline-2 focus-visible:outline-blue"
+              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
             >
-              <span className="block text-body font-bold text-navy">{capability.name}</span>
-              <span className="mt-1.5 block text-body text-grey">{capability.description}</span>
+              <span>{capability.name}</span>
+              <span aria-hidden="true" className="shrink-0 text-blue">
+                →
+              </span>
             </button>
           </li>
         ) : (
@@ -68,15 +35,12 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
                 outcome is failure should not be reachable at all. */}
             <div
               aria-disabled="true"
-              className="h-full border border-dashed border-line-2 bg-paper-2 p-5 select-none"
+              className="flex items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 select-none"
             >
-              <span className="flex items-center gap-2">
-                <span className="text-body font-bold text-line-2">{capability.name}</span>
-                <span className="border border-line-2 px-1.5 py-0.5 text-caption font-bold uppercase tracking-[0.06em] text-grey">
-                  {COPY.comingSoon}
-                </span>
+              <span className="text-lead font-normal leading-[25px] text-grey">{capability.name}</span>
+              <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
+                {COPY.comingSoon}
               </span>
-              <span className="mt-1.5 block text-body text-line-2">{capability.description}</span>
             </div>
           </li>
         ),
@@ -85,10 +49,98 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
   );
 }
 
+type PortfolioOption = { portfolio_id: string; name: string };
+
+/** Project picker — Popover menu styled like the app chrome, not a native select. */
+function ProjectPicker({
+  id,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  value: string;
+  options: readonly PortfolioOption[];
+  onChange: (portfolioId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((portfolio) => portfolio.portfolio_id === value);
+  const label = selected?.name ?? COPY.noProject;
+
+  const pick = (portfolioId: string) => {
+    onChange(portfolioId);
+    setOpen(false);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          id={id}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          className="inline-flex min-w-[14rem] cursor-pointer items-center justify-between gap-3 border border-line-2 bg-paper px-3 py-2 text-body font-normal text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue"
+        >
+          <span className="truncate">{label}</span>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-4 w-4 shrink-0 text-grey"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-1">
+        <ul role="listbox" aria-labelledby={id} className="flex flex-col">
+          <li role="none">
+            <button
+              type="button"
+              role="option"
+              aria-selected={value === ""}
+              onClick={() => pick("")}
+              className={cn(
+                "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
+                value === "" && "bg-blue-tint-2 font-medium",
+              )}
+            >
+              {COPY.noProject}
+            </button>
+          </li>
+          {options.map((portfolio) => (
+            <li key={portfolio.portfolio_id} role="none">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === portfolio.portfolio_id}
+                onClick={() => pick(portfolio.portfolio_id)}
+                className={cn(
+                  "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
+                  value === portfolio.portfolio_id && "bg-blue-tint-2 font-medium",
+                )}
+              >
+                {portfolio.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** Step two: the question, and as little else as possible beside it. */
 function QuestionForm() {
+  const [searchParams] = useSearchParams();
+  const presetPortfolio = searchParams.get("portfolio") ?? "";
   const [question, setQuestion] = useState("");
-  const [portfolioId, setPortfolioId] = useState("");
+  const [portfolioId, setPortfolioId] = useState(presetPortfolio);
   const portfolios = usePortfolios();
   const create = useCreateTask();
   const navigate = useNavigate();
@@ -104,31 +156,30 @@ function QuestionForm() {
 
   return (
     <form
-      className="mt-10"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
       }}
     >
-      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
+      <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey">
         Evidence search
       </p>
-      <h1 className="mt-2 font-display text-display font-extrabold tracking-[-0.5px] text-navy">
+      <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty">
         What do you need evidence on?
       </h1>
-      <p className="mt-3 max-w-prose text-lead text-grey">
-        Ask it the way you would ask a colleague. You will agree the plan before
-        anything runs.
+      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty">
+      Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.
       </p>
 
-      <div className="relative mt-8">
+      <div className="mt-6 flex items-end gap-3 border border-line-2 bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
         <label className="sr-only" htmlFor="new-task-question">
           Your question
         </label>
         <textarea
           id="new-task-question"
           autoFocus
-          rows={5}
+          rows={3}
+          placeholder="e.g. What works to reduce childhood obesity in the UK?"
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={(event) => {
@@ -137,49 +188,32 @@ function QuestionForm() {
               submit();
             }
           }}
-          className="w-full resize-none border border-line-2 bg-paper p-4 pr-28 text-body text-navy focus-visible:outline-2 focus-visible:outline-blue"
+          className="min-h-[5.5rem] min-w-0 flex-1 resize-none border-0 bg-transparent p-0 text-lead leading-[25px] text-ink focus-visible:outline-none"
         />
-        <div className="absolute right-3 bottom-3">
-          <Button type="submit" size="sm" disabled={!canSend}>
-            {create.isPending ? "Starting…" : "Start"}
-          </Button>
-        </div>
+        <Button
+          type="submit"
+          size="md"
+          disabled={!canSend}
+          className="shrink-0 px-6 py-3.5 text-body"
+        >
+          {create.isPending ? "Starting…" : "Start"}
+        </Button>
       </div>
-      <p className="mt-2 text-caption text-grey">
-        Enter to send · Shift + Enter for a new line
+      <p className="mt-2 text-meta font-normal leading-5 text-grey">
+        Enter to send · Shift+Enter for a new line
       </p>
 
-      {question.trim() === "" && (
-        <p className="mt-6 text-body text-grey">
-          For example:{" "}
-          <button
-            type="button"
-            onClick={() => setQuestion(EXAMPLE_QUESTION)}
-            className="cursor-pointer text-left font-semibold text-blue hover:underline"
-          >
-            {EXAMPLE_QUESTION}
-          </button>
-        </p>
-      )}
-
       {(portfolios.data?.data.length ?? 0) > 0 && (
-        <div className="mt-8 flex items-center gap-3">
-          <label className="text-meta text-grey" htmlFor="new-task-portfolio">
+        <div className="mt-8 flex flex-wrap items-center gap-3">
+          <label className="text-meta font-normal text-grey" htmlFor="new-task-portfolio">
             Add to a {PROJECT.lower}
           </label>
-          <select
+          <ProjectPicker
             id="new-task-portfolio"
             value={portfolioId}
-            onChange={(event) => setPortfolioId(event.target.value)}
-            className="border border-line-2 bg-paper px-2 py-1.5 text-meta text-navy focus-visible:outline-2 focus-visible:outline-blue"
-          >
-            <option value="">{COPY.noProject}</option>
-            {portfolios.data?.data.map((portfolio) => (
-              <option key={portfolio.portfolio_id} value={portfolio.portfolio_id}>
-                {portfolio.name}
-              </option>
-            ))}
-          </select>
+            options={portfolios.data?.data ?? []}
+            onChange={setPortfolioId}
+          />
         </div>
       )}
 
@@ -200,20 +234,28 @@ export function NewTaskView() {
   const picked = searchParams.get("capability") === "evidence_base";
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-10">
-      {picked ? (
-        <QuestionForm />
-      ) : (
-        <>
-          <h1 className="font-display text-display font-extrabold tracking-[-0.5px] text-navy">
-            {COPY.newTask}
-          </h1>
-          <p className="mt-3 max-w-prose text-lead text-grey">
-            What kind of work do you want to start?
-          </p>
-          <CapabilityList onPick={() => setSearchParams({ capability: "evidence_base" })} />
-        </>
-      )}
+    <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9">
+      <div className="w-full max-w-[50vw] min-w-0">
+        {picked ? (
+          <QuestionForm />
+        ) : (
+          <>
+            <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey">
+              {COPY.newTask}
+            </p>
+            <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty">
+              {COPY.newTaskPrompt}
+            </h1>
+            <CapabilityList
+              onPick={() => {
+                const next = new URLSearchParams(searchParams);
+                next.set("capability", "evidence_base");
+                setSearchParams(next);
+              }}
+            />
+          </>
+        )}
+      </div>
     </main>
   );
 }

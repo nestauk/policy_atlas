@@ -233,7 +233,9 @@ synth-time context query and must not run before the VPC exists.
      For test users day-to-day, `make staging-user EMAIL=<email-format-username>
      PASSWORD='<password>'` wraps this: invite email suppressed, permanent
      password set directly (the address needs no real inbox; recovery for fake
-     addresses is `admin-set-user-password` again).
+     addresses is `admin-set-user-password` again). `make prod-user` is the same
+     helper against the production pool (`https://policyatlas.uk`); it needs
+     prod-account credentials, not `AWS_PROFILE=pa-dev`.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit

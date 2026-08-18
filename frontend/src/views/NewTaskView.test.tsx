@@ -45,12 +45,12 @@ describe("NewTaskView — capability step", () => {
     expect(screen.getByText("Evidence search")).toBeInTheDocument();
     expect(screen.getByText("Scoping policy options")).toBeInTheDocument();
     expect(screen.getByText("Theory of change")).toBeInTheDocument();
-    expect(screen.getByText("Map stakeholders")).toBeInTheDocument();
+    expect(screen.getByText("Mapping stakeholders")).toBeInTheDocument();
   });
 
   it("renders the three unavailable capabilities as inert, not as buttons", () => {
     renderNewTask();
-    for (const name of ["Scoping policy options", "Theory of change", "Map stakeholders"]) {
+    for (const name of ["Scoping policy options", "Theory of change", "Mapping stakeholders"]) {
       const li = screen.getByText(name).closest("li");
       expect(li).not.toBeNull();
       expect(within(li!).getByText("Coming soon")).toBeInTheDocument();
@@ -62,7 +62,42 @@ describe("NewTaskView — capability step", () => {
     const user = userEvent.setup();
     renderNewTask();
     await user.click(screen.getByRole("button", { name: /Evidence search/ }));
-    expect(screen.getByRole("heading", { name: "What do you need evidence on?" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "What do you need evidence on?" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a project preset when opened from a project, and still starts on the capability picker", async () => {
+    const user = userEvent.setup();
+    vi.mocked(queries.usePortfolios).mockReturnValue(
+      {
+        data: {
+          data: [
+            {
+              portfolio_id: "portfolio-1",
+              name: "Housing",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+            },
+          ],
+        },
+      } as unknown as ReturnType<typeof queries.usePortfolios>,
+    );
+    renderNewTask("/new?portfolio=portfolio-1");
+    expect(
+      screen.getByRole("heading", { name: "What would you like to do?" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Evidence search/ }));
+    expect(screen.getByLabelText(/Add to a project/)).toHaveTextContent("Housing");
+  });
+
+  it("shows the capability-picker eyebrow and prompt", () => {
+    renderNewTask();
+    expect(screen.getByText("New task")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "What would you like to do?" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -95,18 +130,7 @@ describe("NewTaskView — question step", () => {
 
   it("states the Enter / Shift+Enter key hint", () => {
     renderNewTask("/new?capability=evidence_base");
-    expect(screen.getByText(/Shift \+ Enter/)).toBeInTheDocument();
-  });
-
-  it("fills the textarea when the example question is clicked", async () => {
-    const user = userEvent.setup();
-    renderNewTask("/new?capability=evidence_base");
-    await user.click(
-      screen.getByRole("button", { name: /What works to reduce childhood obesity/ }),
-    );
-    expect(screen.getByLabelText("Your question")).toHaveValue(
-      "What works to reduce childhood obesity in primary schools?",
-    );
+    expect(screen.getByText(/Shift\+Enter/)).toBeInTheDocument();
   });
 });
 
@@ -135,8 +159,8 @@ describe("NewTaskView — project selector", () => {
     );
     renderNewTask("/new?capability=evidence_base");
 
-    const select = screen.getByLabelText(/Add to a project/);
-    await user.selectOptions(select, "portfolio-1");
+    await user.click(screen.getByLabelText(/Add to a project/));
+    await user.click(screen.getByRole("option", { name: "Housing" }));
     await user.type(screen.getByLabelText("Your question"), "A question");
     await user.click(screen.getByRole("button", { name: "Start" }));
 

@@ -1,13 +1,52 @@
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 
 import { useGroups, useLandscape, useProject } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
-import { Card, Divider, PaneHeading } from "../ui/brand/Card";
-import { Chip } from "../ui/brand/Chip";
+import { Card } from "../ui/brand/Card";
 import { orderThemes } from "../ui/charts/EvidenceDistributionChart";
 import { ReauthRedirect } from "../ui/feedback";
+
+function documentCount(size: number): string {
+  return size === 1 ? "1 document" : `${size} documents`;
+}
+
+function ThemeRow({
+  name,
+  size,
+  description,
+  to,
+}: {
+  name: string;
+  size: number;
+  description: string;
+  to?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="min-w-0 text-lead font-bold text-navy">{scrub(name)}</p>
+        <p className="shrink-0 text-body text-grey">{documentCount(size)}</p>
+      </div>
+      {description !== "" && <p className="mt-1 text-body text-grey">{scrub(description)}</p>}
+    </>
+  );
+  return (
+    <li className="border-b border-line last:border-b-0">
+      {to !== undefined ? (
+        <Link
+          to={to}
+          className="block py-4 no-underline hover:bg-paper-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue"
+        >
+          {body}
+        </Link>
+      ) : (
+        <div className="py-4">{body}</div>
+      )}
+    </li>
+  );
+}
 
 /**
  * Themes: the reader-facing landscape themes plus every grouping facet,
@@ -38,12 +77,7 @@ export function ThemesView() {
   const isEmpty = !isPending && !isError && themes.length === 0 && facets.length === 0;
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-8">
-      <h1 className="mb-1 font-display text-title font-extrabold text-navy">Themes</h1>
-      <p className="mb-5 text-lead text-grey">
-        The recurring themes and groups found across the screened-in sources.
-      </p>
-
+    <main className="py-8">
       {isPending && (
         <div aria-busy="true" aria-label="Loading themes" className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -78,39 +112,41 @@ export function ThemesView() {
       )}
 
       {themes.length > 0 && (
-        <Card>
-          <PaneHeading>Key themes</PaneHeading>
-          <Divider />
-          <ul role="list" className="space-y-3 p-4">
+        <section>
+          <ul role="list">
             {themes.map((theme) => (
-              <li key={theme.name} className="flex items-baseline gap-2.5">
-                <Chip tone="blue">{theme.size}</Chip>
-                <div>
-                  <p className="text-body font-semibold text-navy">{scrub(theme.name)}</p>
-                  <p className="text-body text-grey">{scrub(theme.description)}</p>
-                </div>
-              </li>
+              <ThemeRow
+                key={theme.name}
+                name={theme.name}
+                size={theme.size}
+                description={theme.description}
+                to={
+                  theme.theme_id
+                    ? `/projects/${projectId}/sources/all?theme=${theme.theme_id}`
+                    : undefined
+                }
+              />
             ))}
           </ul>
-        </Card>
+        </section>
       )}
 
       {facets.map((facet) => (
-        <Card key={facet.facet} className="mt-4">
-          <PaneHeading>{scrub(facet.facet)}</PaneHeading>
-          <Divider />
-          <ul role="list" className="space-y-3 p-4">
+        <section key={facet.facet} className="mt-8">
+          <h2 className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+            {scrub(facet.facet)}
+          </h2>
+          <ul role="list" className="mt-2">
             {(facet.groups ?? []).map((group) => (
-              <li key={group.label} className="flex items-baseline gap-2.5">
-                <Chip tone="soft">{group.size}</Chip>
-                <div>
-                  <p className="text-body font-semibold text-navy">{scrub(group.label)}</p>
-                  <p className="text-body text-grey">{scrub(group.description)}</p>
-                </div>
-              </li>
+              <ThemeRow
+                key={group.label}
+                name={group.label}
+                size={group.size}
+                description={group.description}
+              />
             ))}
           </ul>
-        </Card>
+        </section>
       ))}
     </main>
   );

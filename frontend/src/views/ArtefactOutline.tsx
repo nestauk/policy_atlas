@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { useFunnel, useLandscape } from "../api/queries";
 import { Link } from "react-router";
@@ -42,38 +42,145 @@ export function sectionAnchor(title: string, index: number): string {
   return `section-${index}-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}`;
 }
 
+const OPEN_SECTION_EVENT = "artefact-open-section";
+/** Leave a little air under the scrollport top after a contents jump. */
+const SECTION_SCROLL_OFFSET_PX = 8;
+/** Ignore the spy while a click-driven scroll is settling. */
+const SPY_LOCK_MS = 500;
+
+function hashTargets(id: string): boolean {
+  return decodeURIComponent(window.location.hash.replace(/^#/, "")) === id;
+}
+
+function nearestScrollRoot(start: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = start.parentElement;
+  while (node != null && node !== document.body) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/** Scroll the report pane — not the window — so the section sits at the top. */
+function scrollSectionIntoView(id: string): void {
+  const target = document.getElementById(id);
+  if (target == null) return;
+  const root = nearestScrollRoot(target);
+  if (root == null) {
+    target.scrollIntoView({ block: "start" });
+    return;
+  }
+  const top =
+    target.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
+  root.scrollTo({ top: Math.max(0, top - SECTION_SCROLL_OFFSET_PX) });
+}
+
+/** Contents-nav click: record the hash without the browser scrolling to a
+ *  still-collapsed heading, then tell the matching section to expand. */
+function requestOpenSection(id: string): void {
+  const next = `#${id}`;
+  if (window.location.hash !== next) {
+    history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}${next}`,
+    );
+  }
+  window.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT, { detail: id }));
+}
+
+/** Expand when the contents sidebar or a hash URL points at this section,
+ *  then scroll — even if the section was already open. */
+export function useOpenWhenNavigated(id: string, setOpen: (open: boolean) => void): void {
+  const [navTick, setNavTick] = useState(0);
+  useEffect(() => {
+    const go = () => {
+      setOpen(true);
+      setNavTick((tick) => tick + 1);
+    };
+    const onSidebar = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === id) go();
+    };
+    const onHash = () => {
+      if (hashTargets(id)) go();
+    };
+    if (hashTargets(id)) go();
+    window.addEventListener(OPEN_SECTION_EVENT, onSidebar);
+    window.addEventListener("hashchange", onHash);
+    return () => {
+      window.removeEventListener(OPEN_SECTION_EVENT, onSidebar);
+      window.removeEventListener("hashchange", onHash);
+    };
+  }, [id, setOpen]);
+
+  useLayoutEffect(() => {
+    if (navTick === 0) return;
+    scrollSectionIntoView(id);
+  }, [navTick, id]);
+}
+
+/** Open a collapsed section when the browser is about to print, so the PDF
+ *  contains the full report rather than the on-screen collapsed summaries. */
+export function useExpandForPrint(setOpen: (open: boolean) => void): void {
+  useEffect(() => {
+    const expand = () => setOpen(true);
+    window.addEventListener("beforeprint", expand);
+    return () => window.removeEventListener("beforeprint", expand);
+  }, [setOpen]);
+}
+
 /**
  * Sticky contents sidebar with scroll-spy (mock-up's sidebar variant; built
  * for the real section-list shape — long question-specific titles wrap).
- * Hidden below xl so the page column never scrolls horizontally.
+ * Stacks above the report on small screens so the outline stays reachable
+ * instead of disappearing below a breakpoint.
  */
 export function ContentsSidebar({
   entries,
 }: {
   entries: Array<{ id: string; title: string }>;
 }) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(entries[0]?.id ?? null);
+  const spyLockUntil = useRef(0);
+
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (observed) => {
-        const visible = observed
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible.length > 0) setActiveId(visible[0].target.id);
-      },
-      { rootMargin: "-10% 0px -70% 0px" },
-    );
-    for (const entry of entries) {
-      const element = document.getElementById(entry.id);
-      if (element !== null) observer.observe(element);
-    }
-    return () => observer.disconnect();
+    const list = entries;
+    const first = list
+      .map((entry) => document.getElementById(entry.id))
+      .find((element): element is HTMLElement => element != null);
+    if (first == null) return undefined;
+    const root = nearestScrollRoot(first);
+    const checkpoint = () => {
+      if (Date.now() < spyLockUntil.current) return;
+      const scroller = root;
+      const line = scroller != null ? scroller.getBoundingClientRect().top + 16 : 16;
+      let current = list[0]?.id ?? null;
+      for (const entry of list) {
+        const element = document.getElementById(entry.id);
+        if (element == null) continue;
+        if (element.getBoundingClientRect().top <= line) current = entry.id;
+      }
+      if (scroller != null) {
+        const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+        if (maxScroll > 32 && scroller.scrollTop >= maxScroll - 8) {
+          current = list.at(-1)?.id ?? current;
+        }
+      }
+      if (current != null) setActiveId(current);
+    };
+    const scroller: HTMLElement | Window = root ?? window;
+    scroller.addEventListener("scroll", checkpoint, { passive: true });
+    checkpoint();
+    return () => scroller.removeEventListener("scroll", checkpoint);
   }, [entries]);
 
   return (
     <nav
       aria-label="Contents"
-      className="sticky top-20 hidden max-h-[calc(100svh-6rem)] w-56 shrink-0 self-start overflow-y-auto pr-4 xl:block"
+      className="mb-6 w-full shrink-0 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
     >
       <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Contents</p>
       <ul className="mt-2 space-y-1 border-l border-line">
@@ -82,6 +189,12 @@ export function ContentsSidebar({
             <a
               href={`#${entry.id}`}
               aria-current={activeId === entry.id ? "location" : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                spyLockUntil.current = Date.now() + SPY_LOCK_MS;
+                setActiveId(entry.id);
+                requestOpenSection(entry.id);
+              }}
               className={`block border-l-2 py-0.5 pl-3 text-body leading-snug hover:text-navy ${
                 activeId === entry.id
                   ? "border-l-blue font-semibold text-navy"
@@ -117,13 +230,15 @@ export function SectionDisclosure({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  useOpenWhenNavigated(id, setOpen);
+  useExpandForPrint(setOpen);
   const summary = sectionSummary(section);
   const expanded = !collapsible || open;
 
   return (
     <section
       id={id}
-      className={section.role === "conclusions" ? "mb-9 scroll-mt-20 border-t border-line pt-6" : "mb-9 scroll-mt-20"}
+      className={section.role === "conclusions" ? "mb-9 border-t border-line pt-6" : "mb-9"}
     >
       {collapsible ? (
         <button
@@ -132,21 +247,21 @@ export function SectionDisclosure({
           onClick={() => setOpen((value) => !value)}
           className="flex w-full cursor-pointer items-baseline gap-2 text-left"
         >
-          <h2 className="flex-1 font-display text-heading font-bold text-navy">
+          <h2 className="flex-1 text-heading font-bold text-navy">
             {scrub(section.title)}
           </h2>
-          <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+          <span aria-hidden="true" className="print-hide shrink-0 text-meta font-bold text-blue">
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
       ) : (
-        <h2 className="font-display text-heading font-bold text-navy">{scrub(section.title)}</h2>
+        <h2 className="text-heading font-bold text-navy">{scrub(section.title)}</h2>
       )}
       {/* Fallback (first-sentence) summaries render unmarked — the checked/
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
       {!expanded && summary !== null && (
-        <p className="mt-1.5 max-w-prose-measure text-body text-grey">{scrub(summary.text)}</p>
+        <p className="mt-1.5 max-w-prose-measure text-lead text-grey">{scrub(summary.text)}</p>
       )}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
     </section>
@@ -161,6 +276,8 @@ export function SectionDisclosure({
  */
 export function GatheredSection({ projectId, id }: { projectId: string; id: string }) {
   const [open, setOpen] = useState(false);
+  useOpenWhenNavigated(id, setOpen);
+  useExpandForPrint(setOpen);
   const landscape = useLandscape(projectId, "cited");
   const funnel = useFunnel(projectId);
   const cited = landscape.data;
@@ -189,17 +306,17 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
   }
 
   return (
-    <section id={id} className="mt-12 scroll-mt-20 border-t border-line pt-6">
+    <section id={id} className="mt-12 border-t border-line pt-6">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 font-display text-heading font-bold text-navy">
+        <h2 className="flex-1 text-heading font-bold text-navy">
           How the evidence was gathered
         </h2>
-        <span aria-hidden="true" className="shrink-0 text-meta font-bold text-blue">
+        <span aria-hidden="true" className="print-hide shrink-0 text-meta font-bold text-blue">
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>

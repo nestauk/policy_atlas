@@ -337,13 +337,8 @@ export function FindingsView() {
   const showKind = profile === undefined;
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-8">
-      <h1 className="font-display text-title font-extrabold text-navy">Findings</h1>
-      <p className="mt-1 text-lead text-grey">
-        Every finding pulled from the sources — what was found, and the exact words it rests on.
-      </p>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Finding kind">
+    <main className="py-8">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Finding kind">
         {(
           [
             [undefined, "All kinds"],

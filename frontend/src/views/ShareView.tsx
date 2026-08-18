@@ -3,7 +3,7 @@ import { useParams } from "react-router";
 import { useProject } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, LIFECYCLE_LABELS } from "../lib/vocabulary";
-import { Card, PaneHeading } from "../ui/brand/Card";
+import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 
 /**
  * Share: named as missing rather than absent.
@@ -19,11 +19,8 @@ export function ShareView() {
   useDocumentTitle(project.data?.name, LIFECYCLE_LABELS.share);
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <PaneHeading>{LIFECYCLE_LABELS.share}</PaneHeading>
-      <Card className="mt-4">
-        <p className="text-body text-grey">{COPY.shareComingSoon}</p>
-      </Card>
+    <main className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
+      <p className="text-lead text-grey">{COPY.shareComingSoon}</p>
     </main>
   );
 }

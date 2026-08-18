@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
-import { useCheckIns, useDecisions, useRuns } from "../../api/queries";
+import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
 import { composePlanningThread, usePlanningTranscript } from "../../store";
@@ -19,7 +19,7 @@ import type {
   StageEntry,
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
-import { Divider, PaneHeading } from "../../ui/brand/Card";
+import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
@@ -27,7 +27,15 @@ import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
 import { PlanCard } from "./PlanCard";
+import type { PlanOverlay } from "./planOverlay";
 import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
+import { RunningCard, RunningCardDock } from "./RunningCard";
+import {
+  CHAT_PRIMARY_CTA_CLASS,
+  completedSignposts,
+  elapsedSeconds,
+  formatElapsed,
+} from "./runProgress";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
 const TRANSCRIPT_PAGE_SIZE = 200;
@@ -64,6 +72,34 @@ export function threadInputs(
     }
   }
   return { boundaries, runDecisions };
+}
+
+/** Placeholder for the planning composer — planning/replanning, not follow-up Q&A.
+ *
+ * Args:
+ *   runStatus: The project's current run status, or undefined before any run.
+ *   planReady: True once the approved plan is ready to review and start.
+ *
+ * Returns:
+ *   Copy that matches the run and plan state.
+ */
+export function planningComposerPlaceholder(
+  runStatus: RunStatus | undefined,
+  planReady = false,
+): string {
+  if (runStatus === "running" || runStatus === "paused") {
+    return "Replanning unlocks when this run finishes.";
+  }
+  if (runStatus === "succeeded" || runStatus === "degraded") {
+    return "Describe a change to the plan to run again.";
+  }
+  if (runStatus === "failed" || runStatus === "aborted" || runStatus === "interrupted") {
+    return "Describe what to change, then start again.";
+  }
+  if (planReady) {
+    return "Suggest changes here, or edit directly in the plan.";
+  }
+  return "Describe the policy question you need evidence for.";
 }
 
 /**
@@ -113,7 +149,7 @@ export function Composer({
           }}
           placeholder={placeholder}
           disabled={disabled}
-          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-body [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
+          className="max-h-60 min-h-14 flex-1 resize-y overflow-y-auto border border-line-2 bg-paper px-3 py-2.5 text-lead [field-sizing:content] focus-visible:outline-2 focus-visible:outline-blue disabled:bg-ground disabled:text-grey"
         />
         <Button
           type="submit"
@@ -136,7 +172,7 @@ export function Composer({
           </svg>
         </Button>
       </form>
-      <p className="mt-1 text-caption text-grey">Enter to send · Shift+Enter for a new line</p>
+      <p className="mt-1 text-meta text-grey">Enter to send · Shift+Enter for a new line</p>
     </div>
   );
 }
@@ -144,7 +180,7 @@ export function Composer({
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="anim-rise ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p>
+      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
   );
 }
@@ -154,7 +190,7 @@ function UserBubble({ text }: { text: string }) {
 function PlannerBubble({ text }: { text: string }) {
   return (
     <div className="anim-rise mr-8">
-      <p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p>
+      <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p>
     </div>
   );
 }
@@ -181,12 +217,13 @@ function DurableTurn({
   // A button-confirm turn's record is the ✓ on its part card — the canned
   // marker bubble would only duplicate it (binding record: planning-stage).
   const isConfirmTurn = confirmTarget(turn.user_message) !== null;
+  const plannerText = [turn.reply, turn.part?.body]
+    .filter((piece): piece is string => piece != null && piece !== "")
+    .join("\n\n");
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {!isConfirmTurn && <UserBubble text={turn.user_message} />}
-      {turn.status === "completed" && turn.reply !== null && turn.reply !== "" && (
-        <PlannerBubble text={turn.reply} />
-      )}
+      {turn.status === "completed" && plannerText !== "" && <PlannerBubble text={plannerText} />}
       {turn.part != null && partState !== undefined && (
         <PartCard
           part={turn.part}
@@ -331,10 +368,7 @@ function RunBlock({
       {complete && (
         <div className="anim-rise mr-8 border border-green-tint bg-green-tint/40 px-4 py-3">
           <p className="text-body font-semibold text-navy">The evidence base is ready.</p>
-          <Link
-            to={`/projects/${projectId}/results`}
-            className="cutout mt-2 inline-block bg-blue px-3 py-2 text-meta font-bold text-white"
-          >
+          <Link to={`/projects/${projectId}/results`} className={cn("mt-2", CHAT_PRIMARY_CTA_CLASS)}>
             Read the evidence base
           </Link>
         </div>
@@ -354,19 +388,30 @@ export function PlanningPane({
   projectId,
   runStatus,
   stream,
+  onReviewPlan,
+  planOverlay,
+  onOverlayApplied,
 }: {
   projectId: string;
   runStatus: RunStatus | undefined;
   stream: RunStreamState;
+  onReviewPlan?: () => void;
+  planOverlay?: PlanOverlay;
+  onOverlayApplied?: () => void;
 }) {
   const transcript = usePlanningTranscript(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const planQuery = usePlan(projectId);
+  const planReady =
+    planQuery.data?.status === "approved" && planQuery.data.plan.ready === true;
   const runsQuery = useRuns(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const decisionsQuery = useDecisions(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const checkInsQuery = useCheckIns(projectId, "all");
+  const funnel = useFunnel(projectId);
   const [message, setMessage] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
-  // The plan document's "Change this" seeds this composer rather than writing
-  // to the plan — editing a plan stays conversational.
+  const [runMinimised, setRunMinimised] = useState(false);
+  const [cardOffscreen, setCardOffscreen] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useComposerSeed(setMessage);
 
   const durableTurns = (transcript.data?.data ?? []) as PlanningThreadTurn[];
@@ -390,6 +435,7 @@ export function PlanningPane({
   // toggles, font loads).
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -410,6 +456,66 @@ export function PlanningPane({
   const lastTurnAt = thread.findLastIndex((item) => item.type === "planning_turn");
   const planCardAt = lastTurnAt === -1 ? thread.length : lastTurnAt + 1;
   const planStarted = thread.slice(planCardAt).some((item) => item.type === "run_block");
+  const liveRunId = stream.run?.id;
+  const threadHasLiveRun = thread.some(
+    (item) => item.type === "run_block" && item.run.capability_run_id === liveRunId,
+  );
+  const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
+  const runTicking = runStatus === "running" || runStatus === "paused";
+  const liveElapsed = formatElapsed(
+    elapsedSeconds(stream.run?.startedAt, stream.run?.endedAt, nowMs),
+  );
+
+  useEffect(() => {
+    if (!runTicking || !cardOffscreen) return undefined;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [runTicking, cardOffscreen]);
+
+  useEffect(() => {
+    const card = cardRef.current;
+    const root = scrollRef.current;
+    if (card === null || root === null || typeof IntersectionObserver === "undefined") {
+      setCardOffscreen(false);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setCardOffscreen(entry !== undefined && !entry.isIntersecting),
+      { root, threshold: 0 },
+    );
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [liveRunId, threadHasLiveRun]);
+
+  const liveCard =
+    stream.run === null ? null : (
+      <div key="live-run" ref={cardRef}>
+        <RunningCard
+          projectId={projectId}
+          status={stream.run.status}
+          stages={stream.stages}
+          plan={stream.plan?.plan}
+          startedAt={stream.run.startedAt}
+          endedAt={stream.run.endedAt}
+          hasFindings={hasFindings}
+          minimised={runMinimised}
+          onMinimisedChange={setRunMinimised}
+          onSeePlan={onReviewPlan}
+        />
+      </div>
+    );
+  const signpostBubbles = completedSignposts(stream.stages, projectId, hasFindings).map(
+    (signpost) => (
+      <div key={signpost.href} className="anim-rise mr-8">
+        <p className="max-w-prose-measure text-lead text-ink">
+          {signpost.message}{" "}
+          <Link to={signpost.href} className="font-semibold text-blue hover:underline">
+            {signpost.label} →
+          </Link>
+        </p>
+      </div>
+    ),
+  );
 
   const send = (input: { message: string; clientTurnId: string }) => {
     const trimmed = input.message.trim();
@@ -427,25 +533,19 @@ export function PlanningPane({
     transcript.data !== undefined && thread.length === 0 && transcript.optimisticTurns.length === 0;
 
   return (
-    <section aria-label="Planning conversation" className="flex h-full flex-col">
-      {!landing && (
-        <>
-          <PaneHeading>Plan the analysis</PaneHeading>
-          <Divider />
-        </>
-      )}
+    <section aria-label="Planning conversation" className="flex h-full min-h-0 flex-col">
       <div
         ref={scrollRef}
         onScroll={(event) => {
           const el = event.currentTarget;
           pinnedToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
         }}
-        className="flex flex-1 flex-col overflow-y-auto px-4 py-4"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the
             landing prompt sits in the top third (1:2 spacer split). */}
         <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
-        <div ref={contentRef} className="space-y-3">
+        <div ref={contentRef} className="space-y-6">
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
             Loading your planning conversation…
@@ -486,6 +586,11 @@ export function PlanningPane({
                 onSend={(text) => send({ message: text, clientTurnId: crypto.randomUUID() })}
                 onPrefill={setMessage}
               />
+            ) : item.run.capability_run_id === liveRunId && liveCard !== null ? (
+              <div key="live-run-block" className="space-y-6">
+                {liveCard}
+                {signpostBubbles}
+              </div>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
@@ -500,12 +605,12 @@ export function PlanningPane({
               />
             );
           return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" projectId={projectId} runActive={runActive} started={planStarted} />]
+            ? [rendered, <PlanCard key="plan-card" projectId={projectId} runActive={runActive} started={planStarted} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
             : [rendered];
         })}
 
         {transcript.optimisticTurns.map((turn: OptimisticPlanningTurn) => (
-          <div key={turn.clientTurnId} className="space-y-3">
+          <div key={turn.clientTurnId} className="space-y-6">
             {/* Button-confirm turns never show a bubble — durable turns hide
                 them too; the ✓ on the part card is the record. */}
             {confirmTarget(turn.userMessage) === null && <UserBubble text={turn.userMessage} />}
@@ -573,30 +678,39 @@ export function PlanningPane({
             stages={stream.stages}
           />
         )}
+        {liveCard !== null && !threadHasLiveRun && (
+          <div key="live-run-fallback" className="space-y-6">
+            {liveCard}
+            {signpostBubbles}
+          </div>
+        )}
         </div>
         {landing && <div aria-hidden="true" className="flex-[2]" />}
       </div>
 
-      <div className="border-t border-line px-4 py-3">
-        {runActive && (
-          <p role="status" className="mb-2 text-body leading-relaxed text-grey">
-            {runStatus === "paused"
-              ? "The analysis is paused at a check-in above. Replanning unlocks when the run finishes."
-              : "The analysis is running — steer it from its check-ins. Replanning unlocks when it finishes."}
-          </p>
+      <div className="shrink-0 border-t border-line">
+        {stream.run !== null && cardOffscreen && (
+          <RunningCardDock
+            status={stream.run.status}
+            stages={stream.stages}
+            plan={stream.plan?.plan}
+            elapsedLabel={liveElapsed}
+            onOpen={() => {
+              setRunMinimised(false);
+              cardRef.current?.scrollIntoView({ block: "nearest" });
+            }}
+          />
         )}
+        <div className="px-4 py-3">
         <Composer
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={
-            runActive
-              ? "Replanning is available after the run"
-              : "Describe the policy question you need evidence for."
-          }
+          placeholder={planningComposerPlaceholder(runStatus, planReady)}
           disabled={runActive}
           sendDisabled={composerDisabled}
         />
+        </div>
       </div>
     </section>
   );

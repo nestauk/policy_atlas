@@ -22,14 +22,14 @@ export type LifecycleBarItem = {
  */
 export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem[]; hint: string }) {
   return (
-    <div className="flex items-center gap-5">
+    <div className="flex items-end gap-5">
       {items.map((item) =>
         item.locked ? (
           <span
             key={item.tab}
             aria-disabled="true"
             title={hint}
-            className="cursor-not-allowed text-meta font-semibold text-line-2 select-none"
+            className="inline-flex cursor-not-allowed items-center border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-line-2 select-none"
           >
             {item.label}
             <span className="sr-only"> — {hint}</span>
@@ -43,15 +43,13 @@ export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem
             end={item.tab === "plan"}
             className={({ isActive }) =>
               cn(
-                "nav-underline text-meta font-semibold text-grey no-underline hover:text-navy",
-                isActive && "nav-underline-on font-extrabold text-navy",
+                "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline hover:text-navy",
+                isActive && "border-blue text-navy",
               )
             }
           >
-            <span className="inline-flex items-center gap-1.5">
-              {item.label}
-              {item.marker}
-            </span>
+            {item.label}
+            {item.marker}
           </NavLink>
         ),
       )}

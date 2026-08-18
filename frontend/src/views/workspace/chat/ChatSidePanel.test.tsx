@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatSidePanel } from "./ChatSidePanel";
 
 const CHAT_ROW = { id: "c1", kind: "chat", status: "active", closed_at: null, title: "Cost barriers", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null };
+const PLAN_ROW = { id: "plan-1", kind: "planning", status: "active", closed_at: null, title: "Planning", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null };
 
 const state = vi.hoisted(() => ({
   activeConversationId: null as string | null,
@@ -18,25 +19,31 @@ const state = vi.hoisted(() => ({
 
 vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
 vi.mock("../../../api/queries", () => ({
-  // Dropped the `kind: "chat"` filter (rev 032 G14) so this shares its cache
-  // key with `ChatsLibrary`'s own "active" query — the mocked rows can carry
-  // either kind, exercising the panel's own client-side chat-only filter.
   useConversations: () => ({
     data: { data: state.rows },
     isSuccess: state.chatsResolved,
   }),
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
 }));
-vi.mock("./conversationState", () => ({
-  addOpenChatTab: state.addOpenChatTab,
-  useActiveConversation: () => ({
-    activeConversationId: state.activeConversationId,
-    setActiveConversation: state.setActiveConversation,
-  }),
-  useConversationMutations: () => ({ create: state.create }),
-}));
+vi.mock("./conversationState", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./conversationState")>();
+  return {
+    ...actual,
+    addOpenChatTab: state.addOpenChatTab,
+    openChatTabs: () => ["c1"],
+    removeOpenChatTab: vi.fn(),
+    useActiveConversation: () => ({
+      activeConversationId: state.activeConversationId,
+      setActiveConversation: state.setActiveConversation,
+    }),
+    useConversationMutations: () => ({ create: state.create, archive: vi.fn() }),
+  };
+});
 vi.mock("./ChatPane", () => ({
   ChatPane: ({ conversationId }: { conversationId: string }) => <div data-testid="chat-pane">{conversationId}</div>,
+}));
+vi.mock("../PlanningPane", () => ({
+  PlanningPane: () => <div data-testid="planning-pane" />,
 }));
 vi.mock("./ChatsLibrary", () => ({
   ChatsLibrary: ({ open }: { open: boolean }) => (open ? <div data-testid="library" /> : null),
@@ -73,37 +80,45 @@ describe("ChatSidePanel", () => {
     expect(state.setActiveConversation).not.toHaveBeenCalled();
   });
 
-  it("renders the open panel with header actions when the URL names a chat", async () => {
+  it("ignores a newer planning conversation when picking the latest chat to open — the launcher opens a follow-up chat", async () => {
+    state.activeConversationId = null;
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    const user = userEvent.setup();
+    render(<ChatSidePanel projectId="p1" />);
+    await user.click(screen.getByRole("button", { name: "Open chat" }));
+    expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
+    expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
+  });
+
+  it("creates a follow-up chat when the launcher opens and none exist yet", async () => {
+    state.activeConversationId = null;
+    state.rows = [PLAN_ROW];
+    const user = userEvent.setup();
+    render(<ChatSidePanel projectId="p1" />);
+    await user.click(screen.getByRole("button", { name: "Open chat" }));
+    expect(state.create).toHaveBeenCalledWith(null);
+    expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c-new");
+    expect(state.setActiveConversation).toHaveBeenCalledWith("c-new");
+  });
+
+  it("renders the open panel with the conversation strip when the URL names a chat", async () => {
     state.activeConversationId = "c1";
     const user = userEvent.setup();
     render(<ChatSidePanel projectId="p1" />);
     expect(screen.getByRole("complementary", { name: "Project chat" })).toBeInTheDocument();
     expect(screen.getByTestId("chat-pane")).toHaveTextContent("c1");
-    expect(screen.getByText("Cost barriers")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Planning" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Chats" }));
     expect(screen.getByTestId("library")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close chat panel" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
-  it("creates a blank chat from the new-chat action when none is reusable", async () => {
-    state.activeConversationId = "c1";
-    const user = userEvent.setup();
+  it("shows the planning thread when the strip's Planning tab is selected", () => {
+    state.activeConversationId = "plan-1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
     render(<ChatSidePanel projectId="p1" />);
-    await user.click(screen.getByRole("button", { name: "New chat" }));
-    expect(state.create).toHaveBeenCalledWith(null);
-  });
-
-  it("ignores a newer planning conversation when picking the latest chat to open — the panel only ever hosts chats", async () => {
-    state.activeConversationId = null;
-    state.rows = [
-      { id: "plan-1", kind: "planning", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: new Date().toISOString(), entry_artefact_id: null, latest_turn_preview: null },
-      CHAT_ROW,
-    ];
-    const user = userEvent.setup();
-    render(<ChatSidePanel projectId="p1" />);
-    await user.click(screen.getByRole("button", { name: "Open chat" }));
-    expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
-    expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
+    expect(screen.getByTestId("planning-pane")).toBeInTheDocument();
+    expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 });

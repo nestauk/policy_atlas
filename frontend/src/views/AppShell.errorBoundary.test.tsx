@@ -56,8 +56,8 @@ describe("AppShell — chat subtree error containment (029 fix 6)", () => {
     // The chat's own boundary caught it — the last-resort fallback shows in
     // its place, not a full-page crash.
     expect(screen.getByText("Something went wrong")).toBeInTheDocument();
-    // Everything outside the chat subtree survives: nav, sign-out.
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
-    expect(screen.getByText("policy-lead")).toBeInTheDocument();
+    // Everything outside the chat subtree survives: global nav, account.
+    expect(screen.getByRole("link", { name: "New" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
   });
 });

@@ -10,6 +10,7 @@ import { Card } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { mergeHistory } from "./historyPresentation";
+import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 
 const PAGE_SIZE = 200;
 
@@ -37,15 +38,7 @@ export function HistoryView() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-8">
-      <h1 className="font-display text-title font-extrabold text-navy">
-        {LIFECYCLE_LABELS.history}
-      </h1>
-      <p className="mt-1 mb-5 text-body text-grey">
-        Everything that happened on this task, in order — what you asked, what
-        was agreed, and what the analysis did.
-      </p>
-
+    <main className={`${LIFECYCLE_PAGE_CLASS} py-8`}>
       {isPending && (
         <div aria-busy="true" aria-label="Loading the history" className="space-y-2">
           {Array.from({ length: 6 }).map((_, index) => (

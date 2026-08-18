@@ -228,6 +228,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       sequence: 3,
     });
     expect(state.stages).toHaveLength(1);
+    expect(state.run?.endedAt).toBe("2026-07-21T10:00:03Z");
 
     const OTHER_RUN_ID = "33333333-3333-3333-3333-333333333333";
     state = reduceRunStreamFrame(state, {
@@ -240,7 +241,11 @@ describe("reduceRunStreamFrame — new-run reset", () => {
 
     expect(state.stages).toEqual([]);
     expect(state.liveness).toEqual({});
-    expect(state.run).toEqual({ id: OTHER_RUN_ID, status: "running" });
+    expect(state.run).toEqual({
+      id: OTHER_RUN_ID,
+      status: "running",
+      startedAt: "2026-07-21T10:05:00Z",
+    });
     // The interrupted run's status is still recorded in the `runs` map.
     expect(state.runs[PROJECT_RUN_ID]).toBe("interrupted");
   });

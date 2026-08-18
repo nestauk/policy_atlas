@@ -151,6 +151,17 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   one exists; otherwise the latest completed transcript row's stored
   `response.plan` without recomputation. It is 404 only when neither exists,
   so drafts survive API restarts.
+- `PATCH /api/v1/projects/{id}/plan` → typed edits to the current plan
+  (`question`, `backend_scope`, `search_effort`, `analysis_depth`,
+  `steering_mode`, `screening_criteria`, `published_after`/`published_before`,
+  `geography`). Omitted fields stay as they are; an empty date or geography
+  string clears that constraint. The merged result is re-validated as an
+  executable `OrchestrationPlan` and persisted as a new approved version
+  (the previous approved row is superseded), with `source_turn_index` set to
+  the latest completed planning turn so `POST /runs` is not `plan_stale`.
+  409 `run_active` while a walk is running or paused; 404 when there is no
+  plan to edit; 422 when the merged plan is not executable. This is the
+  document-edit path — it does not go through the planner.
 - `GET /api/v1/projects/{id}/planning-turns` → the owner-scoped durable
   transcript in ascending `turn_index`, paginated in the standard
   `{data, pagination}` envelope. Each row exposes `turn_index`,

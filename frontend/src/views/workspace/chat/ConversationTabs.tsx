@@ -5,32 +5,37 @@ import { scrub } from "../../../lib/scrub";
 import { ChatsIcon } from "./ChatsIcon";
 import {
   addOpenChatTab,
+  isPlanningConversation,
   openChatTabs,
+  planningConversationId,
   removeOpenChatTab,
   useActiveConversation,
   useConversationMutations,
 } from "./conversationState";
 
-/** Conversation switcher for the workspace rail.
+/** Conversation switcher for the project chat overlay.
  *
  * Args:
- *   props: Project, planning lifecycle, and library-open callback.
+ *   props: Project, planning lifecycle, library-open callback, and an
+ *     optional close control used when the strip sits in the side panel.
  *
  * Returns:
- *   A planning tab and session-local chat tabs.
+ *   A planning tab, session-local chat tabs, and library / new-chat actions.
  */
 export function ConversationTabs({
   projectId,
   entryArtefactId = null,
   planningClosed,
   onOpenLibrary,
+  onClose,
 }: {
   projectId: string;
   entryArtefactId?: string | null;
   planningClosed: boolean;
   onOpenLibrary: () => void;
+  onClose?: () => void;
 }) {
-  const chats = useConversations(projectId, { kind: "chat", status: "active" });
+  const conversations = useConversations(projectId, { status: "active" });
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const { create, archive } = useConversationMutations(projectId);
   const [tabIds, setTabIds] = useState(() => openChatTabs(projectId));
@@ -41,10 +46,28 @@ export function ConversationTabs({
     setTabIds(openChatTabs(projectId));
   }
 
-  const activeChats = chats.data?.data ?? [];
+  const rows = conversations.data?.data ?? [];
+  const planningId = planningConversationId(rows);
+  const planningActive = isPlanningConversation(activeConversationId, rows);
+  const activeChats = rows.filter((row) => row.kind === "chat");
+  // A chat opened from the launcher or "+" can land in the URL before this
+  // strip's local tabIds catch up — fold it in during render so the tab
+  // exists on the first paint rather than after an effect.
+  if (
+    activeConversationId !== null &&
+    !planningActive &&
+    !tabIds.includes(activeConversationId)
+  ) {
+    addOpenChatTab(projectId, activeConversationId);
+    setTabIds(openChatTabs(projectId));
+  }
   const tabs = tabIds.flatMap((id) => {
     const chat = activeChats.find((candidate) => candidate.id === id);
-    return chat === undefined ? [] : [chat];
+    if (chat !== undefined) return [chat];
+    if (id === activeConversationId && !planningActive) {
+      return [{ id, title: "New chat" }];
+    }
+    return [];
   });
 
   const select = (id: string) => {
@@ -63,15 +86,17 @@ export function ConversationTabs({
     await archive(id);
     removeOpenChatTab(projectId, id);
     setTabIds(openChatTabs(projectId));
-    if (activeConversationId === id) setActiveConversation(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? null);
+    if (activeConversationId === id) {
+      setActiveConversation(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? planningId);
+    }
   };
 
   return (
     <nav aria-label="Conversations" className="flex min-w-0 items-stretch border-b border-line">
       <button
         type="button"
-        onClick={() => setActiveConversation(null)}
-        className={`flex min-w-0 items-center gap-2 px-3 py-2 text-meta font-semibold ${activeConversationId === null ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
+        onClick={() => setActiveConversation(planningId)}
+        className={`flex min-w-0 items-center gap-2 px-3 py-2 text-meta font-semibold ${planningActive ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
       >
         <span aria-hidden="true" className={`h-2 w-2 rounded-full ${planningClosed ? "bg-line-2" : "bg-blue"}`} />
         <span className="truncate">Planning</span>
@@ -88,6 +113,17 @@ export function ConversationTabs({
       <button type="button" aria-label="Chats" title="Chats" onClick={onOpenLibrary} className="ml-auto px-2.5 text-blue hover:bg-blue-tint">
         <ChatsIcon size={15} />
       </button>
+      {onClose !== undefined && (
+        <button
+          type="button"
+          aria-label="Close chat panel"
+          title="Close"
+          onClick={onClose}
+          className="px-2.5 text-grey hover:text-navy"
+        >
+          ×
+        </button>
+      )}
     </nav>
   );
 }

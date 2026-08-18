@@ -1,8 +1,10 @@
 import { NavLink, Outlet, useParams } from "react-router";
 
 import { useFunnel } from "../api/queries";
+import { useRunStream } from "../store";
 import { cn } from "../ui/brand/cn";
 import { SOURCES_LABELS } from "../lib/vocabulary";
+import { WIDE_PAGE_CLASS } from "./listPageChrome";
 
 /**
  * Sources layout: Themes, Landscape and All sources always render; Findings
@@ -13,6 +15,10 @@ import { SOURCES_LABELS } from "../lib/vocabulary";
 export function SourcesLayout() {
   const { projectId = "" } = useParams();
   const funnel = useFunnel(projectId);
+  // Keep Sources read models live while a run is in progress — Plan and
+  // Results already mount the stream; without it here the list would stay
+  // stale until remount.
+  useRunStream(projectId);
   const base = `/projects/${projectId}/sources`;
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
@@ -24,27 +30,30 @@ export function SourcesLayout() {
   ];
 
   return (
-    <div>
-      <nav aria-label="Sources" className="border-b border-line px-6 pt-6">
-        <div className="flex items-center gap-5 pb-3">
-          {tabs.map((tab) => (
+    <div className={`${WIDE_PAGE_CLASS} py-6`}>
+      <div className="border border-line bg-paper">
+        <nav aria-label="Sources" className="flex border-b border-line">
+          {tabs.map((tab, index) => (
             <NavLink
               key={tab.label}
               to={tab.to}
               end={tab.end}
               className={({ isActive }) =>
                 cn(
-                  "nav-underline text-meta font-semibold text-grey no-underline hover:text-navy",
-                  isActive && "nav-underline-on font-extrabold text-navy",
+                  "flex-1 px-4 py-2.5 text-center text-caption font-extrabold uppercase tracking-[0.06em] no-underline",
+                  index > 0 && "border-l border-line",
+                  isActive ? "bg-navy text-white" : "text-grey hover:text-navy",
                 )
               }
             >
               {tab.label}
             </NavLink>
           ))}
+        </nav>
+        <div className="px-6">
+          <Outlet />
         </div>
-      </nav>
-      <Outlet />
+      </div>
     </div>
   );
 }

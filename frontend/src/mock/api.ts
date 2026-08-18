@@ -27,6 +27,7 @@ import {
   MOCK_CHAT_PROGRESS_LABEL,
   MOCK_CHECK_IN_ID,
   MOCK_PLAN_ID,
+  MOCK_PLANNING_CONVERSATION_ID,
   MOCK_PROJECT_ID,
   MOCK_RUN_ID,
 } from "./fixtures";
@@ -137,16 +138,33 @@ let planningTurns: PlanningTranscriptTurnOut[] = seedPlanningTurns();
 let nextTurnIndex = 4; // the seed transcript occupies turn_index 1-3
 
 // --- Chat conversations + turns (task 029 phase G3 mock) -----------------
-// A project-scoped conversation library starts empty — chats are created
-// on demand (library "New chat", the artefact reader's "Ask about this
-// analysis"), never pre-seeded, matching the real create-then-populate flow.
-let chatConversations: ConversationOut[] = [];
+// Follow-up chats are created on demand. The planning conversation is
+// pre-seeded so the chats overlay (G14) has a planning row in mock mode,
+// matching a real project that already has a plan lineage.
+function seedConversations(): ConversationOut[] {
+  return [
+    {
+      id: MOCK_PLANNING_CONVERSATION_ID,
+      project_id: MOCK_PROJECT_ID,
+      kind: "planning",
+      title: "Planning",
+      status: "active",
+      entry_artefact_id: null,
+      created_at: "2026-07-18T09:00:00Z",
+      closed_at: null,
+      archived_at: null,
+    },
+  ];
+}
+
+let chatConversations: ConversationOut[] = seedConversations();
 let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 // Counts reads of a still-`pending` turn's enrichment: the first read is the
 // `completed` event's own `invalidateTurns()` refetch (still pending, the
 // honest "unchecked" state); the second is the store's enrichment poll,
 // which this flips to `enriched` — the scripted async-judge fixture.
 let chatTurnEnrichmentReads = new Map<string, number>();
+let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
@@ -157,9 +175,10 @@ export function resetMockScenario() {
   mockProject.latest_run = null;
   planningTurns = seedPlanningTurns();
   nextTurnIndex = 4;
-  chatConversations = [];
+  chatConversations = seedConversations();
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
+  currentPlan = { ...mockPlanReady };
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -238,13 +257,35 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       });
       nextTurnIndex += 1;
     }
-    return json({ plan: mockPlanReady, reply, suggestions: [] });
+    return json({ plan: currentPlan, reply, suggestions: [] });
   }
 
   // --- Plan (a resumed session: the transcript above already reached
   // `ready` — see mockPlanReady) ------------------------------------------
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/plan`)) {
-    return json({ plan: mockPlanReady, version: 1, status: "approved" });
+    return json({ plan: currentPlan, version: 1, status: "approved" });
+  }
+  if (method === "PATCH" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/plan`)) {
+    const body = await requestBody(request, init);
+    if (isRecord(body)) {
+      if (typeof body.question === "string") currentPlan = { ...currentPlan, question: body.question };
+      if (typeof body.backend_scope === "string") {
+        currentPlan = { ...currentPlan, backend_scope: body.backend_scope as typeof currentPlan.backend_scope };
+      }
+      if (typeof body.search_effort === "string") {
+        currentPlan = { ...currentPlan, search_effort: body.search_effort as typeof currentPlan.search_effort };
+      }
+      if (typeof body.analysis_depth === "string") {
+        currentPlan = { ...currentPlan, analysis_depth: body.analysis_depth as typeof currentPlan.analysis_depth };
+      }
+      if (typeof body.steering_mode === "string") {
+        currentPlan = { ...currentPlan, steering_mode: body.steering_mode as typeof currentPlan.steering_mode };
+      }
+      if (Array.isArray(body.screening_criteria)) {
+        currentPlan = { ...currentPlan, screening_criteria: body.screening_criteria as string[] };
+      }
+    }
+    return json({ plan: currentPlan, version: 2, status: "approved" });
   }
 
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/groups`)) {
@@ -467,7 +508,22 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
  *  preview from its own latest chat turn — mirrors the real read model's
  *  cross-kind preview join closely enough for the mock library surface. */
 function conversationListItem(conversation: ConversationOut): ConversationListItemOut {
-  const latest = (chatTurnsByConversation.get(conversation.id) ?? []).at(-1);
+  const latestChat = (chatTurnsByConversation.get(conversation.id) ?? []).at(-1);
+  const latestPlanning = conversation.kind === "planning" ? planningTurns.at(-1) : undefined;
+  const latestTurnPreview =
+    latestChat !== undefined
+      ? {
+          user_message: latestChat.user_message,
+          reply_snippet: latestChat.status === "completed" ? latestChat.answer : null,
+          at: latestChat.completed_at,
+        }
+      : latestPlanning !== undefined
+        ? {
+            user_message: latestPlanning.user_message,
+            reply_snippet: latestPlanning.status === "completed" ? latestPlanning.reply : null,
+            at: latestPlanning.completed_at,
+          }
+        : null;
   return {
     id: conversation.id,
     project_id: conversation.project_id,
@@ -478,9 +534,7 @@ function conversationListItem(conversation: ConversationOut): ConversationListIt
     created_at: conversation.created_at,
     closed_at: conversation.closed_at,
     archived_at: conversation.archived_at,
-    latest_turn_preview: latest === undefined
-      ? null
-      : { user_message: latest.user_message, reply_snippet: latest.status === "completed" ? latest.answer : null, at: latest.completed_at },
+    latest_turn_preview: latestTurnPreview,
   };
 }
 
@@ -709,20 +763,24 @@ function finishRun(status: "succeeded" | "failed") {
   };
 }
 
+function frameTime(): string {
+  return new Date().toISOString();
+}
+
 function runStatus(status: "running" | "paused" | "succeeded" | "failed", sequence: number): SseFrame {
-  return { type: "run.status", capability_run_id: MOCK_RUN_ID, status, occurred_at: FRAME_TIME, sequence };
+  return { type: "run.status", capability_run_id: MOCK_RUN_ID, status, occurred_at: frameTime(), sequence };
 }
 
 function stageStarted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, blurb: string, sequence: number): SseFrame {
-  return { type: "stage.started", stage, label, blurb, occurred_at: FRAME_TIME, sequence };
+  return { type: "stage.started", stage, label, blurb, occurred_at: frameTime(), sequence };
 }
 
 function stageCompleted(stage: "acquire" | "screen" | "classify" | "appraise" | "characterise" | "synthesise", label: string, summary: Record<string, number>, sequence: number): SseFrame {
-  return { type: "stage.completed", stage, label, summary, seconds: 4, occurred_at: FRAME_TIME, sequence };
+  return { type: "stage.completed", stage, label, summary, seconds: 4, occurred_at: frameTime(), sequence };
 }
 
 function stageFailed(stage: "synthesise", label: string, reason: string, sequence: number): SseFrame {
-  return { type: "stage.failed", stage, label, reason, skipped: false, occurred_at: FRAME_TIME, sequence };
+  return { type: "stage.failed", stage, label, reason, skipped: false, occurred_at: frameTime(), sequence };
 }
 
 function toSse(frame: SseFrame): string {

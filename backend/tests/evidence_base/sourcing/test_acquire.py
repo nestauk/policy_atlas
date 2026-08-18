@@ -894,6 +894,37 @@ def test_harness_acquire_component(conn: Connection) -> None:
     assert summary["coverage_record_id"]
 
 
+def test_harness_acquire_respects_academic_only_scope(conn: Connection) -> None:
+    """Injected Overton must not run when the compiled plan is OpenAlex-only."""
+    pid, rid = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, pid)
+    config = compile(
+        Plan(
+            component="acquire",
+            evidence_scope_id=scope_id,
+            search_backend_scope="academic_only",
+        )
+    )
+    outcome = run_harness(
+        conn,
+        config=config,
+        project_id=pid,
+        run_id=rid,
+        provider=StubEchoProvider(),
+        search_backends=[OpenAlexFixtureBackend(), OvertonFixtureBackend()],
+    )
+    summary = outcome["summary"]
+    assert summary is not None
+    assert set(summary["by_backend"]) == {"openalex"}
+    log = events.read(conn, pid)
+    backends = [
+        event["payload"]["backend"]
+        for event in log
+        if event["event_type"] == "search.executed"
+    ]
+    assert set(backends) == {"openalex"}
+
+
 def test_harness_acquire_completes_on_backend_error(conn: Connection) -> None:
     """Backend failure is component-visible, not component-fatal."""
     pid, rid = seed_project_and_run(conn)

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
@@ -28,7 +29,7 @@ from policy_atlas.runtime.conversation_lifecycle import (
     ensure_active_planning_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.orchestration_plan import TIME_BANDS, OrchestrationPlan
+from policy_atlas.runtime.orchestration_plan import TIME_BANDS, OrchestrationPlan, compose
 from policy_atlas.runtime.planner import StubPlannerBackend
 from policy_atlas.runtime.planner_prompt import (
     PartChipWire,
@@ -997,3 +998,96 @@ def test_closed_planning_conversation_creates_seeded_successor(
             {"role": "user", "text": "Keep the same evidence question"},
         ]
         assert stub.session_ids[-1] == successor_id
+
+
+def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
+    """Drive the stub planner to a ready approved plan and return the project id."""
+    project_id = create_project(client, owner)
+    first = client.post(
+        f"/api/v1/projects/{project_id}/planning-turns",
+        headers=owner,
+        json={"message": "How can cities reduce heat risk?", "client_turn_id": str(uuid.uuid4())},
+    )
+    assert first.status_code == 200
+    ready = client.post(
+        f"/api/v1/projects/{project_id}/planning-turns",
+        headers=owner,
+        json={
+            "message": "A comparison of intervention options",
+            "client_turn_id": str(uuid.uuid4()),
+        },
+    )
+    assert ready.status_code == 200
+    assert ready.json()["plan"]["ready"] is True
+    return project_id
+
+
+def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path) -> None:
+    """Document edits must land on the approved payload, not as a planner turn."""
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        other,
+    ):
+        project_id = _approve_stub_plan(client, owner)
+        before = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        assert before.json()["plan"]["backend_scope"] == "both"
+
+        patched = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"backend_scope": "academic_only"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["backend_scope"] == "academic_only"
+        assert patched.json()["status"] == "approved"
+        assert patched.json()["version"] == before.json()["version"] + 1
+
+        forbidden = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=other,
+            json={"backend_scope": "grey_lit_only"},
+        )
+        assert forbidden.status_code == 404
+
+    with engine.connect() as conn:
+        payload = conn.execute(
+            select(orchestration_plan.c.payload)
+            .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
+            .where(orchestration_plan.c.status == "approved")
+            .order_by(orchestration_plan.c.version.desc())
+        ).scalar_one()
+    plan = OrchestrationPlan.model_validate(payload)
+    assert plan.backend_scope == "academic_only"
+    acquire = next(step for step in compose(plan).steps if step.component == "acquire")
+    filters = acquire.directive_delta.get("search", {}).get("filters", {})
+    assert "overton" not in filters
+
+
+def test_patch_plan_404s_without_a_plan(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = create_project(client, owner)
+        response = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"backend_scope": "academic_only"},
+        )
+        assert response.status_code == 404
+
+
+def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = _approve_stub_plan(client, owner)
+        response = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"geography": "Not a real country"},
+        )
+        assert response.status_code == 422

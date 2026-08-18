@@ -32,15 +32,10 @@ function lifecycleNav(page: Page) {
   return page.locator("nav").first();
 }
 
-/** The journey pane's completion card carries its own "Read the evidence
- *  base" link — pre-existing, and identical to the one the planning thread's
- *  run block shows inline, so the same accessible name appears twice on the
- *  page once a run succeeds. Scoping to this region (rather than asserting
- *  the bare role+name) is what keeps every such assertion a single-element
- *  match. */
-function journeyCompletionLink(page: Page) {
+/** The in-thread running card's completion link. */
+function runCompletionLink(page: Page) {
   return page
-    .getByRole("region", { name: "Analysis progress" })
+    .getByRole("region", { name: "Analysis run" })
     .getByRole("link", { name: "Read the evidence base" });
 }
 
@@ -61,11 +56,11 @@ async function openWorkspaceFromLanding(page: Page): Promise<void> {
  *  lifecycle only opens once a run has finished. */
 async function driveRunToSuccess(page: Page): Promise<void> {
   await openWorkspaceFromLanding(page);
-  await page.getByRole("button", { name: "Start the analysis" }).click();
+  await page.getByRole("button", { name: "Start search" }).click();
   await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { name: SUGGESTED_OPTION_LABEL }).click();
   await expect(page.getByText("Waiting on your input")).toHaveCount(0);
-  await expect(journeyCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+  await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe("mock task-lifecycle journey", () => {
@@ -131,50 +126,40 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("button", { name: "Looks right" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Add or change a constraint" })).toBeVisible();
 
-    // (f) The ready plan renders as a card inline at the foot of the thread
-    // — a compact disclosure: the header button carries the question + ready
-    // chip, and ready-draft fields with locked-vocabulary labels (never a raw
-    // enum key like "rapid") only render once expanded. Details render
-    // expanded by default pre-run (owner, 2026-07-29); the toggle still works
-    // both ways.
-    await expect(page.getByRole("button", { name: "Toggle plan details" })).toBeVisible();
-    await expect(page.getByText("10-15 minutes").first()).toBeVisible();
-    await expect(page.getByText("Rapid — top sources, fast pass")).toBeVisible();
-    await expect(page.getByText("Geography: United Kingdom (GB)")).toBeVisible();
-    await page.getByRole("button", { name: "Toggle plan details" }).click();
-    await expect(page.getByText("Rapid — top sources, fast pass")).not.toBeVisible();
-    await page.getByRole("button", { name: "Toggle plan details" }).click();
-    await expect(page.getByText("Rapid — top sources, fast pass")).toBeVisible();
+    // (f) The ready plan is two actions at the foot of the thread — review
+    // in the side panel, or start. Locked-vocabulary labels live in the panel,
+    // not in an expandable card in the chat.
+    await expect(page.getByRole("button", { name: "Review the plan" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start search" })).toBeVisible();
 
-    // (g) Start the analysis — the two-pane layout (chat + collapsible rail
-    // on the left, journey on the right) appears for the first time. The
-    // mock races through every pre-synthesise stage with no artificial
-    // delay, straight to the paused check-in (see step (h)) — so "Analysing
-    // the evidence…" is never reliably observable as its own state here; the
-    // timeline and the settled paused heading below are the robust checks.
-    await page.getByRole("button", { name: "Start the analysis" }).click();
+    // (g) Start the analysis — the workspace stays a single-column chat.
+    // Progress is a green running card in the thread (not a right-hand
+    // analysing pane). The mock races through every pre-synthesise stage
+    // with no artificial delay, straight to the paused check-in (see step
+    // (h)), so the card's paused heading and stage list are the robust checks.
+    await page.getByRole("button", { name: "Start search" }).click();
+    const runCard = page.getByRole("region", { name: "Analysis run" });
+    await expect(runCard).toBeVisible({ timeout: 15_000 });
     const timeline = page.getByRole("list", { name: "Stage timeline" });
-    await expect(timeline.getByText("Finding relevant sources")).toBeVisible({ timeout: 15_000 });
-    await expect(timeline.getByText("Synthesising the evidence")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("Sources found")).toBeVisible();
-    await expect(page.getByText("Where I looked")).toBeVisible();
-    await expect(page.getByText("OpenAlex · academic research")).toBeVisible();
+    await expect(timeline.getByText("Searching")).toBeVisible({ timeout: 15_000 });
+    await expect(timeline.getByText("Writing")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("link", { name: /Sources are ready/ })).toBeVisible();
+    await expect(runCard.getByRole("link", { name: /Sources are ready/ })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Analysis progress" })).toHaveCount(0);
 
     // (h) The check-in card appears; the run genuinely parks here. Paused
     // reads distinct from executing on this tab (028 contract: pause
-    // salience) — the journey heading and its status banner both change;
-    // the cross-tab variant of this same check is its own test below. While
-    // paused, Results/Sources/Share are locked — rendered but not links —
-    // and Plan/History stay open (the lifecycle contract's locking table).
+    // salience) — the running card's heading changes. While paused,
+    // Results/Share are locked; Sources stays open so interim results can
+    // be read; Plan/History stay open.
     await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(mockCheckIn.render)).toBeVisible();
-    const journeyPane = page.getByRole("region", { name: "Analysis progress" });
-    await expect(journeyPane.getByRole("heading", { name: "Paused — waiting on you" })).toBeVisible();
-    await expect(journeyPane.getByText("Paused at a check-in")).toBeVisible();
+    await expect(runCard.getByRole("heading", { name: "Paused — waiting on you" })).toBeVisible();
 
     await expect(nav.getByRole("link", { name: "Plan", exact: true })).toBeVisible();
     await expect(nav.getByRole("link", { name: "History", exact: true })).toBeVisible();
-    for (const label of ["Results", "Sources", "Share"]) {
+    await expect(nav.getByRole("link", { name: "Sources", exact: true })).toBeVisible();
+    for (const label of ["Results", "Share"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
       await expect(nav.getByText(label)).toBeVisible();
     }
@@ -189,7 +174,8 @@ test.describe("mock task-lifecycle journey", () => {
     // (i) The run has now reached "succeeded" — all five stages open. The
     // completion card's "Read the evidence base" link is also on the page,
     // pointing at `/results`.
-    await expect(journeyCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+    await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole("button", { name: "See plan" })).toBeVisible();
     for (const label of ["Plan", "Results", "Sources", "Share", "History"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
@@ -252,9 +238,18 @@ test.describe("mock task-lifecycle journey", () => {
     // old flat "Findings"/"Sources" tabs under one Sources stage).
     await nav.getByRole("link", { name: "Sources", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources$`));
-    await expect(page.getByRole("heading", { name: "Themes" })).toBeVisible();
+    await expect(page.getByText("School food environments")).toBeVisible();
 
     const sourcesSubnav = page.getByRole("navigation", { name: "Sources" });
+    await page.getByRole("link", { name: /School food environments/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/all\\?theme=`));
+    await page.getByRole("button", { name: "Open chat" }).click();
+    const overlay = page.getByRole("complementary", { name: "Project chat" });
+    await expect(overlay).toBeVisible();
+    await overlay.getByRole("button", { name: "Planning" }).click();
+    await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
+    await overlay.getByRole("button", { name: "Close chat panel" }).click();
+    await sourcesSubnav.getByRole("link", { name: "Themes" }).click();
     await sourcesSubnav.getByRole("link", { name: "Findings" }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/findings$`));
     const kindFilter = page.getByRole("group", { name: "Finding kind" });
@@ -297,7 +292,7 @@ test.describe("mock task-lifecycle journey", () => {
   // succeed first, unlike the old evidence-base route, which was ungated.
   test("keyboard: tab to a citation marker and open it with Enter", async ({ page }) => {
     await driveRunToSuccess(page);
-    await journeyCompletionLink(page).click();
+    await runCompletionLink(page).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(
       page.getByRole("heading", { name: "Policy options for healthier childhoods" }),
@@ -337,8 +332,8 @@ test.describe("mock task-lifecycle journey", () => {
     await openWorkspaceFromLanding(page);
     // Pre-run: the centred single-column chat, not the two-pane layout — no
     // rail or right-hand pane exists until a run starts.
-    await expect(page.getByRole("button", { name: "Start the analysis" })).toBeVisible();
-    await page.getByRole("button", { name: "Start the analysis" }).click();
+    await expect(page.getByRole("button", { name: "Start search" })).toBeVisible();
+    await page.getByRole("button", { name: "Start search" }).click();
     await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
 
     expect(pageErrors).toEqual([]);
@@ -365,42 +360,30 @@ test.describe("mock task-lifecycle journey", () => {
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
 
-      // Start a run to reach the two-pane layout the rail lives in. The mock
-      // races through every stage with no delay, so wait on the rail control
-      // itself rather than a transient run-status heading.
-      await page.getByRole("button", { name: "Start the analysis" }).click();
-      await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible({ timeout: 15_000 });
+      // Start a run: the workspace stays a single column (no analysing pane,
+      // no rail). The running card is the progress surface.
+      await page.getByRole("button", { name: "Start search" }).click();
+      await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({ timeout: 15_000 });
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
-
-      // Same check with the planning rail collapsed — the other rail state.
-      // This runs at BOTH widths: the toggle used to be unclickable below
-      // `lg`, where the plan button overlapped it, and that is now fixed.
-      await page.getByRole("button", { name: "Collapse the planning rail" }).click();
-      expect(
-        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-      ).toBe(true);
-      await page.getByRole("button", { name: "Expand the planning rail" }).click();
+      await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toHaveCount(0);
     }
   });
 
-  // (q) The rail collapse control is keyboard-operable: focus, activate with
-  // Enter, re-activate with Space — state follows each activation. The rail
-  // only exists once a run has started (pre-run is a single-column chat with
-  // no rail at all), so this drives the flow to a started run first.
-  test("keyboard: the rail collapse control toggles via Enter and Space", async ({ page }) => {
+  // (q) The running card's Minimise control is keyboard-operable.
+  test("keyboard: the running card minimises via Enter and restores via Space", async ({ page }) => {
     await openWorkspaceFromLanding(page);
-    await page.getByRole("button", { name: "Start the analysis" }).click();
-    const collapse = page.getByRole("button", { name: "Collapse the planning rail" });
-    await expect(collapse).toBeVisible({ timeout: 15_000 });
-    await collapse.focus();
+    await page.getByRole("button", { name: "Start search" }).click();
+    const minimise = page.getByRole("button", { name: "Minimise" });
+    await expect(minimise).toBeVisible({ timeout: 15_000 });
+    await minimise.focus();
     await page.keyboard.press("Enter");
-    const expand = page.getByRole("button", { name: "Expand the planning rail" });
+    const expand = page.getByRole("button", { name: "Expand" });
     await expect(expand).toBeVisible();
     await expand.focus();
     await page.keyboard.press("Space");
-    await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Minimise" })).toBeVisible();
   });
 
   // (r) Paused reads distinct from executing on every OTHER tab too (028
@@ -408,12 +391,12 @@ test.describe("mock task-lifecycle journey", () => {
   // except the workspace itself (where the check-in card already is the
   // live source of truth), naming the waiting check-in explicitly. Kept as
   // its own test: the workspace-tab half of this same check lives inline in
-  // the main journey above, at the check-in step. Sources is locked while
-  // paused (task 032), so History — which stays open — is the tab used to
-  // leave the workspace and observe the banner from elsewhere.
+  // the main journey above, at the check-in step. History stays open
+  // while paused, so it is the tab used to leave the workspace and
+  // observe the banner from elsewhere.
   test("paused run: the cross-tab banner appears on other tabs while a check-in waits", async ({ page }) => {
     await openWorkspaceFromLanding(page);
-    await page.getByRole("button", { name: "Start the analysis" }).click();
+    await page.getByRole("button", { name: "Start search" }).click();
     await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
 
     await lifecycleNav(page).getByRole("link", { name: "History", exact: true }).click();
@@ -433,7 +416,7 @@ test.describe("mock task-lifecycle journey", () => {
   test("chat: ask about the evidence base, watch the citation verdict upgrade, and manage the chat in the library", async ({ page }) => {
     await driveRunToSuccess(page);
 
-    await journeyCompletionLink(page).click();
+    await runCompletionLink(page).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(
@@ -523,7 +506,7 @@ test.describe("mock task-lifecycle journey", () => {
     "the theme panel's findings deep link keeps its facet/group filter",
     async ({ page }) => {
       await driveRunToSuccess(page);
-      await journeyCompletionLink(page).click();
+      await runCompletionLink(page).click();
       await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
       await page.getByRole("button", { name: /Implications for local action/ }).click();
       await page.getByRole("button", { name: "pattern" }).click();
@@ -535,22 +518,15 @@ test.describe("mock task-lifecycle journey", () => {
     },
   );
 
-  // The "Open the plan" button was absolutely positioned against the whole
-  // `<main>`, so below `lg` — where the two-column grid collapses to one —
-  // it landed on top of the rail's collapse toggle and swallowed its clicks.
-  // A real user on a narrow viewport could not collapse the rail. Fixed by
-  // putting both controls in one normal-flow row.
-  test(
-    "below the lg breakpoint, the rail collapse toggle is still clickable beside the plan button",
-    async ({ page }) => {
-      await page.setViewportSize({ width: 768, height: 900 });
-      await openWorkspaceFromLanding(page);
-      await page.getByRole("button", { name: "Start the analysis" }).click();
-      await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toBeVisible({
-        timeout: 15_000,
-      });
-      await page.getByRole("button", { name: "Collapse the planning rail" }).click({ timeout: 3_000 });
-      await expect(page.getByRole("button", { name: "Expand the planning rail" })).toBeVisible();
-    },
-  );
+  // The workspace stays a single column after Start search, including
+  // below `lg` — there is no rail to overlap the plan overlay.
+  test("below the lg breakpoint, the running card is the progress surface", async ({ page }) => {
+    await page.setViewportSize({ width: 768, height: 900 });
+    await openWorkspaceFromLanding(page);
+    await page.getByRole("button", { name: "Start search" }).click();
+    await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByRole("button", { name: "Collapse the planning rail" })).toHaveCount(0);
+  });
 });

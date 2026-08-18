@@ -41,13 +41,14 @@ code, not assumed.
 |---|---|---|
 | **D1** | Route shape for the Sources subviews | **Nested routes, not a query parameter.** `routes.tsx` states the repo rule: "views are routes, the dossier and filters are search params". Four subviews are views. This is also the *smaller* diff: a layout route renders the tab strip plus `<Outlet/>`, and `LandscapeView` and `FindingsView` mount unchanged underneath it. Merging them into one component would be more work and would lose their existing tests. |
 | **D2** | Where the locking input comes from | `useProject(projectId).data.latest_run.status`. `ProjectOut` carries `latest_run` on the detail GET as well as the list, so `AppShell` already has it. |
-| **D3** | Keeping locking fresh during a run | `useProject` gains a `refetchInterval` while `latest_run.status` is `running` or `paused`. **Do not** mount `useRunStream` in `AppShell`: the stream is already mounted in `WorkspaceView` and `ArtefactView`, and a third connection in the shell would double-connect on those pages. The run stream *does* invalidate the project detail query (its predicate matches `["projects", projectId, …]`, and `queryKeys.project` is `["projects", projectId, "detail"]`), so on the two pages that mount it, locking updates with no polling. Polling covers only the pages that do not — the same pattern `AppShell` already uses for the pending check-in badge. |
+| **D3** | Keeping locking fresh during a run | `useProject` gains a `refetchInterval` while `latest_run.status` is `running` or `paused`. **Do not** mount `useRunStream` in `AppShell`: the stream is already mounted in `WorkspaceView`, `ArtefactView` and `SourcesLayout`, and a fourth connection in the shell would double-connect on those pages. The run stream *does* invalidate the project detail query (its predicate matches `["projects", projectId, …]`, and `queryKeys.project` is `["projects", projectId, "detail"]`), so on the pages that mount it, locking updates with no polling. Polling covers only the pages that do not — the same pattern `AppShell` already uses for the pending check-in badge. |
 | **D4** | Creating a task | `POST /projects {name, question}` then `POST /projects/{id}/planning-turns {message, client_turn_id}` with the same question. Two calls, no backend change. |
 | **D5** | The task's name at creation | Derived client-side from the question (trimmed, question mark dropped, truncated). The planner's own `plan.title` is **not** written back to the project name — that would need a new behaviour. A task therefore displays its derived name until renamed. Record this as a known gap, not a defect. |
 | **D6** | Assigning a task to a project | `PATCH /projects/{id} {portfolio_id}` after creation, and from the project detail page. **`POST /projects` is left alone** — keeping `portfolio_id` off the create call keeps the gated public-interface surface smaller. |
 | **D7** | Executor family | Codex is **not available** — `codex` is not on PATH. Every phase routes inside the Claude family. See § Executor summary. |
 | **D8** | Review stack | **Owner decision, 2026-08-17: standard review, no adversarial lanes.** See § Review stack. |
 | **D9** | The per-phase gate for frontend phases | **`make frontend-verify`, not `make verify-fast`.** This corrects the plan's first draft. `verify-fast` is `backend/verify-fast` — backend test-fast, typecheck and lint, and **no frontend at all**. On a slice that is ~90% frontend it would have reported green while proving nothing about the work. `frontend-verify` is `pnpm typecheck && lint && test && build`, needs no database, and actually exercises the changed code. |
+| **D10** | Where run progress lives | **Owner decision, 2026-08-18.** After Start search the workspace stays a single-column chat. `JourneyPane` is not shown. A green running card in the thread reports stages; Sources is open while running or paused. Supersedes the 2026-08-17 "journey pane stays" rule. |
 
 ## Gates
 
@@ -225,9 +226,9 @@ taste-bearing entry surfaces. `fast-worker` for the tests from the rules below.
 2. A field with no value yet says "Not decided yet" and is **never hidden**.
 3. "Change this" seeds the chat composer with the part's sentence and focuses it.
    It **never** writes to the plan — editing stays conversational.
-4. `PlanCard`, `PlanningPane`, `ChatPane`, `JourneyPane`, `CheckInCard` and the
-   conversation rail keep their behaviour, and their existing tests pass
-   untouched. No Plan/Run toggle. No second run monitor.
+4. After Start search the workspace stays a single-column chat. Run progress is
+   the green card in `PlanningPane` (D10). `JourneyPane` is not mounted. No
+   Plan/Run toggle.
 5. Tests: every field renders; an empty field says "Not decided yet"; "Change
    this" seeds the composer and does not mutate the plan.
 

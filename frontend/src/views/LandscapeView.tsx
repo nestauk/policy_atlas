@@ -1,5 +1,5 @@
 import { useParams } from "react-router";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { useFunnel, useGroups, useLandscape, useProject } from "../api/queries";
 import { errorCode } from "../lib/errors";
@@ -8,9 +8,11 @@ import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import {
+  DistributionChartTooltip,
   EvidenceDistributionChart,
   normaliseGeographies,
-  PublicationYearsChart, orderThemes } from "../ui/charts/EvidenceDistributionChart";
+  PublicationYearsChart,
+} from "../ui/charts/EvidenceDistributionChart";
 import { ReauthRedirect } from "../ui/feedback";
 
 const FUNNEL_ORDER = [
@@ -27,7 +29,7 @@ const CHART_TOKENS = {
   grid: "var(--color-line)",
   text: "var(--color-grey)",
   navy: "var(--color-navy)",
-  blue: "var(--color-blue)",
+  blueTint: "var(--color-blue-tint)",
 } as const;
 
 /**
@@ -67,15 +69,7 @@ export function LandscapeView() {
     Object.keys(landscape.data?.evidence_types ?? {}).length === 0;
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-8">
-      <h1 className="mb-1 font-display text-title font-extrabold text-navy">
-        Evidence landscape
-      </h1>
-      <p className="mb-5 text-lead text-grey">
-        Distributions describe the screened-in sources only; the funnel spans the whole
-        flow.
-      </p>
-
+    <main className="py-8">
       {(landscape.isPending || funnel.isPending) && (
         <div aria-busy="true" aria-label="Loading the landscape" className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -129,6 +123,7 @@ export function LandscapeView() {
                     width={120}
                     tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
                   />
+                  <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<DistributionChartTooltip />} />
                   <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
                 </BarChart>
               </ResponsiveContainer>
@@ -177,24 +172,6 @@ export function LandscapeView() {
             </div>
           )}
       </div>
-
-      {landscape.data !== undefined && (landscape.data.themes ?? []).length > 0 && (
-        <Card className="mt-4">
-          <PaneHeading>Key themes</PaneHeading>
-          <Divider />
-          <ul role="list" className="space-y-2.5 p-4">
-            {orderThemes(landscape.data.themes ?? []).map((theme) => (
-              <li key={theme.name} className="flex items-baseline gap-2.5">
-                <Chip tone="blue">{theme.size}</Chip>
-                <div>
-                  <p className="text-body font-semibold text-navy">{scrub(theme.name)}</p>
-                  <p className="text-body text-grey">{scrub(theme.description)}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
 
       {groups.data !== undefined && (groups.data.facets ?? []).length > 0 && (
         <Card className="mt-4">

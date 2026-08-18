@@ -161,6 +161,23 @@ export function usePlanningTurn(projectId: string) {
   });
 }
 
+/** `PATCH .../plan` — persist typed document edits onto the approved plan. */
+export function usePatchPlan(projectId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["PlanPatchIn"]) => {
+      const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}/plan", {
+        params: { path: { project_id: projectId } },
+        body,
+      });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.projectRoot(projectId) }),
+  });
+}
+
 /** `POST .../runs` — dispatch the approved plan's walk (409 while one is active). */
 export function useStartRun(projectId: string) {
   const client = useApiClient();

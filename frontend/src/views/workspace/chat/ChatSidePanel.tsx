@@ -2,11 +2,12 @@ import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
-import { scrub } from "../../../lib/scrub";
+import { createInitialRunStreamState } from "../../../store";
+import { PlanningPane } from "../PlanningPane";
 import { ChatPane } from "./ChatPane";
-import { ChatsIcon } from "./ChatsIcon";
 import { ChatsLibrary } from "./ChatsLibrary";
-import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./conversationState";
+import { ConversationTabs } from "./ConversationTabs";
+import { addOpenChatTab, isPlanningConversation, planningConversationId, useActiveConversation, useConversationMutations } from "./conversationState";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -63,12 +64,12 @@ function usePanelWidth() {
   };
 }
 
-/** Side-by-side chat on project views outside the workspace (rev 3.4).
+/** Side-by-side chat on project views outside Plan (rev 3.4).
  *
  * The panel is URL-addressable: it is open exactly when the route carries
- * `?chat=<cid>` — the same deep-link grammar the workspace tabs use, so a
- * chat opened beside the evidence base survives refresh and sharing.
- * Planning stays a workspace surface; the panel only hosts chats.
+ * `?chat=<cid>` — the same deep-link grammar the conversation strip uses.
+ * The edge launcher opens the latest follow-up chat. The strip lists
+ * planning plus those chats; selecting planning renders that thread here.
  *
  * Args:
  *   props: The owning project id.
@@ -81,12 +82,11 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const panel = usePanelWidth();
   const navigate = useNavigate();
-  // Dropped `kind` (rev 032 G14) so this shares its cache key with
-  // `ChatsLibrary`'s own "active" query — both mount together whenever the
-  // panel is open. The panel only ever hosts chats (see docstring above), so
-  // planning rows are filtered out client-side rather than re-split by kind.
-  const chats = useConversations(projectId, { status: "active" });
-  const chatRows = (chats.data?.data ?? []).filter((row) => row.kind === "chat");
+  const conversations = useConversations(projectId, { status: "active" });
+  const rows = conversations.data?.data ?? [];
+  const chatRows = rows.filter((row) => row.kind === "chat");
+  const planningId = planningConversationId(rows);
+  const planningOpen = isPlanningConversation(activeConversationId, rows);
   const artefact = useArtefact(projectId);
   const { create } = useConversationMutations(projectId);
 
@@ -99,16 +99,9 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
     // The launcher's create-vs-open decision needs the chats list resolved
     // first — firing before then reads "no chats" off `undefined` data and
     // POSTs a spurious blank chat on a fast first click.
-    if (!chats.isSuccess) return;
+    if (!conversations.isSuccess) return;
     if (chatRows.length > 0) return openChat(chatRows[0].id);
     openChat((await create(null)).id);
-  };
-
-  const newChat = async () => {
-    const blank = chatRows.find(
-      (chat) => chat.title === "New chat" && chat.entry_artefact_id === null,
-    );
-    openChat(blank !== undefined ? blank.id : (await create(null)).id);
   };
 
   if (activeConversationId === null) {
@@ -117,7 +110,7 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
         type="button"
         aria-label="Open chat"
         title="Chat"
-        disabled={!chats.isSuccess}
+        disabled={!conversations.isSuccess}
         onClick={() => void openLatestOrNew()}
         className="fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-50"
       >
@@ -128,56 +121,41 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
     );
   }
 
-  const title = chatRows.find((chat) => chat.id === activeConversationId)?.title;
+  const planningClosed = rows.some((row) => row.kind === "planning" && row.closed_at !== null)
+    && !rows.some((row) => row.kind === "planning" && row.closed_at === null);
+
   return (
     <aside
       aria-label="Project chat"
       style={{ width: panel.width }}
-      className="relative flex shrink-0 flex-col border-r border-line bg-paper lg:h-[calc(100svh-58px)] lg:overflow-hidden"
+      className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-line bg-paper"
     >
       <div
         {...panel.separatorProps}
         className="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block"
       />
-      <div className="flex items-center gap-2 border-b border-line px-3 py-1.5">
-        <span className="min-w-0 flex-1 truncate text-meta font-semibold text-navy">
-          {title === undefined ? "Chat" : scrub(title)}
-        </span>
-        <button
-          type="button"
-          aria-label="New chat"
-          title="New chat"
-          onClick={() => void newChat()}
-          className="text-grey hover:text-blue"
-        >
-          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 3v10M3 8h10" /></svg>
-        </button>
-        <button
-          type="button"
-          aria-label="Chats"
-          title="Chats"
-          onClick={() => setLibraryOpen(true)}
-          className="text-grey hover:text-blue"
-        >
-          <ChatsIcon size={14} />
-        </button>
-        <button
-          type="button"
-          aria-label="Close chat panel"
-          title="Close"
-          onClick={() => setActiveConversation(null)}
-          className="text-grey hover:text-navy"
-        >
-          ×
-        </button>
-      </div>
+      <ConversationTabs
+        projectId={projectId}
+        planningClosed={planningClosed}
+        onOpenLibrary={() => setLibraryOpen(true)}
+        onClose={() => setActiveConversation(null)}
+      />
       <div className="min-h-0 flex-1">
-        <ChatPane
-          projectId={projectId}
-          conversationId={activeConversationId}
-          sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
-          onOpenPlanning={() => void navigate(`/projects/${projectId}`)}
-        />
+        {planningOpen ? (
+          <PlanningPane
+            projectId={projectId}
+            runStatus={undefined}
+            stream={createInitialRunStreamState()}
+            onReviewPlan={() => void navigate(`/projects/${projectId}`)}
+          />
+        ) : (
+          <ChatPane
+            projectId={projectId}
+            conversationId={activeConversationId}
+            sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
+            onOpenPlanning={() => setActiveConversation(planningId)}
+          />
+        )}
       </div>
       <ChatsLibrary projectId={projectId} open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </aside>

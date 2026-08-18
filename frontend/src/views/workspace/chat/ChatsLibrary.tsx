@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
 
 import { useConversations } from "../../../api/queries";
 import type { components } from "../../../api/gen/types";
@@ -22,21 +21,14 @@ export function ChatsLibrary({ projectId, open, onClose }: { projectId: string; 
   const archived = useConversations(projectId, { status: "archived" });
   const { setActiveConversation } = useActiveConversation();
   const { archive, unarchive, update } = useConversationMutations(projectId);
-  const navigate = useNavigate();
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   if (!open) return null;
 
-  // A planning row has no reader of its own (rubric 42) — it lands on the
-  // Plan tab, which already renders that thread beside the plan it produced.
-  const openChat = (id: string) => {
-    addOpenChatTab(projectId, id);
-    setActiveConversation(id);
-    onClose();
-  };
   const openRow = (row: LibraryRow) => {
-    if (row.kind === "planning") { void navigate(`/projects/${projectId}`); onClose(); return; }
-    openChat(row.id);
+    if (row.kind !== "planning") addOpenChatTab(projectId, row.id);
+    setActiveConversation(row.id);
+    onClose();
   };
   const startRename = (row: LibraryRow) => {
     setEditing(row.id);
@@ -49,8 +41,9 @@ export function ChatsLibrary({ projectId, open, onClose }: { projectId: string; 
 
   // A planning row never archives (no control fires it), but guard the
   // restore-and-open path anyway so a synthetically-archived planning row
-  // can't be routed through the chat-only unarchive+open flow.
-  const openArchivedRow = (row: LibraryRow) => row.kind === "planning" ? openRow(row) : void unarchive(row.id).then(() => openChat(row.id));
+  // isn't routed through the chat-only unarchive+open flow.
+  const openArchivedRow = (row: LibraryRow) =>
+    row.kind === "planning" ? openRow(row) : void unarchive(row.id).then(() => openRow(row));
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Chats" className="absolute inset-x-3 top-3 z-20 max-h-[calc(100%-24px)] overflow-y-auto border border-line bg-paper p-4 shadow-lg">

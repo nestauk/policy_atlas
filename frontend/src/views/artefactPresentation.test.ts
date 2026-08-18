@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { mostRelevantSources, sectionNavLabel } from "./artefactPresentation";
+import { mockArtefact } from "../mock/fixtures";
+import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename } from "./artefactPresentation";
 
 describe("mostRelevantSources", () => {
   it("ranks by how many claims cite each source, not how many citation rows", () => {
@@ -153,5 +154,68 @@ describe("sectionNavLabel", () => {
       const result = sectionNavLabel({ title });
       expect(result.length).toBeLessThanOrEqual(29);
     }
+  });
+});
+
+describe("artefactMarkdown", () => {
+  const artefact = {
+    title: "Policy options for healthier childhoods",
+    summary: "Universal provision helps.",
+    summary_status: "verified" as const,
+    sections: [
+      {
+        title: "Implications",
+        role: "conclusions" as const,
+        blocks: [{ prose: "Pair food with travel." }],
+      },
+      {
+        title: "What appears to help",
+        role: "key_findings" as const,
+        blocks: [
+          {
+            prose: "Universal breakfast helps children eat.",
+            claims: [
+              {
+                claim_type: "citation",
+                span: [9, 25],
+                citations: [{ n: 1 }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    references: [{ n: 1, title: "A study", year: 2022, venue: "BMJ Open" }],
+  };
+
+  it("writes title, verified summary, sections in report order, citation markers, and references", () => {
+    const markdown = artefactMarkdown(artefact);
+    expect(markdown).toContain("# Policy options for healthier childhoods");
+    expect(markdown).toContain("Universal provision helps.");
+    expect(markdown.indexOf("## What appears to help")).toBeLessThan(markdown.indexOf("## Implications"));
+    expect(markdown).toContain("Universal breakfast helps[1] children eat.");
+    expect(markdown).toContain("## References");
+    expect(markdown).toContain("1. A study (2022, BMJ Open)");
+  });
+
+  it("omits an unverified summary — same honesty as the on-screen callout", () => {
+    const markdown = artefactMarkdown({ ...artefact, summary_status: "pending" });
+    expect(markdown).not.toContain("Universal provision helps.");
+  });
+
+  it("puts citation numbers back into mock artefact prose and keeps the reference list", () => {
+    const markdown = artefactMarkdown(mockArtefact);
+    expect(markdown).toContain("support more consistent breakfast consumption[1]");
+    expect(markdown).toContain("## References");
+    expect(markdown).toMatch(/^1\. /m);
+  });
+});
+
+describe("downloadFilename", () => {
+  it("slugs the title and keeps a safe fallback", () => {
+    expect(downloadFilename("What retains early years staff?", "md")).toBe(
+      "what-retains-early-years-staff.md",
+    );
+    expect(downloadFilename("???", "pdf")).toBe("evidence-base.pdf");
   });
 });

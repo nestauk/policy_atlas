@@ -117,10 +117,9 @@ export function SourcesView() {
   };
 
   return (
-    <main className="mx-auto max-w-[1180px] px-6 py-8">
+    <main className="py-8">
       <header className="mb-5">
-        <h1 className="font-display text-title font-extrabold text-navy">Sources</h1>
-        <div role="group" aria-label="Filter sources" className="mt-4 flex flex-wrap gap-1.5">
+        <div role="group" aria-label="Filter sources" className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((filter) => (
             <button
               key={filter.key}
@@ -732,7 +731,6 @@ export function SourceDossierBody({
       )}
       {byAsserter.size > 0 && (
         <DossierSection title="Tags">
-          <p className="mb-2 text-body text-grey">Tags remain grouped by who asserted them.</p>
           {[...byAsserter.entries()].map(([asserter, tags]) => (
             <div key={asserter} className="mb-3">
               <p className="mb-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">Asserted by {scrub(asserter)}</p>

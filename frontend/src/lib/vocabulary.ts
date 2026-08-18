@@ -50,6 +50,10 @@ export const SOURCES_LABELS = {
 /** Copy shared across the new-task entry and the lists. */
 export const COPY = {
   newTask: `New ${TASK.lower}`,
+  /** Global-nav label — shorter than the page heading. */
+  navNew: "New",
+  /** Capability-picker heading on /new. */
+  newTaskPrompt: "What would you like to do?",
   findTask: `Find a ${TASK.lower}`,
   allTasks: `All ${TASK.lowerMany}`,
   noTasks: `No ${TASK.lowerMany} yet`,
@@ -58,5 +62,5 @@ export const COPY = {
   /** A locked tab explains itself rather than showing an empty page. */
   lockedHint: "Available once the analysis has run",
   notDecided: "Not decided yet",
-  shareComingSoon: "Sharing is coming soon.",
+  shareComingSoon: "Sharing features coming soon",
 } as const;

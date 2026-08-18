@@ -538,7 +538,11 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Patch Plan
+         * @description Apply typed edits to the current plan and persist a new approved version.
+         */
+        patch: operations["patch_plan_api_v1_projects__project_id__plan_patch"];
         trace?: never;
     };
     "/api/v1/projects/{project_id}/planning-turns": {
@@ -2298,7 +2302,7 @@ export interface components {
         };
         /**
          * PlanOut
-         * @description Response body for `GET /api/v1/projects/{id}/plan`.
+         * @description Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.
          *
          *     Args:
          *         plan: The current plan (draft or approved).
@@ -2311,6 +2315,48 @@ export interface components {
             status: string;
             /** Version */
             version: number;
+        };
+        /**
+         * PlanPatchIn
+         * @description Inbound body for `PATCH /api/v1/projects/{id}/plan`.
+         *
+         *     Omitted fields stay as they are. An empty string on a date or geography
+         *     field clears that constraint. The merged result must still be a valid
+         *     executable plan.
+         *
+         *     Args:
+         *         question: Replacement evidence question.
+         *         backend_scope: Search backend scope.
+         *         search_effort: Acquisition effort rung.
+         *         analysis_depth: Analysis component and budget rung.
+         *         steering_mode: Check-in cadence for the run.
+         *         screening_criteria: Replacement inclusion/exclusion criteria.
+         *         published_after: Lower publication-date bound (`YYYY-MM-DD`), or
+         *             empty to clear.
+         *         published_before: Upper publication-date bound (`YYYY-MM-DD`), or
+         *             empty to clear.
+         *         geography: Country, ISO code, or pinned group label, or empty to
+         *             clear geography filters.
+         */
+        PlanPatchIn: {
+            /** Analysis Depth */
+            analysis_depth?: ("landscape" | "standard" | "deep") | null;
+            /** Backend Scope */
+            backend_scope?: ("academic_only" | "grey_lit_only" | "both") | null;
+            /** Geography */
+            geography?: string | null;
+            /** Published After */
+            published_after?: string | null;
+            /** Published Before */
+            published_before?: string | null;
+            /** Question */
+            question?: string | null;
+            /** Screening Criteria */
+            screening_criteria?: string[] | null;
+            /** Search Effort */
+            search_effort?: ("rapid" | "standard" | "deep") | null;
+            /** Steering Mode */
+            steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
         };
         /**
          * PlanStep
@@ -4171,6 +4217,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_plan_api_v1_projects__project_id__plan_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlanPatchIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
