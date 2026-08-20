@@ -1222,6 +1222,33 @@ def test_html_non_utf8_charset_decoded_correctly() -> None:
     assert "�" not in joined  # replacement char proves a mangled pre-decode
 
 
+def test_binary_content_is_reason_coded_not_chunked() -> None:
+    """Prod incident 2026-08-19 (run f4c029b3): a source URL served a JPEG, the
+    plain path chunked its raw bytes, and the surviving NUL bytes aborted the
+    whole write transaction at INSERT. Binary must resolve to a reason-coded
+    per-document failure, and no chunk content may ever carry NUL."""
+    jpeg = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00" + b"\x00" * 300
+
+    # Declared binary type: rejected before any parse.
+    result = parse_and_segment(jpeg, "image/jpeg", thin_min=0)
+    assert result == {"status": "error", "reason": "unsupported_type"}
+
+    # Mislabeled/untyped binary falls to the plain path: NUL sniff rejects it.
+    result = parse_and_segment(jpeg, "application/octet-stream", thin_min=0)
+    assert result == {"status": "error", "reason": "unsupported_type"}
+
+    # Stray NULs in genuine text (any parse path) are replaced, never inserted.
+    result = parse_and_segment(
+        b"<html><body><article><p>A stray \x00 NUL inside otherwise ordinary "
+        b"prose about policy analysis must not abort the ingest run at the "
+        b"database insert stage.</p></article></body></html>",
+        "text/html",
+        thin_min=0,
+    )
+    assert result["status"] == "ok"
+    assert all("\x00" not in c["content"] for c in result["chunks"])
+
+
 def test_success_metadata_complete(ingested_corpus: CorpusFixture, engine: Engine) -> None:
     project_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:
