@@ -19,10 +19,11 @@
 > gates, not three, and rev 1 called Phase 9 — which the entire live check depends on —
 > the safest.
 >
-> **ADR 0032 moves out of the build.** The task cycle puts the ADR in the design phase
-> (conversation A, step 4). Rev 1 scheduled it in build Phase 11, which would have decided
-> the **ADR 0031 decision 4 amendment** after ten phases of implementing it.
-> **ADR 0032 is written before the build opens**, alongside this plan.
+> **ADR 0032 is written and Accepted** (2026-08-24,
+> `docs/adr/0032-organisation-tenancy-and-global-admin-read.md`), before the build opens —
+> the task cycle puts the ADR in the design phase, and rev 1 wrongly scheduled it in build
+> Phase 11, which would have decided the **ADR 0031 decision 4 amendment** after ten phases
+> of implementing it. ADR 0031 now carries a pointer to that amendment.
 
 ## Ordering, and the honest version of the gate claim
 
@@ -230,7 +231,8 @@ Spec flow-back (`web-api.md` §§ Auth boundary, Portfolios, Conversations; `dat
 the **manual downgrade procedure**, since the ECS task runs `alembic upgrade head` only);
 deferred seams; **the AGENTS.md phase pointer**; and **the three privacy-notice
 discrepancies quoted verbatim in `verification.md` as an open escalation** to the notice's
-owner. ADR 0032 is *not* here — it ships with this plan, before the build.
+owner. **ADR 0032 is already Accepted** — this phase only checks it still matches what was
+built, and records any drift rather than re-deciding.
 
 ### Phase 12 — Exit gate · *lead, fast-worker for evidence capture*
 Full `make verify`, `make audit`, `make drift-check`, `pnpm e2e`, `fe-api-smoke`; the

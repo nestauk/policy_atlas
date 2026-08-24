@@ -6,7 +6,7 @@
 > peer) all recommended against approving rev 2.0. The scope lane recommended splitting
 > into three slices; **the owner ruled to keep one slice and patch every finding**
 > (2026-08-24). This revision does that. **Contract APPROVED by the owner 2026-08-24
-> (rev 3.0, at `88b5fa3`).** Plan approved (before implementation): _pending_ · ADR: 0032.
+> (rev 3.0, at `88b5fa3`).** **Plan rev 2.0 APPROVED 2026-08-24.** ADR **0032 Accepted 2026-08-24**.
 >
 > **What rev 3.0 changes.** Four kinds of finding, all now addressed in the body:
 > **(1) self-contradictions** — `is_admin` "read leg only" versus the listings that must
