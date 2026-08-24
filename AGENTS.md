@@ -73,16 +73,17 @@ personal data, so `PrivacyView.tsx` **§ 3** gains the email alongside § 6's
 administrator sentence — **both need written owner sign-off**, and de-enrolment
 clears the address as the erasure lever. No user directory (Out).
 
-**Owner call (h), 2026-08-24:** the ops CLI owns the **whole account lifecycle** —
-`user create` (Cognito `AdminCreateUser` then enrol, in one command; Cognito
-first because its `sub` is the DB key; a DB failure keeps the account and prints
-the `user enrol` remediation rather than deleting it) and `user delete` (removes
-the Cognito account, clears `email`/`display_name`, and **never touches owned
-work** — no cascade, no reassign). Delete reports the address, org and
-soon-unreachable Task counts and requires the address retyped; `--force` is for
-scripts only. Because ownership transfer stays Out, deleting someone with live
-work **strands** it — that is now the trigger condition for a transfer slice.
-Operator IAM grows to `ListUsers` + `AdminCreateUser` + `AdminDeleteUser`.
+**Owner call (h), 2026-08-24 (revised same day):** the ops CLI **creates** the
+Cognito user — `user create` runs `AdminCreateUser` then enrols in one command,
+Cognito first because its `sub` is the DB key; a DB failure keeps the account
+and prints the `user enrol` remediation. **Deleting users is Out** (owner): a
+delete that cannot reassign the person's work would strand it, and ownership
+transfer is itself Out, so the two are coupled and ship together or not at all.
+**De-enrolment is the only removal lever** — it clears `org_id`, `email`,
+`display_name` and `is_admin` together, and never touches owned work. Two gaps
+recorded in `docs/deferred.md`: de-enrolment does **not** stop an offboarded
+person signing in, and erasure is two-part because the Cognito account survives.
+Operator IAM is `ListUsers` + `AdminCreateUser`, **not** `AdminDeleteUser`.
 
 **Owner call (i), 2026-08-24:** the portfolio/project **visibility cascade** is
 reopened from Out. One invariant — a `project` with a `portfolio_id` carries
@@ -91,10 +92,12 @@ create; promote a private project into an org portfolio; ask when an org project
 meets a private portfolio) and the three cases they left open (portfolio
 visibility change cascades to members behind `cascade=true`; setting a project's
 visibility while it is in a portfolio is refused with both ways out named;
-removing from a portfolio changes nothing). **The API never guesses** — any
-side-effecting visibility change 409s `visibility_conflict` unless the caller
-states the resolution, so the frontend prompt sits over the refusal rather than
-replacing it. All paths are owner-only writes on both rows. Enforced in the
+removing from a portfolio changes nothing). **The rules are deterministic and nothing prompts** (owner,
+revised 2026-08-24): i.3 demotes the project — the owner's own fallback, and the
+non-exposing direction — and i.4 cascades without confirmation. There is no
+`on_visibility_conflict` parameter and no `cascade` flag; the surface states the
+outcome afterwards in one line instead of asking first. i.5 is the sole 409,
+because it alone would change rows the caller did not name. All paths are owner-only writes on both rows. Enforced in the
 write paths plus a property test; the invariant spans two tables so a CHECK
 cannot express it. Note "public" in product phrasing means `visibility='org'` —
 nothing here is internet-public, and the contract says `org`/`private` throughout.

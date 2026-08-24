@@ -62,17 +62,18 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         rather than breaking the popover; the mock API serves `/me`.
 19. [ ] **Account lifecycle is safe (owner call (h)):** `user create` runs Cognito first
         and, on a database failure, keeps the account and prints the `user enrol`
-        remediation · `user delete` removes the Cognito account and clears `email` and
-        `display_name`, and **leaves every owned row untouched**, pinned by a
-        before/after count · delete reports the address, org and soon-to-be-unreachable
-        counts and requires the address retyped, with `--force` the only bypass and not
-        the default in any make target · unknown addresses write to neither system.
+        remediation · an existing address fails with "use enrol" · `user de-enrol` clears
+        `org_id`, `email`, `display_name` **and `is_admin`** together, and **leaves every
+        owned row untouched**, pinned by a before/after count · **no path calls
+        `AdminDeleteUser` and the operator IAM does not grant it** (deletion is Out) ·
+        the offboarding gap — de-enrolment does not stop sign-in — is recorded, not
+        silently carried.
 20. [ ] **The visibility invariant holds (owner call (i)):** every `project` with a
         `portfolio_id` carries its portfolio's `visibility`, asserted as a property over
-        all six paths (i.1–i.6) and not only as six examples · every conflict path returns
-        409 `visibility_conflict` when the resolution is not stated, so a direct API caller
-        is as protected as the UI · cascades are owner-only — an org colleague and an
-        `is_admin` holder both 403 · the i.4 prompt names the count and the direction
-        before a bulk change, and i.5 names both ways out.
+        all six paths (i.1–i.6) and not only as six examples · **no conflict-resolution
+        parameter exists on any route** — the rules are deterministic, so the UI and a
+        direct API caller get identical results · i.5 is the sole 409 · cascades are
+        owner-only, with an org colleague and an `is_admin` holder both 403 · each
+        visibility move states its outcome on the surface without prompting.
 21. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
         Accepted; AGENTS.md phase pointer current.

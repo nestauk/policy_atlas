@@ -2116,6 +2116,17 @@ omissions.
   (`admin_set_user_mfa_preference`), so requiring it for `is_admin` holders alone is
   possible without friction for ordinary users. **Revisit before the first real
   organisation is enrolled in prod.**
+- **Deleting a user from the ops CLI, and ownership transfer — coupled** (owner,
+  2026-08-24). 033 creates and enrols Cognito users but does not delete them: a delete
+  that cannot reassign the person's work would strand it, and transfer is itself Out, so
+  the two ship together or not at all. Until then **de-enrolment is the only removal
+  lever**, and it carries two consequences whoever offboards a real user must know:
+  **(1) it does not stop them signing in** — the Cognito account survives, so an
+  offboarded person still authenticates and still sees their own work; disabling or
+  deleting the account is a Cognito operation done outside this tooling; **(2) erasure is
+  two-part** — de-enrolment clears `org_id`, `email`, `display_name` and `is_admin` from
+  the application database, but the address in Cognito is untouched, so a genuine erasure
+  request needs the Cognito side handled separately.
 - **An admin dashboard / admin surface** — 033 adds `app_user.is_admin` (owner call (f),
   2026-08-24) as a read grade over every row in every organisation, and says so plainly:
   it is the designated home for admin capability, but it ships **no admin screen**. An

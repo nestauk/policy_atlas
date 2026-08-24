@@ -44,16 +44,17 @@
 > This makes the application database hold directly identifiable personal data for the
 > first time, so the privacy notice changes with it and de-enrolment clears the address.
 >
-> **(h)** **The ops CLI owns the whole account lifecycle** — it creates and deletes the
-> Cognito user, not only reads it, so an operator never handles a pool ID or attribute
-> names by hand. Delete is the highest-consequence command in the slice and is specified
-> as such below: it never destroys work, and it is the erasure lever proper.
+> **(h)** **The ops CLI creates the Cognito user**, not only reads it, so an operator
+> never handles a pool ID or attribute names by hand. **Deleting users is Out** (owner,
+> 2026-08-24): a delete that cannot reassign the person's work would strand it, and
+> nothing in this slice can hand work to a colleague. **De-enrolment is the only removal
+> lever**, and the consequence is named in § Removing a person.
 >
 > **(i)** **Visibility cascades between a `portfolio` and its `project`s** — reopened from
 > Out at the owner's request. One invariant: a `project` in a `portfolio` carries that
-> `portfolio`'s `visibility`. The API refuses to resolve a conflict on the caller's behalf
-> (409); the frontend prompt sits over that refusal rather than replacing it. See
-> § Visibility of a `project` inside a `portfolio`.
+> `portfolio`'s `visibility`. **The rules are deterministic and there are no prompts**
+> (owner, 2026-08-24) — membership changes resolve themselves, and the surface states the
+> outcome rather than asking first. See § Visibility of a `project` inside a `portfolio`.
 >
 > **Sequencing note (owner, 2026-08-24):** the code/screen vocabulary split stays as
 > ADR 0031 left it for this slice. A **standalone rename slice follows 033** — `project`
@@ -82,10 +83,10 @@ owner, same-org, admin), `GET /api/v1/me`,
 the `scope` and `owner_email` filters on the `projects` and `portfolios` listings, chat
 ownership (`conversation.created_by`), the portfolio/project **visibility invariant** and
 its 409 conflict resolutions (i), ops tooling (CLI + make targets) for org create / the
-whole user lifecycle — create, enrol, de-enrol, delete — / row assignment / admin grant,
+user lifecycle short of deletion — create, enrol, de-enrol — / row assignment / admin grant,
 with `boto3` in a new ops-only dependency group, the frontend switcher + read-only
-affordances + identity chip + account menu + visibility-conflict prompts + the visibility
-and privacy-notice copy, spec flow-back to `web-api.md`, ADR 0032, and `verification.md`
+affordances + identity chip + account menu + visibility-outcome copy + the visibility and
+privacy-notice copy, spec flow-back to `web-api.md`, ADR 0032, and `verification.md`
 with the scoped live check.
 
 ## Read first
@@ -214,35 +215,35 @@ with the scoped live check.
      `boto3`+`botocore` never reaches the API container. The rejected alternative was
      shelling out to the AWS CLI; it avoided the dependency but bought argv construction
      and stderr parsing in exchange, which is the worse trade.
-   - **The operator's role needs `cognito-idp:ListUsers`, `AdminCreateUser` and
-     `AdminDeleteUser`** (owner calls (g), (h)), documented alongside the existing jumpbox
-     IAM guidance in `infra/JUMPBOX.md`.
+   - **The operator's role needs `cognito-idp:ListUsers` and `AdminCreateUser`** (owner
+     calls (g), (h)) — **not** `AdminDeleteUser`, since deleting users is Out. Documented
+     alongside the existing jumpbox IAM guidance in `infra/JUMPBOX.md`.
    - **No new IAM on the API.** The permission to read the pool sits with the human
      operator's role, **never** with the API task role, and the import is reachable only
      from the CLI entry point — asserted structurally, so an API module cannot grow a
      `boto3` import unnoticed.
-   - **Erasure lever:** de-enrolment clears `email` as well as `org_id`. It is the one
-     command that removes the identifiable data this slice introduces.
+   - **Erasure lever:** de-enrolment clears `email`, `display_name`, `org_id` and
+     `is_admin`. It is the one command that removes the identifiable data this slice
+     introduces — and it is only half of a real erasure, because the Cognito account is
+     untouched (§ Removing a person).
 
-3c. **Deleting a person (owner call (h)).** `user delete --email` removes the Cognito
-   account so they can no longer sign in, and **clears `email`, `display_name` and
-   `is_admin`** from `app_user` — a dead `sub` must not keep a live grant, even one
-   nobody can authenticate into. It is the erasure lever proper: the identifiable data goes, the row stays,
-   keyed by an opaque `sub` that no longer resolves to a person.
-   - **It never touches their work.** `project.owner_user_id` is plain text with no
-     foreign key, so nothing cascades, and nothing is permitted to: a CLI flag must not be
-     able to destroy research. Their Tasks and Projects remain, owned by a `sub` nobody
-     holds — the same unreachable state the recorded "NULL-owner pre-025 projects" posture
-     already accepts. Ownership transfer stays **Out**, so **there is no lever to give
-     that work to somebody else**; deleting a person who owns live work strands it, and
-     the command says so before it acts.
-   - **It reports before it acts.** The command prints the address, the organisation, and
-     the count of Tasks and Projects about to become unreachable, then requires the
-     operator to retype the address to proceed. `--force` skips the prompt for scripted
-     use. This is an irreversible cross-system action; a confirmation is not ceremony.
-   - **Unknown address fails loudly and writes nothing** — in either system.
-   - Delete is the erasure command; **de-enrol** remains the *reversible* lever that just
-     removes org membership and the stored address.
+3c. **Removing a person (owner call (h) — delete is Out).** `user de-enrol --email` is
+   the only removal lever the CLI has. It clears `org_id`, `email`, `display_name` **and
+   `is_admin`** — someone being removed from an organisation must not keep a global
+   read-everything grant — leaving the row keyed by an opaque `sub`. It is reversible:
+   re-enrolling restores membership and re-resolves the address.
+   - **It does not touch their work,** and nothing here is permitted to. Their Tasks and
+     Projects keep working, still owned by their `sub`, so if they sign in again they see
+     them. Nothing is stranded, which is precisely why delete is Out.
+   - **Two honest gaps, named rather than glossed:**
+     **(1) De-enrolment does not stop them signing in.** The Cognito account survives, so
+     an offboarded person still authenticates and still sees their own work. Disabling or
+     deleting the account is a Cognito operation done outside this tooling, in the console
+     or by `aws cognito-idp`. **(2) Erasure is therefore two-part** — de-enrol clears the
+     personal data this slice introduced into the application database, but the address in
+     Cognito is untouched, and a genuine erasure request needs the Cognito side handled
+     separately. Both are recorded in `docs/deferred.md`; whoever offboards a real user
+     needs to know them.
 
 3d. **Visibility of a `project` inside a `portfolio` (owner call (i), 2026-08-24 —
    reopened from Out).** **Invariant: a `project` that has a `portfolio_id` carries the
@@ -253,30 +254,35 @@ with the scoped live check.
    your organisation. Nothing in this system is internet-public. The contract says
    `org`/`private` throughout, deliberately.)*
 
-   **The API never guesses.** Any request that would change a row's visibility as a
-   side-effect is **refused with 409 `visibility_conflict`** unless the caller states the
-   resolution explicitly. The frontend prompt is an affordance over that refusal, not the
-   guard itself — a direct API caller gets the same protection as the UI.
+   **The rules are deterministic; nothing prompts** (owner, 2026-08-24). A membership
+   change resolves itself by the rules below, and the surface **states the outcome after
+   the fact** — one line of copy, not a dialog. There is no `on_visibility_conflict`
+   parameter and no `cascade` flag: a rule that always has one answer does not need the
+   caller to supply it. The one case that stays a hard refusal is i.5, because there the
+   damage would land on rows the caller did not name.
 
    - **(i.1) Creating a `portfolio` from a `project`** — the new `portfolio` inherits that
      `project`'s `visibility`, in both directions: from an org-visible Task it is
      org-visible, from a private one it is private. No conflict is possible, so no prompt.
    - **(i.2) Adding a `private` project to an `org` portfolio** — the project is promoted
-     to `org`. Caller sends `on_visibility_conflict=promote_project`; the frontend sends it
-     without a prompt, per the owner's rule.
-   - **(i.3) Adding an `org` project to a `private` portfolio** — caller chooses
-     `promote_portfolio` (the portfolio becomes `org`) or `demote_project` (the project
-     becomes `private`). The frontend prompts, naming which way each option moves the work.
-   - **(i.4, not specified by the owner) Changing a `portfolio`'s visibility while it has
-     members** — cascades to every member project. Refused unless the caller sends
-     `cascade=true`, and the frontend names the count and the direction before acting
-     (`private` → `org` **exposes** N Tasks to the organisation; `org` → `private` hides
-     them from colleagues who can currently read them).
-   - **(i.5, not specified) Setting a `project`'s visibility directly while it is in a
-     `portfolio`** — **refused, 409**, with the two ways out named: change the portfolio's
-     visibility, or remove the project from it first. Silently promoting a whole portfolio
-     because one Task changed would expose every sibling.
-   - **(i.6, not specified) Removing a `project` from a `portfolio`** — it keeps whatever
+     to `org`. Per the owner's rule.
+   - **(i.3) Adding an `org` project to a `private` portfolio** — **the project is demoted
+     to `private`.** This is the owner's own fallback ("if not, notify them that the task
+     will be made private") now taken as the rule, and it is the non-exposing direction:
+     the alternative would promote somebody's private Project because one Task joined it,
+     exposing every sibling in it. **Inference to confirm or overturn** — the owner's
+     original rule offered a choice here, and removing the prompt means the system picks.
+   - **(i.4) Changing a `portfolio`'s visibility while it has members** — cascades to every
+     member project, no confirmation. The user changed the Project's visibility
+     deliberately; the members following is the invariant doing its job. The surface states
+     what happened, including the direction, because `private` → `org` **exposes** N Tasks
+     to the organisation.
+   - **(i.5) Setting a `project`'s visibility directly while it is in a `portfolio`** —
+     **refused, 409 `visibility_conflict`**, with the two ways out named: change the
+     portfolio's visibility, or remove the project from it first. This one stays a refusal
+     rather than becoming a rule, because every other case changes only rows the caller
+     named, and this one would change every sibling in the portfolio instead.
+   - **(i.6) Removing a `project` from a `portfolio`** — it keeps whatever
      visibility it currently has. Nothing reverts; there is no memory of a prior value and
      inventing one would surprise.
 
@@ -308,16 +314,18 @@ with the scoped live check.
    `is_owner`, `owner_display` (`display_name` when set, else `email`, else the current
    `sub` rendering) · **`?owner_email=` on both listings, honoured only for `is_admin`
    holders — anyone else passing it gets 400 `invalid_parameter`, which reveals nothing
-   about whether any address exists.** No user directory and no admin screen (Out) · `PATCH /projects/{id}` **and `PATCH /portfolios/{id}`**
-   accept `visibility` (owner-only) · **`PATCH /projects/{id}` accepts
-   `on_visibility_conflict=promote_project|promote_portfolio|demote_project` and
-   `PATCH /portfolios/{id}` accepts `cascade=true`; both 409 `visibility_conflict` when the
-   resolution is needed and not given (owner call (i))** · **`POST /portfolios` accepts
+   about whether any address exists.** No user directory and no admin screen (Out) ·
+   `PATCH /projects/{id}` **and `PATCH /portfolios/{id}`** accept `visibility`
+   (owner-only) · **no conflict-resolution parameters anywhere: the rules are
+   deterministic (owner call (i)). `PATCH /projects/{id}` returns 409
+   `visibility_conflict` for i.5 alone — setting a project's visibility while it belongs
+   to a portfolio** · **`POST /portfolios` accepts
    `from_project_id`: the new portfolio inherits that project's `visibility` **and takes
    that project as its first member** — creating a Project "from" a Task means the Task
-   joins it, or the inheritance would describe nothing (i.1)** · error envelope gains **403 `forbidden`** (owner call (b)), **400 `invalid_parameter`**
+   joins it, or the inheritance would describe nothing (i.1)** ·
+   error envelope gains **403 `forbidden`** (owner call (b)), **400 `invalid_parameter`**
    (a non-admin passing `owner_email`, owner call (g)) and **409 `visibility_conflict`**
-   (an unresolved cascade, owner call (i)).
+   (i.5 only, owner call (i)).
    `make openapi-sync` regenerates the two generated files.
    **Portfolio task counts** (`portfolios.py` `_task_counts`) count only rows the caller
    can read — a colleague must not learn a private task exists from a count.
@@ -336,10 +344,11 @@ with the scoped live check.
    user sets their own through the hosted UI's `NEW_PASSWORD_REQUIRED` challenge. Password
    reset is likewise self-serve via the pool's `verified_email` recovery; **no CLI command
    sets, resets or reads a password**) ·
-   **delete user** (owner call (h) — see § Deleting a person) · enrol user
+   enrol user
    **by email** (resolve `sub` via `boto3`, upsert `app_user` `ON CONFLICT DO
    UPDATE` with `org_id` and `email`, optional `display_name`) · assign a `project` **or
-   `portfolio`** to an org · de-enrol (the rollback lever — **clears `email`**) ·
+   `portfolio`** to an org · de-enrol (the only removal lever — **clears `org_id`,
+   `email`, `display_name` and `is_admin`**; see § Removing a person) ·
    **grant/revoke `is_admin`**
    (the only way to set it — there is no HTTP route that grants it, so the flag cannot be
    self-served or escalated to through the API). **Invocation is the operator's laptop over the SSM
@@ -380,13 +389,12 @@ with the scoped live check.
    above applies unchanged, since the holder is not the owner.
    **Visibility-toggle copy and the privacy-notice sentence ship here too** (§ What
    `private` means) — the privacy page edit is owner-signed before merge.
-   **Visibility-conflict prompts (owner call (i)):** adding an org-visible Task to a
-   private Project asks which way to resolve it, naming what each option does to the work
-   (i.3); changing a Project's visibility with members names the count and the direction
-   before acting (i.4); attempting to set a Task's visibility while it sits in a Project
-   explains the two ways out rather than failing blankly (i.5). Promotion under i.2 is
-   silent, per the owner's rule. Copy is one line per case — a sentence naming the
-   consequence, not a paragraph explaining the model.
+   **Visibility outcomes, stated not asked (owner call (i)):** nothing prompts. Where a
+   membership change moved a row's visibility, the surface says so afterwards in one line
+   — "Now visible to your organisation" (i.2) or "Now private — hidden from your
+   organisation" (i.3), and for i.4 the same with the number of Tasks that followed. i.5
+   is the one hard stop: it explains the two ways out rather than failing blankly. Copy is
+   a sentence naming the consequence, never a paragraph explaining the model.
    **Mock API:** `src/mock/api.ts` mirrors the scope/403 behaviour for `/projects`. It
    serves no `/api/v1/portfolios` at all (032's recorded seam), so portfolio scope/403
    behaviour is covered by backend route tests and frontend unit tests only. Extending
@@ -395,7 +403,8 @@ with the scoped live check.
    grade, the admin read leg, 403/400/409 semantics, `/me`, `scope` and `owner_email` on
    both listings) + § Portfolios (the visibility invariant and its conflict resolutions) +
    a tenancy note above data-model's entity hierarchy · **`infra/JUMPBOX.md`** gains the
-   operator IAM the ops CLI needs (`ListUsers`, `AdminCreateUser`, `AdminDeleteUser`) and
+   operator IAM the ops CLI needs (`ListUsers`, `AdminCreateUser` — **not**
+   `AdminDeleteUser`) and
    `infra/DEPLOYMENT.md` § 6 gains the CLI's invocation. Deferred seams recorded in
    `docs/deferred.md`.
 
@@ -419,14 +428,18 @@ with the scoped live check.
   re-synced, so an address changed in Cognito afterwards goes stale in the app until an
   operator re-enrols. `sub` is the key precisely so that staleness is cosmetic, never a
   correctness or access problem. A re-sync command is a seam, not a gap.
+- **Deleting a Cognito user from the ops CLI** (owner, 2026-08-24). A delete that cannot
+  reassign the person's work would strand it, and ownership transfer is Out, so the two
+  would have to land together. De-enrolment is the removal lever until then. Consequence
+  named in § Removing a person: de-enrolment does **not** stop an offboarded person
+  signing in, and erasure is two-part — the Cognito side is handled outside this tooling.
 - Self-serve onboarding: sign-up, invitation *requests*, email-domain mapping, IdP
   claims/groups/federation. The Cognito invitation email that `AdminCreateUser` sends is
   **in** scope (owner call (h)) — it is admin-initiated, which is the opposite of
   self-serve.
-- Multi-org membership; **ownership transfer**; sharing to named individuals. Transfer's
-  absence is now load-bearing: `user delete` (owner call (h)) strands whatever the deleted
-  person owned, and nothing in this slice can hand it to a colleague. The first operator
-  who needs to delete someone with live work is the trigger for a transfer slice.
+- Multi-org membership; **ownership transfer**; sharing to named individuals. Transfer and
+  CLI user-deletion are now coupled: neither ships without the other, because deleting a
+  person who owns work needs somewhere for that work to go.
 - Write/co-edit on org-visible rows beyond own chats (incl. steering by non-owners).
 - Seeing colleagues' chats (owner moderation view); org-level run/chat capacity policy.
 - Adoption of NULL-owner pre-025 projects (recorded posture stands).
@@ -448,8 +461,8 @@ above; nothing beyond them. **One new dependency, approval-gated and named: `bot
 new ops-only dependency group** (owner opened this 2026-08-24) — excluded from the API
 image by the existing `uv sync --no-dev --frozen` build, so the runtime is unchanged.
 **Egress change, named and bounded:** the ops CLI gains outbound Cognito calls —
-`ListUsers`, `AdminCreateUser`, `AdminDeleteUser` — each made by a human operator under
-their own IAM. **The API's egress is unchanged**: `/me` and every request path stay
+`ListUsers` and `AdminCreateUser`, each made by a human operator under their own IAM.
+Deleting users is Out, so `AdminDeleteUser` is neither called nor granted. **The API's egress is unchanged**: `/me` and every request path stay
 DB-only, and the API task role gains no Cognito permission.
 **Two further gates that are not code:** the **privacy-notice edits** (§ 3 and § 6 of a
 live public legal page) need written owner sign-off before merge, and the **Cognito
@@ -507,17 +520,17 @@ Out items.
   (asserted structurally: the API imports nothing that reaches Cognito)** / **owner call
   (i), as one property plus the six cases: after any accepted operation, **every project
   with a `portfolio_id` matches its portfolio's `visibility`** (property test over the six
-  paths) · i.1 inheritance both directions · i.2 promotes · i.3 offers both resolutions and
-  applies the chosen one · i.4 cascades to every member and 409s without `cascade` · i.5
-  409s · i.6 leaves visibility untouched · **every conflict path 409s when the resolution
-  is absent, so a direct API caller is as protected as the UI** · an org colleague and an
-  `is_admin` holder both 403 on every one of these paths** / **owner call
+  paths) · i.1 inherits in both directions and makes the project the portfolio's first
+  member · i.2 promotes · i.3 demotes · i.4 cascades to every member · i.5 409s · i.6
+  leaves visibility untouched · **no request carries a conflict-resolution parameter — the
+  rules are deterministic, so a direct API caller and the UI get identical results** · an
+  org colleague and an `is_admin` holder both 403 on every one of these paths** / **owner call
   (h): `user create` creates then enrols · a Cognito-succeeded/DB-failed create leaves the
   account and prints the `user enrol` remediation rather than deleting it · an existing
-  address fails with "use enrol" · `user delete` clears `email` and `display_name`, removes
-  the Cognito account, and **leaves every owned row untouched** (pinned by a test that
-  counts the owner's projects before and after) · delete on an unknown address writes to
-  neither system · `--force` is the only way to skip the retype confirmation** / **the account
+  address fails with "use enrol" · `user de-enrol` clears `org_id`, `email`, `display_name`
+  **and `is_admin`**, and **leaves every owned row untouched** (pinned by a test counting
+  the owner's projects before and after) · re-enrolling restores membership · **no code
+  path anywhere calls `AdminDeleteUser`** (asserted structurally — deletion is Out)** / **the account
   menu renders email + organisation from `/me`, shows the email alone when unenrolled, and
   names admin state when `is_admin`**; the existing
   cross-owner 404 suite untouched and green (it now spans ten API test files including
@@ -536,13 +549,14 @@ Out items.
   for a non-admin, and that the corrected visibility-toggle copy and **both** privacy-notice
   changes (§ 3 and § 6) render on the live pages. Open the account menu as each of the
   three users and confirm it names the right email, organisation and admin state. Finally
-  round-trip owner call (h) on a throwaway address: `user create` it into the org, sign in
-  once, then `user delete` it and confirm the account cannot sign in, the stored address is
-  gone, and any Task it owned still exists in the database. Then walk owner call (i) in the
+  exercise owner call (h) on a throwaway address: `user create` it into the org, sign in
+  once, then `user de-enrol` it and confirm the stored address, display name and admin flag
+  are gone, the Task it owned still exists, and the account can still sign in — the
+  offboarding gap, observed rather than assumed. Then walk owner call (i) in the
   browser: create a Project from an org-visible Task and see it inherit, add a private Task
-  to it and see the promotion, add an org-visible Task to a private Project and take each
-  branch of the prompt, and flip a Project with members in both directions confirming the
-  count and direction are named before it acts.** Plus one cheap
+  to it and see the promotion, add an org-visible Task to a private Project and see it demoted with the
+  outcome stated, and flip a Project with members in both directions confirming the members
+  follow and the surface says how many.** Plus one cheap
   full-chain smoke (an existing personal Task still loads end-to-end). **Not** a full live
   e2e run.
 
@@ -600,12 +614,13 @@ the Python;
 (3) `?owner_email=` must not become an enumeration oracle: a non-admin gets the same 400
 whether or not the address exists, and an admin's result set is bounded by the same
 pagination as any other listing;
-(4) `email` is now personal data in the application database. Both erasure levers have to
-actually work — de-enrolment clears the address, `user delete` clears it and removes the
-account — and § 3 of the privacy notice has to be accurate about what is stored. These are
-review items, not paperwork;
-(5) **`user delete` is the most destructive command in the repo** (owner call (h)) and gets
-read line by line: it must remove the Cognito account and the stored personal data, and
-must **not** delete, reassign or cascade to a single owned row. The test that counts owned
-projects before and after is the one that matters. `--force` exists for scripts; a reviewer
-should check it is not the default path anywhere in the make targets.
+(4) `email` is now personal data in the application database. The erasure lever has to
+actually work — de-enrolment clears `org_id`, `email`, `display_name` and `is_admin` — and
+§ 3 of the privacy notice has to be accurate about what is stored **and about what
+de-enrolment does not reach**, since the Cognito account survives it. These are review
+items, not paperwork;
+(5) **deletion is Out** (owner, 2026-08-24), so a reviewer should confirm no path calls
+`AdminDeleteUser` and the operator IAM does not grant it. De-enrolment must clear
+`org_id`, `email`, `display_name` and `is_admin` together — leaving `is_admin` on a
+de-enrolled row would keep a global read-everything grant alive after offboarding, which
+is the failure that matters here.
