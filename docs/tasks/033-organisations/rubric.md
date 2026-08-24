@@ -1,79 +1,139 @@
 # Rubric: 033-organisations
 
 The task is **done only if every box holds** — otherwise it is in progress, not done.
+Rev 3.0: rewritten alongside the contract after the adversarial review. Item 1 of rev 2.0
+("implementation satisfies contract.md") is deliberately gone — a 480-line contract behind
+one unfalsifiable box absorbed everything the other items missed.
 
-1. [ ] Implementation satisfies [contract.md](contract.md).
-2. [ ] `make verify` passes; `make drift-check` green; declared manual/live checks pass
-       per the contract's live-check scope pin.
-3. [ ] No approval-gated change snuck in unapproved — the schema/auth/API changes land
-       exactly as contracted; no roles, IdP, or infra change rode along.
-4. [ ] No generated files or secrets edited by hand (`openapi.json`/`gen/types.ts` only
-       via `make openapi-sync`).
-5. [ ] No tests deleted, skipped or weakened without written justification — in
-       particular the existing cross-owner 404 suite stands unmodified.
-6. [ ] Verification evidence recorded ([verification.md](verification.md)).
-7. [ ] Known gaps and deferred seams listed (gap → [docs/deferred.md](../../deferred.md)),
-       including every contract Out item touched in passing.
-8. [ ] Required Tier-4 review stack ran (contract verifier · code review · security lane ·
-       adversarial · simplification), or skipped with written justification — findings in
-       [verification.md](verification.md).
-9. [ ] **Tenancy matrix holds:** same-org read 200 · same-org write 403 `forbidden` ·
-       cross-org and not-visible 404 (indistinguishable body) · `private` hidden from org
-       listings and direct GET · own-chats isolation both directions · pending-turn cap
-       keyed to the acting user · portfolio task counts exclude unreadable tasks — each
-       pinned by a named test.
-10. [ ] **Every project- and portfolio-scoped route** resolves access through the single
-        helper — no residual inline `owner_user_id` filter outside it. The site list is
-        the one the plan enumerated from the tree, and the check is run against the tree,
-        not against a count written down earlier.
-11. [ ] Dark-launch invariant: with zero orgs/enrolments the API behaviour and frontend
-        are observably unchanged for existing users (pinned by test or live check).
-12. [ ] Migration up/down roundtrip green on the scratch-DB pattern, `created_by`
-        backfill correctness asserted; downgrade restores the pre-033 schema.
-13. [ ] Auth dependency (`get_current_user`) remains DB-free (asserted structurally —
-        no Connection dependency creep).
-14. [ ] `portfolio` carries the same tenancy grades as `project` (owner call (e)):
-        `org_id` + `visibility` columns, `owned_portfolio()` folded into the shared
-        helper, `scope` on its listing — a colleague who can read a Task can read the
-        Project that groups it.
-15. [ ] **`is_admin` holds the line** (owner call (f)): granted only via the ops CLI (no
-        HTTP write path, no mass-assignment route) · **read grade only** — every mutation
-        403s for a non-owner holder · reads every row in every org including
-        `visibility='private'`, pinned by a named test · **nothing outside the read leg
-        consults the flag**, asserted structurally (the broad name invites drift) ·
-        defaults `false`, so rubric 11's dark-launch invariant is unaffected · one trace
-        line per admin-leg read, none on reads the caller was already entitled to · named
-        and reviewed in the security lane per the contract's call-out.
-16. [ ] **The `private` disclosure shipped** (owner call (f)): the visibility toggle says
-        private hides a Task from your organisation, not from everyone; `PrivacyView.tsx`
-        § 6 states that named administrators can access content for support and that
-        accesses are logged; **§ 3 lists the stored email address** (owner call (g) — the
-        DB now holds directly identifiable personal data); **both privacy-page edits carry
-        written owner sign-off** (live public legal copy).
-17. [ ] **Identity reaches the DB only via ops (owner call (g)):** `sub` is still the
-        only claim any request path reads · the Cognito lookup lives in the ops CLI alone
-        and uses `boto3` from the new **ops-only dependency group** — confirmed absent
-        from the built API image, and imported by no API module directly or transitively ·
-        the API task role gains **no** Cognito permission (checked in the CDK diff) · enrolment by email fails loudly and writes
-        nothing on zero or multiple matches · de-enrolment clears `email` · `?owner_email=`
-        is admin-only and gives a non-admin the same 400 whether or not the address exists.
-18. [ ] Account menu names the signed-in email, the organisation and (when set) admin
-        state, from `/me`; unenrolled users show the email alone; a long address truncates
-        rather than breaking the popover; the mock API serves `/me`.
-19. [ ] **Account lifecycle is safe (owner call (h)):** `user create` runs Cognito first
-        and, on a database failure, keeps the account and prints the `user enrol`
-        remediation · an existing address fails with "use enrol" · `user de-enrol` clears
-        `org_id`, `email`, `display_name` **and `is_admin`** together, and **leaves every
-        owned row untouched**, pinned by a before/after count · **no path calls
-        `AdminDeleteUser` and the operator IAM does not grant it** (deletion is Out) ·
-        the offboarding gap — de-enrolment does not stop sign-in — is recorded, not
-        silently carried.
-20. [ ] **The visibility invariant holds (owner call (i)):** every `project` with a
-        `portfolio_id` carries its portfolio's `visibility`, asserted as a property over
-        all six paths (i.1–i.6) and not only as six examples · **no conflict-resolution
-        parameter exists on any route** — the rules are deterministic, so the UI and a
-        direct API caller get identical results · i.5 is the sole 409 · cascades are
-        owner-only, with an org colleague and an `is_admin` holder both 403 · each
-        visibility move states its outcome on the surface without prompting.
-21. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
-        Accepted; AGENTS.md phase pointer current.
+## Process
+
+1. [ ] `make verify` passes **with the `ops` dependency group installed**;
+       `make drift-check` green; generated files only via `make openapi-sync`.
+2. [ ] No approval-gated change beyond those named in § Constraints; no secrets or
+       generated files edited by hand.
+3. [ ] No test deleted, skipped or weakened without written justification; the existing
+       cross-owner 404 suite stands unmodified.
+4. [ ] `verification.md` records evidence per the contract's § Verification evidence.
+5. [ ] Known gaps and deferred seams landed in [docs/deferred.md](../../deferred.md).
+6. [ ] Tier-4 review stack ran — contract verifier · code review · **security lane in
+       three scoped passes** (tenancy boundary · privileged read and audit · operator CLI)
+       · plan- and code-stage adversarial · simplification · human deep review.
+7. [ ] Spec flow-back landed per § 13; ADR 0032 Accepted **and recording that it amends
+       ADR 0031 decision 4**; AGENTS.md phase pointer current.
+
+## Tenancy
+
+8. [ ] **The NULL rule holds in SQL, not Python:** two callers with `org_id IS NULL`
+       cannot see each other's `org_id IS NULL` rows, pinned by a named test; the org leg
+       is a SQL predicate and no code compares two loaded org values in Python.
+9. [ ] **Tenancy matrix**, each row a named test: same-org read 200 · same-org write 403 ·
+       cross-org 404 (indistinguishable) · `private` hidden from the org · scope,
+       `portfolio_id` and `owner_email` filters correct on both listings · counts exclude
+       both unreadable and out-of-org rows.
+10. [ ] **Every project-, portfolio- and conversation-scoped route** resolves through the
+        helper, enumerated from the tree at plan time — **including the seven routes on
+        `conversations.py`'s conversation-id router**. No residual inline `owner_user_id`
+        filter outside the helper, scoped to `api/` (`runtime/` is out of scope).
+11. [ ] **Own-chats isolation both directions, including the deep link:** a colleague's
+        `GET /conversations/{id}/turns` returns 404, not a transcript; the legacy-NULL
+        disjunct is `created_by = :me OR (created_by IS NULL AND owner_user_id = :me)`.
+12. [ ] **Pending cap and its sweeper are both keyed to the acting user** — a colleague
+        with two dead turns is not permanently capped, and an owner's sweep does not fail
+        a colleague's in-flight turn. Colleague chat paths take no `FOR UPDATE` on the
+        owner's `project` row.
+13. [ ] **SSE re-authorises as it streams:** an open stream closes on de-enrolment, on a
+        visibility flip and on admin revoke — each pinned by a test.
+14. [ ] Dark-launch: with zero orgs the API **and frontend** are observably unchanged —
+        including that the Organisation·Mine switcher is absent when `/me` returns no
+        organisation.
+
+## The admin flag
+
+15. [ ] **Read only, no exceptions:** an admin is refused every mutation including
+        conversation creation and turn POST; an admin is explicitly not treated as a
+        colleague.
+16. [ ] **Only the four named readers consult `is_admin`** (row-access helper, listing
+        scope resolver, `owner_email` gate, `/me` projection), asserted structurally
+        against that closed list; no write path reads it.
+17. [ ] **Trace grain holds:** one line per row read on the admin leg · one per cross-org
+        listing or search request **including one returning zero rows** · one per SSE
+        subscribe and re-authorisation · none for a read the caller was already entitled
+        to. Admin grant and revoke are themselves recorded with the acting operator.
+18. [ ] `is_admin` defaults `false`, is settable only by the CLI, and no HTTP route or
+        request body can reach it.
+
+## Identity
+
+19. [ ] **`owner_display` never renders an email** — `display_name` (NOT NULL, required at
+        enrolment) then the `sub` rendering. No surface shows one user's address to
+        another.
+20. [ ] `sub` remains the only claim any request path reads; `get_current_user` stays
+        DB-free and Cognito-free; `/me` upserts `DO NOTHING` and never clobbers ops-set
+        fields, while enrolment upserts `DO UPDATE`.
+21. [ ] **`boto3` is absent from the built API image** (checked against the image, not the
+        declaration) and imported by no API module directly or transitively; the API task
+        role gains no Cognito permission; `boto3-stubs` satisfies strict mypy.
+
+## The invariant
+
+22. [ ] **Property over i.1–i.6 covering `visibility` *and* `org_id`**, not six examples:
+        every `project` with a `portfolio_id` matches its portfolio on both.
+23. [ ] i.5 returns 409; a both-fields `PATCH` returns 422; **the i.5-then-i.2 loop cannot
+        silently re-expose a row**, and the copy names "leave the Task out of the Project"
+        rather than "remove it first".
+24. [ ] **`update_portfolio` cannot write `visibility` outside the cascade** — the blind
+        `.values(**changes)` splat does not carry the field.
+25. [ ] Cascades are owner-only; an org colleague and an admin both 403. The i.4 count
+        shown to the user includes only members that caller can see.
+
+## Ops
+
+26. [ ] **Environment mismatch refuses to act** — every command verifies the resolved AWS
+        account and pool against the connected database and stops on a mismatch.
+27. [ ] **Concurrent operators cannot resurrect admin** — commands read `FOR UPDATE` and
+        refuse when current state differs from what the operator acted on.
+28. [ ] `user create` passes `DesiredDeliveryMediums=["EMAIL"]`; a database failure keeps
+        the account and prints the remediation; an existing address says "use enrol".
+29. [ ] **New rows stamp `org_id` from the creator**; re-enrolment leaves old rows with the
+        previous org and `reassign-rows` fixes them — both pinned.
+30. [ ] No path calls `AdminDeleteUser`; no command accepts a password; **the
+        `staging-user`, `prod-user` and `cognito-user` make targets are deleted**.
+
+## Migration and rollback
+
+31. [ ] Up/down roundtrip green; `created_by` backfill correct; the backfill rehearsed at
+        production scale; the migration sets a lock timeout and the runbook has a blocker
+        preflight.
+32. [ ] **The rollback exposure is evidenced, not asserted** — a test proves that pre-033
+        code would show a colleague's chat to the project owner, and DEPLOYMENT.md carries
+        the roll-forward posture and the manual downgrade procedure.
+
+## Legal and governance
+
+33. [ ] **§ 7 no longer promises what the system cannot do** — it describes what erasure
+        actually reaches, and the two-part runbook (application + Cognito, and what backups
+        mean) ships in `docs/`.
+34. [ ] **§ 3 is accurate** — it no longer calls the email the only user-specific
+        identifier, and it discloses what is stored now that storage is real.
+35. [ ] § 6 states administrator access and that accesses are logged.
+36. [ ] **All three copy blocks are quoted in `verification.md` with the owner's approving
+        message**, and the **DPIA screening and processing-record update are recorded as
+        done before merge**. Log-group retention is recorded as the bound on how far an
+        admin-access investigation can look back.
+
+## Frontend
+
+37. [ ] **The owner/non-owner affordance matrix holds component by component** —
+        `PlanningPane` (and its `ChatSidePanel` duplicate), `PlanCard`, `RunPane`,
+        suggestion chips, plan-start card, check-in responses and retry controls each
+        render read-only for a non-owner. A non-owner cannot reach a mutation by URL.
+38. [ ] **The check-in banner is owner-scoped** — a colleague is never told a check-in is
+        waiting on them.
+39. [ ] `HistoryView` shows decisions and planning turns to any caller who can read the
+        project.
+40. [ ] **Caches converge without reload** after a cascade and after a membership change;
+        `scope` is part of every affected query key.
+41. [ ] The account menu names email, organisation and admin state, falling back to the
+        `sub` rendering when unenrolled; a long address truncates; the admin's wider list
+        says it spans organisations and renders a null owning organisation without a blank.
+42. [ ] `PortfolioDetailView` uses the `portfolio_id` filter and is correct beyond 50 rows.

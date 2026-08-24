@@ -2127,6 +2127,18 @@ omissions.
   two-part** — de-enrolment clears `org_id`, `email`, `display_name` and `is_admin` from
   the application database, but the address in Cognito is untouched, so a genuine erasure
   request needs the Cognito side handled separately.
+- **Org-level chat and run capacity policy** — 033 re-keys the chat pending cap from the
+  project owner to the acting user (owner call (b) fairness), which removes the only
+  per-project bound: an organisation of N members can drive 2N concurrent chat turns
+  against one owner's project. Named rather than presented as neutral.
+- **Cognito email re-sync as an automatic process** — 033 ships `user resync --email` as a
+  manual lever. Nothing detects an address changed in Cognito, so the stored value goes
+  stale until an operator acts. Staleness is not correctness-critical (`sub` is the key)
+  but it does break admin search and means the app holds an inaccurate address.
+- **NULL-owner pre-025 rows are still not adopted, but they are no longer unreachable** —
+  033's admin read leg has no owner predicate, so `runtime/orchestrate.py` CLI rows and
+  pre-025 rows appear in an admin's cross-org listing with a null owner and null
+  organisation. This amends the "unreachable" wording in the recorded posture.
 - **An admin dashboard / admin surface** — 033 adds `app_user.is_admin` (owner call (f),
   2026-08-24) as a read grade over every row in every organisation, and says so plainly:
   it is the designated home for admin capability, but it ships **no admin screen**. An
