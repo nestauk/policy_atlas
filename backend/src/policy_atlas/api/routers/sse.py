@@ -35,7 +35,7 @@ from policy_atlas.api.contract import (
     TickFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
-from policy_atlas.api.routers._access import accessible_project
+from policy_atlas.api.routers._access import accessible_project, may_read_project
 from policy_atlas.api.routers.planning import _draft_from_plan
 from policy_atlas.api.settings import Settings
 
@@ -87,10 +87,31 @@ def _tail(
     engine: Engine,
     *,
     project_id: uuid.UUID,
+    user_id: str,
     after: int,
-) -> tuple[int, list[dict[str, Any]]]:
-    """Read and map the next durable tail batch without blocking the event loop."""
+) -> tuple[int, list[dict[str, Any]]] | None:
+    """Re-authorise, then read and map the next durable tail batch.
+
+    Contract § 5: the stream authorised once at ``_snapshot`` and then looped
+    indefinitely, so none of this slice's four revocation events — de-enrolment,
+    a visibility flip, an i.4 portfolio cascade, an admin revoke — reached an
+    already-open stream. The re-check happens **before** the batch is read, so a
+    caller whose access has gone is never handed the events of the interval in
+    which they lost it.
+
+    Args:
+        engine: Application engine; this runs in a worker thread.
+        project_id: The project being streamed.
+        user_id: The caller's token subject, re-checked every batch.
+        after: Exclusive lower bound on the durable sequence to read.
+
+    Returns:
+        The batch's last sequence and its mapped frames, or ``None`` when the
+        caller's read grade has gone and the stream must close.
+    """
     with engine.connect() as conn:
+        if not may_read_project(conn, project_id=project_id, user_id=user_id):
+            return None
         rows = _event_rows(conn, project_id=project_id, after=after, through=None)
         last_sequence = rows[-1]["sequence"] if rows else after
         return last_sequence, _map_rows(conn, project_id=project_id, rows=rows, through=None)
@@ -479,7 +500,12 @@ async def stream_events(
     settings: Annotated[Settings, Depends(get_settings)],
     cursor: Annotated[int, Query(ge=0)] = 0,
 ) -> StreamingResponse:
-    """Stream an owner-scoped durable replay followed by a non-blocking live tail."""
+    """Stream a read-graded durable replay followed by a re-authorising live tail.
+
+    The replay is authorised once by ``_snapshot``; the tail re-authorises on
+    every batch through the same read legs and ends the response the moment the
+    caller's access is gone (contract § 5).
+    """
     snapshot, replay = await anyio.to_thread.run_sync(
         partial(_snapshot, engine, project_id=project_id, user_id=user.user_id, cursor=cursor)
     )
@@ -503,9 +529,23 @@ async def stream_events(
                     tick = None
                 if tick is not None:
                     yield _encode_tick(tick)
-                last_sequence, tail = await anyio.to_thread.run_sync(
-                    partial(_tail, engine, project_id=project_id, after=next_sequence - 1)
+                batch = await anyio.to_thread.run_sync(
+                    partial(
+                        _tail,
+                        engine,
+                        project_id=project_id,
+                        user_id=user.user_id,
+                        after=next_sequence - 1,
+                    )
                 )
+                # Access revoked mid-stream. Ending the generator completes the
+                # HTTP response and the client's `EventSource` sees a normal
+                # close; the protocol carries no error frame and inventing one
+                # here would be a new public frame type.
+                if batch is None:
+                    log.info("api.sse_revoked", project_id=str(project_id))
+                    return
+                last_sequence, tail = batch
                 for frame in tail:
                     yield _encode_frame(frame)
                 next_sequence = last_sequence + 1

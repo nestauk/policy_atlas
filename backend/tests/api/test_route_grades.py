@@ -10,7 +10,9 @@ names individually gets its own case.
 Phase 5 extends the file with the three colleague chat mutations — create a
 conversation, post a turn to your own conversation, cancel your own turn —
 under the "--- Colleague chat mutations" heading below. `sse.py`'s `_tail`
-re-authorisation is still phase 6 and is not tested here.
+re-authorisation (phase 6) is *not* here: it needs the incremental streaming
+harness, so it lives with the rest of the SSE coverage in `test_sse.py`. This
+file keeps only the `_snapshot` grade, which is an ordinary route response.
 """
 
 from __future__ import annotations

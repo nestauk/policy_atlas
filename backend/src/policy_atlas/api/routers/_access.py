@@ -211,6 +211,52 @@ def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
     return own_estate(table, user_id)
 
 
+def may_read_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -> bool:
+    """Re-check the read grade on one project as a cheap boolean (contract § 5).
+
+    The SSE tail's re-authorisation. :func:`accessible_project` is the wrong
+    shape for a loop that runs every poll interval — it selects the whole row,
+    raises ``HTTPException`` to report a refusal, and applies the archived
+    filter — so this is the same question asked as a boolean.
+
+    **It resolves through :func:`_read_legs`, deliberately the same function
+    :func:`_resolve` uses**, and that is the whole point: a second tenancy
+    predicate written out in ``sse.py`` would be a copy free to drift from the
+    one the snapshot enforced, which is exactly the failure the closed helper
+    design exists to prevent. Phase 8's admin leg attaches inside
+    :func:`_read_legs`, so an admin's stream starts being governed by
+    ``is_admin`` — and closes when the flag is revoked — with no edit here.
+
+    **No status filter, on purpose.** ``accessible_project`` excludes archived
+    rows because *opening* something archived is not a thing the API offers;
+    an already-open stream is different. The owner archiving their own project
+    emits a ``project.updated`` frame and must not have their own stream shot
+    out from under them by the same action. Only the tenancy legs revoke.
+
+    One query, one round trip: the project is found by primary key and the org
+    leg's ``EXISTS`` probes ``app_user``'s primary key, so both sides are index
+    lookups and neither depends on the project's event volume.
+
+    Args:
+        conn: Open database connection.
+        project_id: The project the open stream is bound to.
+        user_id: The caller's token subject.
+
+    Returns:
+        Whether the caller may still read this project.
+    """
+    return (
+        conn.execute(
+            select(literal_column("1"))
+            .select_from(project)
+            .where(project.c.project_id == project_id)
+            .where(_read_legs(project, user_id))
+            .limit(1)
+        ).scalar_one_or_none()
+        is not None
+    )
+
+
 def listing_scope(table: Table, *, user_id: str, scope: str) -> ColumnElement[bool]:
     """Build the tenancy predicate for a paginated listing.
 

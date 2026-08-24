@@ -14,18 +14,28 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from sqlalchemy import select, update
-from sqlalchemy.engine import Engine
+from sqlalchemy import false, select, update
+from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.schema import Table
 
 from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
+from policy_atlas.api.routers import _access
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.liveness import tick_hub
-from policy_atlas.core.schema import event_log, project
+from policy_atlas.core.schema import app_user, event_log, portfolio, project
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
+from tests.api.org_support import (
+    make_org,
+    make_portfolio,
+    make_project,
+    ops_enrol,
+    seeded,
+)
 from tests.helpers import delete_project_data
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
 from tests.runtime.test_steering import _insert_plan_row
@@ -200,6 +210,26 @@ class _SseStream:
             if predicate(item):
                 return items
 
+    async def closed(self, *, timeout: float = 5.0) -> bool:
+        """Consume whatever remains and report whether the response ends in time.
+
+        The revocation cases' assertion. A closed stream is the *absence* of
+        further output plus a completed HTTP body, so this drains keep-alives
+        and frames until the body ends (``StopAsyncIteration``) and calls a
+        stream that is merely quiet a failure rather than a pass.
+        """
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return False
+            try:
+                await self.next(timeout=remaining)
+            except StopAsyncIteration:
+                return True
+            except TimeoutError:
+                return False
+
     async def aclose(self) -> None:
         """Stop consumption and cancel the app-side generator."""
         await self._response_context.__aexit__(None, None, None)
@@ -213,13 +243,25 @@ class _ApiSession:
     owner_headers: dict[str, str]
     other_headers: dict[str, str]
     owner_id: str
+    other_id: str
 
-    async def open_stream(self, project_id: uuid.UUID, *, cursor: int = 0) -> _SseStream:
-        """Open an owner-authenticated SSE response and return its incremental parser."""
+    async def open_stream(
+        self,
+        project_id: uuid.UUID,
+        *,
+        cursor: int = 0,
+        headers: dict[str, str] | None = None,
+    ) -> _SseStream:
+        """Open an authenticated SSE response and return its incremental parser.
+
+        Defaults to the owner. The phase-6 revocation cases pass
+        ``other_headers`` to hold a *colleague's* stream open, which is the
+        only stream any of the four revocation events can close.
+        """
         context = self.client.stream(
             "GET",
             f"/api/v1/projects/{project_id}/events?cursor={cursor}",
-            headers=self.owner_headers,
+            headers=headers if headers is not None else self.owner_headers,
         )
         response = await context.__aenter__()
         assert response.status_code == 200, await response.aread()
@@ -243,10 +285,9 @@ async def _api_session(
         sse_poll_interval_seconds=0.01,
         sse_heartbeat_seconds=heartbeat_seconds,
     )
+    other_id = f"other-{uuid.uuid4()}"
     owner = mint_token(owner_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
-    other = mint_token(
-        f"other-{uuid.uuid4()}", settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
-    )
+    other = mint_token(other_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir)
     app = create_app(settings=settings)
     async with app.router.lifespan_context(app), httpx.AsyncClient(
         transport=_StreamingAsgiTransport(app), base_url="http://testserver"
@@ -256,6 +297,7 @@ async def _api_session(
             owner_headers={"Authorization": f"Bearer {owner}"},
             other_headers={"Authorization": f"Bearer {other}"},
             owner_id=owner_id,
+            other_id=other_id,
         )
 
 
@@ -608,5 +650,278 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
                 assert after == before
         finally:
             _cleanup(engine, project_id)
+
+    asyncio.run(exercise())
+
+
+# --- Phase 6: the tail re-authorises, and revocation closes the stream -------
+#
+# Contract § 5. The stream used to authorise once in `_snapshot` and then loop
+# indefinitely, so none of this slice's four revocation events reached an open
+# stream. Three of them are exercised here for real: de-enrolment, a
+# visibility flip, and the i.4 portfolio cascade (simulated by the direct
+# `project.visibility` update the phase-7 cascade will itself perform).
+#
+# The fourth — admin revoke — cannot be exercised yet: the admin read leg is
+# phase 8's and does not exist. It is pinned structurally instead, by the last
+# test in this file.
+
+
+def _org_seed(
+    engine: Engine,
+    *,
+    owner_id: str,
+    colleague_id: str,
+    in_portfolio: bool = False,
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]:
+    """Seed one organisation, two enrolled members, and an org-visible project.
+
+    Deliberately not `_owned_seed`: a revocation case needs no evidence
+    fixtures and no walk, only a project row a colleague can read and a tail
+    loop running over it. Nothing is cleaned up afterwards, for the reason
+    `org_support` documents — every subject and organisation name here is
+    UUID-unique, so leftover rows are unreachable from any other test.
+
+    Args:
+        engine: The session engine; writes here commit, because the
+            application reads through its own connection.
+        owner_id: The project owner's subject.
+        colleague_id: A second subject enrolled in the same organisation.
+        in_portfolio: Whether to put the project in a portfolio, which the
+            i.4 cascade case needs and the others do not.
+
+    Returns:
+        The organisation, the project, and the portfolio if one was made.
+    """
+    with seeded(engine) as conn:
+        org_id = make_org(conn)
+        ops_enrol(conn, user_id=owner_id, org_id=org_id, display_name="Owner")
+        ops_enrol(conn, user_id=colleague_id, org_id=org_id, display_name="Colleague")
+        portfolio_id = (
+            make_portfolio(conn, owner_user_id=owner_id, org_id=org_id, visibility="org")
+            if in_portfolio
+            else None
+        )
+        project_id = make_project(
+            conn,
+            owner_user_id=owner_id,
+            org_id=org_id,
+            visibility="org",
+            portfolio_id=portfolio_id,
+        )
+    return org_id, project_id, portfolio_id
+
+
+async def _live(stream: _SseStream) -> None:
+    """Require one keep-alive, proving the tail loop is running.
+
+    Asserting only that the response opened would let a stream that never
+    reached its loop pass the "closed after revocation" cases vacuously.
+    """
+    assert (await stream.next(timeout=2.0)).comment == "keep-alive"
+
+
+async def _colleague_stream_closes_on(
+    api: _ApiSession,
+    engine: Engine,
+    project_id: uuid.UUID,
+    revoke: Callable[[Connection], None],
+) -> None:
+    """Hold a colleague's stream open, apply one revocation, require closure."""
+    stream = await api.open_stream(project_id, headers=api.other_headers)
+    try:
+        await _live(stream)
+        with seeded(engine) as conn:
+            revoke(conn)
+        assert await stream.closed(timeout=5.0)
+    finally:
+        await stream.aclose()
+
+
+def test_sse_stream_closes_when_the_colleague_is_de_enrolled(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Revocation 1: ops clears `app_user.org_id` while the stream is open."""
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, _ = _org_seed(
+                engine, owner_id=api.owner_id, colleague_id=api.other_id
+            )
+
+            def revoke(conn: Connection) -> None:
+                conn.execute(
+                    update(app_user)
+                    .where(app_user.c.user_id == api.other_id)
+                    .values(org_id=None)
+                )
+
+            await _colleague_stream_closes_on(api, engine, project_id, revoke)
+
+    asyncio.run(exercise())
+
+
+def test_sse_stream_closes_when_the_project_flips_org_to_private(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Revocation 2: the owner unshares the project while a colleague watches."""
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, _ = _org_seed(
+                engine, owner_id=api.owner_id, colleague_id=api.other_id
+            )
+
+            def revoke(conn: Connection) -> None:
+                conn.execute(
+                    update(project)
+                    .where(project.c.project_id == project_id)
+                    .values(visibility="private")
+                )
+
+            await _colleague_stream_closes_on(api, engine, project_id, revoke)
+
+    asyncio.run(exercise())
+
+
+def test_sse_stream_closes_when_a_portfolio_cascade_privatises_the_member(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Revocation 3: the i.4 cascade — the portfolio flips and its member follows.
+
+    The cascade itself is phase 7. What reaches the stream is only its effect
+    on the row the tail re-authorises against, so this writes exactly what the
+    cascade will write: the portfolio's `visibility`, and the member project's
+    with it. Phase 9b re-runs this suite against the real lever.
+
+    Kept as its own case rather than folded into the flip above because the
+    contract's acceptance list names it separately: it is the revocation whose
+    trigger is on a *different row* from the one the caller is streaming, and
+    a re-auth that watched only the project it was handed would still be
+    correct here only by accident.
+    """
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, portfolio_id = _org_seed(
+                engine,
+                owner_id=api.owner_id,
+                colleague_id=api.other_id,
+                in_portfolio=True,
+            )
+
+            def revoke(conn: Connection) -> None:
+                conn.execute(
+                    update(portfolio)
+                    .where(portfolio.c.portfolio_id == portfolio_id)
+                    .values(visibility="private")
+                )
+                conn.execute(
+                    update(project)
+                    .where(project.c.portfolio_id == portfolio_id)
+                    .values(visibility="private")
+                )
+
+            await _colleague_stream_closes_on(api, engine, project_id, revoke)
+
+    asyncio.run(exercise())
+
+
+def test_sse_owner_stream_survives_every_revocation_event(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The owner leg never revokes: all three levers at once, stream still open.
+
+    De-enrolling the *owner*, privatising the project, and running the
+    portfolio cascade over it are each enough to close a colleague's stream,
+    and not one of them touches `owner_user_id`. The owner keeps watching
+    their own run throughout — the colleague's stream closing in the same
+    breath is what makes that a statement about the legs rather than about
+    nothing having happened.
+    """
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, portfolio_id = _org_seed(
+                engine,
+                owner_id=api.owner_id,
+                colleague_id=api.other_id,
+                in_portfolio=True,
+            )
+            owner_stream = await api.open_stream(project_id)
+            colleague_stream = await api.open_stream(project_id, headers=api.other_headers)
+            try:
+                await _live(owner_stream)
+                await _live(colleague_stream)
+                with seeded(engine) as conn:
+                    conn.execute(
+                        update(app_user)
+                        .where(app_user.c.user_id == api.owner_id)
+                        .values(org_id=None)
+                    )
+                    conn.execute(
+                        update(portfolio)
+                        .where(portfolio.c.portfolio_id == portfolio_id)
+                        .values(visibility="private")
+                    )
+                    conn.execute(
+                        update(project)
+                        .where(project.c.project_id == project_id)
+                        .values(visibility="private")
+                    )
+                assert await colleague_stream.closed(timeout=5.0)
+                await _live(owner_stream)
+            finally:
+                await owner_stream.aclose()
+                await colleague_stream.aclose()
+
+    asyncio.run(exercise())
+
+
+def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
+    engine: Engine, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Revocation 4 (admin revoke), guaranteed by construction rather than tested.
+
+    The admin read leg lands in phase 8, as a third disjunct inside
+    `_access._read_legs` — the single function `_snapshot`'s
+    `accessible_project` resolves through. This pins that the **tail**
+    resolves through that same function and honours whatever it returns, so
+    phase 8 widens the live stream at the same line it widens the snapshot,
+    and clearing `is_admin` closes an admin's open stream with no further edit
+    to `sse.py`. A second tenancy predicate written out in the tail — the
+    drifted copy the closed-helper design exists to prevent — fails here.
+
+    Two things are asserted: that the tail asks `_read_legs` the same question
+    the snapshot did (same table, same subject, at least once per batch), and
+    that flipping only that function's verdict is enough to end the stream.
+    """
+    calls: list[tuple[str, str]] = []
+    real = _access._read_legs
+    state = {"revoked": False}
+
+    def recording(table: Table, user_id: str) -> ColumnElement[bool]:
+        calls.append((table.name, user_id))
+        return false() if state["revoked"] else real(table, user_id)
+
+    monkeypatch.setattr(_access, "_read_legs", recording)
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, _ = _org_seed(
+                engine, owner_id=api.owner_id, colleague_id=api.other_id
+            )
+            stream = await api.open_stream(project_id, headers=api.other_headers)
+            try:
+                await _live(stream)
+                # One call authorised the snapshot; the rest are the tail
+                # re-authorising per batch. All of them ask about the same row
+                # for the same subject.
+                assert len(calls) >= 2
+                assert set(calls) == {("project", api.other_id)}
+                state["revoked"] = True
+                assert await stream.closed(timeout=5.0)
+            finally:
+                await stream.aclose()
 
     asyncio.run(exercise())
