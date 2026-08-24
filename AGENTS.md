@@ -63,6 +63,22 @@ stale-turn sweeper keyed to the project owner, and `update_portfolio`'s blind
 looked: tenancy is not a refactor of ownership checks — it invalidates
 assumptions held throughout the request, streaming, sweeping and caching paths.**
 
+**Owner call (j), 2026-08-24 — enrolment carries the person's work, private
+(amends (d)):** `user enrol` stamps `org_id` onto every `project` and
+`portfolio` the person owns **and sets those rows `visibility='private'`**, in
+one transaction with the `app_user` upsert. So **no operator action can ever
+expose a row**, and the person sees no change (NULL-`org_id` rows were already
+invisible to everyone but them). The invariant survives because a portfolio's
+members are always owned by the portfolio's owner, making one person's rows a
+closed set. Re-enrolment moves them again and re-privatises anything shared with
+the previous org; de-enrolment clears `org_id` on their rows, so an org loses
+sight of a departing member's work — **flagged as an owner decision**, since the
+alternative (the org retains access) needs ownership transfer, which is Out.
+`reassign-rows` is dropped as redundant. **The privacy notice is NOT edited by
+this slice** (owner): its three discrepancies ship as a written escalation in
+`verification.md` and `docs/deferred.md`, and while they stand the admin leg's
+only control is the trace log.
+
 **Owner calls carried into rev 3.0:** (a)-(d) from 2026-08-11 (app-owned
 ops-assigned membership; read-everything + own chats; per-row `visibility`; no
 enrolment backfill) and (e)-(i) from 2026-08-24 — portfolio takes the same
