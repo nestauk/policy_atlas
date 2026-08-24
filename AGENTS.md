@@ -119,8 +119,11 @@ Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — o
 clear meaning per user-visible source count across the P1 check-in, Where I
 looked and the publisher-country charts. Two items were escalated to the owner
 in that PR and remain true of it: the **manual browser check was not run**, and
-**no non-Claude reviewer read the slice** (the Codex CLI is not installed in
-this environment, so the family flip did not happen).
+**no non-Claude reviewer read the slice** (the Codex CLI was not installed at
+the time, so the family flip did not happen). **Corrected 2026-08-24: `codex`
+IS now on PATH**, so the heterogeneous peer lane is available again and later
+slices should route review to it — 031's gap stands as history, not as a
+standing limitation.
 
 Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
 conversation model: a project holds many conversations, Claude-Projects-style.
