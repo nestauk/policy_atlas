@@ -46,7 +46,14 @@
 > organisation, `private` included; no write, ever · **(g)** `app_user` stores the Cognito
 > email; admins filter work by it · **(h)** the ops CLI creates Cognito users; **deleting
 > them is Out**, coupled to ownership transfer · **(i)** visibility cascades between a
-> `portfolio` and its `project`s, deterministic, no prompts.
+> `portfolio` and its `project`s, deterministic, no prompts · **(j)** enrolment carries the
+> person's existing work with them, private · **(k)** **structured logging is wired at the
+> API entrypoint** (added 2026-08-24 after the plan review found it): `configure_logging()`
+> is called only by `runtime/orchestrate.py`'s `main()`, which runs solely as a local CLI.
+> The container starts `uvicorn ... api.app:create_app` directly and runs the
+> evidence-base pipeline in-process, so **nothing deployed has ever configured logging** —
+> `LOG_FORMAT=json` is inert and CloudWatch carries no structured output. This slice's
+> admin trace is unusable without it, so the fix ships here.
 
 ## Goal
 
@@ -383,6 +390,26 @@ forbids.
     carries them so they cannot be lost. A **DPIA screening and processing-record update
     are still required before merge** — those are governance artefacts, not copy, and this
     slice introduces identifiable personal data and a global privileged read.
+
+12a. **Structured logging at the API entrypoint (owner call (k)).** `create_app` calls
+    `configure_logging()` before anything logs, so the deployed service finally honours
+    `LOG_FORMAT=json`. This is a **pre-existing defect this slice is obliged to fix**,
+    because the admin trace (§ 3a) is the admin leg's only control and an unstructured
+    line is not an audit trail.
+    - **Scope is the entrypoint, not a logging refactor.** One call, plus a test that the
+      rendered output really is JSON under `LOG_FORMAT=json` — asserting the *shape*, not
+      that `log.info` was called. Nothing else about logging changes.
+    - **Check the httpx guard with a real request while doing it.** `configure_logging()`
+      also sets `logging.getLogger("httpx")` to WARNING, because httpx logs every request
+      at INFO with the full URL and **both search providers carry their `api_key` in the
+      query string**. The module's comment argues this is inert because structlog bypasses
+      stdlib logging — but that reasoning assumes the function ran, and in the API
+      container it never has. Confirm on staging whether any httpx INFO line was ever
+      emitted; if one was, that is a credential exposure and its own escalation, not a
+      line item here.
+    - **It lands early** (plan Phase 0b), not alongside the admin trace: it is independent
+      of tenancy, it makes every later phase's logs legible, and it is the one fix in this
+      slice that improves the live system regardless of what happens to the rest of it.
 
 13. **Spec flow-back.** `web-api.md` § Auth boundary (the three read legs, the NULL rule,
     403/409/422 semantics, `/me`, the three filters), § Portfolios (the invariant),

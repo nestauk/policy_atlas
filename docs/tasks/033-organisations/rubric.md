@@ -47,6 +47,13 @@ one unfalsifiable box absorbed everything the other items missed.
         including that the Organisation·Mine switcher is absent when `/me` returns no
         organisation.
 
+## Logging
+
+15a. [ ] **`create_app` calls `configure_logging()`** (owner call (k)), pinned by a test
+        asserting the **rendered JSON shape** under `LOG_FORMAT=json`, not that a logger
+        was called · the httpx INFO guard is confirmed applied in the deployed path, and
+        whether any httpx INFO line was ever emitted on staging is checked and recorded.
+
 ## The admin flag
 
 15. [ ] **Read only, no exceptions:** an admin is refused every mutation including

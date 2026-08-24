@@ -67,6 +67,19 @@ Full `make verify` green, alembic head, and the **route inventory captured from 
 (39 decorators across the scoped routers, plus `chat_turns.py`). Evidence for
 `verification.md`.
 
+### Phase 0b — Structured logging at the API entrypoint 🆕 · *fast-worker* · **owner call (k)**
+`create_app` calls `configure_logging()` before anything logs. One call, plus a test that
+the rendered output is JSON under `LOG_FORMAT=json` — the *shape*, not that a logger fired.
+**Why it is here and not in Phase 8 with the trace:** it is independent of tenancy, it
+makes every later phase's logs legible, and it is the only change in this slice that
+improves the live system regardless of what happens to the rest of it. Today
+`configure_logging()` is called solely by `runtime/orchestrate.py`'s `main()`, which runs
+only as a local CLI — the container starts `uvicorn ... create_app` directly and runs the
+evidence-base pipeline in-process, so nothing deployed has ever configured logging.
+**Also check, with a real request:** the httpx INFO guard (`api_key` rides in the search
+providers' query strings). If staging shows any httpx INFO line, stop and escalate — that
+is a credential exposure, not a line item.
+
 ### Phase 1 — Schema, migration and `created_by` writes 🛑 **GATE: schema** · *deep-reasoner*
 The two tables, the four columns, the `created_by` backfill, the two org-leg indexes, a
 lock timeout. **`created_by` is also written on insert here** (`conversations.py`
@@ -159,11 +172,9 @@ structural assertion lands **here**, not in Phase 2 — its four readers only al
 Phase 3 has shipped, and asserted earlier it passes vacuously against a one-element list.
 Trace grain: per row on direct reads, per request on cross-org listings **including a
 zero-result search**, per SSE subscribe and re-authorisation.
-**`configure_logging()` is wired into the API entrypoint here.** It is called today only in
-`runtime/orchestrate.py`; the container starts `uvicorn ... create_app` directly, so
-`LOG_FORMAT=json` is **not applied on the API path** and the trace would reach CloudWatch as
-unstructured text. The admin leg's only control is this log, so a test asserts the rendered
-JSON shape rather than that `log.info` was called.
+**Logging is already configured by Phase 0b**, so this phase asserts the `admin_read`
+line's *content and grain* rather than the transport, and Phase 12 verifies one of each
+kind actually lands in CloudWatch.
 
 ### Phase 9a — Dependency, lock and image plumbing 🛑 **GATE: `boto3` + `boto3-stubs`, the `Dockerfile` change** · *deep-reasoner*
 The `ops` group in `pyproject.toml`, `uv.lock` regenerated **and committed** (an unfrozen
