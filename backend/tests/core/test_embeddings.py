@@ -71,7 +71,9 @@ def _insert_chunk(
 
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 35: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy); no evidence-base table changed.
+    assert len(metadata.tables) == 35
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:

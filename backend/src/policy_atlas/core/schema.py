@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-three tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-five tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -28,6 +28,29 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 metadata = MetaData()
 
+# Task 033 tenancy: an organisation sits above the entity hierarchy, and a row's
+# `org_id` is NULL until its owner is enrolled. NULL never matches NULL — the org
+# leg is a SQL predicate everywhere, never a Python comparison of two loaded values.
+organisation = Table(
+    "organisation",
+    metadata,
+    Column("org_id", UUID(as_uuid=True), primary_key=True),
+    Column("name", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("name", name="uq_organisation_name"),
+)
+
+app_user = Table(
+    "app_user",
+    metadata,
+    Column("user_id", Text, primary_key=True),  # the token `sub`
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
+    Column("display_name", Text, nullable=False),  # never falls back to the email
+    Column("email", Text, nullable=True),  # ops- and admin-facing only
+    Column("is_admin", Boolean, nullable=False, server_default=text("false")),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
 portfolio = Table(
     "portfolio",
     metadata,
@@ -36,6 +59,10 @@ portfolio = Table(
     Column("name", Text, nullable=False),
     Column("description", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
+    Column("visibility", Text, nullable=False, server_default="org"),
+    CheckConstraint("visibility IN ('org', 'private')", name="ck_portfolio_visibility"),
+    Index("ix_portfolio_org_visibility", "org_id", "visibility"),
 )
 
 project = Table(
@@ -55,11 +82,15 @@ project = Table(
         ForeignKey("portfolio.portfolio_id"),
         nullable=True,
     ),
+    Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
+    Column("visibility", Text, nullable=False, server_default="org"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",
         name="ck_project_archived_at",
     ),
+    CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
+    Index("ix_project_org_visibility_status", "org_id", "visibility", "status"),
 )
 
 artefact = Table(
@@ -97,6 +128,9 @@ conversation = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("closed_at", DateTime(timezone=True), nullable=True),
     Column("archived_at", DateTime(timezone=True), nullable=True),
+    # The author's `sub`. Nullable because rows predating task 033 have no
+    # recorded author — those belong to the project owner (the legacy disjunct).
+    Column("created_by", Text, nullable=True),
     ForeignKeyConstraint(
         ["entry_artefact_id", "project_id"],
         ["artefact.artefact_id", "artefact.project_id"],

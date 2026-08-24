@@ -66,7 +66,9 @@ from tests.helpers import (
 # --- Schema / structure ---
 
 def test_screen_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 35: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy); no evidence-base table changed.
+    assert len(metadata.tables) == 35
 
 
 def test_pss_has_composite_unique(conn: Connection) -> None:

@@ -49,7 +49,9 @@ from tests.helpers import (
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 35: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy); no evidence-base table changed.
+    assert len(metadata.tables) == 35
 
 
 # --- Stub logic (pure Python, no DB) ---

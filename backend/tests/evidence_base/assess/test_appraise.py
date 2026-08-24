@@ -87,7 +87,9 @@ def _appraisal_rows(conn: Connection, project_id: uuid.UUID) -> list[sa.Row[Any]
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    # 33 -> 35: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy); no evidence-base table changed.
+    assert len(metadata.tables) == 35
 
 
 # --- Rubric and labels (pure Python, no DB) ---

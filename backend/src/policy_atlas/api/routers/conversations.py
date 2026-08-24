@@ -298,6 +298,7 @@ def create_conversation(
             created_at=now,
             closed_at=None,
             archived_at=None,
+            created_by=user.user_id,
         )
     )
     row = conn.execute(

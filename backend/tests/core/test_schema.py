@@ -19,6 +19,7 @@ from policy_atlas.core.schema import (
     annotation,
     artefact,
     block,
+    conversation,
     event_log,
     project,
     project_source_snapshot,
@@ -259,19 +260,230 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
     with engine.connect() as up_conn:
         inspector = inspect(up_conn)
         assert "portfolio" in inspector.get_table_names()
+        # `org_id` and `visibility` join the set because this upgrades to *head*,
+        # which is now 033's tenancy migration rather than the portfolio layer —
+        # the equality is kept (it is what catches an unintended column) and the
+        # two columns 033 adds to `portfolio` are named explicitly.
         assert {c["name"] for c in inspector.get_columns("portfolio")} == {
             "portfolio_id",
             "owner_user_id",
             "name",
             "description",
             "created_at",
+            "org_id",
+            "visibility",
         }
         assert "portfolio_id" in {c["name"] for c in inspector.get_columns("project")}
 
 
+def _seed_pre_033_project_and_conversation(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    owner_user_id: str | None,
+    created_by: str | None = None,
+) -> None:
+    """Commit one project and one chat conversation on it.
+
+    Committed rather than held in a transaction because alembic runs the
+    migration on a connection of its own and cannot see an uncommitted row.
+    ``created_by`` is omitted entirely when None so the same helper seeds at the
+    pre-033 revision, where the column does not exist.
+    """
+    values: dict[str, object] = {
+        "id": conversation_id,
+        "project_id": project_id,
+        "kind": "chat",
+        "title": "Chat",
+        "entry_artefact_id": None,
+        "status": "active",
+        "created_at": now(),
+        "closed_at": None,
+        "archived_at": None,
+    }
+    if created_by is not None:
+        values["created_by"] = created_by
+    with engine.begin() as seed_conn:
+        seed_conn.execute(project.insert().values(
+            project_id=project_id,
+            created_at=now(),
+            name="Tenancy migration fixture",
+            status="active",
+            updated_at=now(),
+            owner_user_id=owner_user_id,
+        ))
+        seed_conn.execute(conversation.insert().values(**values))
+
+
+def _delete_seeded_rows(engine: Engine, *project_ids: uuid.UUID) -> None:
+    """Remove committed fixture rows — these tests write outside ``conn``."""
+    with engine.begin() as cleanup_conn:
+        cleanup_conn.execute(
+            conversation.delete().where(conversation.c.project_id.in_(project_ids))
+        )
+        cleanup_conn.execute(project.delete().where(project.c.project_id.in_(project_ids)))
+
+
+def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
+    """``a4f1c8e3b6d2`` (organisation tenancy) round-trips, and ``created_by`` backfills.
+
+    Down to ``b3c7d914e0a2`` and back by revision id rather than ``-1``, so the
+    assertions cannot silently start exercising a later migration. Seeds two
+    projects at the pre-033 revision — one owned, one not — because the backfill
+    must attribute the first conversation and leave the second's author unknown.
+    Always leaves the database at head with the fixture rows removed.
+    """
+    cfg = AlembicConfig("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
+    owner = f"sub-owner-{uuid.uuid4()}"
+    owned_project_id = uuid.uuid4()
+    owned_conversation_id = uuid.uuid4()
+    unowned_project_id = uuid.uuid4()
+    unowned_conversation_id = uuid.uuid4()
+
+    command.downgrade(cfg, "b3c7d914e0a2")
+    try:
+        with engine.connect() as down_conn:
+            inspector = inspect(down_conn)
+            assert "organisation" not in inspector.get_table_names()
+            assert "app_user" not in inspector.get_table_names()
+            for table in ("project", "portfolio"):
+                columns = {c["name"] for c in inspector.get_columns(table)}
+                assert "org_id" not in columns
+                assert "visibility" not in columns
+            assert "created_by" not in {
+                c["name"] for c in inspector.get_columns("conversation")
+            }
+
+        _seed_pre_033_project_and_conversation(
+            engine,
+            project_id=owned_project_id,
+            conversation_id=owned_conversation_id,
+            owner_user_id=owner,
+        )
+        # A `runtime/orchestrate.py` CLI row: no owner, so no author to infer.
+        _seed_pre_033_project_and_conversation(
+            engine,
+            project_id=unowned_project_id,
+            conversation_id=unowned_conversation_id,
+            owner_user_id=None,
+        )
+    finally:
+        command.upgrade(cfg, "head")
+
+    try:
+        with engine.connect() as up_conn:
+            inspector = inspect(up_conn)
+            assert {"organisation", "app_user"} <= set(inspector.get_table_names())
+            for table in ("project", "portfolio"):
+                columns = {c["name"] for c in inspector.get_columns(table)}
+                assert {"org_id", "visibility"} <= columns
+            assert "created_by" in {
+                c["name"] for c in inspector.get_columns("conversation")
+            }
+            assert "ix_project_org_visibility_status" in {
+                ix["name"] for ix in inspector.get_indexes("project")
+            }
+            assert "ix_portfolio_org_visibility" in {
+                ix["name"] for ix in inspector.get_indexes("portfolio")
+            }
+
+            # Existing rows arrive with no organisation. `org_id IS NULL` matches
+            # no org leg, so 'org' on them is an inert default — the dark launch.
+            existing = up_conn.execute(
+                select(project.c.org_id, project.c.visibility).where(
+                    project.c.project_id == owned_project_id
+                )
+            ).one()
+            assert existing.org_id is None
+            assert existing.visibility == "org"
+
+            authors: dict[uuid.UUID, str | None] = {
+                row.id: row.created_by
+                for row in up_conn.execute(
+                    select(conversation.c.id, conversation.c.created_by).where(
+                        conversation.c.id.in_(
+                            [owned_conversation_id, unowned_conversation_id]
+                        )
+                    )
+                ).all()
+            }
+            assert authors[owned_conversation_id] == owner
+            assert authors[unowned_conversation_id] is None
+    finally:
+        _delete_seeded_rows(engine, owned_project_id, unowned_project_id)
+
+
+def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engine) -> None:
+    """Evidence for the documented rollback exposure (contract § Rollback posture).
+
+    A colleague's chat on someone else's project survives the 033 downgrade, but
+    the schema stops recording who wrote it — and pre-033 code lists *every*
+    conversation on a project to that project's owner. So a rollback after
+    adoption hands the owner a colleague's private chat. Re-upgrading does not
+    undo it either: the backfill can only attribute the row to the project owner,
+    which is the wrong person. This is why the posture is roll forward, not back;
+    rubric 32 requires the exposure proved rather than asserted.
+    """
+    cfg = AlembicConfig("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
+    owner = f"sub-owner-{uuid.uuid4()}"
+    colleague = f"sub-colleague-{uuid.uuid4()}"
+    project_id = uuid.uuid4()
+    conversation_id = uuid.uuid4()
+
+    _seed_pre_033_project_and_conversation(
+        engine,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        owner_user_id=owner,
+        created_by=colleague,
+    )
+    try:
+        command.downgrade(cfg, "b3c7d914e0a2")
+        try:
+            with engine.connect() as down_conn:
+                inspector = inspect(down_conn)
+                assert "created_by" not in {
+                    c["name"] for c in inspector.get_columns("conversation")
+                }
+                # The pre-033 per-project listing predicate, verbatim: ownership of
+                # the project is the only filter, so the colleague's chat is in it.
+                visible_to_owner = down_conn.execute(
+                    text(
+                        "SELECT c.id FROM conversation c "
+                        "JOIN project p ON p.project_id = c.project_id "
+                        "WHERE p.owner_user_id = :owner"
+                    ),
+                    {"owner": owner},
+                ).scalars().all()
+                assert conversation_id in visible_to_owner
+        finally:
+            command.upgrade(cfg, "head")
+
+        with engine.connect() as up_conn:
+            restored = up_conn.execute(
+                select(conversation.c.created_by).where(
+                    conversation.c.id == conversation_id
+                )
+            ).scalar_one()
+            assert restored == owner
+            assert restored != colleague
+    finally:
+        _delete_seeded_rows(engine, project_id)
+
+
 def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> None:
-    """``downgrade -1`` then ``upgrade head`` for e5c2a7f4b9d1 succeeds and restores
-    all four changes.
+    """Downgrading past e5c2a7f4b9d1 then ``upgrade head`` restores all four changes.
+
+    Targets ``c9e4b7f2d1a8`` — e5c2a7f4b9d1's parent — by id. It previously said
+    ``downgrade -1``, which reverts whatever the *newest* migration happens to be:
+    fifteen revisions have landed above e5c2a7f4b9d1 since, so the test had long
+    stopped exercising the migration its assertions are about while staying green.
+    Naming the revision is the repair; nothing about the assertions changed.
 
     Runs on its own connection outside the rolled-back ``conn`` fixture transaction
     (the migration itself needs a connection it fully controls) and always leaves
@@ -283,7 +495,7 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
     cfg = AlembicConfig("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "c9e4b7f2d1a8")
     command.upgrade(cfg, "head")
 
     with engine.connect() as verify_conn:
