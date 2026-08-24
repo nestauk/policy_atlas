@@ -65,10 +65,10 @@ the address — so the email is resolved **once at ops enrolment** (enrol *by*
 email; the CLI resolves it to a `sub`) and stored. `sub` stays the key, because
 addresses change and `sub` does not. Admins get `?owner_email=` on the two
 listings; a non-admin passing it gets 400 whether or not the address exists.
-**No new dependency and no API egress change:** the lookup shells out to the AWS
-CLI already used for migrations (list args, `shell=False`, shape-validated
-address), runs only in the ops CLI under the human operator's IAM, and the API
-task role gains no Cognito permission. The DB now holds directly identifiable
+**One new dependency, and a named ops-side egress change:** the lookup uses
+`boto3` in a new ops-only `[dependency-groups]` entry (superseding the earlier
+AWS-CLI-subprocess plan), runs only in the ops CLI under the human operator's
+IAM, and the API task role gains no Cognito permission. The DB now holds directly identifiable
 personal data, so `PrivacyView.tsx` **§ 3** gains the email alongside § 6's
 administrator sentence — **both need written owner sign-off**, and de-enrolment
 clears the address as the erasure lever. No user directory (Out).
@@ -88,15 +88,14 @@ Operator IAM is `ListUsers` + `AdminCreateUser`, **not** `AdminDeleteUser`.
 **Owner call (i), 2026-08-24:** the portfolio/project **visibility cascade** is
 reopened from Out. One invariant — a `project` with a `portfolio_id` carries
 that `portfolio`'s `visibility` — covering the owner's three rules (inherit on
-create; promote a private project into an org portfolio; ask when an org project
-meets a private portfolio) and the three cases they left open (portfolio
-visibility change cascades to members behind `cascade=true`; setting a project's
-visibility while it is in a portfolio is refused with both ways out named;
-removing from a portfolio changes nothing). **The rules are deterministic and nothing prompts** (owner,
-revised 2026-08-24): i.3 demotes the project — the owner's own fallback, and the
-non-exposing direction — and i.4 cascades without confirmation. There is no
-`on_visibility_conflict` parameter and no `cascade` flag; the surface states the
-outcome afterwards in one line instead of asking first. i.5 is the sole 409,
+create; promote a private project into an org portfolio; demote an org project
+that joins a private portfolio) and the three cases they left open (a portfolio
+visibility change cascades to its members; setting a project's visibility while
+it is in a portfolio is refused with both ways out named; removing from a
+portfolio changes nothing). **The rules are deterministic and nothing prompts**
+(owner, revised 2026-08-24): there is no `on_visibility_conflict` parameter and
+no `cascade` flag, and the surface states the outcome afterwards in one line
+instead of asking first. i.5 is the sole 409,
 because it alone would change rows the caller did not name. All paths are owner-only writes on both rows. Enforced in the
 write paths plus a property test; the invariant spans two tables so a CHECK
 cannot express it. Note "public" in product phrasing means `visibility='org'` —
