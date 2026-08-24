@@ -3,11 +3,11 @@
 Contract § 8. Every case drives a real route through the real application, so
 what is asserted is what a caller observes — not what a helper returns.
 
-Two states are deliberately still owner-only at this phase and are **not**
-tested here: `GET /projects/{id}` and `GET /portfolios/{id}` keep the pre-033
-owner-only helper until the call-site cutover, so a colleague can see a row in
-their listing and still get 404 opening it. That gap closes when all nineteen
-call sites move together, which is the point of moving them together.
+`GET /projects/{id}` and `GET /portfolios/{id}` moved onto the graded
+accessor in phase 4 along with the rest of the call-site cutover; a
+colleague who can see a row in their listing can now also open it. Route-
+level coverage for the graded read/write split across every cut-over route
+lives in `test_route_grades.py`, not here.
 """
 
 from __future__ import annotations

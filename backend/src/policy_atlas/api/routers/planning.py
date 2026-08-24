@@ -32,7 +32,7 @@ from policy_atlas.api.contract import (
     PlanStep,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core.schema import (
     capability_run,
@@ -297,7 +297,7 @@ def _phase_one_turn(
     # the loser's INSERT dies on a unique constraint as a raw 500 (review
     # finding, 2026-07-29). The transaction is short — the LLM call stays
     # outside it (finding I2 rule).
-    owned_project(conn, project_id=project_id, user_id=user_id, for_update=True)
+    accessible_project(conn, project_id=project_id, user_id=user_id, write=True, for_update=True)
     _expire_stale_pending_turns(conn, project_id)
     existing = conn.execute(
         select(planning_transcript)
@@ -455,7 +455,9 @@ def create_planning_turn(
         run_started_meanwhile = False
         with engine.begin() as conn:
             if approved is not None:
-                owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
+                accessible_project(
+                    conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
+                )
                 # Re-check the run fence under the project row lock: a run may
                 # have started during the out-of-transaction planner call, and
                 # persisting a new approved plan under a live walk would hand
@@ -529,7 +531,7 @@ def list_planning_turns(
 ) -> Page[PlanningTranscriptTurnOut]:
     """Return the durable planning transcript in ascending conversation order."""
     with engine.begin() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
         _expire_stale_pending_turns(conn, project_id)
         total_items = conn.execute(
             select(func.count())
@@ -557,7 +559,7 @@ def get_plan(
 ) -> PlanOut:
     """Return the durable approved plan or latest completed durable draft."""
     with engine.begin() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
         _expire_stale_pending_turns(conn, project_id)
         row = conn.execute(
             select(orchestration_plan)
@@ -802,7 +804,7 @@ def patch_plan(
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version."""
     with engine.begin() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=True)
         _expire_stale_pending_turns(conn, project_id)
         run_active = (
             conn.execute(

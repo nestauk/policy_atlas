@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal, cast
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
@@ -57,7 +57,7 @@ from policy_atlas.api.deps import (
     get_engine,
     get_grounding_judge_backend,
 )
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -111,21 +111,73 @@ def _conversation_out(row: RowMapping) -> ConversationOut:
     )
 
 
-def _owned_conversation(
+def _graded_conversation(
     conn: Connection,
     *,
     conversation_id: uuid.UUID,
     user_id: str,
+    write: bool,
     include_archived: bool = False,
     for_update: bool = False,
 ) -> RowMapping:
-    """Return an owned conversation, hiding unknown and cross-owner rows alike."""
+    """Resolve one conversation under its kind-specific accessibility predicate.
+
+    A **chat** conversation is visible only to the colleague who created it,
+    or — for the legacy pre-033 rows that carry no ``created_by`` — the
+    project owner (the same NULL disjunct :func:`list_conversations` applies
+    to the listing). A **planning** conversation stays owner-only this phase
+    (contract § 4); colleague-authored planning turns are a later slice.
+
+    Not accessible is always a **404**, never a 403: a colleague who did not
+    create a chat must not learn the row exists at all — this is the guard
+    that closes the ``GET /{id}`` / ``GET /{id}/turns`` deep-link leak.
+
+    Args:
+        conn: Open database connection.
+        conversation_id: Requested conversation identity.
+        user_id: The caller's token subject.
+        write: Accepted for call-site symmetry with the project/portfolio
+            graded helpers, but resolves through the **same** predicate as a
+            read this phase — there is no readable-but-not-writable state on
+            this router yet (a colleague who did not create a chat is
+            refused by the read predicate itself, before write is ever
+            checked). Phase 8's admin read leg is what makes the two grades
+            diverge; this parameter exists now so that phase only adds a leg.
+        include_archived: Whether an archived conversation can be observed.
+        for_update: Take ``SELECT … FOR UPDATE`` on the row.
+
+    Returns:
+        The resolved conversation row.
+
+    Raises:
+        HTTPException: 404 when the row is missing, archived (unless
+            ``include_archived``), or not accessible under its kind's
+            predicate.
+    """
+    del write  # See docstring: no distinct write grade on this router yet.
     statement = (
         select(conversation)
         .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
         .where(conversation.c.id == conversation_id)
-        .where(project.c.owner_user_id == user_id)
         .where(project.c.status == "active")
+        .where(
+            or_(
+                and_(
+                    conversation.c.kind == "chat",
+                    or_(
+                        conversation.c.created_by == user_id,
+                        and_(
+                            conversation.c.created_by.is_(None),
+                            project.c.owner_user_id == user_id,
+                        ),
+                    ),
+                ),
+                and_(
+                    conversation.c.kind == "planning",
+                    project.c.owner_user_id == user_id,
+                ),
+            )
+        )
     )
     if not include_archived:
         statement = statement.where(conversation.c.status != "archived")
@@ -239,18 +291,41 @@ def list_conversations(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[ConversationListItemOut]:
-    """List one owned project's conversations, newest first, with turn previews."""
-    owned_project(conn, project_id=project_id, user_id=user.user_id)
-    where = [conversation.c.project_id == project_id]
+    """List one readable project's conversations the caller created, newest first.
+
+    Read-graded on the project (owner or same-org colleague may open the
+    library), but the conversation rows themselves are narrowed further: a
+    colleague sees only the chats *they* created, never the owner's or
+    another colleague's. The owner keeps seeing every legacy pre-033 row
+    (``created_by IS NULL``) as their own, in addition to rows their own
+    subject created since. Colleague chat *creation* arrives in phase 5, so a
+    colleague's page is empty today, not absent — a project they can read
+    is never a 404 here.
+    """
+    accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
+    where = [
+        conversation.c.project_id == project_id,
+        or_(
+            conversation.c.created_by == user.user_id,
+            and_(
+                conversation.c.created_by.is_(None),
+                project.c.owner_user_id == user.user_id,
+            ),
+        ),
+    ]
     if kind is not None:
         where.append(conversation.c.kind == kind)
     if status_filter is None:
         where.append(conversation.c.status != "archived")
     else:
         where.append(conversation.c.status == status_filter)
-    total = conn.execute(select(func.count()).select_from(conversation).where(*where)).scalar_one()
+    joined = conversation.join(project, conversation.c.project_id == project.c.project_id)
+    total = conn.execute(
+        select(func.count()).select_from(joined).where(*where)
+    ).scalar_one()
     rows = conn.execute(
         select(conversation)
+        .select_from(joined)
         .where(*where)
         .order_by(conversation.c.created_at.desc(), conversation.c.id.desc())
         .offset((page - 1) * page_size)
@@ -280,7 +355,9 @@ def create_conversation(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
     """Create one active chat conversation with optional entry context."""
-    owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
+    accessible_project(
+        conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
+    )
     if payload.entry_artefact_id is not None:
         _assert_entry_artefact(
             conn, project_id=project_id, entry_artefact_id=payload.entry_artefact_id
@@ -313,9 +390,11 @@ def get_conversation(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
-    """Resolve an owned active or closed conversation deep link."""
+    """Resolve an active or closed conversation deep link under its grade."""
     return _conversation_out(
-        _owned_conversation(conn, conversation_id=conversation_id, user_id=user.user_id)
+        _graded_conversation(
+            conn, conversation_id=conversation_id, user_id=user.user_id, write=False
+        )
     )
 
 
@@ -327,8 +406,12 @@ def update_conversation(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
     """Rename an owned chat and/or set or clear its entry-context artefact."""
-    row = _owned_conversation(
-        conn, conversation_id=conversation_id, user_id=user.user_id, for_update=True
+    row = _graded_conversation(
+        conn,
+        conversation_id=conversation_id,
+        user_id=user.user_id,
+        write=True,
+        for_update=True,
     )
     if row["kind"] != "chat":
         raise HTTPException(status_code=422, detail="planning conversations cannot be renamed")
@@ -359,10 +442,11 @@ def archive_conversation(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
     """Idempotently archive one owned chat conversation."""
-    row = _owned_conversation(
+    row = _graded_conversation(
         conn,
         conversation_id=conversation_id,
         user_id=user.user_id,
+        write=True,
         include_archived=True,
         for_update=True,
     )
@@ -387,10 +471,11 @@ def unarchive_conversation(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
     """Idempotently restore an owned archived chat to active status."""
-    row = _owned_conversation(
+    row = _graded_conversation(
         conn,
         conversation_id=conversation_id,
         user_id=user.user_id,
+        write=True,
         include_archived=True,
         for_update=True,
     )
@@ -417,7 +502,9 @@ def list_chat_turns(
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[ChatTurnOut]:
     """Return an active owned chat's durable turns in ascending turn order."""
-    row = _owned_conversation(conn, conversation_id=conversation_id, user_id=user.user_id)
+    row = _graded_conversation(
+        conn, conversation_id=conversation_id, user_id=user.user_id, write=False
+    )
     if row["kind"] != "chat" or row["status"] != "active":
         raise _not_found()
     total = conn.execute(

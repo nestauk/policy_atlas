@@ -72,6 +72,32 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   and `chat_turns.py:446` are chat paths that must move or drop the project-row lock
   once colleagues can reach them — the helper's guard raises loudly if missed.
 
+### Phase 3 — API surface (gate: public API)
+- `GET /api/v1/me` (`ON CONFLICT DO NOTHING`; named tests for idempotency,
+  non-clobbering, single-row provisioning) · `scope=all|mine` (default `all`) +
+  `portfolio_id` + `owner_email` on the listings · `ProjectOut`/`PortfolioOut` gain
+  `visibility`, `is_owner`, `owner_display` (all required; never the email; `null`
+  for ownerless rows — the placeholder glyph is a frontend decision) · project PATCH
+  `visibility` with 409 in-portfolio and both-fields 422 · `POST /portfolios
+  {from_project_id}` under the write grade, inheriting `visibility` and `org_id` ·
+  org stamping on both creates (**pulled forward from Phase 4** — without it this
+  phase's own listings would be wrong) · counts bound to `own_estate`
+  (owner ∪ same-org, admin-free).
+- **Full `make verify` green** (backend 2221 collected · drift-check OK · frontend
+  61 files/407 · build ✓). 32 named tests across `test_me_router.py` and
+  `test_tenancy_api_surface.py`.
+- **Bug found mid-phase:** `app_user.email` has no unique constraint and § 3b
+  expects stale addresses, so the `owner_email` filter resolves via
+  `owner_user_id IN (SELECT …)` instead of `scalar_one_or_none` (which would 500 on
+  a duplicate address).
+- **Sequencing notes (minor deviations, resolved within the contract):**
+  `PortfolioUpdate` has no `visibility` — the i.4 cascade (Phase 7) is its sole
+  writer; the splat is replaced by an explicit `_PATCHABLE_COLUMNS` allow-list.
+  `update_project` cut over to the graded helper early (the colleague-403 test
+  requires it); the remaining item routes stay owner-only until Phase 4, so a
+  colleague's listing temporarily shows rows the detail route 404s — closed by
+  Phase 4 in the same PR.
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

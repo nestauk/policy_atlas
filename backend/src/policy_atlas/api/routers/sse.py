@@ -35,7 +35,7 @@ from policy_atlas.api.contract import (
     TickFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.api.routers.planning import _draft_from_plan
 from policy_atlas.api.settings import Settings
 
@@ -71,7 +71,7 @@ def _snapshot(
 ) -> tuple[int, list[dict[str, Any]]]:
     """Authorise then read a cursor-bounded durable backlog in one connection."""
     with engine.connect() as conn:
-        owned_project(conn, project_id=project_id, user_id=user_id)
+        accessible_project(conn, project_id=project_id, user_id=user_id, write=False)
         snapshot = int(
             conn.execute(
                 select(func.coalesce(func.max(event_log.c.sequence), 0)).where(

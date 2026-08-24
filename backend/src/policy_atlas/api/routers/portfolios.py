@@ -28,13 +28,14 @@ from policy_atlas.api.contract import (
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.routers._access import (
+    accessible_portfolio,
     accessible_project,
     creator_org_id,
     listing_scope,
     own_estate,
     owner_email_filter,
 )
-from policy_atlas.api.routers._common import owned_portfolio, resolve_owner_display
+from policy_atlas.api.routers._common import resolve_owner_display
 from policy_atlas.core.schema import app_user, portfolio, project
 
 router = APIRouter(
@@ -251,14 +252,16 @@ def get_portfolio(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> PortfolioOut:
-    """Return one portfolio when it belongs to the caller."""
-    row = owned_portfolio(conn, portfolio_id=portfolio_id, user_id=user.user_id)
+    """Return one portfolio readable by the caller (owner or same-org colleague)."""
+    access = accessible_portfolio(
+        conn, portfolio_id=portfolio_id, user_id=user.user_id, write=False
+    )
     counts = _task_counts(conn, [portfolio_id], user_id=user.user_id)
     return _portfolio_out(
-        row,
+        access.row,
         counts.get(portfolio_id, 0),
         user_id=user.user_id,
-        owner_display=resolve_owner_display(conn, row["owner_user_id"]),
+        owner_display=resolve_owner_display(conn, access.row["owner_user_id"]),
     )
 
 
@@ -291,7 +294,7 @@ def update_portfolio(
     Raises:
         HTTPException: 404 when the portfolio is not the caller's.
     """
-    owned_portfolio(conn, portfolio_id=portfolio_id, user_id=user.user_id)
+    accessible_portfolio(conn, portfolio_id=portfolio_id, user_id=user.user_id, write=True)
     supplied = payload.model_dump(exclude_unset=True)
     changes = {field: supplied[field] for field in _PATCHABLE_COLUMNS if field in supplied}
     if changes:

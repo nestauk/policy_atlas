@@ -14,7 +14,6 @@ from policy_atlas.api.identity import owner_display_for
 from policy_atlas.core.schema import (
     app_user,
     capability_run,
-    portfolio,
     project,
     project_source_snapshot,
 )
@@ -80,36 +79,6 @@ def owned_project(
     if for_update:
         statement = statement.with_for_update()
     row = conn.execute(statement).mappings().one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="resource not found")
-    return row
-
-
-def owned_portfolio(
-    conn: Connection,
-    *,
-    portfolio_id: uuid.UUID,
-    user_id: str,
-) -> RowMapping:
-    """Return an owned portfolio or the contract's indistinguishable 404.
-
-    Args:
-        conn: Open database connection.
-        portfolio_id: Requested portfolio identity.
-        user_id: Authenticated owner's subject.
-
-    Returns:
-        The owned portfolio row.
-
-    Raises:
-        HTTPException: Always 404 for missing or cross-owner rows, so an
-            unknown portfolio and someone else's are indistinguishable.
-    """
-    row = conn.execute(
-        select(portfolio)
-        .where(portfolio.c.portfolio_id == portfolio_id)
-        .where(portfolio.c.owner_user_id == user_id)
-    ).mappings().one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return row

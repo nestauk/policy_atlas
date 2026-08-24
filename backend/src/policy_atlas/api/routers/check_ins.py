@@ -26,7 +26,7 @@ from policy_atlas.api.deps import (
     get_orchestrator_backend,
     get_runner_backends,
 )
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run
@@ -71,7 +71,7 @@ def list_check_ins(
     the pending view is at most one card by construction.
     """
     with engine.connect() as connection:
-        owned_project(connection, project_id=project_id, user_id=user.user_id)
+        accessible_project(connection, project_id=project_id, user_id=user.user_id, write=False)
         pauses = _walk_pause_rows(connection, project_id)
         all_events = events.read(connection, project_id)
         latest_walk = next(
@@ -175,7 +175,7 @@ def respond_to_check_in(
 ) -> FreeTextCompileOut | Response:
     """Compile or durably answer one check-in, dispatching continuations after commit."""
     with engine.connect() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=True)
     try:
         if response.kind == "free_text":
             compiled = continuation.compile_free_text(

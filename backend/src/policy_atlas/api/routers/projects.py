@@ -25,12 +25,13 @@ from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_project, rename_project
 from policy_atlas.api.routers._access import (
+    accessible_portfolio,
     accessible_project,
     creator_org_id,
     listing_scope,
     owner_email_filter,
 )
-from policy_atlas.api.routers._common import owned_portfolio, owned_project, project_out
+from policy_atlas.api.routers._common import project_out
 from policy_atlas.core.schema import app_user, capability_run, project
 
 router = APIRouter(
@@ -153,9 +154,9 @@ def get_project(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ProjectOut:
-    """Return one active project when it belongs to the caller."""
-    row = owned_project(conn, project_id=project_id, user_id=user.user_id)
-    return project_out(conn, row, user_id=user.user_id)
+    """Return one active project readable by the caller (owner or same-org colleague)."""
+    access = accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
+    return project_out(conn, access.row, user_id=user.user_id)
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -223,7 +224,7 @@ def update_project(
         # An unowned portfolio must be as invisible here as it is on its own
         # route, or PATCH becomes an existence oracle for someone else's rows.
         if target is not None:
-            owned_portfolio(conn, portfolio_id=target, user_id=user.user_id)
+            accessible_portfolio(conn, portfolio_id=target, user_id=user.user_id, write=True)
         conn.execute(
             update(project)
             .where(project.c.project_id == project_id)
@@ -240,10 +241,11 @@ def archive_project_route(
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ProjectOut:
     """Soft-delete a project unless its latest walk is active or parked."""
-    owned_project(
+    accessible_project(
         conn,
         project_id=project_id,
         user_id=user.user_id,
+        write=True,
         include_archived=True,
         for_update=True,
     )
