@@ -45,6 +45,12 @@
 > names by hand. Delete is the highest-consequence command in the slice and is specified
 > as such below: it never destroys work, and it is the erasure lever proper.
 >
+> **(i)** **Visibility cascades between a `portfolio` and its `project`s** — reopened from
+> Out at the owner's request. One invariant: a `project` in a `portfolio` carries that
+> `portfolio`'s `visibility`. The API refuses to resolve a conflict on the caller's behalf
+> (409); the frontend prompt sits over that refusal rather than replacing it. See
+> § Visibility of a `project` inside a `portfolio`.
+>
 > **Sequencing note (owner, 2026-08-24):** the code/screen vocabulary split stays as
 > ADR 0031 left it for this slice. A **standalone rename slice follows 033** — `project`
 > → `task`, `portfolio` → `project`, mechanical, no behaviour change — and it will have to
@@ -222,6 +228,53 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    - Delete is the erasure command; **de-enrol** remains the *reversible* lever that just
      removes org membership and the stored address.
 
+3d. **Visibility of a `project` inside a `portfolio` (owner call (i), 2026-08-24 —
+   reopened from Out).** **Invariant: a `project` that has a `portfolio_id` carries the
+   same `visibility` as that `portfolio`.** A `project` with no portfolio is unconstrained.
+   The three owner rules and the three cases they leave open all follow from it.
+
+   *(Terminology: "public" in the owner's phrasing means `visibility='org'` — visible to
+   your organisation. Nothing in this system is internet-public. The contract says
+   `org`/`private` throughout, deliberately.)*
+
+   **The API never guesses.** Any request that would change a row's visibility as a
+   side-effect is **refused with 409 `visibility_conflict`** unless the caller states the
+   resolution explicitly. The frontend prompt is an affordance over that refusal, not the
+   guard itself — a direct API caller gets the same protection as the UI.
+
+   - **(i.1) Creating a `portfolio` from a `project`** — the new `portfolio` inherits that
+     `project`'s `visibility`, in both directions: from an org-visible Task it is
+     org-visible, from a private one it is private. No conflict is possible, so no prompt.
+   - **(i.2) Adding a `private` project to an `org` portfolio** — the project is promoted
+     to `org`. Caller sends `on_visibility_conflict=promote_project`; the frontend sends it
+     without a prompt, per the owner's rule.
+   - **(i.3) Adding an `org` project to a `private` portfolio** — caller chooses
+     `promote_portfolio` (the portfolio becomes `org`) or `demote_project` (the project
+     becomes `private`). The frontend prompts, naming which way each option moves the work.
+   - **(i.4, not specified by the owner) Changing a `portfolio`'s visibility while it has
+     members** — cascades to every member project. Refused unless the caller sends
+     `cascade=true`, and the frontend names the count and the direction before acting
+     (`private` → `org` **exposes** N Tasks to the organisation; `org` → `private` hides
+     them from colleagues who can currently read them).
+   - **(i.5, not specified) Setting a `project`'s visibility directly while it is in a
+     `portfolio`** — **refused, 409**, with the two ways out named: change the portfolio's
+     visibility, or remove the project from it first. Silently promoting a whole portfolio
+     because one Task changed would expose every sibling.
+   - **(i.6, not specified) Removing a `project` from a `portfolio`** — it keeps whatever
+     visibility it currently has. Nothing reverts; there is no memory of a prior value and
+     inventing one would surprise.
+
+   **Grade:** every path above is a **write** on both rows, so the write grade applies to
+   both — owner only. 032 already requires ownership of the target portfolio when setting
+   `portfolio_id` ([`projects.py`](../../../backend/src/policy_atlas/api/routers/projects.py)),
+   and that stands: neither an org colleague nor an `is_admin` holder can trigger a
+   cascade. **Enforcement is in the write paths plus a property test** — the invariant
+   spans two tables, so a CHECK constraint cannot express it, and a trigger is more
+   machinery than one asserted property needs.
+
+   **Migration:** both `visibility` columns default to `'org'`, so every pre-existing row
+   satisfies the invariant on day one. No backfill, no conflicting rows to resolve.
+
 4. **Chats on org projects:** org members create and read **their own** conversations
    (`created_by = sub`); chat listings filter to own chats (owner's legacy NULL rows
    resolve to the owner). Planning conversations: readable with the project, writable by
@@ -240,7 +293,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `sub` rendering) · **`?owner_email=` on both listings, honoured only for `is_admin`
    holders — anyone else passing it gets 400 `invalid_parameter`, which reveals nothing
    about whether any address exists.** No user directory and no admin screen (Out) · `PATCH /projects/{id}` **and `PATCH /portfolios/{id}`**
-   accept `visibility` (owner-only) · error envelope gains 403 `forbidden`.
+   accept `visibility` (owner-only) · **`PATCH /projects/{id}` accepts
+   `on_visibility_conflict=promote_project|promote_portfolio|demote_project` and
+   `PATCH /portfolios/{id}` accepts `cascade=true`; both 409 `visibility_conflict` when the
+   resolution is needed and not given (owner call (i))** · **`POST /portfolios` accepts
+   `from_project_id`, inheriting that project's visibility (i.1)** · error envelope gains 403 `forbidden`.
    `make openapi-sync` regenerates the two generated files.
    **Portfolio task counts** (`portfolios.py` `_task_counts`) count only rows the caller
    can read — a colleague must not learn a private task exists from a count.
@@ -301,6 +358,13 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    above applies unchanged, since the holder is not the owner.
    **Visibility-toggle copy and the privacy-notice sentence ship here too** (§ What
    `private` means) — the privacy page edit is owner-signed before merge.
+   **Visibility-conflict prompts (owner call (i)):** adding an org-visible Task to a
+   private Project asks which way to resolve it, naming what each option does to the work
+   (i.3); changing a Project's visibility with members names the count and the direction
+   before acting (i.4); attempting to set a Task's visibility while it sits in a Project
+   explains the two ways out rather than failing blankly (i.5). Promotion under i.2 is
+   silent, per the owner's rule. Copy is one line per case — a sentence naming the
+   consequence, not a paragraph explaining the model.
    **Mock API:** `src/mock/api.ts` mirrors the scope/403 behaviour for `/projects`. It
    serves no `/api/v1/portfolios` at all (032's recorded seam), so portfolio scope/403
    behaviour is covered by backend route tests and frontend unit tests only. Extending
@@ -343,9 +407,6 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
   scheduled after 033** (owner, 2026-08-24): `project` → `task`, `portfolio` → `project`,
   mechanical, no behaviour change, and it must also cover the code this slice adds. This
   contract works in code words and does nothing to soften the split.
-- **A `portfolio` whose visibility disagrees with its tasks'** — no cascade, no
-  validation: a private task inside an org-visible portfolio simply stays hidden and
-  uncounted. Cascade rules are a seam.
 - Workspace-cluster IA, hard purge, cursor pagination — their own recorded seams.
 - The `project_out()` per-row `latest_run` N+1 — noted, bounded by the page cap; recorded
   as a seam, not fixed here.
@@ -410,6 +471,13 @@ Out items.
   oracle) · de-enrolment clears `email` · `owner_display` falls back
   `display_name` → `email` → `sub` · the Cognito call is absent from every request path
   (asserted structurally: the API imports nothing that reaches Cognito)** / **owner call
+  (i), as one property plus the six cases: after any accepted operation, **every project
+  with a `portfolio_id` matches its portfolio's `visibility`** (property test over the six
+  paths) · i.1 inheritance both directions · i.2 promotes · i.3 offers both resolutions and
+  applies the chosen one · i.4 cascades to every member and 409s without `cascade` · i.5
+  409s · i.6 leaves visibility untouched · **every conflict path 409s when the resolution
+  is absent, so a direct API caller is as protected as the UI** · an org colleague and an
+  `is_admin` holder both 403 on every one of these paths** / **owner call
   (h): `user create` creates then enrols · a Cognito-succeeded/DB-failed create leaves the
   account and prints the `user enrol` remediation rather than deleting it · an existing
   address fails with "use enrol" · `user delete` clears `email` and `display_name`, removes
@@ -436,7 +504,11 @@ Out items.
   three users and confirm it names the right email, organisation and admin state. Finally
   round-trip owner call (h) on a throwaway address: `user create` it into the org, sign in
   once, then `user delete` it and confirm the account cannot sign in, the stored address is
-  gone, and any Task it owned still exists in the database.** Plus one cheap
+  gone, and any Task it owned still exists in the database. Then walk owner call (i) in the
+  browser: create a Project from an org-visible Task and see it inherit, add a private Task
+  to it and see the promotion, add an org-visible Task to a private Project and take each
+  branch of the prompt, and flip a Project with members in both directions confirming the
+  count and direction are named before it acts.** Plus one cheap
   full-chain smoke (an existing personal Task still loads end-to-end). **Not** a full live
   e2e run.
 

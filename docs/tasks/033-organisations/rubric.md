@@ -67,5 +67,12 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         before/after count · delete reports the address, org and soon-to-be-unreachable
         counts and requires the address retyped, with `--force` the only bypass and not
         the default in any make target · unknown addresses write to neither system.
-20. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
+20. [ ] **The visibility invariant holds (owner call (i)):** every `project` with a
+        `portfolio_id` carries its portfolio's `visibility`, asserted as a property over
+        all six paths (i.1–i.6) and not only as six examples · every conflict path returns
+        409 `visibility_conflict` when the resolution is not stated, so a direct API caller
+        is as protected as the UI · cascades are owner-only — an org colleague and an
+        `is_admin` holder both 403 · the i.4 prompt names the count and the direction
+        before a bulk change, and i.5 names both ways out.
+21. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
         Accepted; AGENTS.md phase pointer current.
