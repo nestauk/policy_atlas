@@ -94,11 +94,14 @@ one unfalsifiable box absorbed everything the other items missed.
         refuse when current state differs from what the operator acted on.
 28. [ ] `user create` passes `DesiredDeliveryMediums=["EMAIL"]`; a database failure keeps
         the account and prints the remediation; an existing address says "use enrol".
-29. [ ] **New rows stamp `org_id` from the creator** (NULL when unenrolled) · **`user
-        enrol` reports how many existing rows it left behind** and names the command that
-        moves them · **`reassign-rows` reports the count and requires confirmation**, and
-        `--visibility private` stamps the org without disclosing the back catalogue ·
-        re-enrolment leaves old rows with the previous org — each pinned.
+29. [ ] **Enrolment carries the person's work, private** (owner call (j)): `user enrol`
+        stamps `org_id` on every `project` and `portfolio` they own and sets those rows
+        `visibility='private'`, **in one transaction** with the `app_user` upsert,
+        reporting the counts · new rows stamp `org_id` from the creator (NULL when
+        unenrolled) · **re-enrolment moves the rows again and re-privatises anything shared
+        with the previous org** · **de-enrolment clears `org_id` on their rows** ·
+        **the visibility/`org_id` invariant holds across all three moves** — each pinned.
+        No operator command can expose a row that was not already exposed.
 30. [ ] No path calls `AdminDeleteUser`; no command accepts a password; **the
         `staging-user`, `prod-user` and `cognito-user` make targets are deleted**.
 

@@ -38,7 +38,11 @@
 > read everything + own chats; all other mutations stay owner-only · **(c)** per-row
 > `visibility`, default `org` · **(d)** no enrolment backfill — dark launch.
 > **Owner calls (2026-08-24):** **(e)** `portfolio` takes the same tenancy grades as
-> `project` · **(f)** `app_user.is_admin` grants **read** of every row in every
+> `project` · **(j)** **enrolment carries the person's existing work with them, private**
+> (owner, 2026-08-24 — amends (d)): `user enrol` stamps the person's `org_id` onto every
+> `project` and `portfolio` they own **and sets those rows `visibility='private'`**. (d)'s
+> "no enrolment backfill" still holds for the database at large — no row moves except the
+> enrolled person's own · **(f)** `app_user.is_admin` grants **read** of every row in every
 > organisation, `private` included; no write, ever · **(g)** `app_user` stores the Cognito
 > email; admins filter work by it · **(h)** the ops CLI creates Cognito users; **deleting
 > them is Out**, coupled to ownership transfer · **(i)** visibility cascades between a
@@ -248,33 +252,38 @@ forbids.
    - Enforcement lives in the write paths plus a property test; the invariant spans two
      tables, so no CHECK can express it.
 
-7. **Org stamping, and what an unenrolled user's work does.** `POST /projects` and
-   `POST /portfolios` stamp `org_id` from the creator's `app_user.org_id` — **NULL when the
-   creator is unenrolled**. Without stamping, every Task a user creates is invisible to
-   their organisation until an operator runs a per-row command, and the live check cannot
-   pass.
-   - **An unenrolled user's rows are reachable by their owner and by an admin, and by
-     nobody else** (§ 3's NULL rule). `visibility='org'` sits on them as an inert default:
-     "org" means nothing where there is no org. The frontend hides the switcher entirely
-     when `/me` returns no organisation, so an unenrolled user sees today's application
-     unchanged. That is the dark launch.
-   - **Enrolling someone does not share the work they already have.** Their existing rows
-     keep `org_id IS NULL` (owner call (d), no backfill), so a person joins an
-     organisation, their new Tasks become visible to colleagues, and everything they made
-     before silently does not — with nothing on screen explaining the split. **`user
-     enrol` therefore reports how many existing rows were left behind**, and names the
-     command that would move them. A silent split is the failure mode here.
-   - **`org reassign-rows --email --to <org>` is a bulk exposure event, and is specified
-     as one.** Every legacy row already carries `visibility='org'`, so stamping `org_id`
-     makes a person's entire back catalogue visible to their organisation in a single
-     command. It therefore **reports the count and requires confirmation before acting**,
-     and takes `--visibility private` to stamp the org while keeping the rows private, so
-     an operator has a way to enrol history without disclosing it. This is the one place
-     the owner's "no prompts" ruling (owner call (i)) does not reach: (i) governs a user
-     changing their own rows one at a time, not an operator disclosing hundreds at once.
-   - **Re-enrolment into a different organisation does not rewrite existing rows** — they
-     keep the old `org_id` and stay readable by the organisation the person left, until
-     `reassign-rows` moves them. Pinned by a test.
+7. **Org stamping, enrolment, and what an unenrolled user's work does.**
+   `POST /projects` and `POST /portfolios` stamp `org_id` from the creator's
+   `app_user.org_id` — **NULL when the creator is unenrolled**.
+   - **Before enrolment:** an unenrolled user's rows are reachable by their owner and by an
+     admin, and by nobody else (§ 3's NULL rule). `visibility='org'` sits on them as an
+     inert default — "org" means nothing where there is no org. The frontend hides the
+     switcher entirely when `/me` returns no organisation, so an unenrolled user sees
+     today's application unchanged. That is the dark launch.
+   - **Enrolment carries their work with them, private (owner call (j)).** `user enrol`
+     stamps `org_id` onto every `project` and `portfolio` the person owns **and sets those
+     rows `visibility='private'`** — in **one transaction** with the `app_user` upsert,
+     reporting the counts it moved. Two properties make this the right default:
+     **nothing is ever exposed by an operator action** — the rows arrive private and the
+     person opts each one into their organisation deliberately — and **the person sees no
+     change**, because rows with a NULL `org_id` were already invisible to everyone but
+     them. The alternative, leaving their history behind, would split a person's work in
+     two with nothing on screen explaining why.
+   - **The invariant survives the move** because a `portfolio`'s members are always owned
+     by the portfolio's owner: setting `portfolio_id` requires ownership of both rows
+     (032, `projects.py`). So one person's rows are a closed set, and stamping them
+     together leaves every `project` matching its `portfolio` on both `org_id` and
+     `visibility`. The move is a set operation, not a row-by-row walk through the cascade
+     path — which would transiently violate the invariant.
+   - **Re-enrolment into a different organisation moves the rows again, and re-privatises
+     them.** Work that the person had deliberately shared with organisation A does **not**
+     arrive shared in organisation B. Pinned by a test.
+   - **De-enrolment takes the rows back out:** it clears `org_id` on every `project` and
+     `portfolio` the person owns, so nothing of theirs stays readable by the organisation
+     they left. **Owner decision worth knowing:** this treats work as belonging to the
+     person, not the organisation — an org loses sight of a departing member's Tasks. The
+     alternative (the organisation retains access to work done in it) is defensible and
+     would need ownership transfer, which is Out. Flagged, not assumed.
 
 8. **API (approval-gated · additive).** `GET /api/v1/me` →
    `{user_id, display_name, email, organisation: {org_id, name} | null, is_admin}` ·
@@ -294,9 +303,9 @@ forbids.
    (`AdminCreateUser` **with `DesiredDeliveryMediums=["EMAIL"]` — AWS defaults this to
    SMS**, then enrol; Cognito first because its `sub` is the key; on a database failure the
    account is kept and the `user enrol` remediation printed) · enrol by email · resync
-   email · assign a `project` or `portfolio` to an org (**moving both together where one
-   is a member of the other**, per § 6) · reassign a person's rows · de-enrol (clears
-   `org_id`, `email`, `display_name` placeholder and `is_admin`) · grant/revoke admin.
+   email · assign a single `project` or `portfolio` to an org (**moving both together where one is a
+   member of the other**, per § 6) · de-enrol (clears `org_id`, `email` and `is_admin` on
+   `app_user`, **and `org_id` on every row the person owns**) · grant/revoke admin.
    **No password passes through the CLI**: no `--temporary-password`, ever.
    - **Environment safety, because Cognito and Postgres are addressed separately.** An
      operator with a production tunnel open on `localhost:15432` and staging credentials
@@ -470,15 +479,20 @@ vocabulary split — each halts and escalates.
   the cascade · the i.5-then-i.2 loop cannot silently re-expose a row.
 - **SSE:** an open stream closes on de-enrolment, on a visibility flip and on admin revoke.
 - **Ops:** create sends an email medium explicitly · environment mismatch refuses to act ·
-  concurrent grant/de-enrol cannot resurrect admin · new rows stamp `org_id` · re-enrolment
-  leaves old rows and `reassign-rows` fixes them · no path calls `AdminDeleteUser`.
+  concurrent grant/de-enrol cannot resurrect admin · new rows stamp `org_id` from the
+  creator · **enrolment moves every row the person owns and sets them `private`, in one
+  transaction, reporting the counts** · **re-enrolment into a second org moves them again
+  and re-privatises rows that had been shared with the first** · **de-enrolment clears
+  `org_id` on their rows so the org they left loses sight of them** · the invariant holds
+  across all three moves · no path calls `AdminDeleteUser`.
 - **Migration:** up/down roundtrip; `created_by` backfill; **a test proving the documented
   rollback exposure**, so the risk is evidenced rather than asserted.
 - **Frontend:** the affordance matrix component by component · the switcher absent with no
   organisation · cache convergence after a cascade **without reload** · the check-in banner
   absent for a non-owner.
-- **Live check** on staging: two users in one org plus a third admin in neither; org-visible
-  and private Tasks; own-chat isolation; rename 403; both switchers; `owner_email`;
+- **Live check** on staging: two users in one org plus a third admin in neither; **enrol a user
+  who already owns Tasks and confirm they arrive private and still work for their owner,
+  then share one deliberately**; org-visible and private Tasks; own-chat isolation; rename 403; both switchers; `owner_email`;
   `portfolio_id` paging beyond 50 rows; the account menu per user; the invitation email
   actually arriving (**the pool has no `EmailConfiguration`, so this uses the
   50-per-day `COGNITO_DEFAULT` sender and needs a real deliverable mailbox — an unstated
