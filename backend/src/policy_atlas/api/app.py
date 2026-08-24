@@ -304,6 +304,12 @@ def _install_exception_handlers(app: FastAPI) -> None:
         detail = exc.detail if isinstance(exc.detail, str) and exc.detail else None
         if exc.status_code == 400:
             return _error_response(400, "malformed", detail or "malformed request")
+        if exc.status_code == 403:
+            # Task 033 § 8 spends the 403 that web-api.md § Auth boundary
+            # pre-reserved: the row is readable, the action is not. Distinct
+            # from 404 by design — hiding a colleague's row from a colleague
+            # who can already see it would be theatre.
+            return _error_response(403, "forbidden", detail or "action is not permitted")
         if exc.status_code == 422:
             return _error_response(422, "validation_error", detail or "request validation failed")
         if exc.status_code == 503:
