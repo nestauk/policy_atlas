@@ -24,6 +24,7 @@ from policy_atlas.api.contract import (
     PortfolioCreate,
     PortfolioOut,
     PortfolioUpdate,
+    Visibility,
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
@@ -45,11 +46,65 @@ router = APIRouter(
 )
 
 
-#: The only columns `PATCH /api/v1/portfolios/{id}` may write. Explicitly
-#: **not** `visibility`: contract § 6, i.4 makes the cascade its sole writer,
-#: so the field is absent from `PortfolioUpdate` and cannot reach the column
-#: even if a later slice adds it to the model.
+#: The only columns `PATCH /api/v1/portfolios/{id}` may write **by splat**.
+#: Explicitly **not** `visibility`: contract § 6, i.4 makes
+#: :func:`_cascade_visibility` its sole writer. `PortfolioUpdate` now carries
+#: the field — the route routes it to the cascade by name — and this list is
+#: what guarantees the generic path can never carry it to the column instead.
+#: Asserted structurally by
+#: `test_portfolio_visibility_never_reaches_the_column_through_the_splat`.
 _PATCHABLE_COLUMNS = ("name", "description")
+
+
+def _cascade_visibility(
+    conn: Connection,
+    *,
+    portfolio_id: uuid.UUID,
+    org_id: uuid.UUID | None,
+    visibility: Visibility,
+) -> None:
+    """Set a portfolio's visibility and carry every member project with it.
+
+    Contract § 6, i.4 — **the only writer of `portfolio.visibility`**, and
+    the reason `PATCH /api/v1/portfolios/{id}` may accept the field at all.
+    Two statements in the request's single transaction (`deps.get_conn`), so
+    no reader ever observes a portfolio and its members disagreeing.
+
+    **Both invariant fields are written, not just `visibility`.** A visibility
+    change does not move a row between organisations, and members already
+    match their portfolio's `org_id` — i.1 inherits it, the assignment path
+    syncs it, and enrolment moves a person's rows as one set. So the `org_id`
+    write is a no-op on every row the API itself produced. It is written
+    anyway, deliberately: if a member ever *does* mismatch — an operator
+    assignment, a pre-invariant row, a future path that forgets — the choice
+    is between self-healing it here and leaving an exposed row in place while
+    the property test reports it after the fact. "Every member follows its
+    portfolio" is the rule, so the cascade makes both fields true rather than
+    half of them.
+
+    **Archived members are included** (contract § 6, i.4). They are excluded
+    from the derived task count, not from the row's visibility: an archived
+    Task is still readable by whoever may read it, so leaving it behind would
+    keep exactly the rows nobody is looking at readable by the organisation
+    after the owner made the Project private.
+
+    Args:
+        conn: Open database connection, inside the request transaction.
+        portfolio_id: The portfolio whose visibility is changing.
+        org_id: That portfolio's organisation — what members are synced to.
+        visibility: The new visibility for the portfolio and every member.
+    """
+    conn.execute(
+        update(portfolio)
+        .where(portfolio.c.portfolio_id == portfolio_id)
+        .values(visibility=visibility)
+    )
+    # No status filter, on purpose: archived members follow too.
+    conn.execute(
+        update(project)
+        .where(project.c.portfolio_id == portfolio_id)
+        .values(visibility=visibility, org_id=org_id, updated_at=datetime.now(UTC))
+    )
 
 
 def _task_counts(
@@ -274,27 +329,48 @@ def update_portfolio(
 ) -> PortfolioOut:
     """Apply the supplied portfolio fields without changing omitted fields.
 
-    The columns this route may write are listed explicitly rather than
-    splatted from the request model. Contract § 6, i.4 makes the visibility
-    cascade the **only** writer of `portfolio.visibility`; a blind
-    `.values(**changes)` hands the column to whatever field a later slice
-    adds to `PortfolioUpdate`, and the failure it produces is silent — the
-    owner sets a Project private, the UI agrees, and its Tasks stay readable
-    by the whole organisation.
+    **Two code paths, not one.** `name` and `description` are written by an
+    explicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off
+    the model **by name** and routed to :func:`_cascade_visibility`, and never
+    joins the splat. Contract § 6, i.4 makes the cascade the only writer of
+    `portfolio.visibility`; a blind `.values(**changes)` hands the column to
+    whatever field a later slice adds to `PortfolioUpdate`, and the failure it
+    produces is silent — the owner sets a Project private, the UI agrees, and
+    its Tasks stay readable by the whole organisation. The field now exists on
+    the model, so the allow-list is the thing keeping that true.
+
+    `payload.visibility is not None` **is** "the caller supplied it": the
+    model refuses an explicit null, so the absent value and the None value are
+    the same state.
+
+    **Owner-only, like every other write** (contract § 3): the route resolves
+    through the write grade, so a same-org colleague gets 403 and an
+    administrator — whose leg is a *read* leg — never reaches the cascade
+    however wide their read becomes.
+
+    The row is locked (`for_update`) because the cascade and the assignment
+    path in `projects.py` write overlapping rows: without it, an assignment
+    that read this portfolio's visibility a moment before the cascade
+    committed would write the stale value onto the project it is assigning and
+    leave an org-visible row inside a private Project.
 
     Args:
         portfolio_id: The portfolio to update.
-        payload: The partial update.
+        payload: The partial update. Supplying `visibility` runs the cascade.
         user: The authenticated caller.
         conn: Open database connection.
 
     Returns:
-        The updated portfolio.
+        The updated portfolio. Its `task_count` is the caller-visible active
+        member count — see the note below on what the outcome copy may claim.
 
     Raises:
-        HTTPException: 404 when the portfolio is not the caller's.
+        HTTPException: 404 when the portfolio is unreadable, 403 when it is
+            readable but not owned.
     """
-    accessible_portfolio(conn, portfolio_id=portfolio_id, user_id=user.user_id, write=True)
+    access = accessible_portfolio(
+        conn, portfolio_id=portfolio_id, user_id=user.user_id, write=True, for_update=True
+    )
     supplied = payload.model_dump(exclude_unset=True)
     changes = {field: supplied[field] for field in _PATCHABLE_COLUMNS if field in supplied}
     if changes:
@@ -303,9 +379,25 @@ def update_portfolio(
             .where(portfolio.c.portfolio_id == portfolio_id)
             .values(**changes)
         )
+    if payload.visibility is not None:
+        _cascade_visibility(
+            conn,
+            portfolio_id=portfolio_id,
+            org_id=access.row["org_id"],
+            visibility=payload.visibility,
+        )
     row = conn.execute(
         select(portfolio).where(portfolio.c.portfolio_id == portfolio_id)
     ).mappings().one()
+    # The i.4 outcome number. Defined through the **caller's readable set**
+    # (`_task_counts` is per-caller: read grade minus admin, active only), not
+    # through "how many rows the cascade touched" — the outcome copy must
+    # never name rows the reader cannot see. For this route the two coincide
+    # bar archived members: the write grade means the caller is the owner, and
+    # a portfolio's members are always owned by its owner (032: setting
+    # `portfolio_id` requires ownership of both rows), so the owner reads every
+    # member. It is still derived the honest way, because "the caller happens
+    # to own everything" is a property of today's write grade, not a rule.
     counts = _task_counts(conn, [portfolio_id], user_id=user.user_id)
     return _portfolio_out(
         row,

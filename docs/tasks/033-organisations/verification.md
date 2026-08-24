@@ -156,6 +156,25 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   named test). `owned_project` fully retired. 10 new named tests; verify-fast
   green (2249 backend, mypy, ruff).
 
+### Phase 6 — SSE re-authorisation
+- `_tail` re-authorises through `may_read_project` — a boolean ask of the same
+  `_read_legs` the snapshot resolves through; no second tenancy predicate exists.
+  Re-auth runs **before** the batch read (a revoked caller never receives the
+  interval's events); heartbeats re-authorise too, so a revoked stream dies within
+  one poll interval. No archived filter on re-auth — archiving must not kill the
+  owner's own stream mid-frame. Cost: one statement, two index probes per poll.
+- **Event 4 (admin revoke) holds by construction:** Phase 8's admin leg lands
+  inside `_read_legs`, which snapshot and tail share — pinned by
+  `test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot`
+  (monkeypatched recording delegate + verdict flip).
+- Five named tests (de-enrolment, org→private, cascade-shaped flip, owner
+  survival, the structural pin); anti-vacuity mutation run recorded (all five
+  fail with the re-auth short-circuited). verify-fast green (2254, mypy, ruff).
+- Handed to Phase 8: the trace wants "one line per SSE re-authorisation" and the
+  matched leg — `may_read_project` returns a bare bool today; Phase 8 widens it.
+- Handed to Phase 9b: `_colleague_stream_closes_on`'s `revoke` callback is the
+  single seam to swap for real CLI levers.
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

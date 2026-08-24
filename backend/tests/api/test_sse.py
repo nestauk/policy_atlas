@@ -7,7 +7,7 @@ import json
 import os
 import threading
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -721,21 +721,39 @@ async def _live(stream: _SseStream) -> None:
     assert (await stream.next(timeout=2.0)).comment == "keep-alive"
 
 
+async def _colleague_stream_closes_when(
+    api: _ApiSession,
+    project_id: uuid.UUID,
+    revoke: Callable[[], Awaitable[None]],
+) -> None:
+    """Hold a colleague's stream open, run one revocation, require closure.
+
+    The revocation is an awaitable rather than a statement, so a case can
+    revoke by writing the database *or* by calling the real route that does
+    it — which is what phase 7's cascade case does now that the lever exists.
+    """
+    stream = await api.open_stream(project_id, headers=api.other_headers)
+    try:
+        await _live(stream)
+        await revoke()
+        assert await stream.closed(timeout=5.0)
+    finally:
+        await stream.aclose()
+
+
 async def _colleague_stream_closes_on(
     api: _ApiSession,
     engine: Engine,
     project_id: uuid.UUID,
     revoke: Callable[[Connection], None],
 ) -> None:
-    """Hold a colleague's stream open, apply one revocation, require closure."""
-    stream = await api.open_stream(project_id, headers=api.other_headers)
-    try:
-        await _live(stream)
+    """:func:`_colleague_stream_closes_when` for the direct-write revocations."""
+
+    async def apply() -> None:
         with seeded(engine) as conn:
             revoke(conn)
-        assert await stream.closed(timeout=5.0)
-    finally:
-        await stream.aclose()
+
+    await _colleague_stream_closes_when(api, project_id, apply)
 
 
 def test_sse_stream_closes_when_the_colleague_is_de_enrolled(
@@ -789,10 +807,12 @@ def test_sse_stream_closes_when_a_portfolio_cascade_privatises_the_member(
 ) -> None:
     """Revocation 3: the i.4 cascade — the portfolio flips and its member follows.
 
-    The cascade itself is phase 7. What reaches the stream is only its effect
-    on the row the tail re-authorises against, so this writes exactly what the
-    cascade will write: the portfolio's `visibility`, and the member project's
-    with it. Phase 9b re-runs this suite against the real lever.
+    Written before the cascade existed, so it writes exactly what the cascade
+    writes: the portfolio's `visibility`, and the member project's with it.
+    Kept alongside the real-lever case below rather than replaced by it,
+    because the two answer different questions — this one pins the *effect* a
+    stream must react to, whatever produces it, so a future revocation path
+    that reaches the same row state is covered without a new SSE case.
 
     Kept as its own case rather than folded into the flip above because the
     contract's acceptance list names it separately: it is the revocation whose
@@ -823,6 +843,44 @@ def test_sse_stream_closes_when_a_portfolio_cascade_privatises_the_member(
                 )
 
             await _colleague_stream_closes_on(api, engine, project_id, revoke)
+
+    asyncio.run(exercise())
+
+
+def test_sse_stream_closes_when_the_real_portfolio_cascade_runs(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Revocation 3, driven by the actual route instead of a simulated write.
+
+    Phase 6 could only write what it believed the cascade would write. Phase 7
+    shipped the lever, so this runs it: the owner sends `PATCH
+    /api/v1/portfolios/{id} {"visibility": "private"}` while a colleague
+    watches a member project's stream, and the colleague's stream ends.
+
+    This is the case that fails if the cascade ever stops carrying its
+    members — the simulated version above would keep passing, because it
+    writes both rows itself.
+    """
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, portfolio_id = _org_seed(
+                engine,
+                owner_id=api.owner_id,
+                colleague_id=api.other_id,
+                in_portfolio=True,
+            )
+
+            async def cascade() -> None:
+                response = await api.client.patch(
+                    f"/api/v1/portfolios/{portfolio_id}",
+                    headers=api.owner_headers,
+                    json={"visibility": "private"},
+                )
+                assert response.status_code == 200, response.text
+                assert response.json()["visibility"] == "private"
+
+            await _colleague_stream_closes_when(api, project_id, cascade)
 
     asyncio.run(exercise())
 

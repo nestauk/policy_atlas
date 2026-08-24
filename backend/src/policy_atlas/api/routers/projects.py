@@ -173,6 +173,13 @@ def update_project(
     `forbidden` here rather than the 404 that would claim the row does not
     exist — they are already looking at it.
 
+    Three of the invariant's six paths run here (contract § 6). Setting
+    `visibility` on a project that belongs to a portfolio is **i.5**, refused
+    409. Setting `portfolio_id` to a portfolio is **i.2/i.3** — the member
+    takes that portfolio's `visibility` and `org_id`, promotion and demotion
+    being the same rule read in two directions. Setting it to `null` is
+    **i.6** — the row leaves with the visibility and organisation it had.
+
     Args:
         project_id: The project to update.
         payload: The partial update. A body carrying both `visibility` and
@@ -221,14 +228,48 @@ def update_project(
         )
     if "portfolio_id" in changes:
         target = changes["portfolio_id"]
-        # An unowned portfolio must be as invisible here as it is on its own
-        # route, or PATCH becomes an existence oracle for someone else's rows.
+        assignment: dict[str, object] = {
+            "portfolio_id": target,
+            "updated_at": datetime.now(UTC),
+        }
         if target is not None:
-            accessible_portfolio(conn, portfolio_id=target, user_id=user.user_id, write=True)
+            # An unowned portfolio must be as invisible here as it is on its
+            # own route, or PATCH becomes an existence oracle for someone
+            # else's rows. Locked (`for_update`) so a cascade running on the
+            # same portfolio cannot commit between this read and the write
+            # below and leave the assigned row carrying the old visibility —
+            # which is precisely an org-visible row inside a private Project.
+            #
+            # Both paths lock the portfolio row before writing, and the
+            # cascade's member UPDATE takes row locks on the members it
+            # carries. The one interleaving that can deadlock is a re-assign
+            # of a project *into the portfolio it is already in* racing that
+            # portfolio's cascade; Postgres aborts one side, and the request
+            # is a no-op the caller can repeat.
+            group = accessible_portfolio(
+                conn,
+                portfolio_id=target,
+                user_id=user.user_id,
+                write=True,
+                for_update=True,
+            )
+            # i.2 (promotion) and i.3 (demotion) are one rule, not two
+            # branches: the member takes its portfolio's `visibility` **and**
+            # `org_id`. Deterministic and silent by design — the request that
+            # carries `visibility` for a row in a portfolio is the one that
+            # 409s above, so an assignment cannot be a disguised visibility
+            # argument, and the response states the resulting visibility.
+            # (The screen names that outcome before the click; the copy is
+            # phase 10b's, and `test_the_i5_then_i2_loop_ends_org_visible`
+            # pins the sequence the copy exists to describe.)
+            assignment["visibility"] = group.row["visibility"]
+            assignment["org_id"] = group.row["org_id"]
+        # i.6, the `target is None` case: clearing the assignment writes
+        # neither field. The row keeps the visibility and organisation it had
+        # inside the portfolio — leaving is not a way to change either, and a
+        # row that was org-visible does not become private by being taken out.
         conn.execute(
-            update(project)
-            .where(project.c.project_id == project_id)
-            .values(portfolio_id=target, updated_at=datetime.now(UTC))
+            update(project).where(project.c.project_id == project_id).values(**assignment)
         )
     row = conn.execute(select(project).where(project.c.project_id == project_id)).mappings().one()
     return project_out(conn, row, user_id=user.user_id)

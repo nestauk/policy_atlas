@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .tenancy import Visibility
 
@@ -48,22 +48,57 @@ class PortfolioUpdate(BaseModel):
         name: New display name, when renaming. Omit to leave unchanged.
         description: New description, when changing it. Omit to leave
             unchanged.
+        visibility: How widely to share this portfolio **and every project
+            assigned to it** — supplying it runs the i.4 cascade, not a field
+            write (contract § 6). Owner-only. Omit to leave unchanged; an
+            explicit `null` is refused 422, because there is no such thing as
+            "no visibility" (the column is NOT NULL) and silently ignoring it
+            would give one request shape two outcomes.
 
     Note:
-        **`visibility` is deliberately absent** and stays absent until the
-        cascade lands (contract § 6, i.4: the cascade is the only writer of
+        The field arrives here **with** the cascade and never without it
+        (contract § 6, i.4: the cascade is the only writer of
         `portfolio.visibility`, because a portfolio's visibility change must
-        carry every member with it). Adding the field here without the
-        cascade would let an owner set a Project private, watch the UI agree,
-        and leave its Tasks readable by the whole organisation. `PATCH
-        /projects/{id}` accepts `visibility` today; `PATCH /portfolios/{id}`
-        gains it together with the cascade that makes it honest.
+        carry every member with it). The route keeps it out of its patchable
+        column list and routes it explicitly, so no splat can ever hand the
+        column to this field: an owner setting a Project private and leaving
+        its Tasks readable by the whole organisation is not a state this
+        route can produce.
+
+        Unlike `ProjectUpdate`, no pairing is rejected: `name`, `description`
+        and `visibility` are independent writes with no ordering between
+        them, so one body carrying all three has exactly one outcome. The
+        pairing `ProjectUpdate` refuses is ambiguous for the opposite reason —
+        there `visibility` and `portfolio_id` fight over the same column.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=PORTFOLIO_NAME_MAX)
     description: str | None = None
+    visibility: Visibility | None = None
+
+    @model_validator(mode="after")
+    def reject_explicit_null_visibility(self) -> PortfolioUpdate:
+        """Refuse `{"visibility": null}` rather than treat it as "unchanged".
+
+        `None` is the *absent* value for this field, so the route can read
+        "the caller asked for a cascade" straight off `visibility is not
+        None`. An explicit null that validated would make that reading false
+        for one body shape only — the kind of near-miss the invariant cannot
+        afford — and it cannot mean anything else: `portfolio.visibility` is
+        NOT NULL.
+
+        Returns:
+            The validated model.
+
+        Raises:
+            ValueError: When `visibility` was supplied as null. FastAPI
+                renders this as the contract's **422 `validation_error`**.
+        """
+        if "visibility" in self.model_fields_set and self.visibility is None:
+            raise ValueError("visibility cannot be null; omit it to leave it unchanged")
+        return self
 
 
 class PortfolioOut(BaseModel):

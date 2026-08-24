@@ -689,13 +689,20 @@ def test_an_outsider_still_gets_404_on_patch(engine: Engine, tmp_path: Path) -> 
         assert response.json()["error"]["code"] == "not_found"
 
 
-def test_portfolio_patch_does_not_accept_visibility(engine: Engine, tmp_path: Path) -> None:
-    """`PortfolioUpdate` has no `visibility` until the cascade owns it.
+def test_portfolio_patch_accepts_visibility_only_as_the_cascade(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """`PortfolioUpdate` gained `visibility` **together with** the cascade.
 
-    i.4 makes the cascade the only writer of `portfolio.visibility`. Accepting
-    the field before the cascade exists would let an owner set a Project
-    private, watch the UI agree, and leave its Tasks readable by the whole
-    organisation.
+    This case asserted 422 while the field was absent, and its docstring said
+    what would change it: "`PATCH /portfolios/{id}` gains it together with the
+    cascade that makes it honest." The cascade landed, so the refusal did too
+    — deliberately, not by weakening a check. What the phase-3 assertion
+    protected still holds and is asserted here: the field never reaches the
+    column on its own. The member follows in the same request.
+
+    The full i.4 surface — archived members, the count, the owner-only grade,
+    the splat allow-list — lives in `test_visibility_invariant.py`.
     """
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         with seeded(engine) as conn:
@@ -704,19 +711,30 @@ def test_portfolio_patch_does_not_accept_visibility(engine: Engine, tmp_path: Pa
             group = make_portfolio(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
+            member = make_project(
+                conn,
+                owner_user_id=owner.user_id,
+                org_id=org_id,
+                visibility="org",
+                portfolio_id=group,
+            )
 
         response = client.patch(
             f"/api/v1/portfolios/{group}", headers=owner.headers, json={"visibility": "private"}
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 200, response.text
         with seeded(engine) as conn:
             stored = conn.execute(
                 select(portfolio_table.c.visibility).where(
                     portfolio_table.c.portfolio_id == group
                 )
             ).scalar_one()
-        assert stored == "org"
+            stored_member = conn.execute(
+                select(project_table.c.visibility).where(project_table.c.project_id == member)
+            ).scalar_one()
+        assert stored == "private"
+        assert stored_member == "private"
 
 
 # --- POST /portfolios {from_project_id} (contract § 6, i.1) -------------------
