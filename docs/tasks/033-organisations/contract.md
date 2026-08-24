@@ -219,9 +219,6 @@ Out items.
   attempt by colleague → 403, both switchers filter correctly, identity chip shows the
   ops-set display name. Plus one cheap full-chain smoke (an existing personal Task still
   loads end-to-end). **Not** a full live e2e run.
-  *Known constraint:* staging's OpenAI quota was recorded exhausted; the live check is
-  tenancy-only and needs no model route, but the full-chain smoke does — if the quota is
-  still out, record that as a gap rather than skipping it silently.
 
 ## Verification evidence expected
 

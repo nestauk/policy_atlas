@@ -53,9 +53,8 @@ lifecycle IA — note that `src/mock/api.ts` serves no `/api/v1/portfolios`.
 Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
 clear meaning per user-visible source count across the P1 check-in, Where I
 looked and the publisher-country charts. Two items were escalated to the owner
-in that PR and remain true of it: the **manual browser check was not run** (it
-needs a live model route; staging's OpenAI quota is recorded exhausted below),
-and **no non-Claude reviewer read the slice** (the Codex CLI is not installed in
+in that PR and remain true of it: the **manual browser check was not run**, and
+**no non-Claude reviewer read the slice** (the Codex CLI is not installed in
 this environment, so the family flip did not happen).
 
 Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
@@ -71,20 +70,22 @@ chain conversation → plan → run → artefact). ADR 0029 (Accepted); API surf
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
 `c501022`); system **live** at `v3.policyatlas.uk`.
 
-Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
-`028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
-caps per backend per round; standard/deep wall clocks removed — was
-`028-…`) and `030-multi-round-search` (rapid's clock removed, the
-runner-orchestrated round loop wired — was `029-…`). Their code is **merged to
-`dev`** (PR #46, the `37-hotfix-remove-quota` hotfix). **Numbering collision
-still to settle:** their doc numbers `029`/`030` are both taken — by the
-copilot-chat slice and by three merged 030 tasks — and `031`, `032` and `033`
-are now taken too. If the search-volume docs are renumbered they need `034`/`035`.
-No ADRs written for them yet.
+Search-volume work is **merged to `dev`** (PR #46, the
+`37-hotfix-remove-quota` hotfix) — `029-search-volume-cap` (record caps per
+backend per round; standard/deep wall clocks removed) and
+`030-multi-round-search` (rapid's clock removed, the runner-orchestrated round
+loop wired). It **did not go through the task cycle**: each carries a `plan.md`
+and nothing else — no contract, no rubric, no verification, no ADR — so its
+`docs/tasks/029-…`/`030-…` directories are leftover plan docs, not the record of
+a cycled slice. They collide by name only, with the copilot-chat slice and with
+three merged 030 tasks. **Nothing depends on renumbering them**; the live
+behaviour is on `dev`. If the record is ever reconstructed it takes the next free
+numbers, not `029`/`030`.
 
-Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
-fail honest-429 until billing tops up). The eval slice (former 027 draft)
-stays deferred — contract draft at unpushed `a5c9708`.
+Known operational state: staging's OpenAI quota is **healthy** (the
+2026-07-28 exhaustion was topped up; corrected here 2026-08-24 — live checks
+needing a model route are unblocked). The eval slice (former 027 draft) stays
+deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist
