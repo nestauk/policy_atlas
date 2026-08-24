@@ -178,12 +178,20 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
      CLI resolves it to a `sub` via Cognito, then upserts `app_user`. If it resolves to no
      user or more than one, it **fails loudly and writes nothing** — a half-enrolled row
      is worse than none.
-   - **No new dependency, no new IAM on the API.** `boto3` is not a backend dependency and
-     this slice does not add one: the CLI shells out to the **AWS CLI** already used to run
-     migrations (`aws cognito-idp list-users --filter …`), via `subprocess.run` with
-     **list arguments and `shell=False`**, parsing its JSON with the stdlib. The email is
-     validated for shape before it is used as an argument. The IAM to read the pool sits
-     with the human operator's role, **never** with the API task role.
+   - **`boto3`, in an ops-only dependency group (approval-gated; owner opened this
+     2026-08-24).** The CLI calls `cognito-idp:ListUsers` through the SDK — typed
+     exceptions, no argv, no stdout parsing, and **no command-construction site to
+     review**. It goes in a new `[dependency-groups] ops` entry, **not** the runtime
+     dependencies: `uv sync` installs default groups only and the image is built with
+     `uv sync --no-dev --frozen` ([`backend/Dockerfile`](../../../backend/Dockerfile)), so
+     a non-default group is excluded with **no Dockerfile change** and the ~100MB of
+     `boto3`+`botocore` never reaches the API container. The rejected alternative was
+     shelling out to the AWS CLI; it avoided the dependency but bought argv construction
+     and stderr parsing in exchange, which is the worse trade.
+   - **No new IAM on the API.** The permission to read the pool sits with the human
+     operator's role, **never** with the API task role, and the import is reachable only
+     from the CLI entry point — asserted structurally, so an API module cannot grow a
+     `boto3` import unnoticed.
    - **Erasure lever:** de-enrolment clears `email` as well as `org_id`. It is the one
      command that removes the identifiable data this slice introduces.
 
@@ -298,8 +306,9 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
 
 This slice **is** the approval: schema (two new tables, two tables gaining columns, one
 gaining a backfilled column), auth/tenancy semantics, public API additions — all named
-above; nothing beyond them. **No new dependencies** — the Cognito lookup shells out to
-the AWS CLI already used for migrations rather than adding `boto3` (owner call (g)).
+above; nothing beyond them. **One new dependency, approval-gated and named: `boto3`, in a
+new ops-only dependency group** (owner opened this 2026-08-24) — excluded from the API
+image by the existing `uv sync --no-dev --frozen` build, so the runtime is unchanged.
 **Egress change, named and bounded:** the ops CLI gains one outbound Cognito call, made by
 a human operator under their own IAM. **The API's egress is unchanged** — `/me` and every
 request path stay DB-only, and the API task role gains no Cognito permission. No CI change. Migration is additive; downgrade drops the additions (and
@@ -413,12 +422,12 @@ legal copy — owner sign-off before merge.**
 Default `false` means an un-granted deployment behaves exactly as it does today.
 
 **Second call-out — the Cognito lookup and stored email (owner call (g)).**
-(1) The lookup shells out to the AWS CLI, so it is a **command-construction site**: list
-arguments, `shell=False`, and the address shape-validated before use. A reviewer should
-try to get a metacharacter into an argv position and fail;
-(2) it runs **only** in the ops CLI. The check that no request path can reach Cognito is
-structural, and the API task role must gain no Cognito permission — verify in the CDK diff,
-not just in the Python;
+(1) `boto3` must stay in the `ops` group and out of the runtime: confirm the built image
+does not contain it, not merely that the group is declared correctly;
+(2) the lookup runs **only** in the ops CLI. The check that no request path can reach
+Cognito is structural — no API module imports `boto3`, directly or transitively — and the
+API task role must gain no Cognito permission, verified in the CDK diff and not just in
+the Python;
 (3) `?owner_email=` must not become an enumeration oracle: a non-admin gets the same 400
 whether or not the address exists, and an admin's result set is bounded by the same
 pagination as any other listing;

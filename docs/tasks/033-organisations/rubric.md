@@ -51,10 +51,10 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         DB now holds directly identifiable personal data); **both privacy-page edits carry
         written owner sign-off** (live public legal copy).
 17. [ ] **Identity reaches the DB only via ops (owner call (g)):** `sub` is still the
-        only claim any request path reads · the Cognito lookup lives in the ops CLI alone,
-        shells out to the AWS CLI with list args and `shell=False` on a shape-validated
-        address, and adds no backend dependency · the API task role gains **no** Cognito
-        permission (checked in the CDK diff) · enrolment by email fails loudly and writes
+        only claim any request path reads · the Cognito lookup lives in the ops CLI alone
+        and uses `boto3` from the new **ops-only dependency group** — confirmed absent
+        from the built API image, and imported by no API module directly or transitively ·
+        the API task role gains **no** Cognito permission (checked in the CDK diff) · enrolment by email fails loudly and writes
         nothing on zero or multiple matches · de-enrolment clears `email` · `?owner_email=`
         is admin-only and gives a non-admin the same 400 whether or not the address exists.
 18. [ ] Account menu names the signed-in email, the organisation and (when set) admin
