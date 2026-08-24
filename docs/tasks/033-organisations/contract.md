@@ -251,7 +251,14 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    fails, the CLI **does not** delete the just-created account — it fails loudly and prints
    the exact `user enrol` command that finishes the job. The stranded state is benign: a
    signed-in user with no org sees only their own work. An address that already exists in
-   Cognito fails with "already exists — use `user enrol`", not a silent no-op) ·
+   Cognito fails with "already exists — use `user enrol`", not a silent no-op.
+   **No password ever passes through this codebase or this CLI:** `AdminCreateUser`
+   accepts a `--temporary-password`, and the CLI deliberately does **not** expose one —
+   supplying it would put a working credential in shell history and in CI logs if the
+   command were scripted. Cognito generates the temporary password, emails it, and the
+   user sets their own through the hosted UI's `NEW_PASSWORD_REQUIRED` challenge. Password
+   reset is likewise self-serve via the pool's `verified_email` recovery; **no CLI command
+   sets, resets or reads a password**) ·
    **delete user** (owner call (h) — see § Deleting a person) · enrol user
    **by email** (resolve `sub` via the AWS CLI, upsert `app_user`, set `org_id` and
    `email`, optional `display_name`) · assign a `project` **or
