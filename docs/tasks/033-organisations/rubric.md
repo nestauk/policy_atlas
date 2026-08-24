@@ -57,5 +57,8 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         permission (checked in the CDK diff) · enrolment by email fails loudly and writes
         nothing on zero or multiple matches · de-enrolment clears `email` · `?owner_email=`
         is admin-only and gives a non-admin the same 400 whether or not the address exists.
-18. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
+18. [ ] Account menu names the signed-in email, the organisation and (when set) admin
+        state, from `/me`; unenrolled users show the email alone; a long address truncates
+        rather than breaking the popover; the mock API serves `/me`.
+19. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
         Accepted; AGENTS.md phase pointer current.

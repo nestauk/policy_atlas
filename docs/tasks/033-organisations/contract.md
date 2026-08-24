@@ -230,6 +230,17 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `HistoryView.tsx` scopes to the caller · visibility toggle in Task and Project settings
    (owner only) · identity chip renders `display_name` (fallback: current sub rendering)
    via `/me`.
+   **The account menu says who you are signed in as** (`AppShell.tsx` `AccountMenu`, the
+   avatar popover that today holds only Sign out): the signed-in **email** and the
+   **organisation name**, above a divider, with Sign out beneath. Values only — no
+   "Signed in as" preamble; the account icon is the label (just-enough-text). An
+   unenrolled user shows the email alone, with no empty row and no "No organisation"
+   filler. An `is_admin` holder's menu also names that, because this is the honest place
+   to tell someone their sight is wider than normal. The popover is `w-44` today and an
+   address will not fit: widen it and truncate the email with its full value in `title`,
+   so a long address degrades rather than breaking the layout. Both values come from
+   `/me`, so **the mock API must serve `/me`** or the menu is unrenderable in mock mode
+   and in the CI mock journey.
    **`is_admin` holders:** the Organisation switch shows the everything list, and the
    surface **says so plainly** — an admin must never mistake another org's work for their
    own org's. One label, not a banner or an explainer (just-enough-text). Rows outside the
@@ -341,7 +352,9 @@ Out items.
   non-admin passing `owner_email` gets 400 regardless of whether the address exists (no
   oracle) · de-enrolment clears `email` · `owner_display` falls back
   `display_name` → `email` → `sub` · the Cognito call is absent from every request path
-  (asserted structurally: the API imports nothing that reaches Cognito)**; the existing
+  (asserted structurally: the API imports nothing that reaches Cognito)** / **the account
+  menu renders email + organisation from `/me`, shows the email alone when unenrolled, and
+  names admin state when `is_admin`**; the existing
   cross-owner 404 suite untouched and green (it now spans ten API test files including
   `test_portfolios_router.py` — the plan enumerates them from the tree, not from this
   contract).
@@ -356,7 +369,8 @@ Out items.
   in CloudWatch with none for their own-org reads. Revoke, and confirm the wider list
   disappears. Check that `?owner_email=` finds a colleague's Task for the admin and 400s
   for a non-admin, and that the corrected visibility-toggle copy and **both** privacy-notice
-  changes (§ 3 and § 6) render on the live pages.** Plus one cheap
+  changes (§ 3 and § 6) render on the live pages. Open the account menu as each of the
+  three users and confirm it names the right email, organisation and admin state.** Plus one cheap
   full-chain smoke (an existing personal Task still loads end-to-end). **Not** a full live
   e2e run.
 
