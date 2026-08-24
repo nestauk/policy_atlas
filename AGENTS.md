@@ -43,6 +43,21 @@ words throughout (screen **Task** = code `project`, screen **Project** = code
 `portfolio`), and its route/test counts are re-derived at plan time instead of
 being restated from rev 1. The old `task/030-organisations` branch is superseded.
 
+**Owner call (f), 2026-08-24:** a **cross-org read flag** ships in 033 —
+`app_user.cross_org_read`, ops-assigned only (no HTTP write path), granting
+**read** of org-visible rows in **any** organisation so a developer can browse
+any Task in the real UI. It grants no write, it is not an admin role, and it
+**does not pierce `visibility='private'`** — private must mean private, so
+debugging a private row goes to the ops CLI, not the flag. Every read on that
+leg emits one `structlog` trace line. It is the highest-value target in the
+design and carries a named call-out for the security lane.
+
+**Next slice after 033 — the rename** (owner, 2026-08-24): `project` → `task`
+and `portfolio` → `project`, standalone, mechanical, no behaviour change,
+retiring ADR 0031's vocabulary split. It touches ~249 files and breaks
+`/api/v1/projects/*` URLs and bookmarks, which is why it is its own slice and
+not folded into a Tier-4 tenancy diff. It must also cover the code 033 adds.
+
 Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55, `c6bf772`) — the app
 reshaped around one task and one lifecycle, with a named grouping above tasks:
 screen word **Task** = the `project` row, screen word **Project** = the new

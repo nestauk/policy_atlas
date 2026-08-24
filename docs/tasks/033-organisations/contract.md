@@ -19,11 +19,22 @@
 > **(d)** **no enrolment backfill** — orgs start empty; existing rows stay personal-only
 > until assigned via the ops tooling (dark launch).
 >
-> Owner call taken at re-open (2026-08-24):
+> Owner calls taken at re-open (2026-08-24):
 > **(e)** **`portfolio` takes the same tenancy grades as `project`** — its own `org_id`
 > and `visibility` columns, and `owned_portfolio()` folds into the same access helper.
 > Without it a colleague would see shared Tasks while the Project that groups them stayed
 > invisible.
+> **(f)** **A cross-org read flag ships in this slice** — an ops-assigned boolean on
+> `app_user` granting **read** across every organisation, so a developer can browse any
+> Task in the real UI for support and debugging. It grants **no write, ever**, and it is
+> **not** an admin role: roles remain Out. **It does not pierce `visibility='private'`**
+> (see § The private line, below).
+>
+> **Sequencing note (owner, 2026-08-24):** the code/screen vocabulary split stays as
+> ADR 0031 left it for this slice. A **standalone rename slice follows 033** — `project`
+> → `task`, `portfolio` → `project`, mechanical, no behaviour change — and it will have to
+> cover the code this slice adds. 033 therefore does not spend effort softening the split;
+> it just states the mapping and works in code words.
 
 ## Goal
 
@@ -36,12 +47,15 @@ portfolio membership) remains the owner's alone.
 
 ## Deliverable
 
-One PR landing: `organisation` + `app_user` tables, `org_id`/`visibility` columns on both
+One PR landing: `organisation` + `app_user` tables (the latter carrying the ops-only
+`cross_org_read` flag), `org_id`/`visibility` columns on both
 `project` and `portfolio` (additive Alembic migration off 032's head `b3c7d914e0a2`),
-org-aware authorization on every project- and portfolio-scoped route, `GET /api/v1/me`,
+org-aware authorization on every project- and portfolio-scoped route (three read legs:
+owner, same-org, cross-org read), `GET /api/v1/me`,
 the `scope` filter on the `projects` and `portfolios` listings, chat ownership
 (`conversation.created_by`), ops tooling (CLI + make targets) for org create / user
-enrolment / row assignment, the frontend switcher + read-only affordances + identity chip,
+enrolment / row assignment / cross-org grant, the frontend switcher + read-only
+affordances + identity chip,
 spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped live check.
 
 ## Read first
@@ -73,8 +87,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    - `organisation` — `org_id` UUID PK · `name` Text NOT NULL UNIQUE · `created_at`.
    - `app_user` — `user_id` Text PK (the token `sub`, the grain the system already keys
      on) · `org_id` FK → organisation **nullable** · `display_name` Text nullable
-     (ops-set; access tokens carry no usable name claim) · `created_at`. **One org per
-     user** — multi-org membership is a deferred join-table seam.
+     (ops-set; access tokens carry no usable name claim) ·
+     **`cross_org_read` Boolean NOT NULL DEFAULT `false`** (owner call (f); named for
+     exactly what it grants, so it cannot quietly grow into an `is_admin`) ·
+     `created_at`. **One org per user** — multi-org membership is a deferred join-table
+     seam.
    - `project` — add `org_id` FK nullable + `visibility` Text NOT NULL DEFAULT `'org'`
      CHECK (`org`|`private`); listing indexes for the two access legs
      (owner leg; `(org_id, visibility, status)` leg).
@@ -93,7 +110,9 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `get_current_user` stays DB-free.
 3. **Authorization:** `owned_project()` **and `owned_portfolio()`** generalise onto one
    access helper with two grades — **read** = owner ∪ (same org ∧ `visibility='org'` ∧
-   existing archived/status rules unchanged) · **write** = owner only. Not-visible →
+   existing archived/status rules unchanged) ∪ (**`cross_org_read` ∧ `visibility='org'`**,
+   any org) · **write** = owner only, in every case: a `cross_org_read` holder who is not
+   the owner gets 403 on every mutation, exactly like an org colleague. Not-visible →
    **404** (BOLA rule unchanged, indistinguishable body); visible-but-not-writable →
    **403 `forbidden`** (new error code — the reserved hook fires; the existing cross-owner
    404 suite stands, cross-owner ≠ same-org). **Every** project- and portfolio-scoped
@@ -103,6 +122,23 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    refactor). The plan **enumerates the call sites from the code as it stands at plan
    time** — rev 1's fixed counts ("12 read models", "×6 inline sites") predate 031 and 032
    and are deliberately not restated here.
+3a. **The private line (owner call (f), the sharp edge).** `cross_org_read` reads
+   `visibility='org'` rows in **any** organisation. It **does not** read
+   `visibility='private'` rows in an org the holder does not belong to. Private must
+   mean private, or the word is a lie to the user who set it — and this is a product for
+   government users who will read that word literally. The cost is accepted and named: a
+   developer cannot debug a broken **private** Task through the UI. That case goes to the
+   ops CLI (a DB-level trust boundary that already exists and is separately controlled)
+   or to asking the owner. The flag is a convenience over an existing boundary, not a new
+   claim on user data.
+
+   **Trace:** every read served by the `cross_org_read` leg — and only that leg — emits
+   one `structlog` line (`event="cross_org_read"`, acting `user_id`, row kind and id,
+   owning `org_id`). JSON logs already ship to CloudWatch (`LOG_FORMAT=json`), so this
+   needs no table and no new infra. **Not** `event_log`: that table is project-scoped and
+   sequence-ordered per project, and writing to it on a read path would both pollute a
+   run's audit stream and put a write in a GET.
+
 4. **Chats on org projects:** org members create and read **their own** conversations
    (`created_by = sub`); chat listings filter to own chats (owner's legacy NULL rows
    resolve to the owner). Planning conversations: readable with the project, writable by
@@ -111,7 +147,8 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `created_by`), not the project owner — one user's in-flight turns never throttle a
    colleague.
 5. **API (approval-gated · additive):** `GET /api/v1/me` →
-   `{user_id, display_name, organisation: {org_id, name} | null}` ·
+   `{user_id, display_name, organisation: {org_id, name} | null, cross_org_read: bool}`
+   (the frontend needs it to label the wider list honestly — see § Frontend) ·
    `GET /projects?scope=all|mine` **and `GET /portfolios?scope=all|mine`** (default `all`
    = everything visible to the caller — own rows incl. private, plus org-visible
    colleagues' rows; the user is part of the org, so there is no separate "org" scope —
@@ -123,7 +160,9 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    can read — a colleague must not learn a private task exists from a count.
 6. **Ops tooling:** small `policy_atlas.ops` CLI + make targets — create org · enrol user
    (upsert `app_user`, set `org_id`, optional `display_name`) · assign a `project` **or
-   `portfolio`** to an org · de-enrol (the rollback lever). Prod invocation documented in
+   `portfolio`** to an org · de-enrol (the rollback lever) · **grant/revoke
+   `cross_org_read`** (the only way to set it — there is no HTTP route that grants it, so
+   the flag cannot be self-served or escalated to through the API). Prod invocation documented in
    DEPLOYMENT.md (same pattern as migrations; no new infra).
 7. **Frontend (surfaces named as they stand after 032):** two-state switcher, screen
    labels **Organisation · Mine** (default Organisation = the full visible list; Mine =
@@ -138,6 +177,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `HistoryView.tsx` scopes to the caller · visibility toggle in Task and Project settings
    (owner only) · identity chip renders `display_name` (fallback: current sub rendering)
    via `/me`.
+   **`cross_org_read` holders:** the Organisation switch shows the cross-org list, and the
+   surface **says so plainly** — a holder must never mistake another org's work for their
+   own org's. One label, not a banner or an explainer (just-enough-text). Rows outside the
+   holder's own org show the owning organisation's name. Every read-only affordance rule
+   above applies unchanged, since the holder is not the owner.
    **Mock API:** `src/mock/api.ts` mirrors the scope/403 behaviour for `/projects`. It
    serves no `/api/v1/portfolios` at all (032's recorded seam), so portfolio scope/403
    behaviour is covered by backend route tests and frontend unit tests only. Extending
@@ -149,6 +193,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
 **Out (⏸ deferred, recorded, not silently omitted):**
 
 - Roles beyond owner/org-member (admin, editor); any org-management **UI** — ops CLI only.
+  `cross_org_read` (owner call (f)) is **not** an exception to this: it is one read-grade
+  boolean, not a role. No permission hangs off it, nothing else reads it, and it grants no
+  write. The moment a second capability wants to attach to it, that is a roles slice.
+- **Cross-org write, or cross-org sight of `visibility='private'` rows** — the flag grants
+  read of org-visible rows only (§ The private line).
 - Self-serve onboarding: invitations, email-domain mapping, IdP claims/groups/federation.
 - Multi-org membership; ownership transfer; sharing to named individuals.
 - Write/co-edit on org-visible rows beyond own chats (incl. steering by non-owners).
@@ -156,8 +205,10 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
 - Adoption of NULL-owner pre-025 projects (recorded posture stands).
 - **Extending `src/mock/api.ts` to serve `/api/v1/portfolios`** — 032's seam; this slice
   inherits the gap rather than closing it.
-- **Resolving the code-word/screen-word split** (ADR 0031) — stays with the
-  workspace-cluster slice; this contract works in code words.
+- **Resolving the code-word/screen-word split** (ADR 0031) — its **own rename slice,
+  scheduled after 033** (owner, 2026-08-24): `project` → `task`, `portfolio` → `project`,
+  mechanical, no behaviour change, and it must also cover the code this slice adds. This
+  contract works in code words and does nothing to soften the split.
 - **A `portfolio` whose visibility disagrees with its tasks'** — no cascade, no
   validation: a private task inside an org-visible portfolio simply stays hidden and
   uncounted. Cascade rules are a seam.
@@ -208,7 +259,11 @@ Out items.
   matrix — same-org read 200 / write 403 / cross-org 404 / `visibility='private'` hides
   from org / scope filter correctness on **both** listings / portfolio task counts exclude
   unreadable tasks / own-chats isolation (colleague's chat invisible, turn POST on it
-  404s) / pending-cap keyed to acting user / `/me` JIT upsert idempotency; the existing
+  404s) / pending-cap keyed to acting user / `/me` JIT upsert idempotency /
+  **`cross_org_read`: reads an org-visible row in a foreign org 200 · is refused a
+  `private` row in a foreign org 404 (indistinguishable) · is refused every mutation 403 ·
+  defaults `false` so the dark-launch invariant is untouched · emits exactly one trace
+  line per cross-org read and none on an own-org read**; the existing
   cross-owner 404 suite untouched and green (it now spans ten API test files including
   `test_portfolios_router.py` — the plan enumerates them from the tree, not from this
   contract).
@@ -217,8 +272,12 @@ Out items.
   colleague (read-only affordances render, lifecycle stages gated), private Task hidden
   and uncounted, colleague opens own chat on an org Task + owner cannot see it, rename
   attempt by colleague → 403, both switchers filter correctly, identity chip shows the
-  ops-set display name. Plus one cheap full-chain smoke (an existing personal Task still
-  loads end-to-end). **Not** a full live e2e run.
+  ops-set display name. **Then grant `cross_org_read` to a third user in neither org and
+  verify: they browse the org-visible Task, the owning organisation is named on screen,
+  the private Task stays invisible, a rename attempt returns 403, and the trace line
+  appears in CloudWatch. Revoke, and confirm the wider list disappears.** Plus one cheap
+  full-chain smoke (an existing personal Task still loads end-to-end). **Not** a full live
+  e2e run.
 
 ## Verification evidence expected
 
@@ -240,3 +299,14 @@ feature dark-launches — with no orgs created, behaviour is byte-identical to t
 join site — none left behind, on portfolios as well as projects), count-based disclosure,
 403-vs-404 discipline, no auth-path DB writes, migration safety on live data, no scope
 creep into roles/UI/IdP/vocabulary.
+
+**Named call-out for the security lane — `cross_org_read` (owner call (f)).** It is the
+highest-value target in this design and must be reviewed as such, not as one more boolean:
+(1) it is settable **only** by the ops CLI — no HTTP route writes it, and no request body
+can reach it, so there is no self-serve or mass-assignment path; (2) it appears on the
+**read** leg only — a reviewer should try to find any write path that consults it and fail;
+(3) it must not pierce `visibility='private'`, and the negative test for that is a
+contract, not a nicety; (4) `/me` exposing it is a read of the caller's own row, not a
+capability; (5) the trace fires on the cross-org leg alone — a flag holder reading their
+own org must not generate noise, or the signal is worthless. Default `false` means an
+un-granted deployment behaves exactly as it does today.

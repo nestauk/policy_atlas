@@ -2096,6 +2096,15 @@ omissions.
 - **Portfolio membership beyond one** — a task belongs to at most one project, by the
   single nullable FK. Many-to-many needs a join table and a decision about what a
   task in two projects means for counts.
+- **The code-word/screen-word split** (ADR 0031) — screen **Task** = code `project`,
+  screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this gets its own
+  rename slice, scheduled after 033-organisations** — `project` → `task`,
+  `portfolio` → `project`, mechanical, no behaviour change. It was not folded into 033
+  because a ~249-file rename would bury the ~200 lines of tenancy logic that 033's
+  security review has to read, and it must also cover the code 033 adds. It breaks
+  `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
+  only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
+  the mapping is written down.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
