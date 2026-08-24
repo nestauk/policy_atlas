@@ -154,6 +154,12 @@ def test_page_of_project_out_serialises() -> None:
         updated_at=_now(),
         archived_at=None,
         latest_run=None,
+        # Task 033 made all three required: `visibility` is a column, and
+        # `is_owner`/`owner_display` are caller-relative, so no default could
+        # be honest about which caller the page was built for.
+        visibility="org",
+        is_owner=True,
+        owner_display="Test User",
     )
     wrapper = ProjectPage(
         page=Page[ProjectOut](

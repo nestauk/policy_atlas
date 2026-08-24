@@ -21,6 +21,12 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   updated_at: now,
   archived_at: null,
   latest_run: null,
+  // Task 033 tenancy. The mock signs in as the row's owner, so `is_owner` is
+  // true and every affordance stays live; the org journeys the switcher needs
+  // arrive with the mock's `/me` and portfolio routes.
+  visibility: "org",
+  is_owner: true,
+  owner_display: "Ada Lovelace",
 };
 
 export const mockFunnel: components["schemas"]["FunnelOut"] = {

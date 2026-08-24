@@ -54,6 +54,24 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   `created_by` — Phase 4/5 decides deliberately (contract grades planning
   conversations by project ownership, so it is not load-bearing there).
 
+### Phase 2 — Access helper: owner and org legs (gate: auth semantics)
+- `_access.py`: `accessible_project`/`accessible_portfolio` → `Access(row, is_owner)`.
+  Org leg = one SQL predicate (correlated `EXISTS` equating `app_user.org_id` to the
+  row's non-NULL `org_id`; explicit `.correlate()` — without it SQLAlchemy renders a
+  cross join that would match any org). Write = owner only. `for_update` requires
+  `write=True` (`ValueError` otherwise), and locks are issued through the owner leg
+  alone — a colleague path cannot lock the owner's row, pinned structurally by
+  `test_locking_can_only_ever_land_on_the_callers_own_row`.
+- NULL rule pinned: `test_two_unenrolled_callers_cannot_see_each_others_null_org_rows`
+  (both flavours: NULL `org_id` row in `app_user`, and no `app_user` row at all), plus
+  the compiled-SQL structural pin `test_org_read_leg_is_a_correlated_sql_predicate`.
+- 403 `forbidden` branch added to the envelope handler (contract § 8 text; inert until
+  Phase 4 wires routes). 16 named tests; verify-fast gate green (2188 backend, mypy,
+  ruff). Old helpers and all routes untouched.
+- Handed forward to Phase 4/5: the six `for_update=True` sites; `conversations.py:283`
+  and `chat_turns.py:446` are chat paths that must move or drop the project-row lock
+  once colleagues can reach them — the helper's guard raises loudly if missed.
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

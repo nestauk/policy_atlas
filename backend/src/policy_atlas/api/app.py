@@ -38,6 +38,11 @@ _CONFLICT_CODES = {
     # 028 strand 3: the approved plan predates the newest completed planning
     # turn — review the demoted draft, re-approve, then start.
     "plan_stale",
+    # Task 033 § 6 (i.5): a project in a portfolio carries that portfolio's
+    # visibility, so setting the project's own visibility has no honest
+    # answer — the two ways out are changing the Project's visibility and
+    # leaving the Task out of the Project.
+    "visibility_conflict",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -153,6 +158,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         project_router as project_conversations_router,
     )
     from policy_atlas.api.routers.conversations import router as conversations_router
+    from policy_atlas.api.routers.me import router as me_router
     from policy_atlas.api.routers.planning import router as planning_router
     from policy_atlas.api.routers.portfolios import router as portfolios_router
     from policy_atlas.api.routers.projects import router as projects_router
@@ -161,6 +167,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     from policy_atlas.api.routers.sse import router as sse_router
 
     for router in (
+        me_router,
         projects_router,
         portfolios_router,
         project_conversations_router,

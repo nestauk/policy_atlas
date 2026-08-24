@@ -20,12 +20,149 @@ nothing here commits.
 
 from __future__ import annotations
 
+import os
 import uuid
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import NamedTuple
 
-from sqlalchemy.engine import Connection
+from fastapi.testclient import TestClient
+from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.app import create_app
+from policy_atlas.api.dev_issuer import init, mint_token
+from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import app_user, organisation, portfolio, project
 from tests.helpers import now
+
+
+class Principal(NamedTuple):
+    """One signed-in caller: their token subject and their bearer header.
+
+    Route-level tenancy tests need the *subject* as well as the header,
+    because the fixtures they seed (`app_user` rows, owned projects) are keyed
+    on it. ``resource_support.api_client`` keeps its subjects private and
+    hands back two opaque header dicts, which is right for owner-scoped tests
+    and not enough here.
+    """
+
+    user_id: str
+    headers: dict[str, str]
+
+
+@contextmanager
+def tenancy_client(
+    tmp_path: Path, *, count: int = 3
+) -> Iterator[tuple[TestClient, list[Principal]]]:
+    """Yield an application client plus ``count`` distinct signed-in callers.
+
+    Three is the usual shape: an owner, a same-org colleague, and a third
+    party who is in no organisation with either.
+
+    Args:
+        tmp_path: Per-test temporary directory for the development issuer key.
+        count: How many distinct subjects to mint.
+
+    Yields:
+        The client and the minted principals, in order.
+    """
+    key_dir = tmp_path / "issuer"
+    settings = Settings(
+        "http://dev-issuer.local",
+        "tenancy-router-test",
+        None,
+        init(key_dir),
+        "http://app.example.test",
+        os.environ["DATABASE_URL"],
+    )
+    # Unique subs per client for the same reason `resource_support` mints
+    # them: the test database is shared across the suite and listings would
+    # otherwise see other tests' rows.
+    principals = []
+    for index in range(count):
+        user_id = f"tenancy-{index}-{uuid.uuid4()}"
+        token = mint_token(
+            user_id, settings.oidc_issuer, settings.oidc_client_id, 60, key_dir
+        )
+        principals.append(Principal(user_id, {"Authorization": f"Bearer {token}"}))
+    app = create_app(settings=settings)
+    with TestClient(app, raise_server_exceptions=False) as client:
+        yield client, principals
+
+
+@contextmanager
+def seeded(engine: Engine) -> Generator[Connection, None, None]:
+    """Yield a connection whose writes **commit** on exit.
+
+    The session ``conn`` fixture rolls back, which is right for helper-level
+    tests but invisible to a route: the application opens its own connection
+    from its own engine. Route-level tenancy tests therefore seed through
+    this instead. Nothing needs cleaning up afterwards — every organisation
+    name and every subject minted here is UUID-suffixed, so rows left behind
+    are unreachable from any other test.
+
+    Args:
+        engine: The session-scoped engine (which also applies the migration).
+
+    Yields:
+        A connection inside a transaction that commits.
+    """
+    with engine.begin() as connection:
+        yield connection
+
+
+def ops_enrol(
+    conn: Connection,
+    *,
+    user_id: str,
+    org_id: uuid.UUID | None = None,
+    display_name: str = "Ops Name",
+    email: str | None = None,
+    is_admin: bool = False,
+) -> None:
+    """Write an ``app_user`` row the way ops enrolment will, for an existing subject.
+
+    Distinct from :func:`make_user`, which mints its own subject: this enrols
+    a subject that already exists because a :func:`tenancy_client` principal
+    is signed in as it.
+
+    Args:
+        conn: Open database connection.
+        user_id: The subject to enrol.
+        org_id: The organisation, or ``None`` for an unenrolled row.
+        display_name: Required by the schema; never the email.
+        email: The ops-resolved address — ops- and admin-facing only.
+        is_admin: Whether this person holds the support role.
+    """
+    conn.execute(
+        app_user.insert().values(
+            user_id=user_id,
+            org_id=org_id,
+            display_name=display_name,
+            email=email,
+            is_admin=is_admin,
+            created_at=now(),
+        )
+    )
+
+
+def unique_email(local: str) -> str:
+    """Mint a suite-unique address.
+
+    ``app_user.email`` carries no unique constraint and the test database is
+    shared across the suite *and* across runs, so a fixed address accumulates
+    owners: the `owner_email` filter would then legitimately return rows a
+    previous run created, and the assertion — not the code — would be wrong.
+    Same reason :func:`make_org` suffixes organisation names.
+
+    Args:
+        local: A readable local part, e.g. ``"colleague"``.
+
+    Returns:
+        An address unique to this test.
+    """
+    return f"{local}-{uuid.uuid4()}@example.test"
 
 
 def make_org(conn: Connection, *, name: str = "Org") -> uuid.UUID:

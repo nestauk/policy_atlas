@@ -2810,6 +2810,51 @@
         "title": "LatestTurnPreviewOut",
         "type": "object"
       },
+      "MeOut": {
+        "description": "The authenticated caller's own identity row.\n\nReturned by `GET /api/v1/me`, which also provisions the row on first call\n(contract \u00a7 2). The frontend keys the whole tenancy UI off this shape: a\n`null` organisation hides the scope switcher entirely, which is what makes\nthe slice a dark launch for anyone not yet enrolled.\n\nArgs:\n    user_id: The caller's token subject \u2014 the identity the API keys on.\n    display_name: How the caller is named on screen. Never an address:\n        the ops-set name, or a rendering derived from `user_id` for a\n        caller provisioned by their first `/me` call.\n    email: The caller's own address once ops has resolved it, else\n        `None`. Ops- and admin-facing; never another person's.\n    organisation: The caller's organisation, or `None` when unenrolled.\n    is_admin: Whether the caller holds the read-across-organisations\n        support role. Read-only in every sense: no route and no request\n        body can set it, and no write path consults it.",
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "is_admin": {
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "organisation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrganisationRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "display_name",
+          "is_admin"
+        ],
+        "title": "MeOut",
+        "type": "object"
+      },
       "OptionResponse": {
         "additionalProperties": false,
         "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
@@ -2842,6 +2887,26 @@
           "option_id"
         ],
         "title": "OptionResponse",
+        "type": "object"
+      },
+      "OrganisationRef": {
+        "description": "The organisation the caller belongs to.\n\nArgs:\n    org_id: The organisation's identity.\n    name: Its display name.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "org_id",
+          "name"
+        ],
+        "title": "OrganisationRef",
         "type": "object"
       },
       "PageMeta": {
@@ -3881,7 +3946,7 @@
       },
       "PortfolioCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/portfolios`.\n\nArgs:\n    name: Portfolio display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.",
+        "description": "Inbound body for `POST /api/v1/portfolios`.\n\nArgs:\n    name: Portfolio display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_project_id: Seed the new portfolio from an existing project the\n        caller **owns**: the portfolio inherits that project's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        portfolio. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0032 records the amendment.",
         "properties": {
           "description": {
             "anyOf": [
@@ -3893,6 +3958,18 @@
               }
             ],
             "title": "Description"
+          },
+          "from_project_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Project Id"
           },
           "name": {
             "maxLength": 200,
@@ -3908,7 +3985,7 @@
         "type": "object"
       },
       "PortfolioOut": {
-        "description": "A portfolio resource.\n\nArgs:\n    portfolio_id: The portfolio's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the portfolio was created.\n    task_count: How many of the caller's active projects are assigned to\n        this portfolio, derived per request and never cached on the row.",
+        "description": "A portfolio resource.\n\nArgs:\n    portfolio_id: The portfolio's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the portfolio was created.\n    task_count: How many active projects **the caller may read, in the\n        caller's own organisation** are assigned to this portfolio,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.",
         "properties": {
           "created_at": {
             "format": "date-time",
@@ -3926,9 +4003,24 @@
             ],
             "title": "Description"
           },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "owner_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Display"
           },
           "portfolio_id": {
             "format": "uuid",
@@ -3938,20 +4030,31 @@
           "task_count": {
             "title": "Task Count",
             "type": "integer"
+          },
+          "visibility": {
+            "enum": [
+              "org",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
           }
         },
         "required": [
           "portfolio_id",
           "name",
           "created_at",
-          "task_count"
+          "task_count",
+          "visibility",
+          "is_owner",
+          "owner_display"
         ],
         "title": "PortfolioOut",
         "type": "object"
       },
       "PortfolioUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    description: New description, when changing it. Omit to leave\n        unchanged.",
+        "description": "Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    description: New description, when changing it. Omit to leave\n        unchanged.\n\nNote:\n    **`visibility` is deliberately absent** and stays absent until the\n    cascade lands (contract \u00a7 6, i.4: the cascade is the only writer of\n    `portfolio.visibility`, because a portfolio's visibility change must\n    carry every member with it). Adding the field here without the\n    cascade would let an owner set a Project private, watch the UI agree,\n    and leave its Tasks readable by the whole organisation. `PATCH\n    /projects/{id}` accepts `visibility` today; `PATCH /portfolios/{id}`\n    gains it together with the cascade that makes it honest.",
         "properties": {
           "description": {
             "anyOf": [
@@ -4030,7 +4133,7 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_id: The portfolio this project belongs to, or `None` when it\n        belongs to none. Unassigned is a normal state, not an error.\n    source_count: How many sources this project has gathered, or `None`\n        when no run has started. `None` and `0` differ: `None` means the\n        question has not been asked yet, `0` means a run asked and found\n        nothing.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_id: The portfolio this project belongs to, or `None` when it\n        belongs to none. Unassigned is a normal state, not an error.\n    source_count: How many sources this project has gathered, or `None`\n        when no run has started. `None` and `0` differ: `None` means the\n        question has not been asked yet, `0` means a run asked and found\n        nothing.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same project is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -4049,6 +4152,10 @@
             "title": "Created At",
             "type": "string"
           },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
           "latest_run": {
             "anyOf": [
               {
@@ -4062,6 +4169,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "owner_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Display"
           },
           "portfolio_id": {
             "anyOf": [
@@ -4114,6 +4232,14 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "org",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
           }
         },
         "required": [
@@ -4121,14 +4247,17 @@
           "name",
           "status",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "visibility",
+          "is_owner",
+          "owner_display"
         ],
         "title": "ProjectOut",
         "type": "object"
       },
       "ProjectUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_id: Portfolio to assign this project to, or an explicit\n        `null` to unassign it. Omit to leave the assignment unchanged.",
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_id: Portfolio to assign this project to, or an explicit\n        `null` to unassign it. Omit to leave the assignment unchanged.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged. Cannot be combined with `portfolio_id` in one\n        body \u2014 see :meth:`reject_visibility_with_portfolio`.",
         "properties": {
           "name": {
             "anyOf": [
@@ -4165,6 +4294,21 @@
               }
             ],
             "title": "Question"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "enum": [
+                  "org",
+                  "private"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility"
           }
         },
         "title": "ProjectUpdate",
@@ -5774,11 +5918,68 @@
         ]
       }
     },
+    "/api/v1/me": {
+      "get": {
+        "description": "Return the caller's identity row, provisioning it on first call.\n\nThe insert carries only what the API can know: the subject, and a display\nname derived from it. `email`, `org_id` and `is_admin` are ops-owned and\nare never written here \u2014 not even as explicit NULLs on the conflict path,\nbecause `DO NOTHING` means the statement touches an existing row not at\nall.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The caller's identity, with their organisation resolved by name.",
+        "operationId": "get_me_api_v1_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Me",
+        "tags": [
+          "me"
+        ]
+      }
+    },
     "/api/v1/portfolios": {
       "get": {
-        "description": "List the authenticated user's portfolios with a derived task count.",
+        "description": "List the portfolios the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of portfolios.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_portfolios_api_v1_portfolios_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "mine"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_email",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Email"
+            }
+          },
           {
             "in": "query",
             "name": "page",
@@ -5836,7 +6037,7 @@
         ]
       },
       "post": {
-        "description": "Create one portfolio owned by the authenticated subject.",
+        "description": "Create one portfolio owned by the authenticated subject.\n\nWith `from_project_id` (contract \u00a7 6, i.1) the new portfolio inherits that\nproject's `visibility` **and** organisation and takes it as its first\nmember, all in the request's single transaction \u2014 so the invariant \"a\nproject in a portfolio matches its portfolio on both\" holds from the\nmoment the row exists rather than being repaired afterwards.\n\nThe source project resolves under the **write** grade, not a read grade.\nUnder a read grade a same-org colleague \u2014 or, once the admin leg lands, an\nadministrator \u2014 could pull a row they do not own into a portfolio and\nchange its visibility, which is the concrete admin-write escape the\ncontract names.\n\nWithout `from_project_id`, the portfolio is empty and its organisation is\nstamped from the creator (contract \u00a7 7).\n\nArgs:\n    payload: The create body.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The created portfolio.\n\nRaises:\n    HTTPException: 404 when `from_project_id` names a project the caller\n        cannot read, 403 when they can read it but do not own it.",
         "operationId": "create_portfolio_api_v1_portfolios_post",
         "requestBody": {
           "content": {
@@ -5930,7 +6131,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the supplied portfolio fields without changing omitted fields.",
+        "description": "Apply the supplied portfolio fields without changing omitted fields.\n\nThe columns this route may write are listed explicitly rather than\nsplatted from the request model. Contract \u00a7 6, i.4 makes the visibility\ncascade the **only** writer of `portfolio.visibility`; a blind\n`.values(**changes)` hands the column to whatever field a later slice\nadds to `PortfolioUpdate`, and the failure it produces is silent \u2014 the\nowner sets a Project private, the UI agrees, and its Tasks stay readable\nby the whole organisation.\n\nArgs:\n    portfolio_id: The portfolio to update.\n    payload: The partial update.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated portfolio.\n\nRaises:\n    HTTPException: 404 when the portfolio is not the caller's.",
         "operationId": "update_portfolio_api_v1_portfolios__portfolio_id__patch",
         "parameters": [
           {
@@ -5989,7 +6190,7 @@
     },
     "/api/v1/projects": {
       "get": {
-        "description": "List the authenticated user's projects with derived latest-run state.",
+        "description": "List the projects the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    portfolio_id: Narrow to one portfolio's members. Server-side because\n        `PortfolioDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
           {
@@ -6005,6 +6206,53 @@
               ],
               "title": "Status",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "mine"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "portfolio_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Portfolio Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_email",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Email"
             }
           },
           {
@@ -6064,7 +6312,7 @@
         ]
       },
       "post": {
-        "description": "Create one active project owned by the authenticated subject.",
+        "description": "Create one active project owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `org`, inert while `org_id`\nis NULL.",
         "operationId": "create_project_api_v1_projects_post",
         "requestBody": {
           "content": {
@@ -6158,7 +6406,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the supplied project fields without changing omitted fields.",
+        "description": "Apply the supplied project fields without changing omitted fields.\n\nResolves under the **write** grade (contract \u00a7 3: write is owner-only), so\na same-org colleague who can now *see* this row in their listing gets 403\n`forbidden` here rather than the 404 that would claim the row does not\nexist \u2014 they are already looking at it.\n\nArgs:\n    project_id: The project to update.\n    payload: The partial update. A body carrying both `visibility` and\n        `portfolio_id` was already rejected 422 by the model.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated project.\n\nRaises:\n    HTTPException: 404 when the row is unreadable, 403 when it is\n        readable but not owned.\n    ApiConflict: 409 `visibility_conflict` when setting `visibility` on a\n        project that belongs to a portfolio.",
         "operationId": "update_project_api_v1_projects__project_id__patch",
         "parameters": [
           {

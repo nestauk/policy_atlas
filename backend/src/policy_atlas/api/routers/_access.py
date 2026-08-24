@@ -33,7 +33,17 @@ import uuid
 from typing import NamedTuple
 
 from fastapi import HTTPException
-from sqlalchemy import Select, Table, and_, exists, literal_column, or_, select
+from sqlalchemy import (
+    Select,
+    Table,
+    and_,
+    exists,
+    func,
+    literal_column,
+    or_,
+    select,
+    true,
+)
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -48,6 +58,12 @@ NOT_FOUND_DETAIL = "resource not found"
 # "role failures within an owned scope"; contract § 8 spends the reservation
 # on ``forbidden``.
 FORBIDDEN_DETAIL = "action is not permitted"
+
+# The 422 body a non-admin gets for passing ``owner_email``. Contract § 8 is
+# explicit that this is **422 ``validation_error``**, the code the existing
+# envelope map already assigns to "your parameter is wrong" — not 403, and
+# not a third semantic invented for one filter.
+OWNER_EMAIL_DETAIL = "owner_email is available to administrators only"
 
 
 class Access(NamedTuple):
@@ -94,6 +110,32 @@ def _same_org_leg(table: Table, user_id: str) -> ColumnElement[bool]:
     )
 
 
+def own_estate(table: Table, user_id: str) -> ColumnElement[bool]:
+    """The caller's own estate: the owner leg or the same-org leg, never admin.
+
+    Deliberately **excludes** the admin leg, and will keep excluding it after
+    phase 8 attaches that leg to :func:`_read_legs`. Two callers want this
+    narrower predicate rather than the full read grade:
+
+    - **``scope=mine`` is narrower still** (owner only) but shares this
+      definition of the org leg, so there is one org leg in the codebase.
+    - **Derived counts** (contract § 8, last line: portfolio task counts
+      include only rows the caller may read *and* rows in the caller's own
+      org). Today read-and-own-org is exactly this predicate; once the admin
+      leg exists, an admin's portfolio count must stay their **own
+      organisation's** count rather than silently summing every organisation's
+      members into one number on the card.
+
+    Args:
+        table: ``project`` or ``portfolio``.
+        user_id: The caller's token subject.
+
+    Returns:
+        A boolean predicate correlated to ``table``.
+    """
+    return or_(table.c.owner_user_id == user_id, _same_org_leg(table, user_id))
+
+
 def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
     """Disjoin every read leg this phase has.
 
@@ -102,8 +144,123 @@ def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
     disjunct and attaches **here** and nowhere else. It is not present yet:
     contract § 3a names the closed list of legitimate ``is_admin`` readers,
     and nothing in this phase is on it.
+
+    Row reads (:func:`accessible_project`, :func:`accessible_portfolio`) and
+    the listings (:func:`listing_scope`) both resolve through this function,
+    so the org leg has exactly one definition and phase 8 widens both by
+    editing one line.
     """
-    return or_(table.c.owner_user_id == user_id, _same_org_leg(table, user_id))
+    return own_estate(table, user_id)
+
+
+def listing_scope(table: Table, *, user_id: str, scope: str) -> ColumnElement[bool]:
+    """Build the tenancy predicate for a paginated listing.
+
+    Reader **(ii)** of contract § 3a's closed list of ``is_admin`` readers —
+    named there because phase 8's admin branch attaches to the legs this
+    function disjoins. **In this phase it reads nothing**: ``all`` resolves
+    through :func:`_read_legs`, which has no admin leg yet.
+
+    Args:
+        table: ``project`` or ``portfolio``.
+        user_id: The caller's token subject.
+        scope: ``"all"`` (the default the route declares — owner ∪ the org's
+            org-visible rows) or ``"mine"`` (owner only, the pre-033
+            behaviour). The route's ``Literal`` type is what rejects anything
+            else; a value that reached here unvalidated would be treated as
+            ``"all"``, which is why the route owns the validation.
+
+    Returns:
+        A boolean predicate correlated to ``table``, to be ANDed with the
+        listing's status/portfolio/owner filters.
+    """
+    if scope == "mine":
+        return table.c.owner_user_id == user_id
+    return _read_legs(table, user_id)
+
+
+def owner_email_filter(
+    conn: Connection,
+    table: Table,
+    *,
+    user_id: str,
+    owner_email: str | None,
+) -> ColumnElement[bool]:
+    """Gate and resolve the admin-only ``owner_email`` listing filter.
+
+    Reader **(iii)** of contract § 3a's closed list — kept as one small named
+    function precisely so phase 8's structural assertion can enumerate the
+    readers rather than assert "nowhere else", which rev 2.0 got wrong.
+
+    Refusal is **422 ``validation_error``** (contract § 8), not 403: the
+    caller passed a parameter they may not use, which is the semantic the
+    envelope map already carries. An unenrolled caller has no ``app_user``
+    row at all and is refused on the same branch.
+
+    An address that matches no ``app_user`` row yields an empty page rather
+    than an error, so an admin cannot use the status code to learn whether an
+    address is known to the system. (Phase 8's trace emits a line for that
+    zero-row request for the same reason.)
+
+    Resolution is an ``IN`` over a subquery rather than "look up the one
+    matching subject", because **``app_user.email`` carries no unique
+    constraint**: the address is ops-resolved and can go stale (contract § 3b
+    names staleness explicitly), so two rows sharing one address is a state
+    the schema permits. Fetching it with ``scalar_one_or_none`` would turn
+    that into a 500 on the admin's support path; the subquery filters to
+    every matching owner instead, which is also the more useful answer.
+
+    Args:
+        conn: Open database connection.
+        table: ``project`` or ``portfolio``.
+        user_id: The caller's token subject.
+        owner_email: The requested owner's address, or ``None`` when the
+            caller did not pass the filter.
+
+    Returns:
+        ``true()`` when no filter was requested, otherwise a predicate
+        narrowing ``table`` to that owner's rows.
+
+    Raises:
+        HTTPException: 422 when a non-admin (or unenrolled) caller passes
+            ``owner_email``.
+    """
+    if owner_email is None:
+        return true()
+    is_admin = conn.execute(
+        select(app_user.c.is_admin).where(app_user.c.user_id == user_id)
+    ).scalar_one_or_none()
+    if not is_admin:
+        raise HTTPException(status_code=422, detail=OWNER_EMAIL_DETAIL)
+    # Addresses are case-insensitive in practice and ops type them by hand;
+    # folding both sides keeps the filter usable without a schema change.
+    return table.c.owner_user_id.in_(
+        select(app_user.c.user_id).where(
+            func.lower(app_user.c.email) == owner_email.strip().lower()
+        )
+    )
+
+
+def creator_org_id(conn: Connection, user_id: str) -> uuid.UUID | None:
+    """Return the organisation a newly created row should be stamped with.
+
+    Contract § 7: ``POST /projects`` and ``POST /portfolios`` stamp ``org_id``
+    from the creator's ``app_user.org_id`` — **NULL when the creator is
+    unenrolled**, which is also what a caller with no ``app_user`` row gets.
+    A NULL-``org_id`` row is reachable by its owner (and, from phase 8, an
+    admin) and by nobody else, so the unenrolled user's dark launch holds.
+
+    Args:
+        conn: Open database connection.
+        user_id: The creator's token subject.
+
+    Returns:
+        The creator's organisation, or ``None``.
+    """
+    org_id = conn.execute(
+        select(app_user.c.org_id).where(app_user.c.user_id == user_id)
+    ).scalar_one_or_none()
+    return org_id
 
 
 def _resolve(
