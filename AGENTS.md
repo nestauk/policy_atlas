@@ -82,6 +82,23 @@ this slice** (owner): its three discrepancies ship as a written escalation in
 `verification.md` and `docs/deferred.md`, and while they stand the admin leg's
 only control is the trace log.
 
+**Owner call (k), 2026-08-24 — structured logging at the API entrypoint.**
+Found during the plan review, and it explains a live symptom: **nothing
+deployed has ever configured logging.** `configure_logging()` is called only by
+`runtime/orchestrate.py`'s `main()`, which runs solely via `__main__` as a local
+CLI. The container starts `uvicorn ... api.app:create_app` directly, and runs
+execute **in-process** in a `ThreadPoolExecutor` calling `runtime/runner.py` —
+there is no separate runner container (infra defines only the backend and the
+one-shot migration task). So `LOG_FORMAT=json` has always been inert and
+CloudWatch carries no structured output for anything, including the whole
+evidence-base pipeline. `orchestrate.py` *is* used by the API, but only as a
+library (`deps.py` → `live_planner_and_backends`; `planning.py` → `build_plan`,
+`persist_approved_plan`). Fixed in this slice (plan **Phase 0b**) because the
+admin trace is the admin leg's only control and an unstructured line is not an
+audit trail. **Also to check:** `configure_logging()` sets httpx to WARNING
+because httpx logs full URLs at INFO and both search providers carry `api_key`
+in the query string — the "inert today" comment assumes the function ran.
+
 **Owner calls carried into rev 3.0:** (a)-(d) from 2026-08-11 (app-owned
 ops-assigned membership; read-everything + own chats; per-row `visibility`; no
 enrolment backfill) and (e)-(i) from 2026-08-24 — portfolio takes the same
