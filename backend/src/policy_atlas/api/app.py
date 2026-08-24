@@ -23,6 +23,7 @@ from policy_atlas.api import continuation
 from policy_atlas.api.auth import JwtAuthenticator
 from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
 from policy_atlas.api.settings import Settings, load_settings
+from policy_atlas.core.logging import configure_logging
 
 log = structlog.get_logger()
 
@@ -93,6 +94,12 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     Returns:
         A configured FastAPI application factory result.
     """
+    # The container starts uvicorn against create_app directly (backend
+    # Makefile's `dev` target and the deployed image both use
+    # `uvicorn ... --factory`), so this is the deployed entrypoint —
+    # runtime/orchestrate.py's main() only covers the local CLI path. Must
+    # run before anything below can log.
+    configure_logging()
     app_settings = settings if settings is not None else load_settings()
     app = FastAPI(
         title="Policy Atlas API",
