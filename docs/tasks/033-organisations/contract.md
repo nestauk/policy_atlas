@@ -65,7 +65,8 @@ streams; the re-keyed chat pending cap **and its sweeper**; `GET /api/v1/me`; `s
 and org invariant; the ops CLI (org create, user create, enrol, de-enrol, row assignment,
 admin grant/revoke) with `boto3` in a declared dependency group; the frontend switcher,
 read-only affordance matrix, account menu, cache invalidation and visibility-outcome copy;
-the privacy-notice corrections; spec flow-back; ADR 0032; and `verification.md`.
+spec flow-back; ADR 0032; and `verification.md`. **No privacy-notice copy changes**
+(owner, 2026-08-24) — the three discrepancies ship as a recorded escalation instead.
 
 **Removed by this slice:** the `staging-user`, `prod-user` and `cognito-user` make targets
 (`Makefile`), which the CLI supersedes and whose password-in-argv behaviour this contract
@@ -82,8 +83,8 @@ forbids.
 - `docs/deferred.md` — 029 and 032 seams; the 033 entries.
 - [DEPLOYMENT.md § 6](../../../infra/DEPLOYMENT.md) and `JUMPBOX.md` — how the ops CLI
   reaches the database, and where its operator IAM is documented.
-- `frontend/src/views/legal/PrivacyView.tsx` — **read §§ 3, 6 and 7 before writing any
-  copy**; the page already makes claims this slice must correct.
+- `frontend/src/views/legal/PrivacyView.tsx` — read §§ 3, 6 and 7 to understand the three
+  recorded discrepancies (§ 12). **This slice does not edit the file.**
 - Current code the slice must change, not merely wrap: `api/routers/_common.py`,
   `projects.py`, `portfolios.py` (**`update_portfolio`'s `.values(**changes)` splat**),
   `conversations.py` (**two routers** — one project-scoped, one keyed by conversation id),
@@ -247,13 +248,33 @@ forbids.
    - Enforcement lives in the write paths plus a property test; the invariant spans two
      tables, so no CHECK can express it.
 
-7. **Org stamping on new rows.** `POST /projects` and `POST /portfolios` stamp `org_id`
-   from the creator's `app_user.org_id` (NULL when unenrolled). Without this, every Task a
-   user creates is invisible to their organisation until an operator runs a per-row
-   command, and the live check cannot pass. **Re-enrolment into a different organisation
-   does not rewrite existing rows** — they keep the old `org_id` and stay readable by the
-   organisation the person left. `org reassign-rows --email --to <org>` is the lever, and
-   the case is pinned by a test.
+7. **Org stamping, and what an unenrolled user's work does.** `POST /projects` and
+   `POST /portfolios` stamp `org_id` from the creator's `app_user.org_id` — **NULL when the
+   creator is unenrolled**. Without stamping, every Task a user creates is invisible to
+   their organisation until an operator runs a per-row command, and the live check cannot
+   pass.
+   - **An unenrolled user's rows are reachable by their owner and by an admin, and by
+     nobody else** (§ 3's NULL rule). `visibility='org'` sits on them as an inert default:
+     "org" means nothing where there is no org. The frontend hides the switcher entirely
+     when `/me` returns no organisation, so an unenrolled user sees today's application
+     unchanged. That is the dark launch.
+   - **Enrolling someone does not share the work they already have.** Their existing rows
+     keep `org_id IS NULL` (owner call (d), no backfill), so a person joins an
+     organisation, their new Tasks become visible to colleagues, and everything they made
+     before silently does not — with nothing on screen explaining the split. **`user
+     enrol` therefore reports how many existing rows were left behind**, and names the
+     command that would move them. A silent split is the failure mode here.
+   - **`org reassign-rows --email --to <org>` is a bulk exposure event, and is specified
+     as one.** Every legacy row already carries `visibility='org'`, so stamping `org_id`
+     makes a person's entire back catalogue visible to their organisation in a single
+     command. It therefore **reports the count and requires confirmation before acting**,
+     and takes `--visibility private` to stamp the org while keeping the rows private, so
+     an operator has a way to enrol history without disclosing it. This is the one place
+     the owner's "no prompts" ruling (owner call (i)) does not reach: (i) governs a user
+     changing their own rows one at a time, not an operator disclosing hundreds at once.
+   - **Re-enrolment into a different organisation does not rewrite existing rows** — they
+     keep the old `org_id` and stay readable by the organisation the person left, until
+     `reassign-rows` moves them. Pinned by a test.
 
 8. **API (approval-gated · additive).** `GET /api/v1/me` →
    `{user_id, display_name, email, organisation: {org_id, name} | null, is_admin}` ·
@@ -328,26 +349,31 @@ forbids.
     the cards show the opposite until reload · the mock API serves `/me` and the portfolio
     routes it needs for these journeys.
 
-12. **Privacy, legal and governance — the page already disagrees with the product.**
-    - **§ 3** already states the email is "the only user-specific identifier we store".
-      The database stores none today, so the page is **currently inaccurate**; this slice
-      makes the storage real and must also correct "only" (the `sub` is an identifier too,
-      and pseudonymised identifiers are still personal data).
-    - **§ 7** already promises that on request personal data "will be permanently deleted
-      from our Amazon Aurora PostgreSQL database". De-enrolment cannot honour that: it
-      keeps every Task, query, result and transcript, keeps the `sub`, leaves the Cognito
-      account untouched, and leaves seven days of Aurora backups. **§ 7 is rewritten to
-      describe what actually happens**, and a two-part erasure runbook (application side +
-      Cognito side, and what backups mean) ships in `docs/`. A published promise the system
-      cannot keep is the most serious finding in this review.
-    - **§ 6** gains the administrator-access sentence.
-    - **Governance the disclosure depends on:** a DPIA screening and a processing-record
-      update are **required before merge** — this slice introduces identifiable personal
-      data and a global privileged read, which is exactly what screening is for. Admin
-      grants are reviewed periodically, and the log group's **one-month retention** is
-      recorded as bounding how long an admin-access investigation can look back.
-    - **All three copy changes carry written owner sign-off**, quoted in
-      `verification.md` alongside the approving message.
+12. **Privacy and governance — no copy change ships (owner, 2026-08-24).** The owner
+    ruled that the privacy notice is **not rewritten by this slice**: legal copy belongs to
+    whoever owns the notice (the page names a Data Protection Officer), not to an
+    engineering contract. So `PrivacyView.tsx` is **untouched**, and the three edits rev
+    3.0 specified are withdrawn. What replaces them is an escalation, not silence, because
+    the discrepancies are real and this slice widens two of them:
+    - **§ 7 promises what the system cannot do.** It states that on request personal data
+      "will be permanently deleted from our Amazon Aurora PostgreSQL database".
+      De-enrolment keeps every Task, query, result and transcript, keeps the `sub`, leaves
+      the Cognito account untouched, and leaves seven days of backups.
+    - **§ 3 is already inaccurate today** — it calls the email "the only user-specific
+      identifier we store" when the database stores no email at all and does store the
+      `sub`. This slice makes the email real, which removes half the inaccuracy and leaves
+      the "only" claim wrong.
+    - **§ 6 does not mention administrator access**, and after owner call (f) an
+      ops-assigned administrator reads every row in every organisation, `private`
+      included.
+    **Consequence, stated once and carried rather than re-argued:** with no § 6 sentence,
+    the control set for the admin leg is **the trace log alone** — "disclosure is the
+    control" (§ 3a) no longer holds, because nothing discloses it to users.
+    **What ships instead:** `verification.md` records the three discrepancies verbatim and
+    names them as an **open escalation to the notice's owner**, and `docs/deferred.md`
+    carries them so they cannot be lost. A **DPIA screening and processing-record update
+    are still required before merge** — those are governance artefacts, not copy, and this
+    slice introduces identifiable personal data and a global privileged read.
 
 13. **Spec flow-back.** `web-api.md` § Auth boundary (the three read legs, the NULL rule,
     403/409/422 semantics, `/me`, the three filters), § Portfolios (the invariant),
@@ -376,8 +402,7 @@ forbids.
 
 Schema (2 new tables, 2 altered, 1 backfilled) · auth and tenancy semantics · public API
 additions · **`boto3` + `boto3-stubs` in a new `ops` dependency group** · **a
-`backend/Dockerfile` change (`--no-group ops`)** · **three edits to live public legal
-copy** · **deletion of three existing make targets** · **Cognito account creation**. Each
+`backend/Dockerfile` change (`--no-group ops`)** · **deletion of three existing make targets** · **Cognito account creation**. Each
 is an approval in its own right and this contract is where they are granted.
 **"No CI change" is struck** — CI installs the `ops` group. Egress: the ops CLI calls
 `ListUsers` and `AdminCreateUser` under the operator's own IAM; **the API's egress is
@@ -418,7 +443,8 @@ n/a — no LLM-bearing step; prompt surfaces untouched.
 
 Model only what behaves · the 404/403 line is contract · **counts and absences leak too**
 (a zero-result search is still a disclosure event) · **a published promise the system
-cannot keep is a defect, not copy**.
+cannot keep is a defect** — this slice cannot fix the one it found, so it escalates it in
+writing rather than shipping past it in silence.
 
 ## Stop conditions
 
@@ -456,14 +482,15 @@ vocabulary split — each halts and escalates.
   `portfolio_id` paging beyond 50 rows; the account menu per user; the invitation email
   actually arriving (**the pool has no `EmailConfiguration`, so this uses the
   50-per-day `COGNITO_DEFAULT` sender and needs a real deliverable mailbox — an unstated
-  prerequisite in rev 2.0 that could strand the slice at step 6**); an SSE stream closing
-  on revoke; and all three privacy edits rendering.
+  prerequisite in rev 2.0 that could strand the slice at step 6**); and an SSE stream closing
+  on revoke.
 
 ## Verification evidence expected
 
 Command outputs; the named test list per matrix row; migration up/down evidence and the
-backfill rehearsal; the built-image check for `boto3`; live-check notes; the three legal
-copy blocks quoted with the owner's approving message; the DPIA screening outcome; diff
+backfill rehearsal; the built-image check for `boto3`; live-check notes; **the three privacy-notice
+discrepancies quoted verbatim as an open escalation to the notice's owner**; the DPIA
+screening outcome; diff
 summary; public-safety confirmation; known gaps.
 
 ## Risk tier & review focus

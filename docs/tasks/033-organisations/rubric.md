@@ -94,8 +94,11 @@ one unfalsifiable box absorbed everything the other items missed.
         refuse when current state differs from what the operator acted on.
 28. [ ] `user create` passes `DesiredDeliveryMediums=["EMAIL"]`; a database failure keeps
         the account and prints the remediation; an existing address says "use enrol".
-29. [ ] **New rows stamp `org_id` from the creator**; re-enrolment leaves old rows with the
-        previous org and `reassign-rows` fixes them — both pinned.
+29. [ ] **New rows stamp `org_id` from the creator** (NULL when unenrolled) · **`user
+        enrol` reports how many existing rows it left behind** and names the command that
+        moves them · **`reassign-rows` reports the count and requires confirmation**, and
+        `--visibility private` stamps the org without disclosing the back catalogue ·
+        re-enrolment leaves old rows with the previous org — each pinned.
 30. [ ] No path calls `AdminDeleteUser`; no command accepts a password; **the
         `staging-user`, `prod-user` and `cognito-user` make targets are deleted**.
 
@@ -110,16 +113,17 @@ one unfalsifiable box absorbed everything the other items missed.
 
 ## Legal and governance
 
-33. [ ] **§ 7 no longer promises what the system cannot do** — it describes what erasure
-        actually reaches, and the two-part runbook (application + Cognito, and what backups
-        mean) ships in `docs/`.
-34. [ ] **§ 3 is accurate** — it no longer calls the email the only user-specific
-        identifier, and it discloses what is stored now that storage is real.
-35. [ ] § 6 states administrator access and that accesses are logged.
-36. [ ] **All three copy blocks are quoted in `verification.md` with the owner's approving
-        message**, and the **DPIA screening and processing-record update are recorded as
-        done before merge**. Log-group retention is recorded as the bound on how far an
-        admin-access investigation can look back.
+33. [ ] **`PrivacyView.tsx` is unmodified** (owner, 2026-08-24 — no copy change ships).
+34. [ ] **The three discrepancies are escalated in writing, not dropped:** § 7's promise of
+        permanent Aurora deletion that de-enrolment cannot honour · § 3's "only
+        user-specific identifier" claim · § 6's silence on administrator access. Quoted
+        verbatim in `verification.md`, named as open and addressed to the notice's owner,
+        and recorded in [docs/deferred.md](../../deferred.md).
+35. [ ] **The weakened control set is stated in the PR, not buried:** with no § 6
+        sentence, the admin leg's only control is the trace log.
+36. [ ] **DPIA screening and processing-record update recorded as done before merge** —
+        governance artefacts, not copy. Log-group retention recorded as the bound on how
+        far an admin-access investigation can look back.
 
 ## Frontend
 

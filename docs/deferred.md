@@ -2127,6 +2127,20 @@ omissions.
   two-part** — de-enrolment clears `org_id`, `email`, `display_name` and `is_admin` from
   the application database, but the address in Cognito is untouched, so a genuine erasure
   request needs the Cognito side handled separately.
+- **Three standing discrepancies in the published privacy notice** (escalated by 033,
+  2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open
+  items for whoever owns the notice — the page names a Data Protection Officer):
+  **(1) § 7** states that on request personal data "will be permanently deleted from our
+  Amazon Aurora PostgreSQL database". No lever in the product does that: de-enrolment
+  keeps every Task, query, result and transcript, keeps the `sub`, leaves the Cognito
+  account untouched, and leaves seven days of Aurora backups.
+  **(2) § 3** calls the email "the only user-specific identifier we store" — the `sub` is
+  one too, and until 033 the database stored no email at all, so the sentence has been
+  inaccurate in the other direction.
+  **(3) § 6** does not mention that an ops-assigned administrator can read every row in
+  every organisation, `private` included (033 owner call (f)). **Consequence while these
+  stand:** the admin leg's only control is the trace log, because nothing discloses the
+  access to users.
 - **Org-level chat and run capacity policy** — 033 re-keys the chat pending cap from the
   project owner to the acting user (owner call (b) fairness), which removes the only
   per-project bound: an organisation of N members can drive 2N concurrent chat turns
