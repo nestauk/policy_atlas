@@ -223,8 +223,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `portfolio`** to an org · de-enrol (the rollback lever — **clears `email`**) ·
    **grant/revoke `is_admin`**
    (the only way to set it — there is no HTTP route that grants it, so the flag cannot be
-   self-served or escalated to through the API). Prod invocation documented in
-   DEPLOYMENT.md (same pattern as migrations; no new infra).
+   self-served or escalated to through the API). **Invocation is the operator's laptop over the SSM
+   jumpbox tunnel** ([DEPLOYMENT.md § 6](../../../infra/DEPLOYMENT.md)), **not** the ECS
+   migration-task pattern: the CLI needs Cognito read, and that permission must sit with
+   the human operator's role rather than with any task role in the account. No new infra;
+   documented in DEPLOYMENT.md alongside the existing developer DB access.
 7. **Frontend (surfaces named as they stand after 032):** two-state switcher, screen
    labels **Organisation · Mine** (default Organisation = the full visible list; Mine =
    owned-by-me filter; labels per the just-enough-text principle), on
