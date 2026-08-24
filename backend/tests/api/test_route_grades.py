@@ -7,31 +7,42 @@ underlying resolution is shared across many routes (`read_models.py`'s
 representative route stands in for the family; every route the grade table
 names individually gets its own case.
 
-Two states this phase does **not** touch and this file does not test:
-`create_chat_turn_stream` and `cancel_chat_turn` keep their inline owner
-filters untouched (phase 5), and `sse.py`'s `_tail` re-authorisation is
-phase 6.
+Phase 5 extends the file with the three colleague chat mutations — create a
+conversation, post a turn to your own conversation, cancel your own turn —
+under the "--- Colleague chat mutations" heading below. `sse.py`'s `_tail`
+re-authorisation is still phase 6 and is not tested here.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 
 import httpx
+import pytest
+from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api import chat_turns
 from policy_atlas.api.app import create_app
+from policy_atlas.api.deps import get_chat_backend, get_chat_embedding_backend
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.settings import Settings
+from policy_atlas.core.embeddings import StubEmbeddingBackend
 from policy_atlas.core.schema import (
+    app_user,
     capability_run,
+    chat_turn,
     conversation,
     evidence_scope,
     orchestration_plan,
 )
+from policy_atlas.core.schema import project as project_table
+from policy_atlas.runtime.chat_backend import StubChatBackend
 from tests.api.org_support import (
     make_org,
     make_portfolio,
@@ -40,9 +51,10 @@ from tests.api.org_support import (
     seeded,
     tenancy_client,
 )
+from tests.api.test_chat_turns import _citable_tools, _cleanup, _walk
 from tests.api.test_sse import _StreamingAsgiTransport
 from tests.helpers import now
-from tests.runtime.test_runner import _base_plan
+from tests.runtime.test_runner import _base_plan, _seed_project
 
 
 def _seed_run(conn: Connection, *, project_id: uuid.UUID) -> uuid.UUID:
@@ -511,31 +523,6 @@ def test_create_run_write_grade_colleague_403_outsider_404(
         assert missing.status_code == 404
 
 
-def test_create_conversation_write_grade_colleague_403_outsider_404(
-    engine: Engine, tmp_path: Path
-) -> None:
-    """Chat creation stays owner-only this phase — colleague widening is phase 5."""
-    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
-        with seeded(engine) as conn:
-            org_id = make_org(conn)
-            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
-                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
-            )
-
-        forbidden = client.post(
-            f"/api/v1/projects/{project_id}/conversations", headers=colleague.headers, json={}
-        )
-        missing = client.post(
-            f"/api/v1/projects/{project_id}/conversations", headers=outsider.headers, json={}
-        )
-
-        assert forbidden.status_code == 403
-        assert forbidden.json()["error"]["code"] == "forbidden"
-        assert missing.status_code == 404
-
-
 # --- Conversation-id router: kind-graded, never a 403 -----------------------
 
 
@@ -707,3 +694,466 @@ def test_cross_org_caller_gets_404_across_read_and_write_graded_routes(
             ).status_code
             == 404
         )
+
+
+# --- Colleague chat mutations (phase 5, contract § 4) ------------------------
+#
+# Owner call (b) grants a same-org colleague exactly three mutations and
+# nothing else: create a conversation on a readable project, post a turn to
+# their own conversation, cancel their own turn. These cases drive all three
+# through the real routes.
+
+
+def _chat_ready_project(
+    engine: Engine, *, owner_user_id: str, org_id: uuid.UUID, visibility: str = "org"
+) -> uuid.UUID:
+    """Seed a project a chat turn can actually run against, stamped for one org.
+
+    `make_project` is too thin here: a turn needs the evidence fixtures and a
+    terminal capability run, which is what `tests.runtime.test_runner`'s
+    `_seed_project` builds. This wraps it and applies the tenancy columns the
+    seeder knows nothing about.
+    """
+    project_id, scope_id = _seed_project(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            update(project_table)
+            .where(project_table.c.project_id == project_id)
+            .values(owner_user_id=owner_user_id, org_id=org_id, visibility=visibility)
+        )
+    _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+    return project_id
+
+
+def _pending_turn(engine: Engine, *, conversation_id: uuid.UUID, turn_index: int = 0) -> uuid.UUID:
+    """Insert one fresh pending turn and return its id, for the cancel routes."""
+    turn_id = uuid.uuid4()
+    with engine.begin() as conn:
+        conn.execute(
+            chat_turn.insert().values(
+                id=turn_id,
+                conversation_id=conversation_id,
+                turn_index=turn_index,
+                client_turn_id=uuid.uuid4(),
+                user_message="in flight",
+                answer=None,
+                answer_payload=None,
+                capability_run_id=None,
+                status="pending",
+                created_at=now(),
+                completed_at=None,
+            )
+        )
+    return turn_id
+
+
+def _created_by(engine: Engine, conversation_id: uuid.UUID) -> str | None:
+    """Read one conversation's recorded author."""
+    with engine.connect() as conn:
+        return conn.execute(  # type: ignore[no-any-return]
+            select(conversation.c.created_by).where(conversation.c.id == conversation_id)
+        ).scalar_one()
+
+
+def _chat_overrides() -> dict[Callable[..., object], Callable[..., object]]:
+    """Substitute the provider seams so a turn POST completes deterministically."""
+    return {
+        get_chat_backend: StubChatBackend,
+        get_chat_embedding_backend: StubEmbeddingBackend,
+    }
+
+
+def test_create_conversation_read_grade_lets_a_colleague_start_their_own_chat(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Colleague mutation 1: create a conversation on a project you can read.
+
+    The widening from phase 4's write grade. A colleague gets 201 and the row
+    records *them* as its author, so it is theirs and not the owner's — the
+    owner cannot see it in their library and 404s on its deep link. An
+    outsider, and a colleague on a `private` project, still get 404.
+    """
+    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            shared = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            private = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
+            )
+
+        created = client.post(
+            f"/api/v1/projects/{shared}/conversations", headers=colleague.headers, json={}
+        )
+        assert created.status_code == 201, created.text
+        conversation_id = uuid.UUID(created.json()["id"])
+        assert created.json()["kind"] == "chat"
+        assert _created_by(engine, conversation_id) == colleague.user_id
+
+        assert (
+            client.post(
+                f"/api/v1/projects/{shared}/conversations", headers=outsider.headers, json={}
+            ).status_code
+            == 404
+        )
+        assert (
+            client.post(
+                f"/api/v1/projects/{private}/conversations", headers=colleague.headers, json={}
+            ).status_code
+            == 404
+        )
+
+        colleague_library = client.get(
+            f"/api/v1/projects/{shared}/conversations", headers=colleague.headers
+        ).json()["data"]
+        owner_library = client.get(
+            f"/api/v1/projects/{shared}/conversations", headers=owner.headers
+        ).json()["data"]
+        assert [row["id"] for row in colleague_library] == [str(conversation_id)]
+        assert owner_library == []
+        assert (
+            client.get(
+                f"/api/v1/conversations/{conversation_id}", headers=owner.headers
+            ).status_code
+            == 404
+        )
+
+
+def test_create_conversation_can_never_mint_a_planning_conversation(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A planning conversation can only ever be created by the project owner.
+
+    Enforced by the *shape of the request body*, not by a branch: this route
+    writes the literal `kind="chat"`, and `ConversationCreate` forbids extras,
+    so a caller asking for a planning conversation is rejected **422** before
+    the route function runs. Owner and colleague are refused identically —
+    the owner's planning conversations are minted by the runtime under
+    `planning.py`'s owner-graded lock, never through this route.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            project_id = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+
+        for principal in (owner, colleague):
+            asked = client.post(
+                f"/api/v1/projects/{project_id}/conversations",
+                headers=principal.headers,
+                json={"kind": "planning"},
+            )
+            assert asked.status_code == 422, asked.text
+
+        plain = client.post(
+            f"/api/v1/projects/{project_id}/conversations", headers=colleague.headers, json={}
+        )
+        assert plain.status_code == 201
+        assert plain.json()["kind"] == "chat"
+
+
+def test_colleague_posts_and_cancels_a_turn_in_their_own_chat(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Colleague mutations 2 and 3, end to end on the real routes.
+
+    The colleague opens a chat on the owner's project, posts a turn that runs
+    to a terminal `completed` NDJSON event, and cancels a second pending turn
+    of their own. None of it requires anything of the owner.
+    """
+    monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+    project_id: uuid.UUID | None = None
+    try:
+        with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
+            client,
+            (owner, colleague),
+        ):
+            with seeded(engine) as conn:
+                org_id = make_org(conn)
+                ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+                ops_enrol(
+                    conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+                )
+            project_id = _chat_ready_project(
+                engine, owner_user_id=owner.user_id, org_id=org_id
+            )
+
+            created = client.post(
+                f"/api/v1/projects/{project_id}/conversations",
+                headers=colleague.headers,
+                json={},
+            )
+            assert created.status_code == 201, created.text
+            conversation_id = uuid.UUID(created.json()["id"])
+
+            posted = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=colleague.headers,
+                json={
+                    "message": "What does the evidence say?",
+                    "client_turn_id": str(uuid.uuid4()),
+                },
+            )
+            assert posted.status_code == 200, posted.text
+            events = [json.loads(line) for line in posted.iter_lines() if line]
+            assert events[-1]["type"] == "completed"
+
+            # The colleague reads their own transcript back, then stops a
+            # second turn of their own.
+            transcript = client.get(
+                f"/api/v1/conversations/{conversation_id}/turns", headers=colleague.headers
+            )
+            assert transcript.status_code == 200
+            assert transcript.json()["pagination"]["total_items"] == 1
+
+            turn_id = _pending_turn(engine, conversation_id=conversation_id, turn_index=1)
+            cancelled = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/cancel",
+                headers=colleague.headers,
+            )
+            assert cancelled.status_code == 200, cancelled.text
+            assert cancelled.json()["status"] == "cancelled"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_turn_routes_are_isolated_in_both_directions(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Own-chats isolation on the turn routes, both ways, with turns present.
+
+    Neither direction is a 403: the row's existence is not the other party's
+    to learn, so every refusal is the indistinguishable 404. The deep-link
+    `GET /{id}/turns` is re-asserted here with a real transcript behind it —
+    phase 4 closed it on an empty conversation.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            project_id = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            owners_chat, colleagues_chat = uuid.uuid4(), uuid.uuid4()
+            _insert_conversation(
+                conn,
+                conversation_id=owners_chat,
+                project_id=project_id,
+                kind="chat",
+                created_by=owner.user_id,
+            )
+            _insert_conversation(
+                conn,
+                conversation_id=colleagues_chat,
+                project_id=project_id,
+                kind="chat",
+                created_by=colleague.user_id,
+            )
+        owners_turn = _pending_turn(engine, conversation_id=owners_chat)
+        colleagues_turn = _pending_turn(engine, conversation_id=colleagues_chat)
+
+        body = {"message": "Whose chat is this?", "client_turn_id": str(uuid.uuid4())}
+        cases = [
+            # (intruder, the other party's conversation, the other party's turn)
+            (colleague, owners_chat, owners_turn),
+            (owner, colleagues_chat, colleagues_turn),
+        ]
+        for intruder, target_chat, target_turn in cases:
+            assert (
+                client.post(
+                    f"/api/v1/conversations/{target_chat}/turns",
+                    headers=intruder.headers,
+                    json=body,
+                ).status_code
+                == 404
+            )
+            assert (
+                client.post(
+                    f"/api/v1/conversations/{target_chat}/turns/{target_turn}/cancel",
+                    headers=intruder.headers,
+                ).status_code
+                == 404
+            )
+            assert (
+                client.get(
+                    f"/api/v1/conversations/{target_chat}/turns", headers=intruder.headers
+                ).status_code
+                == 404
+            )
+
+        # Neither turn was touched by the refused calls.
+        with engine.connect() as conn:
+            statuses = conn.execute(
+                select(chat_turn.c.status).where(
+                    chat_turn.c.id.in_([owners_turn, colleagues_turn])
+                )
+            ).scalars().all()
+        assert sorted(statuses) == ["pending", "pending"]
+
+
+def test_owner_posts_into_a_legacy_null_created_by_conversation(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The legacy disjunct on the turn routes, not just on the listing.
+
+    A pre-033 chat records no author. It belongs to the project owner and to
+    nobody else: the owner posts and cancels into it, a colleague who can read
+    the project 404s on both.
+    """
+    monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+    project_id: uuid.UUID | None = None
+    try:
+        with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
+            client,
+            (owner, colleague),
+        ):
+            with seeded(engine) as conn:
+                org_id = make_org(conn)
+                ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+                ops_enrol(
+                    conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+                )
+            project_id = _chat_ready_project(
+                engine, owner_user_id=owner.user_id, org_id=org_id
+            )
+            legacy = uuid.uuid4()
+            with seeded(engine) as conn:
+                _insert_conversation(
+                    conn,
+                    conversation_id=legacy,
+                    project_id=project_id,
+                    kind="chat",
+                    created_by=None,
+                )
+
+            body = {"message": "What does the evidence say?", "client_turn_id": str(uuid.uuid4())}
+            refused = client.post(
+                f"/api/v1/conversations/{legacy}/turns", headers=colleague.headers, json=body
+            )
+            assert refused.status_code == 404
+
+            posted = client.post(
+                f"/api/v1/conversations/{legacy}/turns", headers=owner.headers, json=body
+            )
+            assert posted.status_code == 200, posted.text
+            events = [json.loads(line) for line in posted.iter_lines() if line]
+            assert events[-1]["type"] == "completed"
+
+            turn_id = _pending_turn(engine, conversation_id=legacy, turn_index=1)
+            assert (
+                client.post(
+                    f"/api/v1/conversations/{legacy}/turns/{turn_id}/cancel",
+                    headers=colleague.headers,
+                ).status_code
+                == 404
+            )
+            assert (
+                client.post(
+                    f"/api/v1/conversations/{legacy}/turns/{turn_id}/cancel",
+                    headers=owner.headers,
+                ).status_code
+                == 200
+            )
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_de_enrolment_kills_a_colleagues_chat_mutations(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A colleague's chat access dies with their org leg, not with `created_by`.
+
+    Matching `created_by` is not enough to keep posting: the turn routes also
+    require the project under `own_estate`, so clearing the person's `org_id`
+    — what ops de-enrolment does — takes every one of their three mutations
+    to 404 on the very next request, with nothing else changed and no deploy.
+    """
+    monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
+    project_id: uuid.UUID | None = None
+    try:
+        with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
+            client,
+            (owner, colleague),
+        ):
+            with seeded(engine) as conn:
+                org_id = make_org(conn)
+                ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+                ops_enrol(
+                    conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+                )
+            project_id = _chat_ready_project(
+                engine, owner_user_id=owner.user_id, org_id=org_id
+            )
+
+            created = client.post(
+                f"/api/v1/projects/{project_id}/conversations",
+                headers=colleague.headers,
+                json={},
+            )
+            assert created.status_code == 201
+            conversation_id = uuid.UUID(created.json()["id"])
+            posted = client.post(
+                f"/api/v1/conversations/{conversation_id}/turns",
+                headers=colleague.headers,
+                json={"message": "Before I leave.", "client_turn_id": str(uuid.uuid4())},
+            )
+            assert posted.status_code == 200
+
+            turn_id = _pending_turn(engine, conversation_id=conversation_id, turn_index=1)
+            with seeded(engine) as conn:
+                conn.execute(
+                    update(app_user)
+                    .where(app_user.c.user_id == colleague.user_id)
+                    .values(org_id=None)
+                )
+
+            assert (
+                client.post(
+                    f"/api/v1/projects/{project_id}/conversations",
+                    headers=colleague.headers,
+                    json={},
+                ).status_code
+                == 404
+            )
+            assert (
+                client.post(
+                    f"/api/v1/conversations/{conversation_id}/turns",
+                    headers=colleague.headers,
+                    json={"message": "After.", "client_turn_id": str(uuid.uuid4())},
+                ).status_code
+                == 404
+            )
+            assert (
+                client.post(
+                    f"/api/v1/conversations/{conversation_id}/turns/{turn_id}/cancel",
+                    headers=colleague.headers,
+                ).status_code
+                == 404
+            )
+            # The reads die with the org leg too: matching `created_by` must
+            # not keep a transcript open on a project the caller can no
+            # longer reach (contract § 5 — de-enrolment is a revocation
+            # event; the owner's evidence base rides in those turns).
+            assert (
+                client.get(
+                    f"/api/v1/conversations/{conversation_id}",
+                    headers=colleague.headers,
+                ).status_code
+                == 404
+            )
+            assert (
+                client.get(
+                    f"/api/v1/conversations/{conversation_id}/turns",
+                    headers=colleague.headers,
+                ).status_code
+                == 404
+            )
+    finally:
+        _cleanup(engine, project_id)

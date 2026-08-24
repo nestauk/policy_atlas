@@ -15,7 +15,7 @@ from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.chat_scope import build_chat_readers, resolve_terminal_run_components
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._access import own_chat_leg
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
@@ -46,7 +46,11 @@ from policy_atlas.runtime.chat_prompt import (
 log = structlog.get_logger()
 
 _PENDING_TTL = timedelta(minutes=10)
-_OWNER_PENDING_CAP = 2
+#: How many pending chat turns one *acting user* may hold at once, across
+#: every conversation they created. Task 033 re-keyed the subject of this cap
+#: from the project owner to the acting user; the bound and the scope (per
+#: user, global across their projects) are unchanged.
+_USER_PENDING_CAP = 2
 _TURN_LOCKS_MAX = 256
 _turn_locks_guard = threading.Lock()
 _turn_locks: dict[uuid.UUID, threading.Lock] = {}
@@ -108,15 +112,28 @@ def _row_result(row: RowMapping, *, replayed: bool) -> ChatTurnResult:
 
 
 def _expire_stale_pending_turns(conn: Connection, *, user_id: str) -> None:
-    """Mark this owner's expired pending chat turns failed in a short transaction."""
-    owned_conversations = (
+    """Mark the acting user's expired pending chat turns failed, in this transaction.
+
+    **Keyed to the conversation's creator, not the project owner** (task 033,
+    contract § 4). The sweep and the cap it feeds are one change, not two: the
+    cap counts an acting user's pending turns, so a sweep that still selected
+    by ``project.owner_user_id`` would leave a colleague's dead turns pending
+    for ever — rate-limiting them permanently, on every project, with no
+    operator lever — while an owner's sweep silently failed other people's
+    in-flight turns.
+
+    Args:
+        conn: Open connection inside the caller's reservation transaction.
+        user_id: The acting user's token subject.
+    """
+    own_conversations = (
         select(conversation.c.id)
         .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
-        .where(project.c.owner_user_id == user_id)
+        .where(own_chat_leg(user_id))
     )
     conn.execute(
         update(chat_turn)
-        .where(chat_turn.c.conversation_id.in_(owned_conversations))
+        .where(chat_turn.c.conversation_id.in_(own_conversations))
         .where(chat_turn.c.status == "pending")
         .where(chat_turn.c.created_at < _now() - _PENDING_TTL)
         .values(status="failed", completed_at=_now())
@@ -426,13 +443,45 @@ def _phase_one_turn(
     client_turn_id: uuid.UUID,
     reserved_turn_id: uuid.UUID | None = None,
 ) -> ChatTurnResult | uuid.UUID:
-    """Reserve one chat row or replay a completed row under the project lock.
+    """Reserve one chat row, or replay a completed one, under the conversation lock.
+
+    **The lock is on the ``conversation`` row, not the project row** (task 033,
+    contract § 4). Three findings moved it:
+
+    - *What the project lock was thought to protect, it did not.* The chat
+      turn's ``run_active`` fence reads ``capability_run`` under the lock, but
+      ``runs.create_run`` **commits and releases** its own project lock before
+      its executor thread inserts the ``running`` row (``runs.py``, the
+      ``_await_new_run`` poll). The run row therefore appears outside any
+      lock this function could hold, so the fence was already a best-effort
+      read and stays exactly as good as it was.
+    - *What it actually protected is the reservation itself* — the
+      per-conversation "one pending turn" check, the ``client_turn_id``
+      idempotency branch, the ``max(turn_index)`` read and the title write.
+      Every one of those is scoped to a single conversation, which is the row
+      now locked. Narrower **and** more precise: two chats in one project no
+      longer serialise against each other at all.
+    - *A colleague may now reserve a turn*, and contract § 4 forbids their
+      path taking ``FOR UPDATE`` on the owner's project row — it would block
+      the owner's own rename, archive and run-start for the length of the
+      colleague's transaction.
+
+    ``of=conversation`` is load-bearing: this select joins ``project``, and a
+    bare ``FOR UPDATE`` would lock the joined project row too, reintroducing
+    exactly the block the contract forbids. Pinned structurally by
+    ``test_reservation_locks_the_conversation_row_never_the_owners_project``.
+
+    Authorization is layered, not duplicated: the **router** resolves the
+    caller's tenancy grade on the project (``chat_mutable_project`` — owner or
+    same-org colleague, never an admin), and this function enforces the
+    own-conversation rule that the cap and the sweeper are keyed to.
 
     Args:
         conn: Open connection already inside the caller's transaction.
-        project_id: Owner-scoped project id.
+        project_id: The conversation's project.
         conversation_id: Active chat conversation id.
-        user_id: Authenticated project owner.
+        user_id: The acting user — the conversation's creator, or the project
+            owner for a legacy pre-033 row that records no creator.
         message: Current user question.
         client_turn_id: Client-minted idempotency key.
         reserved_turn_id: The turn id the caller itself already reserved for
@@ -443,17 +492,22 @@ def _phase_one_turn(
             instead of resetting — and possibly double-running — a turn that
             is not its own (security review, 2026-08-11).
     """
-    owned_project(conn, project_id=project_id, user_id=user_id, for_update=True)
     chat = (
         conn.execute(
             select(conversation)
+            .select_from(
+                conversation.join(project, conversation.c.project_id == project.c.project_id)
+            )
             .where(conversation.c.id == conversation_id)
             .where(conversation.c.project_id == project_id)
+            .where(project.c.status == "active")
+            .where(own_chat_leg(user_id))
+            .with_for_update(of=conversation)
         )
         .mappings()
         .one_or_none()
     )
-    if chat is None or chat["kind"] != "chat" or chat["status"] != "active":
+    if chat is None or chat["status"] != "active":
         raise LookupError("chat conversation not found")
 
     _expire_stale_pending_turns(conn, user_id=user_id)
@@ -538,17 +592,26 @@ def _phase_one_turn(
     ).scalar_one_or_none()
     if pending is not None:
         raise ApiConflict("chat_turn_in_progress", "a chat turn is already running")
-    owner_pending = conn.execute(
+    # Re-keyed from the project owner to the acting user (task 033, contract
+    # § 4), in the same edit as the sweeper above — re-keying either alone is
+    # the defect the contract names. Scope is deliberately unchanged: still
+    # one bound over *all* of the counted subject's pending turns, across
+    # every project, not a per-project or per-conversation allowance.
+    # Named consequence, accepted by the contract: this removes the only
+    # per-project chat-spend bound, so an organisation of N members can drive
+    # 2N concurrent turns against one owner's project. Org-level capacity
+    # policy is Out of this slice.
+    user_pending = conn.execute(
         select(func.count())
         .select_from(
             chat_turn.join(conversation, chat_turn.c.conversation_id == conversation.c.id).join(
                 project, conversation.c.project_id == project.c.project_id
             )
         )
-        .where(project.c.owner_user_id == user_id)
+        .where(own_chat_leg(user_id))
         .where(chat_turn.c.status == "pending")
     ).scalar_one()
-    if int(owner_pending) >= _OWNER_PENDING_CAP:
+    if int(user_pending) >= _USER_PENDING_CAP:
         raise ApiCapacity("chat_capacity", "too many chat turns are in progress")
 
     if chat["title"] == "New chat":

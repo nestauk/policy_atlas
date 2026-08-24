@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 import uuid
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple
@@ -53,7 +53,10 @@ class Principal(NamedTuple):
 
 @contextmanager
 def tenancy_client(
-    tmp_path: Path, *, count: int = 3
+    tmp_path: Path,
+    *,
+    count: int = 3,
+    overrides: dict[Callable[..., object], Callable[..., object]] | None = None,
 ) -> Iterator[tuple[TestClient, list[Principal]]]:
     """Yield an application client plus ``count`` distinct signed-in callers.
 
@@ -63,6 +66,12 @@ def tenancy_client(
     Args:
         tmp_path: Per-test temporary directory for the development issuer key.
         count: How many distinct subjects to mint.
+        overrides: FastAPI dependency overrides, the way
+            ``resource_support.api_client`` takes them. Task 033's phase-5
+            chat cases need them — a colleague's turn POST has to run the
+            real route end to end, which means substituting the provider
+            backends, while still driving *named* subjects this file can
+            enrol.
 
     Yields:
         The client and the minted principals, in order.
@@ -87,6 +96,8 @@ def tenancy_client(
         )
         principals.append(Principal(user_id, {"Authorization": f"Bearer {token}"}))
     app = create_app(settings=settings)
+    if overrides:
+        app.dependency_overrides.update(overrides)
     with TestClient(app, raise_server_exceptions=False) as client:
         yield client, principals
 

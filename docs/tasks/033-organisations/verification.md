@@ -98,6 +98,64 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   colleague's listing temporarily shows rows the detail route 404s — closed by
   Phase 4 in the same PR.
 
+### Phase 4 — Route consolidation and signature cutover
+- All 19 sites route through the graded helper per the lead's binding grade table;
+  reads = read grade, mutations = write grade (colleague 403 / outsider 404). The
+  conversation-id router's five lifecycle routes and `GET /{id}/turns` resolve via
+  `_graded_conversation` (chat = creator with the legacy-NULL disjunct; planning =
+  project owner; always 404 — `write` kept as the Phase 8 seam). The transcript
+  deep-link leak is closed
+  (`test_conversation_id_router_closes_the_deep_link_leak_for_a_colleague`).
+- Locks kept exactly per spec: `planning.py` ×2, `create_run`,
+  `create_conversation`, `update_project`, `archive_project_route` (the plan's
+  six-site lock list undercounted — the archive route also locked; covered by the
+  grade table's "keep any current lock" rule and flagged).
+- `owned_portfolio` and `_owned_conversation` retired; `owned_project` retained
+  with exactly one caller (`chat_turns.py:446` — Phase 5 re-keys it). Final
+  `owner_user_id` grep audited hit-by-hit: helper, display projections, create
+  stamping, own-chats predicates, and the two Phase-5 turn routes only.
+- **Deviation flagged (lead call):** the own-chats filter on `list_conversations`
+  landed here with the grade widening, not in Phase 5 as the plan split it —
+  widening the listing without the filter would have exposed the owner's
+  conversations to colleagues mid-branch and forced double-testing.
+- **Spec/code finding:** `planning.py` and `chat_turns.py` each have a private
+  `_phase_one_turn` — same name, different functions; no entanglement.
+- verify-fast green: 2240 passed, mypy 276 files, ruff. Cross-owner 404 suite
+  unmodified (rubric 3). 19 new tests in `test_route_grades.py`.
+- Executor note: the fast-worker run died once on a transient API error before
+  editing and was resumed with context intact; total agent spend was
+  well above typical for a "mechanical" phase — the grade table made it
+  executable, but the volume was deep-reasoner-sized (plan risk confirmed).
+
+### Phase 5 — Chats, cap, sweeper and locks
+- The three colleague mutations and nothing more: chat creation on a readable
+  project via a new `chat_mutable_project` grade (wider than write, narrower than
+  read — resolves through `own_estate`, so Phase 8's admin leg can never reach chat
+  creation structurally); turn POST and cancel under the own-conversation rule
+  (`own_chat_leg`, one shared definition — no drifted copies). Planning-kind
+  refusal is 422 by construction: `ConversationCreate` has no `kind` field and
+  `extra="forbid"`.
+- **Cap and sweeper re-keyed together** to `created_by` (scope preserved: one
+  allowance of 2 pending turns per person across their estate; constant renamed
+  `_USER_PENDING_CAP`). The named consequence (N members → 2N concurrent turns on
+  one owner's project) recorded at the check.
+- **Locks:** create-conversation's project lock removed (it protected only the
+  planning partial index, which chats cannot collide with); turn POST moved to
+  `FOR UPDATE OF conversation` — the bare join lock would have re-locked the
+  owner's project row. **Finding:** the old project lock never actually protected
+  the `run_active` fence (`create_run` commits before its executor inserts the
+  running row), so that fence was already best-effort and is unchanged.
+- **Leak found by the phase and fixed by the lead:** `_graded_conversation` never
+  required the project to be reachable, so a de-enrolled colleague could still
+  read their own chat's transcript (with the owner's evidence base in it) on a
+  foreign project. Fixed with `own_estate(project, user_id)` in the resolver, plus
+  `with_for_update(of=conversation)` (the helper's bare `FOR UPDATE` also locked
+  the joined project row on a creator's archive path). Pinned by extending
+  `test_de_enrolment_kills_a_colleagues_chat_mutations` to the two read routes.
+- The phase mutation-tested its claims (reverting each key/lock/grade fails its
+  named test). `owned_project` fully retired. 10 new named tests; verify-fast
+  green (2249 backend, mypy, ruff).
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

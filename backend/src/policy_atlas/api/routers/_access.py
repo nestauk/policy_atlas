@@ -11,6 +11,10 @@ One helper per entity, replacing the owner-only ``owned_project`` /
   not the owner gets **403 ``forbidden``**; a caller who fails the read grade
   gets the contract's indistinguishable **404**, byte-identical to an absent
   row (the BOLA rule, ``web-api.md`` § Auth boundary).
+- **colleague-mutation** (:func:`chat_mutable_project`) — the one documented
+  exception to "write = owner only": the three chat mutations owner call (b)
+  grants a same-org colleague. Read-shaped but deliberately admin-free, and
+  it never takes a lock. See its docstring.
 
 **The NULL rule** (contract § 3, the highest-blast-radius mistake available
 here). A row with ``org_id IS NULL`` is reachable by its owner only; a caller
@@ -47,7 +51,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.sql.elements import ColumnElement
 
-from policy_atlas.core.schema import app_user, portfolio, project
+from policy_atlas.core.schema import app_user, conversation, portfolio, project
 
 # The 404 body every failed read grade produces. Byte-identical to the string
 # ``_common``'s owner-only helpers raise, so the cutover in phase 4 cannot
@@ -134,6 +138,60 @@ def own_estate(table: Table, user_id: str) -> ColumnElement[bool]:
         A boolean predicate correlated to ``table``.
     """
     return or_(table.c.owner_user_id == user_id, _same_org_leg(table, user_id))
+
+
+def own_conversation_leg(user_id: str) -> ColumnElement[bool]:
+    """Contract § 4's own-chats filter, written out once and reused everywhere.
+
+    The contract specifies this predicate **exactly**, because the obvious
+    shorthand is wrong in a way that leaks: a bare ``created_by IS NULL``
+    disjunct would hand every colleague the owner's legacy pre-033 rows. The
+    NULL disjunct is therefore conjoined with the project's ownership::
+
+        created_by = :me OR (created_by IS NULL AND project.owner_user_id = :me)
+
+    Six call sites resolve through this (the library listing, the
+    conversation-id router's grade, the turn POST, the turn cancel, the
+    pending cap and its sweeper), so it has one definition and a drifted copy
+    is not a thing that can exist.
+
+    Correlated to **both** ``conversation`` and ``project``: every caller must
+    have joined the two, which they all do.
+
+    Args:
+        user_id: The caller's token subject.
+
+    Returns:
+        A boolean predicate over the joined ``conversation``/``project`` pair.
+    """
+    return or_(
+        conversation.c.created_by == user_id,
+        and_(
+            conversation.c.created_by.is_(None),
+            project.c.owner_user_id == user_id,
+        ),
+    )
+
+
+def own_chat_leg(user_id: str) -> ColumnElement[bool]:
+    """:func:`own_conversation_leg` narrowed to chats.
+
+    The grade the two turn mutations, the pending cap and the sweeper carry.
+    Planning conversations are excluded outright: they are owner steering, and
+    a planning turn resolves through ``planning.py``'s own owner-graded path,
+    never through here.
+
+    The library listing deliberately uses the *un*-narrowed
+    :func:`own_conversation_leg` instead — it lists both kinds, and the owner
+    must keep seeing their project's planning conversation there.
+
+    Args:
+        user_id: The caller's token subject.
+
+    Returns:
+        A boolean predicate over the joined ``conversation``/``project`` pair.
+    """
+    return and_(conversation.c.kind == "chat", own_conversation_leg(user_id))
 
 
 def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
@@ -362,6 +420,56 @@ def accessible_project(
     return _resolve(
         conn, table=project, base=base, user_id=user_id, write=write, for_update=for_update
     )
+
+
+def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -> Access:
+    """Resolve one project under the **colleague-mutation** grade, or 404.
+
+    The grade owner call (b) invented and contract § 4 spends on exactly three
+    mutations — create a conversation, post a turn to your own conversation,
+    cancel your own turn. It sits between the two grades
+    :func:`accessible_project` offers, and it exists as its own function for
+    one reason: it must **never** widen to the admin leg.
+
+    - Wider than **write**, which is owner-only: a same-org colleague passes.
+    - Narrower than **read**, which phase 8 widens with ``is_admin``: an admin
+      is not a colleague and receives none of the three mutations (contract
+      § 3, and the acceptance check "is refused every mutation including chat
+      creation and turn POST"). Resolving through :func:`own_estate` rather
+      than :func:`_read_legs` is what makes that structurally true *now*,
+      rather than true only until phase 8 attaches the third leg.
+
+    **No lock, ever, and no ``for_update`` parameter to pass one.** Contract
+    § 4: a colleague chat path that took ``FOR UPDATE`` on the owner's project
+    row would block the owner's own rename, archive and run-start for the
+    length of the colleague's transaction. The turn path locks the
+    *conversation* row instead (``chat_turns._phase_one_turn``).
+
+    Archived projects are excluded, exactly as the retired ``owned_project``
+    excluded them: a chat is a live conversation about live work.
+
+    Args:
+        conn: Open database connection.
+        project_id: Requested project identity.
+        user_id: The caller's token subject.
+
+    Returns:
+        The project row and whether the owner leg matched.
+
+    Raises:
+        HTTPException: 404 for a missing, archived or unreachable row. There
+            is no 403 on this grade — a caller who fails it is not told the
+            row exists.
+    """
+    row = conn.execute(
+        select(project)
+        .where(project.c.project_id == project_id)
+        .where(project.c.status == "active")
+        .where(own_estate(project, user_id))
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
+    return Access(row=row, is_owner=row["owner_user_id"] == user_id)
 
 
 def accessible_portfolio(

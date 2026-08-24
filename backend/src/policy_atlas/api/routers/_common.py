@@ -1,22 +1,21 @@
-"""Private ownership and contract-projection helpers shared by API routers."""
+"""Private contract-projection helpers shared by API routers.
+
+The owner-only row helpers this module used to carry (``owned_project``,
+``owned_portfolio``, ``_owned_conversation``) are gone: every project-,
+portfolio- and conversation-scoped route now resolves through the graded
+helpers in ``_access`` (task 033). What is left is projection and display.
+"""
 
 from __future__ import annotations
 
-import uuid
 from typing import Any, cast
 
-from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, RowMapping
 
 from policy_atlas.api.contract import LatestRun, ProjectOut, RunOut
 from policy_atlas.api.identity import owner_display_for
-from policy_atlas.core.schema import (
-    app_user,
-    capability_run,
-    project,
-    project_source_snapshot,
-)
+from policy_atlas.core.schema import app_user, capability_run, project_source_snapshot
 
 #: Sentinel for "resolve the owner's display name yourself". Distinct from
 #: ``None``, which is a legitimate resolved value (an ownerless row).
@@ -46,42 +45,6 @@ def resolve_owner_display(conn: Connection, owner_user_id: str | None) -> str | 
         select(app_user.c.display_name).where(app_user.c.user_id == owner_user_id)
     ).scalar_one_or_none()
     return owner_display_for(owner_user_id, display_name)
-
-
-def owned_project(
-    conn: Connection,
-    *,
-    project_id: uuid.UUID,
-    user_id: str,
-    include_archived: bool = False,
-    for_update: bool = False,
-) -> RowMapping:
-    """Return an owned project or the contract's indistinguishable 404.
-
-    Args:
-        conn: Open database connection.
-        project_id: Requested project identity.
-        user_id: Authenticated owner's subject.
-        include_archived: Whether an archived project can be observed.
-        for_update: Whether the caller needs a row lock for a mutation.
-
-    Returns:
-        The owned project row.
-
-    Raises:
-        HTTPException: Always 404 for missing, archived, or cross-owner rows.
-    """
-    statement = select(project).where(project.c.project_id == project_id).where(
-        project.c.owner_user_id == user_id
-    )
-    if not include_archived:
-        statement = statement.where(project.c.status == "active")
-    if for_update:
-        statement = statement.with_for_update()
-    row = conn.execute(statement).mappings().one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="resource not found")
-    return row
 
 
 def run_out(row: RowMapping | dict[str, Any]) -> RunOut:

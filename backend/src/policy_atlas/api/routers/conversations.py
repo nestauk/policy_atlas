@@ -57,7 +57,13 @@ from policy_atlas.api.deps import (
     get_engine,
     get_grounding_judge_backend,
 )
-from policy_atlas.api.routers._access import accessible_project
+from policy_atlas.api.routers._access import (
+    accessible_project,
+    chat_mutable_project,
+    own_chat_leg,
+    own_conversation_leg,
+    own_estate,
+)
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -160,18 +166,14 @@ def _graded_conversation(
         .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
         .where(conversation.c.id == conversation_id)
         .where(project.c.status == "active")
+        # The project must still be reachable by the caller: de-enrolment is a
+        # revocation event (contract § 5), so a creator's chat on a project
+        # they can no longer read dies with the org leg. own_estate, not the
+        # full read grade — Phase 8's admin read arrives as its own leg.
+        .where(own_estate(project, user_id))
         .where(
             or_(
-                and_(
-                    conversation.c.kind == "chat",
-                    or_(
-                        conversation.c.created_by == user_id,
-                        and_(
-                            conversation.c.created_by.is_(None),
-                            project.c.owner_user_id == user_id,
-                        ),
-                    ),
-                ),
+                own_chat_leg(user_id),
                 and_(
                     conversation.c.kind == "planning",
                     project.c.owner_user_id == user_id,
@@ -182,7 +184,10 @@ def _graded_conversation(
     if not include_archived:
         statement = statement.where(conversation.c.status != "archived")
     if for_update:
-        statement = statement.with_for_update()
+        # of=conversation: the statement joins project, and a bare FOR UPDATE
+        # would lock the owner's project row on a creator's archive path —
+        # the exact lock contract § 4 forbids on colleague chat paths.
+        statement = statement.with_for_update(of=conversation)
     row = conn.execute(statement).mappings().one_or_none()
     if row is None:
         raise _not_found()
@@ -298,20 +303,19 @@ def list_conversations(
     colleague sees only the chats *they* created, never the owner's or
     another colleague's. The owner keeps seeing every legacy pre-033 row
     (``created_by IS NULL``) as their own, in addition to rows their own
-    subject created since. Colleague chat *creation* arrives in phase 5, so a
-    colleague's page is empty today, not absent — a project they can read
-    is never a 404 here.
+    subject created since.
+
+    The filter is :func:`own_conversation_leg`, **not** its chat-narrowed
+    sibling: this library lists both kinds, and the owner must keep seeing
+    their project's planning conversation here. A colleague never matches a
+    planning row anyway — planning conversations are minted by the runtime
+    and record no ``created_by``, so only the project owner reaches them
+    through the legacy disjunct.
     """
     accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
     where = [
         conversation.c.project_id == project_id,
-        or_(
-            conversation.c.created_by == user.user_id,
-            and_(
-                conversation.c.created_by.is_(None),
-                project.c.owner_user_id == user.user_id,
-            ),
-        ),
+        own_conversation_leg(user.user_id),
     ]
     if kind is not None:
         where.append(conversation.c.kind == kind)
@@ -354,10 +358,29 @@ def create_conversation(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
-    """Create one active chat conversation with optional entry context."""
-    accessible_project(
-        conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
-    )
+    """Create one active chat conversation with optional entry context.
+
+    The first of the three mutations owner call (b) grants a same-org
+    colleague (contract § 4). The grade is :func:`chat_mutable_project` — the
+    owner or a colleague who can read the project, and never an admin.
+
+    **This route can only ever mint a chat**, for anybody: ``kind`` is not a
+    field on ``ConversationCreate`` (which forbids extras), it is written as
+    the literal ``"chat"`` below, and planning conversations are minted
+    exclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s
+    owner-graded project lock. So "a planning conversation can only ever be
+    created by the project owner" needs no branch here to hold — the shape of
+    the request body is what enforces it, and a body carrying ``kind`` is
+    rejected 422 before this function runs.
+
+    **No project-row lock** (contract § 4). The lock this route used to take
+    protected nothing a chat insert needs: the only uniqueness constraint on
+    ``conversation`` is the partial index over ``kind = 'planning' AND status
+    = 'active'``, which a chat row cannot collide with, and the insert itself
+    carries a freshly minted primary key. Kept, it would have let any
+    colleague block the owner's rename, archive and run-start.
+    """
+    chat_mutable_project(conn, project_id=project_id, user_id=user.user_id)
     if payload.entry_artefact_id is not None:
         _assert_entry_artefact(
             conn, project_id=project_id, entry_artefact_id=payload.entry_artefact_id
@@ -605,9 +628,29 @@ async def create_chat_turn_stream(
     embedding_backend: Annotated[EmbeddingBackend, Depends(get_chat_embedding_backend)],
     judge_backend: Annotated[GroundingJudgeBackend, Depends(get_grounding_judge_backend)],
 ) -> StreamingResponse:
-    """Reserve a chat turn and stream its provider-neutral NDJSON lifecycle."""
-    # Reservation happens before response headers. All ownership, eligibility,
-    # idempotency, capacity and validation errors therefore use ErrorEnvelope.
+    """Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.
+
+    The second of the three colleague mutations (contract § 4): post a turn to
+    **your own** conversation. Two conditions, both resolved in the one
+    statement below, both 404 on failure:
+
+    - :func:`own_chat_leg` — the conversation is a chat the caller created,
+      or a legacy pre-033 chat on a project they own. An owner cannot post
+      into a colleague's chat and a colleague cannot post into the owner's.
+    - :func:`own_estate` on the project — the caller must still reach the
+      project as its owner or as a same-org colleague. This is the leg that
+      **dies on de-enrolment**: clearing a colleague's ``org_id`` takes their
+      turn POST to 404 on the next request, even though they still match
+      ``created_by``. Deliberately :func:`own_estate` rather than the full
+      read grade, so phase 8's admin leg never reaches this mutation.
+
+    No lock is taken here. The reservation's lock lives one layer down, on the
+    **conversation** row (``chat_turns._phase_one_turn``) — never on the
+    owner's project row.
+    """
+    # Reservation happens before response headers. All authorization,
+    # eligibility, idempotency, capacity and validation errors therefore use
+    # ErrorEnvelope.
     with engine.begin() as conn:
         row = (
             conn.execute(
@@ -616,8 +659,9 @@ async def create_chat_turn_stream(
                     conversation.join(project, conversation.c.project_id == project.c.project_id)
                 )
                 .where(conversation.c.id == conversation_id)
-                .where(project.c.owner_user_id == user.user_id)
                 .where(project.c.status == "active")
+                .where(own_chat_leg(user.user_id))
+                .where(own_estate(project, user.user_id))
             )
             .scalar_one_or_none()
         )
@@ -760,7 +804,22 @@ def cancel_chat_turn(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> CancelTurnOut:
-    """Explicitly stop a pending chat turn, preserving any streamed partial."""
+    """Explicitly stop a pending chat turn, preserving any streamed partial.
+
+    The third colleague mutation (contract § 4): cancel **your own** turn,
+    resolved through the same two conditions as the turn POST —
+    :func:`own_chat_leg` on the conversation and :func:`own_estate` on the
+    project — so cancellation is isolated in both directions and dies with a
+    colleague's org leg.
+
+    One deliberate asymmetry with the POST: no ``project.status = 'active'``
+    filter, which is the pre-033 behaviour preserved. Cancelling is a stop,
+    not a start; refusing it on an archived project would strand a pending
+    row for the TTL sweep with no way for its author to close it.
+
+    No lock: the write below is already a compare-and-set guarded on
+    ``status = 'pending'``.
+    """
     with engine.begin() as conn:
         status = (
             conn.execute(
@@ -772,7 +831,8 @@ def cancel_chat_turn(
                 )
                 .where(chat_turn.c.id == turn_id)
                 .where(chat_turn.c.conversation_id == conversation_id)
-                .where(project.c.owner_user_id == user.user_id)
+                .where(own_chat_leg(user.user_id))
+                .where(own_estate(project, user.user_id))
             )
             .scalar_one_or_none()
         )
