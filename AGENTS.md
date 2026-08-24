@@ -84,6 +84,21 @@ scripts only. Because ownership transfer stays Out, deleting someone with live
 work **strands** it — that is now the trigger condition for a transfer slice.
 Operator IAM grows to `ListUsers` + `AdminCreateUser` + `AdminDeleteUser`.
 
+**Owner call (i), 2026-08-24:** the portfolio/project **visibility cascade** is
+reopened from Out. One invariant — a `project` with a `portfolio_id` carries
+that `portfolio`'s `visibility` — covering the owner's three rules (inherit on
+create; promote a private project into an org portfolio; ask when an org project
+meets a private portfolio) and the three cases they left open (portfolio
+visibility change cascades to members behind `cascade=true`; setting a project's
+visibility while it is in a portfolio is refused with both ways out named;
+removing from a portfolio changes nothing). **The API never guesses** — any
+side-effecting visibility change 409s `visibility_conflict` unless the caller
+states the resolution, so the frontend prompt sits over the refusal rather than
+replacing it. All paths are owner-only writes on both rows. Enforced in the
+write paths plus a property test; the invariant spans two tables so a CHECK
+cannot express it. Note "public" in product phrasing means `visibility='org'` —
+nothing here is internet-public, and the contract says `org`/`private` throughout.
+
 **Next slice after 033 — the rename** (owner, 2026-08-24): `project` → `task`
 and `portfolio` → `project`, standalone, mechanical, no behaviour change,
 retiring ADR 0031's vocabulary split. It touches ~249 files and breaks
