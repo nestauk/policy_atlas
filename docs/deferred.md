@@ -2105,6 +2105,17 @@ omissions.
   `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
   only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
   the mapping is written down.
+- **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and sets no explicit
+  password policy (`Policies: null`, so Cognito's account defaults apply: 8 characters,
+  upper/lower/number/symbol). That was proportionate while every account could read only
+  its owner's work. 033's `is_admin` (owner call (f)) changes the calculus: an admin
+  account reads every row in every organisation, `private` included, behind a password
+  alone. **Owner ruling 2026-08-24: recorded as a known accepted risk, not fixed in 033** —
+  the slice holds its no-infra-change constraint, and the security lane is told this is a
+  decided gap rather than an oversight. Cognito supports per-user MFA
+  (`admin_set_user_mfa_preference`), so requiring it for `is_admin` holders alone is
+  possible without friction for ordinary users. **Revisit before the first real
+  organisation is enrolled in prod.**
 - **An admin dashboard / admin surface** — 033 adds `app_user.is_admin` (owner call (f),
   2026-08-24) as a read grade over every row in every organisation, and says so plainly:
   it is the designated home for admin capability, but it ships **no admin screen**. An

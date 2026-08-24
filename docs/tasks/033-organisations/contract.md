@@ -477,6 +477,12 @@ sentence or the corrected visibility copy is missing, the slice ships a product 
 tells users `private` means something it does not. **The privacy page is live public
 legal copy — owner sign-off before merge.**
 Default `false` means an un-granted deployment behaves exactly as it does today.
+**Known accepted risk, decided by the owner 2026-08-24, not an oversight to re-raise:** the
+pool has no MFA (`MfaConfiguration: None`) and no explicit password policy, so an `is_admin`
+account — which reads every row in every organisation — is protected by a password alone.
+033 holds its no-infra-change constraint; the gap is recorded in `docs/deferred.md` with
+per-user MFA as the identified route, to revisit before the first real organisation is
+enrolled in prod.
 
 **Second call-out — the Cognito lookup and stored email (owner call (g)).**
 (1) `boto3` must stay in the `ops` group and out of the runtime: confirm the built image
