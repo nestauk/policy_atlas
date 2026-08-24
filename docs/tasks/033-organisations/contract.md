@@ -33,6 +33,13 @@
 > control**: every admin read is traced, the privacy notice says so, and the word
 > "private" in the UI is corrected to what it actually means (see § What `private` means).
 >
+> **(g)** **`app_user` stores the Cognito email, and admins can find work by it.** The
+> access token carries `sub` only, so the email is fetched **once at ops enrolment** and
+> stored. Enrolment is *by* email (an operator knows the address, not the UUID). Admins
+> get an `owner_email` filter on the two listings — no user directory, no admin screen.
+> This makes the application database hold directly identifiable personal data for the
+> first time, so the privacy notice changes with it and de-enrolment clears the address.
+>
 > **Sequencing note (owner, 2026-08-24):** the code/screen vocabulary split stays as
 > ADR 0031 left it for this slice. A **standalone rename slice follows 033** — `project`
 > → `task`, `portfolio` → `project`, mechanical, no behaviour change — and it will have to
@@ -92,6 +99,8 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
      on) · `org_id` FK → organisation **nullable** · `display_name` Text nullable
      (ops-set; access tokens carry no usable name claim) ·
      **`is_admin` Boolean NOT NULL DEFAULT `false`** (owner call (f)) ·
+     **`email` Text nullable** (owner call (g); the Cognito address, resolved once at
+     enrolment — never sent by a client, never read from a token) ·
      `created_at`. **One org per user** — multi-org membership is a deferred join-table
      seam.
    - `project` — add `org_id` FK nullable + `visibility` Text NOT NULL DEFAULT `'org'`
@@ -134,11 +143,14 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
      hides a Task from your organisation — and does not suggest it is hidden from
      everyone. One label, no explainer paragraph (just-enough-text). Copy lands with the
      toggle in this slice, not later.
-   - **The privacy notice says it.** `views/legal/PrivacyView.tsx` § 6 "Who has access to
-     your information?" gains one plain sentence: named administrators can access
-     content in the service for support and maintenance, and those accesses are logged.
-     This is a legal-copy change on a live public page — **owner sign-off before merge**,
-     and it must not be written as if it were a routine string edit.
+   - **The privacy notice says it — twice.** `views/legal/PrivacyView.tsx` § 6 "Who has
+     access to your information?" gains one plain sentence: named administrators can
+     access content in the service for support and maintenance, and those accesses are
+     logged. **§ 3 "What personal data will we collect?" gains the email address**
+     (owner call (g)): the application database has held only opaque identifiers until
+     now, and storing the address makes it directly identifiable personal data. Both are
+     legal-copy changes on a live public page — **owner sign-off before merge**, and
+     neither may be written as if it were a routine string edit.
    - **Every admin read is traced.** One `structlog` line per read served by the admin leg
      (`event="admin_read"`, acting `user_id`, row kind and id, owning `org_id`), and none
      on a read the caller was entitled to anyway — an admin reading their own org must not
@@ -150,6 +162,31 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    The flag is granted only by the ops CLI, so there is no route, request body or
    self-serve path that can reach it.
 
+3b. **How identity reaches the database (owner call (g)).** The only claim the API reads
+   is `sub` ([`auth.py`](../../../backend/src/policy_atlas/api/auth.py) →
+   `AuthenticatedUser.user_id`), and that stays true: `get_current_user` remains DB-free
+   and Cognito-free. Everything else about a person is resolved **once, out of band, by
+   the ops CLI**:
+   - The pool is configured `UsernameAttributes: ["email"]`, so `cognito:username` is a
+     generated UUID, **not** the address — there is nothing extra to harvest from a token.
+     The address lives in the pool's `email` attribute, the ID token and userinfo, none of
+     which the API sees.
+   - **`sub` stays the key.** Emails change (a surname, a move between departments) and
+     Cognito allows the attribute to be updated; `sub` never changes and is never reused.
+     Keying on an address would silently detach a person's Tasks the day it changed.
+   - **Enrolment is by email:** the operator runs `enrol --email jane@example.gov.uk`; the
+     CLI resolves it to a `sub` via Cognito, then upserts `app_user`. If it resolves to no
+     user or more than one, it **fails loudly and writes nothing** — a half-enrolled row
+     is worse than none.
+   - **No new dependency, no new IAM on the API.** `boto3` is not a backend dependency and
+     this slice does not add one: the CLI shells out to the **AWS CLI** already used to run
+     migrations (`aws cognito-idp list-users --filter …`), via `subprocess.run` with
+     **list arguments and `shell=False`**, parsing its JSON with the stdlib. The email is
+     validated for shape before it is used as an argument. The IAM to read the pool sits
+     with the human operator's role, **never** with the API task role.
+   - **Erasure lever:** de-enrolment clears `email` as well as `org_id`. It is the one
+     command that removes the identifiable data this slice introduces.
+
 4. **Chats on org projects:** org members create and read **their own** conversations
    (`created_by = sub`); chat listings filter to own chats (owner's legacy NULL rows
    resolve to the owner). Planning conversations: readable with the project, writable by
@@ -158,20 +195,25 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `created_by`), not the project owner — one user's in-flight turns never throttle a
    colleague.
 5. **API (approval-gated · additive):** `GET /api/v1/me` →
-   `{user_id, display_name, organisation: {org_id, name} | null, is_admin: bool}`
+   `{user_id, display_name, email, organisation: {org_id, name} | null, is_admin: bool}`
    (the frontend needs it to label the wider list honestly — see § Frontend) ·
    `GET /projects?scope=all|mine` **and `GET /portfolios?scope=all|mine`** (default `all`
    = everything visible to the caller — own rows incl. private, plus org-visible
    colleagues' rows; the user is part of the org, so there is no separate "org" scope —
    owner call, rev 1.1) · `ProjectOut` **and `PortfolioOut`** gain `visibility`,
-   `is_owner`, `owner_display` · `PATCH /projects/{id}` **and `PATCH /portfolios/{id}`**
+   `is_owner`, `owner_display` (`display_name` when set, else `email`, else the current
+   `sub` rendering) · **`?owner_email=` on both listings, honoured only for `is_admin`
+   holders — anyone else passing it gets 400 `invalid_parameter`, which reveals nothing
+   about whether any address exists.** No user directory and no admin screen (Out) · `PATCH /projects/{id}` **and `PATCH /portfolios/{id}`**
    accept `visibility` (owner-only) · error envelope gains 403 `forbidden`.
    `make openapi-sync` regenerates the two generated files.
    **Portfolio task counts** (`portfolios.py` `_task_counts`) count only rows the caller
    can read — a colleague must not learn a private task exists from a count.
 6. **Ops tooling:** small `policy_atlas.ops` CLI + make targets — create org · enrol user
-   (upsert `app_user`, set `org_id`, optional `display_name`) · assign a `project` **or
-   `portfolio`** to an org · de-enrol (the rollback lever) · **grant/revoke `is_admin`**
+   **by email** (resolve `sub` via the AWS CLI, upsert `app_user`, set `org_id` and
+   `email`, optional `display_name`) · assign a `project` **or
+   `portfolio`** to an org · de-enrol (the rollback lever — **clears `email`**) ·
+   **grant/revoke `is_admin`**
    (the only way to set it — there is no HTTP route that grants it, so the flag cannot be
    self-served or escalated to through the API). Prod invocation documented in
    DEPLOYMENT.md (same pattern as migrations; no new infra).
@@ -215,6 +257,14 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
 - **An admin dashboard or any admin surface** — the flag is the designated home for one
   when it is built, and that slice adds the surface. This slice ships no admin screen:
   an admin sees the ordinary product, wider.
+- **A user directory** — `?owner_email=` filters *work* by its owner's address (owner call
+  (g)). There is no route that lists users, searches them by partial address, or reports
+  whether an address is enrolled. An admin who wants to know "who is in this org" reads
+  it off the work, or asks the ops CLI.
+- **Keeping `email` in step with Cognito** — it is resolved once at enrolment and never
+  re-synced, so an address changed in Cognito afterwards goes stale in the app until an
+  operator re-enrols. `sub` is the key precisely so that staleness is cosmetic, never a
+  correctness or access problem. A re-sync command is a seam, not a gap.
 - Self-serve onboarding: invitations, email-domain mapping, IdP claims/groups/federation.
 - Multi-org membership; ownership transfer; sharing to named individuals.
 - Write/co-edit on org-visible rows beyond own chats (incl. steering by non-owners).
@@ -237,8 +287,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
 
 This slice **is** the approval: schema (two new tables, two tables gaining columns, one
 gaining a backfilled column), auth/tenancy semantics, public API additions — all named
-above; nothing beyond them. No new dependencies. No egress change (`/me` and ops CLI are
-DB-only). No CI change. Migration is additive; downgrade drops the additions (and
+above; nothing beyond them. **No new dependencies** — the Cognito lookup shells out to
+the AWS CLI already used for migrations rather than adding `boto3` (owner call (g)).
+**Egress change, named and bounded:** the ops CLI gains one outbound Cognito call, made by
+a human operator under their own IAM. **The API's egress is unchanged** — `/me` and every
+request path stay DB-only, and the API task role gains no Cognito permission. No CI change. Migration is additive; downgrade drops the additions (and
 `created_by`). **Sequencing pin — re-derived 2026-08-24:** 029, 031 and 032 are all merged
 to `dev` (head `b8729a5`); this branch is cut fresh from merged `dev`, and
 **`b3c7d914e0a2` (032's portfolio layer) is confirmed the sole alembic head** this slice
@@ -282,7 +335,13 @@ Out items.
   defaults `false` so the dark-launch invariant is untouched · emits exactly one trace
   line per admin-leg read and none on a read the caller was already entitled to · no
   mutation, listing filter or projection reads the flag (asserted structurally, not only
-  behaviourally — the name invites drift)**; the existing
+  behaviourally — the name invites drift)** / **owner call (g): enrolment by email
+  resolves and stores the address · an email matching no user, or more than one, fails
+  loudly and writes nothing · `?owner_email=` returns an admin the right rows · a
+  non-admin passing `owner_email` gets 400 regardless of whether the address exists (no
+  oracle) · de-enrolment clears `email` · `owner_display` falls back
+  `display_name` → `email` → `sub` · the Cognito call is absent from every request path
+  (asserted structurally: the API imports nothing that reaches Cognito)**; the existing
   cross-owner 404 suite untouched and green (it now spans ten API test files including
   `test_portfolios_router.py` — the plan enumerates them from the tree, not from this
   contract).
@@ -291,12 +350,13 @@ Out items.
   colleague (read-only affordances render, lifecycle stages gated), private Task hidden
   and uncounted, colleague opens own chat on an org Task + owner cannot see it, rename
   attempt by colleague → 403, both switchers filter correctly, identity chip shows the
-  ops-set display name. **Then grant `is_admin` to a third user in neither org and verify:
+  ops-set display name — **enrolling both users by email address, not by `sub`**. **Then grant `is_admin` to a third user in neither org and verify:
   they browse both the org-visible Task and the private one, the owning organisation is
   named on screen, a rename attempt returns 403, and one trace line per admin read appears
   in CloudWatch with none for their own-org reads. Revoke, and confirm the wider list
-  disappears. Check the corrected visibility-toggle copy and the privacy-notice sentence
-  render on the live pages.** Plus one cheap
+  disappears. Check that `?owner_email=` finds a colleague's Task for the admin and 400s
+  for a non-admin, and that the corrected visibility-toggle copy and **both** privacy-notice
+  changes (§ 3 and § 6) render on the live pages.** Plus one cheap
   full-chain smoke (an existing personal Task still loads end-to-end). **Not** a full live
   e2e run.
 
@@ -337,3 +397,17 @@ sentence or the corrected visibility copy is missing, the slice ships a product 
 tells users `private` means something it does not. **The privacy page is live public
 legal copy — owner sign-off before merge.**
 Default `false` means an un-granted deployment behaves exactly as it does today.
+
+**Second call-out — the Cognito lookup and stored email (owner call (g)).**
+(1) The lookup shells out to the AWS CLI, so it is a **command-construction site**: list
+arguments, `shell=False`, and the address shape-validated before use. A reviewer should
+try to get a metacharacter into an argv position and fail;
+(2) it runs **only** in the ops CLI. The check that no request path can reach Cognito is
+structural, and the API task role must gain no Cognito permission — verify in the CDK diff,
+not just in the Python;
+(3) `?owner_email=` must not become an enumeration oracle: a non-admin gets the same 400
+whether or not the address exists, and an admin's result set is bounded by the same
+pagination as any other listing;
+(4) `email` is now personal data in the application database. The erasure lever
+(de-enrolment clears it) has to actually work, and § 3 of the privacy notice has to be
+accurate about what is stored — both are review items, not paperwork.

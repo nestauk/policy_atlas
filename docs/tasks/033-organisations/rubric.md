@@ -47,7 +47,15 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 16. [ ] **The `private` disclosure shipped** (owner call (f)): the visibility toggle says
         private hides a Task from your organisation, not from everyone; `PrivacyView.tsx`
         § 6 states that named administrators can access content for support and that
-        accesses are logged; **the privacy-page edit carries written owner sign-off**
-        (live public legal copy).
-17. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
+        accesses are logged; **§ 3 lists the stored email address** (owner call (g) — the
+        DB now holds directly identifiable personal data); **both privacy-page edits carry
+        written owner sign-off** (live public legal copy).
+17. [ ] **Identity reaches the DB only via ops (owner call (g)):** `sub` is still the
+        only claim any request path reads · the Cognito lookup lives in the ops CLI alone,
+        shells out to the AWS CLI with list args and `shell=False` on a shape-validated
+        address, and adds no backend dependency · the API task role gains **no** Cognito
+        permission (checked in the CDK diff) · enrolment by email fails loudly and writes
+        nothing on zero or multiple matches · de-enrolment clears `email` · `?owner_email=`
+        is admin-only and gives a non-admin the same 400 whether or not the address exists.
+18. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
         Accepted; AGENTS.md phase pointer current.

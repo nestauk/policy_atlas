@@ -58,6 +58,21 @@ public legal copy and needs written owner sign-off before merge**. The flag
 carries a named call-out for the security lane; its broad name invites drift, so
 "nothing outside the read leg reads it" is asserted structurally.
 
+**Owner call (g), 2026-08-24:** `app_user` **stores the Cognito email**, and admins
+can filter work by it. The access token carries `sub` only — the pool is
+`UsernameAttributes: ["email"]`, so `cognito:username` is a generated UUID, not
+the address — so the email is resolved **once at ops enrolment** (enrol *by*
+email; the CLI resolves it to a `sub`) and stored. `sub` stays the key, because
+addresses change and `sub` does not. Admins get `?owner_email=` on the two
+listings; a non-admin passing it gets 400 whether or not the address exists.
+**No new dependency and no API egress change:** the lookup shells out to the AWS
+CLI already used for migrations (list args, `shell=False`, shape-validated
+address), runs only in the ops CLI under the human operator's IAM, and the API
+task role gains no Cognito permission. The DB now holds directly identifiable
+personal data, so `PrivacyView.tsx` **§ 3** gains the email alongside § 6's
+administrator sentence — **both need written owner sign-off**, and de-enrolment
+clears the address as the erasure lever. No user directory (Out).
+
 **Next slice after 033 — the rename** (owner, 2026-08-24): `project` → `task`
 and `portfolio` → `project`, standalone, mechanical, no behaviour change,
 retiring ADR 0031's vocabulary split. It touches ~249 files and breaks
