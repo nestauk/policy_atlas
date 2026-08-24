@@ -22,13 +22,17 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `033-organisations` **contract rev 3.0 APPROVED 2026-08-24
-(step 1 🛑 passed) · PLAN DRAFTED → awaiting plan approval (step 3 🛑)** (branch `task/033-organisations`, cut fresh from `dev`
+**DESIGN COMPLETE — task `033-organisations` is ready to build.** Contract rev 3.0
+APPROVED · rubric (42 items) · plan rev 2.0 APPROVED · **ADR 0032 Accepted**
+(all 2026-08-24; steps 1–4 done). **Next: open conversation B and run
+`task-cycle-build` for steps 5–6.** The review stack (steps 7–10) must then run
+in a *third* conversation — the adjudicator of findings must not be the chat
+that wrote the code. (branch `task/033-organisations`, cut fresh from `dev`
 `b8729a5`): users belong to an organisation and see, by default, their own work
 plus their org's org-visible work, read-only, with their own chats on it. A few
 ops-assigned administrators read across every organisation for support, writing
 nothing, every read traced. Contract: `docs/tasks/033-organisations/contract.md`;
-42-item rubric and a thirteen-phase plan alongside. The three approval-gated
+Sixteen phases (0, 0b, 1–12 with 9 and 10 split). The three approval-gated
 phases (schema · auth semantics · public API) run **first**, so a refused gate
 surfaces before code is built on it; the ops CLI carries three more gates
 (`boto3`+stubs, the `Dockerfile` change, Cognito account creation). **Tier 4.** ADR 0032 expected (and must record that it
