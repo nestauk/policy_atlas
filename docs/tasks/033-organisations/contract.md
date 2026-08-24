@@ -40,6 +40,11 @@
 > This makes the application database hold directly identifiable personal data for the
 > first time, so the privacy notice changes with it and de-enrolment clears the address.
 >
+> **(h)** **The ops CLI owns the whole account lifecycle** — it creates and deletes the
+> Cognito user, not only reads it, so an operator never handles a pool ID or attribute
+> names by hand. Delete is the highest-consequence command in the slice and is specified
+> as such below: it never destroys work, and it is the erasure lever proper.
+>
 > **Sequencing note (owner, 2026-08-24):** the code/screen vocabulary split stays as
 > ADR 0031 left it for this slice. A **standalone rename slice follows 033** — `project`
 > → `task`, `portfolio` → `project`, mechanical, no behaviour change — and it will have to
@@ -188,12 +193,34 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
      `boto3`+`botocore` never reaches the API container. The rejected alternative was
      shelling out to the AWS CLI; it avoided the dependency but bought argv construction
      and stderr parsing in exchange, which is the worse trade.
+   - **The operator's role needs `cognito-idp:ListUsers`, `AdminCreateUser` and
+     `AdminDeleteUser`** (owner calls (g), (h)), documented alongside the existing jumpbox
+     IAM guidance in `infra/JUMPBOX.md`.
    - **No new IAM on the API.** The permission to read the pool sits with the human
      operator's role, **never** with the API task role, and the import is reachable only
      from the CLI entry point — asserted structurally, so an API module cannot grow a
      `boto3` import unnoticed.
    - **Erasure lever:** de-enrolment clears `email` as well as `org_id`. It is the one
      command that removes the identifiable data this slice introduces.
+
+3c. **Deleting a person (owner call (h)).** `user delete --email` removes the Cognito
+   account so they can no longer sign in, and **clears `email` and `display_name`** from
+   `app_user`. It is the erasure lever proper: the identifiable data goes, the row stays,
+   keyed by an opaque `sub` that no longer resolves to a person.
+   - **It never touches their work.** `project.owner_user_id` is plain text with no
+     foreign key, so nothing cascades, and nothing is permitted to: a CLI flag must not be
+     able to destroy research. Their Tasks and Projects remain, owned by a `sub` nobody
+     holds — the same unreachable state the recorded "NULL-owner pre-025 projects" posture
+     already accepts. Ownership transfer stays **Out**, so **there is no lever to give
+     that work to somebody else**; deleting a person who owns live work strands it, and
+     the command says so before it acts.
+   - **It reports before it acts.** The command prints the address, the organisation, and
+     the count of Tasks and Projects about to become unreachable, then requires the
+     operator to retype the address to proceed. `--force` skips the prompt for scripted
+     use. This is an irreversible cross-system action; a confirmation is not ceremony.
+   - **Unknown address fails loudly and writes nothing** — in either system.
+   - Delete is the erasure command; **de-enrol** remains the *reversible* lever that just
+     removes org membership and the stored address.
 
 4. **Chats on org projects:** org members create and read **their own** conversations
    (`created_by = sub`); chat listings filter to own chats (owner's legacy NULL rows
@@ -217,7 +244,15 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `make openapi-sync` regenerates the two generated files.
    **Portfolio task counts** (`portfolios.py` `_task_counts`) count only rows the caller
    can read — a colleague must not learn a private task exists from a count.
-6. **Ops tooling:** small `policy_atlas.ops` CLI + make targets — create org · enrol user
+6. **Ops tooling:** small `policy_atlas.ops` CLI + make targets — create org ·
+   **create user** (owner call (h): `user create --email --org [--display-name]` runs
+   Cognito `AdminCreateUser` then enrols in one command; Cognito **must** go first because
+   the `sub` it returns is the DB key. If the Cognito step succeeds and the database step
+   fails, the CLI **does not** delete the just-created account — it fails loudly and prints
+   the exact `user enrol` command that finishes the job. The stranded state is benign: a
+   signed-in user with no org sees only their own work. An address that already exists in
+   Cognito fails with "already exists — use `user enrol`", not a silent no-op) ·
+   **delete user** (owner call (h) — see § Deleting a person) · enrol user
    **by email** (resolve `sub` via the AWS CLI, upsert `app_user`, set `org_id` and
    `email`, optional `display_name`) · assign a `project` **or
    `portfolio`** to an org · de-enrol (the rollback lever — **clears `email`**) ·
@@ -288,7 +323,10 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
   operator re-enrols. `sub` is the key precisely so that staleness is cosmetic, never a
   correctness or access problem. A re-sync command is a seam, not a gap.
 - Self-serve onboarding: invitations, email-domain mapping, IdP claims/groups/federation.
-- Multi-org membership; ownership transfer; sharing to named individuals.
+- Multi-org membership; **ownership transfer**; sharing to named individuals. Transfer's
+  absence is now load-bearing: `user delete` (owner call (h)) strands whatever the deleted
+  person owned, and nothing in this slice can hand it to a colleague. The first operator
+  who needs to delete someone with live work is the trigger for a transfer slice.
 - Write/co-edit on org-visible rows beyond own chats (incl. steering by non-owners).
 - Seeing colleagues' chats (owner moderation view); org-level run/chat capacity policy.
 - Adoption of NULL-owner pre-025 projects (recorded posture stands).
@@ -364,7 +402,13 @@ Out items.
   non-admin passing `owner_email` gets 400 regardless of whether the address exists (no
   oracle) · de-enrolment clears `email` · `owner_display` falls back
   `display_name` → `email` → `sub` · the Cognito call is absent from every request path
-  (asserted structurally: the API imports nothing that reaches Cognito)** / **the account
+  (asserted structurally: the API imports nothing that reaches Cognito)** / **owner call
+  (h): `user create` creates then enrols · a Cognito-succeeded/DB-failed create leaves the
+  account and prints the `user enrol` remediation rather than deleting it · an existing
+  address fails with "use enrol" · `user delete` clears `email` and `display_name`, removes
+  the Cognito account, and **leaves every owned row untouched** (pinned by a test that
+  counts the owner's projects before and after) · delete on an unknown address writes to
+  neither system · `--force` is the only way to skip the retype confirmation** / **the account
   menu renders email + organisation from `/me`, shows the email alone when unenrolled, and
   names admin state when `is_admin`**; the existing
   cross-owner 404 suite untouched and green (it now spans ten API test files including
@@ -382,7 +426,10 @@ Out items.
   disappears. Check that `?owner_email=` finds a colleague's Task for the admin and 400s
   for a non-admin, and that the corrected visibility-toggle copy and **both** privacy-notice
   changes (§ 3 and § 6) render on the live pages. Open the account menu as each of the
-  three users and confirm it names the right email, organisation and admin state.** Plus one cheap
+  three users and confirm it names the right email, organisation and admin state. Finally
+  round-trip owner call (h) on a throwaway address: `user create` it into the org, sign in
+  once, then `user delete` it and confirm the account cannot sign in, the stored address is
+  gone, and any Task it owned still exists in the database.** Plus one cheap
   full-chain smoke (an existing personal Task still loads end-to-end). **Not** a full live
   e2e run.
 
@@ -434,6 +481,12 @@ the Python;
 (3) `?owner_email=` must not become an enumeration oracle: a non-admin gets the same 400
 whether or not the address exists, and an admin's result set is bounded by the same
 pagination as any other listing;
-(4) `email` is now personal data in the application database. The erasure lever
-(de-enrolment clears it) has to actually work, and § 3 of the privacy notice has to be
-accurate about what is stored — both are review items, not paperwork.
+(4) `email` is now personal data in the application database. Both erasure levers have to
+actually work — de-enrolment clears the address, `user delete` clears it and removes the
+account — and § 3 of the privacy notice has to be accurate about what is stored. These are
+review items, not paperwork;
+(5) **`user delete` is the most destructive command in the repo** (owner call (h)) and gets
+read line by line: it must remove the Cognito account and the stored personal data, and
+must **not** delete, reassign or cascade to a single owned row. The test that counts owned
+projects before and after is the one that matters. `--force` exists for scripts; a reviewer
+should check it is not the default path anywhere in the make targets.

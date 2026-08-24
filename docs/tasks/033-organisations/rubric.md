@@ -60,5 +60,12 @@ The task is **done only if every box holds** — otherwise it is in progress, no
 18. [ ] Account menu names the signed-in email, the organisation and (when set) admin
         state, from `/me`; unenrolled users show the email alone; a long address truncates
         rather than breaking the popover; the mock API serves `/me`.
-19. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
+19. [ ] **Account lifecycle is safe (owner call (h)):** `user create` runs Cognito first
+        and, on a database failure, keeps the account and prints the `user enrol`
+        remediation · `user delete` removes the Cognito account and clears `email` and
+        `display_name`, and **leaves every owned row untouched**, pinned by a
+        before/after count · delete reports the address, org and soon-to-be-unreachable
+        counts and requires the address retyped, with `--force` the only bypass and not
+        the default in any make target · unknown addresses write to neither system.
+20. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
         Accepted; AGENTS.md phase pointer current.

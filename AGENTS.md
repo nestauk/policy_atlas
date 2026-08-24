@@ -73,6 +73,17 @@ personal data, so `PrivacyView.tsx` **§ 3** gains the email alongside § 6's
 administrator sentence — **both need written owner sign-off**, and de-enrolment
 clears the address as the erasure lever. No user directory (Out).
 
+**Owner call (h), 2026-08-24:** the ops CLI owns the **whole account lifecycle** —
+`user create` (Cognito `AdminCreateUser` then enrol, in one command; Cognito
+first because its `sub` is the DB key; a DB failure keeps the account and prints
+the `user enrol` remediation rather than deleting it) and `user delete` (removes
+the Cognito account, clears `email`/`display_name`, and **never touches owned
+work** — no cascade, no reassign). Delete reports the address, org and
+soon-unreachable Task counts and requires the address retyped; `--force` is for
+scripts only. Because ownership transfer stays Out, deleting someone with live
+work **strands** it — that is now the trigger condition for a transfer slice.
+Operator IAM grows to `ListUsers` + `AdminCreateUser` + `AdminDeleteUser`.
+
 **Next slice after 033 — the rename** (owner, 2026-08-24): `project` → `task`
 and `portfolio` → `project`, standalone, mechanical, no behaviour change,
 retiring ADR 0031's vocabulary split. It touches ~249 files and breaks
