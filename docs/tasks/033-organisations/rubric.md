@@ -36,11 +36,18 @@ The task is **done only if every box holds** — otherwise it is in progress, no
         `org_id` + `visibility` columns, `owned_portfolio()` folded into the shared
         helper, `scope` on its listing — a colleague who can read a Task can read the
         Project that groups it.
-15. [ ] **`cross_org_read` holds the line** (owner call (f)): granted only via the ops
-        CLI (no HTTP write path, no mass-assignment route) · read grade only, refused 403
-        on every mutation · **does not read `visibility='private'` in a foreign org**
-        (pinned by a named negative test) · defaults `false`, so rubric 11's dark-launch
-        invariant is unaffected · one trace line per cross-org read, none on own-org reads
-        · named and reviewed in the security lane per the contract's call-out.
-16. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
+15. [ ] **`is_admin` holds the line** (owner call (f)): granted only via the ops CLI (no
+        HTTP write path, no mass-assignment route) · **read grade only** — every mutation
+        403s for a non-owner holder · reads every row in every org including
+        `visibility='private'`, pinned by a named test · **nothing outside the read leg
+        consults the flag**, asserted structurally (the broad name invites drift) ·
+        defaults `false`, so rubric 11's dark-launch invariant is unaffected · one trace
+        line per admin-leg read, none on reads the caller was already entitled to · named
+        and reviewed in the security lane per the contract's call-out.
+16. [ ] **The `private` disclosure shipped** (owner call (f)): the visibility toggle says
+        private hides a Task from your organisation, not from everyone; `PrivacyView.tsx`
+        § 6 states that named administrators can access content for support and that
+        accesses are logged; **the privacy-page edit carries written owner sign-off**
+        (live public legal copy).
+17. [ ] Spec flow-back landed: `web-api.md` auth boundary + resources updated; ADR 0032
         Accepted; AGENTS.md phase pointer current.

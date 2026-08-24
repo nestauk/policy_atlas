@@ -43,14 +43,20 @@ words throughout (screen **Task** = code `project`, screen **Project** = code
 `portfolio`), and its route/test counts are re-derived at plan time instead of
 being restated from rev 1. The old `task/030-organisations` branch is superseded.
 
-**Owner call (f), 2026-08-24:** a **cross-org read flag** ships in 033 —
-`app_user.cross_org_read`, ops-assigned only (no HTTP write path), granting
-**read** of org-visible rows in **any** organisation so a developer can browse
-any Task in the real UI. It grants no write, it is not an admin role, and it
-**does not pierce `visibility='private'`** — private must mean private, so
-debugging a private row goes to the ops CLI, not the flag. Every read on that
-leg emits one `structlog` trace line. It is the highest-value target in the
-design and carries a named call-out for the security lane.
+**Owner call (f), 2026-08-24:** an **admin flag** ships in 033 —
+`app_user.is_admin`, ops-assigned only (no HTTP write path), granting **read of
+every row in every organisation, `private` included**, so an admin can support
+any Task from the real UI. **Read only** — every mutation still 403s for a
+non-owner holder. It is the designated home for future admin capability (an
+admin dashboard hangs off it), but this slice grants exactly one thing and the
+tests pin that. Because it sees private work, **disclosure is the control**:
+every admin-leg read emits one `structlog` trace line, the visibility toggle
+copy is corrected to say private hides a Task *from your organisation*, and
+`PrivacyView.tsx` § 6 gains a sentence saying named administrators can access
+content for support and that accesses are logged. That privacy edit is **live
+public legal copy and needs written owner sign-off before merge**. The flag
+carries a named call-out for the security lane; its broad name invites drift, so
+"nothing outside the read leg reads it" is asserted structurally.
 
 **Next slice after 033 — the rename** (owner, 2026-08-24): `project` → `task`
 and `portfolio` → `project`, standalone, mechanical, no behaviour change,

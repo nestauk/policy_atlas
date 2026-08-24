@@ -2105,6 +2105,12 @@ omissions.
   `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
   only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
   the mapping is written down.
+- **An admin dashboard / admin surface** — 033 adds `app_user.is_admin` (owner call (f),
+  2026-08-24) as a read grade over every row in every organisation, and says so plainly:
+  it is the designated home for admin capability, but it ships **no admin screen**. An
+  admin sees the ordinary product, wider. A dashboard, an impersonation tool or an ops
+  view is the slice that adds the surface — and the first one to need *per-organisation*
+  admin rather than a global boolean turns this flag into the roles slice.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
