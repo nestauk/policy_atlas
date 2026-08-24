@@ -13,7 +13,11 @@
 > — it stays with the workspace-cluster slice.
 >
 > Owner calls taken at the design interview (2026-08-11), unchanged, encoded below:
-> **(a)** membership is **app-owned and ops-assigned** (new tables; no Cognito/IdP changes);
+> **(a)** membership is **app-owned and ops-assigned** (new tables; membership itself
+> never comes from the IdP). **Amended by (h), 2026-08-24:** "no Cognito changes" no
+> longer holds literally — the ops CLI now creates and deletes Cognito *users*. What
+> stands is the substance: no pool reconfiguration, no groups, no claims, no federation,
+> and nothing about org membership is read from the IdP.
 > **(b)** org access = **read everything + own chats** (all other mutations stay owner-only);
 > **(c)** per-`project` **`visibility` flag, default `org`**;
 > **(d)** **no enrolment backfill** — orgs start empty; existing rows stay personal-only
@@ -64,7 +68,9 @@ and their organisation's org-visible work — `project` rows and the `portfolio`
 group them — and can switch between the two in the frontend. Org-visible rows are readable
 end-to-end by org colleagues, who can also hold their **own** chat conversations on them;
 every mutating action (rename, archive, runs, planning turns, steering, visibility,
-portfolio membership) remains the owner's alone.
+portfolio membership) remains the owner's alone. A small number of ops-assigned
+**administrators** read across every organisation for support, under the same read-only
+rule and with every such read traced.
 
 ## Deliverable
 
@@ -73,11 +79,14 @@ One PR landing: `organisation` + `app_user` tables (the latter carrying the ops-
 `project` and `portfolio` (additive Alembic migration off 032's head `b3c7d914e0a2`),
 org-aware authorization on every project- and portfolio-scoped route (three read legs:
 owner, same-org, admin), `GET /api/v1/me`,
-the `scope` filter on the `projects` and `portfolios` listings, chat ownership
-(`conversation.created_by`), ops tooling (CLI + make targets) for org create / user
-enrolment / row assignment / admin grant, the frontend switcher + read-only
-affordances + identity chip + the visibility and privacy-notice copy,
-spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped live check.
+the `scope` and `owner_email` filters on the `projects` and `portfolios` listings, chat
+ownership (`conversation.created_by`), the portfolio/project **visibility invariant** and
+its 409 conflict resolutions (i), ops tooling (CLI + make targets) for org create / the
+whole user lifecycle — create, enrol, de-enrol, delete — / row assignment / admin grant,
+with `boto3` in a new ops-only dependency group, the frontend switcher + read-only
+affordances + identity chip + account menu + visibility-conflict prompts + the visibility
+and privacy-notice copy, spec flow-back to `web-api.md`, ADR 0032, and `verification.md`
+with the scoped live check.
 
 ## Read first
 
@@ -94,6 +103,9 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
   `src/mock/api.ts` serves no `/api/v1/portfolios`.
 - `docs/deferred.md` — "NULL-owner pre-025 projects" (posture stands: NOT adopted),
   "Concurrent-run write guard", 029 and 032 seams sections.
+- [DEPLOYMENT.md § 6](../../../infra/DEPLOYMENT.md) and `infra/JUMPBOX.md` — the SSM
+  jumpbox tunnel is how the ops CLI reaches the database, and where its operator IAM is
+  documented.
 - Current code: `api/auth.py` (claims: `sub` only — no email/groups/org in Cognito access
   tokens), `api/routers/_common.py` `owned_project()` **and `owned_portfolio()`**,
   `api/routers/portfolios.py` (032's four routes), the inline ownership joins in
@@ -127,9 +139,12 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
      `archived_at`, the one-active-planning partial index) are untouched by the backfill.
    - No enrolment backfill. `runtime/orchestrate.py` CLI projects keep
      `owner_user_id=NULL`, `org_id=NULL` — unchanged posture.
-2. **User provisioning:** `app_user` row upserted (`ON CONFLICT DO NOTHING`) at
-   `GET /api/v1/me` and by ops enrolment — **no DB writes in the auth dependency**;
-   `get_current_user` stays DB-free.
+2. **User provisioning:** `GET /api/v1/me` upserts the `app_user` row **`ON CONFLICT DO
+   NOTHING`** — it creates a bare row for a caller who has none and must never clobber
+   `org_id`, `email`, `display_name` or `is_admin` set by ops. **Ops enrolment upserts
+   `ON CONFLICT DO UPDATE`**, since setting those fields is exactly its job, and it
+   therefore works whether or not the person has signed in before. **No DB writes in the
+   auth dependency**; `get_current_user` stays DB-free.
 3. **Authorization:** `owned_project()` **and `owned_portfolio()`** generalise onto one
    access helper with two grades — **read** = owner ∪ (same org ∧ `visibility='org'` ∧
    existing archived/status rules unchanged) ∪ (**`is_admin`** — any row, any org, any
@@ -210,8 +225,9 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
      command that removes the identifiable data this slice introduces.
 
 3c. **Deleting a person (owner call (h)).** `user delete --email` removes the Cognito
-   account so they can no longer sign in, and **clears `email` and `display_name`** from
-   `app_user`. It is the erasure lever proper: the identifiable data goes, the row stays,
+   account so they can no longer sign in, and **clears `email`, `display_name` and
+   `is_admin`** from `app_user` — a dead `sub` must not keep a live grant, even one
+   nobody can authenticate into. It is the erasure lever proper: the identifiable data goes, the row stays,
    keyed by an opaque `sub` that no longer resolves to a person.
    - **It never touches their work.** `project.owner_user_id` is plain text with no
      foreign key, so nothing cascades, and nothing is permitted to: a CLI flag must not be
@@ -297,7 +313,11 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    `on_visibility_conflict=promote_project|promote_portfolio|demote_project` and
    `PATCH /portfolios/{id}` accepts `cascade=true`; both 409 `visibility_conflict` when the
    resolution is needed and not given (owner call (i))** · **`POST /portfolios` accepts
-   `from_project_id`, inheriting that project's visibility (i.1)** · error envelope gains 403 `forbidden`.
+   `from_project_id`: the new portfolio inherits that project's `visibility` **and takes
+   that project as its first member** — creating a Project "from" a Task means the Task
+   joins it, or the inheritance would describe nothing (i.1)** · error envelope gains **403 `forbidden`** (owner call (b)), **400 `invalid_parameter`**
+   (a non-admin passing `owner_email`, owner call (g)) and **409 `visibility_conflict`**
+   (an unresolved cascade, owner call (i)).
    `make openapi-sync` regenerates the two generated files.
    **Portfolio task counts** (`portfolios.py` `_task_counts`) count only rows the caller
    can read — a colleague must not learn a private task exists from a count.
@@ -317,8 +337,8 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    reset is likewise self-serve via the pool's `verified_email` recovery; **no CLI command
    sets, resets or reads a password**) ·
    **delete user** (owner call (h) — see § Deleting a person) · enrol user
-   **by email** (resolve `sub` via the AWS CLI, upsert `app_user`, set `org_id` and
-   `email`, optional `display_name`) · assign a `project` **or
+   **by email** (resolve `sub` via `boto3`, upsert `app_user` `ON CONFLICT DO
+   UPDATE` with `org_id` and `email`, optional `display_name`) · assign a `project` **or
    `portfolio`** to an org · de-enrol (the rollback lever — **clears `email`**) ·
    **grant/revoke `is_admin`**
    (the only way to set it — there is no HTTP route that grants it, so the flag cannot be
@@ -344,8 +364,10 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    avatar popover that today holds only Sign out): the signed-in **email** and the
    **organisation name**, above a divider, with Sign out beneath. Values only — no
    "Signed in as" preamble; the account icon is the label (just-enough-text). An
-   unenrolled user shows the email alone, with no empty row and no "No organisation"
-   filler. An `is_admin` holder's menu also names that, because this is the honest place
+   user with no organisation shows their identity line alone, with no empty row and no
+   "No organisation" filler. **A user who has never been enrolled has no stored `email`**
+   (it is set at enrolment), so the menu falls back to the same `sub` rendering the
+   identity chip uses — the menu must not render a blank line where an address would go. An `is_admin` holder's menu also names that, because this is the honest place
    to tell someone their sight is wider than normal. The popover is `w-44` today and an
    address will not fit: widen it and truncate the email with its full value in `title`,
    so a long address degrades rather than breaking the layout. Both values come from
@@ -370,8 +392,12 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
    behaviour is covered by backend route tests and frontend unit tests only. Extending
    the mock fixture is **Out** — recorded, not silently skipped.
 8. **Spec flow-back (ships with the slice):** `web-api.md` § Auth boundary (org read
-   grade, 403 semantics, `/me`, scope param on both listings) + a tenancy note above
-   data-model's entity hierarchy. Deferred seams recorded in `docs/deferred.md`.
+   grade, the admin read leg, 403/400/409 semantics, `/me`, `scope` and `owner_email` on
+   both listings) + § Portfolios (the visibility invariant and its conflict resolutions) +
+   a tenancy note above data-model's entity hierarchy · **`infra/JUMPBOX.md`** gains the
+   operator IAM the ops CLI needs (`ListUsers`, `AdminCreateUser`, `AdminDeleteUser`) and
+   `infra/DEPLOYMENT.md` § 6 gains the CLI's invocation. Deferred seams recorded in
+   `docs/deferred.md`.
 
 **Out (⏸ deferred, recorded, not silently omitted):**
 
@@ -393,7 +419,10 @@ spec flow-back to `web-api.md`, ADR 0032, and `verification.md` with the scoped 
   re-synced, so an address changed in Cognito afterwards goes stale in the app until an
   operator re-enrols. `sub` is the key precisely so that staleness is cosmetic, never a
   correctness or access problem. A re-sync command is a seam, not a gap.
-- Self-serve onboarding: invitations, email-domain mapping, IdP claims/groups/federation.
+- Self-serve onboarding: sign-up, invitation *requests*, email-domain mapping, IdP
+  claims/groups/federation. The Cognito invitation email that `AdminCreateUser` sends is
+  **in** scope (owner call (h)) — it is admin-initiated, which is the opposite of
+  self-serve.
 - Multi-org membership; **ownership transfer**; sharing to named individuals. Transfer's
   absence is now load-bearing: `user delete` (owner call (h)) strands whatever the deleted
   person owned, and nothing in this slice can hand it to a colleague. The first operator
@@ -418,10 +447,15 @@ gaining a backfilled column), auth/tenancy semantics, public API additions — a
 above; nothing beyond them. **One new dependency, approval-gated and named: `boto3`, in a
 new ops-only dependency group** (owner opened this 2026-08-24) — excluded from the API
 image by the existing `uv sync --no-dev --frozen` build, so the runtime is unchanged.
-**Egress change, named and bounded:** the ops CLI gains one outbound Cognito call, made by
-a human operator under their own IAM. **The API's egress is unchanged** — `/me` and every
-request path stay DB-only, and the API task role gains no Cognito permission. No CI change. Migration is additive; downgrade drops the additions (and
-`created_by`). **Sequencing pin — re-derived 2026-08-24:** 029, 031 and 032 are all merged
+**Egress change, named and bounded:** the ops CLI gains outbound Cognito calls —
+`ListUsers`, `AdminCreateUser`, `AdminDeleteUser` — each made by a human operator under
+their own IAM. **The API's egress is unchanged**: `/me` and every request path stay
+DB-only, and the API task role gains no Cognito permission.
+**Two further gates that are not code:** the **privacy-notice edits** (§ 3 and § 6 of a
+live public legal page) need written owner sign-off before merge, and the **Cognito
+account operations** (create and delete real users) are an approval in their own right —
+this contract is where they are granted, and nothing beyond create/delete/read is.
+No CI change. Migration is additive; downgrade drops the additions (and `created_by`). **Sequencing pin — re-derived 2026-08-24:** 029, 031 and 032 are all merged
 to `dev` (head `b8729a5`); this branch is cut fresh from merged `dev`, and
 **`b3c7d914e0a2` (032's portfolio layer) is confirmed the sole alembic head** this slice
 chains off. Generated files only via `make openapi-sync`.
