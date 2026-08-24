@@ -605,11 +605,25 @@ PR landing:
    Unit tests pin every transform.
 
 6. **Per-provider result caps, depth-aware; fields requested explicitly**
-   *(amended revs 1.2, 2)*. Caps are per-backend so the verbose provider
-   can't crowd out grey literature, and **per-depth** (plan-pinned
-   constants; order: rapid ~25–50/backend, deep ~100–200/backend
-   across the whole run — the R&D's Arm-A ran 200/variant, our deep cap
-   bounds the *run*, not the variant). Pagination lands (decision 18);
+   *(amended revs 1.2, 2, tasks 028–029)*. Caps are per-backend so the
+   verbose provider can't crowd out grey literature, and **per-depth**
+   (plan-pinned constants). **Task 028 amendment:** the cap that bounds
+   the *run* is no longer a shared result total divided across the
+   fan-out — that division was the bug (75 ÷ 15 queries = 5 results per
+   query). Two separate constants now do the two jobs:
+   `result_cap_per_backend` (50/75/100) bounds **one call**, sized to
+   provider page boundaries so a call is 1–2 HTTP requests; and
+   `record_cap_per_backend` bounds **documents acquired per backend per
+   round** (task 029, owner-set: rapid 50 / standard 100 / deep 200),
+   applied in `acquire_sources` after a rank-interleaved merge across
+   the fan-out and after dedup. The run-level brake is therefore a
+   volume cap at acquisition, not a result total at search — which
+   brakes the thing that costs money (each acquired record is embedded,
+   then screened at `SCREEN_REPS` LLM calls). The grey-literature
+   protection this decision was written for now comes from the cap
+   being per-backend at acquisition, plus the removal of the wall
+   clock (all depths, task 029) that let the OpenAlex leg skip the
+   entire Overton leg. Pagination lands (decision 18);
    `breadth_truncated` remains the honest stop condition when a cap
    bites. **OpenAlex requests carry a `select=` field list derived from
    the mapper's constants** (envelope-source fields +
@@ -781,7 +795,20 @@ PR landing:
     infrastructure failure, not empty coverage.
 
 15. **Deep search: the Arm-B loop as acquire↔screen rounds,
-    latency-bounded** *(rewritten rev 3 — the loop's judge IS screen)*.
+    latency-bounded** *(rewritten rev 3 — the loop's judge IS screen;
+    amended task 029)*. **Task 029 amendment:** the rounds are
+    **runner-orchestrated**, not skeleton-sequenced — the skeleton died
+    with task 023 and took the loop's only caller with it, leaving every
+    depth single-round until 029 wired a round gate into the runner's
+    walk (each round is an ordinary pair of component steps: own run
+    rows, steering boundaries, check-ins, SSE). The `target_reached`
+    stop is **removed** with `TARGET_CONFIDENT_RELEVANT` and the D5
+    `search.target` directive: the per-depth round cap (standard 2 /
+    deep 3) is the budget, `short_circuit` the marginal-yield stop, and
+    the `re_searched_still_thin` overlay keys on
+    `THIN_CONFIDENT_RELEVANT`. The latency bound below is likewise
+    historical — the wall clock is gone at every depth; volume caps
+    (decision 6) are the budget. As originally specified:
     A deep run is **skeleton-sequenced rounds**, each round one acquire
     run + one incremental screen run:
     - **Round 1**: acquire (decision 14's rapid fan-out) → screen (the

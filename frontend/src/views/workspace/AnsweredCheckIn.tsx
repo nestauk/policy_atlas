@@ -39,7 +39,7 @@ export function AnsweredCheckIn({
         )}
       </div>
       {sessionAnswer !== null && (
-        <p className="mt-2 text-caption text-ink">
+        <p className="mt-2 text-body text-ink">
           You chose <span className="font-semibold">{scrub(sessionAnswer.chosenOptionLabel)}</span>
         </p>
       )}
@@ -54,22 +54,22 @@ export function AnsweredCheckIn({
         </details>
       )}
       {prose !== null && (
-        <p className="mt-2 max-w-prose-measure border-l-2 border-l-line pl-2.5 text-caption italic text-ink">
+        <p className="mt-2 max-w-prose-measure border-l-2 border-l-line pl-2.5 text-body italic text-ink">
           “{scrub(prose)}”
         </p>
       )}
       {details.length > 0 && (
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-caption">
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
           {details.map(({ label, value }) => (
             <div key={label} className="contents">
-              <dt className="text-grey">{label}</dt>
-              <dd className="text-navy">{scrub(String(value))}</dd>
+              <dt className="text-caption text-grey">{label}</dt>
+              <dd className="text-meta text-navy">{scrub(String(value))}</dd>
             </div>
           ))}
         </dl>
       )}
       {sessionAnswer === null && prose === null && details.length === 0 && (
-        <p className="mt-1.5 text-caption text-grey">The run continued as suggested.</p>
+        <p className="mt-1.5 text-body text-grey">The run continued as suggested.</p>
       )}
     </Card>
   );

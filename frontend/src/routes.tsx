@@ -3,11 +3,19 @@ import { createBrowserRouter } from "react-router";
 
 import { AppShell } from "./views/AppShell";
 import { ArtefactView } from "./views/ArtefactView";
-import { DecisionsView } from "./views/DecisionsView";
 import { FindingsView } from "./views/FindingsView";
-import { LandingView } from "./views/LandingView";
+import { HistoryView } from "./views/HistoryView";
+import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
+import { NewTaskView } from "./views/NewTaskView";
+import { PortfolioDetailView, PortfoliosView } from "./views/PortfoliosView";
+import { ShareView } from "./views/ShareView";
+import { SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
+import { TasksListView } from "./views/TasksListView";
+import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
+import { PrivacyView } from "./views/legal/PrivacyView";
+import { TermsView } from "./views/legal/TermsView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
 
 // Lazy: `recharts` is a substantial dependency only the landscape route
@@ -31,20 +39,71 @@ export const router = createBrowserRouter([
   {
     element: <AppShell />,
     children: [
-      { path: "/", element: <LandingView /> },
+      { path: "/", element: <TasksListView /> },
+      { path: "/new", element: <NewTaskView /> },
+      { path: "/portfolios", element: <PortfoliosView /> },
+      { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
+      { path: "/privacy", element: <PrivacyView /> },
+      { path: "/terms", element: <TermsView /> },
+
+      // The task lifecycle: Plan · Results · Sources · Share · History.
+      // Every stage past Plan is gated on run state, so a locked stage is
+      // unreachable by URL as well as by click.
       { path: "/projects/:projectId", element: <WorkspaceView /> },
-      { path: "/projects/:projectId/evidence-base", element: <ArtefactView /> },
-      { path: "/projects/:projectId/findings", element: <FindingsView /> },
-      { path: "/projects/:projectId/sources", element: <SourcesView /> },
       {
-        path: "/projects/:projectId/landscape",
+        path: "/projects/:projectId/results",
         element: (
-          <Suspense fallback={<LandscapeFallback />}>
-            <LandscapeView />
-          </Suspense>
+          <LifecycleRoute tab="results">
+            <ArtefactView />
+          </LifecycleRoute>
         ),
       },
-      { path: "/projects/:projectId/decisions", element: <DecisionsView /> },
+      {
+        path: "/projects/:projectId/sources",
+        element: (
+          <LifecycleRoute tab="sources">
+            <SourcesLayout />
+          </LifecycleRoute>
+        ),
+        children: [
+          { index: true, element: <ThemesView /> },
+          {
+            path: "landscape",
+            element: (
+              <Suspense fallback={<LandscapeFallback />}>
+                <LandscapeView />
+              </Suspense>
+            ),
+          },
+          { path: "all", element: <SourcesView /> },
+          { path: "findings", element: <FindingsView /> },
+        ],
+      },
+      {
+        path: "/projects/:projectId/share",
+        element: (
+          <LifecycleRoute tab="share">
+            <ShareView />
+          </LifecycleRoute>
+        ),
+      },
+      {
+        path: "/projects/:projectId/history",
+        element: (
+          <LifecycleRoute tab="history">
+            <HistoryView />
+          </LifecycleRoute>
+        ),
+      },
+
+      // Retired paths. Every URL that was bookmarkable before the reshape
+      // still resolves — a reorganisation is not a reason to break someone's
+      // saved link.
+      { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
+      { path: "/projects/:projectId/findings", element: <RedirectToPath suffix="/sources/findings" /> },
+      { path: "/projects/:projectId/landscape", element: <RedirectToPath suffix="/sources/landscape" /> },
+      { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
+
       // Catch-all: an unknown URL still gets the app chrome and an honest
       // "nothing here" view rather than a router error page.
       { path: "*", element: <NotFoundView /> },

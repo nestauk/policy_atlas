@@ -86,6 +86,7 @@ const HUMAN_REASON: Record<string, string> = {
   blocked: "The publisher blocked the fetch",
   blocked_by_host: "The publisher's site blocked the fetch",
   fetch_error: "The fetch failed",
+  unsupported_type: "The fetched file was not a text document",
 };
 
 /** Humanize a backend reason code; unknown snake_case codes de-snake rather

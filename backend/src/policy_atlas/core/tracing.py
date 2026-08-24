@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from threading import Lock
 from typing import Any, Literal
 
-from langfuse import Langfuse
+from langfuse import Langfuse, propagate_attributes
 
 from policy_atlas.core import embeddings
 from policy_atlas.core.embeddings import EmbeddingBackend
@@ -147,8 +147,7 @@ def traced_call[T](
     if client is None:
         return call()
 
-    with _observation(client, name=name, as_type=as_type) as span:
-        _set_current_trace_session(client, session_id)
+    with _session_scope(session_id), _observation(client, name=name, as_type=as_type) as span:
         result = call()
         if update is not None:
             update(span, result)
@@ -157,18 +156,25 @@ def traced_call[T](
         return result
 
 
-def _set_current_trace_session(client: Langfuse, session_id: uuid.UUID | None) -> None:
-    """Attach a Langfuse session id when the installed SDK exposes the helper.
+@contextmanager
+def _session_scope(session_id: uuid.UUID | None) -> Iterator[None]:
+    """Propagate a Langfuse session id to every observation opened inside the scope.
+
+    SDK 4.13 has no ``update_current_trace`` (the pre-fix code silently no-opped
+    on every trace, chat and planning alike — confirmed live, sessionId null
+    since 2026-08-09): the v4 seam is ``propagate_attributes``, which only
+    reaches observations OPENED while its context is active. Callers must
+    therefore wrap the WHOLE observation-creation call in this scope, never
+    update a session after the observation already opened.
 
     Args:
-        client: Langfuse client with an active current trace.
-        session_id: Conversation/session id to attach, or ``None``.
+        session_id: Conversation/session id to attach, or ``None`` for a no-op.
     """
     if session_id is None:
+        yield
         return
-    update_current_trace = getattr(client, "update_current_trace", None)
-    if callable(update_current_trace):
-        update_current_trace(session_id=str(session_id))
+    with propagate_attributes(session_id=str(session_id)):
+        yield
 
 
 class TracedEmbeddingBackend:
@@ -355,8 +361,10 @@ def component_span(
         yield None
         return
 
-    with _observation(client, name=f"run:{component}:{run_id}", as_type="span") as run_span:
-        _set_current_trace_session(client, session_id)
+    with (
+        _session_scope(session_id),
+        _observation(client, name=f"run:{component}:{run_id}", as_type="span") as run_span,
+    ):
         run_span.update(metadata={"project_id": str(project_id), "run_id": str(run_id)})
         with _observation(
             client,

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Literal, cast
 
@@ -639,15 +641,11 @@ class _FakeObservation:
 class _FakeLangfuse:
     def __init__(self) -> None:
         self.spans: list[tuple[str, str, _FakeSpan]] = []
-        self.sessions: list[str] = []
 
     def start_as_current_observation(self, *, name: str, as_type: str) -> _FakeObservation:
         span = _FakeSpan()
         self.spans.append((name, as_type, span))
         return _FakeObservation(span)
-
-    def update_current_trace(self, *, session_id: str) -> None:
-        self.sessions.append(session_id)
 
 
 def test_traced_call_after_hook_runs_inside_span() -> None:
@@ -669,9 +667,30 @@ def test_traced_call_after_hook_runs_inside_span() -> None:
     assert fake_client.spans[0][2].closed is True
 
 
-def test_component_span_applies_langfuse_session() -> None:
+def test_component_span_opens_the_root_span_inside_the_session_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real seam is ``propagate_attributes`` (SDK 4.13 has no ``update_current_trace``):
+    the whole root-span creation must sit inside its scope, since attributes only reach
+    observations OPENED while the scope is active — updating after opening is a no-op."""
     fake_client = _FakeLangfuse()
     session_id = uuid.uuid4()
+    events: list[str] = []
+
+    @contextmanager
+    def fake_propagate_attributes(*, session_id: str) -> Iterator[None]:
+        events.append(f"session_enter:{session_id}")
+        yield
+        events.append("session_exit")
+
+    monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
+    original_start = fake_client.start_as_current_observation
+
+    def recording_start(*, name: str, as_type: str) -> _FakeObservation:
+        events.append(f"observation:{name}")
+        return original_start(name=name, as_type=as_type)
+
+    fake_client.start_as_current_observation = recording_start  # type: ignore[method-assign]
 
     with tracing.component_span(
         cast(Any, fake_client),
@@ -682,10 +701,30 @@ def test_component_span_applies_langfuse_session() -> None:
     ):
         pass
 
-    assert fake_client.sessions == [str(session_id)]
+    enter_index = events.index(f"session_enter:{session_id}")
+    exit_index = events.index("session_exit")
+    observation_indexes = [i for i, event in enumerate(events) if event.startswith("observation:")]
+    assert observation_indexes
+    assert all(enter_index < index < exit_index for index in observation_indexes)
     assert fake_client.spans[0][0].startswith("run:synthesise:")
     assert [span[1] for span in fake_client.spans] == ["span", "span"]
     assert fake_client.spans[1][0] == "component:synthesise"
+
+
+def test_session_scope_propagates_session_id_into_the_real_otel_context() -> None:
+    """Exercises the REAL ``propagate_attributes`` (no stub, no client): the SDK carries
+    the session id via OpenTelemetry context, which the pre-fix ``update_current_trace``
+    seam never reached because the installed SDK (4.13.0) has no such method."""
+    from opentelemetry import context as otel_context_api
+
+    session_id = uuid.uuid4()
+    context_key = "langfuse.propagated.session_id"
+    assert otel_context_api.get_value(context_key) is None
+
+    with tracing._session_scope(session_id):
+        assert otel_context_api.get_value(context_key) == str(session_id)
+
+    assert otel_context_api.get_value(context_key) is None
 
 
 def test_salvage_section_caps_emission_at_max() -> None:

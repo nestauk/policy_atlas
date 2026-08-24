@@ -32,5 +32,6 @@ class PaV3CertStack(Stack):
             self,
             "FrontendCertificate",
             domain_name=domain_name,
+            subject_alternative_names=[f"www.{domain_name}"],
             validation=acm.CertificateValidation.from_dns(hosted_zone),
         )

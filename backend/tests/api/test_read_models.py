@@ -1189,6 +1189,264 @@ def test_landscape_cited_scope_uses_only_latest_artefact_members(
                 delete_project_data(conn, project_id)
 
 
+def test_landscape_geography_residual_makes_every_scope_add_up(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 031 invariant 4: country bars + "Not reported" = the population drawn.
+
+    A second relevant source is seeded with no publisher country. Before this
+    slice `_geography` returning ``None`` dropped it from the chart, so the bars
+    summed below the funnel's relevant count (defect 3). The cited scope keeps
+    its own, smaller total — it must not be "corrected" to the funnel's.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                scope_id = conn.execute(
+                    select(search_coverage_record.c.evidence_scope_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                run_id = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                # A second relevant source, and the country goes on THIS one —
+                # the uncited one. The ladder's cited source stays countryless,
+                # so the residual is what the cited scope has to draw. Putting
+                # the country on the cited source instead would make the cited
+                # assertion pass even if the residual were skipped at that
+                # scope, which is the whole thing this test exists to pin.
+                _, uncited_with_country = seed_source(
+                    conn, project_id, {"title": "Reported country", "backend": "openalex"}
+                )
+                seed_screening_result(
+                    conn, project_id, run_id, scope_id, uncited_with_country, status="relevant"
+                )
+                for snapshot_id, metadata in conn.execute(
+                    select(source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata)
+                    .select_from(
+                        source_snapshot.join(
+                            project_source_snapshot,
+                            project_source_snapshot.c.source_snapshot_id
+                            == source_snapshot.c.source_snapshot_id,
+                        )
+                    )
+                    .where(
+                        project_source_snapshot.c.project_id == project_id,
+                        source_snapshot.c.metadata["title"].astext == "Reported country",
+                    )
+                ).all():
+                    conn.execute(
+                        update(source_snapshot)
+                        .where(source_snapshot.c.source_snapshot_id == snapshot_id)
+                        .values(metadata={**metadata, "publication_country": "GB"})
+                    )
+
+            funnel = client.get(f"/api/v1/projects/{project_id}/funnel", headers=owner).json()
+            whole = client.get(f"/api/v1/projects/{project_id}/landscape", headers=owner).json()
+            assert whole["geographies"] == {"GB": 1, "Not reported": 1}
+            assert sum(whole["geographies"].values()) == funnel["relevant"] == 2
+
+            cited = client.get(
+                f"/api/v1/projects/{project_id}/landscape?scope=cited", headers=owner
+            ).json()
+            # The cited scope draws only the artefact's citations, so it sums to
+            # that smaller population — not to the funnel's relevant count. The
+            # residual is what it draws, which is only true because the count
+            # happens inside the loop over the already-narrowed rows.
+            assert cited["geographies"] == {"Not reported": 1}
+            assert sum(cited["geographies"].values()) == 1 != funnel["relevant"]
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
+def test_coverage_ignores_a_superseded_questions_rounds(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """"Where I looked" describes one question, cumulatively — not the project.
+
+    Approving a plan mints a new ``evidence_scope`` (``orchestrate.py``), so a
+    re-planned project holds the abandoned question's coverage records too.
+    Summing acquire runs project-wide put that question's query strings and hits
+    into this question's card, beside a sentence read from the current
+    question's row (review stack, task 031). Round-cumulative was the fix;
+    question-cumulative was not.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                old_run = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=old_run,
+                    event_type="search.executed",
+                    payload={
+                        "backend": "openalex",
+                        "query": "abandoned question",
+                        "result_count": 99,
+                    },
+                )
+                # The replan: a second scope, its own acquire run, its own row.
+                new_scope = seed_scope(conn, project_id)
+                new_run = uuid.uuid4()
+                conn.execute(
+                    insert(runs).values(
+                        run_id=new_run,
+                        project_id=project_id,
+                        status="running",
+                        started_at=now(),
+                    )
+                )
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=new_run,
+                    event_type="search.executed",
+                    payload={
+                        "backend": "openalex",
+                        "query": "current question",
+                        "result_count": 7,
+                    },
+                )
+                conn.execute(
+                    insert(search_coverage_record).values(
+                        search_coverage_record_id=uuid.uuid4(),
+                        evidence_scope_id=new_scope,
+                        project_id=project_id,
+                        acquired_by_run_id=new_run,
+                        backends=[{"backend": "openalex", "trust_class": "academic"}],
+                        scope_filters={},
+                        stop_condition="completed",
+                        adequacy_verdict="adequate",
+                        verdict_origin="model",
+                        created_at=now(),
+                    )
+                )
+
+            coverage = client.get(
+                f"/api/v1/projects/{project_id}/coverage", headers=owner
+            ).json()
+            detail = next(
+                row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
+            )
+            assert [query["query"] for query in detail["queries"]] == ["current question"]
+            assert detail["results"] == 7, "the abandoned question's 99 hits must not count"
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
+def test_coverage_backend_results_sum_query_hits_across_every_round(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Task 031 invariant 3: `results` is cumulative, not the last round only.
+
+    A second acquire round is seeded with its own coverage record and query
+    events. Before this slice `coverage_out` passed only the newest record's
+    ``acquired_by_run_id``, so the pane reported round 2's hits alone beside a
+    cumulative relevant count — defect 2's two grains on one line.
+    """
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = uuid.UUID(create_project(client, owner))
+        _seed_read_model_ladder(engine, project_id)
+        try:
+            with engine.begin() as conn:
+                scope_id = conn.execute(
+                    select(search_coverage_record.c.evidence_scope_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                round_one_run = conn.execute(
+                    select(search_coverage_record.c.acquired_by_run_id).where(
+                        search_coverage_record.c.project_id == project_id
+                    )
+                ).scalar_one()
+                # Round 1 already owns a coverage record from the ladder; give it
+                # a named OpenAlex hit so both rounds contribute.
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=round_one_run,
+                    event_type="search.executed",
+                    payload={"backend": "openalex", "query": "round one", "result_count": 40},
+                )
+                round_two_run = uuid.uuid4()
+                conn.execute(
+                    insert(runs).values(
+                        run_id=round_two_run,
+                        project_id=project_id,
+                        status="running",
+                        started_at=now(),
+                    )
+                )
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=round_two_run,
+                    event_type="search.executed",
+                    payload={"backend": "openalex", "query": "round two", "result_count": 32},
+                )
+                conn.execute(
+                    insert(search_coverage_record).values(
+                        search_coverage_record_id=uuid.uuid4(),
+                        evidence_scope_id=scope_id,
+                        project_id=project_id,
+                        acquired_by_run_id=round_two_run,
+                        backends=[{"backend": "openalex", "trust_class": "academic"}],
+                        scope_filters={},
+                        stop_condition="completed",
+                        adequacy_verdict="adequate",
+                        verdict_origin="model",
+                        created_at=now(),
+                    )
+                )
+                # Attribute the ladder's sources to OpenAlex so the relevance
+                # half of the line is actually exercised.
+                for snapshot_id, metadata in conn.execute(
+                    select(source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata)
+                    .select_from(
+                        source_snapshot.join(
+                            project_source_snapshot,
+                            project_source_snapshot.c.source_snapshot_id
+                            == source_snapshot.c.source_snapshot_id,
+                        )
+                    )
+                    .where(project_source_snapshot.c.project_id == project_id)
+                ).all():
+                    conn.execute(
+                        update(source_snapshot)
+                        .where(source_snapshot.c.source_snapshot_id == snapshot_id)
+                        .values(metadata={**metadata, "backend": "openalex"})
+                    )
+
+            coverage = client.get(
+                f"/api/v1/projects/{project_id}/coverage", headers=owner
+            ).json()
+            detail = next(
+                row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
+            )
+            assert detail["results"] == 72, "both rounds' hits, not round 2's 32 alone"
+            assert [query["query"] for query in detail["queries"]] == ["round one", "round two"]
+            # The 027 §C.1 behaviour is deliberately untouched: relevance stays
+            # project-wide per backend, so it is not a subset of the hit total.
+            assert detail["relevant"] == 1
+        finally:
+            with engine.begin() as conn:
+                delete_project_data(conn, project_id)
+
+
 def test_evidence_cited_filter_and_combination(tmp_path: Path, engine: Engine) -> None:
     """`cited` filters the collection and combines with `status`."""
     with api_client(tmp_path) as (client, owner, other):

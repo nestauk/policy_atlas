@@ -132,7 +132,12 @@ class PolicyAtlasStack(Stack):
 
         # --- Backend ---
 
-        auth = CognitoAuth(self, "CognitoAuth")
+        auth = CognitoAuth(
+            self,
+            "CognitoAuth",
+            domain_name=domain_name,
+            domain_prefix=pa_app_config["cognito_domain_prefix"],
+        )
         backend_image = ecs.ContainerImage.from_asset("../backend",
             platform=ecr_assets.Platform.LINUX_AMD64,
         )
@@ -162,7 +167,7 @@ class PolicyAtlasStack(Stack):
                 "LOG_FORMAT": "json",
                 # Tags deployed traces so they filter apart from local-dev
                 # runs inside the shared dev Langfuse project.
-                "LANGFUSE_TRACING_ENVIRONMENT": "staging",
+                "LANGFUSE_TRACING_ENVIRONMENT": env_name,
             },
             secrets={
                 "DATABASE_URL": ecs.Secret.from_secrets_manager(db_secret, field="db_connection_string"),
@@ -277,21 +282,51 @@ class PolicyAtlasStack(Stack):
         # Review-stack hardening (026 step 7): baseline security headers (HSTS,
         # X-Frame-Options, nosniff, referrer policy) on every response.
         security_headers = cloudfront.ResponseHeadersPolicy.SECURITY_HEADERS
+        # www is a courtesy alias only: 301 to the apex so Cognito callback
+        # URLs and the API's single-origin CORS stay canonical (#53 follow-up).
+        www_redirect = cloudfront.Function(self, "WwwRedirectFunction",
+            code=cloudfront.FunctionCode.from_inline(
+                "function handler(event) {\n"
+                "    var request = event.request;\n"
+                "    var host = request.headers.host.value;\n"
+                "    if (host.indexOf('www.') === 0) {\n"
+                "        var qs = '';\n"
+                "        var keys = Object.keys(request.querystring);\n"
+                "        for (var i = 0; i < keys.length; i++) {\n"
+                "            var q = request.querystring[keys[i]];\n"
+                "            qs += (qs ? '&' : '?') + keys[i] + (q.value ? '=' + q.value : '');\n"
+                "        }\n"
+                "        return {\n"
+                "            statusCode: 301,\n"
+                "            statusDescription: 'Moved Permanently',\n"
+                "            headers: {location: {value: 'https://' + host.slice(4) + request.uri + qs}}\n"
+                "        };\n"
+                "    }\n"
+                "    return request;\n"
+                "}\n"
+            ),
+        )
+        www_redirect_association = cloudfront.FunctionAssociation(
+            function=www_redirect,
+            event_type=cloudfront.FunctionEventType.VIEWER_REQUEST,
+        )
         distribution = cloudfront.Distribution(self, "FrontendDistribution",
             default_behavior=cloudfront.BehaviorOptions(
                 origin=frontend_origin,
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
                 response_headers_policy=security_headers,
+                function_associations=[www_redirect_association],
             ),
             additional_behaviors={
                 "/index.html": cloudfront.BehaviorOptions(
                     origin=frontend_origin,
                     cache_policy=index_html_cache_policy,
                     response_headers_policy=security_headers,
+                    function_associations=[www_redirect_association],
                 ),
             },
             certificate=certificate,
-            domain_names=[domain_name],
+            domain_names=[domain_name, f"www.{domain_name}"],
             default_root_object="index.html",
             error_responses=[
                 cloudfront.ErrorResponse(
@@ -311,8 +346,21 @@ class PolicyAtlasStack(Stack):
             zone=hosted_zone,
             target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
         )
+
+        r53.ARecord(self, "FrontendARecordWWW",
+            zone=hosted_zone,
+            record_name='www',
+            target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
+        )
+
         r53.AaaaRecord(self, "FrontendAaaaRecord",
             zone=hosted_zone,
+            target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
+        )
+
+        r53.AaaaRecord(self, "FrontendAaaaRecordWWW",
+            zone=hosted_zone,
+            record_name='www',
             target=r53.RecordTarget.from_alias(r53_targets.CloudFrontTarget(distribution)),
         )
 

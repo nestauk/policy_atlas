@@ -484,6 +484,9 @@ class SectionOut(BaseModel):
     Args:
         title: Section title.
         role: Section role (determines page position).
+        nav_label: Short scannable name for the contents list, or `None` for
+            an artefact produced before the label existed. Absence is a normal
+            state: the client falls back to a shortened title.
         blocks: The section's prose blocks, in order.
         summary: Verified summary for a single-block section, if available.
         summary_status: Summary production state for a single-block section.
@@ -492,6 +495,7 @@ class SectionOut(BaseModel):
     title: str
     role: SectionRole
     focus: str | None = None
+    nav_label: str | None = None
     blocks: list[BlockOut] = Field(default_factory=list)
     summary: str | None = None
     summary_status: Literal["pending", "verified", "failed"] | None = None
@@ -537,6 +541,8 @@ class ArtefactOut(BaseModel):
     """The `artefact` read model — the synthesised evidence base.
 
     Args:
+        artefact_id: The artefact's durable identity — the id a chat's
+            entry-context chip binds to (029 strand 6).
         title: Artefact title.
         question: The evidence question the artefact answers.
         coverage_snapshot: Embedded coverage snapshot.
@@ -546,6 +552,7 @@ class ArtefactOut(BaseModel):
         summary_status: Artefact-level summary production state.
     """
 
+    artefact_id: uuid.UUID
     title: str
     question: str
     coverage_snapshot: CoverageSnapshotOut

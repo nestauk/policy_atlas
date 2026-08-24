@@ -1,0 +1,253 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router";
+import { describe, expect, it, vi } from "vitest";
+
+import type { PlanDraft, StageEntry } from "../../store";
+import { RunningCard } from "./RunningCard";
+import {
+  CHAT_PRIMARY_CTA_CLASS,
+  collapsedStatusLine,
+  completedSignposts,
+  elapsedSeconds,
+  formatElapsed,
+  resultsSignpost,
+  runningCardCopy,
+  signpostForStage,
+  stageDetailLines,
+  stageRows,
+} from "./runProgress";
+
+const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+
+function stage(overrides: Partial<StageEntry> & Pick<StageEntry, "stage" | "label" | "status">): StageEntry {
+  return overrides;
+}
+
+function planWithSteps(): PlanDraft {
+  return {
+    analysis_depth: "standard",
+    assumptions: null,
+    backend_scope: "both",
+    component_rationale: null,
+    components: null,
+    expected_artefact_shape: null,
+    extract_profiles: null,
+    grouping_facets: null,
+    question: null,
+    ready: true,
+    scope_constraints: null,
+    scoping_notes: null,
+    screening_criteria: null,
+    search_effort: "standard",
+    section_budget: null,
+    steering_mode: "moderate",
+    steps: [
+      { stage: "acquire", label: "Searching sources", blurb: "Queries out." },
+      { stage: "screen", label: "Screening for relevance", blurb: "Titles and abstracts." },
+    ],
+    time_band: null,
+    title: null,
+  };
+}
+
+describe("runningCard helpers", () => {
+  it("labels each run status", () => {
+    expect(runningCardCopy("running").title).toBe("Analysis running…");
+    expect(runningCardCopy("paused").eyebrow).toBe("PAUSED");
+    expect(runningCardCopy("succeeded").title).toBe("The evidence base is ready");
+    expect(runningCardCopy("failed").eyebrow).toBe("STOPPED");
+  });
+
+  it("formats elapsed seconds", () => {
+    expect(formatElapsed(13)).toBe("13s");
+    expect(formatElapsed(60)).toBe("1m");
+    expect(formatElapsed(124)).toBe("2m 4s");
+  });
+
+  it("freezes elapsed time at endedAt rather than the live clock", () => {
+    const started = "2026-07-21T10:00:00Z";
+    const ended = "2026-07-21T10:02:04Z";
+    expect(elapsedSeconds(started, ended, Date.parse("2026-08-18T16:00:00Z"))).toBe(124);
+  });
+
+  it("uses plan-panel step labels, not SSE copy", () => {
+    const rows = stageRows(
+      [stage({ stage: "acquire", label: "Finding relevant sources", status: "completed" })],
+      planWithSteps(),
+    );
+    expect(rows[0]).toMatchObject({
+      stage: "acquire",
+      label: "Searching",
+      blurb: "Querying academic and policy databases.",
+      status: "completed",
+    });
+    expect(rows.map((row) => row.stage)).toEqual([
+      "acquire",
+      "screen",
+      "classify",
+      "appraise",
+      "characterise",
+      "select",
+      "synthesise",
+    ]);
+    expect(rows[1]?.status).toBe("upcoming");
+    expect(rows[1]?.label).toBe("Screening");
+  });
+
+  it("signposts Sources after acquire and Results when the write-up exists", () => {
+    expect(signpostForStage("acquire", PROJECT_ID, false)).toEqual({
+      href: `/projects/${PROJECT_ID}/sources/all`,
+      label: "Sources are ready",
+      message: "Searching has finished.",
+    });
+    expect(signpostForStage("extract", PROJECT_ID, false)).toBeNull();
+    expect(signpostForStage("extract", PROJECT_ID, true)?.href).toContain("/findings");
+    expect(signpostForStage("extract", PROJECT_ID, true)?.message).toBe("Findings are ready.");
+    expect(resultsSignpost(PROJECT_ID, "succeeded")?.label).toBe("Read the evidence base");
+    expect(resultsSignpost(PROJECT_ID, "running")).toBeNull();
+  });
+
+  it("lists completed signposts in stage order", () => {
+    expect(
+      completedSignposts(
+        [
+          stage({ stage: "acquire", label: "Searching", status: "completed" }),
+          stage({ stage: "characterise", label: "Mapping", status: "completed" }),
+        ],
+        PROJECT_ID,
+        false,
+      ).map((entry) => entry.label),
+    ).toEqual(["Sources are ready", "The landscape is ready"]);
+    expect(signpostForStage("characterise", PROJECT_ID, false)?.message).toBe(
+      "Mapping has finished.",
+    );
+  });
+
+  it("lists blurb, counts and elapsed on a completed step", () => {
+    expect(
+      stageDetailLines({
+        stage: "acquire",
+        label: "Searching",
+        status: "completed",
+        blurb: "Querying academic and policy databases.",
+        summary: { found: 12 },
+        seconds: 8,
+      }),
+    ).toEqual(["Querying academic and policy databases.", "12 found", "Took 8s"]);
+  });
+
+  it("builds the collapsed one-liner from the current step", () => {
+    const line = collapsedStatusLine(
+      "running",
+      [
+        {
+          stage: "acquire",
+          label: "Searching",
+          status: "started",
+        },
+      ],
+      "13s",
+    );
+    expect(line).toBe("RUNNING · Searching · 13s");
+  });
+});
+
+describe("RunningCard", () => {
+  it("renders the running card with a minimisable step list", async () => {
+    const user = userEvent.setup();
+    let minimised = false;
+    const { rerender } = render(
+      <MemoryRouter>
+        <RunningCard
+          projectId={PROJECT_ID}
+          status="running"
+          stages={[
+            stage({
+              stage: "acquire",
+              label: "Finding relevant sources",
+              status: "completed",
+              blurb: "Queries out.",
+              summary: { found: 12 },
+              seconds: 4,
+            }),
+            stage({ stage: "screen", label: "Screening sources", status: "started" }),
+          ]}
+          plan={planWithSteps()}
+          startedAt="2026-07-21T10:00:00Z"
+          hasFindings={false}
+          minimised={minimised}
+          onMinimisedChange={(next) => {
+            minimised = next;
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("heading", { name: "Analysis running…" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Stage timeline" })).toHaveTextContent("Searching");
+    expect(screen.queryByRole("link", { name: /Sources are ready/ })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Searching" }));
+    expect(screen.getByRole("link", { name: /Sources are ready/ })).toHaveAttribute(
+      "href",
+      `/projects/${PROJECT_ID}/sources/all`,
+    );
+    expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
+    expect(screen.getByText("12 found")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Minimise" }));
+    rerender(
+      <MemoryRouter>
+        <RunningCard
+          projectId={PROJECT_ID}
+          status="running"
+          stages={[
+            stage({
+              stage: "acquire",
+              label: "Finding relevant sources",
+              status: "completed",
+              summary: { found: 12 },
+              seconds: 4,
+            }),
+          ]}
+          plan={null}
+          startedAt="2026-07-21T10:00:00Z"
+          hasFindings={false}
+          minimised
+          onMinimisedChange={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("list", { name: "Stage timeline" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
+  });
+
+  it("offers Read the evidence base and See plan when the run has succeeded", async () => {
+    const onSeePlan = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <RunningCard
+          projectId={PROJECT_ID}
+          status="succeeded"
+          stages={[stage({ stage: "synthesise", label: "Writing the evidence base", status: "completed" })]}
+          plan={null}
+          startedAt="2026-07-21T10:00:00Z"
+          endedAt="2026-07-21T10:12:00Z"
+          hasFindings={false}
+          minimised={false}
+          onMinimisedChange={() => undefined}
+          onSeePlan={onSeePlan}
+        />
+      </MemoryRouter>,
+    );
+    const results = screen.getByRole("link", { name: "Read the evidence base" });
+    expect(results).toHaveAttribute("href", `/projects/${PROJECT_ID}/results`);
+    expect(results.className).toContain("px-6");
+    expect(results.className).toContain("text-body");
+    expect(CHAT_PRIMARY_CTA_CLASS).toContain("px-6 py-3.5 text-body font-bold");
+    await user.click(screen.getByRole("button", { name: "See plan" }));
+    expect(onSeePlan).toHaveBeenCalledTimes(1);
+  });
+});

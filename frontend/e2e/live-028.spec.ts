@@ -189,7 +189,7 @@ async function partOption(page: Page, selector: { id?: string; primary?: boolean
  *  whatever live card is showing, preferring its primary. */
 async function driveToReady(page: Page, thoroughness: string, maxSteps = 8) {
   for (let step = 0; step < maxSteps; step++) {
-    if (await page.getByTestId("plan-card").isVisible().catch(() => false)) return;
+    if (await page.getByTestId("plan-ready-actions").isVisible().catch(() => false)) return;
     const card = page.getByTestId("part-card").last();
     const preset = card.locator(`[data-option-id="${thoroughness}"]`);
     if (await preset.isVisible().catch(() => false)) {
@@ -204,7 +204,7 @@ async function driveToReady(page: Page, thoroughness: string, maxSteps = 8) {
     // No live card button — nudge in free text.
     await plannerTurn(page, "That's right — carry on.");
   }
-  await expect(page.getByTestId("plan-card")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("plan-ready-actions")).toBeVisible({ timeout: 30_000 });
 }
 
 async function newProject(page: Page, name: string): Promise<string> {
@@ -251,7 +251,7 @@ test.describe.serial("task 028 live check", () => {
         } else {
           await page.getByLabel(/New value for/).fill("UK and comparator countries");
         }
-        await page.getByRole("button", { name: "Stage" }).click();
+        await page.getByRole("button", { name: "Save" }).click();
         await shot(page, "a-04-chip-staged");
         await page.getByRole("button", { name: "Apply changes" }).click();
         await expect(page.getByText("Planning…")).toHaveCount(0, { timeout: 300_000 });
@@ -270,7 +270,7 @@ test.describe.serial("task 028 live check", () => {
 
     // The inline ready plan card: details open, honest band, check-ins "None".
     await driveToReady(page, "quick_look");
-    const planCard = page.getByTestId("plan-card");
+    const planCard = page.getByTestId("plan-ready-actions");
     await expect(planCard.getByText("ready", { exact: true })).toBeVisible();
     await expect(planCard.getByText(/~5-10 min|~10-15 min/)).toBeVisible();
     await expect(planCard.getByText("None", { exact: true })).toBeVisible();
@@ -279,8 +279,8 @@ test.describe.serial("task 028 live check", () => {
     // Start from the card — the ONLY start surface.
     await planCard.getByRole("button", { name: /Start(ing…)? the analysis/ }).click();
     log("leg A run started");
-    // Run stage: the two-pane layout returns (rail collapse control exists).
-    await expect(page.getByRole("button", { name: /collapse the planning rail/i })).toBeVisible({
+    // Run stage: stay on Plan; progress is the in-thread running card.
+    await expect(page.getByRole("region", { name: "Analysis run" })).toBeVisible({
       timeout: 60_000,
     });
     await shot(page, "a-07-run-5050");
@@ -399,7 +399,7 @@ test.describe.serial("task 028 live check — leg B", () => {
     await shot(page, "b-02-thread-after-restart");
 
     await driveToReady(page, "standard_review");
-    const planCard = page.getByTestId("plan-card");
+    const planCard = page.getByTestId("plan-ready-actions");
     await expect(planCard.getByText("ready", { exact: true })).toBeVisible();
     await shot(page, "b-03-ready-card");
     await planCard.getByRole("button", { name: /Start(ing…)? the analysis/ }).click();

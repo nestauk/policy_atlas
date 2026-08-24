@@ -22,26 +22,71 @@
 - Touch only what the task requires.
 
 # Current phase
-Implementation — task `028-ux-refinement` **design step 1** (2026-08-03,
-branch `task/028-ux-refinement`, stacked on `task/027-frontend-uplift`):
-interview-driven UX refinement — four internal policy-team interviews on
-the 027 build (type scale + copy diet, expandable composer, sequential
-plan-building fork, artefact contents-sidebar + progressive disclosure,
-key-findings bullets fork, sortable/theme-filterable sources, naming
-pass, tab-IA fork). Contract:
-`docs/tasks/028-ux-refinement/contract.md`; requirements + owner mock-up:
-`docs/tasks/028-ux-refinement/design-inputs.md`.
+Design — task `032-task-lifecycle-ia` **CONTRACT APPROVED 2026-08-17 · PLAN
+DRAFTED → awaiting plan approval (step 3 🛑)** (branch
+`task/032-task-lifecycle-ia`, based on `dev`): reshape the app around one task
+and one lifecycle, and add a named grouping above tasks. Screen word **Task** =
+the existing `project` row; screen word **Project** = a new `portfolio` row.
+Fifteen gaps G1–G15; the planning conversation's own behaviour is deliberately
+untouched, but G14 lists it in the chats overlay once it stops being the live
+surface, and G15 is a type-scale pass (the frontend uses 12px 250 times against
+its own declared 16px floor). Case studies are parked by the owner (they need a
+new synthesis pass). Contract:
+`docs/tasks/032-task-lifecycle-ia/contract.md`; plan and rubric alongside.
+Thirteen build phases; the two gated backend phases run FIRST so a refused gate
+surfaces before frontend is built against the field. **Tier 3** — new table +
+new public routes + one prompt-surface field (`nav_label`) are three approval
+gates, each to be signed off before its phase starts. ADR 0031 expected for the
+portfolio layer.
 
-Tasks `026-infra-deployment` (draft PR #33, Tier 4 — system **live** at
-`v3.policyatlas.uk`) and `027-frontend-uplift` (PR #36, Tier 3 — review
-stack adjudicated 2026-07-30, 32 fixes re-verified) are both at **step 9:
-human review + merge**. 027 branches from 026; 028 branches from 027;
-each PR re-targets `dev` as its parent merges — if a merge review touches
-files a stacked branch changed, that branch rebases before its own
-review. Known operational state: staging's OpenAI quota exhausted
-2026-07-28 (runs fail honest-429 until billing tops up). The eval slice
-(former 027 draft) stays deferred — contract draft at unpushed
-`a5c9708`.
+**Owner decisions, 2026-08-17, both recorded in the plan:** (1) **standard
+review, no adversarial lanes** — contract verifier, `/code-review`,
+`/security-review`, `/simplify` and the human deep review run; adversarial review
+at the contract, plan and code stages is waived, and `verification.md` plus the
+PR must say so. The tier stays 3. (2) **Three full `make verify` runs**, not
+eight — baseline, end of Phase 2, step-6 exit. Frontend phases gate on
+`make frontend-verify`, because `make verify-fast` is backend-only and would
+prove nothing on a ~90%-frontend slice. No phase routes to `codex`: the CLI is
+not installed here (`codex` is not on PATH).
+
+Design reference: the owner's prototype at
+`scripts/scratchpad/frontend_v20260817/Policy Atlas_new search standalone.html`
+(a bundled artifact — see the contract's § Reading the prototype).
+
+Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
+clear meaning per user-visible source count across the P1 check-in, Where I
+looked and the publisher-country charts. Two items were escalated to the owner
+in that PR and remain true of it: the **manual browser check was not run** (it
+needs a live model route; staging's OpenAI quota is recorded exhausted below),
+and **no non-Claude reviewer read the slice** (the Codex CLI is not installed in
+this environment, so the family flip did not happen).
+
+Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
+conversation model: a project holds many conversations, Claude-Projects-style.
+Follow-up **chats** (read-only, project-scoped, answering across artefacts;
+streamed NDJSON turns with claim-grained citations, deterministic floors + async
+judge enrichment; tool scope `search_chunks` · `lookup` · `query_findings`, no
+`search`) and **planning conversations** (one per plan lineage, closing with its
+run's terminal transaction — supersedes 027's rolling thread; row-grain audit
+chain conversation → plan → run → artefact). ADR 0029 (Accepted); API surface:
+`docs/specs/system/web-api.md` § Conversations.
+
+Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
+`c501022`); system **live** at `v3.policyatlas.uk`.
+
+Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
+`028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
+caps per backend per round; standard/deep wall clocks removed — was
+`028-…`) and `030-multi-round-search` (rapid's clock removed, the
+runner-orchestrated round loop wired — was `029-…`). Their code is **merged to
+`dev`** (PR #46, the `37-hotfix-remove-quota` hotfix). **Numbering collision
+still to settle:** `029` and ADR `0029` belong to the copilot-chat slice, and
+`031` is now this count-honesty slice — so if the search-volume docs are
+renumbered they need `032`/`033`, not `031`/`032`. No ADRs written for them yet.
+
+Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
+fail honest-429 until billing tops up). The eval slice (former 027 draft)
+stays deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist

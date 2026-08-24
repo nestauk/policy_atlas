@@ -25,6 +25,7 @@ dist/
 .pytest_cache/
 
 # Other root-level ignored artifacts that could occur in this build context
+*checkpoint.ipynb
 *.har
 *.trace.zip
 *.webm

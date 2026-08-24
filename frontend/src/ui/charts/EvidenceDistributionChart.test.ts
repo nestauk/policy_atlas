@@ -1,6 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { fillYearRange, humaniseLabel, orderThemes } from "./EvidenceDistributionChart";
+import {
+  fillYearRange,
+  humaniseLabel,
+  normaliseGeographies,
+  orderThemes,
+} from "./EvidenceDistributionChart";
+
+describe("normaliseGeographies", () => {
+  it("keeps the 'Not reported' residual intact so the bars still sum to the population", () => {
+    // Task 031 defect 3: the backend counts sources with no publisher country
+    // into this bucket rather than dropping them. A country alias that
+    // swallowed or renamed it would silently break the sum again.
+    const normalised = normaliseGeographies({ GB: 4, "Not reported": 7 });
+    expect(normalised).toEqual({ "United Kingdom": 4, "Not reported": 7 });
+    expect(Object.values(normalised).reduce((sum, count) => sum + count, 0)).toBe(11);
+  });
+});
 
 describe("fillYearRange", () => {
   it("fills every year from the earliest to the latest evidence year", () => {

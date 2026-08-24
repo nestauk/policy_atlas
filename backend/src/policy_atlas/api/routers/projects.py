@@ -23,7 +23,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.lifecycle import archive_project, rename_project
-from policy_atlas.api.routers._common import owned_project, project_out
+from policy_atlas.api.routers._common import owned_portfolio, owned_project, project_out
 from policy_atlas.core.schema import capability_run, project
 
 router = APIRouter(
@@ -113,6 +113,17 @@ def update_project(
             update(project)
             .where(project.c.project_id == project_id)
             .values(question=changes["question"], updated_at=datetime.now(UTC))
+        )
+    if "portfolio_id" in changes:
+        target = changes["portfolio_id"]
+        # An unowned portfolio must be as invisible here as it is on its own
+        # route, or PATCH becomes an existence oracle for someone else's rows.
+        if target is not None:
+            owned_portfolio(conn, portfolio_id=target, user_id=user.user_id)
+        conn.execute(
+            update(project)
+            .where(project.c.project_id == project_id)
+            .values(portfolio_id=target, updated_at=datetime.now(UTC))
         )
     row = conn.execute(select(project).where(project.c.project_id == project_id)).mappings().one()
     return project_out(conn, row)

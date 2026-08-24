@@ -1,4 +1,5 @@
 {
+  "outputStyle": "Simple",
   "permissions": {
     "deny": [
       "Read(.env)",

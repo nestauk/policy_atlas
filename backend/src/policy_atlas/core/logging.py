@@ -4,6 +4,7 @@ Call configure_logging() at every entrypoint before any log call.
 Never use stdlib logging or print statements; all calls go through structlog.
 """
 
+import logging
 import os
 
 import structlog
@@ -26,6 +27,13 @@ def configure_logging() -> None:
         # renderer, so log.error(..., exc_info=True) renders the traceback.
         processors.append(structlog.processors.format_exc_info)
         processors.append(structlog.dev.ConsoleRenderer())
+
+    # httpx logs every request at INFO with the FULL url — query string
+    # included, and both search providers carry their api_key there. structlog's
+    # PrintLoggerFactory bypasses stdlib logging so this is inert today, but a
+    # single `logging.basicConfig(level=INFO)` (a notebook, a script, a future
+    # log shipper) would publish provider credentials on every search call.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     structlog.configure(
         processors=processors,

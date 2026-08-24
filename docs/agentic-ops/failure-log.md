@@ -4,6 +4,39 @@ Recurring issues encountered during the task cycle. Each entry: what happened, r
 
 ---
 
+## 2026-08-13 — A three-lane convergent finding was declined on one sentence of contract wording
+
+**What happened:** in task 031's review stack, all three defect-hunting lanes
+(`/code-review`, the adversarial lane, the contract verifier) independently flagged that
+`_acquire_run_ids` was project-wide rather than scoped to the evidence question, so a
+re-planned project would fold a superseded question's search rounds into "Where I looked".
+The review lead declined it as a code fix and deferred it, reasoning that the contract's
+§ Scope says "all the acquire runs of the **project**", so changing the grain was a
+contract decision rather than a review-stack fix. The owner pushed back; on re-examination
+the fix was one `where` clause, and the finding was materially worse than adjudicated.
+
+**Root cause:** two compounding errors.
+1. **Contract wording was treated as a decision rather than as prose.** The phrase was
+   written before anyone considered re-planning. Nothing in the contract's § Goal, § Audit
+   or invariants contemplated multiple evidence scopes. An incidental phrase was promoted
+   to a deliberate constraint because it was in the approved document.
+2. **Only the aggregate was weighed, not the itemised list the same code path feeds.**
+   The lead reasoned about whether the *counts* should be project-wide (genuinely
+   arguable, and the project-pool-wide knowledge concept supports it) and never noticed
+   that `_backend_details` also emits `queries[]` — the literal search strings. Showing an
+   abandoned question's queries under the current question is not arguable.
+
+**Rule:** when every independent lane converges on one finding, the bar for declining it
+is *evidence*, not a citation. Quoting the contract back is not evidence — check whether
+the quoted phrase was actually decided, or merely written. And when a finding touches a
+function that returns both an aggregate and the records behind it, adjudicate the
+records: a count can be defensibly coarse, a verbatim list rarely can.
+
+**Fix (installed):** `_acquire_run_ids` takes the evidence scope of the same coverage row
+the card's sentence and backend list come from; the reversal and its reasoning are
+recorded in the task's verification.md § Review findings (R11) so the first adjudication
+stays auditable rather than being quietly overwritten.
+
 ## 2026-07-14 — A commit landed on a red gate: gate exit codes must be read directly, with the gate's exact commands
 
 **What happened:** three related lapses in task 023's build. (1) The phase-F commit was
@@ -642,3 +675,40 @@ pre-migration shapes through post-migration helpers.
 **Rule:** every new FK-bearing table lands in `delete_project_data` in the same
 phase as its migration; migration-roundtrip tests seed pre-migration shapes
 inline, never via shared helpers.
+
+## 2026-08-11 — A gate piped through tail reports the filter's exit status (task 029 build)
+
+**What happened:** Every phase gate A→G (and the post-H fix gates) was run as
+`make verify … | tail -N` in the background and REPORTED green while carrying
+two real test failures from Phase A onward (an outdated exact-shape migration
+assertion; a 422-before-ownership BOLA oracle). The baseline run was genuinely
+green; the failures were only found by a full audit of the retained gate logs.
+
+**Root cause:** Without `pipefail`, a pipeline's exit status is the LAST
+command's — `tail` exits 0 regardless of make's failure. Every gate from A
+onward inherited the same invocation shape, so the defect was systematic, not
+a one-off.
+
+**Rule:** never run a gate as `cmd | filter`. Write the log to a file and test
+`$?` directly (`make verify > gate.log 2>&1; echo EXIT=$?`), or `set -o
+pipefail` if a pipe is unavoidable. The 029 review stack's re-runs use the
+file-plus-exit-code shape.
+
+## 2026-08-11 — Codex jobs and agent plumbing: four composition traps (task 029 build)
+
+**What happened / rules, one per trap:**
+
+1. **Agent-tool worktree isolation + backgrounded codex jobs don't compose** —
+   the auto-worktree is reaped the moment the launching subagent returns while
+   the codex job keeps running in the deleted directory. Create a persistent
+   worktree manually and point the job at it.
+2. **Codex job state is per-invoker-session** — jobs launched by a subagent
+   register under the agent's own state dir, invisible to the lead's
+   `scripts/codex_job.sh`. Track the job JSON/log path the launcher reports,
+   or have the subagent itself wait and relay.
+3. **The codex sandbox denies localhost Postgres AND the uv cache** — codex
+   slices ship code plus inspection-grade checks only; the lead runs the
+   suites. Plan the lead-verify roundtrip into wall-clock estimates.
+4. **Docker Desktop VM wedge** (socket answers 500s, VM never boots, "no route
+   to host 192.168.65.7"): `docker desktop restart` also hung; `pkill -9 -f
+   com.docker` + relaunch recovered in ~1 min.

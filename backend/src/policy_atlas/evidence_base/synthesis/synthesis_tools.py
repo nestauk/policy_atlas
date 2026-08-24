@@ -26,7 +26,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, NotRequired, Protocol, TypedDict, cast
 
-from sqlalchemy import ColumnElement, case, func
+from sqlalchemy import ColumnElement, case, func, true
 from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
@@ -58,7 +58,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.core.schema import chunk as chunk_table
 from policy_atlas.core.tags import has_control_character
-from policy_atlas.core.usage import UsageAccumulator
+from policy_atlas.core.usage import UsageAccumulator, UsageResult
 from policy_atlas.evidence_base.assess.screen import effective_screen_rows
 from policy_atlas.evidence_base.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_base.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
@@ -446,6 +446,30 @@ class SectionLoopResult(TypedDict):
     # silent; the component lands them in claims_rejected_structural.
     malformed_claims: int
     usage_totals: dict[str, int]
+
+
+class LoopTurn(TypedDict):
+    """One backend response consumed by the shared bounded tool loop."""
+
+    emission: Any | None
+    tool_calls: list[dict[str, Any]]
+    malformed: int
+
+
+class ToolLoopResult(TypedDict):
+    """Outcome of one bounded tool loop with an adapter-owned emission."""
+
+    emission: Any | None
+    transcript: list[ToolExchange]
+    turns_used: int
+    tool_call_counts: dict[str, int]
+    rejected_tool_calls: int
+    turn_cap_hit: bool
+    malformed_claims: int
+    usage_totals: dict[str, int]
+
+
+TurnFn = Callable[..., UsageResult[LoopTurn]]
 
 
 _DIRECTIVE_KEYS = {"sections", "retrieval_boosts", "section_budget"}
@@ -2425,19 +2449,25 @@ def _ensure_kind(arguments: dict[str, Any]) -> str:
     return kind
 
 
-def _screened_in_doc_ids(project_id: uuid.UUID, scope_id: uuid.UUID) -> Any:
+def _screened_in_doc_ids(
+    project_id: uuid.UUID,
+    scope_id: uuid.UUID,
+    *,
+    screened_by_run_ids: set[uuid.UUID] | None = None,
+) -> Any:
     """Select of this scope's screened-in doc ids — the lookup read boundary.
 
     Effective-relevant via the helper (never a raw status='relevant' join),
     per the same screened-in-scope rule as ``_load_retrieval_scope``.
     """
-    effective = effective_screen_rows()
-    return (
+    effective = effective_screen_rows(run_ids=screened_by_run_ids)
+    query = (
         sa_select(effective.c.project_source_snapshot_id)
         .where(effective.c.project_id == project_id)
         .where(effective.c.evidence_scope_id == scope_id)
         .where(effective.c.status == "relevant")
     )
+    return query
 
 
 def _doc_id_for_scope(
@@ -2446,6 +2476,7 @@ def _doc_id_for_scope(
     project_id: uuid.UUID,
     scope_id: uuid.UUID,
     arguments: dict[str, Any],
+    screened_by_run_ids: set[uuid.UUID] | None = None,
 ) -> uuid.UUID:
     raw_doc_id = _tool_string(arguments, field="doc_id", max_length=100, required=True)
     assert raw_doc_id is not None
@@ -2456,7 +2487,9 @@ def _doc_id_for_scope(
         .where(project_source_snapshot.c.project_source_snapshot_id == doc_id)
         .where(
             project_source_snapshot.c.project_source_snapshot_id.in_(
-                _screened_in_doc_ids(project_id, scope_id)
+                _screened_in_doc_ids(
+                    project_id, scope_id, screened_by_run_ids=screened_by_run_ids
+                )
             )
         )
     ).first()
@@ -2501,6 +2534,15 @@ def _doc_id_for_project(
 
 def _absent() -> dict[str, bool]:
     return {"absent": True}
+
+
+def _snapshot_run_filter(
+    run_id_column: ColumnElement[uuid.UUID], snapshot_run_ids: set[uuid.UUID] | None
+) -> ColumnElement[bool]:
+    """Return the optional turn-start run-snapshot predicate."""
+    if snapshot_run_ids is None:
+        return true()
+    return run_id_column.in_(snapshot_run_ids)
 
 
 def _selection_summary(row: Any) -> dict[str, Any]:
@@ -2610,6 +2652,7 @@ def make_lookup_reader(
     selection_run_id: uuid.UUID | None,
     extraction_run_id: uuid.UUID | None,
     grouping_run_id: uuid.UUID | None,
+    snapshot_run_ids: set[uuid.UUID] | None = None,
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Create the universal closed-vocabulary lookup reader.
 
@@ -2621,6 +2664,9 @@ def make_lookup_reader(
         selection_run_id: Optional referenced selection run.
         extraction_run_id: Optional referenced extraction run.
         grouping_run_id: Optional referenced grouping run.
+        snapshot_run_ids: Optional terminal-walk run ids bounding otherwise
+            scope-wide records to the turn-start snapshot. ``None`` preserves
+            synthesis's historic whole-scope reads.
 
     Returns:
         A validated ``lookup`` implementation.
@@ -2630,7 +2676,11 @@ def make_lookup_reader(
         kind = _ensure_kind(arguments)
         if kind in {"appraisal_by_doc", "classification_by_doc", "tags_by_doc"}:
             doc_id = _doc_id_for_scope(
-                conn, project_id=project_id, scope_id=scope_id, arguments=arguments
+                conn,
+                project_id=project_id,
+                scope_id=scope_id,
+                arguments=arguments,
+                screened_by_run_ids=snapshot_run_ids,
             )
             result: Any
             if kind == "appraisal_by_doc":
@@ -2642,6 +2692,9 @@ def make_lookup_reader(
                     .where(source_appraisal_result.c.project_id == project_id)
                     .where(source_appraisal_result.c.evidence_scope_id == scope_id)
                     .where(source_appraisal_result.c.project_source_snapshot_id == doc_id)
+                    .where(_snapshot_run_filter(
+                        source_appraisal_result.c.appraised_by_run_id, snapshot_run_ids
+                    ))
                 ).first()
                 result = (
                     _absent()
@@ -2657,6 +2710,9 @@ def make_lookup_reader(
                     .where(source_classification_result.c.project_id == project_id)
                     .where(source_classification_result.c.evidence_scope_id == scope_id)
                     .where(source_classification_result.c.project_source_snapshot_id == doc_id)
+                    .where(_snapshot_run_filter(
+                        source_classification_result.c.classified_by_run_id, snapshot_run_ids
+                    ))
                 ).first()
                 result = (
                     _absent()
@@ -2672,6 +2728,7 @@ def make_lookup_reader(
                     )
                     .where(source_tag.c.project_id == project_id)
                     .where(source_tag.c.project_source_snapshot_id == doc_id)
+                    .where(_snapshot_run_filter(source_tag.c.created_by_run_id, snapshot_run_ids))
                     .order_by(
                         source_tag.c.tag_type,
                         source_tag.c.asserted_by,
@@ -2700,6 +2757,9 @@ def make_lookup_reader(
                 .where(source_screening_result.c.project_id == project_id)
                 .where(source_screening_result.c.evidence_scope_id == scope_id)
                 .where(source_screening_result.c.project_source_snapshot_id == doc_id)
+                .where(_snapshot_run_filter(
+                    source_screening_result.c.screened_by_run_id, snapshot_run_ids
+                ))
                 # Failed attempts are retry history, never a decision — the
                 # partial unique index (uq_ssr_scope_source_stage) guarantees
                 # at most one non-failed row per stage, so this is honestly
@@ -2750,6 +2810,9 @@ def make_lookup_reader(
                 )
                 .where(search_coverage_record.c.project_id == project_id)
                 .where(search_coverage_record.c.evidence_scope_id == scope_id)
+                .where(_snapshot_run_filter(
+                    search_coverage_record.c.acquired_by_run_id, snapshot_run_ids
+                ))
                 .order_by(search_coverage_record.c.search_coverage_record_id)
             ).fetchall()
             return {
@@ -2801,9 +2864,14 @@ def make_lookup_reader(
                 sa_select(source_tag.c.project_source_snapshot_id)
                 .where(source_tag.c.project_id == project_id)
                 .where(source_tag.c.tag == tag)
+                .where(_snapshot_run_filter(source_tag.c.created_by_run_id, snapshot_run_ids))
                 .where(
                     source_tag.c.project_source_snapshot_id.in_(
-                        _screened_in_doc_ids(project_id, scope_id)
+                        _screened_in_doc_ids(
+                            project_id,
+                            scope_id,
+                            screened_by_run_ids=snapshot_run_ids,
+                        )
                     )
                 )
                 .order_by(source_tag.c.project_source_snapshot_id)
@@ -2821,9 +2889,14 @@ def make_lookup_reader(
             rows = conn.execute(
                 sa_select(column.label("value"), func.count().label("tag_count"))
                 .where(source_tag.c.project_id == project_id)
+                .where(_snapshot_run_filter(source_tag.c.created_by_run_id, snapshot_run_ids))
                 .where(
                     source_tag.c.project_source_snapshot_id.in_(
-                        _screened_in_doc_ids(project_id, scope_id)
+                        _screened_in_doc_ids(
+                            project_id,
+                            scope_id,
+                            screened_by_run_ids=snapshot_run_ids,
+                        )
                     )
                 )
                 .group_by(column)
@@ -2867,30 +2940,31 @@ def _turn_search_queries(tool_calls: Sequence[Mapping[str, Any]]) -> list[str]:
     return queries
 
 
-def run_section_loop(
-    backend: Any,
+def run_tool_loop(
+    turn_fn: TurnFn,
     *,
-    seed: dict[str, Any],
     tools: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]],
-    turn_cap: int = SECTION_TURN_CAP,
+    turn_cap: int,
     retriever: ChunkRetriever | None = None,
-) -> SectionLoopResult:
-    """Run one bounded section loop against the closed read-only tool set.
+    emit_label: str = "emit_section",
+    on_tool_start: Callable[[str, dict[str, Any]], None] | None = None,
+) -> ToolLoopResult:
+    """Run the shared bounded read-tool loop with an adapter-owned terminal emission.
 
     Args:
-        backend: Synthesis backend implementing ``section_turn``.
-        seed: Id-keyed section seed.
-        tools: Available substrate tools.
-        turn_cap: Maximum generation turns; final turn forces emission.
-        retriever: Optional chunk retriever. When given, a turn's uncached
-            ``search_chunks`` query embeddings are batched into one backend
-            call before the turn's tool calls execute (022 rider 16).
+        turn_fn: Backend turn adapter receiving transcript and ``force_emit``.
+        tools: Closed read-only tool mapping.
+        turn_cap: Maximum generation turns; final turn forces an emission.
+        retriever: Optional chunk retriever used for per-turn query warm-up.
+        emit_label: Terminal-emitter label recorded on a malformed retry.
+        on_tool_start: Optional progress hook invoked before a valid tool call.
 
     Returns:
-        Claims, transcript and accounting counters.
+        Terminal emission, transcript, and bounded-loop accounting.
 
     Raises:
         RuntimeError: If the backend violates the loop protocol.
+        ValueError: If ``turn_cap`` is not positive.
     """
     if turn_cap <= 0:
         raise ValueError("turn_cap must be positive")
@@ -2903,7 +2977,7 @@ def run_section_loop(
     for turn in range(1, turn_cap + 1):
         force_emit = turn == turn_cap
         try:
-            result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
+            result, usage = turn_fn(transcript, force_emit=force_emit)
             usage_totals.add(usage)
         except MalformedEmissionError as exc:
             if force_emit:
@@ -2911,18 +2985,18 @@ def run_section_loop(
                     "malformed claims emission on the forced final turn"
                 ) from exc
             transcript.append({
-                "tool": "emit_section",
+                "tool": emit_label,
                 "arguments": {},
-                "result": {"error": f"emit_section arguments invalid: {exc}"},
+                "result": {"error": f"{emit_label} arguments invalid: {exc}"},
             })
             rejected_tool_calls += 1
             continue
-        claims = result.get("claims")
+        emission = result.get("emission")
         tool_calls = result.get("tool_calls", [])
-        malformed_claims += int(result.get("malformed_claims", 0))
-        if claims is not None:
+        malformed_claims += int(result.get("malformed", 0))
+        if emission is not None:
             return {
-                "claims": claims,
+                "emission": emission,
                 "transcript": transcript,
                 "turns_used": turn,
                 "tool_call_counts": tool_call_counts,
@@ -2969,6 +3043,8 @@ def run_section_loop(
                 rejected_tool_calls += 1
                 continue
             try:
+                if on_tool_start is not None:
+                    on_tool_start(tool_name, cast("dict[str, Any]", arguments))
                 tool_result = tools[tool_name](cast("dict[str, Any]", arguments))
             except ToolValidationError as exc:
                 transcript.append({
@@ -2987,6 +3063,60 @@ def run_section_loop(
             executed_this_turn += 1
 
     raise RuntimeError("section loop exhausted without emission")
+
+
+def run_section_loop(
+    backend: Any,
+    *,
+    seed: dict[str, Any],
+    tools: Mapping[str, Callable[[dict[str, Any]], dict[str, Any]]],
+    turn_cap: int = SECTION_TURN_CAP,
+    retriever: ChunkRetriever | None = None,
+) -> SectionLoopResult:
+    """Run one bounded section loop against the closed read-only tool set.
+
+    Args:
+        backend: Synthesis backend implementing ``section_turn``.
+        seed: Id-keyed section seed.
+        tools: Available substrate tools.
+        turn_cap: Maximum generation turns; final turn forces emission.
+        retriever: Optional chunk retriever. When given, a turn's uncached
+            ``search_chunks`` query embeddings are batched into one backend
+            call before the turn's tool calls execute (022 rider 16).
+
+    Returns:
+        Claims, transcript and accounting counters.
+
+    Raises:
+        RuntimeError: If the backend violates the loop protocol.
+    """
+
+    def turn_fn(
+        transcript: list[ToolExchange], *, force_emit: bool
+    ) -> UsageResult[LoopTurn]:
+        result, usage = backend.section_turn(seed, transcript, force_emit=force_emit)
+        return {
+            "emission": result.get("claims"),
+            "tool_calls": result.get("tool_calls", []),
+            "malformed": int(result.get("malformed_claims", 0)),
+        }, usage
+
+    result = run_tool_loop(
+        turn_fn,
+        tools=tools,
+        turn_cap=turn_cap,
+        retriever=retriever,
+    )
+    return {
+        "claims": cast("SectionProseWire | None", result["emission"]),
+        "transcript": result["transcript"],
+        "turns_used": result["turns_used"],
+        "tool_call_counts": result["tool_call_counts"],
+        "rejected_tool_calls": result["rejected_tool_calls"],
+        "turn_cap_hit": result["turn_cap_hit"],
+        "malformed_claims": result["malformed_claims"],
+        "usage_totals": result["usage_totals"],
+    }
 
 
 def gathered_ids(transcript: Sequence[ToolExchange]) -> dict[str, set[str]]:

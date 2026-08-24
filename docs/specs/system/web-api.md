@@ -42,8 +42,11 @@ Every non-2xx: `{"error": {"code": <machine string>, "message": <human>,
 "details"?: <structured>}}`. Codes are contract; message text is not.
 Mapping: 400 `malformed` · 401 `unauthenticated` · 404 `not_found` ·
 409 `run_active` | `already_answered` | `capacity` |
-`planning_turn_in_progress` · 422 `validation_error` (Pydantic detail list
-under `details`, assert on `loc`/`type` not `msg`) · 500 `internal` (opaque).
+`planning_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
+`no_completed_run` | `plan_stale` · 422 `validation_error` (Pydantic detail
+list under `details`, assert on `loc`/`type` not `msg`) · 429 `chat_capacity`
+(a distinct code from the 409 run-capacity bound — too many in-flight chat
+turns, never a run-slot conflict) · 500 `internal` (opaque).
 
 ## Pagination
 
@@ -72,6 +75,38 @@ artefact, groups) are whole-object.
   hidden from default listings, rows retained; `project.archived` audit
   event on first archive only). 409 `run_active` while a run is executing
   or parked. There is no hard delete.
+
+**Vocabulary (task 032, ADR 0031).** On screen a `project` row is a **Task**
+and a `portfolio` row is a **Project**. The API keeps the code words; only the
+UI translates, from one shared module. Nothing below the project row was
+re-parented.
+
+Two additive fields on the project read shape:
+`portfolio_id` (the portfolio it belongs to, or `null` — unassigned is a
+normal state), and `source_count` (sources gathered, or `null` when no run
+exists — `null` and `0` differ: `null` means the question has not been asked,
+`0` means a run asked and found nothing).
+
+### Portfolios
+
+A portfolio is a named grouping **above** the project. It holds no plan, no
+run and no evidence of its own, and carries a name, a description and an owner
+— no status, no lifecycle, no cached counts (ADR 0031).
+
+- `GET /api/v1/portfolios` — paginated, owner-scoped. Each item carries a
+  `task_count` **derived per read** from the caller's active projects.
+- `POST /api/v1/portfolios` `{name, description?}` → 201 portfolio.
+- `GET /api/v1/portfolios/{id}` → portfolio with its derived `task_count`.
+- `PATCH /api/v1/portfolios/{id}` `{name?, description?}` — partial.
+- `PATCH /api/v1/projects/{id}` additively accepts `portfolio_id`, including
+  an explicit `null` to unassign. Assigning a portfolio the caller does not
+  own is 404 and does not write — otherwise the route would be an existence
+  oracle for another owner's rows.
+
+Owner scoping matches projects exactly: an unknown portfolio and a
+cross-owner one are the same indistinguishable 404. There is no portfolio
+archive route and no `archived_at` on the row; both land together if archiving
+is wanted (`docs/deferred.md` § Task lifecycle IA).
 
 ### Planning turns
 
@@ -116,6 +151,17 @@ artefact, groups) are whole-object.
   one exists; otherwise the latest completed transcript row's stored
   `response.plan` without recomputation. It is 404 only when neither exists,
   so drafts survive API restarts.
+- `PATCH /api/v1/projects/{id}/plan` → typed edits to the current plan
+  (`question`, `backend_scope`, `search_effort`, `analysis_depth`,
+  `steering_mode`, `screening_criteria`, `published_after`/`published_before`,
+  `geography`). Omitted fields stay as they are; an empty date or geography
+  string clears that constraint. The merged result is re-validated as an
+  executable `OrchestrationPlan` and persisted as a new approved version
+  (the previous approved row is superseded), with `source_turn_index` set to
+  the latest completed planning turn so `POST /runs` is not `plan_stale`.
+  409 `run_active` while a walk is running or paused; 404 when there is no
+  plan to edit; 422 when the merged plan is not executable. This is the
+  document-edit path — it does not go through the planner.
 - `GET /api/v1/projects/{id}/planning-turns` → the owner-scoped durable
   transcript in ascending `turn_index`, paginated in the standard
   `{data, pagination}` envelope. Each row exposes `turn_index`,
@@ -124,6 +170,102 @@ artefact, groups) are whole-object.
   `reply`, `suggestions`, `status`, `created_at` and
   `completed_at`; pending and failed rows remain visibly incomplete. There
   is no backfill: projects predating the table simply have zero turns.
+
+### Conversations
+
+A **conversation** is `kind ∈ planning | chat`. A project holds **one active
+planning conversation** at a time (created with the project or on its first
+planning turn; the existing `/planning-turns` and `/plan` endpoints below
+operate on it and additively expose `conversation_id` — paths and semantics
+are unchanged) plus **many chats** (Claude-Projects-style follow-up threads,
+user-created, project-scoped, answering across every artefact in the
+project — an entry artefact is context, never a scope fence). Chats are
+**read-only**: they never mutate a plan, never start a run, never write an
+artefact — a question needing new evidence hands off to the planning
+conversation as a typed affordance, never a plan mutation from chat. All
+routes below are owner-scoped under the standard BOLA rule (unknown,
+cross-owner, and — except where noted — archived conversations are 404).
+
+- `GET /projects/{id}/conversations?kind=&status=` — the library read model,
+  both kinds, newest first, standard `{data, pagination}` envelope; each row
+  carries a `latest_turn_preview` (bounded snippet of its most recent chat or
+  planning turn, from whichever turn table its `kind` reads). Default
+  listing excludes archived rows; `status=archived` is the one filter that
+  lists an owner's own archived chats (planning conversations are never
+  archived).
+- `GET /conversations/{cid}` → `ConversationOut` (`id`, `project_id`, `kind`,
+  `title`, `status`, `entry_artefact_id`, `created_at`, `closed_at`,
+  `archived_at`) — the deep-link resolver. An archived conversation is 404
+  here (as on every route below except the list above and unarchive);
+  unarchiving is the one call that resolves it back into reach.
+- `POST /projects/{id}/conversations` `{entry_artefact_id?}` → 201 chat
+  conversation, titled `"New chat"` until its first turn (kind is always
+  `chat` — planning conversations are lifecycle-created, never minted by
+  hand). `entry_artefact_id` must name an artefact belonging to the same
+  project, else 404.
+- `PATCH /conversations/{cid}` `{title?, entry_artefact_id?}` — chats only
+  (422 on a planning conversation); partial, an explicit `null`
+  `entry_artefact_id` clears the entry-context chip; a replacement artefact
+  is project-guarded the same as at creation.
+- `POST /conversations/{cid}/archive` / `.../unarchive` — chats only (422 on
+  planning), idempotent either direction.
+- `GET /conversations/{cid}/turns` — an active owned chat's durable turns,
+  ascending `turn_index`, standard paginated envelope; each row carries
+  `claims[]` (claim spans over the answer prose, each mapping to
+  `citations[]` as durable ids), the per-claim `enrichment` state, the
+  zero-citation `warning_not_evidence_checked` marker, a typed `handoff`, and
+  `stopped_before_evidence_check` for a cancelled row.
+- `POST /conversations/{cid}/turns` `{message, client_turn_id}` — **the turn
+  stream**. Reservation (ownership, eligibility, idempotency, capacity,
+  validation) happens in one transaction before any response bytes; every
+  error from reservation is the standard `ErrorEnvelope`, never a stream
+  event. `message` caps at 10 000 characters. Response is `application/
+  x-ndjson`, one JSON object per line, a discriminated union on `type`:
+  - `progress {label}` — a user-facing read-tool activity label before that
+    tool runs (e.g. "Searching the evidence…"), never a fake token.
+  - `delta {text}` — a provider-neutral prose fragment.
+  - `completed {turn}` — the one successful terminal event: the durable
+    `ChatTurnOut` row, citation floor already applied.
+  - `failed {error, turn_id}` — the one failure terminal event. A failure
+    after headers have committed is always a stream event, never an
+    `ErrorEnvelope` — the envelope only covers pre-header rejections above.
+  - `cancelled {turn}` — the one explicit-stop terminal event; the row's
+    `stopped_before_evidence_check` is set, its citation markers are inert
+    (the terminal citation floor never ran on a stopped generation).
+
+  Exactly one terminal event (`completed | failed | cancelled`) arrives per
+  still-connected accepted request. A client that disconnects without
+  calling cancel is **not** a stop signal: the server finishes generation
+  and commits `completed` server-side regardless: the answer is waiting on
+  the next `GET .../turns` read, never lost. Async grounding-judge
+  enrichment (per-claim `{verdict, weakly_grounded, rationale}`) runs after
+  the stream closes and compare-and-sets onto the already-completed row —
+  never a second stream, picked up by re-reading the turn.
+  **Idempotency and retry** key on `client_turn_id`: a completed row replays
+  its stored terminal payload verbatim (a fresh one-line `completed` stream,
+  no re-generation); a `failed` or `cancelled` row re-runs in place, and only
+  for the conversation's latest turn. Error vocabulary: 409 `stale_turn`
+  (same id bound to a different message, or a retry attempted on a
+  non-latest turn) · 409 `chat_turn_in_progress` (a new `client_turn_id`
+  while this conversation already has a `pending` row; a `pending` row older
+  than ten minutes is first terminally expired to `failed`) · 409
+  `no_completed_run` (the project has never finished a run) · 409
+  `run_active` (the project's walk is currently `running` or `paused` —
+  finish or park it first) · 429 `chat_capacity` (an owner-wide in-flight
+  chat-turn cap, distinct from the run-slot `capacity` code). A generated
+  answer is also capped by a fixed output-token ceiling.
+- `POST /conversations/{cid}/turns/{turn_id}/cancel` → `CancelTurnOut
+  {status}` — the explicit stop signal (bare disconnect does not cancel; see
+  above). Owner-scoped, idempotent, keyed to the named pending turn: it stops
+  generation, persists whatever prose has streamed so far as `cancelled`,
+  and returns the turn's honest current status (already-terminal is a
+  no-op read, not an error).
+- `GET /projects/{id}/chunks/{chunk_id}/context?quote=` — the chat-citation
+  hover/click read: the same clamped context-window shape as the artefact
+  citation-context read above, resolved from a chat citation's durable chunk
+  id plus its quote (chat citations carry chunk ids, not artefact
+  citation-table ids). An ambiguous or unmatched quote is 404, same rule as
+  the artefact seam.
 
 ### Runs
 
@@ -188,6 +330,14 @@ clamps context to a character window around the cited span — the 008
 seam's named consumer) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
+
+- Artefact `SectionOut.nav_label` (task 032) is an optional short label for the
+  contents list, at most 28 characters, produced by the section proposal
+  (`synthesise_sections_v4`). Over-length is **rejected at the proposal
+  boundary**, never truncated downstream — unlike the title and focus bounds
+  beside it, which clamp. There is no backfill: an artefact synthesised before
+  the field existed reads `null`, and the client falls back to a shortened
+  title. Absence is a normal state, not an error.
 
 - Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
   or grouping references to named items (`name`, optional `description` and

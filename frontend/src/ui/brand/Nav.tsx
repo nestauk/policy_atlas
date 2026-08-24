@@ -1,41 +1,68 @@
 import type { HTMLAttributes, ReactNode } from "react";
-import { NavLink } from "react-router";
+import { Link, NavLink, useLocation } from "react-router";
 
 import { cn } from "./cn";
 
-/** Top nav bar: brand group left, links right (brand tokens § Navigation). */
-export function NavBar({ className, ...props }: HTMLAttributes<HTMLElement>) {
+/** Height of one chrome row. The shell stacks two of these inside a task. */
+export const NAV_BAR_HEIGHT_PX = 64;
+
+/** Top nav bar: brand left, links right, full viewport width. */
+export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLElement>) {
   return (
-    <nav
-      className={cn(
-        "flex h-[58px] items-center justify-between border-b border-line bg-paper px-6",
-        className,
-      )}
-      {...props}
-    />
+    <nav className={cn("w-full border-b border-line bg-paper", className)} {...props}>
+      <div className="flex h-16 w-full items-center justify-between px-6">
+        {children}
+      </div>
+    </nav>
   );
 }
 
 /** Wordmark: "Policy" navy + "Atlas" electric blue, display face. */
 export function NavLogo() {
   return (
-    <span className="whitespace-nowrap font-display text-lead font-extrabold tracking-[-0.3px] text-navy">
+    <span className="whitespace-nowrap font-display text-heading font-extrabold tracking-[-0.02em] text-navy">
       Policy <b className="font-extrabold text-blue">Atlas</b>
     </span>
   );
 }
 
-/** Growing-underline nav link: active page fills its width in Nesta blue. */
-export function NavItem({ to, children }: { to: string; children: ReactNode }) {
+/**
+ * Brand wordmark, always home. It is not a nav item — the active underline
+ * is reserved for New / Tasks / Projects, so the logo never looks selected.
+ */
+export function NavHomeLink() {
+  return (
+    <Link to="/" className="min-w-0 no-underline">
+      <NavLogo />
+    </Link>
+  );
+}
+
+/** Growing-underline nav link: active item gets a 3px Nesta-blue rule. */
+export function NavItem({
+  to,
+  end,
+  match,
+  children,
+}: {
+  to: string;
+  end?: boolean;
+  /** When set, wins over React Router's default prefix match. */
+  match?: (pathname: string) => boolean;
+  children: ReactNode;
+}) {
+  const { pathname } = useLocation();
   return (
     <NavLink
       to={to}
-      className={({ isActive }) =>
-        cn(
-          "nav-underline text-meta font-semibold text-grey no-underline hover:text-navy",
-          isActive && "nav-underline-on font-extrabold text-navy",
-        )
-      }
+      end={end}
+      className={({ isActive }) => {
+        const active = match ? match(pathname) : isActive;
+        return cn(
+          "inline-block border-b-[3px] border-transparent pb-1 text-lead font-semibold text-navy no-underline",
+          active && "border-blue font-extrabold",
+        );
+      }}
     >
       {children}
     </NavLink>

@@ -4,6 +4,7 @@ export const MOCK_PROJECT_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
+export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
@@ -222,6 +223,7 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
 };
 
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
+  artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",
   question: mockProject.question ?? "",
   coverage_snapshot: { source_count: 46, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
@@ -290,6 +292,41 @@ export const mockCoverage: components["schemas"]["CoverageOut"] = {
     },
   ],
 };
+
+// --- Chat conversations (task 029 phase G3 mock) ------------------------
+//
+// The chat citation carries a durable chunk id (not the artefact citation
+// table's id) — a distinct fixture id in the same 8-4-4-4-12 style, one
+// prefix on from the planning-turn ids above.
+export const MOCK_CHAT_CITATION_CHUNK_ID = "70000000-0000-4000-8000-000000000001";
+export const MOCK_CHAT_CLAIM_ID = "70000000-0000-4000-8000-000000000002";
+
+/** The quote a chat citation resolves to — the same breakfast-provision
+ *  passage the artefact's own citation cites (`mockFindings[0].quote`),
+ *  so `mock/api.ts`'s chunk-context handler can share one context window. */
+export const MOCK_CHAT_CITATION_QUOTE = mockFindings[0].quote ?? "";
+
+/** Two NDJSON `delta` chunks the mock chat stream emits in order; joined,
+ *  they form the turn's persisted `answer` (with its `[1]` marker landing
+ *  in the second chunk, so the marker itself only ever arrives whole). */
+export const MOCK_CHAT_ANSWER_DELTAS = [
+  "Universal breakfast provision supported more consistent uptake ",
+  "when schools removed the separate sign-up step [1].",
+] as const;
+
+/** The claim-span text the mock chat turn carries over its own answer
+ *  (030 fold e2e coverage): server-shape faithful to what
+ *  `chat_floor.apply_citation_floor` actually persists on `claims[]` —
+ *  `{text, span, citation_ns}`, with `span` the floor's own
+ *  `prose.find(text)` result rather than a hand-picked offset that could
+ *  silently drift from `MOCK_CHAT_ANSWER_DELTAS` above. Deliberately ends
+ *  before the `[1]` marker (like a model's own claim text, which never
+ *  includes the bracket) so the mock exercises the claim-span affordance and
+ *  the literal-marker affordance as the two distinct, non-overlapping
+ *  regions the fold's design specifies. */
+export const MOCK_CHAT_CLAIM_TEXT = "Universal breakfast provision supported more consistent uptake";
+
+export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 
 /**
  * A ready plan draft (contract 027 F.2 fixture item 1b): the mock project
@@ -373,13 +410,13 @@ export function seedPlanningTurns(): components["schemas"]["PlanningTranscriptTu
       client_turn_id: MOCK_PLANNING_TURN_IDS.second,
       turn_index: 2,
       user_message: "That's my question\n\n[confirm part=question option=confirm]",
-      reply: "What counts as in-scope? Edit any chip directly.",
+      reply: "What counts as in-scope? Edit any chip directly. I'll search from 2016 onward. UK as the primary setting is judged from each document.",
       suggestions: [],
       part: {
         id: "scope",
         step_label: "Plan · 2 of 3 · scope",
         title: "What counts as in-scope?",
-        body: "Dates filter the search itself; setting and population become screening rules judged per document.",
+        body: null,
         chips: [
           { label: "UK primary", kind: "text", value: "UK as the primary study setting" },
           { label: "Since 2016", kind: "date_range", value: '{"after": "2016-01-01", "before": null}' },

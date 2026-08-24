@@ -42,6 +42,20 @@ letter diverges from its invariant is an instruction to diverge.
   is version-pin tests. A guard that selects by filename convention guards
   the convention, not the surface: widen the glob or move the constants
   when a gated surface lands outside the selector.
+- **A guard can also die by evaluating to nothing** (031). A test named as pinning
+  "acquire's headline is the sum of its per-backend counts" asserted
+  `real["acquired"] == sum(stats["acquired"] for stats in real["by_backend"].values())`
+  against a walk whose payload was `acquired = 0, by_backend = {}` — i.e. `0 == sum(())`.
+  It would have passed however acquire computed its headline. Sibling shape in the same
+  slice: a scope-narrowing test whose fixture never put a record in the narrowed scope, so
+  it passed whether or not the narrowing ran. **Ask of every guard: what value would make
+  this fail?** If the fixture cannot produce one, the guard is decorative. The cheap check
+  is a mutation — break the production line deliberately and confirm the test goes red.
+- Related fixture trap (031): the runtime walk's stub search acquires **0 new** sources,
+  because the seeded project already holds the records the stub returns. `assert
+  headline > 0` off a plain walk fails; a non-zero headline has to be seeded, or the test
+  has to use a backend that yields fresh records per call.
 - Same family:
   [untrusted-prompt-fields-json-records](untrusted-prompt-fields-json-records.md)
-  (the boundary is the mechanism, not the sanitizer's pattern).
+  (the boundary is the mechanism, not the sanitizer's pattern),
+  [assert-on-row-not-summary](assert-on-row-not-summary.md).

@@ -33,6 +33,7 @@ from policy_atlas.evidence_base.corpus.select import (
     select_documents,
 )
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
+from policy_atlas.evidence_base.sourcing.search_loop import DEPTH_CONSTANTS
 from policy_atlas.runtime import harness, steering_events
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.runner import (
@@ -269,30 +270,20 @@ def test_extract_refresh_is_exempt_from_plan_round_trip_but_profiles_still_are()
     _validate_delta_round_trip({"extract": delta}, amended_chain=chain)
 
 
-# --- D5 search.target: _validate_directive_delta flows through the parser ---
+# --- search.target removed (task 029): honest refusal, never a silent no-op ---
 
 
 @pytest.mark.parametrize(
     "delta",
     [
-        {"search": {"target": 5}},
-        {"search": {"target": 60}},
+        {"search": {"target": 30}},
         {"search": {"depth": "deep", "target": 30}},
     ],
 )
-def test_acquire_target_directive_delta_validates(delta: dict[str, Any]) -> None:
-    _validate_directive_delta("acquire", delta, backend_scope="both")  # does not raise
-
-
-@pytest.mark.parametrize(
-    "delta",
-    [
-        {"search": {"target": 4}},
-        {"search": {"target": 61}},
-        {"search": {"target": "30"}},
-    ],
-)
-def test_acquire_target_directive_delta_rejects_out_of_range(delta: dict[str, Any]) -> None:
+def test_acquire_target_directive_delta_is_refused(delta: dict[str, Any]) -> None:
+    """The former D5 target key no longer exists; a router that still compiles
+    it gets an explicit unknown-key refusal rather than a value that validates
+    and then silently does nothing."""
     with pytest.raises(SteeringAdjustmentError):
         _validate_directive_delta("acquire", delta, backend_scope="both")
 
@@ -381,7 +372,6 @@ def test_group_granularity_directive_delta_rejects_bogus_value(delta: dict[str, 
         {
             "search": {
                 "depth": "deep",
-                "target": 30,
                 "guidance": ["prioritise UK policy evaluations", "avoid clinical literature"],
             }
         },
@@ -585,8 +575,11 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
 
         # Frequent pauses after every component, with P2 (before select) inserted
         # right before select runs and P4 (before synthesise) right before
-        # synthesise runs (the two before-boundary lattice points).
+        # synthesise runs (the two before-boundary lattice points). The
+        # standard-effort round loop (task 029) runs acquire+screen_abstract
+        # round_cap (2) times, each round pausing at its own boundaries.
         expected_components = compose(plan).components
+        round_cap = DEPTH_CONSTANTS[plan.search_effort]["round_cap"]
         expected_sequence: list[tuple[str, str]] = []
         for component in expected_components:
             if component == "select":
@@ -594,6 +587,10 @@ def test_frequent_run_pauses_after_every_component_and_continue_matches_nullio(
             if component == "synthesise":
                 expected_sequence.append(("before_component", "synthesise"))
             expected_sequence.append(("after_component", component))
+            if component == "screen_abstract":
+                for _ in range(round_cap - 1):
+                    expected_sequence.append(("after_component", "acquire"))
+                    expected_sequence.append(("after_component", "screen_abstract"))
         assert [
             (point["boundary"], point["component"]) for point, _ in io.pauses
         ] == expected_sequence

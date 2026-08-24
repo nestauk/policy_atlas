@@ -340,6 +340,232 @@ def test_p2_bundle_shape_and_determinism(engine: Engine) -> None:
         _cleanup_project(engine, project_id)
 
 
+def _acquire_completion_payload(
+    engine: Engine, project_id: uuid.UUID, run_id: uuid.UUID
+) -> dict[str, Any]:
+    """The acquire run's ``component.completed`` payload — the headline's own source."""
+    with engine.connect() as conn:
+        entries = events.read_for_run(conn, project_id, run_id)
+    payload = next(
+        entry["payload"]
+        for entry in reversed(entries)
+        if entry["event_type"] == "component.completed"
+        and entry["payload"].get("component") == "acquire"
+    )
+    assert isinstance(payload, dict)
+    return payload
+
+
+def test_p1_bundle_backend_counts_sum_to_the_acquired_headline(engine: Engine) -> None:
+    """Task 031 invariant 1: a non-zero headline never sits above an all-zero line.
+
+    Before this slice ``p1_bundle`` summed ``backends[].count`` on the coverage
+    record, a key acquire never writes — so the line was permanently zero
+    (defect 1a). It now reads the acquire run's own ``by_backend`` counts.
+
+    The walk's stub search returns records the seeded project already holds, so
+    its real headline is an honest 0. A later completion payload with a non-zero
+    headline is appended on the same run to make the invariant bite; acquire
+    defines that headline as the sum of the same ``by_backend`` values
+    (acquire.py), which is what the assertion checks.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        acquire_run_id = runs_by["acquire"]
+        real = _acquire_completion_payload(engine, project_id, acquire_run_id)
+        assert "by_backend" in real, "acquire must persist per-backend counts"
+        assert real["acquired"] == sum(
+            stats["acquired"] for stats in real["by_backend"].values()
+        ), "acquire's headline is the sum of its per-backend counts"
+
+        by_backend = {"openalex": {"acquired": 5}, "overton": {"acquired": 2}}
+        headline = 7
+        with engine.begin() as conn:
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=acquire_run_id,
+                event_type="component.completed",
+                payload={"component": "acquire", "acquired": headline, "by_backend": by_backend},
+            )
+
+        with engine.connect() as conn:
+            bundle = steering_bundles.p1_bundle(
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                acquire_run_id=acquire_run_id,
+            )
+        assert sum(entry["count"] for entry in bundle["backends"]) == headline
+        assert bundle["backends"] == [
+            {"backend": "openalex", "count": 5},
+            {"backend": "overton", "count": 2},
+        ]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p1_bundle_scopes_queries_to_one_run_while_p2_spans_every_round(
+    engine: Engine,
+) -> None:
+    """Task 031 invariant 2: P1 lists one round; P2 keeps the whole picture.
+
+    The scope's other-round search calls are seeded on a second real run id, so
+    the assertion is about the run filter rather than about a fabricated row.
+    ``_executed_queries`` is shared, and spanning every round stays correct for
+    P2's coverage picture — that half is the regression guard.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        acquire_run_id = runs_by["acquire"]
+        other_round_run_id = runs_by["screen_abstract"]
+        assert other_round_run_id != acquire_run_id
+
+        with engine.begin() as conn:
+            for run_id, query in (
+                (acquire_run_id, "this round query"),
+                (other_round_run_id, "other round query"),
+            ):
+                events.append(
+                    conn,
+                    project_id=project_id,
+                    run_id=run_id,
+                    event_type="search.executed",
+                    payload={
+                        "backend": "openalex",
+                        "trust_class": "academic",
+                        "mode": "live",
+                        "query": query,
+                        "query_origin": "seed",
+                        "verb": "search",
+                        "depth": "deep",
+                        "filters": {},
+                        "status": "ok",
+                        "result_count": 3,
+                        "error": None,
+                        "evidence_scope_id": str(scope_id),
+                    },
+                )
+
+        with engine.connect() as conn:
+            p1 = steering_bundles.p1_bundle(
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                acquire_run_id=acquire_run_id,
+            )
+            p2 = steering_bundles.p2_bundle(
+                conn, project_id=project_id, evidence_scope_id=scope_id
+            )
+        assert "this round query" in p1["queries"]
+        assert "other round query" not in p1["queries"]
+        p2_queries = [entry["query"] for entry in p2["executed_queries"]]
+        assert "this round query" in p2_queries
+        assert "other round query" in p2_queries
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p1_bundle_without_an_acquire_run_reports_absence_not_zeros(
+    engine: Engine,
+) -> None:
+    """No acquire run recorded: empty counts and queries, never numbers from another round."""
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        _walk(engine, project_id, scope_id)
+        with engine.connect() as conn:
+            bundle = steering_bundles.p1_bundle(
+                conn,
+                project_id=project_id,
+                evidence_scope_id=scope_id,
+                acquire_run_id=None,
+            )
+        assert bundle["backends"] == []
+        assert bundle["queries"] == []
+        assert bundle["sample_titles"], "titles come from PSS and do not need the run id"
+    finally:
+        _cleanup_project(engine, project_id)
+
+
+def test_p1_bundle_is_empty_when_the_boundary_run_is_not_the_successful_acquire(
+    engine: Engine,
+) -> None:
+    """A failed round's P1 shows absence, not the previous round's numbers.
+
+    ``successful_runs`` is written only on the success path (`runner.py`), but a
+    failed acquire still presents its boundary. Without the boundary-run gate,
+    round 2's P1 would render round 1's counts and queries under round 2's
+    label — defect 1b inverted, and harder to spot than the zeros it replaced.
+    """
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id = _seed_project(engine)
+        runs_by = _walk(engine, project_id, scope_id)
+        succeeded = runs_by["acquire"]
+        failed_later_round = uuid.uuid4()
+        with engine.begin() as conn:
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=succeeded,
+                event_type="component.completed",
+                payload={
+                    "component": "acquire",
+                    "acquired": 4,
+                    "by_backend": {"openalex": {"acquired": 4}},
+                },
+            )
+            events.append(
+                conn,
+                project_id=project_id,
+                run_id=succeeded,
+                event_type="search.executed",
+                payload={
+                    "backend": "openalex",
+                    "query": "round one query",
+                    "status": "ok",
+                    "result_count": 4,
+                    "evidence_scope_id": str(scope_id),
+                },
+            )
+
+        stale = runner_module._build_bundle(
+            engine,
+            name=SEARCH_EXCEPTION,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            successful_runs={"acquire": succeeded},
+            backends=_runner_backends(),
+            section_budget=None,
+            boundary_run_id=failed_later_round,
+        )
+        assert stale is not None
+        assert stale["backends"] == []
+        assert stale["queries"] == []
+
+        # Same call, boundary matching the successful run: the card fills in.
+        current = runner_module._build_bundle(
+            engine,
+            name=SEARCH_EXCEPTION,
+            project_id=project_id,
+            evidence_scope_id=scope_id,
+            successful_runs={"acquire": succeeded},
+            backends=_runner_backends(),
+            section_budget=None,
+            boundary_run_id=succeeded,
+        )
+        assert current is not None
+        assert current["queries"] == ["round one query"]
+        assert current["backends"] == [{"backend": "openalex", "count": 4}]
+    finally:
+        _cleanup_project(engine, project_id)
+
+
 def test_p2_bundle_parses_executed_and_zero_result_queries(engine: Engine) -> None:
     """Executed/zero-result queries come from seeded search.executed event payloads."""
     project_id: uuid.UUID | None = None

@@ -79,7 +79,7 @@ function ListBlock({
 }) {
   return (
     <div className="mt-3 border border-line bg-paper-2 px-3 py-2.5">
-      <p className="text-caption font-bold uppercase tracking-wide text-grey">{heading}</p>
+      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{heading}</p>
       {children}
     </div>
   );
@@ -156,7 +156,7 @@ export function CheckInBundle({
     <div>
       {backends.length > 0 && (
         <ListBlock heading={CHECK_IN_SEARCH_HEADING}>
-          <p className="mt-1 text-caption text-navy">
+          <p className="mt-1 text-body text-navy">
             {backends
               .map(({ backend, count }) => `${scrub(backendLabel(backend) ?? backend)} ${count}`)
               .join(" · ")}
@@ -165,7 +165,7 @@ export function CheckInBundle({
           {sampleTitles.length > 0 && (
             <ul className="mt-1.5 space-y-0.5">
               {sampleTitles.slice(0, 5).map((title) => (
-                <li key={title} className="truncate text-caption text-ink">
+                <li key={title} className="truncate text-body text-ink">
                   {scrub(title)}
                 </li>
               ))}
@@ -193,14 +193,14 @@ export function CheckInBundle({
               const staged = stagedRenames.find((rename) => rename.theme_id === theme.theme_id);
               const shown = staged?.name ?? theme.name;
               return (
-                <li key={theme.name} className="flex items-baseline gap-2 text-caption text-ink">
+                <li key={theme.name} className="flex items-baseline gap-2 text-body text-ink">
                   {renaming === theme.theme_id && theme.theme_id !== null ? (
                     <span className="flex flex-1 items-center gap-1.5">
                       <input
                         value={renameText}
                         onChange={(event) => setRenameText(event.target.value)}
                         aria-label={`New name for ${theme.name}`}
-                        className="flex-1 border border-line-2 px-1.5 py-0.5 text-caption"
+                        className="flex-1 border border-line-2 px-1.5 py-0.5 text-body"
                       />
                       <Button
                         size="sm"
@@ -250,14 +250,14 @@ export function CheckInBundle({
         <ListBlock heading={checkInReadingListHeading(shortlist.length)}>
           <ul className="mt-1.5 space-y-0.5">
             {shortlist.slice(0, 6).map((row) => (
-              <li key={row.title} className="flex items-baseline gap-2 text-caption text-ink">
+              <li key={row.title} className="flex items-baseline gap-2 text-body text-ink">
                 <span className="min-w-0 flex-1 truncate">{scrub(row.title)}</span>
                 {row.stratum !== null && <span className="shrink-0 text-grey">· {scrub(row.stratum)}</span>}
               </li>
             ))}
           </ul>
           {shortlist.length > 6 && (
-            <p className="mt-1 text-caption text-grey">…and {shortlist.length - 6} more</p>
+            <p className="mt-1 text-body text-grey">…and {shortlist.length - 6} more</p>
           )}
         </ListBlock>
       )}
@@ -266,7 +266,7 @@ export function CheckInBundle({
         <ListBlock heading={checkInGroupsHeading(groups.length)}>
           <ul className="mt-1.5 space-y-0.5">
             {groups.slice(0, 6).map((group) => (
-              <li key={group.name} className="flex items-baseline gap-2 text-caption text-ink">
+              <li key={group.name} className="flex items-baseline gap-2 text-body text-ink">
                 <span className="min-w-0 flex-1 truncate">{scrub(group.name)}</span>
                 {group.size !== null && (
                   <span className="shrink-0 text-grey">
@@ -276,7 +276,7 @@ export function CheckInBundle({
               </li>
             ))}
           </ul>
-          {groups.length > 6 && <p className="mt-1 text-caption text-grey">…and {groups.length - 6} more</p>}
+          {groups.length > 6 && <p className="mt-1 text-body text-grey">…and {groups.length - 6} more</p>}
         </ListBlock>
       )}
 
@@ -284,7 +284,7 @@ export function CheckInBundle({
         <ListBlock heading={CHECK_IN_SECTIONS_HEADING}>
           <ul className="mt-1.5 space-y-1">
             {sections.map((section, index) => (
-              <li key={`${section.title}-${index}`} className="flex items-baseline gap-2 text-caption text-ink">
+              <li key={`${section.title}-${index}`} className="flex items-baseline gap-2 text-body text-ink">
                 {editingRow === index ? (
                   <span className="flex flex-1 flex-col gap-1">
                     <input
@@ -292,14 +292,14 @@ export function CheckInBundle({
                       maxLength={200}
                       onChange={(event) => setRowTitle(event.target.value)}
                       aria-label="Section title"
-                      className="border border-line-2 px-1.5 py-0.5 text-caption"
+                      className="border border-line-2 px-1.5 py-0.5 text-body"
                     />
                     <input
                       value={rowFocus}
                       maxLength={200}
                       onChange={(event) => setRowFocus(event.target.value)}
                       aria-label="What it covers"
-                      className="border border-line-2 px-1.5 py-0.5 text-caption"
+                      className="border border-line-2 px-1.5 py-0.5 text-body"
                     />
                     <span className="flex gap-1.5">
                       <Button
@@ -353,7 +353,7 @@ export function CheckInBundle({
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-caption text-grey">
+          <p className="mt-1.5 text-body text-grey">
             Key findings opens the report and Conclusions closes it — those are structural and
             stay.
           </p>
@@ -365,7 +365,7 @@ export function CheckInBundle({
                 onChange={(event) => setRowTitle(event.target.value)}
                 aria-label="New section title"
                 placeholder="Section title"
-                className="border border-line-2 px-1.5 py-0.5 text-caption"
+                className="border border-line-2 px-1.5 py-0.5 text-body"
               />
               <input
                 value={rowFocus}
@@ -373,7 +373,7 @@ export function CheckInBundle({
                 onChange={(event) => setRowFocus(event.target.value)}
                 aria-label="What the new section covers"
                 placeholder="What it covers"
-                className="border border-line-2 px-1.5 py-0.5 text-caption"
+                className="border border-line-2 px-1.5 py-0.5 text-body"
               />
               <span className="flex gap-1.5">
                 <Button
@@ -398,7 +398,7 @@ export function CheckInBundle({
           ) : (
             <button
               type="button"
-              className="mt-1.5 cursor-pointer text-caption font-semibold text-blue hover:text-navy"
+              className="mt-1.5 cursor-pointer text-meta font-semibold text-blue hover:text-navy"
               onClick={() => {
                 setRowTitle("");
                 setRowFocus("");

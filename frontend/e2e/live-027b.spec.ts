@@ -285,7 +285,7 @@ test.describe.serial("task 027 live check — part B", () => {
     // started from its inline plan card in the thread (the completion card's
     // "Run the analysis again" control was removed, owner 2026-08-05).
     const runAgain = page
-      .getByTestId("plan-card")
+      .getByTestId("plan-ready-actions")
       .getByRole("button", { name: /Start(ing…)? the analysis/ });
     for (let attempt = 0; attempt < 8; attempt++) {
       if (await runAgain.isVisible().catch(() => false)) break;

@@ -1,7 +1,9 @@
 # Policy Atlas v3 — deployment
 
-Operator runbook for `infra/`. Deploys are operator-run (`cdk deploy`, no CI/CD
-pipeline in this slice) via `scripts/deploy.sh`.
+Operator runbook for `infra/`. `scripts/deploy.sh` remains the authoritative
+deployment sequence. GitHub Actions invokes it for steady-state staging and
+prod deploys; operators retain the Makefile entry points for first deploys
+and recovery.
 
 ## 1. Overview
 
@@ -10,7 +12,7 @@ Four CloudFormation stacks:
 | Stack | Region | Contents |
 | --- | --- | --- |
 | `PaV3NetworkStack` | `eu-west-2` | VPC, fck-nat, shared ALB + wildcard ACM cert |
-| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda |
+| `PaV3DatabaseStack` | `eu-west-2` | Aurora Postgres cluster, generated credentials secret, `load_secret` Lambda, SSM jumpbox |
 | `PaV3AppStack` | `eu-west-2` | ECS Fargate API service + migration task, Cognito, S3 + CloudFront frontend, font bucket |
 | `PaV3CertStack` | `us-east-1` | CloudFront's ACM certificate (AWS requires this region for CloudFront certs) |
 
@@ -30,16 +32,109 @@ context. No IP allowlists or similar operationally sensitive values are committe
 anywhere.
 
 > `scripts/deploy.sh` is the authoritative sequence — on any discrepancy between
-> this file and the script, the script wins. Modes: `bootstrap` (first deploy,
-> gates A/B) and `update` (steady state).
+> this file and the script, the script wins. Modes: `check` (read-only committed
+> config preflight), `bootstrap` (first deploy, gates A/B), and `update` (steady
+> state). Use the Makefile entry points rather than invoking it directly.
 >
-> **One operator at a time.** There is no deploy lock: two concurrent
-> `deploy.sh` runs can interleave migrations and scale-ups. Coordinate
-> human-to-human (deferred seam — see `docs/deferred.md`).
+> **One deploy at a time per environment.** GitHub Actions serializes each
+> environment and never cancels an active deploy. There is no cross-system lock:
+> a local `deploy.sh` can still interleave with Actions, so coordinate local
+> recovery/bootstrap work human-to-human (deferred seam — see `docs/deferred.md`).
+
+### GitHub Actions, Environments, and AWS OIDC
+
+Two workflows automate only steady-state updates:
+
+| Workflow | Trigger | Ref deployed | GitHub Environment |
+| --- | --- | --- | --- |
+| `deploy-staging.yml` | engineer runs `workflow_dispatch` | dispatch SHA, accepted only when the selected ref is `dev` | `staging` |
+| `deploy-production.yml` | stable GitHub Release is published | immutable Release SHA, accepted only when it is in `dev` history | `prod` |
+
+`release.published` includes prereleases; the workflow explicitly skips them. A
+failed configuration/ref validation job never reaches the protected Environment
+and never requests an OIDC token. Deploy jobs have only `contents: read` and
+`id-token: write`. Concurrency queues a later deployment and deliberately does not
+cancel the active stop→migrate→scale→publish sequence.
+
+Create protected GitHub Environments named exactly `staging` and `prod`.
+Each needs these Environment **secrets** (not repository variables or committed
+values):
+
+- `AWS_ROLE_ARN` — ARN of that environment's OIDC deployment role.
+- `AWS_ACCOUNT_ID` — expected account; passed to CDK and used by the credential
+  action's confused-deputy check. Account IDs are masked in logs.
+
+Set each IAM role's maximum session duration to at least two hours. Workflows ask
+for a two-hour credential and cap the job at 90 minutes, so a role left at AWS's
+one-hour default fails during credential setup instead of expiring partway through
+an outage-sensitive deploy.
+
+Restrict `staging` deployment branches to `dev`. Restrict `prod` deployment
+tags to the repository's release-tag pattern (for example `v*`) and require a
+reviewer for prod. These restrictions are security controls, not just UI:
+an environment-based GitHub OIDC token has a subject naming the Environment rather
+than its branch/tag. The workflow performs a second ref check in code.
+
+Create GitHub's OIDC provider in each AWS account with URL
+`https://token.actions.githubusercontent.com` and audience `sts.amazonaws.com`.
+Use one role per account/environment. Its trust policy must bind both audience and
+the exact Environment subject (replace placeholders; do not commit the result):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {
+      "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+    },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": {
+        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+        "token.actions.githubusercontent.com:sub": "repo:nestauk/policy_atlas:environment:<staging-or-prod>"
+      }
+    }
+  }]
+}
+```
+
+The example shows this existing repository's default subject shape. If the GitHub
+organisation opts into immutable organisation/repository IDs or a custom OIDC
+subject template, inspect the issued claims and bind the role to that exact subject
+instead. Do not replace the exact match with a repository-wide wildcard.
+
+The role needs the permissions already required by this runbook: use the CDK
+bootstrap deploy/file/image roles; read the named deploy SSM parameters and app
+secret metadata; run/inspect the migration task; update/inspect the ECS service;
+sync the two deployment buckets; create/wait for the CloudFront invalidation; and
+the tightly conditioned `iam:PassRole` grant below. Scope these permissions to the
+environment's account and v3 resources. Do not add static AWS access-key secrets.
+
+**Account isolation:** current v3 stack names, physical resource names, and
+`/policy_atlas_v3/*` SSM namespace are fixed. Staging and prod therefore
+must target separate AWS accounts. Supporting both in one account requires a
+separate namespacing design, not a workflow-variable change.
+
+**Prod is intentionally fail-closed today.** Add reviewed `prod`
+entries to `network_config.json`, `db_config.json`, and `pa_config.json` before
+enabling releases. The values include its domain, globally unique Cognito domain
+prefix, app-secret name, region, and capacity. Until then:
+
+```bash
+make deploy-check DEPLOY_ENV=prod
+```
+
+fails before GitHub requests prod approval or AWS credentials. Never point
+the prod workflow at the `staging` config as a workaround.
 
 ## 2. First-deploy preconditions (gate A)
 
 Before the first `cdk deploy` of any kind, all of the following must hold.
+
+The first deployment is intentionally not release-triggered: satisfy this section
+and run `make deploy-bootstrap DEPLOY_ENV=<environment>` from an attended operator
+session. Once gate B passes, GitHub Actions owns steady-state `deploy-update` runs.
 
 1. **NS delegation live.**
 
@@ -138,7 +233,9 @@ synth-time context query and must not run before the VPC exists.
      For test users day-to-day, `make staging-user EMAIL=<email-format-username>
      PASSWORD='<password>'` wraps this: invite email suppressed, permanent
      password set directly (the address needs no real inbox; recovery for fake
-     addresses is `admin-set-user-password` again).
+     addresses is `admin-set-user-password` again). `make prod-user` is the same
+     helper against the production pool (`https://policyatlas.uk`); it needs
+     prod-account credentials, not `AWS_PROFILE=pa-dev`.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit
@@ -181,6 +278,12 @@ count the template pins at 0). Fix the cause and rerun `deploy.sh update`, or
 restore service manually with
 `aws ecs update-service --cluster policy-atlas-v3-cluster --service policy-atlas-v3-api-service --desired-count 1`
 (only if the migration step had already passed).
+
+For normal operator recovery use
+`make deploy-update DEPLOY_ENV=<environment>` so local and GitHub execution stay on
+the same interface. A GitHub rerun uses the same event SHA. For prod code
+rollback, publish a new reviewed Release pointing at the chosen prior commit; do
+not move or republish an existing Release tag.
 
 **One-time pending step — encrypting the Aurora cluster (026 review hardening).**
 The committed template sets `StorageEncrypted` (+ deletion protection, 7-day
@@ -254,6 +357,7 @@ omitted from the deployed task.
 | `OPENALEX_EMAIL` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_EMAIL` | `evidence_base/sourcing/search_live.py` |
 | `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_base/sourcing/search_live.py` |
 | `PA_BACKEND_MODE` | config value: `live` | `api/deps.py` |
+| `POLICY_ATLAS_CHAT_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `runtime/chat_prompt.py` |
 | `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_base/sourcing/ingest_full_text.py` |
 | `POLICY_ATLAS_ORCHESTRATOR_MODEL` | omitted (development tuning; application default) | `runtime/orchestrator_backend.py` |
 | `POLICY_ATLAS_ORCHESTRATOR_TRIAGE_MODEL` | omitted (development tuning; application default) | `runtime/orchestrator_backend.py` |
@@ -275,34 +379,48 @@ slower — never to wrong.
 ## 6. Developer DB access
 
 Local dev stays on docker-compose Postgres, untouched. Direct Aurora access from
-a laptop is an SSM port-forward tunnel through the fck-nat instance (no bastion,
-no inbound ports, IAM-gated) — the inspection replacement for v2's deleted
-Supabase Studio. Recipe (verbatim):
+a laptop is an SSM port-forward tunnel through a dedicated, no-ingress jumpbox
+in a private subnet — the inspection replacement for v2's deleted Supabase
+Studio. The jumpbox reaches the public Systems Manager services over HTTPS via
+the existing NAT route in staging. In prod, `NetworkStack` creates
+private `ssm` and `ssmmessages` interface endpoints and the jumpbox attaches
+their pre-wired managed-node SG; it has no public HTTPS fallback. The selection
+is explicit in `network_config.json` as `ssm_connectivity: nat` or
+`ssm_connectivity: interface_endpoints`. See
+[`JUMPBOX.md`](../JUMPBOX.md) for the full operator and IAM guidance.
 
 Prereqs: AWS CLI + session-manager-plugin; IAM allowing `ssm:StartSession` on the
-fck-nat instance; the fck-nat SSM role + fck-nat→Aurora 5432 ingress rule.
+jumpbox instance **and only its generated custom Session document**; permission
+to read the database secret. Do not grant the engineer role access to the
+AWS-managed remote-host port-forwarding document, which would let the caller
+choose a different remote target.
 
 ```bash
-# 1. fck-nat instance id (the only EC2 instance in the v3 network stack)
-INSTANCE_ID=$(aws ec2 describe-instances \
-  --filters "Name=tag:aws:cloudformation:stack-name,Values=PaV3NetworkStack" \
-            "Name=instance-state-name,Values=running" \
-  --query 'Reservations[0].Instances[0].InstanceId' --output text)
-
-# 2. DB endpoint + credentials from the generated cluster secret
+# 1. DB credentials from the generated cluster secret
 DB_SECRET=$(aws ssm get-parameter --name /policy_atlas_v3/db/secret_name \
   --query Parameter.Value --output text)
 aws secretsmanager get-secret-value --secret-id "$DB_SECRET" \
   --query SecretString --output text | python3 -m json.tool   # host, port, password
 
-# 3. Port-forward through the fck-nat instance (no bastion, no inbound ports)
-aws ssm start-session --target "$INSTANCE_ID" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters host=<aurora-writer-endpoint>,portNumber=5432,localPortNumber=15432
+# 2. Retrieve and run the fixed-target command emitted by DatabaseStack
+aws cloudformation describe-stacks --stack-name PaV3DatabaseStack \
+  --query "Stacks[0].Outputs[?contains(OutputKey, 'PortForwardingCommand')].OutputValue | [0]" \
+  --output text
+# Run the returned command. The generated document defaults localhost to 15432.
 
-# 4. In another shell
+# 3. In another shell
 psql "postgresql://dbadmin:<password>@localhost:15432/policy_atlas_db?sslmode=require"
 ```
+
+The document pins the Aurora writer endpoint and port 5432. To select a
+different local port, append
+`--parameters '{"localPortNumber":["15433"]}'`; callers cannot override the
+remote target.
+
+This change does not put backend-to-Aurora traffic through the jumpbox or NAT.
+The Fargate task ENIs and Aurora ENIs remain in the same VPC private subnets,
+where AWS's implicit `local` route applies, and Aurora independently allows
+`BackendSG` on port 5432. The NAT route is used only for internet-bound traffic.
 
 **Warning:** a locally booted API pointed at Aurora is a second instance
 sharing the DB — the orphan sweep has no ownership lease and will interrupt the
@@ -320,6 +438,11 @@ like any other static asset. Binaries never enter the repo or the CDK asset tree
 in committable form — CI's font-guard stays green.
 
 ## 8. Rollback
+
+- **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
+  stop new deploys, then revert the workflow change. This does not repair an
+  already interrupted stop→migrate→scale sequence; use the recovery procedure in
+  § 4 against the exact deployed SHA.
 
 - **Repo:** single squash-revert removes `infra/` plus the two named backend
   touches (auth congruence edit, pool sizing) — both regression-tested by the

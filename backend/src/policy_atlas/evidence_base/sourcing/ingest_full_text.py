@@ -117,8 +117,13 @@ PLAIN_SEGMENTATION_POLICY = "plain_para_v1"
 FAILURE_REASONS = (
     "no_url", "paywall", "not_found", "too_large", "timeout",
     "corrupt", "no_text_layer", "thin_text", "empty",
-    "blocked", "blocked_by_host", "fetch_error",
+    "blocked", "blocked_by_host", "fetch_error", "unsupported_type",
 )
+
+# Base content types that are never parseable text; anything here fails fast with
+# a reason-coded outcome instead of being chunked as text (prod incident 2026-08-19:
+# a JPEG routed to the plain path and its NUL bytes killed the whole run at INSERT).
+_NON_TEXT_TYPE_PREFIXES = ("image/", "audio/", "video/", "font/", "model/")
 
 _HTTP_STATUS_REASONS = {401: "paywall", 403: "blocked_by_host", 404: "not_found", 410: "not_found"}
 FETCH_FAILURE_REASON_PRIORITY = (
@@ -684,6 +689,10 @@ def _parse_html(body: bytes) -> dict[str, Any]:
 
 
 def _parse_plain(body: bytes) -> dict[str, Any]:
+    if b"\x00" in body:
+        # NUL bytes mean binary (git's own binary heuristic) — mislabeled or
+        # untyped binary lands here; Postgres text columns reject NUL anyway.
+        return {"status": "error", "reason": "unsupported_type"}
     text = _decode(body)
     if not text.strip():
         return {"status": "error", "reason": "empty"}
@@ -717,6 +726,8 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
         or ``{"status": "error", "reason": <closed vocabulary>}``.
     """
     base_type = content_type.split(";")[0].strip().lower()
+    if base_type.startswith(_NON_TEXT_TYPE_PREFIXES):
+        return {"status": "error", "reason": "unsupported_type"}
     if base_type == "application/pdf":
         result = _parse_pdf(body)
     elif base_type == "text/html":
@@ -725,6 +736,11 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
         result = _parse_plain(body)
     if result["status"] != "ok":
         return result
+    for c in result["chunks"]:
+        # Stray NULs from PDF/HTML extraction would abort the whole write
+        # transaction at INSERT (Postgres text rejects NUL) — replace like any
+        # other undecodable byte.
+        c["content"] = c["content"].replace("\x00", "�")
     total_chars = sum(len(c["content"]) for c in result["chunks"])
     if total_chars == 0:
         reason = "no_text_layer" if base_type == "application/pdf" else "empty"

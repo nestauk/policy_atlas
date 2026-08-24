@@ -9,7 +9,13 @@ import { extendTailwindMerge } from "tailwind-merge";
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      "font-size": [{ text: ["caption", "meta", "body", "lead", "heading", "title"] }],
+      // Every name here must exist as a --text-* token in index.css, and
+      // every --text-* token there must appear here. TypeScale.test.ts
+      // asserts the two lists are equal, so the next token cannot repeat the
+      // 028 failure by being added to only one of them.
+      "font-size": [
+        { text: ["caption", "meta", "body", "lead", "heading", "title", "display"] },
+      ],
     },
   },
 });

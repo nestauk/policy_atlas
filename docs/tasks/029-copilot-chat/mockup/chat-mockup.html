@@ -1,0 +1,544 @@
+<title>029 co-pilot chat — frontend mockup</title>
+<style>
+  /* ——— annotation chrome (theme-aware) ——— */
+  :root {
+    --page: #f6f6f7;
+    --page-ink: #1c1c1e;
+    --page-mut: #64636a;
+    --page-line: #dcdce1;
+    --frame-shadow: 0 1px 3px rgba(15, 41, 74, 0.10), 0 8px 28px rgba(15, 41, 74, 0.07);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #17171a;
+      --page-ink: #ececee;
+      --page-mut: #9b9ba4;
+      --page-line: #303036;
+      --frame-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 10px 32px rgba(0, 0, 0, 0.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #17171a;
+    --page-ink: #ececee;
+    --page-mut: #9b9ba4;
+    --page-line: #303036;
+    --frame-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 10px 32px rgba(0, 0, 0, 0.45);
+  }
+  :root[data-theme="light"] {
+    --page: #f6f6f7;
+    --page-ink: #1c1c1e;
+    --page-mut: #64636a;
+    --page-line: #dcdce1;
+    --frame-shadow: 0 1px 3px rgba(15, 41, 74, 0.10), 0 8px 28px rgba(15, 41, 74, 0.07);
+  }
+
+  /* ——— Nesta product tokens (frames are light-product-true by design) ——— */
+  :root {
+    --blue: #0000ff;
+    --navy: #0f294a;
+    --grey: #646363;
+    --ink: #1c1c1e;
+    --line: #e4e4e7;
+    --line2: #d3d3d8;
+    --ground: #f4f4f5;
+    --paper: #ffffff;
+    --paper2: #fafafa;
+    --green: #18a48c;
+    --red: #eb003b;
+    --orange: #ff6e47;
+    --yellow: #fdb633;
+    --blue-tint: #ececff;
+    --blue-tint2: #f5f5ff;
+    --green-tint: #e7f5f2;
+    --yellow-tint: #fff6e3;
+    --red-tint: #fde8ed;
+    --sans: "Averta", "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--page);
+    color: var(--page-ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.55;
+    padding: 48px 20px 96px;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 64px; }
+
+  /* page header */
+  .head { display: flex; flex-direction: column; gap: 10px; max-width: 72ch; }
+  .head .eyebrow {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--page-mut); font-weight: 700;
+  }
+  .head h1 { font-size: 30px; line-height: 1.2; font-weight: 800; text-wrap: balance; }
+  .head p { color: var(--page-mut); font-size: 16px; }
+  .head .pins { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .head .pin {
+    font-size: 12px; font-weight: 700; padding: 3px 10px;
+    border: 1px solid var(--page-line); color: var(--page-mut);
+  }
+
+  /* frame scaffolding */
+  .frame { display: flex; flex-direction: column; gap: 14px; }
+  .frame > header { max-width: 72ch; display: flex; flex-direction: column; gap: 4px; }
+  .frame .fno {
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--page-mut); font-weight: 700;
+  }
+  .frame h2 { font-size: 24px; line-height: 1.3; font-weight: 800; text-wrap: balance; }
+  .frame .fdesc { color: var(--page-mut); font-size: 14px; line-height: 1.5; }
+  .frame .fdesc b { color: var(--page-ink); font-weight: 700; }
+
+  .shot {
+    background: var(--ground); border: 1px solid var(--page-line);
+    box-shadow: var(--frame-shadow); overflow-x: auto;
+  }
+  .app { display: grid; grid-template-columns: 460px 1fr; min-width: 900px; min-height: 520px; }
+
+  /* ——— the chat rail ——— */
+  .rail { background: var(--paper); border-right: 1px solid var(--line2); display: flex; flex-direction: column; }
+
+  .tabs { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); background: var(--paper2); }
+  .tab {
+    display: flex; align-items: center; gap: 7px; padding: 9px 12px;
+    font-size: 14px; color: var(--grey); border-right: 1px solid var(--line);
+    white-space: nowrap; max-width: 190px;
+  }
+  .tab .tname { overflow: hidden; text-overflow: ellipsis; }
+  .tab.active { background: var(--paper); color: var(--navy); font-weight: 600; box-shadow: inset 0 -2px 0 var(--blue); }
+  .tab .dot { width: 7px; height: 7px; flex: none; background: var(--green); }
+  .tab .dot.closed { background: var(--line2); }
+  .tab .x { color: var(--line2); font-weight: 400; margin-left: 2px; }
+  .tab.active .x { color: var(--grey); }
+  .tab.plus { color: var(--blue); font-weight: 700; border-right: none; }
+  .tab.lib { margin-left: auto; border-right: none; border-left: 1px solid var(--line); color: var(--blue); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; }
+
+  .stream { flex: 1; padding: 18px 18px 8px; display: flex; flex-direction: column; gap: 16px; }
+
+  .msg-user { align-self: flex-end; max-width: 82%; background: var(--blue-tint); color: var(--navy); padding: 10px 14px; font-size: 16px; }
+  .msg-a { max-width: 58ch; color: var(--ink); font-size: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg-a p { line-height: 1.55; }
+
+  .cite {
+    color: var(--blue); font-weight: 700; font-size: 12px; cursor: pointer;
+    padding: 0 2px; vertical-align: super; line-height: 1;
+  }
+  .cite.inert { color: var(--line2); cursor: default; }
+
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chip { font-size: 12px; font-weight: 700; padding: 3px 9px; line-height: 1.4; }
+  .chip.tier2 { background: var(--green-tint); color: #0d6e5e; }
+  .chip.tier4 { background: var(--yellow-tint); color: #8a5b00; }
+  .chip.stopped { background: var(--red-tint); color: #a3002a; }
+  .activity { font-size: 12px; color: var(--grey); }
+  .activity b { color: var(--navy); }
+
+  .refs { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .refs .ref { font-size: 12px; color: var(--grey); line-height: 1.45; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+  .refs .ref a { color: var(--blue); text-decoration: none; font-weight: 600; }
+  .refs .ref .rn { color: var(--blue); font-weight: 700; }
+  .rtier { font-size: 12px; font-weight: 700; padding: 1px 7px; line-height: 1.4; }
+  .rtier.t1 { background: var(--green-tint); color: #0d6e5e; }
+  .rtier.t2 { background: var(--green-tint); color: #0d6e5e; }
+  .rtier.t3 { background: var(--yellow-tint); color: #8a5b00; }
+  .rtier.un { background: var(--ground); color: var(--grey); border: 1px dashed var(--line2); }
+
+  /* progress events */
+  .prog { display: flex; flex-direction: column; gap: 6px; }
+  .prog .step { display: flex; gap: 9px; align-items: baseline; font-size: 12px; color: var(--grey); }
+  .prog .step::before { content: ""; width: 7px; height: 7px; background: var(--line2); flex: none; align-self: center; }
+  .prog .step.done::before { background: var(--green); }
+  .prog .step.live::before { background: var(--blue); }
+  .prog .step.live { color: var(--navy); font-weight: 600; }
+
+  .caret { display: inline-block; width: 8px; height: 17px; background: var(--blue); vertical-align: text-bottom; margin-left: 2px; }
+
+  /* hand-off card */
+  .handoff { border: 1px solid var(--line2); border-left: 3px solid var(--blue); background: var(--blue-tint2); padding: 10px 14px; display: flex; flex-direction: column; gap: 3px; max-width: 58ch; }
+  .handoff .ht { font-size: 14px; font-weight: 700; color: var(--navy); }
+  .handoff a { font-size: 14px; color: var(--blue); font-weight: 600; text-decoration: none; }
+
+  /* context bar + composer */
+  .ctxbar { display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-top: 1px solid var(--line); }
+  .ctxbar .lbl { font-size: 12px; letter-spacing: 0.1em; color: var(--grey); font-weight: 700; }
+  .ctx-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--navy); background: var(--ground); border: 1px solid var(--line2); padding: 3px 9px; }
+  .ctx-chip .x { color: var(--grey); }
+  .ctx-chip.zero { background: transparent; border-style: dashed; color: var(--grey); font-weight: 400; }
+
+  .composer { display: flex; gap: 10px; padding: 10px 18px 16px; align-items: flex-end; }
+  .composer .field {
+    flex: 1; border: 1px solid var(--line2); background: var(--paper);
+    padding: 10px 12px; font-size: 16px; color: var(--grey); min-height: 44px;
+  }
+  .composer .field.active { color: var(--ink); }
+  .cutout { --cut: 10px; clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%); }
+  .btn-send { background: var(--blue); color: #fff; font-weight: 700; font-size: 14px; padding: 12px 18px; border: none; }
+  .btn-stop { background: var(--navy); color: #fff; font-weight: 700; font-size: 14px; padding: 12px 16px; border: none; display: inline-flex; align-items: center; gap: 8px; }
+  .btn-stop .sq { width: 10px; height: 10px; background: #fff; }
+
+  /* ——— right pane (artefact, dimmed context) ——— */
+  .pane { background: var(--ground); padding: 26px 30px; color: var(--grey); position: relative; overflow: hidden; }
+  .pane.dim > * { opacity: 0.55; }
+  .pane .ptitle { font-size: 19px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+  .pane .psub { font-size: 12px; color: var(--grey); margin-bottom: 16px; }
+  .pane .block { background: var(--paper); border: 1px solid var(--line); padding: 14px 16px; margin-bottom: 10px; max-width: 66ch; }
+  .pane .block h4 { font-size: 14px; color: var(--navy); margin-bottom: 6px; }
+  .pane .block p { font-size: 13px; line-height: 1.5; }
+  .pane .claim { border-bottom: 1px dashed var(--blue); color: var(--navy); }
+
+  /* citation hover card */
+  .qcard { position: absolute; right: 26px; top: 120px; width: 320px; background: var(--paper); border: 1px solid var(--line2); box-shadow: var(--frame-shadow); padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .qcard .qt { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey); font-weight: 700; }
+  .qcard .quote { font-size: 13px; line-height: 1.5; color: var(--ink); border-left: 3px solid var(--yellow); padding-left: 10px; background: var(--yellow-tint); padding-top: 6px; padding-bottom: 6px; }
+  .qcard .qsrc { font-size: 12px; color: var(--grey); }
+  .qcard .qsrc a { color: var(--blue); font-weight: 600; text-decoration: none; }
+
+  /* ——— chats library ——— */
+  .lib-wrap { background: var(--paper); min-width: 720px; padding: 24px 28px; }
+  .lib-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 14px; max-width: 780px; }
+  .lib-head h3 { font-size: 24px; font-weight: 800; color: var(--navy); }
+  .lib-rows { display: flex; flex-direction: column; max-width: 780px; }
+  .lrow { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; padding: 13px 12px; border-top: 1px solid var(--line); }
+  .lrow:last-child { border-bottom: 1px solid var(--line); }
+  .lrow.hover { background: var(--blue-tint2); outline: 2px solid var(--blue); outline-offset: -2px; }
+  .lrow .lt { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; color: var(--navy); }
+  .lrow .lp { grid-column: 1; font-size: 14px; color: var(--grey); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 60ch; }
+  .lrow .lmeta { grid-column: 1; display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+  .lrow .rtime { grid-row: 1; grid-column: 2; font-size: 12px; color: var(--grey); white-space: nowrap; }
+  .lrow .acts { grid-row: 2 / span 2; grid-column: 2; align-self: center; display: flex; gap: 10px; font-size: 12px; font-weight: 700; }
+  .lrow .acts span { color: var(--blue); }
+  .lrow .acts .arch { color: var(--grey); }
+
+  .note { font-size: 12px; color: var(--page-mut); max-width: 72ch; }
+  .note b { color: var(--page-ink); }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .caret { animation: blink 1.1s steps(1) infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="head">
+    <div class="eyebrow">Task 029 · design phase · contract rev 2.6</div>
+    <h1>Co-pilot chat — frontend mockup</h1>
+    <p>Six frames covering the contract's user-facing pins. Product frames render light — the app's
+       own world — on the Nesta brand layer (electric blue, 0&nbsp;radius, cutout buttons, 028 type scale).</p>
+    <div class="pins">
+      <span class="pin">many chats per project</span>
+      <span class="pin">stream → verify → cite</span>
+      <span class="pin">judge-tiered citations</span>
+      <span class="pin">chats never mutate</span>
+    </div>
+  </header>
+
+  <!-- ——————————————————— frame 01 ——————————————————— -->
+  <section class="frame">
+    <header>
+      <div class="fno">Frame 01 · answered</div>
+      <h2>A follow-up chat beside the artefact</h2>
+      <p class="fdesc">The rail hosts conversations as tabs: the <b>closed planning conversation</b> (grey dot — its
+      run completed and produced this evidence base) and the active chat. Answers are plain prose with inline
+      <b>[n]</b> citations; the grounding judge has run post-stream, so each reference carries its <b>own tier
+      verdict</b> — there is no answer-wide label; the citations carry the whole trust story. The context bar shows
+      this chat was opened from the artefact; the chip navigates, the ✕ detaches — scope stays whole-project either
+      way.</p>
+    </header>
+    <div class="shot"><div class="app">
+      <div class="rail">
+        <div class="tabs">
+          <div class="tab"><span class="dot closed"></span><span class="tname">Planning — Evidence base</span></div>
+          <div class="tab active"><span class="dot"></span><span class="tname">Upfront-cost barriers</span><span class="x">✕</span></div>
+          <div class="tab plus">+</div>
+          <div class="tab lib">CHATS</div>
+        </div>
+        <div class="stream">
+          <div class="msg-user">What does the evidence say about upfront-cost barriers for low-income households?</div>
+          <div class="msg-a">
+            <p>Upfront cost is the most consistently reported barrier across the evidence base. Grant-eligible
+            households still faced average out-of-pocket costs of £4,200 after subsidy <span class="cite">[1]</span>,
+            and uptake among the lowest income quintile stayed below 3% even where grants covered the majority of
+            installation <span class="cite">[2]</span>. Two studies link this to inability to finance the residual
+            cost rather than low awareness <span class="cite">[2]</span><span class="cite">[3]</span>.</p>
+            <div class="meta-row">
+              <span class="activity">Checked the evidence — <b>3 searches · 6 sources read</b></span>
+            </div>
+            <div class="refs">
+              <div class="ref"><span class="rn">[1]</span><a href="#">Fuel poverty and low-carbon heating adoption</a> — BEIS, 2023 <span class="rtier t1">Tier 1 · direct quote</span></div>
+              <div class="ref"><span class="rn">[2]</span><a href="#">Barriers to heat pump adoption in social housing</a> — Energy Policy, 2022 <span class="rtier t2">Tier 2 · grounded</span></div>
+              <div class="ref"><span class="rn">[3]</span><a href="#">Retrofit finance for low-income owner-occupiers</a> — UKERC, 2024 <span class="rtier t2">Tier 2 · grounded</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="ctxbar">
+          <span class="lbl">CONTEXT</span>
+          <span class="ctx-chip">Evidence base · Heat pump uptake <span class="x">✕</span></span>
+        </div>
+        <div class="composer">
+          <div class="field">Ask a follow-up…</div>
+          <button class="btn-send cutout">Send</button>
+        </div>
+      </div>
+      <div class="pane dim">
+        <div class="ptitle">Heat pump uptake in disadvantaged households</div>
+        <div class="psub">Evidence base · 42 sources · completed 2 Aug</div>
+        <div class="block"><h4>Key findings</h4><p>Uptake concentrates in owner-occupied, higher-income
+        households; <span class="claim">cost remains the dominant barrier</span> across tenures…</p></div>
+        <div class="block"><h4>1 · Adoption patterns</h4><p>Across the 42 included sources, adoption skews…</p></div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ——————————————————— frame 02 ——————————————————— -->
+  <section class="frame">
+    <header>
+      <div class="fno">Frame 02 · streaming</div>
+      <h2>Progress events, then prose, then the evidence check</h2>
+      <p class="fdesc">Before tokens arrive the turn shows <b>typed progress events</b> — real tool steps with
+      user-facing labels, not a spinner. Prose streams with markers as plain text; citations attach at the terminal
+      payload in an <b>“unchecked”</b> state, and the grounding judge's per-citation tier verdicts land a few
+      seconds later. The composer's send becomes <b>Stop</b> for the whole generation.</p>
+    </header>
+    <div class="shot"><div class="app">
+      <div class="rail">
+        <div class="tabs">
+          <div class="tab"><span class="dot closed"></span><span class="tname">Planning — Evidence base</span></div>
+          <div class="tab active"><span class="dot"></span><span class="tname">Upfront-cost barriers</span><span class="x">✕</span></div>
+          <div class="tab plus">+</div>
+          <div class="tab lib">CHATS</div>
+        </div>
+        <div class="stream">
+          <div class="msg-user">Which of those studies looked at private renters specifically?</div>
+          <div class="msg-a">
+            <div class="prog">
+              <div class="step done">Searched the evidence — “private rented sector heat pump barriers”</div>
+              <div class="step done">Read 4 findings across 3 sources</div>
+              <div class="step live">Drafting the answer…</div>
+            </div>
+            <p>Two of the three cited studies include private renters. The Energy Policy study [2] samples across
+            tenures but reports renters separately, finding split incentives between landlord and tenant were<span class="caret"></span></p>
+          </div>
+        </div>
+        <div class="ctxbar">
+          <span class="lbl">CONTEXT</span>
+          <span class="ctx-chip">Evidence base · Heat pump uptake <span class="x">✕</span></span>
+        </div>
+        <div class="composer">
+          <div class="field"></div>
+          <button class="btn-stop cutout"><span class="sq"></span>Stop</button>
+        </div>
+      </div>
+      <div class="pane dim">
+        <div class="ptitle">Heat pump uptake in disadvantaged households</div>
+        <div class="psub">Evidence base · 42 sources · completed 2 Aug</div>
+        <div class="block"><h4>Key findings</h4><p>Uptake concentrates in owner-occupied, higher-income
+        households; cost remains the dominant barrier across tenures…</p></div>
+        <div class="block"><h4>1 · Adoption patterns</h4><p>Across the 42 included sources, adoption skews…</p></div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ——————————————————— frame 03 ——————————————————— -->
+  <section class="frame">
+    <header>
+      <div class="fno">Frame 03 · stopped</div>
+      <h2>Stopping keeps the text — honestly unchecked</h2>
+      <p class="fdesc">A stopped turn persists what streamed. The terminal citations never arrived, so markers render
+      <b>inert</b> (grey, no link) and the turn carries <b>“Stopped before evidence check”</b> in place of a tier —
+      content kept, never mistakable for a checked answer. The composer is immediately ready for the next question.</p>
+    </header>
+    <div class="shot"><div class="app">
+      <div class="rail">
+        <div class="tabs">
+          <div class="tab"><span class="dot closed"></span><span class="tname">Planning — Evidence base</span></div>
+          <div class="tab active"><span class="dot"></span><span class="tname">Upfront-cost barriers</span><span class="x">✕</span></div>
+          <div class="tab plus">+</div>
+          <div class="tab lib">CHATS</div>
+        </div>
+        <div class="stream">
+          <div class="msg-user">Which of those studies looked at private renters specifically?</div>
+          <div class="msg-a">
+            <p>Two of the three cited studies include private renters. The Energy Policy study
+            <span class="cite inert">[2]</span> samples across tenures but reports renters separately, finding split
+            incentives between landlord and tenant were the primary blocker —</p>
+            <div class="meta-row">
+              <span class="chip stopped">Stopped before evidence check</span>
+            </div>
+          </div>
+        </div>
+        <div class="ctxbar">
+          <span class="lbl">CONTEXT</span>
+          <span class="ctx-chip">Evidence base · Heat pump uptake <span class="x">✕</span></span>
+        </div>
+        <div class="composer">
+          <div class="field">Ask a follow-up…</div>
+          <button class="btn-send cutout">Send</button>
+        </div>
+      </div>
+      <div class="pane dim">
+        <div class="ptitle">Heat pump uptake in disadvantaged households</div>
+        <div class="psub">Evidence base · 42 sources · completed 2 Aug</div>
+        <div class="block"><h4>Key findings</h4><p>Uptake concentrates in owner-occupied, higher-income
+        households; cost remains the dominant barrier across tenures…</p></div>
+        <div class="block"><h4>1 · Adoption patterns</h4><p>Across the 42 included sources, adoption skews…</p></div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ——————————————————— frame 04 ——————————————————— -->
+  <section class="frame">
+    <header>
+      <div class="fno">Frame 04 · honest absence</div>
+      <h2>“The evidence base doesn’t hold this” — and the hand-off</h2>
+      <p class="fdesc">When the corpus can’t answer, the chat says so as a first-class answer. With <b>no citations
+      to carry verdicts</b>, this is the one answer that keeps an answer-level marker — <b>Tier 4 · reasoning</b> on
+      whatever it adds from general knowledge — plus the one sanctioned next step: a link into a <b>new planning
+      conversation</b>. Chats never mutate the project; getting new evidence is the planner’s job.</p>
+    </header>
+    <div class="shot"><div class="app">
+      <div class="rail">
+        <div class="tabs">
+          <div class="tab"><span class="dot closed"></span><span class="tname">Planning — Evidence base</span></div>
+          <div class="tab active"><span class="dot"></span><span class="tname">Upfront-cost barriers</span><span class="x">✕</span></div>
+          <div class="tab plus">+</div>
+          <div class="tab lib">CHATS</div>
+        </div>
+        <div class="stream">
+          <div class="msg-user">How does uptake here compare with Germany’s subsidy scheme?</div>
+          <div class="msg-a">
+            <p>The evidence base doesn’t cover Germany — its 42 sources are UK-scoped, and no comparative
+            international study was collected. From general knowledge only: Germany’s BEG scheme subsidises at a
+            higher rate and its uptake has grown faster, but I can’t ground that in this project’s evidence.</p>
+            <div class="meta-row">
+              <span class="chip tier4">Tier 4 · reasoning</span>
+              <span class="activity">Checked the evidence — <b>2 searches · 0 sources matched</b></span>
+            </div>
+            <div class="handoff">
+              <span class="ht">Want this evidenced?</span>
+              <a href="#">Plan a follow-up analysis covering international comparators →</a>
+            </div>
+          </div>
+        </div>
+        <div class="ctxbar">
+          <span class="lbl">CONTEXT</span>
+          <span class="ctx-chip zero">Whole project</span>
+        </div>
+        <div class="composer">
+          <div class="field">Ask a follow-up…</div>
+          <button class="btn-send cutout">Send</button>
+        </div>
+      </div>
+      <div class="pane dim">
+        <div class="ptitle">Heat pump uptake in disadvantaged households</div>
+        <div class="psub">Evidence base · 42 sources · completed 2 Aug</div>
+        <div class="block"><h4>Key findings</h4><p>Uptake concentrates in owner-occupied, higher-income
+        households; cost remains the dominant barrier across tenures…</p></div>
+        <div class="block"><h4>1 · Adoption patterns</h4><p>Across the 42 included sources, adoption skews…</p></div>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ——————————————————— frame 05 ——————————————————— -->
+  <section class="frame">
+    <header>
+      <div class="fno">Frame 05 · chats library</div>
+      <h2>Every conversation, one library</h2>
+      <p class="fdesc">Chats and planning conversations in one list: title, two-line preview, context chip, relative
+      time — the preview carries each conversation's state (the planning row names the run it produced). Hover
+      (second row) reveals rename/archive — <b>no delete anywhere</b>; the transcript is part of the project
+      record.</p>
+    </header>
+    <div class="shot"><div class="lib-wrap">
+      <div class="lib-head">
+        <h3>Chats</h3>
+        <button class="btn-send cutout">New chat</button>
+      </div>
+      <div class="lib-rows">
+        <div class="lrow">
+          <div class="lt">Upfront-cost barriers</div>
+          <div class="rtime">just now</div>
+          <div class="lp">Two of the three cited studies include private renters. The Energy Policy study [2] samples across tenures but reports renters separately…</div>
+          <div class="lmeta"><span class="ctx-chip">Evidence base · Heat pump uptake</span></div>
+        </div>
+        <div class="lrow hover">
+          <div class="lt">Rural vs urban uptake</div>
+          <div class="rtime">yesterday</div>
+          <div class="lp">Rural adoption runs ahead of urban in absolute terms [1], driven by off-gas-grid properties — but the pattern reverses…</div>
+          <div class="lmeta"><span class="ctx-chip zero">Whole project</span></div>
+          <div class="acts"><span>Rename</span><span class="arch">Archive</span></div>
+        </div>
+        <div class="lrow">
+          <div class="lt">Planning — Evidence base</div>
+          <div class="rtime">8 days ago</div>
+          <div class="lp">Plan approved: 2 search backends, UK scope, 2015–2025, moderate steering. Produced “Heat pump uptake in disadvantaged households”.</div>
+          <div class="lmeta"><span class="ctx-chip zero">Whole project</span></div>
+        </div>
+      </div>
+    </div></div>
+    <p class="note"><b>Deep-linkable:</b> every row is a route (<code>…/conversations/&lt;id&gt;</code>) — reopening
+    from here restores the thread in the rail, expanded.</p>
+  </section>
+
+  <!-- ——————————————————— frame 06 ——————————————————— -->
+  <section class="frame">
+    <header>
+      <div class="fno">Frame 06 · provenance in one hop</div>
+      <h2>Hover a citation, see the evidence</h2>
+      <p class="fdesc">Hovering <b>[1]</b> shows the cited passage in context — the artefact reader’s own
+      quote-in-context pattern reused — with the id-keyed link through to the full source dossier. The same gesture
+      the user already knows from reading the artefact, now on every chat answer.</p>
+    </header>
+    <div class="shot"><div class="app">
+      <div class="rail">
+        <div class="tabs">
+          <div class="tab"><span class="dot closed"></span><span class="tname">Planning — Evidence base</span></div>
+          <div class="tab active"><span class="dot"></span><span class="tname">Upfront-cost barriers</span><span class="x">✕</span></div>
+          <div class="tab plus">+</div>
+          <div class="tab lib">CHATS</div>
+        </div>
+        <div class="stream">
+          <div class="msg-user">Where does the £4,200 figure come from?</div>
+          <div class="msg-a">
+            <p>It’s the mean residual cost after Boiler Upgrade Scheme grants, reported in the BEIS fuel-poverty
+            evaluation <span class="cite" style="background: var(--blue-tint);">[1]</span> — table 12, covering
+            2022 installations in grant-eligible households.</p>
+            <div class="meta-row">
+              <span class="activity">Checked the evidence — <b>1 lookup · 1 source read</b></span>
+            </div>
+          </div>
+        </div>
+        <div class="ctxbar">
+          <span class="lbl">CONTEXT</span>
+          <span class="ctx-chip zero">Whole project</span>
+        </div>
+        <div class="composer">
+          <div class="field">Ask a follow-up…</div>
+          <button class="btn-send cutout">Send</button>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="ptitle" style="opacity:.5">Heat pump uptake in disadvantaged households</div>
+        <div class="psub" style="opacity:.5">Evidence base · 42 sources · completed 2 Aug</div>
+        <div class="block" style="opacity:.5"><h4>Key findings</h4><p>Uptake concentrates in owner-occupied,
+        higher-income households; cost remains the dominant barrier…</p></div>
+        <div class="qcard">
+          <div class="qt">Where this comes from</div>
+          <div class="quote">“…mean out-of-pocket expenditure of £4,200 (SD £1,850) among grant-eligible households
+          completing installation in 2022 (table 12)…”</div>
+          <div class="qsrc"><span class="rtier t1">Tier 1 · direct quote</span></div>
+          <div class="qsrc">Fuel poverty and low-carbon heating adoption — BEIS, 2023 · <a href="#">Open source dossier →</a></div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <p class="note"><b>Out of frame, by contract:</b> markdown answers (plain prose is a security pin) · quick-reply
+  chips · starting runs from chat · cross-chat recall. Streaming/citation mechanics per contract rev 2.6
+  (deltas → terminal payload; durable-id citations; cancelled turns keep the partial).</p>
+
+</div>

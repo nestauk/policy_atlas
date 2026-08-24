@@ -272,7 +272,116 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   result caps *with per-call distribution quotas*, credit-responsible `select=`, no
   citation floor, and a zero-progress page guard on pagination. The stub remains the
   zero-egress default; the 007 guard now names `search_live.py` as the sole sanctioned
-  HTTP-import home.
+  HTTP-import home. **Amended 2026-08-04:** the "per-call distribution quotas" clause no
+  longer holds — `_distribute_quota` was removed. Dividing a shared per-backend total
+  across the fan-out shrank as the fan-out widened (standard 75 ÷ 15 calls = 5 results
+  per query). `result_cap_per_backend` is now a flat **per-call** target sized against
+  provider page size (rapid 50 / standard 75 / deep 100). See the open seam below.
+
+- **Search total-volume ceiling — DISCHARGED (task 028, 2026-08-04).** The ceiling landed
+  at acquisition, not at search or at screening: `acquire_sources`'s
+  `record_cap_per_backend` (task 029 owner-set: rapid 50 / standard 100 / deep 200, per
+  backend per round) trims each backend's
+  search fan-out after a rank-interleaved merge and after dedup. Acquisition is the right
+  seam because persisting a record is what commits the spend — it is embedded on the spot
+  and screened at `SCREEN_REPS` calls afterwards — and because dedup-then-trim means a
+  capped round still yields a full cap of *new* documents rather than quietly doing less
+  work in later rounds. `dropped_over_cap` makes the trim visible per backend, and
+  `test_acquire_record_cap.py` bounds total volume, replacing the `results_returned == 45`
+  assertion that per-call semantics had removed. **Still provisional:** 200 is sized from
+  purpose (the deep loop's confident-relevant goal), not measured.
+  `scripts/eval_ground_truth/` (lives on a different branch) scores search recall against
+  published-review ground truth (baseline: mean 2.4%, max 9.1%, at rapid depth under the
+  divided quota) — after this branch and that one merge, re-run it and set the caps from
+  where recall stops improving. With rounds + arms live (task 029) that re-run is the
+  acceptance test for the whole change.
+
+- **Multi-round search wired into the runner — DISCHARGED (task 029, 2026-08-06).** The
+  round loop found unwired on 2026-08-05 (orphaned since task 023's skeleton retirement,
+  `3304df4`) is now runner-orchestrated: after `screen_abstract` completes, a gate at the
+  walk's classify pop re-opens the acquire+screen pair until the depth's `round_cap`
+  (rapid 1 / standard 2 / deep 3) or a yield collapse (`short_circuit`, < 1 new
+  confident-relevant per 50 screened from round 2). Each round is an ordinary step —
+  fresh run rows, steering boundaries, check-ins, SSE frames. The gate recomputes every
+  input from persisted state (coverage rows, the screen run's own rows via
+  `new_confident_relevant_for_run`), so a run parked mid-loop resumes at the correct
+  round. `run_deep_rounds` and `should_escalate` were **deleted** (the runner owns the
+  loop; rapid→deep escalation stays unbuilt — a fresh decision if wanted). The loop-level
+  stop condition lands on the final round's coverage row via `finalise_deep_stop`, whose
+  thin-evidence overlay now keys on `THIN_CONFIDENT_RELEVANT` (8). Pinned by
+  `tests/runtime/test_search_rounds.py`.
+  **Accepted blemishes — the per-round *counts* are DISCHARGED (task 031, 2026-08-13).**
+  The "Where I looked" pane now sums query hits across every acquire run that wrote a
+  coverage record for the project, so `results` and `relevant` are both cumulative. The
+  P1 check-in reports the counts and queries of the single acquire run that just
+  finished, taken from that run's `component.completed` payload rather than the coverage
+  record's never-written `backends[].count`. `successful_runs["acquire"]` is
+  last-write-wins, which is the *wanted* behaviour at P1 — but it is written only on the
+  success path, so P1 now gates on the boundary's own run id and shows honest absence
+  when the round it fired for failed (review stack, 2026-08-13).
+  **Still open:**
+  - `coverage_out` still reads only the **newest** coverage row for the pane's
+    `sentence`, `base` (stop condition, adequacy, verdict origin) and the `backends` name
+    list — only `backends_detail` went cumulative. A backend used in an earlier round but
+    absent from the latest row contributes no card, so its hits stay invisible.
+  - `backends_detail.relevant` remains **project-wide** per backend while `results` is now
+    one question's rounds (task 027 §C.1; `_acquire_run_ids` was scoped to the evidence
+    scope by the 031 review stack). This is deliberate — screening re-screens the whole
+    project pool per question, so project-wide relevance is the design
+    (`docs/knowledge/coverage-base-project-pool-wide.md`) — and the contract's invariant 3
+    requires only that the copy never imply one number contains the other, which it does
+    not. Revisit if the multi-question IA makes per-question relevance meaningful.
+  - The loop-level stop condition is written after the last screen boundary, so the
+    `re_searched_still_thin` P1 check-in **trigger** can only see it on a later boundary,
+    if at all — task 031 changed the P1 display bundle, not the trigger.
+  - The frontend timeline still shows repeated "Searching sources"/"Screening" rows with
+    no round labels.
+
+- **Publisher-country charts truncate, so the drawn bars can sum below the population**
+  (task 031, 2026-08-13). `landscape_out` guarantees the *payload* adds up (known
+  countries + `"Not reported"` = the population drawn, at either scope), and the tests
+  assert it there. The renderers then cut to the top 12
+  (`EvidenceDistributionChart.tsx`) or top 8 (`ArtefactOutline.tsx`), so a corpus with
+  more buckets than that shows bars summing below the total. Pre-existing truncation, but
+  the residual is typically large and now occupies one of those slots, pushing one real
+  country off the chart. Wanted: a "+N more" row, or render the residual outside the cut.
+
+- **Authorship-country geography is not offered anywhere** (task 031, 2026-08-13).
+  `_geography` reads the publishing venue's country only, and the contract explicitly
+  forbids substituting an author affiliation for it — the two answer different questions
+  and conflating them was part of defect 3. The slim authorships already retain the
+  authorship countries, so a later slice can offer them as their **own** clearly-labelled
+  dimension with no migration. Not started; needs a product decision on whether the
+  question ("where are the authors based?") is one users want.
+
+- **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
+  2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.
+  `TARGET_CONFIDENT_RELEVANT`, `SEARCH_TARGET_MIN/MAX`, the parser's `target` key, the
+  orchestrator-prompt line advertising it (stale 5–60 range) and the
+  `target_confident_relevant` payload echo are all deleted. Free text like "aim for 30
+  papers" now gets an honest parser refusal instead of compiling to a silent no-op (the
+  plan layer always discarded the value; nothing read the echo). `target_reached` stays
+  in the coverage CHECK constraint as a historical value — no migration. If a
+  "stop early at N" user feature is ever wanted, rebuild it at the runner's round gate,
+  not in the parser.
+
+- **Wall clock removed entirely — recorded (tasks 028–029).** Task 028 removed the
+  standard/deep clocks; task 029 removed rapid's 30 s clock and the whole `stop_all`
+  mechanism with it — no planned call is ever skipped at any depth, and acquire's stop
+  vocabulary is `completed`/`error` (`wall_clock_exceeded` stays in the CHECK constraint
+  as a historical value). Volume is bounded by `record_cap_per_backend`
+  (owner-set 2026-08-06: rapid 50 / standard 100 / deep 200, per backend per round);
+  nothing bounds latency anywhere — rapid's worst case is its ~21 sequential provider
+  calls plus retries. If a latency bound is ever needed it belongs at the runner as a
+  step timeout, not inside the fan-out where it truncates an ordered list of queries.
+
+- **`http_budget` counts logical calls, not HTTP requests — OPEN (2026-08-04).**
+  `http_calls_by_backend` increments once per `execute_call`, but backends paginate
+  internally to satisfy `max_results` (Overton page 50, OpenAlex 200). Holding per-call
+  targets near one page keeps the two roughly equal, which is why the current values are
+  sized that way — but the budget does not enforce that relationship, and
+  `_TransportMixin.http_calls` (the real per-request counter) is incremented and never
+  read. Either consult it, or rename the budget to say what it counts.
 - **Arm-B agentic search loop — DISCHARGED (task 015, ADR 0012).** The R&D direction landed
   as the deep depth: query reformulation from judged exemplars (via the production screen —
   the loop's judge IS `screen_v1`, no shadow relevance judgment), citation snowballing
@@ -376,9 +485,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   episode ran 343 s end-to-end while the loop driver honoured its 150 s budget), and the
   **coverage-record stop-condition grain — DISCHARGED (task 019).** Migration
   `921d3a781f3f` widens the stop-value vocabulary: clean completion now records
-  `completed`, a rapid wall-clock breach records `wall_clock_exceeded`;
-  `breadth_truncated` is retained for historical rows only. The deep-path
-  vocabulary is unchanged.
+  `completed`; `breadth_truncated` is retained for historical rows only.
+  (`wall_clock_exceeded`, task 019's rapid-breach value, joined the historical
+  set when task 029 removed the wall clock.)
 - **Rev-3.10 loop seams** — calibrated recall estimate (Chao capture-recapture /
   Undermind exponential-saturation fit → a user-facing "estimated % of relevant found" on
   the coverage record); sliding-window Thompson-sampling arm allocation (eval-gated, must
@@ -1599,7 +1708,13 @@ first-class vocabulary. What follows is what it deliberately left out.
   portability). 025's co-pilot Q&A needs persisted per-user sessions
   ("multiple persisted sessions; browse previous ones") — the transcript
   companion store (per-user/per-project turn table, session/`capability_run`
-  linkage, window-plus-recall context assembly) lands there.
+  linkage, window-plus-recall context assembly) lands there. **DISCHARGED
+  (task 029, contract §1/§5):** the unified `conversation` + `chat_turn`
+  tables are that companion store — per-project chats (many, read-only),
+  `client_turn_id` idempotency, and a ceiling-windowed context assembler
+  (frame + verbatim turns, no recall-with-summarization yet — see "recall
+  beyond the window" below). Provider-side conversation state stays
+  forbidden, unchanged.
 - **Build-discovered seams (024 build, 2026-07-16)** — surfaced mid-build,
   not pre-registered in the annex:
   - **Live DB-backed read executors for watch deliberation** — the runner
@@ -1757,12 +1872,14 @@ first-class vocabulary. What follows is what it deliberately left out.
 
 ## Infra deployment (task 026 seams)
 
-- **No deploy lock** (026 review, Codex adversarial, 2026-07-28) — `scripts/deploy.sh`
-  assumes one operator: two concurrent runs can interleave stop→migrate→scale (parallel
-  Alembic runs, one deploy booting the API mid-migration of the other). Acceptable while
-  deploys are one team member on staging (DEPLOYMENT.md § 1 states the rule); a real
-  lock (S3 conditional-put lease or DynamoDB lock, plus an Alembic advisory lock) is the
-  seam when a second operator or CI-driven deploys appear.
+- **No cross-system deploy lock** (026 review, Codex adversarial, 2026-07-28;
+  narrowed by 030, 2026-08-11) — GitHub Actions now serializes each Environment and
+  never cancels an active stop→migrate→scale→publish run. That discharges overlap
+  between ordinary Action runs, but a local recovery/bootstrap can still interleave
+  with Actions (parallel Alembic runs, one deploy booting the API mid-migration of the
+  other). The runbook requires human coordination. A real S3 conditional-put or
+  DynamoDB lease, plus an Alembic advisory lock, remains the seam if unattended local
+  operations or a second deployment system appears.
 
 ## Frontend uplift (task 027 seams)
 
@@ -1774,6 +1891,11 @@ first-class vocabulary. What follows is what it deliberately left out.
   context (PR #35 adjudication): the transcript schema is deliberately single-table/
   planning-only so the co-pilot slice brings its own thread/context model; the rail is
   single-thread until then. Q&A needs a lead-authored prompt surface (own slice).
+  **DISCHARGED (task 029, contract §6):** the conversation-aware rail + Chats library
+  ships — switcher over planning conversations and chats, URL-addressable threads,
+  entry-context chip with "Whole project" zero-state, `chat_v1` as the lead-authored
+  prompt surface. Narrower seams this slice left open are recorded fresh under
+  "Co-pilot chat (task 029 seams)" below.
 - **Workspace-cluster IA seam** — artifact gallery / capability picker / multi-artifact
   IA / per-artifact "Cited in" (PR #35): needs run/artifact-scoped read models. 027's
   journey/evidence components are IA-agnostic and re-mount under it unchanged.
@@ -1864,3 +1986,137 @@ first-class vocabulary. What follows is what it deliberately left out.
   path re-fetches block prose already fetched; `write_block_summary` doubles as the
   artefact entry point keyed on `seed["kind"]`. Revisit with the summary/judge
   calibration eval workstream.
+
+## Co-pilot chat (task 029 seams)
+
+029 shipped the unified `conversation` model — many read-only chats per project plus
+one planning conversation per plan lineage — with streamed NDJSON turns, claim-grained
+citation floors, and async grounding-judge enrichment (contract
+`docs/tasks/029-copilot-chat/contract.md`). What follows is what it deliberately left
+out (Out-of-scope list plus seams named in the strands).
+
+- **Planning-turn streaming** — chat streams prose deltas; planning turns stay
+  blocking (`POST /planning-turns` returns whole). Its own later uplift once the
+  planner's own moment wants it; the NDJSON wire this slice built is reusable.
+- **Recall beyond the window, incl. cross-planning-conversation rationale carry** —
+  chat context is the conversation's own turns under a ceiling-only window (no
+  summarization/recall layer yet — window-first, honestly); a re-plan's rationale
+  ("we excluded pre-2015 because…") does not carry across a lineage's successor
+  conversation by prose recall — only the plan object's own decisions do.
+- **Promotion to artefact block** — a chat answer never becomes artefact content;
+  the spec's block discipline requires the full appraisal bar, which chat's
+  fast-path answers never clear.
+- **Shared-search-request conversion** — the evidence-not-held hand-off renders a
+  typed link to the planning conversation; turning that gap into a structured
+  search request the planner can act on directly stays unbuilt.
+- **Watch executor feed (`read_tools=None`)** — unchanged by this slice; still the
+  024-recorded seam (§ Steering surface, "Live DB-backed read executors for watch
+  deliberation") — chat's tool-loop kernel is a separate call site.
+- **Older-run structured reads / multi-artefact read-model widening
+  (workspace-cluster)** — as built, ALL three chat read tools are bounded to the
+  terminal completed run: `query_findings`/`lookup` read its outputs, and
+  `search_chunks` retrieves within its evidence scope (`chat_scope.py` passes
+  `scope.evidence_scope_id` into `build_retrieval_scope`). The contract's
+  strand-4 "whole shared corpus (all runs' screened-in text)" search is
+  therefore NOT what shipped — on a re-run project, earlier runs'
+  screened-in text is unsearchable from chat (identical behaviour on the
+  dominant single-lineage shape; conservative, no leak). Found by the 029
+  review stack (contract-verifier lane); flagged to the owner at the 029 PR.
+  Corpus-wide retrieval semantics (which screening generation is "effective"
+  across scopes — see `effective_screen_rows(run_ids=…)`) belong with this
+  widening.
+- **Chats while a run is paused** — the turn fence 409s `run_active` for
+  `running` AND `paused` walks (`chat_turns.py`); the contract's owner
+  cut-line ("allow chats while paused — defer unless wanted now") was taken
+  as the defer. Revisit if paused-run reading becomes a real workflow
+  (steering remains the mid-run channel).
+- **Field-level turn provenance** — the audit chain (conversation → plan → run →
+  artefact) is walkable at row grain only; which turn produced which specific plan
+  *field* is plan-as-object's field-level provenance, still deferred.
+- **Conversation search** — the library lists and previews (title, latest-turn
+  snippet); there is no search-within-conversations or cross-conversation content
+  search.
+- **Project-level standing chat instructions** — no per-project custom/standing
+  instructions layer sits above `chat_v1`; the system prompt is the one
+  lead-authored, version-pinned surface for every chat in every project.
+- **"Continue generating" on a stopped turn** — a cancelled turn keeps its partial
+  prose but offers no resume-this-generation affordance; asking again starts a new
+  turn.
+- **Resumable mid-stream recovery** — a client that reconnects mid-stream re-reads
+  the turn once it lands, never resumes the byte stream itself (a Redis-style delta
+  buffer is additive later, precisely because the DB only ever commits terminal
+  rows).
+- **Thumbs-feedback → Langfuse scores** — named as the eval slice's gold-set seam;
+  that slice decides the surface and scoring mechanics.
+- **LLM auto-titling** — v1 titles a chat from its first question by truncation;
+  async cheap-model titling is a noted, easy upgrade.
+- **Regenerate / edit / branching** — the turn-pair row (question + answer in one
+  row) is the deliberate v1 grain; the named migration seam is the pair→per-message
+  row split these features would need.
+- **Cross-chat memory / recall** — chats stay mutually blind by design; knowledge
+  travels via artefacts, not a shared chat memory (2026 practice keeps cross-thread
+  recall opt-in and memory-mediated, not a default).
+
+## Task lifecycle IA (task 032 seams)
+
+032 reshaped the app around one task and one lifecycle, and added a named grouping
+above tasks (contract `docs/tasks/032-task-lifecycle-ia/contract.md`; ADR 0031 for
+the portfolio layer). What follows is what it deliberately left out — seams, not
+omissions.
+
+- **Case studies** — parked by the owner, 2026-08-17: producing them needs a new
+  synthesis pass, and the slice's rule was that where the prototype shows an output
+  the backend does not have, no new backend process is built for it. The parked
+  design, so it is recoverable: a **deterministic IOF shortlist** (pick candidate
+  studies by the finding layer's own fields — effect basis, evidence type, appraisal
+  tier — with no model call), followed by **one prose pass modelled on the
+  key-findings pass** (same shape: a bounded emission, spans bound to the source,
+  claims verified against quoted chunks). It is a second synthesis surface with its
+  own prompt version and its own cost, which is exactly why it is its own slice.
+- **The prose "why this source matters"** — Most cited sources states only facts the
+  data asserts (citation count, appraisal tier, evidence type, which sections cite
+  it). The prototype shows a sentence explaining a study's importance; nothing in
+  the system has made that judgement, so writing one would be the report inventing
+  authority. It needs either a scored relevance model or a synthesis pass, both of
+  which are new surfaces.
+- **Mobile and narrow-viewport navigation** — owner: later. Existing responsive
+  behaviour was preserved and not regressed, but the lifecycle bar, the tasks list
+  and the Sources tab strip have no narrow-viewport treatment of their own.
+- **A full briefing page** — owner: one page for the report is enough. A separate
+  briefing surface (an executive-audience rendering distinct from the report) stays
+  unbuilt.
+- **Writing `plan.title` back to the task name** (plan D5) — a task's name is derived
+  client-side from its question at creation and never updated from the planner's own
+  `plan.title`. So a task keeps its derived name until renamed by hand, even after
+  planning settles on a better one. Writing it back is new behaviour (which write
+  wins, and when) rather than a display fix.
+- **Portfolio soft-delete** — the `portfolio` row has no `archived_at` and there is
+  no archive route (ADR 0031 decision 3). Both land together when archiving a project
+  is actually wanted.
+- **Portfolio membership beyond one** — a task belongs to at most one project, by the
+  single nullable FK. Many-to-many needs a join table and a decision about what a
+  task in two projects means for counts.
+- **What remains of the workspace-cluster IA** — this slice discharged the
+  *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
+  destination per task state. It did **not** re-parent plan, run or artefact onto a
+  task entity, so the code word `project` still means what the screen calls a Task,
+  and the vocabulary split recorded in ADR 0031 persists. The cluster slice remains
+  the place where that split is finally resolved.
+- **Sharing and export** — the Share stage says sharing is coming soon and does
+  nothing else. The download control reuses the evidence-base print stylesheet that
+  already ships; any other format says coming soon. The share/export product seam is
+  unchanged from `docs/deferred.md` § Web app.
+- **The three unbuilt capabilities** — scoping policy options, theory of change and
+  map stakeholders are listed on the new-task page as coming soon, with no route and
+  no behaviour. Each is its own capability slice.
+- **Per-surface type-scale assertions** — the G15 mapping is verified by eye and at
+  review, not by test. A test asserting class names per surface would be brittle and
+  would not measure readability. What IS mechanically guarded is that the
+  `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
+  (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
+  028.
+- **Portfolio surfaces in the mock API** — `src/mock/api.ts` serves no
+  `/api/v1/portfolios`, so the projects list, the project detail page and find-a-task
+  cannot be driven in mock mode or in the CI mock journey. Their coverage is backend
+  route tests plus frontend unit tests only. Extending the mock fixture would let the
+  contract's live check 7 be driven in a browser.

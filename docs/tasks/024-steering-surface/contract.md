@@ -273,7 +273,12 @@ front-end/API renderers · schema beyond decision 2.
    JSONB; no fingerprint participation; synthesis consumer in-slice;
    pay-only-when-steered). Keys: D1 `appraisal.rubric` (partial type→tier
    override; derived `rubric_version`) · D3 `extraction.refresh`
-   (fingerprint-bypass by class) · D5 `search.target` (clamped) · D6
+   (fingerprint-bypass by class) · D5 `search.target` (clamped;
+   **REMOVED task 029** with `TARGET_CONFIDENT_RELEVANT` — the round cap
+   is the budget, and the key had never left the commit layer: the plan
+   layer validated then discarded it, and its only effect was an unread
+   payload echo. A directive carrying it now gets an honest unknown-key
+   refusal) · D6
    `selection.strata_scope` · D7 `selection.exclude_ids` · D8
    `grouping.granularity` · D9 `characterise.themes`. Every key/channel:
    fail-closed parser, bounded scrubbed strings (data-not-instructions),

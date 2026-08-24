@@ -44,6 +44,16 @@ from policy_atlas.evidence_base.group.group import GroupClusteringBackendFactory
 from policy_atlas.evidence_base.sourcing.acquire import SearchBackend
 from policy_atlas.evidence_base.sourcing.ingest_full_text import DocumentFetcher
 from policy_atlas.evidence_base.sourcing.search_generation import SearchGenerationBackend
+from policy_atlas.evidence_base.sourcing.search_loop import (
+    DEPTH_CONSTANTS,
+    THIN_CONFIDENT_RELEVANT,
+    confident_relevant_count,
+    count_existing_rounds,
+    docs_screened_from_payload,
+    evaluate_deep_stop,
+    finalise_deep_stop,
+    new_confident_relevant_for_run,
+)
 from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     StubSynthesisBackend,
@@ -59,6 +69,7 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
 )
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
+from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
 from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.orchestration_plan import (
     SPINE,
@@ -817,6 +828,33 @@ def _run_plan_impl(
 
     while remaining_steps:
         step = remaining_steps.pop(0)
+        # Multi-round search gate (task 030): the walk is about to leave the
+        # acquire→screen_abstract pair for the first post-screen component.
+        # Standard/deep repeat the pair until the depth's round_cap or a yield
+        # collapse; re-opening the two components hands the next round to the
+        # ordinary step machinery (fresh run rows, boundaries, check-ins, SSE).
+        # Gating on the classify pop — the fixed successor in every composed
+        # chain — makes the check stateless and park/resume-safe: a resumed
+        # walk re-derives everything from coverage rows and screen provenance.
+        if (
+            step.component == "classify"
+            and steering_state.plan.search_effort in ("standard", "deep")
+            and "screen_abstract" in completed_components
+            and _search_round_continues(
+                engine,
+                project_id=project_id,
+                evidence_scope_id=evidence_scope_id,
+                plan=steering_state.plan,
+                successful_runs=successful_runs,
+            )
+        ):
+            completed_components.discard("acquire")
+            completed_components.discard("screen_abstract")
+            remaining_steps = _remaining_steps(
+                steering_state.chain,
+                completed_components=completed_components,
+            )
+            continue
         if last_check_in_payload is not None:
             pause_result = _handle_before_component_boundary(
                 engine,
@@ -1530,6 +1568,7 @@ def _handle_after_component_boundary(
         backends=backends,
         triggers=triggers,
         prebuilt_bundle=observation.bundle,
+        boundary_run_id=boundary_run_id,
     )
     # The P3 select and FG group steer points wire a replacement re-run from
     # their pause (their floors offer re-run options at an after-boundary);
@@ -1900,6 +1939,7 @@ def _pause_options_and_bundle(
     backends: RunnerBackends,
     triggers: list[dict[str, Any]] | None = None,
     prebuilt_bundle: dict[str, Any] | None = None,
+    boundary_run_id: uuid.UUID | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """Return the canonical options + (P2/P3/P4) bundle for a pause.
 
@@ -1935,6 +1975,7 @@ def _pause_options_and_bundle(
             successful_runs=successful_runs,
             backends=backends,
             section_budget=state.plan.section_budget,
+            boundary_run_id=boundary_run_id,
         )
     )
     if steer_point_name == SYNTHESIS_SHAPE and isinstance(bundle, dict):
@@ -1991,12 +2032,30 @@ def _build_bundle(
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
     section_budget: int | None,
+    boundary_run_id: uuid.UUID | None = None,
 ) -> dict[str, Any] | None:
-    """Build the decision-point bundle for a lattice pause, fail-safe to None."""
+    """Build the decision-point bundle for a lattice pause, fail-safe to None.
+
+    ``boundary_run_id`` is the run the boundary fired for, when the caller knows
+    it. P1 needs it: ``successful_runs`` is written only on the success path, so
+    after a failed round ≥2 acquire it still points at the *previous* round.
+    """
     try:
         with engine.connect() as conn:
             if name == SEARCH_EXCEPTION:
-                return p1_bundle(conn, project_id=project_id, evidence_scope_id=evidence_scope_id)
+                acquire_run_id = successful_runs.get("acquire")
+                # P1 describes the acquire run that just finished. If the
+                # boundary fired for a different run, this round's acquire
+                # failed and left nothing to report — honest absence beats the
+                # previous round's counts wearing this round's label.
+                if boundary_run_id is not None and acquire_run_id != boundary_run_id:
+                    acquire_run_id = None
+                return p1_bundle(
+                    conn,
+                    project_id=project_id,
+                    evidence_scope_id=evidence_scope_id,
+                    acquire_run_id=acquire_run_id,
+                )
             if name == EVIDENCE_BASE_COVERAGE:
                 return p2_bundle(
                     conn,
@@ -3956,6 +4015,7 @@ def _resolve_unattended_boundary(
             successful_runs=successful_runs,
             backends=backends,
             section_budget=state.plan.section_budget,
+            boundary_run_id=event_run_id,
         )
         outcome = discretion_hook(
             _DiscretionContext(
@@ -4358,6 +4418,7 @@ def _watch_observe_boundary(
                 successful_runs=successful_runs,
                 backends=backends,
                 section_budget=state.plan.section_budget,
+                boundary_run_id=event_run_id,
             )
             if steer_point_name is not None
             else None
@@ -4853,6 +4914,104 @@ def _remaining_steps(
     return [step for step in chain.steps if step.component not in completed_components]
 
 
+def _search_round_continues(
+    engine: Engine,
+    *,
+    project_id: uuid.UUID,
+    evidence_scope_id: uuid.UUID,
+    plan: OrchestrationPlan,
+    successful_runs: dict[str, uuid.UUID],
+) -> bool:
+    """Evaluate the multi-round search gate after a completed screen round.
+
+    Standard and deep runs repeat the acquire → screen_abstract pair until the
+    depth's ``round_cap`` (standard 2 / deep 3) or a yield collapse
+    (``short_circuit``). ``run_search`` derives each round's index from the
+    scope's coverage rows, so a second acquire run is automatically round 2 and
+    unlocks the reformulate/snowball/suggest/diversity arms — the gate only
+    decides whether to run it.
+
+    Every input is recomputed from persisted state (coverage rows, the screen
+    run's own screening rows and completed payload), never from walk-local
+    memory, so a run parked mid-loop resumes at the correct round.
+
+    On a stop, writes the loop-level stop condition onto the final round's
+    coverage row (``finalise_deep_stop``), with the thin-evidence overlay keyed
+    to ``THIN_CONFIDENT_RELEVANT``.
+
+    Args:
+        engine: Engine for the short evaluation reads and the stop write.
+        project_id: Owning project.
+        evidence_scope_id: Scope being searched.
+        plan: Current orchestration plan; ``search_effort`` picks the budget.
+        successful_runs: Per-component last successful run ids.
+
+    Returns:
+        ``True`` when another acquire+screen round should run.
+    """
+    round_cap = DEPTH_CONSTANTS[plan.search_effort]["round_cap"]
+    screen_run_id = successful_runs.get("screen_abstract")
+    if screen_run_id is None:
+        # No completed screen round to evaluate — nothing to loop on.
+        return False
+    with engine.connect() as conn:
+        rounds_done = count_existing_rounds(
+            conn, project_id=project_id, scope_id=evidence_scope_id
+        )
+        confident = confident_relevant_count(
+            conn, project_id=project_id, scope_id=evidence_scope_id
+        )
+        new_confident = new_confident_relevant_for_run(
+            conn,
+            project_id=project_id,
+            scope_id=evidence_scope_id,
+            run_id=screen_run_id,
+        )
+        screen_payload = _find_component_payload(
+            events.read_for_run(conn, project_id, screen_run_id),
+            "screen",
+            event_type="component.completed",
+            run_id=screen_run_id,
+        )
+    if rounds_done == 0 or screen_payload is None:
+        # Acquire never produced a coverage row, or the screen summary is
+        # missing — no honest denominator, so no loop. The chain proceeds.
+        return False
+    decision = evaluate_deep_stop(
+        round_index=rounds_done,
+        new_confident_relevant=new_confident,
+        docs_screened_this_round=docs_screened_from_payload(screen_payload),
+        round_cap=round_cap,
+    )
+    if not decision.stop:
+        log.info(
+            "search.round_continue",
+            project_id=str(project_id),
+            round_completed=rounds_done,
+            round_cap=round_cap,
+            confident_relevant=confident,
+        )
+        return True
+    if decision.stop_condition is None:  # pragma: no cover - StopDecision invariant
+        raise RuntimeError("round stop decision missing stop_condition")
+    with engine.begin() as conn:
+        final = finalise_deep_stop(
+            conn,
+            project_id=project_id,
+            scope_id=evidence_scope_id,
+            stop_condition=decision.stop_condition,
+            thin=confident < THIN_CONFIDENT_RELEVANT,
+        )
+    log.info(
+        "search.rounds_stopped",
+        project_id=str(project_id),
+        rounds=rounds_done,
+        stop_condition=final,
+        confident_relevant=confident,
+    )
+    return False
+
+
 def _open_capability_run(
     engine: Engine,
     *,
@@ -4901,11 +5060,12 @@ def _finish_run(
     project_id: uuid.UUID,
 ) -> RunPlanOutcome:
     with engine.begin() as conn:
+        ended_at = datetime.now(UTC)
         conn.execute(
             capability_run.update()
             .where(capability_run.c.capability_run_id == capability_run_id)
             .where(capability_run.c.project_id == project_id)
-            .values(status=status, ended_at=datetime.now(UTC))
+            .values(status=status, ended_at=ended_at)
         )
         events.append(
             conn,
@@ -4914,6 +5074,11 @@ def _finish_run(
             event_type="run.finished",
             payload={"capability_run_id": str(capability_run_id), "status": status},
         )
+        # A completed run closes its planning conversation atomically with the
+        # terminal status + run.finished event (029 strand 2): a crash can
+        # never leave a succeeded run with an active planning conversation.
+        if status in ("succeeded", "degraded"):
+            close_planning_conversation(conn, project_id=project_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)

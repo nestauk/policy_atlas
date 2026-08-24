@@ -18,9 +18,6 @@ from policy_atlas.evidence_base.sourcing.country_filters import (
 )
 from policy_atlas.evidence_base.sourcing.search_loop import (
     ROUND_CAP,
-    SEARCH_TARGET_MAX,
-    SEARCH_TARGET_MIN,
-    TARGET_CONFIDENT_RELEVANT,
     SearchDirectiveError,
     StopDecision,
     _filter_variants,
@@ -35,7 +32,7 @@ from policy_atlas.runtime.run_spec import Config, Plan, compile
 
 
 def test_parse_search_directive_absent() -> None:
-    assert parse_search_directive({}) == ("rapid", None, None, None)
+    assert parse_search_directive({}) == ("rapid", None, None)
 
 
 def test_parse_search_directive_unknown_key() -> None:
@@ -54,12 +51,12 @@ def test_parse_search_directive_bad_depth() -> None:
 
 
 def test_parse_search_directive_depth_deep_ok() -> None:
-    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None, None, None)
+    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None, None)
 
 
 def test_parse_search_directive_depth_standard_ok() -> None:
     assert parse_search_directive({"search": {"depth": "standard"}}) == (
-        "standard", None, None, None,
+        "standard", None, None,
     )
 
 
@@ -68,26 +65,14 @@ def test_parse_search_directive_null_filters_rejected() -> None:
         parse_search_directive({"search": {"filters": None}})
 
 
-# --- D5 search.target: fail-closed matrix ---
+# --- search.target removed (task 029): unknown key, honest refusal ---
 
 
-@pytest.mark.parametrize("target", [SEARCH_TARGET_MIN, 20, SEARCH_TARGET_MAX])
-def test_parse_search_directive_accepts_valid_target(target: int) -> None:
-    assert parse_search_directive({"search": {"target": target}}) == ("rapid", None, target, None)
-
-
-@pytest.mark.parametrize(
-    "target",
-    [SEARCH_TARGET_MIN - 1, SEARCH_TARGET_MAX + 1, 0, -5],
-)
-def test_parse_search_directive_rejects_out_of_range_target(target: int) -> None:
-    # Out-of-range values are refused, never silently clamped (honest refusal).
-    with pytest.raises(SearchDirectiveError):
-        parse_search_directive({"search": {"target": target}})
-
-
-@pytest.mark.parametrize("target", [20.5, "20", True, None, [20]])
-def test_parse_search_directive_rejects_malformed_target_type(target: object) -> None:
+@pytest.mark.parametrize("target", [5, 20, 100, "20", None])
+def test_parse_search_directive_refuses_removed_target_key(target: object) -> None:
+    """The former D5 target key died with TARGET_CONFIDENT_RELEVANT: the round
+    cap is the budget, so there is no stop target to override. Whatever the
+    value, the key itself is refused — never silently ignored."""
     with pytest.raises(SearchDirectiveError):
         parse_search_directive({"search": {"target": target}})
 
@@ -96,7 +81,7 @@ def test_parse_search_directive_rejects_malformed_target_type(target: object) ->
 
 
 def test_parse_search_directive_guidance_absent_is_none() -> None:
-    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None, None, None)
+    assert parse_search_directive({"search": {"depth": "deep"}}) == ("deep", None, None)
 
 
 @pytest.mark.parametrize(
@@ -109,7 +94,7 @@ def test_parse_search_directive_guidance_absent_is_none() -> None:
 )
 def test_parse_search_directive_accepts_valid_guidance(guidance: list[str]) -> None:
     assert parse_search_directive({"search": {"guidance": guidance}}) == (
-        "rapid", None, None, guidance,
+        "rapid", None, guidance,
     )
 
 
@@ -135,13 +120,13 @@ def test_parse_search_directive_rejects_malformed_guidance(guidance: object) -> 
 
 def test_parse_search_directive_guidance_at_max_chars_accepted() -> None:
     guidance = ["x" * DIRECTIVE_STRING_MAX]
-    assert parse_search_directive({"search": {"guidance": guidance}})[3] == guidance
+    assert parse_search_directive({"search": {"guidance": guidance}})[2] == guidance
 
 
 def test_parse_search_directive_guidance_combines_with_other_keys() -> None:
     assert parse_search_directive(
-        {"search": {"depth": "deep", "target": 30, "guidance": ["prioritise UK evidence"]}}
-    ) == ("deep", None, 30, ["prioritise UK evidence"])
+        {"search": {"depth": "deep", "guidance": ["prioritise UK evidence"]}}
+    ) == ("deep", None, ["prioritise UK evidence"])
 
 
 # --- validate_scope_filters + to_wire_params: full valid example ---
@@ -381,38 +366,16 @@ def test_search_backend_scope_unknown_value_rejected_on_config() -> None:
 
 
 # --- evaluate_deep_stop: pure stop-decision matrix ---
-
-
-def test_deep_stop_target_reached() -> None:
-    decision = evaluate_deep_stop(
-        round_index=1,
-        confident_relevant=20,
-        new_confident_relevant=20,
-        docs_screened_this_round=100,
-        wall_clock_breached=False,
-    )
-    assert decision == StopDecision(True, "target_reached")
-
-
-def test_deep_stop_target_reached_above_target() -> None:
-    decision = evaluate_deep_stop(
-        round_index=2,
-        confident_relevant=25,
-        new_confident_relevant=5,
-        docs_screened_this_round=10,
-        wall_clock_breached=False,
-    )
-    assert decision.stop is True
-    assert decision.stop_condition == "target_reached"
+# No target and no clock (task 029): the only stops are short_circuit (yield
+# collapse, rounds >= 2) and budget_exhausted (round cap).
 
 
 def test_deep_stop_short_circuit_low_rate_round_2() -> None:
     decision = evaluate_deep_stop(
         round_index=2,
-        confident_relevant=5,
         new_confident_relevant=1,
         docs_screened_this_round=1000,  # 1/1000 < 1/50
-        wall_clock_breached=False,
+        round_cap=ROUND_CAP,
     )
     assert decision == StopDecision(True, "short_circuit")
 
@@ -420,22 +383,20 @@ def test_deep_stop_short_circuit_low_rate_round_2() -> None:
 def test_deep_stop_short_circuit_zero_docs_round_2() -> None:
     decision = evaluate_deep_stop(
         round_index=2,
-        confident_relevant=5,
         new_confident_relevant=0,
         docs_screened_this_round=0,
-        wall_clock_breached=False,
+        round_cap=ROUND_CAP,
     )
     assert decision == StopDecision(True, "short_circuit")
 
 
 def test_deep_stop_round_1_never_short_circuits() -> None:
-    """Round 1 is the rapid leg; the discovery-rate floor only applies from round 2."""
+    """Round 1 is the plain fan-out; the discovery-rate floor applies from round 2."""
     decision = evaluate_deep_stop(
         round_index=1,
-        confident_relevant=5,
         new_confident_relevant=0,
         docs_screened_this_round=1000,
-        wall_clock_breached=False,
+        round_cap=ROUND_CAP,
     )
     assert decision == StopDecision(False, None)
 
@@ -443,21 +404,9 @@ def test_deep_stop_round_1_never_short_circuits() -> None:
 def test_deep_stop_budget_on_round_cap() -> None:
     decision = evaluate_deep_stop(
         round_index=ROUND_CAP,
-        confident_relevant=5,
         new_confident_relevant=5,
         docs_screened_this_round=10,  # healthy rate, no short-circuit
-        wall_clock_breached=False,
-    )
-    assert decision == StopDecision(True, "budget_exhausted")
-
-
-def test_deep_stop_budget_on_wall_clock_breach() -> None:
-    decision = evaluate_deep_stop(
-        round_index=2,
-        confident_relevant=5,
-        new_confident_relevant=5,
-        docs_screened_this_round=10,
-        wall_clock_breached=True,
+        round_cap=ROUND_CAP,
     )
     assert decision == StopDecision(True, "budget_exhausted")
 
@@ -465,65 +414,20 @@ def test_deep_stop_budget_on_wall_clock_breach() -> None:
 def test_deep_stop_no_stop_otherwise() -> None:
     decision = evaluate_deep_stop(
         round_index=2,
-        confident_relevant=5,
         new_confident_relevant=5,
         docs_screened_this_round=10,
-        wall_clock_breached=False,
+        round_cap=ROUND_CAP,
     )
     assert decision == StopDecision(False, None)
 
 
-def test_deep_stop_custom_round_cap() -> None:
+def test_deep_stop_standard_round_cap_is_two() -> None:
+    """The gate passes the DEPTH's cap — standard stops at 2 rounds, not deep's 3
+    (run_deep_rounds used to hardcode deep's cap; the runner gate must not)."""
     decision = evaluate_deep_stop(
         round_index=2,
-        confident_relevant=5,
         new_confident_relevant=5,
         docs_screened_this_round=10,
-        wall_clock_breached=False,
         round_cap=2,
     )
     assert decision == StopDecision(True, "budget_exhausted")
-
-
-# --- D5 search.target: evaluate_deep_stop override ---
-
-
-def test_deep_stop_default_target_is_as_built_constant() -> None:
-    """Absent target ≡ as-built: default param equals TARGET_CONFIDENT_RELEVANT."""
-    decision = evaluate_deep_stop(
-        round_index=1,
-        confident_relevant=TARGET_CONFIDENT_RELEVANT,
-        new_confident_relevant=TARGET_CONFIDENT_RELEVANT,
-        docs_screened_this_round=100,
-        wall_clock_breached=False,
-    )
-    assert decision == StopDecision(True, "target_reached")
-
-
-def test_deep_stop_custom_target_honours_lower_override() -> None:
-    # Below the as-built target, but the D5 override of 10 is reached.
-    decision = evaluate_deep_stop(
-        round_index=1,
-        confident_relevant=10,
-        new_confident_relevant=10,
-        docs_screened_this_round=100,
-        wall_clock_breached=False,
-        target=10,
-    )
-    assert decision == StopDecision(True, "target_reached")
-
-
-def test_deep_stop_custom_target_not_yet_reached() -> None:
-    # confident_relevant (15) is below the as-built default (20) but WOULD
-    # trip the as-built target; a raised override (40) means it hasn't
-    # stopped on the target check, honouring the override rather than the
-    # module constant.
-    decision = evaluate_deep_stop(
-        round_index=1,
-        confident_relevant=15,
-        new_confident_relevant=15,
-        docs_screened_this_round=100,
-        wall_clock_breached=False,
-        target=40,
-    )
-    assert decision == StopDecision(False, None)

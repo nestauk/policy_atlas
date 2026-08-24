@@ -27,15 +27,19 @@ from policy_atlas.api.settings import Settings, load_settings
 log = structlog.get_logger()
 
 _CONFLICT_CODES = {
+    "no_completed_run",
     "run_active",
     "already_answered",
     "capacity",
     "planning_turn_in_progress",
+    "chat_turn_in_progress",
     "stale_turn",
     # 028 strand 3: the approved plan predates the newest completed planning
     # turn — review the demoted draft, re-approve, then start.
     "plan_stale",
 }
+
+_CAPACITY_CODES = {"chat_capacity"}
 
 
 class ApiConflict(Exception):
@@ -58,6 +62,22 @@ class ApiConflict(Exception):
         """
         if code not in _CONFLICT_CODES:
             raise ValueError(f"unsupported API conflict code: {code}")
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+class ApiCapacity(Exception):
+    """A contract-defined capacity response raised by API service adapters.
+
+    Args:
+        code: One of the contract-defined 429 codes.
+        message: Human-readable explanation for the caller.
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        if code not in _CAPACITY_CODES:
+            raise ValueError(f"unsupported API capacity code: {code}")
         super().__init__(message)
         self.code = code
         self.message = message
@@ -122,7 +142,12 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # Imported here so resource routers can use ApiConflict without an import
     # cycle during module initialisation.
     from policy_atlas.api.routers.check_ins import router as check_ins_router
+    from policy_atlas.api.routers.conversations import (
+        project_router as project_conversations_router,
+    )
+    from policy_atlas.api.routers.conversations import router as conversations_router
     from policy_atlas.api.routers.planning import router as planning_router
+    from policy_atlas.api.routers.portfolios import router as portfolios_router
     from policy_atlas.api.routers.projects import router as projects_router
     from policy_atlas.api.routers.read_models import router as read_models_router
     from policy_atlas.api.routers.runs import router as runs_router
@@ -130,9 +155,12 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
 
     for router in (
         projects_router,
+        portfolios_router,
+        project_conversations_router,
         planning_router,
         runs_router,
         check_ins_router,
+        conversations_router,
         sse_router,
         read_models_router,
         *routers,
@@ -240,6 +268,10 @@ def _install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiConflict)
     async def api_conflict_handler(_: Request, exc: ApiConflict) -> JSONResponse:
         return _error_response(409, exc.code, exc.message)
+
+    @app.exception_handler(ApiCapacity)
+    async def api_capacity_handler(_: Request, exc: ApiCapacity) -> JSONResponse:
+        return _error_response(429, exc.code, exc.message)
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(_: Request, exc: RequestValidationError) -> JSONResponse:

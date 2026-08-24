@@ -1,5 +1,39 @@
 # Knowledge update log
 
+## 2026-08-13 (task 031 step 8)
+* **Creation**: Added
+  [success-map-is-stale-on-the-failure-path](success-map-is-stale-on-the-failure-path.md)
+  — `successful_runs` is written only on the success path, but the runner still presents
+  the component's steer point when it fails, so P1 rendered round 1's counts and queries
+  under round 2's label. Found by the adversarial lane after the contract verifier had
+  certified the success path; both were right about different paths.
+* **Creation**: Added
+  [read-the-producing-components-summary](read-the-producing-components-summary.md) — the
+  read model displays the number the producing component already persisted rather than
+  recounting the same population, so the check-in chip and its per-backend line cannot
+  disagree. Carries the shared-read-helper corollary (`_executed_queries` right for P2,
+  wrong for P1).
+* **Creation**: Added
+  [residual-counted-after-narrowing](residual-counted-after-narrowing.md) — counting
+  "Not reported" inside the loop over already-scoped rows makes the add-up invariant true
+  at every scope for free; the payload adding up is not the drawn chart adding up.
+* **Update**: [read-the-producing-components-summary](read-the-producing-components-summary.md)
+  — added the grain rule for a read path that returns both an aggregate and the records
+  behind it: `_backend_details` emits `results` and `queries[]`, and the verbatim query
+  list, not the count, is what forces the question-scoped grain. Owner-caught after the
+  review lead had deferred the three-lane finding (failure-log 2026-08-13).
+* **Update**: [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md) — a
+  guard can die by evaluating to nothing, not only by being routed around: `0 == sum(())`
+  and a scope test whose fixture never entered the narrowed scope both passed
+  unconditionally. Ask what value would make it fail; mutation-check when unsure. Plus
+  the stub-search fixture trap (a plain walk acquires 0 new sources).
+
+## 2026-08-06 (task 030)
+* **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — caps
+  owner-set at rapid 50 / standard 100 / deep 200 per backend per round; the wall clock is gone at
+  every depth (the runner's round gate + record caps replaced it), and the multi-round loop the
+  caps were sized for is now actually wired (runner-orchestrated rounds, task 030).
+
 ## 2026-08-05 (task 028 step 9 — owner live review)
 * **Creation**: Added
   [custom-text-tokens-need-tailwind-merge-registration](custom-text-tokens-need-tailwind-merge-registration.md)
@@ -30,6 +64,13 @@
   Codex-no-Docker (already a delegated-practices rule, 027); nulls-first staging
   (already the wire-additions concept's core); a standalone "review-economy" concept
   (process, lives in the task-cycle skill + memory, not product knowledge).
+## 2026-08-04 (task 029)
+* **Update**: [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — the
+  total-volume bound named in the rule now exists (`record_cap_per_backend`, applied in
+  `acquire_sources` after a rank-interleaved merge and after dedup), and a third instance of the
+  same defect family is recorded: a *time* budget over an ordered fan-out truncates a specific set
+  of queries and providers, not a random sample. Standard/deep wall clocks removed for that reason;
+  rapid keeps its clock because latency is the requirement there, not a proxy for cost.
 
 ## 2026-07-28
 * **Creation**: Added [cdk-poweruser-deploy-boundaries](cdk-poweruser-deploy-boundaries.md),
@@ -127,6 +168,10 @@
   [result-caps-need-distribution-rule](result-caps-need-distribution-rule.md) — a total
   cap needs a per-call distribution rule or the fan-out silently collapses to one
   load-bearing query (015 live-check finding, fixed in-slice as `_distribute_quota`).
+  **Superseded 2026-08-04** — `_distribute_quota` became the next bug (dividing a
+  shared cap across a widened fan-out gave 5 results per query). The concept is
+  rewritten: caps belong per call, sized against the provider page; total volume is
+  a separate bound.
 * **Creation**: Added
   [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md) — the 007
   zero-egress guard's importlib dodge (015 build); guards name their invariant, evasion

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   PartCard,
   type PlanningTurn,
+  chipDisplayLabel,
   chipEditMessage,
   confirmMessage,
   confirmTarget,
@@ -121,8 +122,8 @@ describe("PartCard", () => {
     const onSend = vi.fn();
     const part = proposal("thoroughness", {
       options: [
-        { id: "standard_review", label: "Standard review", sub: "a full cited report · ~10-20 min", primary: true, reason: null },
-        { id: "quick_look", label: "Quick look", sub: "a short cited overview · ~5-10 min", primary: false, reason: null },
+        { id: "standard_review", label: "Standard report", sub: "Get a cited answer from the strongest sources. Broad search (up to 100 relevant results per database).", primary: true, reason: null },
+        { id: "quick_look", label: "Rapid overview", sub: "Get a fast picture of the evidence.", primary: false, reason: null },
       ],
     });
     render(
@@ -134,9 +135,17 @@ describe("PartCard", () => {
         onPrefill={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Quick look/ }));
+    await user.click(screen.getByRole("radio", { name: /Rapid overview/ }));
     expect(onSend).toHaveBeenCalledWith(
-      "Quick look\n\n[confirm part=thoroughness option=quick_look]",
+      "Rapid overview\n\n[confirm part=thoroughness option=quick_look]",
+    );
+    expect(screen.getByRole("radio", { name: /Rapid overview/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: /Standard report/ })).toHaveAttribute(
+      "aria-checked",
+      "false",
     );
   });
 
@@ -152,6 +161,10 @@ describe("PartCard", () => {
     );
     expect(screen.getByText(/✓ Confirmed — Looks right/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Change it/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Proposal for question" }).className).toContain(
+      "text-lead",
+    );
+    expect(screen.getByText(/✓ Confirmed — Looks right/).className).toContain("text-lead");
   });
 
   it("a superseded proposal renders inert with its history note", () => {
@@ -183,8 +196,50 @@ describe("PartCard", () => {
         onPrefill={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Remove UK primary" }));
+    await user.click(screen.getByRole("button", { name: "Remove Screen: UK primary" }));
     await user.click(screen.getByRole("button", { name: "Apply changes" }));
     expect(onSend).toHaveBeenCalledWith('Update the scope:\n- Remove "UK primary".');
+  });
+
+  it("prefixes chips from kind and does not double-prefix", () => {
+    expect(chipDisplayLabel({ kind: "text", label: "UK primary" })).toBe("Screen: UK primary");
+    expect(chipDisplayLabel({ kind: "date_range", label: "Since 2016" })).toBe("Search: Since 2016");
+    expect(chipDisplayLabel({ kind: "country_list", label: "UK" })).toBe("Search: UK");
+    expect(chipDisplayLabel({ kind: "text", label: "Screen: already" })).toBe("Screen: already");
+  });
+
+  it("labels the chip-edit commit Save, not Stage", async () => {
+    const user = userEvent.setup();
+    const onSend = vi.fn();
+    const part = proposal("scope", {
+      chips: [{ label: "UK primary", kind: "text", value: "UK as the primary study setting" }],
+    });
+    render(
+      <PartCard
+        part={part}
+        state={{ live: true, confirmedOptionId: null }}
+        disabled={false}
+        onSend={onSend}
+        onPrefill={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Screen: UK primary")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit Screen: UK primary" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stage" })).toBeNull();
+  });
+
+  it("does not render Notes on the card", () => {
+    render(
+      <PartCard
+        part={proposal("scope", { body: "Dates filter the search itself." })}
+        state={{ live: true, confirmedOptionId: null }}
+        disabled={false}
+        onSend={vi.fn()}
+        onPrefill={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Notes")).toBeNull();
+    expect(screen.queryByText("Dates filter the search itself.")).toBeNull();
   });
 });

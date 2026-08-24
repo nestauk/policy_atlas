@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from functools import cmp_to_key
 from typing import Any, Literal, cast
 
@@ -62,6 +62,7 @@ from policy_atlas.core.schema import (
     implementation_context_finding,
     intervention_outcome_finding,
     project_source_snapshot,
+    pss_owns_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -73,6 +74,7 @@ from policy_atlas.core.schema import (
 )
 from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
 from policy_atlas.evidence_base.assess.screen import effective_screen_rows
+from policy_atlas.evidence_base.extract.quote_verify import build_basis, locate_unique_span
 from policy_atlas.runtime.steering_history import steering_history
 
 
@@ -126,6 +128,12 @@ def _url(metadata: Mapping[str, Any], source_locator: str | None = None) -> str 
     return f"https://doi.org/{doi}" if doi is not None else None
 
 
+#: Residual bucket for sources whose provider sent no publisher country (task
+#: 031). A stable, public-vocabulary string: the frontend must not rename or
+#: drop it, or the chart stops adding up to the population it draws.
+GEOGRAPHY_NOT_REPORTED = "Not reported"
+
+
 def _geography(metadata: Mapping[str, Any]) -> str | None:
     """Read provider publication geography when the acquired snapshot carries it."""
     direct = _metadata_text(metadata, "publication_country")
@@ -158,7 +166,22 @@ def _origin(origin: str, metadata: Mapping[str, Any]) -> Literal["OpenAlex", "Ov
     return "OpenAlex"
 
 
-def _latest_row_by_id(rows: Iterable[Any], id_key: str, time_key: str) -> dict[uuid.UUID, Any]:
+def latest_row_by_id(rows: Iterable[Any], id_key: str, time_key: str) -> dict[uuid.UUID, Any]:
+    """Pick the latest row per ``id_key``, comparing ``time_key`` timestamps.
+
+    The shared effective-row discipline for every read model that resolves
+    one durable id to its latest appraisal/classification/screen row
+    (task 029 delta-review: exported so ``chat_turns`` reuses this instead of
+    a second, parallel implementation).
+
+    Args:
+        rows: Rows carrying at least the ``id_key`` and ``time_key`` fields.
+        id_key: Attribute name to group rows by.
+        time_key: Attribute name whose later value wins within a group.
+
+    Returns:
+        A mapping from each distinct ``id_key`` value to its latest row.
+    """
     latest: dict[uuid.UUID, Any] = {}
     for row in rows:
         key = cast(uuid.UUID, getattr(row, id_key))
@@ -231,7 +254,7 @@ def _cited_snapshot_ids(conn: Connection, artefact_id: uuid.UUID) -> set[uuid.UU
 def _effective_screens(conn: Connection, project_id: uuid.UUID) -> dict[uuid.UUID, Any]:
     effective = effective_screen_rows()
     rows = conn.execute(select(effective).where(effective.c.project_id == project_id)).all()
-    return _latest_row_by_id(rows, "project_source_snapshot_id", "screened_at")
+    return latest_row_by_id(rows, "project_source_snapshot_id", "screened_at")
 
 
 def funnel_out(conn: Connection, project_id: uuid.UUID) -> FunnelOut:
@@ -344,6 +367,10 @@ def landscape_out(
                     select(project_source_snapshot.c.project_source_snapshot_id).where(
                         project_source_snapshot.c.project_id == project_id,
                         project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids),
+                        # Membership against a SET of candidate snapshots, not
+                        # equality against one column — pss_owns_snapshot's
+                        # `==` shape doesn't fit; stays hand-written (task 029
+                        # delta-review sweep).
                         (
                             project_source_snapshot.c.source_snapshot_id.in_(cited_snapshots)
                             | project_source_snapshot.c.full_text_snapshot_id.in_(cited_snapshots)
@@ -371,7 +398,7 @@ def landscape_out(
         )
         .where(project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids))
     ).all()
-    classifications = _latest_row_by_id(
+    classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -393,9 +420,13 @@ def landscape_out(
         year = _year(metadata)
         if year is not None:
             years[str(year)] += 1
+        # Honest absence (task 031, defect 3): a source whose provider sent no
+        # publisher country is counted, never dropped, so the bars plus the
+        # residual always equal the population drawn — at either scope, because
+        # base_rows is already narrowed. An authorship country is never
+        # substituted here; the slim authorships answer a different question.
         geography = _geography(metadata)
-        if geography is not None:
-            geographies[geography] += 1
+        geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
         .where(characterisation_result.c.project_id == project_id)
@@ -599,7 +630,7 @@ def evidence_page(
     ).all()
     screens = _effective_screens(conn, project_id)
     screen_reasons, classification_reasons = _source_reason_maps(conn, project_id)
-    classifications = _latest_row_by_id(
+    classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -610,7 +641,7 @@ def evidence_page(
         "project_source_snapshot_id",
         "classified_at",
     )
-    appraisals = _latest_row_by_id(
+    appraisals = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.project_source_snapshot_id,
@@ -653,6 +684,9 @@ def evidence_page(
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
         screen = screens.get(row.project_source_snapshot_id)
+        # Python-side membership over an already-fetched row + a precomputed
+        # set, not a SQL join — pss_owns_snapshot doesn't fit here (task 029
+        # delta-review sweep).
         row_cited = (
             row.source_snapshot_id in cited_snapshots
             or row.full_text_snapshot_id in cited_snapshots
@@ -1270,7 +1304,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         if envelope_ids
         else {}
     )
-    appraisal = _latest_row_by_id(
+    appraisal = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.project_source_snapshot_id,
@@ -1283,7 +1317,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     )
     # The classified evidence type is the appraisal rubric's scoring input —
     # surfaced with the label so the UI can say WHY a citation carries a band.
-    citation_classifications = _latest_row_by_id(
+    citation_classifications = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -1359,7 +1393,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
             )
         )
-    section_entries: dict[tuple[str, str, str | None], list[uuid.UUID]] = {}
+    section_entries: dict[tuple[str, str, str | None, str | None], list[uuid.UUID]] = {}
     for spec, block_id in parsed_specs:
         role: str = cast(
             str,
@@ -1369,15 +1403,23 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         )
         title = cast(str, spec.get("title") or "")
         focus = cast(str | None, spec.get("focus")) if isinstance(spec.get("focus"), str) else None
-        section_entries.setdefault((title, role, focus), []).append(block_id)
+        # Absent on every artefact synthesised before task 032 — the client
+        # falls back to a shortened title rather than treating it as an error.
+        nav_label = (
+            cast(str | None, spec.get("nav_label"))
+            if isinstance(spec.get("nav_label"), str)
+            else None
+        )
+        section_entries.setdefault((title, role, focus, nav_label), []).append(block_id)
     sections: list[SectionOut] = []
-    for (title, role, focus), section_block_ids in section_entries.items():
+    for (title, role, focus, nav_label), section_block_ids in section_entries.items():
         single_block = block_rows.get(section_block_ids[0]) if len(section_block_ids) == 1 else None
         sections.append(
             SectionOut(
                 title=title,
                 role=cast(Any, role),
                 focus=focus,
+                nav_label=nav_label,
                 blocks=[
                     BlockOut(
                         block_id=block_id,
@@ -1436,6 +1478,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     reference_years = [reference.year for reference in refs_out if reference.year is not None]
     year_range = (min(reference_years), max(reference_years)) if reference_years else None
     return ArtefactOut(
+        artefact_id=artefact_row["artefact_id"],
         title=artefact_row["title"],
         question=scope or "",
         summary=cast(str | None, artefact_row["summary"]),
@@ -1751,7 +1794,12 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
         base=base,
         backends=backend_names,
         backends_detail=_backend_details(
-            conn, project_id, row["acquired_by_run_id"], backend_names
+            conn,
+            project_id,
+            # Same row the sentence and the backend list come from, so every
+            # part of this card describes one question.
+            _acquire_run_ids(conn, project_id, row["evidence_scope_id"]),
+            backend_names,
         ),
     )
 
@@ -1759,6 +1807,43 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
 def _public_backend_name(value: str) -> str | None:
     """Translate a durable backend key into the closed public vocabulary."""
     return {"openalex": "OpenAlex", "overton": "Overton"}.get(value)
+
+
+def _acquire_run_ids(
+    conn: Connection, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Every acquire run of one evidence scope, oldest first.
+
+    Acquire inserts one coverage record per run, so the column holds one id per
+    round (task 031) — all of them, which is what makes ``results`` cumulative
+    across rounds instead of last-round-only.
+
+    Scoped to **one question**, not the whole project: approving a plan mints a
+    new ``evidence_scope`` (``orchestrate.py``), so a re-planned project holds
+    the superseded question's coverage records too. Project-wide here would put
+    the abandoned question's query strings and hits into this question's card,
+    beside a ``sentence`` read from the current question's row. Round-cumulative
+    is the fix task 031 wanted; question-cumulative is not (review stack).
+
+    ``relevant`` next door stays project-wide by design — screening re-screens
+    the whole project pool per question (docs/knowledge/
+    coverage-base-project-pool-wide.md), and the contract's invariant 3 requires
+    only that the copy never imply one number contains the other.
+
+    The order here is for readability only — what makes the read model
+    deterministic is the ``sequence`` ordering on the event select that consumes
+    these ids, not the order of the ids themselves.
+    """
+    return list(
+        conn.execute(
+            select(search_coverage_record.c.acquired_by_run_id)
+            .where(
+                search_coverage_record.c.project_id == project_id,
+                search_coverage_record.c.evidence_scope_id == evidence_scope_id,
+            )
+            .order_by(search_coverage_record.c.created_at)
+        ).scalars()
+    )
 
 
 def _coverage_backend_names(backends: Any) -> list[str]:
@@ -1777,20 +1862,50 @@ def _coverage_backend_names(backends: Any) -> list[str]:
 def _backend_details(
     conn: Connection,
     project_id: uuid.UUID,
-    run_id: uuid.UUID,
+    run_ids: Sequence[uuid.UUID],
     backend_names: list[str],
 ) -> list[CoverageBackendDetailOut]:
-    """Project post-run query counts and the documented project-wide relevance wart."""
+    """Query hits across every acquire round, beside project-wide relevance.
+
+    ``results`` sums the query hits of every acquire run given, not just the
+    newest round's (task 031, defect 2). Before this slice the caller passed the
+    latest coverage row's ``acquired_by_run_id`` alone, so a deep run's third
+    round reported ~72 hits beside ~200 cumulative relevant sources — two grains
+    on one line.
+
+    ``relevant`` stays the project-wide unique count per backend (the documented
+    task 027 §C.1 behaviour). The two numbers are now both cumulative, but they
+    still count different things: hits are per call and pre-dedupe, so
+    ``relevant`` is not a subset of ``results``.
+
+    Args:
+        conn: Open read connection.
+        project_id: Owning project.
+        run_ids: Every acquire run whose query hits belong in the total. Empty
+            yields empty query lists rather than a silent last-round figure.
+        backend_names: Public backend names to report, in display order.
+
+    Returns:
+        One detail row per backend name, in the order given.
+    """
     events = (
         conn.execute(
-            select(event_log.c.payload).where(
+            select(event_log.c.payload)
+            .where(
                 event_log.c.project_id == project_id,
-                event_log.c.run_id == run_id,
+                event_log.c.run_id.in_(run_ids),
                 event_log.c.event_type == "search.executed",
             )
+            # Emission order, so the pane lists round 1's queries before round
+            # 2's. Spanning several runs made this load-bearing: without it the
+            # rows come back in physical order and the list is non-deterministic
+            # between identical requests.
+            .order_by(event_log.c.sequence)
         )
         .scalars()
         .all()
+        if run_ids
+        else []
     )
     queries: dict[str, list[CoverageQueryOut]] = {name: [] for name in backend_names}
     for payload in events:
@@ -1893,6 +2008,9 @@ def source_dossier_out(
     cited_ids = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
+    # Python-side membership over an already-fetched row + a precomputed set,
+    # not a SQL join — pss_owns_snapshot doesn't fit here (task 029
+    # delta-review sweep).
     cited = row["source_snapshot_id"] in cited_ids or row["full_text_snapshot_id"] in cited_ids
     if cited:
         status, reason = "cited", None
@@ -1914,7 +2032,7 @@ def source_dossier_out(
         status, reason = "screened_out", screen.screen_basis
     else:
         status, reason = "found", None
-    classification = _latest_row_by_id(
+    classification = latest_row_by_id(
         conn.execute(
             select(
                 source_classification_result.c.project_source_snapshot_id,
@@ -1928,7 +2046,7 @@ def source_dossier_out(
         "project_source_snapshot_id",
         "classified_at",
     ).get(source_id)
-    appraisal = _latest_row_by_id(
+    appraisal = latest_row_by_id(
         conn.execute(
             select(
                 source_appraisal_result.c.project_source_snapshot_id,
@@ -2089,6 +2207,59 @@ def chunk_context_out(
     )
 
 
+def chunk_quote_context_out(
+    conn: Connection, project_id: uuid.UUID, chunk_id: uuid.UUID, quote: str
+) -> ChunkContextOut | None:
+    """Return the clamped context window for a chat citation's chunk + quote.
+
+    The chunk must belong to the project's corpus (envelope or full-text
+    snapshot link) — the same ownership boundary every read model enforces.
+    Chat quotes are raw model output, so this locates the quote via
+    ``quote_verify.locate_unique_span`` — the canonical overlap-aware,
+    word-boundary-guarded, case-fold-round-tripped locator (task 029
+    delta-review) — rather than a repository-side exact-match fast path plus
+    a second, parallel normaliser. It tolerates casefold, collapsed
+    whitespace and curly quotes/dashes folded to straight — NOT Unicode NFC
+    composition (a composed vs. decomposed accent pair is an honest absence,
+    not a match; see the locator's own docstring) — with the matched span
+    converted back to the true raw span so the displayed context and
+    highlight always show the real source text. An ambiguous or absent
+    quote has no honest recoverable span, so this returns absence rather
+    than guessing.
+    """
+    row = conn.execute(
+        select(chunk.c.content, chunk.c.sequence, chunk.c.source_snapshot_id)
+        .select_from(
+            chunk.join(
+                project_source_snapshot,
+                pss_owns_snapshot(chunk.c.source_snapshot_id),
+            )
+        )
+        .where(chunk.c.chunk_id == chunk_id)
+        .where(project_source_snapshot.c.project_id == project_id)
+        .limit(1)
+    ).one_or_none()
+    if row is None:
+        return None
+    text = row.content
+    span = locate_unique_span(build_basis([(None, text)]), quote)
+    if span is None:
+        return None
+    position, end = span
+    start_window = max(0, position - 800)
+    end_window = min(len(text), end + 800)
+    return ChunkContextOut(
+        context=text[start_window:end_window],
+        span_start=position - start_window,
+        span_end=end - start_window,
+        clamped=start_window > 0 or end_window < len(text),
+        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
+        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
+        year=_chunk_year(conn, project_id, row.source_snapshot_id),
+        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+    )
+
+
 def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
     """Return one adjacent chunk's content when the sequence exists."""
     return conn.execute(
@@ -2113,8 +2284,7 @@ def _chunk_metadata(
         )
         .where(
             project_source_snapshot.c.project_id == project_id,
-            (project_source_snapshot.c.source_snapshot_id == source_snapshot_id)
-            | (project_source_snapshot.c.full_text_snapshot_id == source_snapshot_id),
+            pss_owns_snapshot(source_snapshot_id),
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}

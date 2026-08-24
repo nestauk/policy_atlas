@@ -66,7 +66,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 {message.title}
               </ToastPrimitive.Title>
               {message.description !== undefined && (
-                <ToastPrimitive.Description className="mt-1 text-caption text-grey">
+                <ToastPrimitive.Description className="mt-1 text-meta text-grey">
                   {message.description}
                 </ToastPrimitive.Description>
               )}
@@ -76,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   onClick={message.action.onClick}
-                  className="cursor-pointer text-caption font-bold text-blue hover:underline"
+                  className="cursor-pointer text-meta font-bold text-blue hover:underline"
                 >
                   {message.action.label}
                 </button>

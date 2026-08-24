@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from types import TracebackType
 from typing import Any, Literal, cast
 
 import pytest
 
+from policy_atlas.core import tracing
 from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.planner import (
@@ -18,6 +21,7 @@ from policy_atlas.runtime.planner import (
 )
 from policy_atlas.runtime.planner_prompt import (
     PLANNER_PROMPT_VERSION,
+    PLANNER_SYSTEM_PROMPT,
     PlanDraftWire,
     PlannerTurnWire,
 )
@@ -43,9 +47,26 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    # task 028 fork A: planner_v6 (sequential parts, outcome-first
-    # thoroughness, steer-point walk deleted) succeeds orchestrator_v1_planning.
-    assert PLANNER_PROMPT_VERSION == "planner_v6"
+    # planner_v8: Analysis level screen words; report not review; search caps.
+    assert PLANNER_PROMPT_VERSION == "planner_v8"
+
+
+def test_planner_prompt_plain_language_and_ready_update() -> None:
+    assert "## How to talk" in PLANNER_SYSTEM_PROMPT
+    assert "Never name internals" in PLANNER_SYSTEM_PROMPT
+    assert 'Never say "nothing runs until you start it"' in PLANNER_SYSTEM_PROMPT
+    assert "on an update" in PLANNER_SYSTEM_PROMPT
+
+
+def test_planner_prompt_thoroughness_screen_words_and_caps() -> None:
+    assert 'label "Standard report"' in PLANNER_SYSTEM_PROMPT
+    assert 'label "Detailed report"' in PLANNER_SYSTEM_PROMPT
+    assert "up to 50 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "up to 100 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "up to 200 relevant results per database" in PLANNER_SYSTEM_PROMPT
+    assert "Evidence overview / Full-text synthesis / Findings synthesis" in PLANNER_SYSTEM_PROMPT
+    assert "Standard review" not in PLANNER_SYSTEM_PROMPT
+    assert "Detailed review" not in PLANNER_SYSTEM_PROMPT
 
 
 def test_stub_first_turn_asks_shape_question_with_three_suggestions() -> None:
@@ -293,19 +314,28 @@ class _FakeObservation:
 
 
 class _FakeLangfuse:
-    def __init__(self) -> None:
-        self.sessions: list[str] = []
-
     def start_as_current_observation(self, *, name: str, as_type: str) -> _FakeObservation:
         del name, as_type
         return _FakeObservation()
 
-    def update_current_trace(self, *, session_id: str) -> None:
-        self.sessions.append(session_id)
 
-
-def test_openai_planner_turn_sets_langfuse_session() -> None:
+def test_openai_planner_turn_propagates_session_before_opening_the_span(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The installed SDK (4.13.0) has no ``update_current_trace`` — the real seam is
+    ``propagate_attributes``, and the whole observation must open INSIDE its scope
+    (attributes only reach observations opened while the scope is active)."""
     session_id = uuid.uuid4()
+    events: list[str] = []
+
+    @contextmanager
+    def fake_propagate_attributes(*, session_id: str) -> Iterator[None]:
+        events.append(f"session_enter:{session_id}")
+        yield
+        events.append("session_exit")
+
+    monkeypatch.setattr(tracing, "propagate_attributes", fake_propagate_attributes)
+
     parsed = PlannerTurnWire(
         reply="Ready.",
         plan_draft=PlanDraftWire(title="Session test", question="Q?"),
@@ -315,12 +345,23 @@ def test_openai_planner_turn_sets_langfuse_session() -> None:
     )
     backend: OpenAIPlannerBackend = object.__new__(OpenAIPlannerBackend)
     fake_langfuse = _FakeLangfuse()
+    original_start = fake_langfuse.start_as_current_observation
+
+    def recording_start(*, name: str, as_type: str) -> _FakeObservation:
+        events.append(f"observation:{name}")
+        return original_start(name=name, as_type=as_type)
+
+    fake_langfuse.start_as_current_observation = recording_start  # type: ignore[method-assign]
     cast("Any", backend)._client = fake_parse_client(parsed=parsed)
     cast("Any", backend)._langfuse_client = fake_langfuse
 
     backend.plan_turn([_turn("Q?")], None, session_id=session_id)
 
-    assert fake_langfuse.sessions == [str(session_id)]
+    enter_index = events.index(f"session_enter:{session_id}")
+    exit_index = events.index("session_exit")
+    observation_indexes = [i for i, event in enumerate(events) if event.startswith("observation:")]
+    assert observation_indexes
+    assert all(enter_index < index < exit_index for index in observation_indexes)
 
 
 def test_scrub_turn_removes_nul_from_nested_plan_draft() -> None:

@@ -259,12 +259,14 @@ class PlanningTurnOut(BaseModel):
         suggestions: The planner's suggested answers to its clarifying
             question, rendered as tappable quick replies. Empty when none.
         part: Structured sequential-planning proposal, when this turn carries one.
+        conversation_id: Planning conversation that produced this turn.
     """
 
     reply: str
     plan: PlanDraft
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
+    conversation_id: uuid.UUID | None = None
 
 
 class PlanningTranscriptTurnOut(BaseModel):
@@ -272,6 +274,7 @@ class PlanningTranscriptTurnOut(BaseModel):
 
     Args:
         turn_index: Monotonic per-project conversation coordinate.
+        conversation_id: Owning planning conversation, absent only on legacy rows.
         client_turn_id: The caller's idempotency key for this turn — returned
             so a reloaded client can retry its own incomplete latest turn.
         user_message: Submitted user message.
@@ -284,6 +287,7 @@ class PlanningTranscriptTurnOut(BaseModel):
     """
 
     turn_index: int
+    conversation_id: uuid.UUID | None = None
     client_turn_id: uuid.UUID
     user_message: str
     reply: str | None
@@ -295,7 +299,7 @@ class PlanningTranscriptTurnOut(BaseModel):
 
 
 class PlanOut(BaseModel):
-    """Response body for `GET /api/v1/projects/{id}/plan`.
+    """Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.
 
     Args:
         plan: The current plan (draft or approved).
@@ -306,3 +310,38 @@ class PlanOut(BaseModel):
     plan: PlanDraft
     version: int
     status: str
+
+
+class PlanPatchIn(BaseModel):
+    """Inbound body for `PATCH /api/v1/projects/{id}/plan`.
+
+    Omitted fields stay as they are. An empty string on a date or geography
+    field clears that constraint. The merged result must still be a valid
+    executable plan.
+
+    Args:
+        question: Replacement evidence question.
+        backend_scope: Search backend scope.
+        search_effort: Acquisition effort rung.
+        analysis_depth: Analysis component and budget rung.
+        steering_mode: Check-in cadence for the run.
+        screening_criteria: Replacement inclusion/exclusion criteria.
+        published_after: Lower publication-date bound (`YYYY-MM-DD`), or
+            empty to clear.
+        published_before: Upper publication-date bound (`YYYY-MM-DD`), or
+            empty to clear.
+        geography: Country, ISO code, or pinned group label, or empty to
+            clear geography filters.
+    """
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    question: str | None = Field(default=None, min_length=1)
+    backend_scope: BackendScope | None = None
+    search_effort: SearchEffort | None = None
+    analysis_depth: AnalysisDepth | None = None
+    steering_mode: SteeringMode | None = None
+    screening_criteria: list[str] | None = None
+    published_after: str | None = None
+    published_before: str | None = None
+    geography: str | None = None

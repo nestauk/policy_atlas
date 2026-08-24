@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { components } from "../../api/gen/types";
 import { scrub } from "../../lib/scrub";
 import { Button } from "../../ui/brand/Button";
+import { cn } from "../../ui/brand/cn";
 
 type PartProposal = components["schemas"]["PartProposalOut"];
 type PartChip = components["schemas"]["PartChipOut"];
@@ -86,6 +87,29 @@ export function chipEditMessage(edits: ChipEdit[]): string {
   return `Update the scope:\n${lines.join("\n")}`;
 }
 
+const SEARCH_CHIP_PREFIX = "Search:";
+const SCREEN_CHIP_PREFIX = "Screen:";
+
+/** Visible chip label: Search: for date/country filters, Screen: for text rules.
+ *
+ * Args:
+ *   chip: A scope chip; `kind` is the only search/screen signal on the wire.
+ *
+ * Returns:
+ *   The label with a prefix unless it already starts with one.
+ */
+export function chipDisplayLabel(chip: Pick<PartChip, "kind" | "label">): string {
+  const prefix =
+    chip.kind === "date_range" || chip.kind === "country_list"
+      ? SEARCH_CHIP_PREFIX
+      : chip.kind === "text"
+        ? SCREEN_CHIP_PREFIX
+        : null;
+  if (prefix === null) return chip.label;
+  if (chip.label.startsWith(prefix)) return chip.label;
+  return `${prefix} ${chip.label}`;
+}
+
 /** Parse a date_range chip value ({"after": ..., "before": ...}) fail-soft. */
 function parseDateRange(value: string): { after: string | null; before: string | null } | null {
   try {
@@ -116,11 +140,12 @@ function EditableChip({
   const range = chip.kind === "date_range" ? parseDateRange(chip.value) : null;
   const [after, setAfter] = useState(range?.after ?? "");
   const [before, setBefore] = useState(range?.before ?? "");
+  const displayLabel = chipDisplayLabel(chip);
 
   if (editing && !disabled) {
     return (
       <span className="inline-flex flex-wrap items-center gap-1 border border-blue-tint bg-paper px-2 py-1">
-        <span className="text-caption font-semibold text-navy">{scrub(chip.label)}</span>
+        <span className="text-caption font-semibold text-navy">{scrub(displayLabel)}</span>
         {chip.kind === "date_range" ? (
           <>
             <label className="text-caption text-grey">
@@ -164,7 +189,7 @@ function EditableChip({
             setEditing(false);
           }}
         >
-          Stage
+          Save
         </Button>
         <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
           Cancel
@@ -175,12 +200,12 @@ function EditableChip({
 
   return (
     <span className="inline-flex items-center gap-1 border border-blue-tint bg-blue-tint px-2 py-1 text-caption font-semibold text-blue">
-      {scrub(chip.label)}
+      {scrub(displayLabel)}
       {!disabled && (
         <>
           <button
             type="button"
-            aria-label={`Edit ${chip.label}`}
+            aria-label={`Edit ${displayLabel}`}
             className="cursor-pointer px-0.5 hover:text-navy"
             onClick={() => setEditing(true)}
           >
@@ -188,7 +213,7 @@ function EditableChip({
           </button>
           <button
             type="button"
-            aria-label={`Remove ${chip.label}`}
+            aria-label={`Remove ${displayLabel}`}
             className="cursor-pointer px-0.5 hover:text-navy"
             onClick={() => onStage({ kind: "remove", label: chip.label })}
           >
@@ -225,6 +250,7 @@ export function PartCard({
   const [staged, setStaged] = useState<ChipEdit[]>([]);
   const [adding, setAdding] = useState(false);
   const [addText, setAddText] = useState("");
+  const [pickedId, setPickedId] = useState<string | null>(null);
   const interactive = state.live && state.confirmedOptionId === null && !disabled;
   const confirmedOption =
     state.confirmedOptionId === null
@@ -237,22 +263,12 @@ export function PartCard({
 
   return (
     <div data-testid="part-card" className="anim-rise mr-8 border border-line-2 bg-paper px-4 py-3 shadow-sm">
-      <p className="text-caption font-bold uppercase tracking-wide text-grey">
+      <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
         {scrub(part.step_label)}
       </p>
-      <h3 className="mt-1 max-w-prose-measure text-body font-bold text-navy">
+      <h3 className="mt-1 max-w-prose-measure text-lead font-bold text-navy">
         {scrub(part.title)}
       </h3>
-      {part.body != null && part.body !== "" && (
-        // The planner's rationale is collapsed by default (owner, 2026-08-05:
-        // plan-step text clutter) — the title + chips carry the decision.
-        <details className="mt-1 max-w-prose-measure">
-          <summary className="cursor-pointer text-caption font-semibold text-grey hover:text-navy">
-            Notes
-          </summary>
-          <p className="mt-1 text-meta text-grey">{scrub(part.body)}</p>
-        </details>
-      )}
 
       {(part.chips ?? []).length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -267,7 +283,7 @@ export function PartCard({
           {interactive && !adding && (
             <button
               type="button"
-              className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-caption font-semibold text-grey hover:text-navy"
+              className="cursor-pointer border border-dashed border-line-2 bg-paper px-2 py-1 text-meta font-semibold text-grey hover:text-navy"
               onClick={() => setAdding(true)}
             >
               + add
@@ -294,7 +310,7 @@ export function PartCard({
                   setAdding(false);
                 }}
               >
-                Stage
+                Save
               </Button>
             </span>
           )}
@@ -304,7 +320,7 @@ export function PartCard({
       {staged.length > 0 && (
         <div className="mt-2 border border-yellow bg-yellow-tint/40 px-3 py-2">
           <p className="text-caption font-bold text-navy">Staged changes</p>
-          <ul className="mt-1 space-y-0.5 text-caption text-ink">
+          <ul className="mt-1 space-y-0.5 text-lead text-ink">
             {staged.map((edit, index) => (
               <li key={`${edit.kind}-${edit.label}-${index}`}>
                 {edit.kind === "remove"
@@ -334,12 +350,12 @@ export function PartCard({
       )}
 
       {confirmedOption !== null ? (
-        <p className="mt-2 text-meta font-bold text-green-strong">
+        <p className="mt-2 text-lead font-bold text-green-strong">
           ✓ Confirmed{confirmedOption.label !== "" ? ` — ${scrub(confirmedOption.label)}` : ""}
           {state.live && (
             <button
               type="button"
-              className="ml-2 cursor-pointer text-caption font-semibold text-grey underline"
+              className="ml-2 cursor-pointer text-body font-semibold text-grey underline"
               disabled={disabled}
               onClick={() => onPrefill("Change this part: ")}
             >
@@ -347,16 +363,54 @@ export function PartCard({
             </button>
           )}
         </p>
-      ) : (
-        // Preset options (any option carrying a sub line) stack one per line
-        // at a shared width; plain confirm/refine pairs stay inline.
+      ) : part.options.some((option) => option.sub != null && option.sub !== "") ? (
         <div
-          className={
-            part.options.some((option) => option.sub != null && option.sub !== "")
-              ? "mt-3 flex max-w-md flex-col gap-2"
-              : "mt-3 flex flex-wrap gap-2"
-          }
+          role="radiogroup"
+          aria-label={part.title}
+          className="mt-3 flex max-w-prose-measure flex-col gap-3"
         >
+          {part.options.map((option) => {
+            const selected = pickedId === option.id;
+            return (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              data-option-id={option.id}
+              data-part-option={option.primary ? "primary" : "secondary"}
+              aria-checked={selected}
+              disabled={!interactive}
+              className="flex cursor-pointer items-start gap-3 text-left disabled:cursor-default"
+              onClick={() => {
+                setPickedId(option.id);
+                if (sendsDirectly(option)) {
+                  onSend(confirmMessage(part, option));
+                } else {
+                  onPrefill(`${option.label}: `);
+                }
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                  selected ? "border-navy" : "border-navy/40",
+                )}
+              >
+                {selected ? <span className="h-2.5 w-2.5 rounded-full bg-navy" /> : null}
+              </span>
+              <span>
+                <span className="block text-lead font-bold text-navy">{scrub(option.label)}</span>
+                {option.sub != null && option.sub !== "" && (
+                  <span className="block text-lead font-normal text-grey">{scrub(option.sub)}</span>
+                )}
+              </span>
+            </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
           {part.options.map((option) => (
             <Button
               key={option.id}
@@ -371,27 +425,20 @@ export function PartCard({
                   : onPrefill(`${option.label}: `)
               }
             >
-              <span className="text-left">
-                {scrub(option.label)}
-                {option.sub != null && option.sub !== "" && (
-                  <span className="block text-caption font-normal opacity-85">
-                    {scrub(option.sub)}
-                  </span>
-                )}
-              </span>
+              <span className="text-left">{scrub(option.label)}</span>
             </Button>
           ))}
         </div>
       )}
       {confirmedOption === null && part.options.some((option) => option.reason != null && option.reason !== "") && (
-        <p className="mt-1.5 max-w-prose-measure text-caption text-grey">
+        <p className="mt-1.5 max-w-prose-measure text-lead text-grey">
           {part.options
             .filter((option) => option.reason != null && option.reason !== "")
             .map((option) => scrub(option.reason ?? ""))}
         </p>
       )}
       {!state.live && state.confirmedOptionId === null && (
-        <p className="mt-2 text-caption text-grey">Updated below — this version is kept for the record.</p>
+        <p className="mt-2 text-lead text-grey">Updated below — this version is kept for the record.</p>
       )}
     </div>
   );

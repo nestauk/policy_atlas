@@ -238,6 +238,37 @@ def test_project_source_snapshot_unique_constraint(conn: Connection) -> None:
         ))
 
 
+def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
+    """``b3c7d914e0a2`` (the portfolio layer) downgrades and upgrades cleanly.
+
+    Targets the revision by id rather than ``-1`` so the assertions cannot
+    silently start exercising a different migration when the next one lands.
+    Runs on its own connection for the same reason as the round-trip below, and
+    leaves the database back at head.
+    """
+    cfg = AlembicConfig("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
+
+    command.downgrade(cfg, "d8e4a1c7f2b9")
+    with engine.connect() as down_conn:
+        inspector = inspect(down_conn)
+        assert "portfolio" not in inspector.get_table_names()
+        assert "portfolio_id" not in {c["name"] for c in inspector.get_columns("project")}
+
+    command.upgrade(cfg, "head")
+    with engine.connect() as up_conn:
+        inspector = inspect(up_conn)
+        assert "portfolio" in inspector.get_table_names()
+        assert {c["name"] for c in inspector.get_columns("portfolio")} == {
+            "portfolio_id",
+            "owner_user_id",
+            "name",
+            "description",
+            "created_at",
+        }
+        assert "portfolio_id" in {c["name"] for c in inspector.get_columns("project")}
+
+
 def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> None:
     """``downgrade -1`` then ``upgrade head`` for e5c2a7f4b9d1 succeeds and restores
     all four changes.
