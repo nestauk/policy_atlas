@@ -22,36 +22,33 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `032-task-lifecycle-ia` **CONTRACT APPROVED 2026-08-17 · PLAN
-DRAFTED → awaiting plan approval (step 3 🛑)** (branch
-`task/032-task-lifecycle-ia`, based on `dev`): reshape the app around one task
-and one lifecycle, and add a named grouping above tasks. Screen word **Task** =
-the existing `project` row; screen word **Project** = a new `portfolio` row.
-Fifteen gaps G1–G15; the planning conversation's own behaviour is deliberately
-untouched, but G14 lists it in the chats overlay once it stops being the live
-surface, and G15 is a type-scale pass (the frontend uses 12px 250 times against
-its own declared 16px floor). Case studies are parked by the owner (they need a
-new synthesis pass). Contract:
-`docs/tasks/032-task-lifecycle-ia/contract.md`; plan and rubric alongside.
-Thirteen build phases; the two gated backend phases run FIRST so a refused gate
-surfaces before frontend is built against the field. **Tier 3** — new table +
-new public routes + one prompt-surface field (`nav_label`) are three approval
-gates, each to be signed off before its phase starts. ADR 0031 expected for the
-portfolio layer.
+Design — task `033-organisations` **RE-OPENED 2026-08-24 · contract rev 2.0 →
+awaiting contract approval (step 1 🛑)** (branch `task/033-organisations`,
+cut fresh from `dev` `b8729a5`): users belong to an organisation and see, by
+default, their own work plus their org's org-visible work, read-only, with their
+own chats on it. Every mutation stays the owner's. Contract:
+`docs/tasks/033-organisations/contract.md`; rubric alongside. **Tier 4** —
+tenancy/auth semantics + a live-DB migration + public-API additions. ADR 0032
+expected.
 
-**Owner decisions, 2026-08-17, both recorded in the plan:** (1) **standard
-review, no adversarial lanes** — contract verifier, `/code-review`,
-`/security-review`, `/simplify` and the human deep review run; adversarial review
-at the contract, plan and code stages is waived, and `verification.md` plus the
-PR must say so. The tier stays 3. (2) **Three full `make verify` runs**, not
-eight — baseline, end of Phase 2, step-6 exit. Frontend phases gate on
-`make frontend-verify`, because `make verify-fast` is backend-only and would
-prove nothing on a ~90%-frontend slice. No phase routes to `codex`: the CLI is
-not installed here (`codex` is not on PATH).
+The slice was drafted 2026-08-11 as `030-organisations` and sat in design while
+031 and 032 merged (134 commits). Re-opened and de-collided 2026-08-24:
+**renumbered 030 → 033** (three merged tasks hold 030) and **ADR 0030 → 0032**
+(0030 = SSM jumpbox, 0031 = the portfolio layer); the alembic head it chains off
+moved from 029's `d8e4a1c7f2b9` to 032's `b3c7d914e0a2`; and 032's `portfolio`
+layer pulled a new owner call — **owner call (e), 2026-08-24: `portfolio` takes
+the same tenancy grades as `project`**, since a colleague who can read a Task
+must be able to read the Project that groups it. The contract now works in code
+words throughout (screen **Task** = code `project`, screen **Project** = code
+`portfolio`), and its route/test counts are re-derived at plan time instead of
+being restated from rev 1. The old `task/030-organisations` branch is superseded.
 
-Design reference: the owner's prototype at
-`scripts/scratchpad/frontend_v20260817/Policy Atlas_new search standalone.html`
-(a bundled artifact — see the contract's § Reading the prototype).
+Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55, `c6bf772`) — the app
+reshaped around one task and one lifecycle, with a named grouping above tasks:
+screen word **Task** = the `project` row, screen word **Project** = the new
+`portfolio` row. ADR 0031 (Accepted) records the vocabulary split, which stays
+open until the workspace-cluster slice. Seams in `docs/deferred.md` § Task
+lifecycle IA — note that `src/mock/api.ts` serves no `/api/v1/portfolios`.
 
 Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
 clear meaning per user-visible source count across the P1 check-in, Where I
@@ -80,9 +77,10 @@ caps per backend per round; standard/deep wall clocks removed — was
 `028-…`) and `030-multi-round-search` (rapid's clock removed, the
 runner-orchestrated round loop wired — was `029-…`). Their code is **merged to
 `dev`** (PR #46, the `37-hotfix-remove-quota` hotfix). **Numbering collision
-still to settle:** `029` and ADR `0029` belong to the copilot-chat slice, and
-`031` is now this count-honesty slice — so if the search-volume docs are
-renumbered they need `032`/`033`, not `031`/`032`. No ADRs written for them yet.
+still to settle:** their doc numbers `029`/`030` are both taken — by the
+copilot-chat slice and by three merged 030 tasks — and `031`, `032` and `033`
+are now taken too. If the search-volume docs are renumbered they need `034`/`035`.
+No ADRs written for them yet.
 
 Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
 fail honest-429 until billing tops up). The eval slice (former 027 draft)
