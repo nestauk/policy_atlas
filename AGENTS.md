@@ -22,90 +22,56 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `033-organisations` **RE-OPENED 2026-08-24 · contract rev 2.0 →
-awaiting contract approval (step 1 🛑)** (branch `task/033-organisations`,
-cut fresh from `dev` `b8729a5`): users belong to an organisation and see, by
-default, their own work plus their org's org-visible work, read-only, with their
-own chats on it. Every mutation stays the owner's. Contract:
-`docs/tasks/033-organisations/contract.md`; rubric alongside. **Tier 4** —
-tenancy/auth semantics + a live-DB migration + public-API additions. ADR 0032
-expected.
+Design — task `033-organisations` **contract rev 3.0, awaiting contract approval
+(step 1 🛑)** (branch `task/033-organisations`, cut fresh from `dev`
+`b8729a5`): users belong to an organisation and see, by default, their own work
+plus their org's org-visible work, read-only, with their own chats on it. A few
+ops-assigned administrators read across every organisation for support, writing
+nothing, every read traced. Contract: `docs/tasks/033-organisations/contract.md`;
+42-item rubric alongside. **Tier 4.** ADR 0032 expected (and must record that it
+amends ADR 0031 decision 4).
 
-The slice was drafted 2026-08-11 as `030-organisations` and sat in design while
-031 and 032 merged (134 commits). Re-opened and de-collided 2026-08-24:
-**renumbered 030 → 033** (three merged tasks hold 030) and **ADR 0030 → 0032**
-(0030 = SSM jumpbox, 0031 = the portfolio layer); the alembic head it chains off
-moved from 029's `d8e4a1c7f2b9` to 032's `b3c7d914e0a2`; and 032's `portfolio`
-layer pulled a new owner call — **owner call (e), 2026-08-24: `portfolio` takes
-the same tenancy grades as `project`**, since a colleague who can read a Task
-must be able to read the Project that groups it. The contract now works in code
-words throughout (screen **Task** = code `project`, screen **Project** = code
-`portfolio`), and its route/test counts are re-derived at plan time instead of
-being restated from rev 1. The old `task/030-organisations` branch is superseded.
+**Contract-stage adversarial review ran 2026-08-24** across three lanes —
+tenancy/authorization, scope/coherence, and Codex as the heterogeneous peer. All
+three recommended against approving rev 2.0; the scope lane recommended
+splitting into three slices. **Owner ruled: keep one slice, patch every
+finding.** Rev 3.0 is that rewrite. The review cost of that decision is recorded
+in the contract: **the security lane reads three unrelated threat models and
+must be scoped as three passes, not one.**
 
-**Owner call (f), 2026-08-24:** an **admin flag** ships in 033 —
-`app_user.is_admin`, ops-assigned only (no HTTP write path), granting **read of
-every row in every organisation, `private` included**, so an admin can support
-any Task from the real UI. **Read only** — every mutation still 403s for a
-non-owner holder. It is the designated home for future admin capability (an
-admin dashboard hangs off it), but this slice grants exactly one thing and the
-tests pin that. Because it sees private work, **disclosure is the control**:
-every admin-leg read emits one `structlog` trace line, the visibility toggle
-copy is corrected to say private hides a Task *from your organisation*, and
-`PrivacyView.tsx` § 6 gains a sentence saying named administrators can access
-content for support and that accesses are logged. That privacy edit is **live
-public legal copy and needs written owner sign-off before merge**. The flag
-carries a named call-out for the security lane; its broad name invites drift, so
-"nothing outside the read leg reads it" is asserted structurally.
+**What the review found, in four kinds.** (1) *Self-contradictions* — `is_admin`
+declared the helper its only reader while two listings must consult it; "write =
+owner only, exactly like an org colleague" false in both halves, and taken
+literally it would have let an admin post chat turns on any private project in
+any organisation, untraced. (2) *Wrong about the world* — `PrivacyView` **§ 3
+already claims the email is stored** (it is not, so the live page is inaccurate
+today) and **§ 7 already promises permanent Aurora deletion on request**, which
+de-enrolment cannot honour; the repo already ships `staging-user`/`prod-user`/
+`cognito-user`, which create without enrolling and take a password in argv (this
+slice deletes them); the `boto3` non-default group broke `uv sync`, strict mypy
+and `pip-audit`; **the downgrade is data-destructive and exposes colleagues'
+chats to the Task owner**, because pre-033 code lists every conversation on a
+project — so the posture is now **roll forward, not back**. (3) *Design holes* —
+no stated NULL-`org_id` rule (and `None == None` is `True` in Python, which would
+have exposed every unenrolled user's work to every other one), nothing stamping
+`org_id` on new rows, and i.5's stated way out was a no-op loop that silently
+re-exposed the row. (4) *Single-owner assumptions baked into existing code* —
+seven routes on `conversations.py`'s conversation-id router (including a
+transcript by id), SSE that authorises once and streams through revocation, a
+stale-turn sweeper keyed to the project owner, and `update_portfolio`'s blind
+`.values(**changes)` splat. **Category 4 is why this slice is larger than it
+looked: tenancy is not a refactor of ownership checks — it invalidates
+assumptions held throughout the request, streaming, sweeping and caching paths.**
 
-**Owner call (g), 2026-08-24:** `app_user` **stores the Cognito email**, and admins
-can filter work by it. The access token carries `sub` only — the pool is
-`UsernameAttributes: ["email"]`, so `cognito:username` is a generated UUID, not
-the address — so the email is resolved **once at ops enrolment** (enrol *by*
-email; the CLI resolves it to a `sub`) and stored. `sub` stays the key, because
-addresses change and `sub` does not. Admins get `?owner_email=` on the two
-listings; a non-admin passing it gets 400 whether or not the address exists.
-**One new dependency, and a named ops-side egress change:** the lookup uses
-`boto3` in a new ops-only `[dependency-groups]` entry (superseding the earlier
-AWS-CLI-subprocess plan), runs only in the ops CLI under the human operator's
-IAM, and the API task role gains no Cognito permission. The DB now holds directly identifiable
-personal data, so `PrivacyView.tsx` **§ 3** gains the email alongside § 6's
-administrator sentence — **both need written owner sign-off**, and de-enrolment
-clears the address as the erasure lever. No user directory (Out).
-
-**Owner call (h), 2026-08-24 (revised same day):** the ops CLI **creates** the
-Cognito user — `user create` runs `AdminCreateUser` then enrols in one command,
-Cognito first because its `sub` is the DB key; a DB failure keeps the account
-and prints the `user enrol` remediation. **Deleting users is Out** (owner): a
-delete that cannot reassign the person's work would strand it, and ownership
-transfer is itself Out, so the two are coupled and ship together or not at all.
-**De-enrolment is the only removal lever** — it clears `org_id`, `email`,
-`display_name` and `is_admin` together, and never touches owned work. Two gaps
-recorded in `docs/deferred.md`: de-enrolment does **not** stop an offboarded
-person signing in, and erasure is two-part because the Cognito account survives.
-Operator IAM is `ListUsers` + `AdminCreateUser`, **not** `AdminDeleteUser`.
-
-**Owner call (i), 2026-08-24:** the portfolio/project **visibility cascade** is
-reopened from Out. One invariant — a `project` with a `portfolio_id` carries
-that `portfolio`'s `visibility` — covering the owner's three rules (inherit on
-create; promote a private project into an org portfolio; demote an org project
-that joins a private portfolio) and the three cases they left open (a portfolio
-visibility change cascades to its members; setting a project's visibility while
-it is in a portfolio is refused with both ways out named; removing from a
-portfolio changes nothing). **The rules are deterministic and nothing prompts**
-(owner, revised 2026-08-24): there is no `on_visibility_conflict` parameter and
-no `cascade` flag, and the surface states the outcome afterwards in one line
-instead of asking first. i.5 is the sole 409,
-because it alone would change rows the caller did not name. All paths are owner-only writes on both rows. Enforced in the
-write paths plus a property test; the invariant spans two tables so a CHECK
-cannot express it. Note "public" in product phrasing means `visibility='org'` —
-nothing here is internet-public, and the contract says `org`/`private` throughout.
-
-**Next slice after 033 — the rename** (owner, 2026-08-24): `project` → `task`
-and `portfolio` → `project`, standalone, mechanical, no behaviour change,
-retiring ADR 0031's vocabulary split. It touches ~249 files and breaks
-`/api/v1/projects/*` URLs and bookmarks, which is why it is its own slice and
-not folded into a Tier-4 tenancy diff. It must also cover the code 033 adds.
+**Owner calls carried into rev 3.0:** (a)-(d) from 2026-08-11 (app-owned
+ops-assigned membership; read-everything + own chats; per-row `visibility`; no
+enrolment backfill) and (e)-(i) from 2026-08-24 — portfolio takes the same
+tenancy grades; `is_admin` reads every row in every org including `private`,
+read-only; `app_user` stores the Cognito email with an admin `owner_email`
+filter; the CLI creates Cognito users but **deleting them is Out**, coupled to
+ownership transfer; and the portfolio/project invariant, deterministic with no
+prompts. **A standalone rename slice follows 033** (`project` → `task`,
+`portfolio` → `project`) and must cover this slice's code.
 
 Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55, `c6bf772`) — the app
 reshaped around one task and one lifecycle, with a named grouping above tasks:
