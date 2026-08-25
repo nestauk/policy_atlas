@@ -10,11 +10,17 @@ type PlanDraft = components["schemas"]["PlanDraft"];
 /**
  * Inline actions once the three planning steps are done: review in the plan
  * document, or start the search. Local plan edits apply on start, not on each save.
+ *
+ * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): starting a run
+ * is an owner-only mutation, so a non-owner sees "Review the plan" only —
+ * the read action stays, Start search hides (the same idiom
+ * `VisibilityControl` established, not a disabled button that would error).
  */
 export function PlanCard({
   projectId,
   runActive,
   started = false,
+  isOwner,
   onReviewPlan,
   overlay = {},
   onOverlayApplied,
@@ -22,6 +28,7 @@ export function PlanCard({
   projectId: string;
   runActive: boolean;
   started?: boolean;
+  isOwner: boolean;
   onReviewPlan?: () => void;
   overlay?: PlanOverlay;
   onOverlayApplied?: () => void;
@@ -43,10 +50,12 @@ export function PlanCard({
       <Button className="px-6 py-3.5 text-body" onClick={() => onReviewPlan?.()}>
         Review the plan
       </Button>
-      <Button className={cn(START_SEARCH_CLASS)} disabled={disabled} onClick={start}>
-        {label}
-      </Button>
-      {startNotice != null && (
+      {isOwner && (
+        <Button className={cn(START_SEARCH_CLASS)} disabled={disabled} onClick={start}>
+          {label}
+        </Button>
+      )}
+      {isOwner && startNotice != null && (
         <p role="alert" className="w-full text-body text-red">
           {startNotice}
         </p>

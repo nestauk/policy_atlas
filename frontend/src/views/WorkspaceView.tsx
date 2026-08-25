@@ -26,6 +26,13 @@ export function WorkspaceView() {
   useDocumentTitle(project.data?.name, "Plan");
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
+  // Task 033 phase 10c (contract § 11 / rubric 37) — the Plan route (this
+  // view) hosts every owner-only mutation surface and is never gated by
+  // `LifecycleRoute` (it's open at every run state), so `is_owner` is the
+  // only line of defence against a non-owner reaching them by address.
+  // Undefined while `project` is still loading reads as "not the owner" —
+  // fail closed, never grant the mutation surface before ownership is known.
+  const isOwner = project.data?.is_owner === true;
   const openPlan = () => {
     setPlanPlacement("center");
     setPlanOpen(true);
@@ -35,7 +42,10 @@ export function WorkspaceView() {
       projectId={projectId}
       placement={planPlacement}
       runActive={runActive}
-      readOnly={hasRun}
+      // The plan-start card (contract § 11 / rubric 37): folds `!isOwner`
+      // into the same `readOnly` prop that already hides Edit/Start once a
+      // run has consumed the plan — one mechanism, not a second gate.
+      readOnly={hasRun || !isOwner}
       onClose={() => setPlanOpen(false)}
       onDock={() => setPlanPlacement("side")}
       onStarted={() => {
@@ -65,6 +75,7 @@ export function WorkspaceView() {
           projectId={projectId}
           runStatus={stream.run?.status}
           stream={stream}
+          isOwner={isOwner}
           onReviewPlan={openPlan}
           planOverlay={planOverlay}
           onOverlayApplied={() => setPlanOverlay({})}

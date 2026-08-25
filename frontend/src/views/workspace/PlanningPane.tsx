@@ -79,6 +79,10 @@ export function threadInputs(
  * Args:
  *   runStatus: The project's current run status, or undefined before any run.
  *   planReady: True once the approved plan is ready to review and start.
+ *   isOwner: Steering is owner-only (task 033 phase 10c, contract § 11 /
+ *     rubric 37) — a non-owner always sees the same honest line, regardless
+ *     of run state, the same idiom the run-state copy already uses rather
+ *     than a "you cannot edit this" banner.
  *
  * Returns:
  *   Copy that matches the run and plan state.
@@ -86,7 +90,11 @@ export function threadInputs(
 export function planningComposerPlaceholder(
   runStatus: RunStatus | undefined,
   planReady = false,
+  isOwner = true,
 ): string {
+  if (!isOwner) {
+    return "Steering is limited to the project owner.";
+  }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
   }
@@ -398,6 +406,7 @@ export function PlanningPane({
   projectId,
   runStatus,
   stream,
+  isOwner,
   onReviewPlan,
   planOverlay,
   onOverlayApplied,
@@ -405,6 +414,12 @@ export function PlanningPane({
   projectId: string;
   runStatus: RunStatus | undefined;
   stream: RunStreamState;
+  /** Steering is owner-only (task 033 phase 10c, contract § 11 / rubric 37):
+   *  gates the composer, retry controls, suggestion chips, the plan-ready
+   *  card's Start action and the check-in card. Required, not defaulted —
+   *  a forgotten prop must fail closed to read-only, never silently grant
+   *  every colleague the owner's mutation surface. */
+  isOwner: boolean;
   onReviewPlan?: () => void;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
@@ -436,7 +451,11 @@ export function PlanningPane({
   const partStates = derivePartStates(durableTurns);
 
   const runActive = runStatus === "running" || runStatus === "paused";
-  const composerDisabled = runActive || transcript.isSubmitting;
+  // `!isOwner` folds into the same `composerDisabled` flag that already
+  // disables the composer, DurableTurn's retry button and PartCard's options
+  // during an active run (task 033 phase 10c, contract § 11 / rubric 37) —
+  // one mechanism, not a second parallel disabled path.
+  const composerDisabled = runActive || transcript.isSubmitting || !isOwner;
 
   // Chat scroll: pinned to the bottom (newest messages) unless the user has
   // scrolled up to read history; new content re-pins only when near-bottom.
@@ -616,7 +635,7 @@ export function PlanningPane({
               />
             );
           return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" projectId={projectId} runActive={runActive} started={planStarted} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
+            ? [rendered, <PlanCard key="plan-card" projectId={projectId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
             : [rendered];
         })}
 
@@ -666,7 +685,10 @@ export function PlanningPane({
           </div>
         )}
 
-        {suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
+        {/* Suggestion chips send a planning turn (task 033 phase 10c,
+            contract § 11 / rubric 37) — owner-only, hidden for a colleague
+            rather than left clickable to a 403. */}
+        {isOwner && suggestions.length > 0 && !transcript.isSubmitting && !runActive && (
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map((suggestion) => (
               <button
@@ -687,6 +709,7 @@ export function PlanningPane({
             projectId={projectId}
             checkIn={stream.pendingCheckIn}
             stages={stream.stages}
+            isOwner={isOwner}
           />
         )}
         {liveCard !== null && !threadHasLiveRun && (
@@ -718,8 +741,8 @@ export function PlanningPane({
           value={message}
           onChange={setMessage}
           onSubmit={() => send({ message, clientTurnId: crypto.randomUUID() })}
-          placeholder={planningComposerPlaceholder(runStatus, planReady)}
-          disabled={runActive}
+          placeholder={planningComposerPlaceholder(runStatus, planReady, isOwner)}
+          disabled={runActive || !isOwner}
           sendDisabled={composerDisabled}
         />
         </div>

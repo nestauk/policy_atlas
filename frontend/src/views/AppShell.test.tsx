@@ -127,6 +127,33 @@ describe("AppShell — the check-in banner is owner-scoped (task 033 phase 10b, 
   });
 });
 
+describe("AppShell — the project-settings popover (task 033 phase 10c, contract § 11 / rubric 37)", () => {
+  beforeEach(() => {
+    authState.signOut.mockClear();
+  });
+
+  async function openProjectSettings() {
+    const user = userEvent.setup();
+    renderShell(`/projects/${PROJECT_ID}`);
+    await user.click(screen.getByRole("button", { name: "Project settings" }));
+    return user;
+  }
+
+  it("owner: shows Rename and Archive", async () => {
+    projectState.isOwner = true;
+    await openProjectSettings();
+    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
+  });
+
+  it("non-owner: hides Rename and Archive rather than leaving them clickable to an error", async () => {
+    projectState.isOwner = false;
+    await openProjectSettings();
+    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
+  });
+});
+
 describe("AppShell — global chrome", () => {
   beforeEach(() => {
     authState.signOut.mockClear();

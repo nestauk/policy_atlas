@@ -161,13 +161,21 @@ function ProjectSettingsMenu({
           </form>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-            >
-              Rename
-            </button>
+            {/* Rename and archive are owner-only mutations (task 033 phase
+                10c, contract § 11 / rubric 37) — hidden entirely for a
+                non-owner, the same idiom `VisibilityControl` already
+                established for visibility. Rev 1 of this menu shipped these
+                ungated: a colleague would see Rename, click, and get "The
+                project couldn't be renamed." */}
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
+              >
+                Rename
+              </button>
+            )}
             {me.data?.organisation != null && (
               <VisibilityControl
                 visibility={visibility}
@@ -177,46 +185,47 @@ function ProjectSettingsMenu({
                 className="block w-full justify-start px-0 py-0 text-left text-meta font-semibold text-navy hover:text-blue"
               />
             )}
-            {archive.isError && (
+            {isOwner && archive.isError && (
               <p role="alert" className="text-body text-red">
                 The project couldn't be archived. Try again.
               </p>
             )}
-            {confirmingArchive ? (
-              <div className="space-y-2 text-body text-grey">
-                <p>Archiving removes this project from your active projects.</p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={archive.isPending}
-                    onClick={() =>
-                      archive.mutate(undefined, {
-                        onSuccess: () => setOpen(false),
-                        onError: () =>
-                          toast.toast({
-                            title: "Archive failed",
-                            description: "The project couldn't be archived. Try again.",
-                            tone: "error",
-                          }),
-                      })
-                    }
-                  >
-                    Confirm archive
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
-                    Cancel
-                  </Button>
+            {isOwner &&
+              (confirmingArchive ? (
+                <div className="space-y-2 text-body text-grey">
+                  <p>Archiving removes this project from your active projects.</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={archive.isPending}
+                      onClick={() =>
+                        archive.mutate(undefined, {
+                          onSuccess: () => setOpen(false),
+                          onError: () =>
+                            toast.toast({
+                              title: "Archive failed",
+                              description: "The project couldn't be archived. Try again.",
+                              tone: "error",
+                            }),
+                        })
+                      }
+                    >
+                      Confirm archive
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingArchive(true)}
-                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-              >
-                Archive
-              </button>
-            )}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingArchive(true)}
+                  className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
+                >
+                  Archive
+                </button>
+              ))}
           </>
         )}
       </PopoverContent>
@@ -430,7 +439,7 @@ export function AppShell() {
                   out the rest of the shell (nav, the routed view). */}
               {showChatPanel && (
                 <ErrorBoundary key={projectId}>
-                  <ChatSidePanel projectId={projectId ?? ""} />
+                  <ChatSidePanel projectId={projectId ?? ""} isOwner={isOwner} />
                 </ErrorBoundary>
               )}
               <div

@@ -43,7 +43,13 @@ vi.mock("./ChatPane", () => ({
   ChatPane: ({ conversationId }: { conversationId: string }) => <div data-testid="chat-pane">{conversationId}</div>,
 }));
 vi.mock("../PlanningPane", () => ({
-  PlanningPane: () => <div data-testid="planning-pane" />,
+  // Task 033 phase 10c (contract § 11 / rubric 37): echoes the prop back so
+  // the "ChatSidePanel duplicate" the rubric names can be checked for
+  // threading `isOwner` through to the planning surface without re-testing
+  // PlanningPane's own read-only rendering here (that's PlanningPane.test.tsx).
+  PlanningPane: ({ isOwner }: { isOwner: boolean }) => (
+    <div data-testid="planning-pane" data-is-owner={String(isOwner)} />
+  ),
 }));
 vi.mock("./ChatsLibrary", () => ({
   ChatsLibrary: ({ open }: { open: boolean }) => (open ? <div data-testid="library" /> : null),
@@ -61,7 +67,7 @@ describe("ChatSidePanel", () => {
   it("renders the edge toggle when closed and opens the latest chat", async () => {
     state.activeConversationId = null;
     const user = userEvent.setup();
-    render(<ChatSidePanel projectId="p1" />);
+    render(<ChatSidePanel projectId="p1" isOwner />);
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open chat" }));
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
@@ -72,7 +78,7 @@ describe("ChatSidePanel", () => {
     state.activeConversationId = null;
     state.chatsResolved = false;
     const user = userEvent.setup();
-    render(<ChatSidePanel projectId="p1" />);
+    render(<ChatSidePanel projectId="p1" isOwner />);
     const launcher = screen.getByRole("button", { name: "Open chat" });
     expect(launcher).toBeDisabled();
     await user.click(launcher);
@@ -84,7 +90,7 @@ describe("ChatSidePanel", () => {
     state.activeConversationId = null;
     state.rows = [PLAN_ROW, CHAT_ROW];
     const user = userEvent.setup();
-    render(<ChatSidePanel projectId="p1" />);
+    render(<ChatSidePanel projectId="p1" isOwner />);
     await user.click(screen.getByRole("button", { name: "Open chat" }));
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
     expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
@@ -94,7 +100,7 @@ describe("ChatSidePanel", () => {
     state.activeConversationId = null;
     state.rows = [PLAN_ROW];
     const user = userEvent.setup();
-    render(<ChatSidePanel projectId="p1" />);
+    render(<ChatSidePanel projectId="p1" isOwner />);
     await user.click(screen.getByRole("button", { name: "Open chat" }));
     expect(state.create).toHaveBeenCalledWith(null);
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c-new");
@@ -104,7 +110,7 @@ describe("ChatSidePanel", () => {
   it("renders the open panel with the conversation strip when the URL names a chat", async () => {
     state.activeConversationId = "c1";
     const user = userEvent.setup();
-    render(<ChatSidePanel projectId="p1" />);
+    render(<ChatSidePanel projectId="p1" isOwner />);
     expect(screen.getByRole("complementary", { name: "Project chat" })).toBeInTheDocument();
     expect(screen.getByTestId("chat-pane")).toHaveTextContent("c1");
     expect(screen.getByRole("button", { name: "Planning" })).toBeInTheDocument();
@@ -117,8 +123,15 @@ describe("ChatSidePanel", () => {
   it("shows the planning thread when the strip's Planning tab is selected", () => {
     state.activeConversationId = "plan-1";
     state.rows = [PLAN_ROW, CHAT_ROW];
-    render(<ChatSidePanel projectId="p1" />);
+    render(<ChatSidePanel projectId="p1" isOwner />);
     expect(screen.getByTestId("planning-pane")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  it("threads isOwner=false into the planning duplicate (task 033 phase 10c, contract § 11 / rubric 37)", () => {
+    state.activeConversationId = "plan-1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    render(<ChatSidePanel projectId="p1" isOwner={false} />);
+    expect(screen.getByTestId("planning-pane")).toHaveAttribute("data-is-owner", "false");
   });
 });
