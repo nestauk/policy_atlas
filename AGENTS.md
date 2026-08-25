@@ -22,21 +22,29 @@
 - Touch only what the task requires.
 
 # Current phase
-**DESIGN COMPLETE — task `033-organisations` is ready to build.** Contract rev 3.0
-APPROVED · rubric (42 items) · plan rev 2.0 APPROVED · **ADR 0032 Accepted**
-(all 2026-08-24; steps 1–4 done). **Next: open conversation B and run
-`task-cycle-build` for steps 5–6.** The review stack (steps 7–10) must then run
-in a *third* conversation — the adjudicator of findings must not be the chat
-that wrote the code. (branch `task/033-organisations`, cut fresh from `dev`
-`b8729a5`): users belong to an organisation and see, by default, their own work
-plus their org's org-visible work, read-only, with their own chats on it. A few
-ops-assigned administrators read across every organisation for support, writing
-nothing, every read traced. Contract: `docs/tasks/033-organisations/contract.md`;
-Sixteen phases (0, 0b, 1–12 with 9 and 10 split). The three approval-gated
-phases (schema · auth semantics · public API) run **first**, so a refused gate
-surfaces before code is built on it; the ops CLI carries three more gates
-(`boto3`+stubs, the `Dockerfile` change, Cognito account creation). **Tier 4.** ADR 0032 expected (and must record that it
-amends ADR 0031 decision 4).
+**BUILD COMPLETE (steps 5–6, 2026-08-25) — task `033-organisations` is ready
+for the review stack.** All sixteen phases implemented and committed on
+`task/033-organisations`; exit gate green (`make verify` 2327 backend + 460
+frontend, `make audit`, `make drift-check`, `pnpm e2e` all pass);
+`docs/tasks/033-organisations/verification.md` complete. **Next: a FRESH
+conversation runs `task-cycle-review` (steps 7–10)** — the adjudicator of
+findings must not be the chat that wrote the code. The security lane runs as
+**three scoped passes** (tenancy boundary · privileged read + audit · operator
+CLI), and the heterogeneous peer lane goes to Codex (no non-Claude model has
+read this slice). **Tier 4.**
+
+**Open items the review and merge must carry** (detail + exact commands in
+`verification.md` § Known unverified): the built-image boto3 check (Docker
+daemon here has no registry egress); the staging httpx INFO check and the
+backfill rehearsal (AWS SSO expired — `aws sso login --profile pa-dev`); the
+attended staging live check (needs a deliverable mailbox; **no enrolment
+before the CloudFront invalidation completes**); **DPIA screening +
+processing-record update — required before merge**; and the three
+privacy-notice discrepancies escalated verbatim in `verification.md` (while
+they stand, the admin leg's only control is the trace log — state this in the
+PR). Owner decisions surfaced by the build: the org-less-admin CLI gap
+(Phase 9b escalation) and the "admin in a third org" reading of the live
+check.
 
 **Contract-stage adversarial review ran 2026-08-24** across three lanes —
 tenancy/authorization, scope/coherence, and Codex as the heterogeneous peer. All

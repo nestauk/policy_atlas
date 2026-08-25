@@ -1,14 +1,24 @@
 # Verification: 033-organisations
 
-> **Status: IN PROGRESS — build phase (steps 5–6).** Assembled incrementally at each
-> phase commit; complete only at the Phase 12 exit gate.
+> **Status: BUILD COMPLETE (steps 5–6), 2026-08-25.** All sixteen phases
+> implemented and committed; every locally runnable gate green. Six items are
+> named in § Known unverified — four blocked on this machine/AWS access, two
+> owner-side (DPIA; the attended live check). Review (steps 7–10) runs in a
+> fresh conversation.
 
-## Commands run
+## Commands run (exit gate, 2026-08-25, final tree)
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make verify` (baseline, Phase 0) | pass | Third run; see the baseline note below. |
-| `make verify` (Phase 0b in tree) | pass | Backend 2170 passed · typecheck · lint · frontend build green. |
+| `make verify` | **pass** (exit 0) | okf 120/0 · backend **2327 passed** · mypy 291 files clean · ruff clean · infra 46 · audit-paths/prompt-guard/font-guard · drift-check OK · frontend **460 passed** (66 files) · build ✓ |
+| `make audit` | **pass** | pip-audit: no known vulnerabilities; the `ops` group in scope (Phase 9a evidence: 125 packages audited) |
+| `make drift-check` | **pass** | generated files match `make openapi-sync` output |
+| `pnpm e2e` | **pass** | 11/11 mock journeys |
+| `fe-api-smoke` | CI-only | needs live backend credentials locally |
+
+Earlier per-phase gate runs are recorded in § Phase evidence (full `make
+verify` at Phases 0/0b, 1, 3, 9a per the plan's gate map; verify-fast at the
+intermediate phases; frontend-verify at 10a/10b/10c).
 
 **Baseline note (Phase 0).** The first two full-verify runs were red (45, then 4
 failures) from *test contention*, not the tree: a delegated agent ran pytest against the
@@ -440,9 +450,103 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 
 ## Diff summary
 
-(Assembled per phase; final pass at Phase 12.)
+One slice, sixteen phases, committed per phase on `task/033-organisations`.
+What changed, in one read:
 
-- Phase 0b: `create_app` wires `configure_logging()`; one new test.
+- **Schema** (`a4f1c8e3b6d2`): `organisation` + `app_user`; `org_id` +
+  `visibility` on `project`/`portfolio` with CHECKs and org-leg indexes;
+  `conversation.created_by` backfilled from the owning project's owner; 5s
+  lock timeout both directions.
+- **Access**: one graded helper (`_access.py`) — read = owner ∪ same-org ∪
+  admin, write = owner only; the org leg is a correlated-`EXISTS` SQL
+  predicate (the NULL rule); `for_update ⇒ write ⇒ owner`. All 19 sites plus
+  the conversation-id router resolve through it; the transcript deep link is
+  closed; the old helpers are gone.
+- **Chats**: the three colleague mutations exactly; own-conversation rule with
+  the legacy-NULL disjunct; cap + sweeper re-keyed together to the acting
+  user; chat paths lock the conversation row, never the owner's project.
+- **SSE**: the tail re-authorises per poll through the same predicate as the
+  snapshot and closes on all four revocation events.
+- **Invariant**: i.1–i.6 over both `visibility` and `org_id`; the cascade is
+  the sole writer of `portfolio.visibility`; property pinned by a fixed-seed
+  90-op walk.
+- **Admin**: one read-only global boolean; leg detection in one query; traced
+  at the contract's grain (`admin_read`/`admin_listing`/`admin_stream_read`)
+  including zero-result searches; four named readers pinned by AST.
+- **API**: `/me` (DO NOTHING upsert), `scope`/`portfolio_id`/`owner_email`,
+  `visibility`/`is_owner`/`owner_display`, `from_project_id`, 403
+  `forbidden` + 409 `visibility_conflict`.
+- **Ops**: `policy_atlas.ops` CLI (create/enrol/resync/de-enrol/assign/
+  grant/revoke) with the three-leg environment guard, FOR UPDATE
+  concurrency, EMAIL delivery medium, no password path, no delete path; the
+  three legacy make targets deleted; `ops` dependency group excluded from
+  the image by both Dockerfile sync lines.
+- **Frontend**: useMe + scoped query keys + portfolio_id filter +
+  cross-family invalidation; the switcher (dark-launch hidden), account
+  menu, owner-scoped check-in banner, outcome copy; the read-only affordance
+  matrix component by component with the URL leg.
+- **Records**: spec flow-back (web-api, data-model, JUMPBOX, DEPLOYMENT,
+  deferred); ADR 0032 drift-checked, no drift.
+
+Per-phase detail, deviations and executor provenance: § Phase evidence above.
+
+## End-to-end command
+
+The backend tenancy flow, end to end against the real API and database
+(two enrolled users + an admin, exercised over HTTP through the app):
+
+```bash
+cd backend && DATABASE_URL="postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test" \
+  uv run pytest tests/api/test_route_grades.py tests/api/test_admin_leg.py \
+  tests/api/test_visibility_invariant.py tests/api/test_sse.py -q
+```
+
+The frontend journey, end to end in mock mode (the CI mock journey):
+
+```bash
+cd frontend && pnpm e2e
+```
+
+The staging live check (contract § Acceptance, last row) is **not run** —
+see Known unverified items.
+
+## Privacy-notice escalation (rubric 34 — open, addressed to the notice's owner)
+
+`PrivacyView.tsx` is unmodified by this branch (verified:
+`git diff dev...HEAD -- frontend/src/views/legal/PrivacyView.tsx` is empty —
+rubric 33). The three discrepancies stand in the live page and are escalated
+here verbatim, **open**, to the owner of the privacy notice (the page names a
+Data Protection Officer):
+
+1. **§ 3 — the "only identifier" claim.** The page says: *"Email Address:
+   This is the only user-specific identifier we store. It serves the
+   essential purpose of linking your search activity to your account…"*
+   Before 033 the database stored no email at all and did store the Cognito
+   `sub`; after 033 the email is real (ops-entered), which removes half the
+   inaccuracy and leaves the "only" claim wrong — the `sub` and
+   `display_name` are also stored.
+2. **§ 6 — silence on administrator access.** The data-storage section
+   (*"your user email, search queries, and search results are stored in
+   Amazon Aurora PostgreSQL…"*) does not mention that ops-assigned
+   administrators can read every row in every organisation, `private`
+   included (owner call (f)). **Consequence, carried not re-argued: while
+   this stands, the admin leg's only control is the trace log** (rubric 35 —
+   this sentence must also appear in the PR).
+3. **§ 7 — a promise the system cannot keep.** The page says: *"Upon the
+   conclusion of the pilot (or upon your request), your personal data will
+   be permanently deleted from our Amazon Aurora PostgreSQL database."*
+   De-enrolment keeps every Task, query, result and transcript, keeps the
+   `sub`, leaves the Cognito account untouched, and Aurora keeps seven days
+   of backups. No lever this slice ships performs that erasure.
+
+Also recorded in `docs/deferred.md` § Task lifecycle IA (the standing
+discrepancies entry), so the escalation cannot be lost.
+
+**DPIA screening and processing-record update: NOT DONE — required before
+merge (rubric 36).** These are governance artefacts owned outside this
+build; flagged to the owner. Log-group retention (`ONE_MONTH`,
+`policy_atlas_stack.py:109`) is recorded as the bound on how far back an
+admin-access investigation can look.
 
 ## Deviations flagged (minor, resolved within the contract's vocabulary)
 
@@ -456,18 +560,79 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 
 ## Intent & assumptions
 
-## Known unverified items
+- Contract rev 3.0 and plan rev 2.0 followed as written; every deviation is
+  flagged in § Phase evidence (all minor, resolved within the contract's own
+  vocabulary — the largest being `cache_logger_on_first_use` and the
+  own-chats filter landing one phase early).
+- The live check's "third admin in neither org" is read as satisfiable by
+  enrolling the admin into a third organisation (see the Phase 9b
+  escalation) — an owner call before the live check runs.
 
-- Staging httpx INFO line check (rubric 15a) — deferred to Phase 12 live checks.
+## Known unverified items (each with the exact command for the machine that can run it)
+
+1. **The built-image boto3 check (rubric 21).** The Docker daemon on this
+   machine has no registry egress (pulls hang; host curl reaches the
+   registries fine), so the check ran as the image's exact `uv sync` command
+   against a throwaway environment instead (boto3 absent, `create_app`
+   imports — Phase 9a evidence). Re-run on a working machine:
+   `docker build --platform linux/amd64 -t pa-img backend/ &&
+   docker run --rm pa-img python -c "import boto3"` (expect
+   `ModuleNotFoundError`) `&& docker run --rm pa-img python -c
+   "from policy_atlas.api.app import create_app"` (expect success).
+   The local BuildKit cache was pruned during diagnosis — the next build
+   here starts cold, and the staging deploy is blocked on daemon networking.
+2. **The staging httpx INFO check (rubric 15a).** AWS SSO is expired
+   (`aws sso login --profile pa-dev` needed). Then:
+   `aws logs filter-log-events --log-group-name /policy_atlas_v3/application
+   --filter-pattern '"HTTP Request:"' --profile pa-dev --max-items 5` —
+   any hit is a credential exposure (search-provider `api_key` rides the
+   query string) and its own escalation.
+3. **The production-scale backfill rehearsal (rubric 31).** Needs the staging
+   tunnel (SSO): measure the 033 migration's DDL + backfill duration against
+   representative row counts, the blocker preflight query, and the lock-
+   timeout behaviour, with a success budget against the deploy outage window.
+4. **The staging deploy + live check** (contract § Acceptance, last row):
+   pinned five-step order; needs a real deliverable mailbox (the pool has no
+   `EmailConfiguration` — 50/day `COGNITO_DEFAULT` sender); the rollout gate
+   holds — **no enrolment before `publish_frontend`'s CloudFront invalidation
+   completes** (`deploy.sh` scales the backend up first, and enrolling in
+   that window activates org listings for clients on the old bundle); the
+   first organisation is an attended canary.
+5. **`fe-api-smoke`** — CI-only locally (needs live backend credentials the
+   sandbox denies); runs in CI.
+6. **DPIA screening + processing-record update (rubric 36)** — owner-side
+   governance artefacts, required before merge.
 
 ## Public safety
 
-Nothing sensitive added so far: no real subs, no addresses, no org names.
+Safe to publish: fixtures use synthetic subs and uuid-suffixed org names; no
+real addresses, no staging org names, no secrets or allowlists committed; the
+privacy-notice quotes above are from the already-public page; no account ids
+in committed infra config (env-injected per the 026 decision).
 
 ## Review handoff (step-7/8 inputs)
 
-Executor provenance so far: Phase 0 route inventory — fast-worker; Phase 0b — fast-worker
-(lead root-caused and fixed the capture_logs interaction); Phase 1 — deep-reasoner.
+**Executor provenance (for the family flip):** Phases 0, 0b, 4, 10a, 10b, 10c —
+fast-worker (Sonnet); Phases 1, 2, 3, 5, 6, 7, 8, 9a, 9b — deep-reasoner (Opus);
+Phase 4's grade/lock tables, Phase 10b's copy strings, the Phase 5
+`_graded_conversation` leak fix, and Phase 11 — lead (Fable). Codex was not used
+(no budget constraint arose). No non-Claude model has read this slice — route
+the heterogeneous peer lane to Codex at step 7.
+
+**Adjudication items for the review conversation:**
+- The flagged deviations in § Phase evidence (cache flag; own-chats filter
+  timing; org stamping pulled forward; portfolio-visibility sequencing;
+  `update_project` early cutover).
+- The Phase 9b escalation (org-less admin) and the Phase 9a image-check gap.
+- The security lane runs as **three scoped passes** (tenancy boundary ·
+  privileged read + audit · operator CLI) — priced into the contract.
+- Diff-scoping: exclude `frontend/openapi.json` and
+  `frontend/src/api/gen/types.ts` (generated), `uv.lock` (lock churn), and
+  `docs/tasks/033-organisations/route-inventory.md` (evidence) from review
+  diffs.
+- Review-focus pointers from the contract § Review focus all have named tests;
+  `test_route_grades.py`, `test_admin_leg.py`, `test_visibility_invariant.py`,
+  `test_sse.py`, `tests/ops/` are the tenancy surface.
 
 - **Knowledge candidates** (running list, one bullet per durable-seeming lesson):
   - `structlog.configure(cache_logger_on_first_use=True)` and
@@ -491,7 +656,41 @@ Executor provenance so far: Phase 0 route inventory — fast-worker; Phase 0b �
   - Alembic roundtrip tests run on their own connection, so the `conn` fixture's
     rollback cannot clean their seeds — commit outside the fixture and delete in
     `finally`, then verify zero residue.
+  - SQLAlchemy renders a correlated `EXISTS` as a **cross join** unless
+    `.correlate(table)` is explicit — and a cross-joined org leg is true for any
+    row in any org. Pin compiled SQL structurally when the predicate is the
+    security boundary.
+  - A bare `.with_for_update()` on a joined statement locks every joined row —
+    `of=<table>` is load-bearing wherever the contract forbids locking the other
+    table (found twice: the turn reservation and `_graded_conversation`).
+  - `uv run` re-syncs the environment to `[tool.uv] default-groups` on every
+    invocation, silently undoing any one-off `uv sync --group X` — a CI group
+    must live in `default-groups`, not in an install step.
+  - `structlog.testing.capture_logs` + `botocore.stub.Stubber` beats hand-rolled
+    fakes: Stubber validates params against the real service model (it caught
+    the SMS-default nuance of `DesiredDeliveryMediums`).
+  - "Widen a listing's grade" and "add the listing's row filter" must land
+    together or colleagues see the owner's rows for the window between — the
+    same lesson as re-keying the cap and sweeper together.
+  - The lock a path takes is part of its tenancy design: the pre-033 project
+    lock on chat paths protected nothing the conversation row could not, and
+    the `run_active` fence it appeared to protect was already best-effort
+    (create_run commits before its executor inserts the running row).
+  - An ownership-blind SSE store field (`stream.pendingCheckIn`) rendered a
+    steering surface to colleagues — any frontend state fed by a stream needs
+    the same ownership gate as the components that read it.
+  - Deterministic property walks (fixed seed, ops × assertions after every op,
+    breach check in SQL) are a workable substitute where hypothesis is not a
+    dependency — and mutation-testing the walk is what makes it trustworthy.
+  - Background subagents on this infra die on transient API errors mid-phase;
+    SendMessage-resume with "re-anchor via git diff" recovers them losslessly.
+    Budget for it on long phases.
 
 ## Deferred work
 
-(Collected at Phase 11 into docs/deferred.md.)
+Landed in [docs/deferred.md](../../deferred.md): the design-time 033 entries
+(rename slice · MFA · user deletion + ownership transfer · privacy-notice
+discrepancies · org capacity policy · resync automation · NULL-owner rows ·
+admin surface) plus the build seams (§ Organisations: org-less admin CLI gap ·
+`PortfolioOut` last-updated field · `admin_stream_read` volume · RunPane dead
+code · ops CLI rename coverage). The mock-API portfolio entry is discharged.
