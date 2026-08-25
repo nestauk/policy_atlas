@@ -98,3 +98,32 @@ dev = [
     "pytest-socket>=0.8.0",
 ]
 
+# Task 033 (approved dependency gate, contract rev 3.0 § 10): the operator CLI's
+# only dependency. It is a SEPARATE group from `dev` for one reason — the runtime
+# image must not carry it (`backend/Dockerfile` passes `--no-group ops`), while
+# tests, strict mypy and `make audit` must all still see it. A group that is
+# merely undeclared-by-default fails all three: the CLI's tests fail at import,
+# mypy strict errors on `import boto3`, and pip-audit never scans it.
+# `boto3-stubs[cognito-idp]` lives in the SAME group: boto3 ships no inline types,
+# so strict mypy needs the stubs wherever the CLI code is checked, and the stub
+# release train is versioned in lockstep with boto3 — split them across groups and
+# an image build that drops one keeps the other.
+# >=1.43: what this slice resolved and ran against; <2: the ops-egress SDK (it
+# calls AdminCreateUser against the real identity provider) must not cross a major
+# on a lock regen — the same rule applied to openai/langfuse above.
+ops = [
+    "boto3>=1.43,<2",
+    "boto3-stubs[cognito-idp]>=1.43,<2",
+]
+
+[tool.uv]
+# `ops` must be installed by default, not only on request. `uv run` re-syncs the
+# project environment to the default groups on every invocation, so a
+# `uv sync --group ops` in the Makefile would be silently undone by the very next
+# `uv run mypy` / `uv run pytest` / `uv run pip-audit`. Declaring it here is what
+# makes the group reach local dev AND CI (`make setup` is a bare `uv sync`; the
+# `audit` job runs `uv run --with pip-audit`) without touching a workflow file.
+# The image opts OUT explicitly instead — see `--no-group ops` in backend/Dockerfile.
+# `dev` must be listed too: naming this key replaces uv's implicit default of ["dev"].
+default-groups = ["dev", "ops"]
+

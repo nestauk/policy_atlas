@@ -280,6 +280,33 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   `admin grant` / `admin revoke`, and § 3a's operator-side grant/revoke trace
   (naming operator, subject and direction) is 9b's, not this phase's.
 
+### Phase 8 — Admin leg, trace and the closed-list assertion
+- `admin_read_leg` joins `_read_legs` as the third disjunct — the one seam, so item
+  routes, listings, and SSE snapshot **and** tail gained it in one edit;
+  `own_estate`/`chat_mutable_project` stay admin-free by design, so an admin is
+  refused every mutation including chat (403 on graded writes; 404 on the
+  conversation-id router, which spends no 403). `_graded_conversation`'s `write`
+  parameter finally diverges: the admin leg exists on its read path only.
+- Leg detection is one query: the own-grade predicate selected as a boolean column
+  beside the row; `via_admin` is its negation; `for_update` paths skip it (owner-
+  bounded). `may_read_project` → `ReadCheck`; `listing_scope` → `ListingScope`.
+- Trace shapes (all emitted from `_access.py`; `_resolve` emits `admin_read` itself
+  so a route cannot forget): `admin_read {user_id, kind, row_id}` per row incl. SSE
+  subscribe · `admin_listing {…filter, page, row_count…}` per cross-org request,
+  zero-result included, `owner_email` logged verbatim (it is the audit subject) ·
+  `admin_stream_read` per SSE re-auth batch, never per frame. **Volume note for
+  Phase 12:** an idle admin stream emits ~2.5 trace lines/s at the 0.4s poll —
+  the lever is the poll interval, not the grain.
+- Judgment: a 403'd admin mutation attempt **does** emit `admin_read` — the leg
+  disclosed the row's existence, and attempts belong in the trail.
+- Closed list at code level, pinned by AST walk (prose references excluded):
+  `_access.admin_read_leg`, `_access._is_admin`, `me.get_me`, `contract.tenancy
+  .MeOut`; plus the no-write assertion on the column under `api/`.
+- SSE event 4 (admin revoke closing a stream) now real; Phase 7's handoff
+  discharged (`test_the_cascade_is_refused_to_an_out_of_organisation_administrator`).
+- 15 new tests. verify-fast 2282 green; drift-check OK (description-only drift
+  re-synced).
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)
