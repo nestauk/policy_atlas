@@ -1,11 +1,15 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as mutations from "../api/mutations";
 import * as queries from "../api/queries";
+import { ToastProvider } from "../ui/radix/Toast";
 import { PortfolioDetailView, PortfoliosView } from "./PortfoliosView";
 
 vi.mock("../api/queries", () => ({
+  useMe: vi.fn(),
   usePortfolio: vi.fn(),
   usePortfolios: vi.fn(),
   useProjects: vi.fn(),
@@ -13,24 +17,53 @@ vi.mock("../api/queries", () => ({
 
 vi.mock("../api/mutations", () => ({
   useCreatePortfolio: vi.fn(),
+  useUpdatePortfolio: vi.fn(),
 }));
 
 const PORTFOLIO_ID = "portfolio-1";
 
 function renderDetail(portfolioId = PORTFOLIO_ID) {
   return render(
-    <MemoryRouter initialEntries={[`/portfolios/${portfolioId}`]}>
-      <Routes>
-        <Route path="/portfolios/:portfolioId" element={<PortfolioDetailView />} />
-      </Routes>
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter initialEntries={[`/portfolios/${portfolioId}`]}>
+        <Routes>
+          <Route path="/portfolios/:portfolioId" element={<PortfolioDetailView />} />
+        </Routes>
+      </MemoryRouter>
+    </ToastProvider>,
+  );
+}
+
+function renderList() {
+  return render(
+    <ToastProvider>
+      <MemoryRouter>
+        <PortfoliosView />
+      </MemoryRouter>
+    </ToastProvider>,
   );
 }
 
 beforeEach(() => {
+  // Unenrolled default (task 033 phase 10b dark launch) — every pre-033 test
+  // in this file keeps seeing no switcher and no owner column unless a test
+  // below opts into an organisation explicitly.
+  vi.mocked(queries.useMe).mockReturnValue(
+    { data: { user_id: "u1", display_name: "Ada Lovelace", organisation: null, is_admin: false } } as unknown as ReturnType<
+      typeof queries.useMe
+    >,
+  );
   vi.mocked(queries.usePortfolio).mockReturnValue(
     {
-      data: { portfolio_id: PORTFOLIO_ID, name: "Housing", description: null },
+      data: {
+        portfolio_id: PORTFOLIO_ID,
+        name: "Housing",
+        description: null,
+        visibility: "org",
+        is_owner: true,
+        owner_display: "Ada Lovelace",
+        task_count: 0,
+      },
       isPending: false,
       isError: false,
     } as unknown as ReturnType<typeof queries.usePortfolio>,
@@ -42,6 +75,9 @@ beforeEach(() => {
   );
   vi.mocked(queries.usePortfolios).mockReturnValue(
     { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.usePortfolios>,
+  );
+  vi.mocked(mutations.useUpdatePortfolio).mockReturnValue(
+    { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdatePortfolio>,
   );
 });
 
@@ -58,11 +94,153 @@ describe("PortfolioDetailView — the portfolio_id filter (task 033 phase 10a)",
 
 describe("PortfoliosView — the projects-overview page size (task 033 phase 10a)", () => {
   it("raises the global projects page beyond the 50-row default, since PortfolioOut carries no last-task-updated field to use instead", () => {
-    render(
-      <MemoryRouter>
-        <PortfoliosView />
-      </MemoryRouter>,
-    );
+    renderList();
     expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200 });
+  });
+});
+
+describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)", () => {
+  it("rubric 14 dark launch: hides the switcher when /me has no organisation", () => {
+    renderList();
+    expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
+    // The unenrolled call shape must stay exactly what it was pre-033.
+    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200 });
+    expect(queries.useProjects).not.toHaveBeenCalledWith(
+      expect.objectContaining({ scope: expect.anything() }),
+    );
+  });
+
+  it("shows the switcher when enrolled, defaulting to Organisation, and drives scope", async () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "u1",
+          display_name: "Ada Lovelace",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: false,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    const user = userEvent.setup();
+    renderList();
+    expect(queries.usePortfolios).toHaveBeenCalledWith({ scope: "all" });
+    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200, scope: "all" });
+
+    await user.click(screen.getByRole("tab", { name: "Mine" }));
+    expect(queries.usePortfolios).toHaveBeenCalledWith({ scope: "mine" });
+    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200, scope: "mine" });
+  });
+
+  it("shows the admin wider-list notice only for admin + Organisation scope", () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "admin-1",
+          display_name: "Admin",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: true,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    renderList();
+    expect(screen.getByText("Showing every organisation.")).toBeInTheDocument();
+  });
+
+  it("does not show the admin notice for a non-admin, even with the switcher visible", () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "u1",
+          display_name: "Ada Lovelace",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: false,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    renderList();
+    expect(screen.queryByText("Showing every organisation.")).not.toBeInTheDocument();
+  });
+
+  it("renders a null owner_display as 'No organisation' on the admin wide list", () => {
+    vi.mocked(queries.useMe).mockReturnValue(
+      {
+        data: {
+          user_id: "admin-1",
+          display_name: "Admin",
+          organisation: { org_id: "org-1", name: "Dept" },
+          is_admin: true,
+        },
+      } as unknown as ReturnType<typeof queries.useMe>,
+    );
+    vi.mocked(queries.usePortfolios).mockReturnValue(
+      {
+        data: {
+          data: [
+            {
+              portfolio_id: "orphan-1",
+              name: "Orphan project",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              visibility: "org",
+              is_owner: false,
+              owner_display: null,
+            },
+          ],
+        },
+        isPending: false,
+      } as unknown as ReturnType<typeof queries.usePortfolios>,
+    );
+    renderList();
+    expect(screen.getByText("No organisation")).toBeInTheDocument();
+  });
+});
+
+describe("PortfolioDetailView — the visibility-outcome copy (task 033 phase 10b)", () => {
+  it("renders the singular cascade line when exactly one Task follows", async () => {
+    const mutate = vi.fn((_body, options: { onSuccess: (data: unknown) => void }) => {
+      options.onSuccess({ task_count: 1 });
+    });
+    vi.mocked(mutations.useUpdatePortfolio).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdatePortfolio>,
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(screen.getByRole("button", { name: "Make private" }));
+    expect(await screen.findByText("Now private. 1 Task follows.")).toBeInTheDocument();
+  });
+
+  it("renders the plural cascade line when more than one Task follows", async () => {
+    const mutate = vi.fn((_body, options: { onSuccess: (data: unknown) => void }) => {
+      options.onSuccess({ task_count: 3 });
+    });
+    vi.mocked(mutations.useUpdatePortfolio).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdatePortfolio>,
+    );
+    const user = userEvent.setup();
+    renderDetail();
+    await user.click(screen.getByRole("button", { name: "Make private" }));
+    expect(await screen.findByText("Now private. 3 Tasks follow.")).toBeInTheDocument();
+  });
+
+  it("hides the visibility control for a non-owner", () => {
+    vi.mocked(queries.usePortfolio).mockReturnValue(
+      {
+        data: {
+          portfolio_id: PORTFOLIO_ID,
+          name: "Housing",
+          description: null,
+          visibility: "org",
+          is_owner: false,
+          owner_display: "A Colleague",
+          task_count: 0,
+        },
+        isPending: false,
+        isError: false,
+      } as unknown as ReturnType<typeof queries.usePortfolio>,
+    );
+    renderDetail();
+    expect(screen.queryByRole("button", { name: "Make private" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Share with organisation" })).not.toBeInTheDocument();
   });
 });

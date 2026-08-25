@@ -6,7 +6,7 @@ import { scrub } from "../lib/scrub";
 import { StatusDot } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
-import { taskListRowGridClass } from "./listPageChrome";
+import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
 
 type LatestRun = components["schemas"]["ProjectOut"]["latest_run"];
 
@@ -19,9 +19,14 @@ type TaskListRowProps = {
   sourceCount?: number | null;
   updatedAt?: string | null;
   latestRun?: LatestRun;
+  /** Task 033 phase 10b: render the owner column, and the string to show
+   *  when `owner_display` is null (`"—"`, or the admin-wide-list's "No
+   *  organisation" — the caller decides which, this row just renders it). */
+  ownerDisplay?: string | null;
+  ownerlessLabel?: string;
 };
 
-/** One task row: name (optional project prefix), capability, aligned status, sources, date. */
+/** One task row: name (optional project prefix), capability, aligned status, [owner], sources, date. */
 export function TaskListRow({
   to,
   name,
@@ -31,18 +36,21 @@ export function TaskListRow({
   sourceCount,
   updatedAt,
   latestRun,
+  ownerDisplay,
+  ownerlessLabel = "—",
 }: TaskListRowProps) {
   const status = taskStatus(latestRun);
   const safeName = scrub(name);
   const safePortfolio = portfolioName != null ? scrub(portfolioName) : null;
   const ariaLabel =
     showProjectPrefix && safePortfolio != null ? `${safePortfolio}, ${safeName}` : safeName;
+  const showOwner = ownerDisplay !== undefined;
 
   return (
     <Link
       to={to}
       aria-label={ariaLabel}
-      className={`${taskListRowGridClass} px-4 py-3.5 no-underline hover:bg-blue-tint-2`}
+      className={`${showOwner ? taskListRowGridClassWithOwner : taskListRowGridClass} px-4 py-3.5 no-underline hover:bg-blue-tint-2`}
     >
       <span className="min-w-0 truncate text-body">
         {showProjectPrefix && safePortfolio != null && (
@@ -62,6 +70,11 @@ export function TaskListRow({
         <StatusDot tone={status.dot} />
         <span className="truncate">{status.label}</span>
       </span>
+      {showOwner && (
+        <span className="truncate text-right text-meta text-grey">
+          {ownerDisplay !== null ? scrub(ownerDisplay) : ownerlessLabel}
+        </span>
+      )}
       <span className="text-right text-meta tabular-nums text-grey">
         {/* null and 0 differ: null means no run has asked yet. */}
         {sourceCount != null

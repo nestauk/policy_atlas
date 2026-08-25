@@ -235,6 +235,16 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const body = await requestBody(request, init);
     if (isRecord(body) && typeof body.name === "string") mockProject.name = body.name;
     if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
+    // Task 033 phase 10b: i.5 — a Task's own visibility can't be set while
+    // it's in a Project (portfolio membership). The mock mirrors the real
+    // 409 `visibility_conflict` so the control's error line is exercisable
+    // in mock mode too, not just against a live backend.
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      if (mockProject.portfolio_id != null) {
+        return json({ error: { code: "visibility_conflict", message: "Task is in a Project." } }, 409);
+      }
+      mockProject.visibility = body.visibility;
+    }
     mockProject.updated_at = new Date().toISOString();
     return json(mockProject);
   }
@@ -353,6 +363,22 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   if (method === "GET" && portfolioDetailMatch) {
     const found = mockPortfolios.find((portfolio) => portfolio.portfolio_id === portfolioDetailMatch[1]);
     return found !== undefined ? json(found) : json({ detail: "resource not found" }, 404);
+  }
+  // Task 033 phase 10b: the visibility control's cascade (i.4) — the mock's
+  // one project is the portfolio's only member, so "every member follows"
+  // is a single assignment, but the shape (mutate both rows, return the
+  // updated `task_count`) matches what the visibility-outcome copy reads.
+  if (method === "PATCH" && portfolioDetailMatch) {
+    const found = mockPortfolios.find((portfolio) => portfolio.portfolio_id === portfolioDetailMatch[1]);
+    if (found === undefined) return json({ detail: "resource not found" }, 404);
+    const body = await requestBody(request, init);
+    if (isRecord(body) && typeof body.name === "string") found.name = body.name;
+    if (isRecord(body) && typeof body.description === "string") found.description = body.description;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      found.visibility = body.visibility;
+      if (mockProject.portfolio_id === found.portfolio_id) mockProject.visibility = body.visibility;
+    }
+    return json(found);
   }
 
   // `portfolio_id` narrows to one portfolio's members, server-side — mirrors

@@ -332,6 +332,50 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 - Full `make verify` (exit 0, incl. the new hygiene test — infra 46) and
   `make audit` green.
 
+### Phase 9b — Ops CLI (gate: Cognito account creation)
+- Eight commands; no password flag exists anywhere; no `AdminDeleteUser` path
+  (both structural tests). `user create`: Cognito first (`AdminCreateUser` with
+  `DesiredDeliveryMediums=["EMAIL"]` — validated against botocore's own service
+  model via Stubber), DB failure keeps the account and prints the enrol
+  remediation, existing address says "use enrol". `user enrol`: every owned row
+  stamped and privatised **in one transaction** with the upsert, counts reported;
+  atomicity pinned (mid-move failure moves nothing, the upsert rolls back too);
+  re-enrol re-privatises a deliberately shared row. `de-enrol`: clears org/email/
+  admin + `org_id` on their rows — no AWS call, which with grant/revoke resolving
+  by DB address keeps operator IAM at exactly `ListUsers` + `AdminCreateUser`.
+  `rows assign`: a member project moves its portfolio and siblings (closed set).
+- **Environment guard (rubric 26):** STS account vs operator-supplied expected ·
+  pool reachability · **the DB leg — the resolved pool must recognise the
+  connected database's newest `app_user` subs; subjects-exist-but-none-resolve is
+  a hard refusal `--yes` cannot lift** (that case IS prod-tunnel/staging-creds).
+  Honest limit, documented: an empty `app_user` degrades to typed confirmation
+  (blast radius nil — nobody has signed in there).
+- **Concurrency (rubric 27):** all `app_user` writers read `FOR UPDATE`;
+  grant-vs-de-enrol races refuse in either commit order because de-enrol clears
+  the address grant resolves by. Operator identity on traces = `--operator`
+  defaulting to the STS ARN (not $USER, which is spoofable).
+- `staging-user`/`prod-user`/`cognito-user` make targets deleted (pinned by
+  test); DEPLOYMENT.md § 3 rewritten to the CLI with the `COGNITO_DEFAULT`
+  50/day caveat. SSE revocation re-driven through the real CLI de-enrol.
+- 45 new tests; verify-fast 2327 green; mypy strict 291 files; ruff clean.
+- **Escalation (owner decision):** no CLI path creates an org-less administrator
+  (`admin grant` resolves by address, which only `enrol --org` writes). The live
+  check's "third admin in neither org" is satisfiable by enrolling the admin
+  into a third organisation; alternatives — an org-less enrol mode, or
+  grant-by-sub (rejected: bypasses the rubric-27 address-mediated lock).
+- Post-033 rename note: `rows assign` reports in code words; the rename slice
+  must cover `policy_atlas.ops`.
+
+### Phase 10a — Frontend data plumbing
+- `useMe` (staleTime Infinity); `scope`/`portfolio_id` in the query keys;
+  `PortfolioDetailView` exact via the `portfolio_id` filter; `PortfoliosView`
+  overview keeps one global page raised to the 200 cap — **documented
+  approximation** (`PortfolioOut` has no last-task-updated field; >200 active
+  projects can mis-order the overview; the detail view is exact); cross-family
+  invalidation (portfolio PATCH ↔ project lists, all scopes by prefix); mock API
+  gains `/me` (unenrolled default — dark launch), portfolio routes, and
+  `portfolio_id` filtering. frontend-verify green (422 tests); `pnpm e2e` 11/11.
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

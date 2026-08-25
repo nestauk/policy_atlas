@@ -1,9 +1,11 @@
 import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
+import type { components } from "../api/gen/types";
 import { useArchiveProject, useUpdateProject } from "../api/mutations";
-import { useCheckIns, useProject } from "../api/queries";
+import { useCheckIns, useMe, useProject } from "../api/queries";
 import { useAuth } from "../auth";
+import { conflictSentences, isConflictCode } from "../lib/errors";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
@@ -11,28 +13,64 @@ import { StatusDot } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
-import { COPY, PROJECT, TASK } from "../lib/vocabulary";
+import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { lifecycleTabs } from "./lifecycle";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { AppFooter } from "./AppFooter";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
+import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
+
+type Visibility = components["schemas"]["ProjectOut"]["visibility"];
 
 /** Project settings affordance (028 F.5): rename + archive, wired to the
  *  existing project mutations — the project-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
  *  explicit confirm step before the mutation fires. */
-function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; projectName: string }) {
+function ProjectSettingsMenu({
+  projectId,
+  projectName,
+  visibility,
+  isOwner,
+}: {
+  projectId: string;
+  projectName: string;
+  visibility: Visibility;
+  isOwner: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
   const [draftName, setDraftName] = useState(projectName);
+  const me = useMe();
   const update = useUpdateProject(projectId);
   const archive = useArchiveProject(projectId);
   const toast = useToast();
+
+  // Visibility (task 033 phase 10b): hidden entirely without an
+  // organisation — sharing "with your organisation" means nothing when
+  // there isn't one, and this is new UI, so it doesn't get to add chrome an
+  // unenrolled caller never had (rubric 14's dark-launch invariant).
+  const changeVisibility = (next: Visibility) => {
+    update.mutate(
+      { visibility: next },
+      {
+        onSuccess: () => toast.toast({ title: visibilityOutcomeLine(next), tone: "default" }),
+        onError: (error) => {
+          const code = (error as { code?: string }).code;
+          toast.toast({
+            title: isConflictCode(code)
+              ? conflictSentences[code]
+              : "The project's visibility couldn't be changed. Try again.",
+            tone: "error",
+          });
+        },
+      },
+    );
+  };
 
   const reset = () => {
     setEditing(false);
@@ -130,6 +168,15 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
             >
               Rename
             </button>
+            {me.data?.organisation != null && (
+              <VisibilityControl
+                visibility={visibility}
+                isOwner={isOwner}
+                pending={update.isPending}
+                onChange={changeVisibility}
+                className="block w-full justify-start px-0 py-0 text-left text-meta font-semibold text-navy hover:text-blue"
+              />
+            )}
             {archive.isError && (
               <p role="alert" className="text-body text-red">
                 The project couldn't be archived. Try again.
@@ -177,8 +224,19 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
   );
 }
 
-/** Account menu: a user icon in the global bar, Sign out inside the popover. */
+/**
+ * Account menu: a user icon in the global bar, identity above Sign out
+ * inside the popover (task 033 phase 10b, contract § 11 / rubric 41).
+ *
+ * Renders exactly what `/me` returns: `display_name` (ops already falls it
+ * back to the `sub` rendering for an unenrolled caller — nothing here
+ * duplicates that), `email` only when non-null, the organisation name or
+ * `TENANCY_COPY.noOrganisation`, and `Administrator` only when `is_admin`.
+ * The email line truncates with CSS (`truncate`) rather than being clipped
+ * in script — a long address must not break the popover's fixed width.
+ */
 function AccountMenu({ signOut }: { signOut: () => void }) {
+  const me = useMe();
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -203,7 +261,23 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
           </svg>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-44 p-1">
+      <PopoverContent align="end" className="w-56 p-1">
+        {me.data !== undefined && (
+          <div className="min-w-0 border-b border-line px-3 py-2">
+            <p className="truncate text-meta font-bold text-navy">{scrub(me.data.display_name)}</p>
+            {me.data.email != null && (
+              <p className="truncate text-caption text-grey">{scrub(me.data.email)}</p>
+            )}
+            <p className="truncate text-caption text-grey">
+              {me.data.organisation != null
+                ? scrub(me.data.organisation.name)
+                : TENANCY_COPY.noOrganisation}
+            </p>
+            {me.data.is_admin && (
+              <p className="text-caption font-bold text-blue">{TENANCY_COPY.administrator}</p>
+            )}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => signOut()}
@@ -242,11 +316,20 @@ export function AppShell() {
   // the workspace view (where the check-in card itself is the live source of
   // truth) — the nav badge and title marker exist precisely to be seen from
   // everywhere else.
+  //
+  // Owner-scoped (task 033 phase 10b, contract § 11 / rubric 38): steering
+  // is owner-only, so a colleague reading an org-shared Task must never be
+  // told a check-in is "waiting on you" — this used to poll and show for
+  // every viewer. `project.data?.is_owner` gates both the poll (cheapest
+  // honest rule: don't even ask) and, transitively through `hasPendingCheckIn`
+  // below, the nav badge, the lifecycle-tab marker and the cross-tab banner.
+  const isOwner = project.data?.is_owner === true;
   const pendingCheckIns = useCheckIns(projectId ?? "", "pending", {
-    enabled: base !== null && !inWorkspace,
+    enabled: base !== null && !inWorkspace && isOwner,
     refetchInterval: 15_000,
   });
-  const hasPendingCheckIn = base !== null && !inWorkspace && (pendingCheckIns.data?.data.length ?? 0) > 0;
+  const hasPendingCheckIn =
+    base !== null && !inWorkspace && isOwner && (pendingCheckIns.data?.data.length ?? 0) > 0;
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
   // and only the panes below scroll. List pages keep normal document scroll.
@@ -295,6 +378,8 @@ export function AppShell() {
                       <ProjectSettingsMenu
                         projectId={project.data.project_id}
                         projectName={project.data.name}
+                        visibility={project.data.visibility}
+                        isOwner={project.data.is_owner}
                       />
                     </>
                   )}

@@ -102,11 +102,9 @@ export function useUpdateProject(projectId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: {
-      name?: string | null;
-      question?: string | null;
-      portfolio_id?: string | null;
-    }) => {
+    // `visibility` (task 033 phase 10b): owner-only, and refused 422 combined
+    // with `portfolio_id` in one body — see `ProjectUpdate`'s own docstring.
+    mutationFn: async (body: components["schemas"]["ProjectUpdate"]) => {
       const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}", {
         params: { path: { project_id: projectId } },
         body,

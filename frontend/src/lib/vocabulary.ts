@@ -64,3 +64,20 @@ export const COPY = {
   notDecided: "Not decided yet",
   shareComingSoon: "Sharing features coming soon",
 } as const;
+
+/**
+ * Task 033 phase 10b — organisation-tenancy chrome copy (contract § 11,
+ * rubric 41). Lead-owned and binding: wired exactly, not rewritten.
+ */
+export const TENANCY_COPY = {
+  /** Switcher options, in this order — the component itself carries no label. */
+  scopeOrganisation: "Organisation",
+  scopeMine: "Mine",
+  /** Shown only when `is_admin` and the switcher's scope is Organisation. */
+  adminWiderList: "Showing every organisation.",
+  /** A null owning organisation on an admin-visible row. */
+  noOrganisation: "No organisation",
+  /** A null `owner_display` outside the admin-wide-list case. */
+  ownerlessRow: "—",
+  administrator: "Administrator",
+} as const;
