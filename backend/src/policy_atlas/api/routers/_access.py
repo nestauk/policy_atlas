@@ -4,9 +4,10 @@ One helper per entity, replacing the owner-only ``owned_project`` /
 ``owned_portfolio`` pair in ``_common``. Two grades:
 
 - **read** = the owner leg (``owner_user_id`` matches the caller) *or* the
-  same-org leg. The admin read leg (contract § 3a) is deliberately absent —
-  it lands in phase 8, at the single seam marked below. Nothing here reads
-  ``app_user.is_admin``.
+  same-org leg *or* the **admin leg** (contract § 3a: ``app_user.is_admin``,
+  any row, any organisation, any visibility). All three disjoin at the single
+  seam :func:`_read_legs`, so row reads, listings and the SSE tail widened
+  together when phase 8 attached the third.
 - **write** = the owner leg only. A caller who passes the read grade but is
   not the owner gets **403 ``forbidden``**; a caller who fails the read grade
   gets the contract's indistinguishable **404**, byte-identical to an absent
@@ -29,6 +30,15 @@ row's non-NULL ``org_id``, so a NULL-org caller matches nothing. Pinned by
 Comparing the *loaded* ``owner_user_id`` to the caller in Python is a
 different thing and is fine: it happens only after SQL has already decided
 visibility, and ``owner_user_id`` NULL never equals a subject string.
+
+**The admin trace lives here too** (contract § 3a). The privileged read has
+no user-facing disclosure — the privacy notice was deliberately not edited
+(contract § 12) — so the log line *is* the control, and it is emitted from
+the same functions that grant the access rather than from each route, which
+is what makes "nothing is emitted for a read the caller was already entitled
+to" a property of the grade rather than of a caller's diligence. The three
+shapes are :func:`trace_admin_read`, :func:`trace_admin_listing` and
+:func:`trace_admin_stream_read`.
 """
 
 from __future__ import annotations
@@ -36,6 +46,7 @@ from __future__ import annotations
 import uuid
 from typing import NamedTuple
 
+import structlog
 from fastapi import HTTPException
 from sqlalchemy import (
     Select,
@@ -53,6 +64,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from policy_atlas.core.schema import app_user, conversation, portfolio, project
 
+log = structlog.get_logger()
+
 # The 404 body every failed read grade produces. Byte-identical to the string
 # ``_common``'s owner-only helpers raise, so the cutover in phase 4 cannot
 # change what a probing caller observes.
@@ -69,6 +82,23 @@ FORBIDDEN_DETAIL = "action is not permitted"
 # not a third semantic invented for one filter.
 OWNER_EMAIL_DETAIL = "owner_email is available to administrators only"
 
+#: Label the graded read query carries **alongside** the row: did the owner or
+#: same-org leg match on its own?
+#:
+#: This is the one-query leg detection the admin trace needs. The alternative —
+#: resolve the row, then ask a second question ("was this caller entitled
+#: anyway?") — is a second round trip on every graded read in the API, and a
+#: second copy of the tenancy predicate free to drift from the one that
+#: actually granted the row. Selecting :func:`own_estate` as a boolean column
+#: beside the row means SQL answers both questions in the statement that
+#: already ran: the row came back, so *some* leg matched; this column says
+#: whether it was one the caller held without ``is_admin``.
+#:
+#: The extra key rides along in the returned ``RowMapping``. Every consumer
+#: reads the row by column name, so it is inert — and it is named distinctly
+#: enough that no present or future column can collide with it.
+_OWN_LEG = "own_leg_matched"
+
 
 class Access(NamedTuple):
     """A row the caller may reach, plus the grade that reached it.
@@ -78,10 +108,48 @@ class Access(NamedTuple):
         is_owner: Whether the owner leg matched. Callers project this
             straight onto ``ProjectOut.is_owner`` / ``PortfolioOut.is_owner``
             and use it to decide read-only affordances.
+        via_admin: Whether the **admin** leg is what reached this row — i.e.
+            the caller would have been refused without ``is_admin``. Defaults
+            ``False`` so the admin-free helpers (:func:`chat_mutable_project`)
+            construct unchanged. :func:`_resolve` has already emitted the
+            trace line when this is true; the field exists so a caller can
+            reason about the grade, not so each route can remember to log.
     """
 
     row: RowMapping
     is_owner: bool
+    via_admin: bool = False
+
+
+class ReadCheck(NamedTuple):
+    """The boolean re-check's answer, plus which leg carried it.
+
+    :func:`may_read_project` returns this rather than a bare ``bool`` because
+    the SSE tail owes a trace line per re-authorisation the admin leg carried
+    (contract § 3a) and must not ask a second question to find out.
+
+    Attributes:
+        allowed: Whether the caller may still read the project.
+        via_admin: Whether the admin leg is what allowed it.
+    """
+
+    allowed: bool
+    via_admin: bool
+
+
+class ListingScope(NamedTuple):
+    """A listing's tenancy predicate, plus whether the admin leg widened it.
+
+    Attributes:
+        predicate: The boolean to AND into the listing's filters.
+        via_admin: Whether this listing runs on the admin leg — i.e. it spans
+            organisations. ``scope=mine`` is never on the admin leg (it is the
+            owner column and nothing else), so this is ``False`` there without
+            a query.
+    """
+
+    predicate: ColumnElement[bool]
+    via_admin: bool
 
 
 def _same_org_leg(table: Table, user_id: str) -> ColumnElement[bool]:
@@ -114,21 +182,197 @@ def _same_org_leg(table: Table, user_id: str) -> ColumnElement[bool]:
     )
 
 
+def admin_read_leg(user_id: str) -> ColumnElement[bool]:
+    """Build the admin read leg as one uncorrelated SQL predicate.
+
+    **Code-level reader of ``app_user.is_admin`` #1**, and the whole of
+    contract § 3a's semantic readers **(i)** the row-access helper's admin leg
+    and **(ii)** the listing scope resolver — both reach the flag through
+    here, because both resolve through :func:`_read_legs`. The closed list is
+    asserted structurally by
+    ``test_only_the_named_code_sites_read_the_is_admin_flag``.
+
+    Unlike :func:`_same_org_leg` this predicate says **nothing** about the
+    row: not its ``org_id``, not its ``visibility``, not its owner. That is
+    the contract's "any row, any org, any visibility" written as SQL, and it
+    is why the leg also reaches ``org_id IS NULL`` rows — including the
+    ``runtime/orchestrate.py`` rows that carry no owner at all (contract § 11
+    names this; the deferred "unreachable" posture is amended by it).
+
+    What it does **not** do is bypass the archived/status filters. Those live
+    in the ``base`` select the caller built, before any leg is applied, so
+    ``include_archived`` stays exactly as caller-controlled for an admin as
+    for anyone else.
+
+    Args:
+        user_id: The caller's token subject.
+
+    Returns:
+        A boolean predicate, correlated to nothing.
+    """
+    return exists(
+        select(literal_column("1"))
+        .select_from(app_user)
+        .where(app_user.c.user_id == user_id)
+        .where(app_user.c.is_admin.is_(True))
+    )
+
+
+def _is_admin(conn: Connection, user_id: str) -> bool:
+    """Ask whether one caller holds the support role, as a Python boolean.
+
+    **Code-level reader of ``app_user.is_admin`` #2**, serving contract
+    § 3a's semantic readers **(iii)** the ``owner_email`` filter gate and the
+    listing-trace decision inside **(ii)** the listing scope resolver. Both
+    need the answer in Python — one to raise 422, one to decide whether the
+    request owes an audit line — and neither can get it from a SQL leg.
+
+    Kept as *one* function rather than two inline queries so the structural
+    assertion has a closed list to name. An unenrolled caller, or one with no
+    ``app_user`` row at all, is not an administrator.
+
+    Args:
+        conn: Open database connection.
+        user_id: The caller's token subject.
+
+    Returns:
+        Whether the caller holds ``is_admin``.
+    """
+    return bool(
+        conn.execute(
+            select(app_user.c.is_admin).where(app_user.c.user_id == user_id)
+        ).scalar_one_or_none()
+    )
+
+
+def _row_identity(table: Table, row: RowMapping) -> str:
+    """Render a resolved row's primary key for the trace line."""
+    (key,) = table.primary_key.columns.keys()
+    return str(row[key])
+
+
+def trace_admin_read(*, kind: str, row_id: str, user_id: str) -> None:
+    """Record one direct row read served by the admin leg (contract § 3a).
+
+    **One line per row**, and only for a row the caller would *not* have
+    reached without ``is_admin`` — a reader-entitled read emits nothing, which
+    is what keeps the log an audit trail of the privilege rather than of the
+    traffic.
+
+    Emitted for a row the admin leg disclosed on a **write**-graded route too,
+    where the outcome is 403. The line records what the leg revealed, and the
+    leg revealed the row's existence: a 403 tells the admin the row is there,
+    a 404 would not. Recording it also puts an administrator's *attempted*
+    mutations in the trail, which is the more useful audit property. The event
+    name stays ``admin_read`` because a read grade is all that was ever
+    granted.
+
+    Args:
+        kind: ``"project"``, ``"portfolio"`` or ``"conversation"``.
+        row_id: The row's primary key, rendered.
+        user_id: The administrator's token subject.
+    """
+    log.info("admin_read", user_id=user_id, kind=kind, row_id=row_id)
+
+
+def trace_admin_listing(
+    scoped: ListingScope,
+    *,
+    kind: str,
+    user_id: str,
+    scope: str,
+    owner_email: str | None,
+    page: int,
+    page_size: int,
+    row_count: int,
+    total_items: int,
+) -> None:
+    """Record one listing or search request served across organisations.
+
+    **One line per request**, not per row — "one line per read" is meaningless
+    for a listing, and a per-row grain would make a 200-row page unreadable in
+    the log and a zero-row page invisible in it.
+
+    **A zero-result request still emits its line** (rubric 17). That is the
+    whole point of the request grain: ``owner_email`` returns an empty page
+    rather than a 404 precisely so the status code is not an oracle for "does
+    this address own anything", and an unlogged empty page would restore the
+    oracle in a form nobody can see.
+
+    **The address is logged verbatim.** ``owner_email`` is the filter, and an
+    audit line that cannot say what was searched for is not an audit line.
+    Contract § 3b already makes the address ops- and admin-facing; this log is
+    read by the same people. It is never rendered to another user.
+
+    Args:
+        scoped: The resolver's answer — the line is emitted only when the
+            admin leg is what widened this listing.
+        kind: ``"project"`` or ``"portfolio"``.
+        user_id: The administrator's token subject.
+        scope: The requested scope, as the route received it.
+        owner_email: The requested owner filter, or ``None``.
+        page: The 1-indexed page requested.
+        page_size: The page size requested.
+        row_count: How many rows this page actually returned — ``0`` for the
+            zero-result search, which still emits.
+        total_items: How many rows matched in total.
+    """
+    if not scoped.via_admin:
+        return
+    log.info(
+        "admin_listing",
+        user_id=user_id,
+        kind=kind,
+        scope=scope,
+        owner_email=owner_email,
+        page=page,
+        page_size=page_size,
+        row_count=row_count,
+        total_items=total_items,
+    )
+
+
+def trace_admin_stream_read(*, user_id: str, project_id: uuid.UUID) -> None:
+    """Record one SSE re-authorisation batch carried by the admin leg.
+
+    **One line per batch, never one per frame** (contract § 3a). A stream is
+    unbounded; a per-frame line would drown the trail it is meant to be. The
+    *subscribe* is already covered — ``_snapshot`` resolves through
+    :func:`accessible_project`, so opening an admin-carried stream emits an
+    ordinary ``admin_read`` line for the project row, and this event covers
+    only the tail's repeated re-checks.
+
+    Args:
+        user_id: The administrator's token subject.
+        project_id: The project being streamed.
+    """
+    log.info(
+        "admin_stream_read", user_id=user_id, kind="project", row_id=str(project_id)
+    )
+
+
 def own_estate(table: Table, user_id: str) -> ColumnElement[bool]:
     """The caller's own estate: the owner leg or the same-org leg, never admin.
 
-    Deliberately **excludes** the admin leg, and will keep excluding it after
-    phase 8 attaches that leg to :func:`_read_legs`. Two callers want this
-    narrower predicate rather than the full read grade:
+    Deliberately **excludes** the admin leg, which is now attached to
+    :func:`_read_legs` alongside it. Three callers want this narrower
+    predicate rather than the full read grade:
 
     - **``scope=mine`` is narrower still** (owner only) but shares this
       definition of the org leg, so there is one org leg in the codebase.
     - **Derived counts** (contract § 8, last line: portfolio task counts
       include only rows the caller may read *and* rows in the caller's own
-      org). Today read-and-own-org is exactly this predicate; once the admin
-      leg exists, an admin's portfolio count must stay their **own
-      organisation's** count rather than silently summing every organisation's
-      members into one number on the card.
+      org). An admin's portfolio card keeps showing their **own
+      organisation's** count rather than silently summing every
+      organisation's members into one number.
+    - **The chat mutations** (:func:`chat_mutable_project`, and
+      ``own_chat_leg``'s call sites): an admin is not a colleague and receives
+      none of the three.
+
+    It is also the boolean the graded read selects alongside the row (see
+    :data:`_OWN_LEG`): "would this caller have reached the row without
+    ``is_admin``" is exactly this predicate, which is why the trace can be
+    decided in the statement that already resolved the row.
 
     Args:
         table: ``project`` or ``portfolio``.
@@ -195,23 +439,25 @@ def own_chat_leg(user_id: str) -> ColumnElement[bool]:
 
 
 def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
-    """Disjoin every read leg this phase has.
+    """Disjoin every read leg: owner, same-org, and admin.
 
-    Phase 8's admin leg (``EXISTS(app_user WHERE user_id = :me AND
-    is_admin)``, unconditional on ``org_id`` and ``visibility``) is the third
-    disjunct and attaches **here** and nowhere else. It is not present yet:
-    contract § 3a names the closed list of legitimate ``is_admin`` readers,
-    and nothing in this phase is on it.
+    **The one seam.** Row reads (:func:`accessible_project`,
+    :func:`accessible_portfolio`), the listings (:func:`listing_scope`) and
+    the SSE tail's re-authorisation (:func:`may_read_project`) all resolve
+    through this function, so the admin leg attached to all three by adding
+    one disjunct here and nowhere else — and revoking ``is_admin`` withdraws
+    it from all three just as narrowly.
 
-    Row reads (:func:`accessible_project`, :func:`accessible_portfolio`) and
-    the listings (:func:`listing_scope`) both resolve through this function,
-    so the org leg has exactly one definition and phase 8 widens both by
-    editing one line.
+    The admin leg is unconditional on the row (:func:`admin_read_leg`); the
+    archived/status filters are applied by the caller's ``base`` select before
+    any leg runs, so they stay caller-controlled.
     """
-    return own_estate(table, user_id)
+    return or_(own_estate(table, user_id), admin_read_leg(user_id))
 
 
-def may_read_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -> bool:
+def may_read_project(
+    conn: Connection, *, project_id: uuid.UUID, user_id: str
+) -> ReadCheck:
     """Re-check the read grade on one project as a cheap boolean (contract § 5).
 
     The SSE tail's re-authorisation. :func:`accessible_project` is the wrong
@@ -223,9 +469,17 @@ def may_read_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -
     :func:`_resolve` uses**, and that is the whole point: a second tenancy
     predicate written out in ``sse.py`` would be a copy free to drift from the
     one the snapshot enforced, which is exactly the failure the closed helper
-    design exists to prevent. Phase 8's admin leg attaches inside
-    :func:`_read_legs`, so an admin's stream starts being governed by
-    ``is_admin`` — and closes when the flag is revoked — with no edit here.
+    design exists to prevent. The admin leg attaches inside
+    :func:`_read_legs`, so an admin's stream is governed by ``is_admin`` — and
+    closes when the flag is revoked — with no leg written out here.
+
+    **It reports which leg answered**, in the same statement: the read query
+    selects :func:`own_estate` as a boolean column, so "may they still read"
+    and "is this batch on the admin leg" cost one round trip between them.
+    The tail owes a trace line per admin-carried batch (contract § 3a) and
+    :func:`trace_admin_stream_read` is where that line is shaped; the tail
+    calls it rather than this function emitting, because the batch — not the
+    grade check — is the unit being recorded.
 
     **No status filter, on purpose.** ``accessible_project`` excludes archived
     rows because *opening* something archived is not a thing the API offers;
@@ -243,44 +497,61 @@ def may_read_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -
         user_id: The caller's token subject.
 
     Returns:
-        Whether the caller may still read this project.
+        Whether the caller may still read this project, and which leg said so.
     """
-    return (
-        conn.execute(
-            select(literal_column("1"))
-            .select_from(project)
-            .where(project.c.project_id == project_id)
-            .where(_read_legs(project, user_id))
-            .limit(1)
-        ).scalar_one_or_none()
-        is not None
-    )
+    own_leg = conn.execute(
+        select(own_estate(project, user_id).label(_OWN_LEG))
+        .select_from(project)
+        .where(project.c.project_id == project_id)
+        .where(_read_legs(project, user_id))
+        .limit(1)
+    ).scalar_one_or_none()
+    if own_leg is None:
+        return ReadCheck(allowed=False, via_admin=False)
+    # `own_leg` is a real ``False`` when the admin leg is what matched, which
+    # is why the miss is distinguished by ``is None`` and not by falsiness.
+    return ReadCheck(allowed=True, via_admin=not own_leg)
 
 
-def listing_scope(table: Table, *, user_id: str, scope: str) -> ColumnElement[bool]:
-    """Build the tenancy predicate for a paginated listing.
+def listing_scope(
+    conn: Connection, table: Table, *, user_id: str, scope: str
+) -> ListingScope:
+    """Build the tenancy predicate for a paginated listing, and say how wide it is.
 
-    Reader **(ii)** of contract § 3a's closed list of ``is_admin`` readers —
-    named there because phase 8's admin branch attaches to the legs this
-    function disjoins. **In this phase it reads nothing**: ``all`` resolves
-    through :func:`_read_legs`, which has no admin leg yet.
+    Reader **(ii)** of contract § 3a's closed list of ``is_admin`` readers, on
+    both counts: ``all`` resolves through :func:`_read_legs`, whose admin leg
+    is what lets an administrator's listing span organisations (private rows
+    and ``org_id IS NULL`` rows included, contract § 11), and the returned
+    ``via_admin`` is what tells the route it owes an audit line.
+
+    **``scope=mine`` is never on the admin leg and costs no query.** It is the
+    owner column and nothing else, so an administrator asking for their own
+    rows is an ordinary caller asking for their own rows — no widening, no
+    line. ``scope=all`` for an administrator *is* the widened listing, and
+    emits one line whether or not the widening happened to change the page:
+    deciding "did it actually cross an organisation" per row would cost a
+    second scan and would make the trail depend on what the data happened to
+    contain that day.
 
     Args:
+        conn: Open database connection — used only to ask whether the caller
+            holds the flag, and only when ``scope`` can be widened by it.
         table: ``project`` or ``portfolio``.
         user_id: The caller's token subject.
         scope: ``"all"`` (the default the route declares — owner ∪ the org's
-            org-visible rows) or ``"mine"`` (owner only, the pre-033
-            behaviour). The route's ``Literal`` type is what rejects anything
-            else; a value that reached here unvalidated would be treated as
-            ``"all"``, which is why the route owns the validation.
+            org-visible rows ∪, for an administrator, everything) or
+            ``"mine"`` (owner only, the pre-033 behaviour). The route's
+            ``Literal`` type is what rejects anything else; a value that
+            reached here unvalidated would be treated as ``"all"``, which is
+            why the route owns the validation.
 
     Returns:
-        A boolean predicate correlated to ``table``, to be ANDed with the
-        listing's status/portfolio/owner filters.
+        The predicate to AND with the listing's status/portfolio/owner
+        filters, and whether the admin leg widened it.
     """
     if scope == "mine":
-        return table.c.owner_user_id == user_id
-    return _read_legs(table, user_id)
+        return ListingScope(table.c.owner_user_id == user_id, False)
+    return ListingScope(_read_legs(table, user_id), _is_admin(conn, user_id))
 
 
 def owner_email_filter(
@@ -293,8 +564,11 @@ def owner_email_filter(
     """Gate and resolve the admin-only ``owner_email`` listing filter.
 
     Reader **(iii)** of contract § 3a's closed list — kept as one small named
-    function precisely so phase 8's structural assertion can enumerate the
-    readers rather than assert "nowhere else", which rev 2.0 got wrong.
+    function precisely so the structural assertion can enumerate the readers
+    rather than assert "nowhere else", which rev 2.0 got wrong. It reaches the
+    flag through :func:`_is_admin`, the same one-line query the listing trace
+    uses, so the column has two code-level readers in this module rather than
+    three.
 
     Refusal is **422 ``validation_error``** (contract § 8), not 403: the
     caller passed a parameter they may not use, which is the semantic the
@@ -303,8 +577,8 @@ def owner_email_filter(
 
     An address that matches no ``app_user`` row yields an empty page rather
     than an error, so an admin cannot use the status code to learn whether an
-    address is known to the system. (Phase 8's trace emits a line for that
-    zero-row request for the same reason.)
+    address is known to the system. (:func:`trace_admin_listing` emits a line
+    for that zero-row request for the same reason.)
 
     Resolution is an ``IN`` over a subquery rather than "look up the one
     matching subject", because **``app_user.email`` carries no unique
@@ -331,10 +605,7 @@ def owner_email_filter(
     """
     if owner_email is None:
         return true()
-    is_admin = conn.execute(
-        select(app_user.c.is_admin).where(app_user.c.user_id == user_id)
-    ).scalar_one_or_none()
-    if not is_admin:
+    if not _is_admin(conn, user_id):
         raise HTTPException(status_code=422, detail=OWNER_EMAIL_DETAIL)
     # Addresses are case-insensitive in practice and ops type them by hand;
     # folding both sides keeps the filter usable without a schema change.
@@ -378,6 +649,18 @@ def _resolve(
 ) -> Access:
     """Apply the grades to an already identity- and status-filtered select.
 
+    **Leg detection is one query, not two.** The read statement carries
+    :func:`own_estate` as a boolean column beside the row (:data:`_OWN_LEG`),
+    so the row and the answer to "would this caller have reached it without
+    ``is_admin``" arrive together. Where that answer is ``False`` the admin
+    leg is what reached the row, and :func:`trace_admin_read` records it — one
+    line per row, emitted here rather than at each route so a route cannot
+    forget it and so a read the caller was already entitled to cannot
+    accidentally be logged.
+
+    The ``for_update`` fast path skips the extra column: it is bounded by the
+    owner leg, so a row it returns was reached by the owner, never the admin.
+
     Args:
         conn: Open database connection.
         table: The entity table the select reads.
@@ -414,15 +697,31 @@ def _resolve(
         ).mappings().one_or_none()
         if owned is not None:
             return Access(row=owned, is_owner=True)
-    row = conn.execute(base.where(_read_legs(table, user_id))).mappings().one_or_none()
+    row = (
+        conn.execute(
+            base.add_columns(own_estate(table, user_id).label(_OWN_LEG)).where(
+                _read_legs(table, user_id)
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
     if row is None:
         raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
+    via_admin = not row[_OWN_LEG]
+    if via_admin:
+        trace_admin_read(
+            kind=table.name, row_id=_row_identity(table, row), user_id=user_id
+        )
     # Safe in Python: SQL has already decided visibility, and a NULL
     # ``owner_user_id`` (the ``orchestrate.py`` rows) never equals a subject.
     is_owner = row["owner_user_id"] == user_id
     if write and not is_owner:
+        # An administrator lands here on every mutation they attempt: the
+        # admin leg is a **read** leg, so it can reach the row and never write
+        # it. 403 rather than 404 because the leg already disclosed the row.
         raise HTTPException(status_code=403, detail=FORBIDDEN_DETAIL)
-    return Access(row=row, is_owner=is_owner)
+    return Access(row=row, is_owner=is_owner, via_admin=via_admin)
 
 
 def accessible_project(
@@ -478,12 +777,15 @@ def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: st
     one reason: it must **never** widen to the admin leg.
 
     - Wider than **write**, which is owner-only: a same-org colleague passes.
-    - Narrower than **read**, which phase 8 widens with ``is_admin``: an admin
-      is not a colleague and receives none of the three mutations (contract
-      § 3, and the acceptance check "is refused every mutation including chat
+    - Narrower than **read**, which carries the ``is_admin`` leg: an admin is
+      not a colleague and receives none of the three mutations (contract § 3,
+      and the acceptance check "is refused every mutation including chat
       creation and turn POST"). Resolving through :func:`own_estate` rather
-      than :func:`_read_legs` is what makes that structurally true *now*,
-      rather than true only until phase 8 attaches the third leg.
+      than :func:`_read_legs` is what makes that structurally true — the admin
+      leg attached to ``_read_legs`` and this helper did not change.
+      An out-of-organisation administrator therefore gets the **404** this
+      grade gives everyone it refuses, not a 403: there is no read grade here
+      to disclose the row with.
 
     **No lock, ever, and no ``for_update`` parameter to pass one.** Contract
     § 4: a colleague chat path that took ``FOR UPDATE`` on the owner's project

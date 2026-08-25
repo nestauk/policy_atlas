@@ -59,10 +59,12 @@ from policy_atlas.api.deps import (
 )
 from policy_atlas.api.routers._access import (
     accessible_project,
+    admin_read_leg,
     chat_mutable_project,
     own_chat_leg,
     own_conversation_leg,
     own_estate,
+    trace_admin_read,
 )
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
@@ -95,6 +97,14 @@ _live_cancels_guard = threading.Lock()
 _live_cancels: dict[uuid.UUID, threading.Event] = {}
 
 _PREVIEW_MAX_CHARS = 240
+
+#: Label :func:`_graded_conversation`'s read path carries beside the row: did
+#: the creator/owner grade match on its own? ``False`` means the admin leg is
+#: what resolved the row, which is what the trace records. Mirrors
+#: ``_access._OWN_LEG`` for the project/portfolio helpers; kept as its own
+#: constant because the predicate it labels is this router's, not the shared
+#: estate one.
+_OWN_GRADE = "own_grade_matched"
 
 
 def _not_found() -> HTTPException:
@@ -138,17 +148,36 @@ def _graded_conversation(
     create a chat must not learn the row exists at all — this is the guard
     that closes the ``GET /{id}`` / ``GET /{id}/turns`` deep-link leak.
 
+    **The two grades diverge here, and only here.** Contract § 4 gives an
+    administrator ``GET /{id}`` and ``GET /{id}/turns`` — traced — and gives
+    them nothing else on this router. So the admin leg is disjoined into the
+    predicate on the **read** path and is absent from the write path, where
+    the creator/owner predicate stands exactly as it did: an administrator
+    who is not the creator gets this router's ordinary 404 on ``PATCH``,
+    ``archive`` and ``unarchive``, and that is deliberate — the router has no
+    403 semantic to spend, and refusing a write is not a reason to confirm the
+    row exists.
+
+    Note what the admin leg *replaces*: the whole conjunction, ``own_estate``
+    on the project included. That guard is the colleague's revocation lever
+    (de-enrolment kills their chat), and an administrator is not reached by
+    it. The project's ``status == "active"`` filter and the archived-
+    conversation filter are **not** replaced — they are not tenancy, and an
+    administrator observes the same rows anyone else would.
+
+    Leg detection is one query: the own-grade conjunction is selected as a
+    boolean column beside the row, so a row that came back with it ``False``
+    was reached by the admin leg, and :func:`trace_admin_read` records it —
+    one line per row, nothing for a caller who was entitled anyway.
+
     Args:
         conn: Open database connection.
         conversation_id: Requested conversation identity.
         user_id: The caller's token subject.
-        write: Accepted for call-site symmetry with the project/portfolio
-            graded helpers, but resolves through the **same** predicate as a
-            read this phase — there is no readable-but-not-writable state on
-            this router yet (a colleague who did not create a chat is
-            refused by the read predicate itself, before write is ever
-            checked). Phase 8's admin read leg is what makes the two grades
-            diverge; this parameter exists now so that phase only adds a leg.
+        write: Whether the caller needs the write grade. ``False`` adds the
+            admin read leg; ``True`` is the creator/owner predicate alone.
+            There is still no readable-but-not-writable 403 on this router —
+            the divergence is which rows resolve, not which code is returned.
         include_archived: Whether an archived conversation can be observed.
         for_update: Take ``SELECT … FOR UPDATE`` on the row.
 
@@ -160,27 +189,32 @@ def _graded_conversation(
             ``include_archived``), or not accessible under its kind's
             predicate.
     """
-    del write  # See docstring: no distinct write grade on this router yet.
+    own_grade = and_(
+        # The project must still be reachable by the caller: de-enrolment is a
+        # revocation event (contract § 5), so a creator's chat on a project
+        # they can no longer read dies with the org leg. own_estate, not the
+        # full read grade — the admin read arrives as its own leg below.
+        own_estate(project, user_id),
+        or_(
+            own_chat_leg(user_id),
+            and_(
+                conversation.c.kind == "planning",
+                project.c.owner_user_id == user_id,
+            ),
+        ),
+    )
     statement = (
         select(conversation)
         .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
         .where(conversation.c.id == conversation_id)
         .where(project.c.status == "active")
-        # The project must still be reachable by the caller: de-enrolment is a
-        # revocation event (contract § 5), so a creator's chat on a project
-        # they can no longer read dies with the org leg. own_estate, not the
-        # full read grade — Phase 8's admin read arrives as its own leg.
-        .where(own_estate(project, user_id))
-        .where(
-            or_(
-                own_chat_leg(user_id),
-                and_(
-                    conversation.c.kind == "planning",
-                    project.c.owner_user_id == user_id,
-                ),
-            )
-        )
     )
+    if write:
+        statement = statement.where(own_grade)
+    else:
+        statement = statement.add_columns(own_grade.label(_OWN_GRADE)).where(
+            or_(own_grade, admin_read_leg(user_id))
+        )
     if not include_archived:
         statement = statement.where(conversation.c.status != "archived")
     if for_update:
@@ -191,6 +225,10 @@ def _graded_conversation(
     row = conn.execute(statement).mappings().one_or_none()
     if row is None:
         raise _not_found()
+    if not write and not row[_OWN_GRADE]:
+        trace_admin_read(
+            kind="conversation", row_id=str(row["id"]), user_id=user_id
+        )
     return row
 
 

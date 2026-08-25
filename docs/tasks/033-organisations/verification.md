@@ -175,6 +175,111 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 - Handed to Phase 9b: `_colleague_stream_closes_on`'s `revoke` callback is the
   single seam to swap for real CLI levers.
 
+### Phase 7 — The visibility and org invariant (i.1–i.6)
+- Assignment (i.2/i.3) syncs the member to its portfolio on **both** fields in one
+  rule; i.6 touches neither; the i.4 cascade is the sole writer of
+  `portfolio.visibility` — owner-only (colleague and in-org admin 403), includes
+  archived members, self-heals an operator-mismatched member `org_id`
+  (`test_the_cascade_repairs_a_member_stamped_to_another_organisation`), one
+  transaction. Both write paths lock the portfolio row (`for_update` through the
+  owner leg only); the one deadlock interleaving is documented and resolves as a
+  repeatable no-op.
+- `PortfolioUpdate.visibility` = one deterministic path: present → cascade,
+  omitted → unchanged, explicit `null` → 422. Splat allow-list unchanged.
+- **Property (rubric 22):** hypothesis is not a dependency (not added); instead a
+  fixed-seed 90-operation walk over all seven ops through real HTTP, breach check
+  in SQL (`IS DISTINCT FROM` for org_id) after every op, non-vacuity asserted.
+  Mutation-checked (dropping the i.2 sync or the archived-member cascade fails).
+- The i.5-then-i.2 loop's end state pinned (`…ends_org_visible`); the 409 copy
+  names "leave the task out of the project"; Phase 10b repeats it in UI copy.
+- SSE cascade revocation now tested against the **real** PATCH lever.
+- Test repair justified: `test_portfolio_patch_does_not_accept_visibility` →
+  `…accepts_visibility_only_as_the_cascade` (its own docstring named the
+  condition for replacement; the protected property re-asserted behaviourally).
+- `make openapi-sync` also swept up pre-existing description-only drift from
+  Phases 4–6 docstrings. verify-fast 2267 green; drift-check OK; frontend green.
+- Handed to Phase 8: re-assert the cascade 403 with an out-of-org administrator.
+
+### Phase 8 — Admin read leg, trace, closed-list assertion
+- **One seam.** The admin leg is a third disjunct in `_access._read_legs`
+  (`admin_read_leg` = `EXISTS(app_user WHERE user_id = :me AND is_admin)`,
+  uncorrelated to the row). Row reads, both listings and the SSE tail widened at
+  that one line; archived/status filters sit in the caller's `base` select
+  *before* any leg, so `include_archived` stays caller-controlled for an admin.
+- **Write is untouched.** `own_estate`, `chat_mutable_project` and `own_chat_leg`
+  are unchanged, so the admin is not a colleague: project/portfolio mutations 403
+  (the leg reached the row, then the owner check refused), every chat path 404
+  (no admin leg in the grade at all). Both codes asserted and recorded.
+- **Conversation-id router** (§ 4): `write=False` disjoins the admin leg,
+  `write=True` keeps the creator/owner predicate alone — the parameter Phase 4
+  reserved finally diverges. Admin reads `GET /{id}` and `GET /{id}/turns`
+  (planning rows included); `PATCH`/`archive`/`unarchive` 404, this router's
+  standing refusal.
+- **One-query leg detection.** The graded read selects `own_estate(...)` as a
+  boolean column beside the row (`_access._OWN_LEG`, `conversations._OWN_GRADE`);
+  a row that came back with it `False` was reached by the admin leg. No second
+  round trip and no second copy of the tenancy predicate to drift.
+  `may_read_project` returns `ReadCheck(allowed, via_admin)` the same way;
+  `listing_scope` returns `ListingScope(predicate, via_admin)` and queries the
+  flag only when `scope != "mine"`.
+- **Trace shapes, as emitted** (structlog, configured by Phase 0b):
+  `admin_read {user_id, kind, row_id}` — one per row, project/portfolio/
+  conversation, including the SSE subscribe (which is an ordinary graded read);
+  `admin_listing {user_id, kind, scope, owner_email, page, page_size, row_count,
+  total_items}` — one per cross-org request, **zero-result included**;
+  `admin_stream_read {user_id, kind, row_id}` — one per SSE re-authorisation
+  batch, never per frame. Content and grain asserted via `capture_logs`, never
+  transport; Phase 12 confirms one of each in CloudWatch.
+- **Nothing is emitted for an entitled read** — owner on their own row, colleague
+  on an org row, admin on their own row, admin on their own org's row.
+- **Closed list at code level** (rubric 16), asserted by walking `api/**/*.py`:
+  `routers/_access.py::admin_read_leg` (readers i + ii — both resolve through
+  `_read_legs`), `routers/_access.py::_is_admin` (reader iii's 422 gate and
+  reader ii's trace decision), `routers/me.py::get_me` (reader iv),
+  `contract/tenancy.py::MeOut` (the field declaration, named rather than
+  filtered). Plus: no `.values(...)` under `api/` carries the column.
+- **Judgment calls, stated rather than left implicit:** (a) the 403 path emits an
+  `admin_read` — the leg disclosed the row's existence, and an admin's attempted
+  mutations belong in the trail; (b) `owner_email` is logged **verbatim** — it is
+  the filter, the log is read by the same ops/admin audience § 3b already scopes
+  it to, and an audit line that cannot say what was searched for is not one;
+  (c) `admin_listing` fires on admin + `scope=all` whether or not the widening
+  changed the page — deciding "did it actually cross an organisation" per row
+  costs a second scan and makes the trail depend on that day's data.
+- **Volume note for Phase 12 (not a deviation):** `_tail` re-authorises every
+  `SSE_POLL_INTERVAL_SECONDS` (default 0.4s), so an *idle admin stream* emits
+  ~2.5 `admin_stream_read` lines/second. That is the grain § 3a specifies
+  ("one per re-authorisation batch"), implemented as written; if CloudWatch
+  volume proves unacceptable, the lever is the poll interval, not the grain.
+- **Tests:** `test_admin_leg.py` (12) —
+  `…reads_org_visible_and_private_rows_in_a_foreign_organisation` ·
+  `…reads_a_null_organisation_row_and_an_ownerless_one` ·
+  `test_reads_the_caller_was_already_entitled_to_emit_no_trace_line` ·
+  `test_an_administrator_is_refused_every_mutation` ·
+  `…cannot_write_through_the_conversation_id_router` ·
+  `…listing_spans_organisations_and_emits_one_line_per_request` ·
+  `test_scope_mine_is_not_the_admin_leg_and_emits_nothing` ·
+  `test_a_zero_result_administrator_search_still_emits_its_line` ·
+  `test_a_non_administrators_listing_is_never_traced` ·
+  `test_is_admin_defaults_false_on_a_bare_me_provisioned_row` ·
+  `test_no_write_under_the_api_can_set_is_admin` ·
+  `test_only_the_named_code_sites_read_the_is_admin_flag`.
+  `test_sse.py` (+2) — `…traces_the_subscribe_and_every_reauthorisation`
+  (grain asserted as an equality against the recorded re-authorisations) ·
+  `test_sse_stream_closes_when_the_administrators_flag_is_revoked` (revocation
+  event 4, now real; the owner's stream on the same row survives).
+  `test_visibility_invariant.py` (+1) —
+  `test_the_cascade_is_refused_to_an_out_of_organisation_administrator`
+  (Phase 6/7 handoff discharged: reachable, still 403).
+- `org_support` gains `ops_set_admin` (the phase-9b grant/revoke row write) and
+  `make_conversation`.
+- `make openapi-sync` re-run: **description-only** drift from the two listing
+  docstrings; no schema change, as expected of a behavioural leg.
+  verify-fast **2282 green**; mypy + ruff clean; drift-check OK.
+- Handed to Phase 9b: `ops_set_admin` is the seam to swap for the real
+  `admin grant` / `admin revoke`, and § 3a's operator-side grant/revoke trace
+  (naming operator, subject and direction) is 9b's, not this phase's.
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

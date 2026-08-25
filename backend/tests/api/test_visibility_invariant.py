@@ -424,13 +424,13 @@ def test_the_cascade_is_refused_to_a_colleague_and_to_an_administrator(
     """Rubric 25: cascades are owner-only.
 
     The colleague and the administrator are seeded **in the same
-    organisation**, which is the honest shape today: the admin read leg lands
-    in phase 8, so an administrator outside the organisation has no read at
-    all and would 404 here for a reason that has nothing to do with being an
-    administrator. An in-org administrator reaches the row through the org
-    leg and is refused the write, which is the assertion that must survive
-    phase 8 unchanged — *phase 8 must re-assert this with an out-of-organisation
-    administrator once that leg exists, and it must return 403, not 200.*
+    organisation**, which was the honest shape while the admin read leg did
+    not exist: an administrator outside the organisation would have 404'd here
+    for a reason that has nothing to do with being an administrator. An in-org
+    administrator reaches the row through the org leg and is refused the
+    write, and phase 8 left that unchanged. The out-of-organisation case the
+    phase-6 handoff asked for is the next test down, where the refusal is a
+    403 reached through the admin leg itself.
 
     An outsider still gets the indistinguishable 404: refusing a write is not
     a reason to confirm the row exists.
@@ -476,6 +476,62 @@ def test_the_cascade_is_refused_to_a_colleague_and_to_an_administrator(
         assert refusals[outsider.user_id].status_code == 404
         assert _portfolio_row(engine, group)["visibility"] == "org"
         assert _row(engine, member)["visibility"] == "org"
+
+
+def test_the_cascade_is_refused_to_an_out_of_organisation_administrator(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Rubric 25, re-asserted through the admin leg itself (phase 6 handoff).
+
+    The previous case seeded the administrator *inside* the organisation, so
+    the org leg could have been what reached the portfolio and the refusal
+    proved nothing about `is_admin`. Here the administrator is enrolled
+    elsewhere and the portfolio is **private**, so every other leg is closed:
+    the admin leg is the only thing that reaches the row, and the answer is
+    still 403 `forbidden`, not 200.
+
+    That combination — reachable, unwritable — is the concrete "admin write
+    escape" contract § 6 names. The cascade is the highest-value target for
+    it: one write flips a Project and every Task inside it.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, admin)):
+        org_id = _enrolled_owner(engine, owner)
+        with seeded(engine) as conn:
+            support_org = make_org(conn, name="Support Org")
+            ops_enrol(
+                conn,
+                user_id=admin.user_id,
+                org_id=support_org,
+                display_name="Support",
+                is_admin=True,
+            )
+            group = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
+            )
+            member = make_project(
+                conn,
+                owner_user_id=owner.user_id,
+                org_id=org_id,
+                visibility="private",
+                portfolio_id=group,
+            )
+
+        # Reachable: the leg really does open the row for reading.
+        assert (
+            client.get(f"/api/v1/portfolios/{group}", headers=admin.headers).status_code
+            == 200
+        )
+
+        refusal = client.patch(
+            f"/api/v1/portfolios/{group}",
+            headers=admin.headers,
+            json={"visibility": "org"},
+        )
+
+        assert refusal.status_code == 403
+        assert refusal.json()["error"]["code"] == "forbidden"
+        assert _portfolio_row(engine, group)["visibility"] == "private"
+        assert _row(engine, member)["visibility"] == "private"
 
 
 def test_portfolio_visibility_never_reaches_the_column_through_the_splat(

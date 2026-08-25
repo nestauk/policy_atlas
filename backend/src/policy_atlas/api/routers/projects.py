@@ -30,6 +30,7 @@ from policy_atlas.api.routers._access import (
     creator_org_id,
     listing_scope,
     owner_email_filter,
+    trace_admin_listing,
 )
 from policy_atlas.api.routers._common import project_out
 from policy_atlas.core.schema import app_user, capability_run, project
@@ -61,7 +62,8 @@ def list_projects(
         conn: Open database connection.
         status_filter: `active` (default), `archived` or `all`.
         scope: `all` (default) — the caller's own rows plus their
-            organisation's org-visible rows — or `mine` for owner-only, the
+            organisation's org-visible rows, and for an administrator every
+            row in every organisation — or `mine` for owner-only, the
             pre-033 behaviour. **The default is `all`**: a `mine` default
             would hide the whole feature behind a switcher.
         portfolio_id: Narrow to one portfolio's members. Server-side because
@@ -79,8 +81,9 @@ def list_projects(
     Raises:
         HTTPException: 422 when a non-administrator passes `owner_email`.
     """
+    scoped = listing_scope(conn, project, user_id=user.user_id, scope=scope)
     where = [
-        listing_scope(project, user_id=user.user_id, scope=scope),
+        scoped.predicate,
         owner_email_filter(conn, project, user_id=user.user_id, owner_email=owner_email),
     ]
     if status_filter != "all":
@@ -100,6 +103,20 @@ def list_projects(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).mappings().all()
+    # One line per cross-organisation request (contract § 3a), emitted after
+    # the page is known so it can carry the row count — including the zero
+    # that an `owner_email` search matching nobody produces.
+    trace_admin_listing(
+        scoped,
+        kind="project",
+        user_id=user.user_id,
+        scope=scope,
+        owner_email=owner_email,
+        page=page,
+        page_size=page_size,
+        row_count=len(rows),
+        total_items=int(total),
+    )
     return Page(
         data=[
             project_out(

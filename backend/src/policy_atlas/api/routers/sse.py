@@ -35,7 +35,11 @@ from policy_atlas.api.contract import (
     TickFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
-from policy_atlas.api.routers._access import accessible_project, may_read_project
+from policy_atlas.api.routers._access import (
+    accessible_project,
+    may_read_project,
+    trace_admin_stream_read,
+)
 from policy_atlas.api.routers.planning import _draft_from_plan
 from policy_atlas.api.settings import Settings
 
@@ -69,7 +73,15 @@ def _snapshot(
     user_id: str,
     cursor: int,
 ) -> tuple[int, list[dict[str, Any]]]:
-    """Authorise then read a cursor-bounded durable backlog in one connection."""
+    """Authorise then read a cursor-bounded durable backlog in one connection.
+
+    This is also the **subscribe** half of contract § 3a's SSE trace grain:
+    the grade resolves through `accessible_project`, so a stream opened on the
+    admin leg emits exactly one `admin_read` line for the project row here,
+    and the tail emits one `admin_stream_read` per re-authorised batch after
+    it. Nothing extra is logged for a caller who was entitled to the project
+    anyway.
+    """
     with engine.connect() as conn:
         accessible_project(conn, project_id=project_id, user_id=user_id, write=False)
         snapshot = int(
@@ -99,6 +111,16 @@ def _tail(
     caller whose access has gone is never handed the events of the interval in
     which they lost it.
 
+    **The fourth revocation event is now real.** The re-check resolves through
+    `_access._read_legs`, which carries the admin leg, so clearing `is_admin`
+    on a streaming administrator closes their stream on the next batch — no
+    second tenancy predicate here, and no edit to this function when the leg
+    landed.
+
+    **One trace line per admin-carried batch**, not per frame (contract
+    § 3a). `may_read_project` reports the leg in the same query that answers
+    the grade, so the line costs nothing beyond the call.
+
     Args:
         engine: Application engine; this runs in a worker thread.
         project_id: The project being streamed.
@@ -110,8 +132,11 @@ def _tail(
         caller's read grade has gone and the stream must close.
     """
     with engine.connect() as conn:
-        if not may_read_project(conn, project_id=project_id, user_id=user_id):
+        check = may_read_project(conn, project_id=project_id, user_id=user_id)
+        if not check.allowed:
             return None
+        if check.via_admin:
+            trace_admin_stream_read(user_id=user_id, project_id=project_id)
         rows = _event_rows(conn, project_id=project_id, after=after, through=None)
         last_sequence = rows[-1]["sequence"] if rows else after
         return last_sequence, _map_rows(conn, project_id=project_id, rows=rows, through=None)

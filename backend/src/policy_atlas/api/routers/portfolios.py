@@ -35,6 +35,7 @@ from policy_atlas.api.routers._access import (
     listing_scope,
     own_estate,
     owner_email_filter,
+    trace_admin_listing,
 )
 from policy_atlas.api.routers._common import resolve_owner_display
 from policy_atlas.core.schema import app_user, portfolio, project
@@ -181,7 +182,8 @@ def list_portfolios(
         user: The authenticated caller.
         conn: Open database connection.
         scope: `all` (default) — the caller's own rows plus their
-            organisation's org-visible rows — or `mine` for owner-only.
+            organisation's org-visible rows, and for an administrator every
+            row in every organisation — or `mine` for owner-only.
         owner_email: Narrow to one owner's rows. **Administrators only**; any
             other caller gets 422 `validation_error`.
         page: 1-indexed page number.
@@ -193,8 +195,9 @@ def list_portfolios(
     Raises:
         HTTPException: 422 when a non-administrator passes `owner_email`.
     """
+    scoped = listing_scope(conn, portfolio, user_id=user.user_id, scope=scope)
     where = [
-        listing_scope(portfolio, user_id=user.user_id, scope=scope),
+        scoped.predicate,
         owner_email_filter(conn, portfolio, user_id=user.user_id, owner_email=owner_email),
     ]
     total = conn.execute(select(func.count()).select_from(portfolio).where(*where)).scalar_one()
@@ -209,6 +212,20 @@ def list_portfolios(
         .limit(page_size)
     ).mappings().all()
     counts = _task_counts(conn, [row["portfolio_id"] for row in rows], user_id=user.user_id)
+    # One line per cross-organisation request (contract § 3a), emitted after
+    # the page is known so it can carry the row count — including the zero an
+    # `owner_email` search matching nobody produces.
+    trace_admin_listing(
+        scoped,
+        kind="portfolio",
+        user_id=user.user_id,
+        scope=scope,
+        owner_email=owner_email,
+        page=page,
+        page_size=page_size,
+        row_count=len(rows),
+        total_items=int(total),
+    )
     return Page(
         data=[
             _portfolio_out(

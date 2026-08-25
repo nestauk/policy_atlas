@@ -192,7 +192,8 @@ export interface paths {
          *         user: The authenticated caller.
          *         conn: Open database connection.
          *         scope: `all` (default) — the caller's own rows plus their
-         *             organisation's org-visible rows — or `mine` for owner-only.
+         *             organisation's org-visible rows, and for an administrator every
+         *             row in every organisation — or `mine` for owner-only.
          *         owner_email: Narrow to one owner's rows. **Administrators only**; any
          *             other caller gets 422 `validation_error`.
          *         page: 1-indexed page number.
@@ -323,7 +324,8 @@ export interface paths {
          *         conn: Open database connection.
          *         status_filter: `active` (default), `archived` or `all`.
          *         scope: `all` (default) — the caller's own rows plus their
-         *             organisation's org-visible rows — or `mine` for owner-only, the
+         *             organisation's org-visible rows, and for an administrator every
+         *             row in every organisation — or `mine` for owner-only, the
          *             pre-033 behaviour. **The default is `all`**: a `mine` default
          *             would hide the whole feature behind a switcher.
          *         portfolio_id: Narrow to one portfolio's members. Server-side because

@@ -28,12 +28,19 @@ from pathlib import Path
 from typing import NamedTuple
 
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import app_user, organisation, portfolio, project
+from policy_atlas.core.schema import (
+    app_user,
+    conversation,
+    organisation,
+    portfolio,
+    project,
+)
 from tests.helpers import now
 
 
@@ -156,6 +163,69 @@ def ops_enrol(
             created_at=now(),
         )
     )
+
+
+def ops_set_admin(conn: Connection, *, user_id: str, is_admin: bool) -> None:
+    """Grant or revoke the support role on an already-enrolled subject.
+
+    The phase-9b CLI's `admin grant` / `admin revoke` reduced to the row write
+    they perform. Phase 8 needs the **revoke** as a lever an open SSE stream
+    can react to (contract § 5's fourth revocation event), and needs it
+    without waiting for the CLI, exactly as the de-enrolment cases in
+    `test_sse.py` write `app_user.org_id` directly.
+
+    Args:
+        conn: Open database connection.
+        user_id: The subject to grant or revoke.
+        is_admin: The new state.
+    """
+    conn.execute(
+        update(app_user).where(app_user.c.user_id == user_id).values(is_admin=is_admin)
+    )
+
+
+def make_conversation(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    kind: str = "chat",
+    created_by: str | None = None,
+    status: str = "active",
+    title: str = "Conversation",
+) -> uuid.UUID:
+    """Insert one durable conversation row and return its id.
+
+    `created_by` is explicit and defaults to `None` — the legacy pre-033
+    shape — because every tenancy question on this table turns on it.
+
+    Args:
+        conn: Open database connection.
+        project_id: The project the conversation belongs to.
+        kind: `chat` or `planning`.
+        created_by: The authoring subject, or `None` for a legacy row.
+        status: `active`, `closed` or `archived`.
+        title: The conversation's title.
+
+    Returns:
+        The generated conversation id.
+    """
+    conversation_id = uuid.uuid4()
+    moment = now()
+    conn.execute(
+        conversation.insert().values(
+            id=conversation_id,
+            project_id=project_id,
+            kind=kind,
+            title=title,
+            entry_artefact_id=None,
+            status=status,
+            created_at=moment,
+            closed_at=None,
+            archived_at=moment if status == "archived" else None,
+            created_by=created_by,
+        )
+    )
+    return conversation_id
 
 
 def unique_email(local: str) -> str:

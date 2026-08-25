@@ -18,11 +18,12 @@ from sqlalchemy import false, select, update
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.schema import Table
+from structlog.testing import capture_logs
 
 from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
-from policy_atlas.api.routers import _access
+from policy_atlas.api.routers import _access, sse
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.liveness import tick_hub
@@ -34,6 +35,7 @@ from tests.api.org_support import (
     make_portfolio,
     make_project,
     ops_enrol,
+    ops_set_admin,
     seeded,
 )
 from tests.helpers import delete_project_data
@@ -660,11 +662,14 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
 # indefinitely, so none of this slice's four revocation events reached an open
 # stream. Three of them are exercised here for real: de-enrolment, a
 # visibility flip, and the i.4 portfolio cascade (simulated by the direct
-# `project.visibility` update the phase-7 cascade will itself perform).
+# `project.visibility` update, and again through the real PATCH lever).
 #
-# The fourth — admin revoke — cannot be exercised yet: the admin read leg is
-# phase 8's and does not exist. It is pinned structurally instead, by the last
-# test in this file.
+# The fourth — admin revoke — was pinned only structurally while the admin
+# read leg did not exist. Phase 8 shipped the leg, so it is now exercised for
+# real too, under the "--- Phase 8" heading at the end of this file, along
+# with the SSE half of the admin trace grain. The structural case is kept:
+# it is the one that fails if the tail ever grows a tenancy predicate of its
+# own instead of resolving through `_read_legs`.
 
 
 def _org_seed(
@@ -939,16 +944,19 @@ def test_sse_owner_stream_survives_every_revocation_event(
 def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
     engine: Engine, tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """Revocation 4 (admin revoke), guaranteed by construction rather than tested.
+    """The tail asks the same question the snapshot did, whatever the legs are.
 
-    The admin read leg lands in phase 8, as a third disjunct inside
-    `_access._read_legs` — the single function `_snapshot`'s
-    `accessible_project` resolves through. This pins that the **tail**
-    resolves through that same function and honours whatever it returns, so
-    phase 8 widens the live stream at the same line it widens the snapshot,
-    and clearing `is_admin` closes an admin's open stream with no further edit
-    to `sse.py`. A second tenancy predicate written out in the tail — the
-    drifted copy the closed-helper design exists to prevent — fails here.
+    The admin read leg is a third disjunct inside `_access._read_legs` — the
+    single function `_snapshot`'s `accessible_project` resolves through. This
+    pins that the **tail** resolves through that same function and honours
+    whatever it returns, which is why phase 8 widened the live stream at the
+    same line it widened the snapshot and needed no edit to `sse.py`'s grade.
+    A second tenancy predicate written out in the tail — the drifted copy the
+    closed-helper design exists to prevent — fails here.
+
+    Kept alongside the real admin-revoke case below rather than replaced by
+    it: that one proves the behaviour for today's legs, this one proves the
+    *mechanism* for whatever legs come next.
 
     Two things are asserted: that the tail asks `_read_legs` the same question
     the snapshot did (same table, same subject, at least once per batch), and
@@ -981,5 +989,153 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
                 assert await stream.closed(timeout=5.0)
             finally:
                 await stream.aclose()
+
+    asyncio.run(exercise())
+
+
+# --- Phase 8: the admin leg on an open stream, and its trace grain -----------
+#
+# Contract § 3a's SSE clause, in two halves. The **subscribe** is an ordinary
+# graded row read — `_snapshot` calls `accessible_project` — so it emits one
+# `admin_read` line and nothing special happens here. The **tail** owes one
+# `admin_stream_read` line per re-authorisation batch, which is the grain that
+# keeps an unbounded stream from becoming an unbounded log: a line per event
+# frame would be neither.
+#
+# Revocation 4 lands here too. `is_admin` is cleared by the row write the
+# phase-9b `admin revoke` command performs, exactly as the de-enrolment case
+# above writes `app_user.org_id` directly.
+
+
+def _admin_seed(engine: Engine, *, owner_id: str, admin_id: str) -> uuid.UUID:
+    """Seed a **private** project in one organisation and an admin in another.
+
+    Private, and cross-organisation, on purpose: every other leg is closed, so
+    a stream that opens at all opened on `is_admin` and nothing else.
+
+    Args:
+        engine: The session engine; writes here commit, because the
+            application reads through its own connection.
+        owner_id: The project owner's subject, enrolled in organisation A.
+        admin_id: The administrator's subject, enrolled in organisation B.
+
+    Returns:
+        The project the administrator will stream.
+    """
+    with seeded(engine) as conn:
+        org_a = make_org(conn, name="Owner Org")
+        org_b = make_org(conn, name="Support Org")
+        ops_enrol(conn, user_id=owner_id, org_id=org_a, display_name="Owner")
+        ops_enrol(
+            conn,
+            user_id=admin_id,
+            org_id=org_b,
+            display_name="Support",
+            is_admin=True,
+        )
+        return make_project(
+            conn, owner_user_id=owner_id, org_id=org_a, visibility="private"
+        )
+
+
+def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation(
+    engine: Engine, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """One `admin_read` at subscribe, then one `admin_stream_read` per batch.
+
+    The grain assertion is made against the re-authorisations themselves
+    rather than against a wall-clock count: `may_read_project` is wrapped to
+    record every call the admin leg carried, and the number of
+    `admin_stream_read` lines must equal it exactly. That is "one per
+    re-authorisation batch" stated as an equality — a per-frame
+    implementation, or a per-connection one, fails it in opposite directions.
+
+    The subscribe line is deliberately *not* a fourth event name: it is a
+    direct row read on the graded helper like any other, so it carries the
+    same `admin_read` shape and the same project id.
+    """
+
+    carried: list[str] = []
+    real = _access.may_read_project
+
+    def recording(
+        conn: Connection, *, project_id: uuid.UUID, user_id: str
+    ) -> _access.ReadCheck:
+        check = real(conn, project_id=project_id, user_id=user_id)
+        if check.allowed and check.via_admin:
+            carried.append(user_id)
+        return check
+
+    monkeypatch.setattr(sse, "may_read_project", recording)
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            project_id = _admin_seed(
+                engine, owner_id=api.owner_id, admin_id=api.other_id
+            )
+            with capture_logs() as captured:
+                stream = await api.open_stream(project_id, headers=api.other_headers)
+                try:
+                    await _live(stream)
+                    await _live(stream)
+                finally:
+                    await stream.aclose()
+                batches = list(carried)
+                lines = [
+                    entry
+                    for entry in captured
+                    if entry.get("event") == "admin_stream_read"
+                ]
+                subscribes = [
+                    entry for entry in captured if entry.get("event") == "admin_read"
+                ]
+
+            # The private, cross-organisation project opened at all, which is
+            # the leg doing its job; and every re-check ran on the admin leg.
+            assert batches
+            assert set(batches) == {api.other_id}
+            assert len(lines) == len(batches)
+            assert {entry["row_id"] for entry in lines} == {str(project_id)}
+            assert {entry["user_id"] for entry in lines} == {api.other_id}
+            assert [(entry["kind"], entry["row_id"]) for entry in subscribes] == [
+                ("project", str(project_id))
+            ]
+
+    asyncio.run(exercise())
+
+
+def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Revocation 4, for real. Clearing `is_admin` ends an open admin stream.
+
+    The last of contract § 5's four revocation events, and the one phase 6
+    could only pin structurally. The project is private and in another
+    organisation, so the admin leg is the *only* thing holding the stream
+    open — when the flag goes, there is nothing left to fall back to, and the
+    tail's next re-authorisation ends the response.
+
+    The owner's own stream on the same project is untouched by the same write,
+    which is what makes this a statement about the leg rather than about the
+    tail closing whenever anything is written.
+    """
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            project_id = _admin_seed(
+                engine, owner_id=api.owner_id, admin_id=api.other_id
+            )
+            owner_stream = await api.open_stream(project_id)
+            admin_stream = await api.open_stream(project_id, headers=api.other_headers)
+            try:
+                await _live(owner_stream)
+                await _live(admin_stream)
+                with seeded(engine) as conn:
+                    ops_set_admin(conn, user_id=api.other_id, is_admin=False)
+                assert await admin_stream.closed(timeout=5.0)
+                await _live(owner_stream)
+            finally:
+                await owner_stream.aclose()
+                await admin_stream.aclose()
 
     asyncio.run(exercise())
