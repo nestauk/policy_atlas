@@ -230,12 +230,30 @@ synth-time context query and must not run before the VPC exists.
      (Self-signup is disabled — operator-created users only, for the migration
      window.)
 
-     For test users day-to-day, `make staging-user EMAIL=<email-format-username>
-     PASSWORD='<password>'` wraps this: invite email suppressed, permanent
-     password set directly (the address needs no real inbox; recovery for fake
-     addresses is `admin-set-user-password` again). `make prod-user` is the same
-     helper against the production pool (`https://policyatlas.uk`); it needs
-     prod-account credentials, not `AWS_PROFILE=pa-dev`.
+     Day-to-day, use the operator CLI instead of the raw call — it creates the
+     account **and enrols it**, which the raw call does not (task 033):
+
+     ```bash
+     export PA_OPS_ACCOUNT_STAGING=<account id>
+     export PA_OPS_USER_POOL_STAGING=$(aws ssm get-parameter \
+       --name /policy_atlas_v3/auth/user_pool_id --query Parameter.Value --output text)
+     # DATABASE_URL points at the § 6 tunnel
+     uv run python -m policy_atlas.ops --env staging user create \
+       --email <user-email> --display-name "<name>" --org "<organisation>"
+     ```
+
+     The CLI verifies that the AWS account and user pool it resolved match the
+     database on the far end of the tunnel before it writes anything, and it
+     takes **no password**: Cognito emails the invitation. The former
+     `make staging-user` / `make prod-user` / `make cognito-user` targets are
+     **deleted** — they suppressed the invitation, set a password from argv, and
+     left the account unenrolled. For prod, use `--env prod`, the
+     `PA_OPS_*_PROD` variables and prod-account credentials, not
+     `AWS_PROFILE=pa-dev`.
+
+     The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
+     `EmailConfiguration`), which is capped at 50 messages a day and needs a
+     real deliverable mailbox.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit

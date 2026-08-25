@@ -307,6 +307,31 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 - 15 new tests. verify-fast 2282 green; drift-check OK (description-only drift
   re-synced).
 
+### Phase 9a — Dependency, lock and image plumbing (gates: boto3+stubs, Dockerfile)
+- `ops` group (`boto3>=1.43,<2`, `boto3-stubs[cognito-idp]` — same group, boto3
+  ships no `py.typed`); `[tool.uv] default-groups = ["dev", "ops"]` is the CI
+  change: `uv run` re-syncs to default groups on every invocation, so any
+  Makefile/workflow `--group ops` would be silently undone. `uv.lock` +102 lines,
+  purely additive. Both Dockerfile `uv sync` lines carry `--no-group ops`, guarded
+  permanently by `test_every_uv_sync_excludes_the_ops_group` (infra tests, inside
+  root verify).
+- Proofs: frozen sync + import · strict-mypy probe inside the checked tree
+  (revealed `str`, not `Any`) · `make audit` scans all 8 new packages in-scope
+  (125 audited; the only skip is the first-party editable project) · the image's
+  exact `uv sync --no-dev --no-group ops --frozen` yields an environment with no
+  boto3 where `create_app` imports; `--no-dev` alone ships boto3 (94 vs 86
+  packages) — the flag is load-bearing, exactly the contract's predicted failure.
+- **Known-unverified (named for the review):** the literal `docker build` image
+  check could not run — the Docker daemon on this machine has no registry egress
+  (pulls hang; host curl reaches the registries). Re-run on a working machine:
+  `docker build --platform linux/amd64 -t pa-img backend/` then
+  `docker run --rm pa-img python -c "import boto3"` (expect ModuleNotFoundError)
+  and the `create_app` import (expect success). Also: the local BuildKit cache was
+  pruned during diagnosis — the next image build here starts cold, and **Phase
+  12's deploy work is blocked on daemon networking**.
+- Full `make verify` (exit 0, incl. the new hygiene test — infra 46) and
+  `make audit` green.
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

@@ -28,6 +28,7 @@ from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.liveness import tick_hub
 from policy_atlas.core.schema import app_user, event_log, portfolio, project
+from policy_atlas.ops import commands as ops_commands
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
 from tests.api.org_support import (
@@ -37,6 +38,7 @@ from tests.api.org_support import (
     ops_enrol,
     ops_set_admin,
     seeded,
+    unique_email,
 )
 from tests.helpers import delete_project_data
 from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
@@ -780,6 +782,53 @@ def test_sse_stream_closes_when_the_colleague_is_de_enrolled(
                 )
 
             await _colleague_stream_closes_on(api, engine, project_id, revoke)
+
+    asyncio.run(exercise())
+
+
+def test_sse_stream_closes_when_the_real_ops_cli_de_enrols_the_colleague(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Revocation 1, driven by the actual operator command instead of a write.
+
+    The case above writes ``app_user.org_id = NULL`` itself, because in phase 6
+    that was the only lever there was. Phase 9b ships the real one, so this runs
+    it: ``policy_atlas.ops.commands.de_enrol_user`` against the test database,
+    while a colleague holds a stream open on an org-visible project.
+
+    Two things this catches that the simulated version cannot. The stream reacts
+    to whatever the **real** command writes, so a de-enrolment that ever stopped
+    clearing ``org_id`` — or started clearing something else instead — fails
+    here while the simulation keeps passing. And it pins that the two halves of
+    the slice agree about the same column: SSE re-authorisation reads the org
+    leg, the CLI writes it, and nothing in between translates.
+
+    No Cognito client appears, which is not an omission: ``de-enrol`` resolves
+    its subject by the stored address in the database and makes no AWS call at
+    all (contract § 9's operator IAM is ``ListUsers`` and ``AdminCreateUser``
+    only, and this command needs neither).
+    """
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            _, project_id, _ = _org_seed(
+                engine, owner_id=api.owner_id, colleague_id=api.other_id
+            )
+            # `_org_seed` enrols without an address; the CLI resolves by one.
+            email = unique_email("colleague")
+            with seeded(engine) as conn:
+                conn.execute(
+                    update(app_user)
+                    .where(app_user.c.user_id == api.other_id)
+                    .values(email=email)
+                )
+
+            async def de_enrol() -> None:
+                with seeded(engine) as conn:
+                    result = ops_commands.de_enrol_user(conn, email=email)
+                assert result.user_id == api.other_id
+
+            await _colleague_stream_closes_when(api, project_id, de_enrol)
 
     asyncio.run(exercise())
 
