@@ -9,14 +9,14 @@ const LOCKING_TABLE: ReadonlyArray<{
   status: Parameters<typeof isTabOpen>[1];
   open: readonly LifecycleTab[];
 }> = [
-  { state: "no run yet", status: null, open: ["plan"] },
-  { state: "running", status: "running", open: ["plan", "sources", "history"] },
-  { state: "paused", status: "paused", open: ["plan", "sources", "history"] },
+  { state: "no run yet", status: null, open: ["plan", "share"] },
+  { state: "running", status: "running", open: ["plan", "sources", "share", "history"] },
+  { state: "paused", status: "paused", open: ["plan", "sources", "share", "history"] },
   { state: "succeeded", status: "succeeded", open: [...LIFECYCLE_TABS] },
   { state: "degraded", status: "degraded", open: [...LIFECYCLE_TABS] },
-  { state: "failed", status: "failed", open: ["plan", "sources", "history"] },
-  { state: "aborted", status: "aborted", open: ["plan", "sources", "history"] },
-  { state: "interrupted", status: "interrupted", open: ["plan", "sources", "history"] },
+  { state: "failed", status: "failed", open: ["plan", "sources", "share", "history"] },
+  { state: "aborted", status: "aborted", open: ["plan", "sources", "share", "history"] },
+  { state: "interrupted", status: "interrupted", open: ["plan", "sources", "share", "history"] },
 ];
 
 describe("lifecycle tab locking", () => {
@@ -63,7 +63,7 @@ describe("lifecycleTabs", () => {
     const locked = lifecycleTabs("/projects/p1", "running")
       .filter((entry) => entry.locked)
       .map((entry) => entry.tab);
-    expect(locked).toEqual(["results", "share"]);
+    expect(locked).toEqual(["results"]);
   });
 });
 

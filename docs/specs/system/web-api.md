@@ -81,11 +81,12 @@ and a `portfolio` row is a **Project**. The API keeps the code words; only the
 UI translates, from one shared module. Nothing below the project row was
 re-parented.
 
-Two additive fields on the project read shape:
-`portfolio_id` (the portfolio it belongs to, or `null` — unassigned is a
-normal state), and `source_count` (sources gathered, or `null` when no run
-exists — `null` and `0` differ: `null` means the question has not been asked,
-`0` means a run asked and found nothing).
+Two derived fields on the project read shape (033):
+`portfolio_ids` (the portfolios this task belongs to; empty list is
+unassigned — a normal state), and `source_count` (Included sources — funnel
+`relevant` — or `null` when no run exists. `null` and `0` differ: `null`
+means the question has not been asked, `0` means a run asked and none are
+Included). A task may belong to many portfolios (ADR 0032).
 
 ### Portfolios
 
@@ -98,10 +99,12 @@ run and no evidence of its own, and carries a name, a description and an owner
 - `POST /api/v1/portfolios` `{name, description?}` → 201 portfolio.
 - `GET /api/v1/portfolios/{id}` → portfolio with its derived `task_count`.
 - `PATCH /api/v1/portfolios/{id}` `{name?, description?}` — partial.
-- `PATCH /api/v1/projects/{id}` additively accepts `portfolio_id`, including
-  an explicit `null` to unassign. Assigning a portfolio the caller does not
-  own is 404 and does not write — otherwise the route would be an existence
-  oracle for another owner's rows.
+- `PATCH /api/v1/projects/{id}` accepts `portfolio_ids` (replace-all). Omit
+  to leave membership unchanged; `[]` unassigns every portfolio; a list
+  replaces the set. Each id must be an owned portfolio or the write is 404
+  and does not happen — otherwise the route would be an existence oracle for
+  another owner's rows. Rename and membership writes are not `run_active`
+  conflicts; they serialize on the project row lock.
 
 Owner scoping matches projects exactly: an unknown portfolio and a
 cross-owner one are the same indistinguishable 404. There is no portfolio

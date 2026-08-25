@@ -1,3 +1,5 @@
+import { Navigate } from "react-router";
+
 import { usePortfolios, useProjects } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
@@ -10,6 +12,7 @@ import { TaskListActions, TaskListPanel } from "./TaskListPanel";
 export function TasksListView() {
   useDocumentTitle(TASK.many);
   const projects = useProjects();
+  const archived = useProjects({ status: "archived" });
   const portfolios = usePortfolios();
 
   const rows = projects.data?.data ?? [];
@@ -19,6 +22,17 @@ export function TasksListView() {
 
   if (projects.isError && errorCode(projects.error) === "unauthenticated") {
     return <ReauthRedirect />;
+  }
+
+  const homeIsEmpty =
+    !projects.isPending &&
+    !archived.isPending &&
+    !projects.isError &&
+    !archived.isError &&
+    (projects.data?.data ?? []).length === 0 &&
+    (archived.data?.data ?? []).length === 0;
+  if (homeIsEmpty) {
+    return <Navigate to="/new" replace />;
   }
 
   return (

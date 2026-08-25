@@ -2142,6 +2142,18 @@
       "IcfFindingOut": {
         "description": "An implementation-context finding, discriminated by ``profile='icf'``.",
         "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
           "claim": {
             "title": "Claim",
             "type": "string"
@@ -2369,6 +2381,18 @@
               }
             ],
             "title": "Causality By Design"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
           },
           "comparator": {
             "anyOf": [
@@ -4030,7 +4054,7 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_id: The portfolio this project belongs to, or `None` when it\n        belongs to none. Unassigned is a normal state, not an error.\n    source_count: How many sources this project has gathered, or `None`\n        when no run has started. `None` and `0` differ: `None` means the\n        question has not been asked yet, `0` means a run asked and found\n        nothing.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_ids: Portfolios this project belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this project has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -4063,17 +4087,13 @@
             "title": "Name",
             "type": "string"
           },
-          "portfolio_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Portfolio Id"
+          "portfolio_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Portfolio Ids",
+            "type": "array"
           },
           "project_id": {
             "format": "uuid",
@@ -4128,7 +4148,7 @@
       },
       "ProjectUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_id: Portfolio to assign this project to, or an explicit\n        `null` to unassign it. Omit to leave the assignment unchanged.",
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_ids: Portfolios to assign this project to. Omit to leave\n        membership unchanged; `[]` unassigns every portfolio; a list\n        replaces the set.",
         "properties": {
           "name": {
             "anyOf": [
@@ -4143,17 +4163,20 @@
             ],
             "title": "Name"
           },
-          "portfolio_id": {
+          "portfolio_ids": {
             "anyOf": [
               {
-                "format": "uuid",
-                "type": "string"
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Portfolio Id"
+            "title": "Portfolio Ids"
           },
           "question": {
             "anyOf": [

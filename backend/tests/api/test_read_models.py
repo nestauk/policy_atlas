@@ -141,6 +141,7 @@ def _seed_read_model_ladder(
             )
         )
         iof_id, icf_id = uuid.uuid4(), uuid.uuid4()
+        iof_chunk_id = uuid.uuid4()
         conn.execute(
             insert(intervention_outcome_finding).values(
                 finding_id=iof_id,
@@ -157,6 +158,7 @@ def _seed_read_model_ladder(
                         "quote": "Training increased uptake.",
                         "match_status": "exact",
                         "quote_verified": True,
+                        "chunk_id": str(iof_chunk_id),
                     }
                 ],
                 created_at=now(),
@@ -432,9 +434,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             }
             assert iof["quote"] == "Training increased uptake."
             assert iof["quote_verified"] is True
+            assert iof["chunk_id"] is not None
             assert iof["groups"] == {"intervention": "Training"}
             assert icf["claim"] == "Staff time constrained implementation."
             assert icf["quote_verified"] is True
+            assert icf["chunk_id"] is None
             assert (
                 client.get(f"/api/v1/projects/{project_id}/groups", headers=owner).json()["facets"][
                     0

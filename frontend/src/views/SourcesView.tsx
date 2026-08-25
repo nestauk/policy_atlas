@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
+import { useCoverage, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
@@ -39,6 +39,7 @@ export function SourcesView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const landscape = useLandscape(projectId);
+  const coverage = useCoverage(projectId);
   useDocumentTitle(project.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
@@ -366,6 +367,39 @@ export function SourcesView() {
             Next
           </button>
         </nav>
+      )}
+
+      {(coverage.data?.backends_detail ?? []).some(
+        (backend) => (backend.queries ?? []).length > 0,
+      ) && (
+        <section className="mt-8" aria-labelledby="search-queries-heading">
+          <h2 id="search-queries-heading" className="text-lead font-semibold text-navy">
+            Search queries
+          </h2>
+          <div className="mt-4 space-y-5">
+            {(coverage.data?.backends_detail ?? []).map((backend) => {
+              const queries = backend.queries ?? [];
+              if (queries.length === 0) return null;
+              return (
+                <div key={backend.backend}>
+                  <h3 className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
+                    {backend.backend}
+                  </h3>
+                  <ul className="mt-2 space-y-1">
+                    {queries.map((item) => (
+                      <li key={item.query} className="text-body text-navy">
+                        <code className="text-caption">{scrub(item.query)}</code>
+                        {typeof item.results === "number" ? (
+                          <span className="ml-2 text-caption text-grey">{item.results} results</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       <SourceDossier

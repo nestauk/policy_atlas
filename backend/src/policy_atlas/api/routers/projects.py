@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.app import ApiConflict
@@ -23,8 +23,13 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.lifecycle import archive_project, rename_project
-from policy_atlas.api.routers._common import owned_portfolio, owned_project, project_out
-from policy_atlas.core.schema import capability_run, project
+from policy_atlas.api.routers._common import (
+    memberships_for_projects,
+    owned_portfolio,
+    owned_project,
+    project_out,
+)
+from policy_atlas.core.schema import capability_run, portfolio_membership, project
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -55,8 +60,12 @@ def list_projects(
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).mappings().all()
+    memberships = memberships_for_projects(conn, [row["project_id"] for row in rows])
     return Page(
-        data=[project_out(conn, row) for row in rows],
+        data=[
+            project_out(conn, row, portfolio_ids=memberships[row["project_id"]])
+            for row in rows
+        ],
         pagination=PageMeta(page=page, page_size=page_size, total_items=int(total)),
     )
 
@@ -114,19 +123,38 @@ def update_project(
             .where(project.c.project_id == project_id)
             .values(question=changes["question"], updated_at=datetime.now(UTC))
         )
-    if "portfolio_id" in changes:
-        target = changes["portfolio_id"]
-        # An unowned portfolio must be as invisible here as it is on its own
-        # route, or PATCH becomes an existence oracle for someone else's rows.
-        if target is not None:
+    assigned_ids: list[uuid.UUID] | None = None
+    if "portfolio_ids" in changes:
+        assigned_ids = list(dict.fromkeys(changes["portfolio_ids"] or []))
+        # Unowned ids must 404 before any write, matching the portfolio
+        # route — otherwise PATCH is an existence oracle for other owners.
+        for target in assigned_ids:
             owned_portfolio(conn, portfolio_id=target, user_id=user.user_id)
+        conn.execute(
+            delete(portfolio_membership).where(
+                portfolio_membership.c.project_id == project_id
+            )
+        )
+        now = datetime.now(UTC)
+        if assigned_ids:
+            conn.execute(
+                portfolio_membership.insert(),
+                [
+                    {
+                        "portfolio_id": target,
+                        "project_id": project_id,
+                        "created_at": now,
+                    }
+                    for target in assigned_ids
+                ],
+            )
         conn.execute(
             update(project)
             .where(project.c.project_id == project_id)
-            .values(portfolio_id=target, updated_at=datetime.now(UTC))
+            .values(updated_at=now)
         )
     row = conn.execute(select(project).where(project.c.project_id == project_id)).mappings().one()
-    return project_out(conn, row)
+    return project_out(conn, row, portfolio_ids=assigned_ids)
 
 
 @router.post("/{project_id}/archive", response_model=ProjectOut)

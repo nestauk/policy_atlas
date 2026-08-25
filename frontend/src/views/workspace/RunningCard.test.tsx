@@ -95,6 +95,46 @@ describe("runningCard helpers", () => {
     expect(rows[1]?.label).toBe("Screening");
   });
 
+  it("keeps every search/screen round and numbers them when there is more than one", () => {
+    const rows = stageRows(
+      [
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 1 },
+        }),
+        stage({
+          stage: "screen",
+          label: "Screening",
+          status: "completed",
+          summary: { round_index: 1 },
+        }),
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 2 },
+        }),
+        stage({
+          stage: "screen",
+          label: "Screening",
+          status: "started",
+          summary: { round_index: 2 },
+        }),
+      ],
+      planWithSteps(),
+    );
+    expect(rows.filter((row) => row.stage === "acquire").map((row) => row.label)).toEqual([
+      "Searching",
+      "Searching (Round 2)",
+    ]);
+    expect(rows.filter((row) => row.stage === "screen").map((row) => row.label)).toEqual([
+      "Screening",
+      "Screening (Round 2)",
+    ]);
+  });
+
   it("signposts Sources after acquire and Results when the write-up exists", () => {
     expect(signpostForStage("acquire", PROJECT_ID, false)).toEqual({
       href: `/projects/${PROJECT_ID}/sources/all`,

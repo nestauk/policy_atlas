@@ -259,6 +259,7 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
     with engine.connect() as up_conn:
         inspector = inspect(up_conn)
         assert "portfolio" in inspector.get_table_names()
+        assert "portfolio_membership" in inspector.get_table_names()
         assert {c["name"] for c in inspector.get_columns("portfolio")} == {
             "portfolio_id",
             "owner_user_id",
@@ -266,7 +267,12 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
             "description",
             "created_at",
         }
-        assert "portfolio_id" in {c["name"] for c in inspector.get_columns("project")}
+        assert {c["name"] for c in inspector.get_columns("portfolio_membership")} == {
+            "portfolio_id",
+            "project_id",
+            "created_at",
+        }
+        assert "portfolio_id" not in {c["name"] for c in inspector.get_columns("project")}
 
 
 def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> None:

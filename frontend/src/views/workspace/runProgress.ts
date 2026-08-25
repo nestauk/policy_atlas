@@ -76,10 +76,11 @@ function vocabByStage(backendScope?: string | null): Map<string, PlanStepPreview
 function rowFromVocab(
   step: PlanStepPreview,
   live: StageEntry | undefined,
+  label = step.label,
 ): StageRow {
   return {
     stage: step.stage,
-    label: step.label,
+    label,
     blurb: step.blurb,
     status: live?.status ?? "upcoming",
     summary: live?.summary,
@@ -87,7 +88,24 @@ function rowFromVocab(
   };
 }
 
-/** Agreed plan steps with live SSE status/counts overlaid — labels from the plan panel. */
+const SEARCH_CYCLE_STAGES = new Set(["acquire", "screen"]);
+
+function roundIndexOf(entry: StageEntry): number {
+  const value = entry.summary?.round_index;
+  return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+function cycleLabel(base: string, roundIndex: number, maxRound: number): string {
+  if (maxRound <= 1 || roundIndex <= 1) return base;
+  return `${base} (Round ${roundIndex})`;
+}
+
+/** Agreed plan steps with live SSE status/counts overlaid — labels from the plan panel.
+
+Every acquire/screen SSE entry is kept so Broad/Broadest rounds do not
+collapse to the last one. Ingest is omitted from Searching by the server
+(unmapped from public acquire).
+*/
 export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
   const liveByStage = new Map<string, StageEntry>(stages.map((entry) => [entry.stage, entry]));
   const scope = plan?.backend_scope;
@@ -95,30 +113,57 @@ export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefin
   const depth = plan?.analysis_depth;
   const agreed =
     depth !== undefined && depth !== null ? stepsForAnalysisDepth(depth, scope) : [];
+  const maxRound = Math.max(
+    1,
+    ...stages.filter((entry) => SEARCH_CYCLE_STAGES.has(entry.stage)).map(roundIndexOf),
+  );
+
+  const labelled = (step: PlanStepPreview, entry: StageEntry | undefined): StageRow => {
+    if (entry !== undefined && SEARCH_CYCLE_STAGES.has(entry.stage)) {
+      return rowFromVocab(step, entry, cycleLabel(step.label, roundIndexOf(entry), maxRound));
+    }
+    return rowFromVocab(step, entry);
+  };
 
   if (agreed.length > 0) {
     const seen = new Set(agreed.map((step) => step.stage));
     const extras = stages.flatMap((entry) => {
       if (seen.has(entry.stage)) return [];
       const step = vocab.get(entry.stage);
-      return step === undefined ? [] : [rowFromVocab(step, entry)];
+      return step === undefined ? [] : [labelled(step, entry)];
     });
-    return [...agreed.map((step) => rowFromVocab(step, liveByStage.get(step.stage))), ...extras];
+    const rows: StageRow[] = [];
+    for (const step of agreed) {
+      if (SEARCH_CYCLE_STAGES.has(step.stage)) {
+        const matches = stages.filter((entry) => entry.stage === step.stage);
+        if (matches.length === 0) {
+          rows.push(rowFromVocab(step, undefined));
+        } else {
+          for (const entry of matches) rows.push(labelled(step, entry));
+        }
+      } else {
+        rows.push(rowFromVocab(step, liveByStage.get(step.stage)));
+      }
+    }
+    return [...rows, ...extras];
   }
 
   return stages.map((entry) => {
     const step = vocab.get(entry.stage);
     if (step === undefined) {
+      const base = entry.label;
       return {
         stage: entry.stage,
-        label: entry.label,
+        label: SEARCH_CYCLE_STAGES.has(entry.stage)
+          ? cycleLabel(base, roundIndexOf(entry), maxRound)
+          : base,
         blurb: entry.blurb,
         status: entry.status,
         summary: entry.summary,
         seconds: entry.seconds,
       };
     }
-    return rowFromVocab(step, entry);
+    return labelled(step, entry);
   });
 }
 

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
+import { mockCoverage, mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
@@ -11,6 +11,7 @@ import * as queries from "../api/queries";
 vi.mock("../api/queries", () => ({
   useProject: vi.fn(),
   useLandscape: vi.fn(),
+  useCoverage: vi.fn(),
   useEvidence: vi.fn(),
   useFindings: vi.fn(),
   useSourceDossier: vi.fn(),
@@ -75,6 +76,9 @@ beforeEach(() => {
   );
   vi.mocked(queries.useFunnel).mockReturnValue(
     { data: mockFunnel } as unknown as ReturnType<typeof queries.useFunnel>,
+  );
+  vi.mocked(queries.useCoverage).mockReturnValue(
+    { data: mockCoverage } as unknown as ReturnType<typeof queries.useCoverage>,
   );
   vi.mocked(queries.useEvidence).mockReturnValue({
     data: evidencePage(),
@@ -164,6 +168,15 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
   it("shows a sources count footer from the pagination total", () => {
     renderSources();
     expect(screen.getByText(`${mockEvidence.length} sources`)).toBeInTheDocument();
+  });
+
+  it("lists search queries under the table, grouped by backend", () => {
+    renderSources();
+    expect(screen.getByRole("heading", { name: "Search queries" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OpenAlex" })).toBeInTheDocument();
+    expect(
+      screen.getByText("childhood obesity school intervention UK"),
+    ).toBeInTheDocument();
   });
 });
 

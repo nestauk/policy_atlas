@@ -996,6 +996,7 @@ def findings_page(
             "relevance": cast(Any, relevance.get(str(row["finding_id"]))),
             "quote": _grounding_value(row["grounding"], "quote"),
             "quote_verified": _grounding_value(row["grounding"], "quote_verified"),
+            "chunk_id": _grounding_value(row["grounding"], "chunk_id"),
             "groups": groups.get(row["finding_id"], {}),
         }
         if profile == "iof":
@@ -1068,6 +1069,11 @@ def _grounding_value(grounding: Any, key: str) -> Any | None:
     value = grounding[0].get(key)
     if key == "quote_verified":
         return value if isinstance(value, bool) else None
+    if key == "chunk_id":
+        try:
+            return uuid.UUID(str(value)) if value is not None else None
+        except (TypeError, ValueError):
+            return None
     return value if isinstance(value, str) else None
 
 

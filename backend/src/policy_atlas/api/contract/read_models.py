@@ -223,6 +223,8 @@ class FindingBaseOut(BaseModel):
         source_title: Title of that source.
         profile: Extraction profile the finding came from.
         relevance: Run-scoped B2' relevance mark, when the run has them.
+        chunk_id: Verified chunk identity from the first grounding anchor, or
+            ``None`` for abstract-only findings.
     """
 
     finding_id: uuid.UUID
@@ -231,6 +233,7 @@ class FindingBaseOut(BaseModel):
     source_title: str
     profile: ExtractProfile
     relevance: FindingRelevance | None = None
+    chunk_id: uuid.UUID | None = None
 
 
 class IofStatisticsOut(BaseModel):

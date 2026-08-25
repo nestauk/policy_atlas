@@ -1,8 +1,10 @@
 import { Fragment, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useFindings, useGroups, useProject } from "../api/queries";
+import { useApiClient, useFindings, useGroups, useProject } from "../api/queries";
+import { HighlightedContext } from "./ArtefactView";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -79,16 +81,53 @@ function DefinitionRow({ label, value }: { label: string; value: string | null }
 
 /** The shared grounding shape: the finding's exact anchoring words. The
  *  verified tick renders only when verification actually passed. */
-function ExactWords({ quote, verified }: { quote?: string | null; verified?: boolean | null }) {
+function ExactWords({
+  projectId,
+  finding,
+}: {
+  projectId: string;
+  finding: FindingOut;
+}) {
+  const client = useApiClient();
+  const chunkId = finding.chunk_id ?? null;
+  const quote = finding.quote ?? "";
+  const context = useQuery({
+    queryKey: ["projects", projectId, "finding-chunk-context", chunkId, quote],
+    enabled: chunkId !== null && quote !== "",
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await client.GET(
+        "/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+        {
+          params: {
+            path: { project_id: projectId, chunk_id: chunkId ?? "" },
+            query: { quote },
+          },
+        },
+      );
+      if (data === undefined) throw error;
+      return data;
+    },
+  });
   return (
     <div>
       <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
         The exact words
       </h3>
-      {typeof quote === "string" && quote !== "" ? (
+      {context.data?.context !== undefined && context.data.context !== "" ? (
+        <p className="text-body leading-relaxed text-grey">
+          <HighlightedContext text={context.data.context} quote={quote} />{" "}
+          {finding.quote_verified === true && (
+            <span className="not-italic text-green">✓ verified</span>
+          )}
+        </p>
+      ) : typeof quote === "string" && quote !== "" ? (
         <p className="text-body italic leading-relaxed text-grey">
           “{scrub(quote)}”{" "}
-          {verified === true && <span className="not-italic text-green">✓ verified</span>}
+          {finding.quote_verified === true && (
+            <span className="not-italic text-green">✓ verified</span>
+          )}
         </p>
       ) : (
         <p className="text-body text-grey">No anchoring quote recorded.</p>
@@ -97,7 +136,7 @@ function ExactWords({ quote, verified }: { quote?: string | null; verified?: boo
   );
 }
 
-function IofExpansion({ finding }: { finding: IofFinding }) {
+function IofExpansion({ finding, projectId }: { finding: IofFinding; projectId: string }) {
   const stats = statRows(finding.statistics);
   const qualifiers = finding.stratum_qualifiers ?? [];
   return (
@@ -145,12 +184,12 @@ function IofExpansion({ finding }: { finding: IofFinding }) {
           ))}
         </div>
       </div>
-      <ExactWords quote={finding.quote} verified={finding.quote_verified} />
+      <ExactWords projectId={projectId} finding={finding} />
     </div>
   );
 }
 
-function IcfExpansion({ finding }: { finding: IcfFinding }) {
+function IcfExpansion({ finding, projectId }: { finding: IcfFinding; projectId: string }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
@@ -180,7 +219,7 @@ function IcfExpansion({ finding }: { finding: IcfFinding }) {
           <DefinitionRow label="Workforce needed" value={finding.workforce_requirements ?? null} />
         </dl>
       </div>
-      <ExactWords quote={finding.quote} verified={finding.quote_verified} />
+      <ExactWords projectId={projectId} finding={finding} />
     </div>
   );
 }
@@ -280,9 +319,9 @@ function FindingRow({
           <td />
           <td colSpan={showKind ? 6 : 5} className="px-4 py-4">
             {finding.profile === "iof" ? (
-              <IofExpansion finding={finding} />
+              <IofExpansion finding={finding} projectId={projectId} />
             ) : (
-              <IcfExpansion finding={finding} />
+              <IcfExpansion finding={finding} projectId={projectId} />
             )}
           </td>
         </tr>
@@ -307,21 +346,23 @@ export function FindingsView() {
   const profile = profileParam === "iof" || profileParam === "icf" ? profileParam : undefined;
   const facet = searchParams.get("facet") ?? undefined;
   const group = searchParams.get("group") ?? undefined;
+  const rawPage = Number(searchParams.get("page") ?? "1");
+  const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
 
   const findings = useFindings(projectId, {
-    page_size: 200,
+    page,
+    page_size: 50,
     profile,
     facet,
-    group: group,
+    group,
   });
   const groups = useGroups(projectId);
   const [open, setOpen] = useState<string | null>(null);
 
-  const setParam = (key: string, value: string | null) => {
+  const updateParams = (update: (next: URLSearchParams) => void) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
-      if (value === null) next.delete(key);
-      else next.set(key, value);
+      update(next);
       return next;
     });
   };
@@ -350,7 +391,13 @@ export function FindingsView() {
             key={label}
             type="button"
             aria-pressed={profile === value}
-            onClick={() => setParam("profile", value ?? null)}
+            onClick={() =>
+              updateParams((next) => {
+                if (value === undefined) next.delete("profile");
+                else next.set("profile", value);
+                next.delete("page");
+              })
+            }
             className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
               profile === value
                 ? "border-blue bg-blue-tint text-blue"
@@ -367,10 +414,13 @@ export function FindingsView() {
           <button
             type="button"
             aria-pressed={group === undefined}
-            onClick={() => {
-              setParam("facet", null);
-              setParam("group", null);
-            }}
+            onClick={() =>
+              updateParams((next) => {
+                next.delete("facet");
+                next.delete("group");
+                next.delete("page");
+              })
+            }
             className={`cursor-pointer border px-2.5 py-1 text-caption focus-visible:outline-2 focus-visible:outline-blue ${
               group === undefined
                 ? "border-blue bg-blue-tint text-blue"
@@ -387,15 +437,18 @@ export function FindingsView() {
                 key={candidate.label}
                 type="button"
                 aria-pressed={group === candidate.label}
-                onClick={() => {
-                  if (group === candidate.label) {
-                    setParam("facet", null);
-                    setParam("group", null);
-                  } else {
-                    setParam("facet", interventionFacet.facet);
-                    setParam("group", candidate.label);
-                  }
-                }}
+                onClick={() =>
+                  updateParams((next) => {
+                    if (group === candidate.label) {
+                      next.delete("facet");
+                      next.delete("group");
+                    } else {
+                      next.set("facet", interventionFacet.facet);
+                      next.set("group", candidate.label);
+                    }
+                    next.delete("page");
+                  })
+                }
                 className={`cursor-pointer border px-2.5 py-1 text-caption focus-visible:outline-2 focus-visible:outline-blue ${
                   group === candidate.label
                     ? "border-blue bg-blue-tint text-blue"
@@ -491,6 +544,41 @@ export function FindingsView() {
               </tbody>
             </table>
           </div>
+          {findings.data.pagination.total_items > findings.data.pagination.page_size && (
+            <nav aria-label="Pages" className="mt-5 flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() =>
+                  updateParams((next) => next.set("page", String(page - 1)))
+                }
+                className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
+              >
+                Previous
+              </button>
+              <span className="text-caption text-grey">
+                Page {page} of{" "}
+                {Math.ceil(
+                  findings.data.pagination.total_items / findings.data.pagination.page_size,
+                )}
+              </span>
+              <button
+                type="button"
+                disabled={
+                  page >=
+                  Math.ceil(
+                    findings.data.pagination.total_items / findings.data.pagination.page_size,
+                  )
+                }
+                onClick={() =>
+                  updateParams((next) => next.set("page", String(page + 1)))
+                }
+                className="cursor-pointer border border-line-2 px-3 py-2 text-caption font-semibold text-navy disabled:cursor-default disabled:text-line-2"
+              >
+                Next
+              </button>
+            </nav>
+          )}
         </>
       )}
     </main>

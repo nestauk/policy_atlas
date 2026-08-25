@@ -56,7 +56,7 @@ export function useCreateTask() {
       if (input.portfolioId != null) {
         await client.PATCH("/api/v1/projects/{project_id}", {
           params: { path: { project_id: project.project_id } },
-          body: { portfolio_id: input.portfolioId },
+          body: { portfolio_ids: [input.portfolioId] },
         });
       }
 
@@ -105,7 +105,7 @@ export function useUpdateProject(projectId: string) {
     mutationFn: async (body: {
       name?: string | null;
       question?: string | null;
-      portfolio_id?: string | null;
+      portfolio_ids?: string[] | null;
     }) => {
       const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}", {
         params: { path: { project_id: projectId } },
@@ -117,7 +117,10 @@ export function useUpdateProject(projectId: string) {
     // The bare "projects" root covers BOTH this project's detail key and the
     // projects-list key (["projects", "list", …]) — a rename must refresh the
     // landing card, not just the workspace header (F.2 finding, 2026-07-29).
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    },
   });
 }
 

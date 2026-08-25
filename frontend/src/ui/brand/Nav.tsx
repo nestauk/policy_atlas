@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 
+import { Chip } from "./Chip";
 import { cn } from "./cn";
 
 /** Height of one chrome row. The shell stacks two of these inside a task. */
@@ -32,8 +33,9 @@ export function NavLogo() {
  */
 export function NavHomeLink() {
   return (
-    <Link to="/" className="min-w-0 no-underline">
+    <Link to="/" className="flex min-w-0 items-center gap-2 no-underline">
       <NavLogo />
+      <Chip tone="blue">BETA</Chip>
     </Link>
   );
 }

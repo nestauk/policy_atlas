@@ -12,6 +12,8 @@ const now = "2026-07-21T09:30:00Z";
 // begins at the plan pane, not mid-analysis. `mock/api.ts` mutates
 // `latest_run` in place once a run actually starts, so every read of this
 // object stays consistent with the scripted run state.
+export const MOCK_PORTFOLIO_ID = "a1000000-0000-4000-8000-000000000001";
+
 export const mockProject: components["schemas"]["ProjectOut"] = {
   project_id: MOCK_PROJECT_ID,
   name: "Healthier childhoods in Tower Hamlets",
@@ -21,7 +23,18 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   updated_at: now,
   archived_at: null,
   latest_run: null,
+  portfolio_ids: [MOCK_PORTFOLIO_ID],
 };
+
+export const mockPortfolios: components["schemas"]["PortfolioOut"][] = [
+  {
+    portfolio_id: MOCK_PORTFOLIO_ID,
+    name: "Childhood health",
+    description: "Borough childhood-health programme",
+    created_at: "2026-07-10T09:00:00Z",
+    task_count: 1,
+  },
+];
 
 export const mockFunnel: components["schemas"]["FunnelOut"] = {
   found: 128,
@@ -151,6 +164,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     stratum_qualifiers: [{ "Age band": "5-7" }, { Deprivation: "IMD quintile 1-2" }],
     quote: "Breakfast participation increased when provision was universal, particularly where uptake carried no separate sign-up.",
     quote_verified: true,
+    chunk_id: "70000000-0000-4000-8000-000000000001",
     groups: { "Intervention type": "Universal breakfast provision" },
   },
   {
@@ -175,6 +189,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     workforce_requirements: "School travel coordinator time",
     quote: "Where routes felt safe and arrival was coordinated with the school day, participation held up over the term.",
     quote_verified: false,
+    chunk_id: null,
     groups: { "Intervention type": "Active-travel offers" },
   },
 ];

@@ -31,18 +31,18 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
  * That is the flag-don't-drop discipline, not a special case.
  */
 function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
-  if (status === null || status === undefined) return ["plan"];
+  if (status === null || status === undefined) return ["plan", "share"];
   switch (status) {
     case "running":
     case "paused":
-      return ["plan", "sources", "history"];
+      return ["plan", "sources", "share", "history"];
     case "succeeded":
     case "degraded":
       return LIFECYCLE_TABS;
     case "failed":
     case "aborted":
     case "interrupted":
-      return ["plan", "sources", "history"];
+      return ["plan", "sources", "share", "history"];
   }
 }
 

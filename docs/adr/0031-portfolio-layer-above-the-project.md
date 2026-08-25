@@ -1,7 +1,10 @@
 # ADR 0031 — A portfolio layer above the project, and the screen/code vocabulary split
 
 - **Status:** Accepted — 2026-08-17 (owner, with the 032 plan approval and the
-  schema gate)
+  schema gate). **Amended 2026-08-24** by [ADR 0032](0032-portfolio-membership-many-to-many.md)
+  on membership cardinality (decision 1) and PATCH shape (decision 4). The
+  portfolio still sits *above* the project; the screen/code vocabulary split
+  is unchanged.
 - **Date:** 2026-08-17
 - **Task:** 032-task-lifecycle-ia · contract approved 2026-08-17 · plan approved
   2026-08-17 (with two owner reductions: standard review, three full verify runs)

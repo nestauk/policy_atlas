@@ -47,8 +47,15 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    # planner_v8: Analysis level screen words; report not review; search caps.
-    assert PLANNER_PROMPT_VERSION == "planner_v8"
+    # planner_v9: OECD members source-origin default; spoken chip.
+    assert PLANNER_PROMPT_VERSION == "planner_v9"
+
+
+def test_planner_prompt_defaults_source_origin_to_oecd_members() -> None:
+    assert 'set country_group to the pinned label "OECD members"' in PLANNER_SYSTEM_PROMPT
+    assert "publisher / author-affiliation" in PLANNER_SYSTEM_PROMPT
+    assert "not study setting" in PLANNER_SYSTEM_PROMPT
+    assert "Do NOT add a UK or high-income screening criterion" in PLANNER_SYSTEM_PROMPT
 
 
 def test_planner_prompt_plain_language_and_ready_update() -> None:

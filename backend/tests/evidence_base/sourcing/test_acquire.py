@@ -175,7 +175,7 @@ def assert_invariant(counts: dict[str, Any]) -> None:
 
 
 def test_acquire_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 33
+    assert len(metadata.tables) == 34
 
 
 def seed_coverage_row(

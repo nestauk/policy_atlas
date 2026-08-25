@@ -153,7 +153,7 @@ export function PortfolioDetailView() {
   useDocumentTitle(portfolio.data?.name, PROJECT.one);
 
   const tasks = (projects.data?.data ?? []).filter(
-    (project) => project.portfolio_id === portfolioId,
+    (project) => project.portfolio_ids?.includes(portfolioId) === true,
   );
 
   return (

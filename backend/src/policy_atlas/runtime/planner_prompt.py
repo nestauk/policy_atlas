@@ -26,12 +26,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-# planner_v8: Analysis level screen words (Evidence overview / Full-text
-# synthesis / Findings synthesis); research-approach "report" not
-# "review"; search-scope acquire caps in thoroughness option subs.
-# Succeeds planner_v7 (plain reader language; ready-update copy).
+# planner_v9: default source origin to the pinned OECD members group,
+# spoken in reply + scope chip; publisher/author origin not study setting.
+# Succeeds planner_v8 (analysis-level screen words; report not review;
+# search-scope acquire caps).
 # The router and watch moments live in orchestrator_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v8"
+PLANNER_PROMPT_VERSION = "planner_v9"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -470,6 +470,13 @@ Intent-awareness — binding:
     countries — "what are G7 governments publishing", "Nordic ministry
     documents", or the user confirms the origin reading): set
     country_group.
+  Default SOURCE ORIGIN when the user has named no geography and has not
+  cleared it: set country_group to the pinned label "OECD members"
+  (countries null). Say so in `reply` — this is publisher / author-affiliation
+  origin, not study setting — and emit the matching scope chip.
+  Do NOT add a UK or high-income screening criterion unless the user asks
+  about study setting. If they cleared geography, leave country_group unset
+  and do not re-apply this default on later turns.
   Three cases for the label:
   - Pinned groups — emit the label EXACTLY as written, countries null
     (membership expands at compile from provenance-stamped tables, never
