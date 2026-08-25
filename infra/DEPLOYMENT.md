@@ -231,10 +231,18 @@ synth-time context query and must not run before the VPC exists.
      window.)
 
      Day-to-day, use the operator CLI instead of the raw call — it creates the
-     account **and enrols it**, which the raw call does not (task 033):
+     account **and enrols it**, which the raw call does not (task 033). The
+     make wrappers own the setup (session check, pool id from SSM, DB
+     credentials, the § 6 tunnel opened or reused):
 
      ```bash
-     export PA_OPS_ACCOUNT_STAGING=<account id>
+     export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+     make user-create ENV=staging EMAIL=<user-email> NAME="<name>" ORG="<organisation>"
+     ```
+
+     The direct form remains equivalent (the wrappers only forward to it):
+
+     ```bash
      export PA_OPS_USER_POOL_STAGING=$(aws ssm get-parameter \
        --name /policy_atlas_v3/auth/user_pool_id --query Parameter.Value --output text)
      # DATABASE_URL points at the § 6 tunnel
@@ -436,7 +444,10 @@ choose a different remote target.
 
 **The ops CLI (task 033) runs over this same tunnel** — the operator's
 laptop, `uv run python -m policy_atlas.ops --env staging|prod ...` with
-`DATABASE_URL` pointing at `localhost:15432`, under the operator's own IAM
+`DATABASE_URL` pointing at `localhost:15432`, or the equivalent make
+wrappers (`make user-create ENV=... EMAIL=... NAME=... ORG=...` — see the
+Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
+and tunnel automatically, reusing an already-open one), under the operator's own IAM
 (Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser`, nothing
 more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
 task: Cognito permission belongs to the human operator, not to a task

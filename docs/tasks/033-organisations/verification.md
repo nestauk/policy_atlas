@@ -781,6 +781,26 @@ lane and Tier 4 ("stated here rather than discovered at step 7").
   originals could not see; every adopted fix carries a test that fails
   with the fix reverted (verified per fix by the executing agents).
 
+### Post-review owner addition (2026-08-25): ops make wrappers
+
+The owner requested per-command make wrappers for the ops CLI
+(`make user-create ENV=staging EMAIL=... NAME="..." ORG="..."`), reversing
+the build's no-make-target stance for ergonomics. Shipped with the
+properties that made the original deletion necessary preserved:
+`scripts/ops_run.sh` owns the setup (session check, pool id from SSM, DB
+credentials from Secrets Manager into `DATABASE_URL` in-process — never
+argv — and the § 6 tunnel, opened/reused/torn down);
+`PA_OPS_ACCOUNT_<ENV>` stays operator-exported (deriving it from the same
+STS call the guard compares against would make the account leg a
+tautology); the targets only map variable names to flag names — the CLI's
+parser remains the sole grammar authority (mutually exclusive pairs are
+forwarded as given); the tty passes through so the day-zero confirmation
+still reaches a human. Drift is pinned: `tests/ops/test_make_wrappers.py`
+dry-runs every target (`OPS_DRY_RUN=1`) and parses the assembled argv with
+the real `build_parser()` inside `make verify` — the pin caught its first
+bug pre-ship (`--operator` emitted after the subcommand, which argparse
+refuses). The three deleted targets stay deleted and their pin stands.
+
 ## Deviations flagged (minor, resolved within the contract's vocabulary)
 
 1. **`cache_logger_on_first_use=True` dropped from `configure_logging()`** (Phase 0b).
