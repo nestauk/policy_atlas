@@ -57,7 +57,14 @@ def upgrade() -> None:
     # this runs; an idle jumpbox session holding a conflicting lock would
     # otherwise queue the deploy behind it — and queue every reader behind us.
     # Fail fast instead, so the runbook's blocker preflight is the remedy.
-    op.execute("SET lock_timeout = '5s'")
+    #
+    # SET **LOCAL**: plain `SET` is session-scoped, so on a connection that
+    # runs several revisions — `alembic upgrade head` on a fresh database — it
+    # silently imposed this migration's 5s ceiling on every later one, whose
+    # own lock waits are none of this revision's business. `alembic/env.py`
+    # wraps the run in `context.begin_transaction()`, so LOCAL has a
+    # transaction to be scoped to and the GUC reverts at commit.
+    op.execute("SET LOCAL lock_timeout = '5s'")
 
     op.create_table(
         "organisation",
@@ -138,7 +145,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("SET lock_timeout = '5s'")
+    # Transaction-scoped, for the reason `upgrade` states.
+    op.execute("SET LOCAL lock_timeout = '5s'")
 
     op.drop_column("conversation", "created_by")
 

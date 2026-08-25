@@ -1,10 +1,10 @@
 # Verification: 033-organisations
 
-> **Status: BUILD COMPLETE (steps 5–6), 2026-08-25.** All sixteen phases
-> implemented and committed; every locally runnable gate green. Six items are
-> named in § Known unverified — four blocked on this machine/AWS access, two
-> owner-side (DPIA; the attended live check). Review (steps 7–10) runs in a
-> fresh conversation.
+> **Status: REVIEW STACK RUN AND ADJUDICATED (step 7), 2026-08-25.** Six
+> lanes run in a fresh conversation; every finding adopted, declined with a
+> recorded reason, or escalated — see § Review findings. Fixes applied and
+> gated. Six items remain in § Known unverified — four blocked on this
+> machine/AWS access, two owner-side (DPIA; the attended live check).
 
 ## Commands run (exit gate, 2026-08-25, final tree)
 
@@ -357,22 +357,32 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 - **Environment guard (rubric 26):** STS account vs operator-supplied expected ·
   pool reachability · **the DB leg — the resolved pool must recognise the
   connected database's newest `app_user` subs; subjects-exist-but-none-resolve is
-  a hard refusal `--yes` cannot lift** (that case IS prod-tunnel/staging-creds).
+  a hard refusal** (that case IS prod-tunnel/staging-creds).
   Honest limit, documented: an empty `app_user` degrades to typed confirmation
-  (blast radius nil — nobody has signed in there).
+  (blast radius nil — nobody has signed in there). *Amended by the review
+  stack:* the confirmation now requires an interactive terminal — the
+  assume-yes flag is deleted outright, and a non-empty table with no
+  sampleable subject hard-refuses instead of degrading.
 - **Concurrency (rubric 27):** all `app_user` writers read `FOR UPDATE`;
   grant-vs-de-enrol races refuse in either commit order because de-enrol clears
-  the address grant resolves by. Operator identity on traces = `--operator`
-  defaulting to the STS ARN (not $USER, which is spoofable).
+  the address grant resolves by. *Amended by the review stack:* grant now
+  also refuses any subject with `org_id` NULL (closing the resync-then-grant
+  re-arm), and the trace always names the verified STS ARN — `--operator`
+  is an annotation, never a replacement, and the trace is emitted only
+  after commit.
 - `staging-user`/`prod-user`/`cognito-user` make targets deleted (pinned by
   test); DEPLOYMENT.md § 3 rewritten to the CLI with the `COGNITO_DEFAULT`
   50/day caveat. SSE revocation re-driven through the real CLI de-enrol.
-- 45 new tests; verify-fast 2327 green; mypy strict 291 files; ruff clean.
-- **Escalation (owner decision):** no CLI path creates an org-less administrator
-  (`admin grant` resolves by address, which only `enrol --org` writes). The live
-  check's "third admin in neither org" is satisfiable by enrolling the admin
-  into a third organisation; alternatives — an org-less enrol mode, or
-  grant-by-sub (rejected: bypasses the rubric-27 address-mediated lock).
+- 44 new tests at build (the build's "45" was a miscount — review-stack
+  correction); verify-fast 2327 green; mypy strict 291 files; ruff clean.
+- **Escalation (owner decision), amended by the review stack:** no CLI path
+  creates an org-less administrator — now enforced directly (`admin grant`
+  refuses a subject with `org_id` NULL, via either selector; the review
+  added `--sub` after proving the build's grant-by-sub rejection rested on
+  a wrong premise — the sub path takes the same FOR UPDATE lock). The live
+  check's "third admin in neither org" is satisfiable by enrolling the
+  admin into a third organisation; if a truly org-less admin is wanted, an
+  org-less enrol mode is the only route. Owner call still open on which.
 - Post-033 rename note: `rows assign` reports in code words; the rename slice
   must cover `policy_atlas.ops`.
 
@@ -392,13 +402,20 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   byte-identical (rubric 14). Owner column rule:
   `showOwnerColumn = hasSwitcher || any non-owned row` (collapses to false for
   every unenrolled state); null `owner_display` renders "—", and
-  "No organisation" on the admin wide list. Account menu (display name,
+  "No organisation" on the admin wide list. *Review-stack correction:* the
+  Phase 10b claim "the unenrolled UI is byte-identical" was too strong —
+  two deltas exist at zero orgs (the rubric-41 account-menu block, and the
+  listing page size raised to 200 for everyone). The pinned dark-launch
+  property is that no `scope` param is ever sent for an unenrolled caller
+  and no org affordance renders; rubric 14 is adjudicated as holding in
+  that form, with rubric 41 governing the account menu. Account menu (display name,
   CSS-truncated email, organisation, "Administrator") extended in place in
   AppShell. Check-in banner gated on `is_owner` at the one AppShell site that
   covers poll, badge, tab marker and banner (rubric 38). HistoryView verified
   non-owner-readable — no frontend gating existed to remove (rubric 39).
-  VisibilityControl ships the binding outcome lines (singular/plural) and the
-  i.5 conflict copy; copy strings were lead-authored and wired verbatim.
+  VisibilityControl ships the binding outcome lines (singular/plural); the
+  i.5 conflict copy lives in `lib/errors.ts` (review-stack wording
+  correction); copy strings were lead-authored and wired verbatim.
 - frontend-verify green (443 tests, 64 files); e2e 11/11.
 
 ### Phase 10c — The read-only affordance matrix
@@ -412,7 +429,10 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   stay enabled for colleagues (granted mutations).
 - **URL leg:** `/projects/:id` is the only mutation-bearing route; a non-owner
   reaching it by address gets the read-only variant, no redirect; `isOwner`
-  fails closed while loading. Pinned by `WorkspaceView.test.tsx`.
+  fails closed while loading by construction (`is_owner === true` on a
+  required field). Pinned by `WorkspaceView.test.tsx` for the loaded states;
+  the in-flight loading state is not separately pinned (review-stack
+  correction of an over-stated claim).
 - **Live bug closed:** `stream.pendingCheckIn` is ownership-blind SSE state — a
   colleague viewing during a pending check-in saw the full steering card
   (options, free-text steer, Stop analysis) before this phase.
@@ -548,6 +568,219 @@ build; flagged to the owner. Log-group retention (`ONE_MONTH`,
 `policy_atlas_stack.py:109`) is recorded as the bound on how far back an
 admin-access investigation can look.
 
+## Review findings (step 7, 2026-08-25 — fresh conversation C)
+
+**Lanes run:** contract verifier (fresh, read-only — 42 rubric items + claim
+audit) · security in three scoped passes (tenancy boundary · privileged
+read + audit · operator CLI) · Codex adversarial (the heterogeneous peer —
+the whole slice is Claude-built, so Codex anchored everything, lead prompts
+included) · `/code-review medium` (the Claude half of the pair) ·
+OKF/mechanical gates inside `make verify`. **Live-trace content lane: N/A**
+— this slice has no LLM-bearing step (contract § Model route) and its
+evidence contains no live model runs; the staging live check is a named
+blocked item. **`/simplify`: not re-run** — the code-review cleanup angles
+ran and their three named candidates were each resolved (one fixed by the
+single-flag-read change, one reshaped by the `rows assign` fix, one
+investigated and found not to be drift).
+
+**Headline:** the tenancy core held every direct attack (NULL rule,
+correlated EXISTS, 404/403 discipline, lock discipline, closed reader
+list, trace grain, mutation refusal — zero critical/high findings in the
+two API-side security passes; 33 of 42 rubric items verified HOLDS by a
+fresh reader). The real findings clustered in the operator CLI, the SSE
+revocation edges, and claims that outran the code.
+
+### Adopted and fixed in this phase
+
+Backend API (all with named tests; each fix verified by reverting it):
+- **Nullable own-leg column** (Codex + `/code-review`, reproduced): an
+  admin's SSE stream on an ownerless row closed as revoked on every
+  connect — `own_estate` is SQL NULL there and `scalar_one_or_none()` read
+  it as "no row". Coalesced to false at every selected-column site.
+- **SSE revocation edges** (three lanes convergent): a tick frame was
+  yielded before the re-auth, and the event-batch read ran in a separate
+  statement from the grade check. Tick now held until after re-auth; the
+  batch select carries the read legs itself; the revocation tests now
+  assert **no frame at all** arrives after the revocation commits (they
+  previously drained and ignored frames — a pin that could not see the
+  leak it pinned).
+- **Un-serialized user cap** (Codex + `/code-review` convergent): the
+  conversation-row lock cannot serialize a per-user count across
+  conversations — parallel POSTs to different chats exceeded the cap.
+  Transaction-scoped `pg_advisory_xact_lock` on the acting subject, taken
+  before the stale-turn sweep (which also closes a sweep deadlock window).
+- **Reads that wrote** (both API security passes): the planning-turn TTL
+  sweep ran on read-graded GETs — a colleague's or admin's GET mutated the
+  owner's rows. Now owner-gated at both call sites.
+- **Non-atomic listing trace** (Codex high + security pass 2): the
+  `admin_listing` decision and the page predicate read the flag in
+  separate statements — a grant landing between them served an untraced
+  cross-org page. One flag read now derives both.
+- **Trace forensics** (security pass 2 + Codex): `admin_read` lines now
+  carry request id, method and route template via request-context binding —
+  a card open and a transcript read are distinguishable. `owner_email` is
+  bounded (254, must contain `@`) before it reaches the audit line.
+- **Explicit-null 500s** (`/code-review`): `{"visibility": null}` /
+  `{"name": null}` PATCH bodies now 422 instead of 500; nulls that mean
+  something (`question`, `description`, `portfolio_id`) still work.
+- **Migration GUC leak** (security pass 1): `SET LOCAL lock_timeout` in
+  both directions. New structural guards: the timeout pinned in both
+  directions; no module under `api/`/`core/` imports boto3; the `is_admin`
+  AST walk now also catches raw-SQL string constants.
+
+Operator CLI (all with named tests):
+- **`rows assign` privatises on an org change** (security pass 3 high +
+  contract verifier, convergent — the stack's highest-confidence finding):
+  it stamped `org_id` while preserving `visibility`, exposing an
+  unenrolled owner's default-`org` estate to the whole destination org,
+  silently, with a test pinning the exposing end state. Now follows the
+  enrol rule (arrive private; the owner re-shares), and the summary says
+  so. Rubric 29's unqualified non-exposure property and ADR 0032 D7 now
+  hold as written.
+- **Resync-then-grant re-arm** (security pass 3 + contract verifier):
+  `resync` restored a de-enrolled row's address, and `grant` then minted
+  an offboarded admin. Resync refuses de-enrolled rows; grant refuses any
+  subject with `org_id` NULL (either selector).
+- **Audit integrity** (three lanes): the trace always names the verified
+  STS ARN (`--operator` demoted to an annotation); `ops.admin_change` is
+  emitted only after commit (no false record on a failed transaction);
+  a de-enrolment that clears the flag emits the revoke.
+- **Environment guard** (security pass 3 + Codex, convergent — Codex
+  proved the empty-DB state is exactly the post-033-deploy state): the
+  assume-yes flag is **deleted** (the DB-leg confirmation always requires
+  a terminal, structurally pinned); a non-empty table with no sampleable
+  subject hard-refuses (SQL-side filtering) instead of degrading to the
+  empty-table confirmation.
+- **Identity hygiene**: emails normalised (`strip().lower()`) at the CLI
+  boundary; Cognito ClientErrors become refusals, not tracebacks;
+  `admin grant/revoke` gain `--sub` (the ambiguous-address refusal's own
+  remediation, previously a dead end on the defensive path);
+  `--database-url` refuses a URL carrying a password.
+- **The rubric-22 walk made honest** (contract verifier: the `org_id` half
+  was vacuous — one org meant the breach check could never fire): the walk
+  now spans two organisations with real ops-level re-enrolment and
+  cross-org assignment interleaved (120 ops, fixed seed), non-vacuity
+  asserted on the cross-org counts, and mutation-verified (deleting the
+  i.2 org sync fails the walk at step 34).
+
+Frontend (all with tests; suite 460 → 469+):
+- `PortfolioDetailView` members at `page_size=200` (rubric 42 — was
+  silently truncating at the 50 default); `useCreateTask` checks its
+  portfolio-assignment PATCH and the picker offers only owned portfolios
+  (was a silent 403 → task created unassigned); the SSE client treats
+  403/404 on reconnect as terminal (was an infinite reconnect loop after
+  revocation); the settings gear hidden for non-owners (was an empty
+  popover — the build's "left alone" call contested and fixed); mock PATCH
+  409 made atomic; `["portfolios"]` invalidation on task-create.
+
+Docs/runbook: the blocker preflight query written into DEPLOYMENT.md § 4
+(contract verifier: it was mis-filed as tunnel-blocked; it never was) plus
+the fresh-deployment terminal requirement in § 6; web-api.md records the
+`owner_email` bounds and the explicit-null 422s; deferred.md and this
+file corrected where claims outran code (test count 44 not 45,
+`display_name` survives de-enrolment, the byte-identical claim, the
+loading-state pin, the i.5 copy location).
+
+### Declined, with reasons
+
+- **Chat-creation TOCTOU** (Codex; `/code-review` independently cut its
+  version as negligible): an owner archiving between a colleague's check
+  and insert strands one inaccessible conversation row. Documented lock
+  removal, no exposure, sweeper-bounded cost.
+- **Chat NDJSON mid-turn revocation** (security pass 1): a de-enrolled
+  colleague still receives one in-flight answer. Accepted one-turn bound —
+  the revocation contract (§ 5 / rubric 13) is SSE-scoped; the next
+  request 404s.
+- **Assignment/cascade lock-order inversion** (Codex low): already
+  documented in code; the deadlock resolves as a repeatable no-op after a
+  rare 500 on one side.
+- **2N per-project turn bound** (Codex): contract-accepted consequence,
+  recorded at the check and in deferred.md (org capacity policy); the
+  cap-race half was fixed above.
+- **SSE poll cost** (Codex): recorded at Phase 8; the lever is the poll
+  interval, deferred.md carries it.
+- **Enrol vs concurrent API-create race** (Codex): a project created in
+  the milliseconds around a re-enrolment can land org-visible in the old
+  org. Real but narrow (ops-attended window, dark-launch era); the fix
+  (a shared lock on `app_user` in every create path) taxes every request
+  to close an operator-window race. Recorded in deferred.md's runbook
+  guidance instead: visibility must be re-confirmed with owners after
+  membership moves. [→ deferred]
+- **Sequential admin race test** (Codex low): the two-connection
+  lock-timeout tests already prove the blocking behaviour in both orders.
+- **`get_current_user` DB-free structural test** (contract verifier F8c):
+  low value — `auth.py` is untouched by the branch.
+- **Ops CLI source shipping in the image** (contract verifier F10, info):
+  boto3 is absent so it cannot run; contract requires only the dependency
+  exclusion.
+
+### Escalated to the owner (carried in the PR)
+
+1. **Durable audit sink** (three lanes convergent): the admin trace's
+   30-day retention (infra gate) and the terminal-only ops privilege
+   trace (schema gate for an `ops_audit` table). Folded into the DPIA
+   items; deferred.md carries the seam.
+2. **Colleague-creator lifecycle mutations** (Codex): a chat's creator
+   can PATCH/archive/unarchive their own chat — the contract's "exactly
+   three colleague mutations, nothing else" read literally forbids it,
+   but removing it makes colleague chats immortal (the owner cannot reach
+   them by design). Standing behaviour pinned by test, named as pending
+   the owner's call.
+3. **`rows assign` semantics** changed to privatise-on-move (the fix
+   above) — flagged for owner ratification since it reshapes an operator
+   command's behaviour, though it is what rubric 29 and ADR 0032 D7
+   already promised.
+4. The pre-existing escalations stand: privacy-notice discrepancies
+   (rubric 34), DPIA before merge (rubric 36), org-less-admin owner call
+   (now narrowed: an org-less enrol mode is the only route).
+
+### Build deviations adjudicated (each confirmed or contested explicitly)
+
+- `cache_logger_on_first_use` dropped — **confirmed** (code matches the
+  description; the displaced tests were strengthened, not weakened).
+- Own-chats filter landed in Phase 4 with the grade widening —
+  **confirmed** (the alternative exposed rows mid-branch).
+- Org stamping pulled forward to Phase 3 — **confirmed**.
+- `_PATCHABLE_COLUMNS` allow-list / cascade-only visibility writer —
+  **confirmed** (rubric 24 pinned).
+- `update_project` early cutover — **confirmed**.
+- Phase 10c "empty gear popover left alone" — **contested and fixed**
+  (trivial fix; the gear is hidden for non-owners).
+
+### Lane economics and credit
+
+Convergent across families (highest confidence): `rows assign` exposure,
+the SSE tick/batch edges, the cap race, the non-atomic listing trace, the
+environment-guard bypass, the planning-sweep write-on-read. Unique
+finds justifying their lanes: contract verifier — the vacuous org half of
+the invariant walk, the mis-filed blocker preflight, the claim audit;
+Codex — the cap race mechanism, the ownerless-row NULL, the
+creator-lifecycle contract gap, the pre-commit audit line;
+`/code-review` — the frontend silent-failure cluster (unassigned task,
+reconnect loop) and the explicit-null 500s; security pass 3 — the
+resync re-arm and the guard-poisoning scenarios. Security passes 1–2
+largely verified the core held — itself the evidence the three-pass
+scoping paid for. Reasoning-class subagent spend ran above the routine
+250K guideline, as the contract priced in for the three-pass security
+lane and Tier 4 ("stated here rather than discovered at step 7").
+
+### Post-fix gate (2026-08-25, after all review fixes)
+
+- `make verify` **pass** (exit 0) — backend **2367 tests** (was 2327; +40
+  from the review fixes), mypy strict **292 files**, ruff clean, infra
+  suite, frontend **469 tests / 66 files** (was 460), build ✓.
+- `make drift-check` **pass** (the `owner_email` bounds regenerated via
+  `make openapi-sync` during the fix pass).
+- `pnpm e2e` **11/11** — one flaky failure in the first run (the
+  chat-library journey, executed while the verify build still held the
+  machine); passed in isolation and in a quiet full re-run. Same
+  contention pattern as the build's Phase 0 baseline note.
+- Fake-done check on the fixes themselves: no test was deleted or
+  weakened — the two rewritten pins (`rows assign` end state, the SSE
+  drain helper) were strengthened to assert the safe behaviour their
+  originals could not see; every adopted fix carries a test that fails
+  with the fix reverted (verified per fix by the executing agents).
+
 ## Deviations flagged (minor, resolved within the contract's vocabulary)
 
 1. **`cache_logger_on_first_use=True` dropped from `configure_logging()`** (Phase 0b).
@@ -589,8 +822,10 @@ admin-access investigation can look.
    query string) and its own escalation.
 3. **The production-scale backfill rehearsal (rubric 31).** Needs the staging
    tunnel (SSO): measure the 033 migration's DDL + backfill duration against
-   representative row counts, the blocker preflight query, and the lock-
-   timeout behaviour, with a success budget against the deploy outage window.
+   representative row counts and the lock-timeout behaviour, with a success
+   budget against the deploy outage window. (The blocker preflight query the
+   build filed here was never tunnel-blocked — the review stack wrote it
+   into DEPLOYMENT.md § 4; only the rehearsal itself remains.)
 4. **The staging deploy + live check** (contract § Acceptance, last row):
    pinned five-step order; needs a real deliverable mailbox (the pool has no
    `EmailConfiguration` — 50/day `COGNITO_DEFAULT` sender); the rollout gate

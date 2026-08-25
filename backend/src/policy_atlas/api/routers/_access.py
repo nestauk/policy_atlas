@@ -6,8 +6,11 @@ One helper per entity, replacing the owner-only ``owned_project`` /
 - **read** = the owner leg (``owner_user_id`` matches the caller) *or* the
   same-org leg *or* the **admin leg** (contract § 3a: ``app_user.is_admin``,
   any row, any organisation, any visibility). All three disjoin at the single
-  seam :func:`_read_legs`, so row reads, listings and the SSE tail widened
-  together when phase 8 attached the third.
+  seam :func:`_read_legs`, so row reads and the SSE tail widened together when
+  phase 8 attached the third. The listings hold the same grade but assemble it
+  from one Python read of the flag rather than from that predicate, because
+  they owe an audit line and the two must not be able to disagree — see
+  :func:`listing_scope`.
 - **write** = the owner leg only. A caller who passes the read grade but is
   not the owner gets **403 ``forbidden``**; a caller who fails the read grade
   gets the contract's indistinguishable **404**, byte-identical to an absent
@@ -53,6 +56,7 @@ from sqlalchemy import (
     Table,
     and_,
     exists,
+    false,
     func,
     literal_column,
     or_,
@@ -81,6 +85,19 @@ FORBIDDEN_DETAIL = "action is not permitted"
 # envelope map already assigns to "your parameter is wrong" — not 403, and
 # not a third semantic invented for one filter.
 OWNER_EMAIL_DETAIL = "owner_email is available to administrators only"
+
+# The 422 body for a value that is not an address at all. Same status and same
+# code as the refusal above, deliberately: both are "your parameter is wrong",
+# and the filter has no third semantic to spend.
+OWNER_EMAIL_MALFORMED_DETAIL = "owner_email must be an email address"
+
+#: Longest ``owner_email`` the listings accept, and the reason there is a bound
+#: at all: the value is logged **verbatim** by :func:`trace_admin_listing`, so
+#: unbounded input on the query string is unbounded input in the audit trail —
+#: the one control the admin leg has. 254 is the maximum length of an address
+#: that can be delivered (RFC 5321's 256-octet path minus the angle brackets),
+#: so it refuses nothing anyone could actually be looking for.
+OWNER_EMAIL_MAX = 254
 
 #: Label the graded read query carries **alongside** the row: did the owner or
 #: same-org leg match on its own?
@@ -186,10 +203,13 @@ def admin_read_leg(user_id: str) -> ColumnElement[bool]:
     """Build the admin read leg as one uncorrelated SQL predicate.
 
     **Code-level reader of ``app_user.is_admin`` #1**, and the whole of
-    contract § 3a's semantic readers **(i)** the row-access helper's admin leg
-    and **(ii)** the listing scope resolver — both reach the flag through
-    here, because both resolve through :func:`_read_legs`. The closed list is
-    asserted structurally by
+    contract § 3a's semantic reader **(i)**, the row-access helper's admin leg
+    — every graded row read and the SSE tail's re-check reach the flag through
+    here, because all of them resolve through :func:`_read_legs`. Reader
+    **(ii)**, the listing scope resolver, reaches it through :func:`_is_admin`
+    instead and for a stated reason: a listing owes an audit line, and a
+    predicate holding its own copy of the flag can disagree with the line. The
+    closed list is asserted structurally by
     ``test_only_the_named_code_sites_read_the_is_admin_flag``.
 
     Unlike :func:`_same_org_leg` this predicate says **nothing** about the
@@ -222,10 +242,11 @@ def _is_admin(conn: Connection, user_id: str) -> bool:
     """Ask whether one caller holds the support role, as a Python boolean.
 
     **Code-level reader of ``app_user.is_admin`` #2**, serving contract
-    § 3a's semantic readers **(iii)** the ``owner_email`` filter gate and the
-    listing-trace decision inside **(ii)** the listing scope resolver. Both
-    need the answer in Python — one to raise 422, one to decide whether the
-    request owes an audit line — and neither can get it from a SQL leg.
+    § 3a's semantic readers **(iii)** the ``owner_email`` filter gate and
+    **(ii)** the listing scope resolver *in full* — its predicate as well as
+    its trace decision. Both need the answer in Python — one to raise 422, one
+    to decide whether the request owes an audit line — and neither can get it
+    from a SQL leg.
 
     Kept as *one* function rather than two inline queries so the structural
     assertion has a closed list to name. An unenrolled caller, or one with no
@@ -384,15 +405,61 @@ def own_estate(table: Table, user_id: str) -> ColumnElement[bool]:
     return or_(table.c.owner_user_id == user_id, _same_org_leg(table, user_id))
 
 
+def _own_leg_column(table: Table, user_id: str) -> ColumnElement[bool]:
+    """Select :func:`own_estate` as a **non-nullable** boolean, labelled :data:`_OWN_LEG`.
+
+    The ``COALESCE`` is not decoration. :func:`own_estate`'s owner disjunct is
+    ``owner_user_id = :caller``, and ``owner_user_id`` is nullable — the
+    ``runtime/orchestrate.py`` CLI rows carry no owner at all (contract § 11).
+    On such a row with ``org_id IS NULL`` the owner disjunct is SQL NULL and
+    the org leg is ``FALSE``, so the whole predicate evaluates to **NULL**, not
+    ``FALSE``. Three-valued logic then breaks the two readers of this column in
+    different ways:
+
+    - :func:`may_read_project` selects it as the *only* column, so
+      ``scalar_one_or_none()`` read the NULL as "no row" and an
+      administrator's open SSE stream closed as revoked on every
+      re-authorisation — while their plain ``GET`` on the same project
+      succeeded, because :func:`_resolve` selects the row beside it.
+    - :func:`_resolve` reads ``not row[_OWN_LEG]``, and ``not None`` is
+      ``True`` — right on this row (nothing but the admin leg reaches an
+      ownerless row) and right only by accident.
+
+    NULL and ``FALSE`` mean the same thing for this column either way: "no leg
+    the caller held without ``is_admin`` matched". Saying so in SQL is what
+    makes both readers correct by construction rather than by case analysis.
+
+    Args:
+        table: ``project`` or ``portfolio``.
+        user_id: The caller's token subject.
+
+    Returns:
+        The labelled boolean column to select beside — or instead of — the row.
+    """
+    return func.coalesce(own_estate(table, user_id), false()).label(_OWN_LEG)
+
+
 def own_conversation_leg(user_id: str) -> ColumnElement[bool]:
     """Contract § 4's own-chats filter, written out once and reused everywhere.
 
     The contract specifies this predicate **exactly**, because the obvious
     shorthand is wrong in a way that leaks: a bare ``created_by IS NULL``
-    disjunct would hand every colleague the owner's legacy pre-033 rows. The
-    NULL disjunct is therefore conjoined with the project's ownership::
+    disjunct would hand every colleague every unattributed row. The NULL
+    disjunct is therefore conjoined with the project's ownership::
 
         created_by = :me OR (created_by IS NULL AND project.owner_user_id = :me)
+
+    **A NULL ``created_by`` is not only a legacy state.** The migration
+    backfilled pre-033 rows from their project's owner, but
+    ``runtime/conversation_lifecycle.ensure_active_planning_conversation``
+    still inserts every planning conversation without the column — they are
+    minted by the runtime rather than by a request, so there is no acting
+    subject to record. So this disjunct is the live rule for planning
+    conversations (which is exactly how the owner reaches their own project's
+    planning lineage, and why no colleague ever can) and a legacy rule for
+    chats, whose creator has been recorded since this slice.
+    ``conversations.list_conversations`` states the same thing from the
+    listing's side.
 
     Six call sites resolve through this (the library listing, the
     conversation-id router's grade, the turn POST, the turn cancel, the
@@ -441,12 +508,18 @@ def own_chat_leg(user_id: str) -> ColumnElement[bool]:
 def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
     """Disjoin every read leg: owner, same-org, and admin.
 
-    **The one seam.** Row reads (:func:`accessible_project`,
-    :func:`accessible_portfolio`), the listings (:func:`listing_scope`) and
-    the SSE tail's re-authorisation (:func:`may_read_project`) all resolve
-    through this function, so the admin leg attached to all three by adding
-    one disjunct here and nowhere else — and revoking ``is_admin`` withdraws
-    it from all three just as narrowly.
+    **The one seam for a single row.** Row reads
+    (:func:`accessible_project`, :func:`accessible_portfolio`) and the SSE
+    tail's re-authorisation (:func:`may_read_project`) resolve through this
+    function, so the admin leg attached to both by adding one disjunct here
+    and nowhere else — and revoking ``is_admin`` withdraws it from both just
+    as narrowly.
+
+    :func:`listing_scope` deliberately does **not** resolve through here. A
+    listing owes an audit line, so it must know *in Python* whether the admin
+    leg widened it, and a predicate carrying a second, independent read of the
+    flag can disagree with that answer across a concurrent grant or revoke.
+    It reads the flag once and derives both from it; see its docstring.
 
     The admin leg is unconditional on the row (:func:`admin_read_leg`); the
     archived/status filters are applied by the caller's ``base`` select before
@@ -500,7 +573,7 @@ def may_read_project(
         Whether the caller may still read this project, and which leg said so.
     """
     own_leg = conn.execute(
-        select(own_estate(project, user_id).label(_OWN_LEG))
+        select(_own_leg_column(project, user_id))
         .select_from(project)
         .where(project.c.project_id == project_id)
         .where(_read_legs(project, user_id))
@@ -509,8 +582,42 @@ def may_read_project(
     if own_leg is None:
         return ReadCheck(allowed=False, via_admin=False)
     # `own_leg` is a real ``False`` when the admin leg is what matched, which
-    # is why the miss is distinguished by ``is None`` and not by falsiness.
+    # is why the miss is distinguished by ``is None`` and not by falsiness —
+    # and why the column is COALESCEd (:func:`_own_leg_column`): an ownerless
+    # row made the predicate NULL, which arrived here as ``is None`` and closed
+    # every administrator's stream on a project the same leg let them GET.
     return ReadCheck(allowed=True, via_admin=not own_leg)
+
+
+def readable_project_exists(project_id: uuid.UUID, user_id: str) -> ColumnElement[bool]:
+    """The read grade on one project, as a predicate to AND into another select.
+
+    :func:`may_read_project` answers "may they still read it" as a *value*, and
+    a value is one statement behind whatever the caller does next. The SSE tail
+    had exactly that gap: it authorised in one statement and read the event
+    batch in a second, so a revocation committing between them still disclosed
+    one batch of frames before the stream closed. Gating the batch select with
+    this predicate closes the window inside a single statement — the rows
+    cannot be read unless the grade holds at the moment they are read.
+
+    Both are kept, and they are not redundant: this predicate makes a batch
+    empty, while :func:`may_read_project` is what ends the response. Resolving
+    both through :func:`_read_legs` is what keeps them one rule.
+
+    Args:
+        project_id: The project being streamed.
+        user_id: The caller's token subject.
+
+    Returns:
+        A boolean predicate correlated to nothing, true only while the caller
+        holds a read leg on that project.
+    """
+    return exists(
+        select(literal_column("1"))
+        .select_from(project)
+        .where(project.c.project_id == project_id)
+        .where(_read_legs(project, user_id))
+    )
 
 
 def listing_scope(
@@ -519,10 +626,22 @@ def listing_scope(
     """Build the tenancy predicate for a paginated listing, and say how wide it is.
 
     Reader **(ii)** of contract § 3a's closed list of ``is_admin`` readers, on
-    both counts: ``all`` resolves through :func:`_read_legs`, whose admin leg
-    is what lets an administrator's listing span organisations (private rows
-    and ``org_id IS NULL`` rows included, contract § 11), and the returned
-    ``via_admin`` is what tells the route it owes an audit line.
+    both counts: the flag is what lets an administrator's listing span
+    organisations (private rows and ``org_id IS NULL`` rows included, contract
+    § 11), and the returned ``via_admin`` is what tells the route it owes an
+    audit line.
+
+    **The flag is read exactly once per listing, and both answers come from
+    that read.** It would be natural to hand back :func:`_read_legs` as the
+    predicate and ask :func:`_is_admin` separately for the trace — but those
+    are two statements, and the route then runs its count and page queries in
+    two more. A grant or revoke committing in any of those gaps decouples the
+    page from the line about the page: rows served across organisations with
+    no ``admin_listing`` entry, or an entry for a page the leg never widened.
+    So the administrator's predicate is ``true()`` — which is what the admin
+    leg already means, since it is unconditional on the row
+    (:func:`admin_read_leg`) — and everyone else's is :func:`own_estate`, the
+    read grade with no flag in it at all. Both are decided by the one boolean.
 
     **``scope=mine`` is never on the admin leg and costs no query.** It is the
     owner column and nothing else, so an administrator asking for their own
@@ -551,7 +670,20 @@ def listing_scope(
     """
     if scope == "mine":
         return ListingScope(table.c.owner_user_id == user_id, False)
-    return ListingScope(_read_legs(table, user_id), _is_admin(conn, user_id))
+    # **One read of the flag, and the predicate derives from it.** The obvious
+    # spelling — `_read_legs(...)` for the predicate, `_is_admin(conn, ...)`
+    # for the trace — asks the same question twice in two statements, and the
+    # page and count queries ask it a third and fourth time later still. A
+    # grant or revoke committing between them serves a cross-organisation page
+    # with **no** `admin_listing` line (or logs one for a page the leg did not
+    # widen). Since the admin leg is unconditional on the row
+    # (:func:`admin_read_leg`), an administrator's widened predicate is
+    # `sa.true()` — so substituting it here loses nothing and makes the
+    # predicate and the audit decision two readings of a single row read.
+    via_admin = _is_admin(conn, user_id)
+    if via_admin:
+        return ListingScope(true(), True)
+    return ListingScope(own_estate(table, user_id), False)
 
 
 def owner_email_filter(
@@ -601,7 +733,7 @@ def owner_email_filter(
 
     Raises:
         HTTPException: 422 when a non-admin (or unenrolled) caller passes
-            ``owner_email``.
+            ``owner_email``, and 422 when the value is not an address at all.
     """
     if owner_email is None:
         return true()
@@ -609,10 +741,19 @@ def owner_email_filter(
         raise HTTPException(status_code=422, detail=OWNER_EMAIL_DETAIL)
     # Addresses are case-insensitive in practice and ops type them by hand;
     # folding both sides keeps the filter usable without a schema change.
+    candidate = owner_email.strip().lower()
+    # The shallowest possible shape check, and not a validation exercise: the
+    # value reaches the audit line verbatim, so "not an address" should be
+    # refused at the boundary rather than written to the trail and matched
+    # against nothing. Anything stricter would start refusing addresses that
+    # exist — the column has no format constraint and ops fill it in by hand.
+    # The **length** bound is not here: it belongs on the route's `Query`, so
+    # the contract states it and FastAPI refuses the value before any handler
+    # runs. `OWNER_EMAIL_MAX` is what both routes annotate.
+    if "@" not in candidate:
+        raise HTTPException(status_code=422, detail=OWNER_EMAIL_MALFORMED_DETAIL)
     return table.c.owner_user_id.in_(
-        select(app_user.c.user_id).where(
-            func.lower(app_user.c.email) == owner_email.strip().lower()
-        )
+        select(app_user.c.user_id).where(func.lower(app_user.c.email) == candidate)
     )
 
 
@@ -699,7 +840,7 @@ def _resolve(
             return Access(row=owned, is_owner=True)
     row = (
         conn.execute(
-            base.add_columns(own_estate(table, user_id).label(_OWN_LEG)).where(
+            base.add_columns(_own_leg_column(table, user_id)).where(
                 _read_legs(table, user_id)
             )
         )

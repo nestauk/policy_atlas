@@ -116,3 +116,39 @@ def test_project_with_a_run_reports_source_count_as_the_snapshot_row_count(
         listed = client.get("/api/v1/projects", headers=owner)
         assert listed.status_code == 200
         assert listed.json()["data"][0]["source_count"] == 3
+
+
+def test_a_patch_body_of_explicit_nulls_is_refused_rather_than_written(
+    tmp_path: Path,
+) -> None:
+    """A malformed body is the caller's error, not an internal one.
+
+    Both fields back NOT NULL columns and the route dumps with
+    `exclude_unset`, so an explicit null was *in* the changes: `visibility`
+    went to the UPDATE and `name` went to `rename_project`, and each request
+    ended as **500 internal** on a constraint violation. `visibility` needed a
+    project with no portfolio to get that far — with one it is refused 409
+    first (i.5), which is why the crash was reachable only on the plainer row.
+
+    The row is unchanged afterwards, which is the half that says the refusal
+    happened before the write rather than in the middle of it.
+    """
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = create_project(client, owner)
+
+        for body in ({"visibility": None}, {"name": None}):
+            response = client.patch(
+                f"/api/v1/projects/{project_id}", headers=owner, json=body
+            )
+            assert response.status_code == 422, (body, response.text)
+            assert response.json()["error"]["code"] == "validation_error"
+
+        # `question: null` is not the same thing — the column is nullable, so
+        # clearing the question is a real instruction and still works.
+        cleared = client.patch(
+            f"/api/v1/projects/{project_id}", headers=owner, json={"question": None}
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["question"] is None
+        assert cleared.json()["visibility"] == "org"
+        assert cleared.json()["name"] == "Test project"

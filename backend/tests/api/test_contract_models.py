@@ -22,6 +22,7 @@ from policy_atlas.api.contract import (
     OptionResponse,
     Page,
     PageMeta,
+    PortfolioUpdate,
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
@@ -127,6 +128,44 @@ def test_project_update_is_all_optional_and_forbids_extra() -> None:
     assert model.question is None
     with pytest.raises(ValidationError):
         ProjectUpdate.model_validate({"unexpected": "field"})
+
+
+def test_an_update_body_refuses_an_explicit_null_on_a_not_null_column() -> None:
+    """`{"name": null}` and `{"visibility": null}` are 422, not "unchanged".
+
+    Both fields are declared `T | None` so that *omitting* them means "leave
+    this alone" — which makes an explicit null a second spelling of absence,
+    and one the routes do not read that way: they dump with `exclude_unset`,
+    so the field is present in the changes and the null is written to a NOT
+    NULL column. The caller got **500 internal** for a malformed body.
+
+    `min_length` does not catch it: a `None` skips string constraints
+    entirely, which is why this needs a validator rather than a tighter field.
+    """
+    for body in ({"name": None}, {"visibility": None}):
+        with pytest.raises(ValidationError):
+            ProjectUpdate.model_validate(body)
+        with pytest.raises(ValidationError):
+            PortfolioUpdate.model_validate(body)
+
+
+def test_an_update_body_keeps_the_nulls_that_mean_something() -> None:
+    """The guard is per-field: `null` is a real instruction on three of them.
+
+    `portfolio_id: null` is contract § 6's i.6 — take the Task out of the
+    Project — and `question` / `description` are nullable columns that a null
+    clears. A blanket "no nulls in a PATCH body" rule would have removed all
+    three capabilities to fix two crashes.
+    """
+    unassigned = ProjectUpdate.model_validate({"portfolio_id": None})
+    assert "portfolio_id" in unassigned.model_fields_set
+    assert unassigned.portfolio_id is None
+
+    cleared = ProjectUpdate.model_validate({"question": None})
+    assert "question" in cleared.model_fields_set
+
+    described = PortfolioUpdate.model_validate({"description": None})
+    assert "description" in described.model_fields_set
 
 
 def test_run_create_forbids_any_body() -> None:

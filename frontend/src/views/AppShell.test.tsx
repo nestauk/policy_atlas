@@ -146,9 +146,11 @@ describe("AppShell — the project-settings popover (task 033 phase 10c, contrac
     expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
   });
 
-  it("non-owner: hides Rename and Archive rather than leaving them clickable to an error", async () => {
+  it("non-owner: hides the settings gear itself, not just the items inside it — an empty popover is not a fix", () => {
     projectState.isOwner = false;
-    await openProjectSettings();
+    renderShell(`/projects/${PROJECT_ID}`);
+    expect(screen.queryByRole("button", { name: "Project settings" })).not.toBeInTheDocument();
+    // With the trigger gone, Rename and Archive can never be reached either.
     expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
   });

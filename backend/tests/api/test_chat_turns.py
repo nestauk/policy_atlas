@@ -8,7 +8,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import event, select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api import chat_turns
@@ -1684,6 +1684,140 @@ def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
             )
         assert _status_of(engine, colleague_stale) == "failed"
         assert _status_of(engine, colleague_live) == "pending"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
+    engine: Engine,
+) -> None:
+    """The cap survives concurrency, on two real connections.
+
+    The row lock this reservation takes is on the **conversation**, and the cap
+    it has to enforce is on the **acting user across every conversation they
+    created**. Two POSTs from one person to two different chats therefore lock
+    two different rows: neither sees the other's uncommitted insert, both count
+    one pending turn against a cap of two, and both proceed — three pending
+    turns from an allowance of two, repeatable to any width.
+
+    Written with an explicit hand-off rather than by racing two threads and
+    hoping: the first transaction reserves and is **held open**, the second is
+    started in a thread and must still be waiting when we look. Then the first
+    commits, and the second — now able to see the row it was racing — is
+    refused for capacity. Unserialized, it returns a turn id here instead.
+    """
+    actor = f"cap-race-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, first_chat = _chat(engine, owner=actor)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        second_chat = _second_chat_in_same_project(engine, project_id)
+        held_chat = _second_chat_in_same_project(engine, project_id)
+        # One pending turn already in flight, so the cap of two allows exactly
+        # one of the two reservations below.
+        _insert_pending_turn(engine, conversation_id=held_chat)
+
+        started = threading.Event()
+        finished = threading.Event()
+        outcome: list[Any] = []
+
+        def second_reservation() -> None:
+            started.set()
+            try:
+                with engine.begin() as conn:
+                    outcome.append(
+                        chat_turns._phase_one_turn(
+                            conn,
+                            project_id=project_id,
+                            conversation_id=second_chat,
+                            user_id=actor,
+                            message="the simultaneous question",
+                            client_turn_id=uuid.uuid4(),
+                        )
+                    )
+            except BaseException as exc:  # noqa: BLE001 - reported to the test
+                outcome.append(exc)
+            finally:
+                finished.set()
+
+        with engine.begin() as conn:
+            reserved = chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=first_chat,
+                user_id=actor,
+                message="the first question",
+                client_turn_id=uuid.uuid4(),
+            )
+            assert isinstance(reserved, uuid.UUID)
+            racer = threading.Thread(target=second_reservation)
+            racer.start()
+            assert started.wait(5.0)
+            # Still blocked: the first transaction holds the per-user lock, so
+            # the second cannot reach its count until this one commits.
+            assert not finished.wait(0.5)
+
+        racer.join(timeout=10.0)
+        assert finished.is_set()
+        assert len(outcome) == 1
+        assert isinstance(outcome[0], ApiCapacity), outcome[0]
+        assert outcome[0].code == "chat_capacity"
+
+        with engine.connect() as conn:
+            pending = conn.execute(
+                select(func.count())
+                .select_from(
+                    chat_turn.join(
+                        conversation, chat_turn.c.conversation_id == conversation.c.id
+                    )
+                )
+                .where(conversation.c.project_id == project_id)
+                .where(chat_turn.c.status == "pending")
+            ).scalar_one()
+        assert pending == chat_turns._USER_PENDING_CAP
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_the_per_user_lock_is_taken_before_the_pending_turns_are_counted(
+    engine: Engine,
+) -> None:
+    """Order, asserted structurally — a lock after the count serializes nothing.
+
+    The concurrency case above is the behavioural proof; this is the one that
+    stays readable when someone moves a line. The advisory lock has to be held
+    *before* the count is read, or the two transactions still both count below
+    the cap and only serialize the insert that follows.
+    """
+    actor = f"cap-order-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, chat_id = _chat(engine, owner=actor)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+
+        with engine.begin() as conn:
+            issued = _statements(conn)
+            chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=chat_id,
+                user_id=actor,
+                message="a question",
+                client_turn_id=uuid.uuid4(),
+            )
+
+        locks = [index for index, sql in enumerate(issued) if "pg_advisory_xact_lock" in sql]
+        counts = [
+            index
+            for index, sql in enumerate(issued)
+            if "count(*)" in sql.lower() and "chat_turn" in sql
+        ]
+        assert len(locks) == 1, issued
+        assert counts, issued
+        assert locks[0] < counts[0]
+        # Transaction-scoped, not session-scoped: a `pg_advisory_lock` here
+        # would outlive the reservation and leak into the pooled connection.
+        assert "pg_advisory_lock(" not in issued[locks[0]]
     finally:
         _cleanup(engine, project_id)
 

@@ -14,7 +14,7 @@ from typing import Annotated, Any, Literal, cast
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
@@ -212,9 +212,16 @@ def _graded_conversation(
     if write:
         statement = statement.where(own_grade)
     else:
-        statement = statement.add_columns(own_grade.label(_OWN_GRADE)).where(
-            or_(own_grade, admin_read_leg(user_id))
-        )
+        # COALESCEd for the same reason `_access._own_leg_column` is: every
+        # disjunct of `own_grade` compares a **nullable** column to the
+        # caller's subject (`project.owner_user_id`, `conversation.created_by`),
+        # so on a project with no owner the predicate is SQL NULL rather than
+        # FALSE — and `not row[_OWN_GRADE]` would then be deciding the trace on
+        # `not None`. NULL and FALSE mean one thing here ("no grade the caller
+        # held without `is_admin`"), so the column says so.
+        statement = statement.add_columns(
+            func.coalesce(own_grade, false()).label(_OWN_GRADE)
+        ).where(or_(own_grade, admin_read_leg(user_id)))
     if not include_archived:
         statement = statement.where(conversation.c.status != "archived")
     if for_update:

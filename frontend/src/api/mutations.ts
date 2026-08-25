@@ -27,6 +27,11 @@ export function useCreateProject() {
       if (data === undefined) raise(error, response.status);
       return data;
     },
+    // `ProjectCreate` (this body) carries no `portfolio_id` — a project made
+    // here is never assigned to a portfolio at creation, so this mutation
+    // cannot change any portfolio's `task_count`. No "portfolios"
+    // invalidation belongs here (contrast `useCreateTask` below, whose
+    // second call can assign one).
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 }
@@ -54,10 +59,19 @@ export function useCreateTask() {
       if (project === undefined) raise(error, response.status);
 
       if (input.portfolioId != null) {
-        await client.PATCH("/api/v1/projects/{project_id}", {
-          params: { path: { project_id: project.project_id } },
-          body: { portfolio_id: input.portfolioId },
-        });
+        // Unlike the opening turn below, this result IS checked: openapi-fetch
+        // never throws on its own, so an ignored error here (e.g. a colleague
+        // picking a colleague-owned org-visible portfolio, which is readable
+        // but not writable) would silently leave the task unassigned with no
+        // sign anything went wrong.
+        const { data: patched, error: patchError, response: patchResponse } = await client.PATCH(
+          "/api/v1/projects/{project_id}",
+          {
+            params: { path: { project_id: project.project_id } },
+            body: { portfolio_id: input.portfolioId },
+          },
+        );
+        if (patched === undefined) raise(patchError, patchResponse.status);
       }
 
       // The opening turn. A failure here leaves a real, usable task whose
@@ -69,7 +83,15 @@ export function useCreateTask() {
       });
       return project;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    // "portfolios" is invalidated too, symmetric with `useUpdateProject`/
+    // `useArchiveProject` below: a successful `portfolioId` assignment above
+    // changes that portfolio's derived `task_count`, a cross-family effect
+    // the portfolio list would otherwise keep showing stale until an
+    // unrelated refetch.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    },
   });
 }
 

@@ -13,7 +13,7 @@ from typing import Any, cast
 
 import pytest
 from fastapi import FastAPI, HTTPException
-from sqlalchemy import event, select
+from sqlalchemy import event, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.routers._access import (
@@ -22,8 +22,10 @@ from policy_atlas.api.routers._access import (
     _read_legs,
     accessible_portfolio,
     accessible_project,
+    listing_scope,
+    may_read_project,
 )
-from policy_atlas.core.schema import project
+from policy_atlas.core.schema import app_user, project
 from tests.api.org_support import (
     make_org,
     make_portfolio,
@@ -182,6 +184,104 @@ def test_ownerless_rows_stay_unreachable(conn: Connection) -> None:
     with pytest.raises(HTTPException) as refused:
         accessible_project(conn, project_id=project_id, user_id=caller)
     assert refused.value.status_code == 404
+
+
+def test_the_two_read_checks_agree_on_a_project_that_has_no_owner_at_all(
+    conn: Connection,
+) -> None:
+    """``accessible_project`` and ``may_read_project`` are one grade, or nothing works.
+
+    An administrator reaches an ownerless, organisation-less row through the
+    admin leg and nothing else (contract § 11). Both readers select
+    ``own_estate`` as a boolean beside their answer — and on this row every
+    disjunct of it compares a NULL column, so the predicate is **SQL NULL**.
+    That reached `may_read_project`'s ``scalar_one_or_none()`` as "no row" and
+    the administrator's stream closed as revoked on its first
+    re-authorisation, while their ``GET`` on the same project succeeded.
+
+    Asserted as an agreement between the two rather than as one value, because
+    a divergence is the defect: the SSE tail exists to ask the same question
+    the snapshot asked.
+    """
+    org_id = make_org(conn)
+    admin = make_user(conn, org_id=org_id)
+    conn.execute(
+        update(app_user).where(app_user.c.user_id == admin).values(is_admin=True)
+    )
+    ownerless = make_project(conn, owner_user_id=None, org_id=None)
+
+    direct = accessible_project(conn, project_id=ownerless, user_id=admin)
+    assert direct.via_admin is True
+    assert direct.is_owner is False
+
+    recheck = may_read_project(conn, project_id=ownerless, user_id=admin)
+    assert recheck.allowed is True
+    assert recheck.via_admin is True
+
+
+def test_a_caller_without_the_flag_still_cannot_read_an_ownerless_project(
+    conn: Connection,
+) -> None:
+    """The COALESCE that fixed the check above widened nothing.
+
+    NULL and ``FALSE`` mean the same thing for the own-leg column — "no leg
+    the caller held without ``is_admin``" — so folding one into the other
+    cannot admit a caller. The re-check refuses this one on the same terms the
+    direct read does.
+    """
+    caller = make_user(conn, org_id=make_org(conn))
+    ownerless = make_project(conn, owner_user_id=None, org_id=None)
+
+    assert may_read_project(conn, project_id=ownerless, user_id=caller) == (False, False)
+    with pytest.raises(HTTPException) as refused:
+        accessible_project(conn, project_id=ownerless, user_id=caller)
+    assert refused.value.status_code == 404
+
+
+def test_a_listings_predicate_and_its_audit_decision_come_from_one_flag_read(
+    conn: Connection,
+) -> None:
+    """One read of ``is_admin`` per listing, or the page and its line can disagree.
+
+    The natural spelling asks twice: ``_read_legs`` for the predicate (whose
+    admin leg is an ``EXISTS`` over ``app_user``) and ``_is_admin`` for the
+    trace decision — and the route then runs its count and page queries, each
+    re-evaluating the leg again. A grant or revoke committing in any of those
+    gaps serves rows across organisations with **no** ``admin_listing`` line,
+    or logs one for a page the leg never widened.
+
+    Both halves are asserted structurally, because the race is a race: the
+    resolver issues exactly one statement, and the predicate it hands back
+    carries no second reading of the flag. An administrator's is ``true`` —
+    which is what the admin leg already meant, being unconditional on the row —
+    and everybody else's is the org estate with no flag in it at all.
+    """
+    org_id = make_org(conn)
+    admin = make_user(conn, org_id=org_id)
+    conn.execute(
+        update(app_user).where(app_user.c.user_id == admin).values(is_admin=True)
+    )
+    colleague = make_user(conn, org_id=org_id)
+
+    recorded = _statements(conn)
+    admin_scope = listing_scope(conn, project, user_id=admin, scope="all")
+    assert admin_scope.via_admin is True
+    assert len(recorded) == 1, recorded
+    assert "is_admin" in recorded[0]
+    assert str(admin_scope.predicate.compile(conn)) == "true"
+
+    recorded.clear()
+    plain_scope = listing_scope(conn, project, user_id=colleague, scope="all")
+    assert plain_scope.via_admin is False
+    assert len(recorded) == 1, recorded
+    assert "is_admin" not in str(plain_scope.predicate.compile(conn))
+
+    # `scope=mine` still costs no query at all: the owner column cannot be
+    # widened by the flag, so there is nothing to ask.
+    recorded.clear()
+    mine = listing_scope(conn, project, user_id=admin, scope="mine")
+    assert mine.via_admin is False
+    assert recorded == []
 
 
 # --- The write grade -------------------------------------------------------

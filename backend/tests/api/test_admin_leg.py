@@ -36,10 +36,11 @@ from __future__ import annotations
 
 import ast
 import uuid
-from collections.abc import MutableMapping, Sequence
+from collections.abc import Callable, MutableMapping, Sequence
 from pathlib import Path
 from typing import Any
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
 from structlog.testing import capture_logs
@@ -615,6 +616,121 @@ def test_a_zero_result_administrator_search_still_emits_its_line(
         assert {entry["owner_email"] for entry in emitted} == {nobody}
 
 
+def test_an_admin_read_line_says_which_request_produced_it(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Two reads of the same row are two different actions, and the line must say which.
+
+    `admin_read` carried a `kind` and a `row_id` and nothing else, so opening a
+    project card and reading a colleague's whole chat transcript looked
+    identical in the trail — and the trail is the admin leg's only control
+    while the privacy notice stands unedited (contract § 12). A request-scoped
+    `structlog` context supplies the missing half.
+
+    The keys are asserted *through the emission site that already existed*:
+    nothing in `_access.py` was edited to carry them, because
+    `merge_contextvars` is first in the processor chain. `capture_logs` is
+    given that processor explicitly — it replaces the configured chain, so
+    without it the context is invisible to the capture and this would pass
+    against an unbound request.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, admin)):
+        with seeded(engine) as conn:
+            ops_enrol(
+                conn,
+                user_id=owner.user_id,
+                org_id=make_org(conn),
+                display_name="Owner",
+            )
+            ops_enrol(
+                conn,
+                user_id=admin.user_id,
+                org_id=make_org(conn, name="Support Org"),
+                display_name="Support",
+                is_admin=True,
+            )
+            project_id = make_project(
+                conn, owner_user_id=owner.user_id, org_id=None, visibility="private"
+            )
+            chat_id = make_conversation(
+                conn, project_id=project_id, created_by=owner.user_id
+            )
+
+        with capture_logs(
+            processors=[structlog.contextvars.merge_contextvars]
+        ) as captured:
+            card = client.get(f"/api/v1/projects/{project_id}", headers=admin.headers)
+            transcript = client.get(
+                f"/api/v1/conversations/{chat_id}/turns", headers=admin.headers
+            )
+
+        assert card.status_code == 200
+        assert transcript.status_code == 200
+        lines = _lines(captured, "admin_read")
+        assert [(entry["kind"], entry["route"]) for entry in lines] == [
+            ("project", "/api/v1/projects/{project_id}"),
+            ("conversation", "/api/v1/conversations/{conversation_id}/turns"),
+        ]
+        assert {entry["http_method"] for entry in lines} == {"GET"}
+        # One request id per request, and never the same one twice.
+        assert len({entry["request_id"] for entry in lines}) == 2
+
+
+def test_an_unbounded_or_shapeless_owner_email_never_reaches_the_audit_line(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The filter is bounded and shaped at the boundary, because the log is verbatim.
+
+    `trace_admin_listing` writes `owner_email` exactly as received — it must,
+    or the line cannot say what was searched for — and the admin trace is the
+    only control the privileged read has while the privacy notice stands
+    unedited (contract § 12). An unbounded query parameter is therefore
+    unbounded input into that trail, and the way to keep it out is to refuse
+    the request rather than to trim the line.
+
+    Both refusals are 422 `validation_error`, the same code and status a
+    non-administrator gets for passing the filter at all: all three are "your
+    parameter is wrong", and inventing a fourth semantic for one query
+    parameter would buy nothing. Neither refusal emits a line, because neither
+    request was served.
+    """
+    with tenancy_client(tmp_path, count=1) as (client, (admin,)):
+        with seeded(engine) as conn:
+            ops_enrol(
+                conn,
+                user_id=admin.user_id,
+                org_id=make_org(conn, name="Support Org"),
+                display_name="Support",
+                email=unique_email("support"),
+                is_admin=True,
+            )
+
+        too_long = f"{'a' * 250}@example.test"
+        with capture_logs() as captured:
+            over = client.get(
+                f"/api/v1/projects?owner_email={too_long}", headers=admin.headers
+            )
+            shapeless = client.get(
+                "/api/v1/portfolios?owner_email=not-an-address", headers=admin.headers
+            )
+            at_the_bound = client.get(
+                f"/api/v1/projects?owner_email={'a' * 241}@example.test",
+                headers=admin.headers,
+            )
+
+        assert over.status_code == 422
+        assert over.json()["error"]["code"] == "validation_error"
+        assert shapeless.status_code == 422
+        assert shapeless.json()["error"]["code"] == "validation_error"
+        # The bound refuses nothing anyone could be looking for: 254 characters
+        # is the longest deliverable address, and one of them is served.
+        assert at_the_bound.status_code == 200
+        assert at_the_bound.json()["data"] == []
+
+        emitted = _lines(captured, "admin_listing")
+        assert [entry["owner_email"] for entry in emitted] == ["a" * 241 + "@example.test"]
+
+
 def test_a_non_administrators_listing_is_never_traced(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -742,6 +858,37 @@ def _api_modules() -> list[Path]:
     return sorted(root.rglob("*.py"))
 
 
+def _scopes_where(path: Path, references: Callable[[ast.AST, ast.Module], bool]) -> set[str]:
+    """Names of the scopes in one module holding a node `references` accepts.
+
+    Args:
+        path: The module to parse.
+        references: Predicate over a node and the parsed module it came from.
+
+    Returns:
+        The innermost enclosing `def`/`class` name of each accepted node, or
+        `"<module>"` for one at module level.
+    """
+    tree = ast.parse(path.read_text())
+    found: set[str] = set()
+
+    def walk(node: ast.AST, scope: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(
+                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                if references(child, tree):
+                    found.add(scope or "<module>")
+                walk(child, f"{scope}.{child.name}" if scope else child.name)
+                continue
+            if references(child, tree):
+                found.add(scope or "<module>")
+            walk(child, scope)
+
+    walk(tree, "")
+    return found
+
+
 def _scopes_mentioning(path: Path, name: str) -> set[str]:
     """Names of the scopes in one module that reference `name`.
 
@@ -760,7 +907,7 @@ def _scopes_mentioning(path: Path, name: str) -> set[str]:
         `"<module>"` for one at module level.
     """
 
-    def references(node: ast.AST) -> bool:
+    def references(node: ast.AST, _tree: ast.Module) -> bool:
         if isinstance(node, ast.Attribute):
             return node.attr == name
         if isinstance(node, ast.Name):
@@ -773,23 +920,56 @@ def _scopes_mentioning(path: Path, name: str) -> set[str]:
             return isinstance(node.value, str) and node.value == name
         return False
 
-    found: set[str] = set()
+    return _scopes_where(path, references)
 
-    def walk(node: ast.AST, scope: str) -> None:
-        for child in ast.iter_child_nodes(node):
-            if isinstance(
-                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                if references(child):
-                    found.add(scope or "<module>")
-                walk(child, f"{scope}.{child.name}" if scope else child.name)
-                continue
-            if references(child):
-                found.add(scope or "<module>")
-            walk(child, scope)
 
-    walk(ast.parse(path.read_text()), "")
-    return found
+def _prose_strings(tree: ast.Module) -> set[int]:
+    """The `id()`s of every string constant that is a whole statement.
+
+    Docstrings and the free-standing prose blocks this codebase uses under
+    attributes. A string used as a *value* — an argument, a subscript, an
+    element — is code and is never in here.
+    """
+    return {
+        id(node.value)
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    }
+
+
+def _scopes_with_a_string_containing(path: Path, name: str) -> set[str]:
+    """Names of the scopes whose *code* strings contain `name` as a substring.
+
+    The gap :func:`_scopes_mentioning` leaves. It matches string constants by
+    equality, so `text("SELECT ... WHERE is_admin ...")` — the most plausible
+    way a future edit reaches this column outside the named helpers, and the
+    one way that bypasses SQLAlchemy's column objects entirely — is a string
+    the flag's name is merely *inside* and registers nowhere.
+
+    Prose is excluded the way the equality check excluded it for free: a
+    string constant that is a whole statement is a docstring or a comment
+    block, and this module's own docstrings discuss `is_admin` at length. A
+    string passed as an argument is code.
+
+    Args:
+        path: The module to parse.
+        name: The identifier to look for inside string literals.
+
+    Returns:
+        The innermost enclosing `def`/`class` name of each occurrence.
+    """
+
+    def references(node: ast.AST, tree: ast.Module) -> bool:
+        return (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and name in node.value
+            and id(node) not in _prose_strings(tree)
+        )
+
+    return _scopes_where(path, references)
 
 
 def test_only_the_named_code_sites_read_the_is_admin_flag() -> None:
@@ -813,3 +993,32 @@ def test_only_the_named_code_sites_read_the_is_admin_flag() -> None:
     }
 
     assert actual == _IS_ADMIN_READERS
+
+
+def test_no_raw_sql_string_reaches_the_is_admin_flag_behind_the_walk() -> None:
+    """The closed list again, against the one spelling equality cannot see.
+
+    The walk above matches string constants by equality, which catches
+    `row["is_admin"]` and misses `text("… WHERE is_admin …")` — a longer
+    string the name is merely inside. That is not a hypothetical spelling:
+    this codebase already uses `sa.text` for the statements SQLAlchemy's
+    column objects cannot express, and a raw statement is precisely how a
+    fifth reader would arrive without touching `app_user.c.is_admin` at all.
+
+    So the same closed list is asserted a second way. Today the only code
+    string containing the name is `get_me`'s `row["is_admin"]`, which both
+    walks see; the value of this one is what it will say the day the two lists
+    stop agreeing.
+
+    Docstrings are excluded, and deliberately not by an allowlist: a string
+    that *is* a statement is prose, and this package's docstrings discuss the
+    flag on nearly every page.
+    """
+    root = Path(policy_atlas.api.__file__).parent
+    actual = {
+        str(path.relative_to(root)): scopes
+        for path in _api_modules()
+        if (scopes := _scopes_with_a_string_containing(path, "is_admin"))
+    }
+
+    assert actual == {"routers/me.py": {"get_me"}}

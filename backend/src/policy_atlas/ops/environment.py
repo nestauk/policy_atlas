@@ -42,19 +42,33 @@ and ask the resolved pool whether it knows them.
   Verified; the command proceeds.
 - **Subjects exist and none resolve** → they are somebody else's pool's subjects.
   This is precisely the prod-tunnel/staging-credentials case, and it is a **hard
-  refusal with no override** — ``--yes`` does not lift it, because an operator
-  who is wrong about which estate they are in is exactly the operator who would
-  pass ``--yes``.
+  refusal with no override**, because an operator who is wrong about which
+  estate they are in is exactly the operator who would reach for a flag.
+- **Subjects exist and none of them can be sampled** → the sample selects
+  filter-safe subjects *in SQL*, so this means the table holds rows whose
+  ``user_id`` could not have come from a token at all. Also a **hard refusal**:
+  a non-empty ``app_user`` this check cannot form a question about is a foreign
+  database, and degrading it to the confirmation below would let the one state
+  that most looks like a wrong tunnel take the softest path out.
 - **The table is empty** → nothing to prove against. The command prints the
-  resolved triple and requires the operator to type the environment name back
-  (``--yes`` skips this, for scripting). Stated plainly rather than dressed up:
-  in this one state the database leg is operator confirmation. Its blast radius
-  is also nil — a database with no ``app_user`` rows is one nobody has ever
-  signed in to.
+  resolved triple and requires the operator to type the environment name back,
+  **interactively, with no flag to skip it**. Stated plainly rather than dressed
+  up: in this one state the database leg is operator confirmation.
 
-The residual gap is honest and worth naming: this leg proves *the database and
-the pool agree*, so it catches the mismatched pair. It cannot catch an operator
-who is consistently and entirely in the wrong environment — right account, right
+That last state is the honest limit, and it is not rare — it is where every
+fresh deployment starts, because the 033 migration seeds no ``app_user`` rows.
+So the confirmation is what stands between a wrong tunnel and the first write to
+a new environment, and it is deliberately not scriptable: an earlier revision
+had an assume-yes flag that lifted it, which made "wrong tunnel plus one flag"
+the cheapest mistake available in precisely the window where leg 3 can prove
+nothing. There is now no such flag on any command to lift anything. The
+blast radius of assenting *correctly* is nil — a database with no ``app_user``
+rows is one nobody has ever signed in to — but the blast radius of assenting
+*wrongly* is a production database, and only a person can tell those apart.
+
+The other residual gap is worth naming: this leg proves *the database and the
+pool agree*, so it catches the mismatched pair. It cannot catch an operator who
+is consistently and entirely in the wrong environment — right account, right
 pool, right database, wrong intent. That is what ``--env`` being explicit and
 echoed on every line is for.
 """
@@ -70,7 +84,7 @@ import boto3
 import structlog
 from botocore.exceptions import ClientError
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 from sqlalchemy.engine import Connection, make_url
 
 from policy_atlas.core.schema import app_user
@@ -94,6 +108,11 @@ ENVIRONMENTS = ("staging", "prod")
 #: account behind them. More than one because a single sampled subject whose
 #: Cognito account was since removed would refuse a correct pairing.
 _SUB_SAMPLE = 3
+
+#: Characters that make a value inexpressible as a Cognito ``ListUsers`` filter
+#: literal: the grammar is ``attribute = "value"`` with no escape sequence, so a
+#: quote or a backslash would change the query rather than be matched by it.
+_UNSAFE = ('"', "\\")
 
 
 class StsClient(Protocol):
@@ -303,6 +322,14 @@ def _check_database_leg(
     """Leg 3: do the connected database's subjects belong to the resolved pool?"""
     subs = _sample_subjects(conn)
     if not subs:
+        if _holds_any_subject(conn):
+            raise OpsError(
+                f"environment mismatch: the database at {target.database} holds accounts "
+                "whose subjects cannot be Cognito subs at all (a quote or a backslash), "
+                "so the pairing with user pool "
+                f"{target.user_pool_id} cannot even be asked about. Nothing was written, "
+                "and nothing overrides this."
+            )
         if confirm(target):
             return "unproven"
         raise OpsError("refused at the environment confirmation. Nothing was written.")
@@ -312,22 +339,43 @@ def _check_database_leg(
     raise OpsError(
         f"environment mismatch: the database at {target.database} holds accounts that user "
         f"pool {target.user_pool_id} does not know, so the tunnel and the AWS credentials "
-        f"are not the same environment. Nothing was written, and --yes does not override "
-        "this."
+        "are not the same environment. Nothing was written, and nothing overrides this."
     )
 
 
 def _sample_subjects(conn: Connection) -> Sequence[str]:
-    """The newest subjects in the connected database, filter-safe ones only.
+    """The newest filter-safe subjects in the connected database.
 
     A subject containing a quote or a backslash cannot be expressed in Cognito's
-    ``ListUsers`` filter grammar. Such a subject can only have been written by
-    something other than a real token, so it is skipped rather than escaped.
+    ``ListUsers`` filter grammar, and can only have been written by something
+    other than a real token. **The exclusion is a WHERE clause, not a Python
+    filter over the rows that came back**, which is the difference between
+    "sample the newest three subjects this check can ask about" and "sample the
+    newest three rows, then possibly have nothing left". The second reads
+    identically to an empty table one statement later, and an empty table takes
+    the confirmation path — so a table full of unaskable rows would have
+    degraded to the softest outcome the check has.
     """
+    unsafe = or_(
+        *(app_user.c.user_id.contains(character, autoescape=True) for character in _UNSAFE)
+    )
     rows = conn.execute(
-        select(app_user.c.user_id).order_by(desc(app_user.c.created_at)).limit(_SUB_SAMPLE * 2)
+        select(app_user.c.user_id)
+        .where(~unsafe)
+        .order_by(desc(app_user.c.created_at))
+        .limit(_SUB_SAMPLE)
     ).scalars()
-    return [sub for sub in rows if _filter_safe(sub)][:_SUB_SAMPLE]
+    return list(rows)
+
+
+def _holds_any_subject(conn: Connection) -> bool:
+    """Whether ``app_user`` has any row at all, filter-safe or not.
+
+    Asked only when :func:`_sample_subjects` came back empty, to tell the two
+    reasons for that apart: an empty table (confirmable) from a table whose rows
+    are all unaskable (a refusal).
+    """
+    return conn.execute(select(app_user.c.user_id).limit(1)).first() is not None
 
 
 def _pool_knows(
@@ -335,8 +383,3 @@ def _pool_knows(
 ) -> bool:
     response = cognito.list_users(UserPoolId=pool_id, Filter=f'sub = "{sub}"', Limit=1)
     return bool(response.get("Users"))
-
-
-def _filter_safe(value: str) -> bool:
-    """Whether a value can be embedded in a Cognito ``ListUsers`` filter literal."""
-    return '"' not in value and "\\" not in value

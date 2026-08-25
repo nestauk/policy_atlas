@@ -24,6 +24,7 @@ from __future__ import annotations
 import random
 import uuid
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +35,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api.routers.portfolios import _PATCHABLE_COLUMNS
 from policy_atlas.core.schema import portfolio as portfolio_table
 from policy_atlas.core.schema import project as project_table
+from policy_atlas.ops import commands as ops_commands
 from tests.api.org_support import (
     Principal,
     make_org,
@@ -42,7 +44,9 @@ from tests.api.org_support import (
     ops_enrol,
     seeded,
     tenancy_client,
+    unique_email,
 )
+from tests.ops.support import POOL_ID, cognito, expect_lookup
 
 
 def _row(engine: Engine, project_id: uuid.UUID | str) -> Any:
@@ -673,8 +677,19 @@ def test_the_i5_then_i2_loop_ends_org_visible(engine: Engine, tmp_path: Path) ->
 
 # --- the property over all six paths (rubric 22) ------------------------------
 
-#: Every operation the walk draws from. The six invariant paths plus the two
-#: plain creates that produce the rows they act on.
+#: Every operation the walk draws from. The six invariant paths, the two plain
+#: creates that produce the rows they act on, and **two operator-level moves**.
+#:
+#: The operator moves are not decoration. With one organisation, every row and
+#: every creator stamp carries the same `org_id`, so
+#: `project.org_id IS DISTINCT FROM portfolio.org_id` can never be true and the
+#: `org_id` half of the invariant is asserted over a condition that cannot
+#: arise — the walk passes whatever the write paths do with that column.
+#: `ops_reenrol` moves the owner between two organisations with the real
+#: `user enrol`, and `ops_assign_portfolio` moves one portfolio into the
+#: organisation the owner is *not* in with the real `rows assign`. The second is
+#: what actually splits the estate across two organisations, which is the only
+#: state in which an API write path that forgot the column can be caught.
 _OPERATIONS = (
     "create_project",
     "create_portfolio",
@@ -683,17 +698,92 @@ _OPERATIONS = (
     "remove",  # i.6
     "cascade",  # i.4
     "set_visibility",  # i.5 when the row is in a portfolio, a plain set otherwise
+    "ops_reenrol",  # the operator moves the person, and their whole estate
+    "ops_assign_portfolio",  # the operator moves one portfolio, and only that
 )
+
+#: How often each operation is drawn. Uniform for the API paths; the operator
+#: ones are weighted, and the weights are the interesting part.
+#:
+#: A re-enrolment gathers the owner's *whole* estate into one organisation, so
+#: it ends the split state an `ops_assign_portfolio` created. Drawing the two at
+#: the same rate leaves the estate split for only a handful of steps at a time,
+#: and the interleaving that matters — an `assign` landing on a portfolio the
+#: operator moved — then depends on a coincidence inside a short window. Making
+#: re-enrolment the rarer event is both truer to life (people change
+#: organisation far less often than rows get reassigned) and what keeps the
+#: two-organisation state standing long enough for the API paths to be tested
+#: inside it. `cross_org_assignments` is the assertion that this worked.
+_WEIGHTS = {
+    "create_project": 3,
+    "create_portfolio": 1,
+    "create_portfolio_from_project": 2,
+    "assign": 6,
+    "remove": 2,
+    "cascade": 3,
+    "set_visibility": 2,
+    "ops_assign_portfolio": 3,
+    "ops_reenrol": 1,
+}
 
 #: How many operations the walk runs. Long enough that every operation fires
 #: several times against several states (asserted at the end, so a shorter
 #: walk fails loudly rather than passing thinly); short enough to stay a
-#: fast test — one request and one invariant query per step.
-_WALK_LENGTH = 90
+#: fast test — one request and one invariant query per step. Raised from 90
+#: with the two operator operations, so the per-operation count held.
+_WALK_LENGTH = 120
 
 #: Fixed, so a failure is reproducible from the test name alone. `hypothesis`
 #: is not a dependency of this repository and this phase does not add one.
 _WALK_SEED = 20260824
+
+
+@dataclass
+class _Estate:
+    """Everything the walk draws from and mutates, in one place.
+
+    Attributes:
+        projects: Pool of project ids, extended in place by the creates.
+        portfolios: Pool of portfolio ids, extended in place by the creates.
+        organisations: The two organisations the walk moves rows between.
+        email: The owner's stored address — `user enrol` resolves by it.
+        enrolled_in: Index into `organisations`: where the owner is *now*.
+        re_enrolments: How many operator re-enrolments have happened, for the
+            non-vacuity assertion.
+        cross_org_assignments: How many `assign` steps put a project into a
+            portfolio **stamped to a different organisation**. This is the
+            counter that decides whether the `org_id` half of the invariant was
+            tested at all: it is the only step at which a write path that
+            carried `visibility` alone would leave a breach behind.
+    """
+
+    projects: list[str]
+    portfolios: list[str]
+    organisations: tuple[ops_commands.Organisation, ops_commands.Organisation]
+    email: str
+    enrolled_in: int = 0
+    re_enrolments: int = 0
+    cross_org_assignments: int = 0
+
+    def elsewhere(self) -> ops_commands.Organisation:
+        """The organisation the owner is not currently enrolled in."""
+        return self.organisations[1 - self.enrolled_in]
+
+
+def _organisations_of(engine: Engine, owner_user_id: str) -> set[uuid.UUID | None]:
+    """Every distinct `org_id` across one owner's projects and portfolios."""
+    with seeded(engine) as conn:
+        projects = conn.execute(
+            select(project_table.c.org_id).where(
+                project_table.c.owner_user_id == owner_user_id
+            )
+        ).scalars()
+        portfolios = conn.execute(
+            select(portfolio_table.c.org_id).where(
+                portfolio_table.c.owner_user_id == owner_user_id
+            )
+        ).scalars()
+        return set(projects) | set(portfolios)
 
 
 def _walk_step(
@@ -704,23 +794,27 @@ def _walk_step(
     operation: str,
     step: int,
     rng: random.Random,
-    projects: list[str],
-    portfolios: list[str],
+    estate: _Estate,
 ) -> None:
     """Apply one operation and assert the status code that operation must give.
 
     The status assertions are half the property: an operation that started
     silently 4xx-ing would otherwise leave the invariant trivially intact.
 
+    The two operator operations run the **real command functions** against the
+    same test database, the way `test_sse.py` drives the real de-enrolment
+    rather than the write it believes the CLI performs. A stubbed identity
+    provider answers the one `ListUsers` `user enrol` makes; no AWS call
+    happens, and `rows assign` makes none at all.
+
     Args:
         client: The application client.
         owner: The acting principal — the walk is one owner's estate.
-        engine: The session engine, for the one state read i.5 needs.
+        engine: The session engine, for the state reads and the operator moves.
         operation: Which of :data:`_OPERATIONS` to run.
         step: The step index, for unique names and failure messages.
         rng: The seeded generator; every choice comes from it.
-        projects: Pool of project ids, extended in place by the creates.
-        portfolios: Pool of portfolio ids, extended in place by the creates.
+        estate: The walk's pools and membership state, mutated in place.
     """
     headers = owner.headers
     if operation == "create_project":
@@ -728,35 +822,46 @@ def _walk_step(
             "/api/v1/projects", headers=headers, json={"name": f"walk task {step}"}
         )
         assert response.status_code == 201, response.text
-        projects.append(response.json()["project_id"])
+        estate.projects.append(response.json()["project_id"])
         return
     if operation == "create_portfolio":
         response = client.post(
             "/api/v1/portfolios", headers=headers, json={"name": f"walk group {step}"}
         )
         assert response.status_code == 201, response.text
-        portfolios.append(response.json()["portfolio_id"])
+        estate.portfolios.append(response.json()["portfolio_id"])
         return
     if operation == "create_portfolio_from_project":
         response = client.post(
             "/api/v1/portfolios",
             headers=headers,
-            json={"name": f"walk seeded {step}", "from_project_id": rng.choice(projects)},
+            json={
+                "name": f"walk seeded {step}",
+                "from_project_id": rng.choice(estate.projects),
+            },
         )
         assert response.status_code == 201, response.text
-        portfolios.append(response.json()["portfolio_id"])
+        estate.portfolios.append(response.json()["portfolio_id"])
         return
     if operation == "assign":
+        moving, into = rng.choice(estate.projects), rng.choice(estate.portfolios)
+        # Read both organisations *before* the write, and count the case the
+        # `org_id` conjunct of the breach query exists for. Counted rather than
+        # forced: the walk stays a walk, and the count is asserted at the end so
+        # a change that made this state unreachable fails loudly instead of
+        # quietly going back to testing one field.
+        if _row(engine, moving)["org_id"] != _portfolio_row(engine, into)["org_id"]:
+            estate.cross_org_assignments += 1
         response = client.patch(
-            f"/api/v1/projects/{rng.choice(projects)}",
+            f"/api/v1/projects/{moving}",
             headers=headers,
-            json={"portfolio_id": rng.choice(portfolios)},
+            json={"portfolio_id": into},
         )
         assert response.status_code == 200, response.text
         return
     if operation == "remove":
         response = client.patch(
-            f"/api/v1/projects/{rng.choice(projects)}",
+            f"/api/v1/projects/{rng.choice(estate.projects)}",
             headers=headers,
             json={"portfolio_id": None},
         )
@@ -764,13 +869,46 @@ def _walk_step(
         return
     if operation == "cascade":
         response = client.patch(
-            f"/api/v1/portfolios/{rng.choice(portfolios)}",
+            f"/api/v1/portfolios/{rng.choice(estate.portfolios)}",
             headers=headers,
             json={"visibility": rng.choice(("org", "private"))},
         )
         assert response.status_code == 200, response.text
         return
-    target = rng.choice(projects)
+    if operation == "ops_reenrol":
+        # The whole estate moves as one set operation and arrives private, so
+        # this must never be the step that breaks the invariant — and it is
+        # what puts the owner's *new* rows in the other organisation, which is
+        # how the two-organisation state keeps regenerating through the walk.
+        estate.enrolled_in = 1 - estate.enrolled_in
+        destination = estate.organisations[estate.enrolled_in]
+        with cognito() as (identity, stubber):
+            expect_lookup(stubber, email=estate.email, sub=owner.user_id)
+            with seeded(engine) as conn:
+                enrolment = ops_commands.enrol_user(
+                    conn,
+                    identity,
+                    pool_id=POOL_ID,
+                    email=estate.email,
+                    display_name="Owner",
+                    org=destination,
+                )
+        assert enrolment.created is False
+        estate.re_enrolments += 1
+        return
+    if operation == "ops_assign_portfolio":
+        # Deliberately the organisation the owner is NOT in: one portfolio and
+        # its members move, the owner's loose projects do not, and the estate
+        # is now split across two organisations. That is the state the `org_id`
+        # half of the invariant is about.
+        with seeded(engine) as conn:
+            ops_commands.assign_rows(
+                conn,
+                org=estate.elsewhere(),
+                portfolio_id=uuid.UUID(rng.choice(estate.portfolios)),
+            )
+        return
+    target = rng.choice(estate.projects)
     # i.5 is a statement about the row's state, so the expectation is read
     # from the database rather than modelled in the test: a shadow copy of
     # the state machine could agree with a broken implementation.
@@ -798,6 +936,18 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
     steals a member out of another portfolio — are what this covers, and they
     are where an invariant written as six independent write paths breaks.
 
+    **Two organisations, not one, and operator moves in the operation set.**
+    With a single organisation the `org_id` conjunct of the breach query is
+    dead: every row and every creator stamp carries the same value, so
+    `IS DISTINCT FROM` cannot be true however the write paths behave, and the
+    half of the invariant rev 2.0 of the contract missed goes back to being
+    unasserted. `ops_assign_portfolio` splits the estate across the two
+    organisations and `ops_reenrol` re-gathers it, so assignment and cascade
+    keep meeting members and portfolios that really are in different
+    organisations. The mutation check for this is deleting
+    `assignment["org_id"] = group.row["org_id"]` from `projects.update_project`:
+    the walk fails.
+
     Deterministic rather than generative: `hypothesis` is not a dependency
     here and this phase does not add one. The seed is fixed, so a failure
     reproduces exactly; the coverage assertions at the end are what stop the
@@ -808,32 +958,44 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            projects = [
-                str(
-                    make_project(
-                        conn,
-                        owner_user_id=owner.user_id,
-                        org_id=org_id,
-                        visibility=visibility,
+            elsewhere_id = make_org(conn, name="Walk Elsewhere")
+            estate = _Estate(
+                projects=[
+                    str(
+                        make_project(
+                            conn,
+                            owner_user_id=owner.user_id,
+                            org_id=org_id,
+                            visibility=visibility,
+                        )
                     )
-                )
-                for visibility in ("org", "private", "org")
-            ]
-            portfolios = [
-                str(
-                    make_portfolio(
-                        conn,
-                        owner_user_id=owner.user_id,
-                        org_id=org_id,
-                        visibility=visibility,
+                    for visibility in ("org", "private", "org")
+                ],
+                portfolios=[
+                    str(
+                        make_portfolio(
+                            conn,
+                            owner_user_id=owner.user_id,
+                            org_id=org_id,
+                            visibility=visibility,
+                        )
                     )
-                )
-                for visibility in ("org", "private")
-            ]
+                    for visibility in ("org", "private")
+                ],
+                organisations=(
+                    ops_commands.Organisation(org_id=org_id, name="Walk Home"),
+                    ops_commands.Organisation(org_id=elsewhere_id, name="Walk Elsewhere"),
+                ),
+                email=unique_email("walk-owner"),
+            )
 
         widest_membership = 0
+        widest_split = 0
+        organisations_seen: set[uuid.UUID | None] = set()
         for step in range(_WALK_LENGTH):
-            operation = rng.choice(_OPERATIONS)
+            (operation,) = rng.choices(
+                _OPERATIONS, weights=[_WEIGHTS[name] for name in _OPERATIONS]
+            )
             performed[operation] += 1
             _walk_step(
                 client,
@@ -842,11 +1004,13 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
                 operation=operation,
                 step=step,
                 rng=rng,
-                projects=projects,
-                portfolios=portfolios,
+                estate=estate,
             )
             members = _members(engine, owner.user_id)
             widest_membership = max(widest_membership, len(members))
+            here = _organisations_of(engine, owner.user_id)
+            organisations_seen |= here
+            widest_split = max(widest_split, len(here))
             breached = [dict(member) for member in members if member["breached"]]
             assert breached == [], f"step {step} ({operation}) broke the invariant: {breached}"
 
@@ -854,3 +1018,13 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
         # reason, and every operation must have actually run.
         assert set(performed) == set(_OPERATIONS), performed
         assert widest_membership >= 2, widest_membership
+        assert estate.re_enrolments >= 1, estate.re_enrolments
+        # And the `org_id` conjunct was live: the owner's rows were seen in
+        # both organisations, at some step they were in both at once, and at
+        # least one assignment crossed between them. That last one is the
+        # assertion that keeps this walk from silently reverting to a
+        # single-field property — it is the only step where a write path that
+        # forgot `org_id` leaves a breach behind.
+        assert organisations_seen >= {org_id, elsewhere_id}, organisations_seen
+        assert widest_split >= 2, widest_split
+        assert estate.cross_org_assignments >= 1, estate.cross_org_assignments

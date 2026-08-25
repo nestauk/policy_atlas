@@ -180,6 +180,37 @@ def test_user_create_keeps_the_account_and_prints_the_remediation_on_a_database_
     assert _user_row(conn, sub) is None
 
 
+def test_user_create_turns_a_cognito_refusal_into_a_refusal_not_a_traceback(
+    conn: Connection,
+) -> None:
+    """``AdminCreateUser`` can fail for reasons the pre-flight lookup cannot see.
+
+    The lookup is Cognito's own exact-match filter, so it can lose a race, and
+    it cannot see an account whose *alias* rather than whose ``email``
+    attribute carries the address. Either way the answer is
+    ``UsernameExistsException``, and an operator mid-provisioning is owed the
+    ``user enrol`` remediation rather than a botocore stack trace on their
+    terminal.
+    """
+    org = _org(conn)
+    email = unique_email("racing")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        stubber.add_client_error(
+            "admin_create_user",
+            service_error_code="UsernameExistsException",
+            http_status_code=400,
+        )
+        with pytest.raises(OpsError) as refusal:
+            commands.create_user(
+                conn, client, pool_id=POOL_ID, email=email, display_name="X", org=org
+            )
+        stubber.assert_no_pending_responses()
+    message = str(refusal.value)
+    assert "UsernameExistsException" in message
+    assert "user enrol" in message
+
+
 # --- user enrol --------------------------------------------------------------
 
 
@@ -356,6 +387,61 @@ def test_user_resync_refuses_a_subject_that_was_never_enrolled(conn: Connection)
             commands.resync_user(conn, client, pool_id=POOL_ID, email=email)
 
 
+def test_user_resync_refuses_a_de_enrolled_row_rather_than_restoring_its_address(
+    conn: Connection,
+) -> None:
+    """Rubric 27's interlock, from the side that reverses it.
+
+    De-enrolment clears ``email`` and ``admin grant`` resolves *by* address:
+    that pairing is the whole guard. ``resync`` writing the address back onto a
+    de-enrolled row restores the selector, so the guard is defeated by two
+    commands neither of which looks wrong on its own. The row keeps its cleared
+    address, and the operator is sent to ``user enrol`` — the only command that
+    also names the organisation the address is for.
+    """
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("offboarded")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
+    commands.de_enrol_user(conn, sub=sub)
+
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        with pytest.raises(OpsError, match="user enrol"):
+            commands.resync_user(conn, client, pool_id=POOL_ID, email=email)
+
+    assert _user_row(conn, sub).email is None
+
+
+def test_resync_then_grant_cannot_reinstate_an_administrator_for_an_offboarded_person(
+    conn: Connection,
+) -> None:
+    """The two-command sequence, run as a sequence — which is how it would happen.
+
+    An offboarded person, a support ticket, and an operator who reaches for
+    ``resync`` because ``admin grant`` said it could not find the address. Both
+    halves refuse: the first because the row has no organisation, and the second
+    because the address is still cleared. The role is not resurrected either way,
+    and the remediation both messages name is the one that is actually correct —
+    re-enrol the person first, deliberately.
+    """
+    org = _org(conn)
+    sub = fresh_sub()
+    email = unique_email("returning")
+    ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email, is_admin=True)
+    commands.de_enrol_user(conn, sub=sub)
+
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=sub)
+        with pytest.raises(OpsError, match="user enrol"):
+            commands.resync_user(conn, client, pool_id=POOL_ID, email=email)
+    with pytest.raises(OpsError, match="de-enrolled"):
+        commands.set_admin(conn, email=email, grant=True)
+
+    row = _user_row(conn, sub)
+    assert (row.email, row.org_id, row.is_admin) == (None, None, False)
+
+
 # --- de-enrol ----------------------------------------------------------------
 
 
@@ -442,14 +528,23 @@ def test_rows_assign_of_a_member_project_moves_its_portfolio_and_siblings(
     assert assignment.followed_membership is True
     assert assignment.projects_moved == 2
     assert "moved together" in assignment.summary()
-    assert _portfolio_row(conn, portfolio_id)[0] == org.org_id
+    assert _portfolio_row(conn, portfolio_id) == (org.org_id, "private")
     for row_id in (named, sibling):
-        assert _project_row(conn, row_id).org_id == org.org_id
+        assert _project_row(conn, row_id)[:2] == (org.org_id, "private")
 
 
-def test_rows_assign_of_a_project_in_no_portfolio_moves_only_that_row(
-    conn: Connection,
-) -> None:
+def test_rows_assign_privatises_the_rows_it_moves(conn: Connection) -> None:
+    """Rubric 29's last clause, ADR 0032 decision 7: no operator action exposes a row.
+
+    The row this pins is the one the previous revision of the command got
+    wrong. ``visibility`` defaults to ``org``, and a row whose ``org_id`` is
+    NULL is reachable by its owner alone whatever that column says — the org leg
+    is ``org_id IS NOT NULL AND visibility = 'org'``. So an unenrolled owner's
+    estate is *full* of rows marked ``org`` that nobody can see, and an
+    assignment that stamped ``org_id`` while preserving ``visibility`` handed
+    every one of them to every member of the destination, instantly, with the
+    owner never acting. They arrive private instead, and the summary says so.
+    """
     org = _org(conn)
     owner = fresh_sub()
     project_id = make_project(conn, owner_user_id=owner, visibility="org")
@@ -458,8 +553,73 @@ def test_rows_assign_of_a_project_in_no_portfolio_moves_only_that_row(
     assignment = commands.assign_rows(conn, org=org, project_id=project_id)
 
     assert (assignment.projects_moved, assignment.portfolios_moved) == (1, 0)
-    assert _project_row(conn, project_id)[:2] == (org.org_id, "org")
+    assert assignment.privatised is True
+    assert "all private" in assignment.summary()
+    assert org.name in assignment.summary()
+    assert _project_row(conn, project_id)[:2] == (org.org_id, "private")
+    # (d) still holds: only the named row moved, and nothing else was privatised.
     assert _project_row(conn, other)[:2] == (None, "org")
+
+
+def test_rows_assign_of_an_org_visible_portfolio_across_organisations_arrives_private(
+    conn: Connection,
+) -> None:
+    """The cross-org case: work shared with A does not arrive shared with B.
+
+    Same rule as re-enrolment, reached the other way. The portfolio was
+    deliberately shared inside its first organisation; assigning it to a second
+    is an operator act, and carrying that share across would disclose a whole
+    back catalogue to an audience nobody chose.
+    """
+    first = _org(conn, "First")
+    second = _org(conn, "Second")
+    owner = fresh_sub()
+    portfolio_id = make_portfolio(
+        conn, owner_user_id=owner, org_id=first.org_id, visibility="org"
+    )
+    member = make_project(
+        conn,
+        owner_user_id=owner,
+        org_id=first.org_id,
+        visibility="org",
+        portfolio_id=portfolio_id,
+    )
+
+    assignment = commands.assign_rows(conn, org=second, portfolio_id=portfolio_id)
+
+    assert assignment.privatised is True
+    assert _portfolio_row(conn, portfolio_id) == (second.org_id, "private")
+    assert _project_row(conn, member)[:2] == (second.org_id, "private")
+
+
+def test_rows_assign_into_the_organisation_a_row_is_already_in_keeps_its_visibility(
+    conn: Connection,
+) -> None:
+    """Privatising is for moves, not for re-stating where a row already is.
+
+    A no-op assignment changes nobody's audience, so flipping ``visibility``
+    would be a gratuitous edit to a choice the owner made. What it still does is
+    the ``i.4`` repair: the member takes its portfolio's visibility.
+    """
+    org = _org(conn)
+    owner = fresh_sub()
+    portfolio_id = make_portfolio(
+        conn, owner_user_id=owner, org_id=org.org_id, visibility="org"
+    )
+    member = make_project(
+        conn,
+        owner_user_id=owner,
+        org_id=org.org_id,
+        visibility="private",
+        portfolio_id=portfolio_id,
+    )
+
+    assignment = commands.assign_rows(conn, org=org, portfolio_id=portfolio_id)
+
+    assert assignment.privatised is False
+    assert "all private" not in assignment.summary()
+    assert _portfolio_row(conn, portfolio_id) == (org.org_id, "org")
+    assert _project_row(conn, member)[:2] == (org.org_id, "org")
 
 
 def test_rows_assign_refuses_without_exactly_one_target(conn: Connection) -> None:
@@ -471,25 +631,58 @@ def test_rows_assign_refuses_without_exactly_one_target(conn: Connection) -> Non
 # --- admin grant and revoke --------------------------------------------------
 
 
-def test_admin_grant_and_revoke_trace_the_operator_the_subject_and_the_direction(
+def test_admin_grant_and_revoke_hand_the_trace_to_the_caller_and_emit_nothing(
     conn: Connection,
 ) -> None:
-    """Contract § 3a: a privileged grant with no record of who made it is not auditable."""
+    """Contract § 3a's record, moved off the write path deliberately.
+
+    The command carries the change it made — subject and direction — and logs
+    **nothing**. A ``log.info`` here would run inside the operator's
+    transaction, so a commit that then failed would leave a durable audit line
+    claiming a privilege change that never landed. The line is emitted by
+    ``cli._trace`` after the commit instead, which is where the operator ARN
+    lives anyway; ``test_ops_cli`` pins that end.
+    """
     org = _org(conn)
     sub = fresh_sub()
     email = unique_email("support")
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email)
 
     with capture_logs() as logs:
-        commands.set_admin(conn, email=email, grant=True, operator="alice", env="staging")
-        commands.set_admin(conn, email=email, grant=False, operator="alice", env="staging")
+        granted = commands.set_admin(conn, email=email, grant=True)
+        revoked = commands.set_admin(conn, email=email, grant=False)
 
-    traced = [line for line in logs if line["event"] == "ops.admin_change"]
-    assert [line["direction"] for line in traced] == ["grant", "revoke"]
-    assert {line["operator"] for line in traced} == {"alice"}
-    assert {line["subject"] for line in traced} == {sub}
-    assert {line["env"] for line in traced} == {"staging"}
+    assert [line["event"] for line in logs] == []
+    assert [change.direction for change in granted.admin_changes()] == ["grant"]
+    assert [change.direction for change in revoked.admin_changes()] == ["revoke"]
+    assert {change.subject for change in granted.admin_changes()} == {sub}
     assert _user_row(conn, sub).is_admin is False
+
+
+def test_de_enrolling_an_administrator_carries_a_revoke_to_trace(conn: Connection) -> None:
+    """The other way the support role is taken away, and the one offboarding runs.
+
+    ``de-enrol`` clears ``is_admin`` in the same statement that clears the
+    organisation. Contract § 3a asks for a record of privilege changes, not of
+    ``admin revoke`` invocations, so this counts — and an investigation asking
+    "when did they stop being an administrator" is most likely asking about
+    exactly this command.
+    """
+    org = _org(conn)
+    admin_sub, plain_sub = fresh_sub(), fresh_sub()
+    admin_email, plain_email = unique_email("leaving-admin"), unique_email("leaving")
+    ops_enrol(conn, user_id=admin_sub, org_id=org.org_id, email=admin_email, is_admin=True)
+    ops_enrol(conn, user_id=plain_sub, org_id=org.org_id, email=plain_email)
+
+    admin_leaver = commands.de_enrol_user(conn, email=admin_email)
+    plain_leaver = commands.de_enrol_user(conn, email=plain_email)
+
+    assert [
+        (change.subject, change.direction) for change in admin_leaver.admin_changes()
+    ] == [(admin_sub, "revoke")]
+    # Nothing to record when nothing changed: a de-enrolment is not a privilege
+    # change on its own.
+    assert plain_leaver.admin_changes() == ()
 
 
 def test_admin_grant_refuses_when_the_role_is_already_held(conn: Connection) -> None:
@@ -498,14 +691,71 @@ def test_admin_grant_refuses_when_the_role_is_already_held(conn: Connection) -> 
     email = unique_email("twice")
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email, is_admin=True)
     with pytest.raises(OpsError, match="already an administrator"):
-        commands.set_admin(conn, email=email, grant=True, operator="alice", env="staging")
+        commands.set_admin(conn, email=email, grant=True)
 
 
 def test_admin_grant_refuses_an_address_no_row_carries(conn: Connection) -> None:
     with pytest.raises(OpsError, match="de-enrolled"):
-        commands.set_admin(
-            conn, email=unique_email("nobody"), grant=True, operator="alice", env="staging"
-        )
+        commands.set_admin(conn, email=unique_email("nobody"), grant=True)
+
+
+def test_admin_grant_refuses_a_subject_in_no_organisation(conn: Connection) -> None:
+    """Defence in depth behind ``user resync``'s refusal (the interlock's other end).
+
+    Only ``user enrol --org`` writes an address, so a row carrying one with no
+    organisation should not exist. If one ever does — a hand-written row, a
+    future command, a bug — it is not a row that gets the support role, and
+    ``--sub`` must not be a way around that either.
+    """
+    sub = fresh_sub()
+    email = unique_email("orphaned")
+    ops_enrol(conn, user_id=sub, org_id=None, email=email)
+
+    with pytest.raises(OpsError, match="no organisation"):
+        commands.set_admin(conn, email=email, grant=True)
+    with pytest.raises(OpsError, match="no organisation"):
+        commands.set_admin(conn, sub=sub, grant=True)
+    assert _user_row(conn, sub).is_admin is False
+
+
+def test_admin_revoke_still_reaches_a_subject_in_no_organisation(conn: Connection) -> None:
+    """Taking the role away must never be the blocked direction.
+
+    The grant refusal above is a guard on privilege *arriving*. Applying it to
+    revoke would strand any pre-existing administrator whose row lost its
+    organisation — the one case where an operator most needs the command to work.
+    """
+    sub = fresh_sub()
+    ops_enrol(conn, user_id=sub, org_id=None, email=None, is_admin=True)
+
+    revoked = commands.set_admin(conn, sub=sub, grant=False)
+
+    assert revoked.direction == "revoke"
+    assert _user_row(conn, sub).is_admin is False
+
+
+def test_admin_revoke_resolves_an_ambiguous_address_by_sub(conn: Connection) -> None:
+    """The refusal recommends ``--sub``, so ``--sub`` has to exist (both directions).
+
+    ``app_user.email`` carries no unique constraint, so two rows can share an
+    address — and the command that most needs to work under that condition is
+    revoking a compromised administrator. Before ``--sub``, the refusal named a
+    flag the parser did not accept: a dead end on the defensive path.
+    """
+    org = _org(conn)
+    shared = unique_email("shared-admin")
+    subs = [fresh_sub(), fresh_sub()]
+    for sub in subs:
+        ops_enrol(conn, user_id=sub, org_id=org.org_id, email=shared, is_admin=True)
+
+    with pytest.raises(OpsError, match="resolve with --sub"):
+        commands.set_admin(conn, email=shared, grant=False)
+
+    revoked = commands.set_admin(conn, sub=subs[0], grant=False)
+
+    assert revoked.user_id == subs[0]
+    assert _user_row(conn, subs[0]).is_admin is False
+    assert _user_row(conn, subs[1]).is_admin is True
 
 
 # --- concurrency (rubric 27) -------------------------------------------------
@@ -531,9 +781,7 @@ def test_a_de_enrolment_stops_a_concurrent_operator_resurrecting_admin(
         commands.de_enrol_user(operator_a, email=email)
 
     with seeded(engine) as operator_b, pytest.raises(OpsError, match="de-enrolled"):
-        commands.set_admin(
-            operator_b, email=email, grant=True, operator="bob", env="staging"
-        )
+        commands.set_admin(operator_b, email=email, grant=True)
 
     with seeded(engine) as check:
         assert check.execute(
@@ -541,13 +789,20 @@ def test_a_de_enrolment_stops_a_concurrent_operator_resurrecting_admin(
         ).scalar_one() is False
 
 
-def test_admin_grant_takes_a_real_row_lock(engine: Engine) -> None:
-    """The refusal above is only sound if the read genuinely locks.
+def test_admin_grant_takes_a_real_row_lock_by_address_and_by_sub(engine: Engine) -> None:
+    """The refusal above is only sound if the read genuinely locks — either selector.
 
     Proved without threads: operator A holds the row ``FOR UPDATE`` in an open
     transaction while operator B, given a 250ms ``lock_timeout``, tries the same
     read. Postgres raises rather than letting B proceed on a stale view — which
     is what serialises the two operators in the first place.
+
+    ``--sub`` is asserted alongside ``--email`` because the recorded objection to
+    resolving by subject at all was that it "bypasses the address-mediated
+    compare-and-refuse". It bypasses the address as a *selector*; it does not
+    bypass the lock, and the interlock it would otherwise weaken is carried by
+    the grant path's organisation check instead
+    (``test_admin_grant_refuses_a_subject_in_no_organisation``).
     """
     email = unique_email("locked")
     sub = fresh_sub()
@@ -560,12 +815,14 @@ def test_admin_grant_takes_a_real_row_lock(engine: Engine) -> None:
         operator_a.execute(
             select(app_user).where(app_user.c.user_id == sub).with_for_update()
         ).mappings().one()
-        with engine.connect() as operator_b:
-            attempt = operator_b.begin()
-            operator_b.execute(text("SET LOCAL lock_timeout = '250ms'"))
-            with pytest.raises(DBAPIError, match="lock timeout"):
-                commands.set_admin(
-                    operator_b, email=email, grant=True, operator="bob", env="staging"
-                )
-            attempt.rollback()
+        for selector in ("email", "sub"):
+            with engine.connect() as operator_b:
+                attempt = operator_b.begin()
+                operator_b.execute(text("SET LOCAL lock_timeout = '250ms'"))
+                with pytest.raises(DBAPIError, match="lock timeout"):
+                    if selector == "email":
+                        commands.set_admin(operator_b, email=email, grant=True)
+                    else:
+                        commands.set_admin(operator_b, sub=sub, grant=True)
+                attempt.rollback()
         held.rollback()

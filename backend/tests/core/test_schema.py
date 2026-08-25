@@ -1,13 +1,16 @@
 """Schema validation — tables, columns, constraints."""
 
+import ast
 import os
 import re
 import uuid
+from pathlib import Path
 from typing import get_args
 
 import pytest
 from alembic import command
 from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import IntegrityError
@@ -414,6 +417,46 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
             assert authors[unowned_conversation_id] is None
     finally:
         _delete_seeded_rows(engine, owned_project_id, unowned_project_id)
+
+
+def test_the_tenancy_migrations_lock_timeout_cannot_outlive_the_migration() -> None:
+    """``SET LOCAL``, both directions — a session GUC leaks into later revisions.
+
+    The 5s ceiling exists because ``ALTER TABLE`` takes ACCESS EXCLUSIVE and a
+    stray jumpbox session holding a conflicting lock would queue the deploy and
+    every reader behind it. That is a statement about *this* revision, and a
+    plain ``SET`` is session-scoped: on the connection that runs ``alembic
+    upgrade head`` over a fresh database it silently imposed the same ceiling on
+    every revision applied afterwards, which may legitimately want to wait
+    longer. ``alembic/env.py`` runs migrations inside
+    ``context.begin_transaction()``, so ``SET LOCAL`` has a transaction to be
+    scoped to and reverts when it commits.
+
+    Asserted against the source text because the leak is invisible in
+    behaviour: a run that never contends for a lock passes either way, and the
+    one that does contend is a production deploy.
+    """
+    script = ScriptDirectory.from_config(AlembicConfig("alembic.ini"))
+    source = Path(script.get_revision("a4f1c8e3b6d2").path).read_text()
+    statements = re.findall(r'op\.execute\("(SET[^"]*lock_timeout[^"]*)"\)', source)
+
+    assert statements == ["SET LOCAL lock_timeout = '5s'"] * 2, statements
+    # One per direction, not two in `upgrade` and none in `downgrade`.
+    module = ast.parse(source)
+    for name in ("upgrade", "downgrade"):
+        function = next(
+            node
+            for node in module.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        )
+        found = [
+            node.value
+            for node in ast.walk(function)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and "lock_timeout" in node.value
+        ]
+        assert found == ["SET LOCAL lock_timeout = '5s'"], (name, found)
 
 
 def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engine) -> None:

@@ -65,16 +65,21 @@ never clobbers ops-set fields; ops enrolment is the deliberate
 Listing filters: `scope=all|mine` (default `all` = owner ∪ org-visible;
 for an admin, `all` spans every organisation) on both listings ·
 `portfolio_id` on `GET /projects` · `owner_email` on both listings,
-admin-only — a non-admin passing it gets 422 `validation_error`.
+admin-only — a non-admin passing it gets 422 `validation_error`, as does
+any value over 254 characters or without an `@` (the value is logged
+verbatim into the audit line, so it is bounded and shape-checked first).
 
 **The admin trace.** Reads served by the admin leg — and only those — are
 logged: one line per direct row read (`admin_read`), one per cross-org
 listing or search request including zero-result searches
 (`admin_listing`), one per SSE subscribe and per re-authorisation batch
 (`admin_stream_read`). Nothing is emitted for a read the caller was
-entitled to anyway. Exactly four code sites read `is_admin` (the helper's
-admin leg, the listing scope resolver, the `owner_email` gate, the `/me`
-projection); no write path reads it, and no HTTP surface can set it.
+entitled to anyway. The flag has exactly four readers, asserted
+structurally as a closed code-site list (`_access.admin_read_leg` and
+`_access._is_admin` — which between them serve the row/listing legs, the
+`owner_email` gate and the trace decision — plus `me.get_me` and the
+`MeOut` field declaration); no write path reads it, and no HTTP surface
+can set it.
 
 ## Error envelope
 
@@ -124,7 +129,10 @@ artefact, groups) are whole-object.
   partial, owner-only; rename emits a transactional `project.renamed`
   audit event. `visibility` on a project in a portfolio is 409
   `visibility_conflict`; a body carrying both `visibility` and
-  `portfolio_id` is 422 (the two orderings differ).
+  `portfolio_id` is 422 (the two orderings differ). An explicit
+  `null` on a NOT NULL column (`name`, `visibility` — here and on
+  `PATCH /portfolios/{id}`) is 422 rather than a 500; nulls that mean
+  something (`question`, `description`, `portfolio_id`) still work.
 - `POST /api/v1/projects/{id}/archive` → idempotent archive (soft-delete:
   hidden from default listings, rows retained; `project.archived` audit
   event on first archive only). 409 `run_active` while a run is executing

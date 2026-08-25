@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.sql.elements import ColumnElement
 
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.checkin_read import _check_in
@@ -38,6 +39,7 @@ from policy_atlas.api.deps import get_current_user, get_engine, get_settings
 from policy_atlas.api.routers._access import (
     accessible_project,
     may_read_project,
+    readable_project_exists,
     trace_admin_stream_read,
 )
 from policy_atlas.api.routers.planning import _draft_from_plan
@@ -111,6 +113,16 @@ def _tail(
     caller whose access has gone is never handed the events of the interval in
     which they lost it.
 
+    **The batch select carries the grade too, in its own statement.** Checking
+    first and reading second is two statements, and a revocation committing
+    between them was still worth one batch of frames to the caller who had just
+    lost access. So the event read is gated by
+    :func:`_access.readable_project_exists` — the same legs, expressed as a
+    predicate rather than a value — and the two do different jobs: the gate
+    makes the batch empty, ``may_read_project`` ends the response. Neither
+    alone is the fix; the reason both exist is that the response must *close*,
+    not merely go quiet.
+
     **The fourth revocation event is now real.** The re-check resolves through
     `_access._read_legs`, which carries the admin leg, so clearing `is_admin`
     on a streaming administrator closes their stream on the next batch — no
@@ -137,7 +149,13 @@ def _tail(
             return None
         if check.via_admin:
             trace_admin_stream_read(user_id=user_id, project_id=project_id)
-        rows = _event_rows(conn, project_id=project_id, after=after, through=None)
+        rows = _event_rows(
+            conn,
+            project_id=project_id,
+            after=after,
+            through=None,
+            guard=readable_project_exists(project_id, user_id),
+        )
         last_sequence = rows[-1]["sequence"] if rows else after
         return last_sequence, _map_rows(conn, project_id=project_id, rows=rows, through=None)
 
@@ -148,13 +166,28 @@ def _event_rows(
     project_id: uuid.UUID,
     after: int,
     through: int | None,
+    guard: ColumnElement[bool] | None = None,
 ) -> list[dict[str, Any]]:
-    """Read ordered durable events in the inclusive/exclusive SSE sequence interval."""
+    """Read ordered durable events in the inclusive/exclusive SSE sequence interval.
+
+    Args:
+        conn: Open database connection.
+        project_id: The project whose log is read.
+        after: Exclusive lower bound on the durable sequence.
+        through: Inclusive upper bound, or ``None`` for "everything since".
+        guard: An access predicate to AND into **this** statement, so the grade
+            and the rows are decided together. The tail passes one (see
+            :func:`_tail`); ``_snapshot`` does not, because it has just
+            resolved the row through ``accessible_project`` in the same
+            connection and nothing has been yielded yet.
+    """
     statement = select(event_log).where(event_log.c.project_id == project_id).where(
         event_log.c.sequence > after
     )
     if through is not None:
         statement = statement.where(event_log.c.sequence <= through)
+    if guard is not None:
+        statement = statement.where(guard)
     return [dict(row._mapping) for row in conn.execute(statement.order_by(event_log.c.sequence))]
 
 
@@ -529,7 +562,8 @@ async def stream_events(
 
     The replay is authorised once by ``_snapshot``; the tail re-authorises on
     every batch through the same read legs and ends the response the moment the
-    caller's access is gone (contract § 5).
+    caller's access is gone (contract § 5). **Re-authorisation precedes every
+    frame of its iteration, ephemeral ticks included** — see the loop.
     """
     snapshot, replay = await anyio.to_thread.run_sync(
         partial(_snapshot, engine, project_id=project_id, user_id=user.user_id, cursor=cursor)
@@ -552,8 +586,14 @@ async def stream_events(
                     tick = await asyncio.wait_for(queue.get(), timeout=timeout)
                 except TimeoutError:
                     tick = None
-                if tick is not None:
-                    yield _encode_tick(tick)
+                # The tick is **held**, not yielded, until the tail has
+                # re-authorised. A tick carries the project's current stage and
+                # its progress note — project-derived content — so yielding it
+                # first handed a caller whose access had just gone one more
+                # frame about work they may no longer read. Re-authorisation is
+                # the first thing every iteration does; nothing is written to
+                # the response before it answers.
+                pending_tick = _encode_tick(tick) if tick is not None else None
                 batch = await anyio.to_thread.run_sync(
                     partial(
                         _tail,
@@ -571,6 +611,10 @@ async def stream_events(
                     log.info("api.sse_revoked", project_id=str(project_id))
                     return
                 last_sequence, tail = batch
+                # Order within the iteration is unchanged: the ephemeral tick
+                # still precedes the durable frames it was observed alongside.
+                if pending_tick is not None:
+                    yield pending_tick
                 for frame in tail:
                     yield _encode_frame(frame)
                 next_sequence = last_sequence + 1

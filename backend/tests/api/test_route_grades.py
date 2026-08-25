@@ -22,6 +22,7 @@ import json
 import os
 import uuid
 from collections.abc import Callable
+from datetime import timedelta
 from pathlib import Path
 
 import httpx
@@ -42,6 +43,7 @@ from policy_atlas.core.schema import (
     conversation,
     evidence_scope,
     orchestration_plan,
+    planning_transcript,
 )
 from policy_atlas.core.schema import project as project_table
 from policy_atlas.runtime.chat_backend import StubChatBackend
@@ -262,6 +264,94 @@ def test_get_plan_read_grade_lets_a_colleague_read(engine: Engine, tmp_path: Pat
 
         assert response.status_code == 200
         assert response.json()["status"] == "approved"
+
+
+def _stale_pending_turn(conn: Connection, *, project_id: uuid.UUID) -> uuid.UUID:
+    """Insert one planning turn old enough for the sweeper to fail, and return its id."""
+    turn_id = uuid.uuid4()
+    conn.execute(
+        planning_transcript.insert().values(
+            id=turn_id,
+            project_id=project_id,
+            conversation_id=None,
+            client_turn_id=uuid.uuid4(),
+            turn_index=0,
+            user_message="a turn whose process died",
+            reply=None,
+            planner_state=None,
+            response=None,
+            suggestions=[],
+            status="pending",
+            created_at=now() - timedelta(minutes=11),
+            completed_at=None,
+        )
+    )
+    return turn_id
+
+
+def _turn_status(engine: Engine, turn_id: uuid.UUID) -> str:
+    """Read one planning transcript row's status."""
+    with engine.connect() as conn:
+        return str(
+            conn.execute(
+                select(planning_transcript.c.status).where(
+                    planning_transcript.c.id == turn_id
+                )
+            ).scalar_one()
+        )
+
+
+def test_a_read_graded_planning_get_by_anyone_but_the_owner_writes_nothing(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The stale-turn sweeper is a write, so it belongs to the owner alone.
+
+    `GET .../planning-turns` and `GET .../plan` carry the **read** grade —
+    owner, same-org colleague, administrator — and both used to run
+    `_expire_stale_pending_turns` unconditionally. That made a colleague's page
+    load, and an administrator's support read, fail the owner's in-flight
+    planning turn: a mutation on a read grade, and for the admin leg a
+    mutation the contract's read-only guarantee forbids outright.
+
+    Both non-owner callers are exercised against the same row, and the row is
+    still `pending` after four reads. The owner's read then sweeps it, which is
+    what keeps this a statement about *who* rather than about the sweeper
+    having been deleted.
+    """
+    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, admin)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            support_org = make_org(conn, name="Support Org")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(
+                conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+            )
+            ops_enrol(
+                conn,
+                user_id=admin.user_id,
+                org_id=support_org,
+                display_name="Support",
+                is_admin=True,
+            )
+            project_id = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            _seed_approved_plan(conn, project_id=project_id)
+            turn_id = _stale_pending_turn(conn, project_id=project_id)
+
+        for caller in (colleague, admin):
+            for path in ("planning-turns", "plan"):
+                response = client.get(
+                    f"/api/v1/projects/{project_id}/{path}", headers=caller.headers
+                )
+                assert response.status_code == 200, (path, response.text)
+                assert _turn_status(engine, turn_id) == "pending"
+
+        owner_read = client.get(
+            f"/api/v1/projects/{project_id}/planning-turns", headers=owner.headers
+        )
+        assert owner_read.status_code == 200
+        assert _turn_status(engine, turn_id) == "failed"
 
 
 def test_sse_snapshot_read_grade_lets_a_colleague_open_the_stream(
@@ -1159,3 +1249,94 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
             )
     finally:
         _cleanup(engine, project_id)
+
+
+def test_a_chat_creator_can_archive_their_own_chat_standing_behaviour_pending_owner_call(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The lifecycle routes as they behave today, pinned while the owner rules.
+
+    Contract § 4 grants a same-org colleague "exactly three mutations and
+    nothing else" — create a conversation, post a turn to it, cancel their
+    turn. `PATCH /{id}`, `archive` and `unarchive` are not on that list, and a
+    colleague who *created* the chat passes all three anyway: the write path's
+    predicate is the creator/owner conjunction, and they are the creator.
+
+    Two readings are available and this test takes neither. Either the three
+    are the *mutations on somebody else's project* and renaming your own chat
+    was never in scope of the sentence — or the list is exhaustive and this is
+    an unintended fourth. **Escalated to the owner**; the name of this case
+    says so, and it changes with the ruling rather than quietly outliving it.
+
+    What is asserted is only what is true: the creator reaches their own
+    chat's lifecycle routes, and *nobody else* does — not the project owner,
+    not an administrator. That second half is the property no reading disputes
+    and no existing case covered, because this router has no 403 to spend: a
+    refused write here is the same opaque 404 as an absent row.
+    """
+    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, admin)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(
+                conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+            )
+            ops_enrol(
+                conn,
+                user_id=admin.user_id,
+                org_id=make_org(conn, name="Support Org"),
+                display_name="Support",
+                is_admin=True,
+            )
+            project_id = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            chat_id = uuid.uuid4()
+            _insert_conversation(
+                conn,
+                conversation_id=chat_id,
+                project_id=project_id,
+                kind="chat",
+                created_by=colleague.user_id,
+            )
+
+        # The owner of the project and an administrator are refused all three,
+        # indistinguishably from the chat not existing.
+        for stranger in (owner, admin):
+            assert (
+                client.patch(
+                    f"/api/v1/conversations/{chat_id}",
+                    headers=stranger.headers,
+                    json={"title": "Renamed by someone else"},
+                ).status_code
+                == 404
+            )
+            for action in ("archive", "unarchive"):
+                assert (
+                    client.post(
+                        f"/api/v1/conversations/{chat_id}/{action}",
+                        headers=stranger.headers,
+                    ).status_code
+                    == 404
+                ), (stranger.user_id, action)
+
+        # The creator reaches all three. Standing behaviour, pending the ruling.
+        renamed = client.patch(
+            f"/api/v1/conversations/{chat_id}",
+            headers=colleague.headers,
+            json={"title": "The colleague's own chat"},
+        )
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()["title"] == "The colleague's own chat"
+
+        archived = client.post(
+            f"/api/v1/conversations/{chat_id}/archive", headers=colleague.headers
+        )
+        assert archived.status_code == 200, archived.text
+        assert archived.json()["status"] == "archived"
+
+        unarchived = client.post(
+            f"/api/v1/conversations/{chat_id}/unarchive", headers=colleague.headers
+        )
+        assert unarchived.status_code == 200, unarchived.text
+        assert unarchived.json()["status"] == "active"

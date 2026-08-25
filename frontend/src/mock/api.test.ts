@@ -356,5 +356,23 @@ describe("mock API", () => {
       const { data: unfilteredData } = await unfiltered.json() as { data: unknown[] };
       expect(unfilteredData).toHaveLength(1);
     });
+
+    it("PATCH /projects/{id} refuses a rename bundled with a visibility conflict all-or-nothing — the name is never assigned before the 409", async () => {
+      resetMockScenario();
+      // `mockProject.portfolio_id` is seeded non-null (task 033 phase 10a
+      // fixture), so any `visibility` in the body always conflicts here.
+      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: "Renamed while conflicted", visibility: "private" }),
+      });
+      expect(response.status).toBe(409);
+      const body = await response.json() as { error: { code: string } };
+      expect(body.error.code).toBe("visibility_conflict");
+
+      const reread = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`);
+      const project = await reread.json() as { name: string; visibility: string };
+      expect(project.name).not.toBe("Renamed while conflicted");
+      expect(project.visibility).toBe("org");
+    });
   });
 });

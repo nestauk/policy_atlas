@@ -54,6 +54,26 @@ def test_no_command_accepts_a_password() -> None:
     assert offenders == []
 
 
+def test_no_command_accepts_an_assume_yes_flag() -> None:
+    """The one confirmation this CLI asks is the environment check's database leg.
+
+    That leg is reached by every first command against a fresh deployment — the
+    migration seeds no ``app_user`` rows — and it is exactly the moment at which
+    the tunnel is least accounted for. So it is typed, interactively, and there
+    is no flag to skip it.
+
+    The flag that used to skip it was **deleted rather than made inert**: an
+    inert ``--yes`` still reads, to an operator scanning ``--help``, as
+    permission to skip the one check standing between a wrong tunnel and a
+    production write, and the operator most likely to reach for it is the one it
+    would have hurt. Asserted over the built tree for the same reason the
+    password check is: a flag reintroduced on any subcommand, or through a shared
+    parent parser, fails here.
+    """
+    offenders = [flag for flag in _all_option_strings(build_parser()) if "yes" in flag.lower()]
+    assert offenders == []
+
+
 def test_the_command_tree_is_the_one_the_contract_names() -> None:
     """The eight commands of contract § 9, and no ninth that nobody reviewed."""
     parser = build_parser()

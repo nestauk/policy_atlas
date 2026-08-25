@@ -50,6 +50,14 @@ function ProjectSettingsMenu({
   const archive = useArchiveProject(projectId);
   const toast = useToast();
 
+  // Non-owner (task 033 phase 10c, contract § 11 / rubric 37): every item
+  // inside this popover is owner-gated (Rename and Archive directly below,
+  // `VisibilityControl` internally) — a non-owner has nothing to do here at
+  // all, so the trigger itself must not render. Rev 1 of this gate covered
+  // only the items, leaving a colleague a gear that opened onto an empty
+  // popover.
+  if (!isOwner) return null;
+
   // Visibility (task 033 phase 10b): hidden entirely without an
   // organisation — sharing "with your organisation" means nothing when
   // there isn't one, and this is new UI, so it doesn't get to add chrome an

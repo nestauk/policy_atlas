@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { taskNameFromQuestion, useUpdatePortfolio, useUpdateProject } from "./mutations";
+import { taskNameFromQuestion, useCreateTask, useUpdatePortfolio, useUpdateProject } from "./mutations";
 
 describe("taskNameFromQuestion", () => {
   it("drops a trailing question mark", () => {
@@ -129,5 +129,131 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(["projects"]);
     expect(invalidatedKeys).toContainEqual(["portfolios"]);
+  });
+
+  it("useCreateTask invalidates both families when it assigns a portfolio (its PATCH changes that portfolio's task_count)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const request = input as Request;
+        if (request.method === "POST" && request.url.endsWith("/api/v1/projects")) {
+          return new Response(
+            JSON.stringify({
+              project_id: "proj-1",
+              name: "A question",
+              status: "active",
+              created_at: "2026-01-01T00:00:00Z",
+              updated_at: "2026-01-01T00:00:00Z",
+              latest_run: null,
+              portfolio_id: null,
+              visibility: "org",
+              is_owner: true,
+              owner_display: "Ada Lovelace",
+            }),
+            { headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (request.method === "PATCH" && request.url.endsWith("/api/v1/projects/proj-1")) {
+          return new Response(JSON.stringify({ project_id: "proj-1" }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (request.method === "POST" && request.url.endsWith("/planning-turns")) {
+          return new Response(JSON.stringify({ turn_index: 1 }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        throw new Error(`unexpected fetch: ${request.method} ${request.url}`);
+      }),
+    );
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
+
+    const { result } = renderHook(() => useCreateTask(), { wrapper: wrapper(queryClient) });
+    result.current.mutate({ question: "A question", portfolioId: "portfolio-1" });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(["projects"]);
+    expect(invalidatedKeys).toContainEqual(["portfolios"]);
+  });
+});
+
+// The portfolio-assignment PATCH inside `useCreateTask` used to fire and
+// forget: openapi-fetch never throws on a 4xx of its own, so an unchecked
+// result left a colleague picking a colleague-owned (readable but not
+// writable) project with a task created and silently left unassigned.
+describe("useCreateTask — the portfolio-assignment PATCH result is checked", () => {
+  function projectResponse() {
+    return new Response(
+      JSON.stringify({
+        project_id: "proj-1",
+        name: "A question",
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        latest_run: null,
+        portfolio_id: null,
+        visibility: "org",
+        is_owner: true,
+        owner_display: "Ada Lovelace",
+      }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  it("surfaces the PATCH's error instead of silently leaving the task unassigned", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input as Request;
+      if (request.method === "POST" && request.url.endsWith("/api/v1/projects")) {
+        return projectResponse();
+      }
+      if (request.method === "PATCH" && request.url.endsWith("/api/v1/projects/proj-1")) {
+        return new Response(
+          JSON.stringify({ error: { code: "forbidden", message: "Not the owner." } }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`unexpected fetch: ${request.method} ${request.url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const { result } = renderHook(() => useCreateTask(), { wrapper: wrapper(queryClient) });
+    result.current.mutate({ question: "A question", portfolioId: "portfolio-1" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect((result.current.error as { code?: string } | null)?.code).toBe("forbidden");
+
+    // The opening planning turn never fires once the assignment is refused.
+    const calledUrls = fetchMock.mock.calls.map(([req]) => (req as Request).url);
+    expect(calledUrls.some((url) => url.includes("/planning-turns"))).toBe(false);
+  });
+
+  it("still succeeds when the caller owns the chosen project", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input as Request;
+      if (request.method === "POST" && request.url.endsWith("/api/v1/projects")) {
+        return projectResponse();
+      }
+      if (request.method === "PATCH" && request.url.endsWith("/api/v1/projects/proj-1")) {
+        return new Response(JSON.stringify({ project_id: "proj-1" }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (request.method === "POST" && request.url.endsWith("/planning-turns")) {
+        return new Response(JSON.stringify({ turn_index: 1 }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`unexpected fetch: ${request.method} ${request.url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const { result } = renderHook(() => useCreateTask(), { wrapper: wrapper(queryClient) });
+    result.current.mutate({ question: "A question", portfolioId: "portfolio-1" });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

@@ -4054,7 +4054,7 @@
       },
       "PortfolioUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    description: New description, when changing it. Omit to leave\n        unchanged.\n    visibility: How widely to share this portfolio **and every project\n        assigned to it** \u2014 supplying it runs the i.4 cascade, not a field\n        write (contract \u00a7 6). Owner-only. Omit to leave unchanged; an\n        explicit `null` is refused 422, because there is no such thing as\n        \"no visibility\" (the column is NOT NULL) and silently ignoring it\n        would give one request shape two outcomes.\n\nNote:\n    The field arrives here **with** the cascade and never without it\n    (contract \u00a7 6, i.4: the cascade is the only writer of\n    `portfolio.visibility`, because a portfolio's visibility change must\n    carry every member with it). The route keeps it out of its patchable\n    column list and routes it explicitly, so no splat can ever hand the\n    column to this field: an owner setting a Project private and leaving\n    its Tasks readable by the whole organisation is not a state this\n    route can produce.\n\n    Unlike `ProjectUpdate`, no pairing is rejected: `name`, `description`\n    and `visibility` are independent writes with no ordering between\n    them, so one body carrying all three has exactly one outcome. The\n    pairing `ProjectUpdate` refuses is ambiguous for the opposite reason \u2014\n    there `visibility` and `portfolio_id` fight over the same column.",
+        "description": "Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged; an\n        explicit `null` is refused 422 (the column is NOT NULL).\n    description: New description, when changing it, or an explicit `null`\n        to clear it. Omit to leave unchanged.\n    visibility: How widely to share this portfolio **and every project\n        assigned to it** \u2014 supplying it runs the i.4 cascade, not a field\n        write (contract \u00a7 6). Owner-only. Omit to leave unchanged; an\n        explicit `null` is refused 422, because there is no such thing as\n        \"no visibility\" (the column is NOT NULL) and silently ignoring it\n        would give one request shape two outcomes.\n\nNote:\n    The field arrives here **with** the cascade and never without it\n    (contract \u00a7 6, i.4: the cascade is the only writer of\n    `portfolio.visibility`, because a portfolio's visibility change must\n    carry every member with it). The route keeps it out of its patchable\n    column list and routes it explicitly, so no splat can ever hand the\n    column to this field: an owner setting a Project private and leaving\n    its Tasks readable by the whole organisation is not a state this\n    route can produce.\n\n    Unlike `ProjectUpdate`, no pairing is rejected: `name`, `description`\n    and `visibility` are independent writes with no ordering between\n    them, so one body carrying all three has exactly one outcome. The\n    pairing `ProjectUpdate` refuses is ambiguous for the opposite reason \u2014\n    there `visibility` and `portfolio_id` fight over the same column.",
         "properties": {
           "description": {
             "anyOf": [
@@ -4272,7 +4272,7 @@
       },
       "ProjectUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_id: Portfolio to assign this project to, or an explicit\n        `null` to unassign it. Omit to leave the assignment unchanged.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged. Cannot be combined with `portfolio_id` in one\n        body \u2014 see :meth:`reject_visibility_with_portfolio`.",
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_id: Portfolio to assign this project to, or an explicit\n        `null` to unassign it. Omit to leave the assignment unchanged.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `portfolio_id` in one body \u2014 see\n        :meth:`reject_visibility_with_portfolio`.\n\nNote:\n    `name` and `visibility` back NOT NULL columns, so an explicit `null`\n    on either is refused rather than treated as \"unchanged\" \u2014 see\n    :meth:`reject_nulls_without_meaning`. `question` and `portfolio_id`\n    are not: null clears the question, and null on `portfolio_id` is\n    contract \u00a7 6's i.6 (unassign).",
         "properties": {
           "name": {
             "anyOf": [
@@ -5962,7 +5962,7 @@
     },
     "/api/v1/portfolios": {
       "get": {
-        "description": "List the portfolios the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of portfolios.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
+        "description": "List the portfolios the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `projects.list_projects`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of portfolios.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_portfolios_api_v1_portfolios_get",
         "parameters": [
           {
@@ -5986,6 +5986,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 254,
                   "type": "string"
                 },
                 {
@@ -6205,7 +6206,7 @@
     },
     "/api/v1/projects": {
       "get": {
-        "description": "List the projects the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    portfolio_id: Narrow to one portfolio's members. Server-side because\n        `PortfolioDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
+        "description": "List the projects the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    portfolio_id: Narrow to one portfolio's members. Server-side because\n        `PortfolioDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 the value is\n        logged verbatim on the admin trace, so it is bounded and shaped at\n        the boundary rather than in the log.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
           {
@@ -6261,6 +6262,7 @@
             "schema": {
               "anyOf": [
                 {
+                  "maxLength": 254,
                   "type": "string"
                 },
                 {
@@ -7183,7 +7185,7 @@
     },
     "/api/v1/projects/{project_id}/events": {
       "get": {
-        "description": "Stream a read-graded durable replay followed by a re-authorising live tail.\n\nThe replay is authorised once by ``_snapshot``; the tail re-authorises on\nevery batch through the same read legs and ends the response the moment the\ncaller's access is gone (contract \u00a7 5).",
+        "description": "Stream a read-graded durable replay followed by a re-authorising live tail.\n\nThe replay is authorised once by ``_snapshot``; the tail re-authorises on\nevery batch through the same read legs and ends the response the moment the\ncaller's access is gone (contract \u00a7 5). **Re-authorisation precedes every\nframe of its iteration, ephemeral ticks included** \u2014 see the loop.",
         "operationId": "stream_events_api_v1_projects__project_id__events_get",
         "parameters": [
           {
@@ -7839,7 +7841,7 @@
     },
     "/api/v1/projects/{project_id}/plan": {
       "get": {
-        "description": "Return the durable approved plan or latest completed durable draft.",
+        "description": "Return the durable approved plan or latest completed durable draft.\n\nOwner-only sweep, for the reason :func:`list_planning_turns` states: a\ncolleague's or an administrator's read must not write the owner's rows.",
         "operationId": "get_plan_api_v1_projects__project_id__plan_get",
         "parameters": [
           {
@@ -7945,7 +7947,7 @@
     },
     "/api/v1/projects/{project_id}/planning-turns": {
       "get": {
-        "description": "Return the durable planning transcript in ascending conversation order.",
+        "description": "Return the durable planning transcript in ascending conversation order.\n\n**Read-graded, and the sweep is owner-only.** The grade here is the read\ngrade \u2014 owner \u222a same-org colleague \u222a administrator \u2014 but\n:func:`_expire_stale_pending_turns` is a *write*, and contract \u00a7 3 makes\nthe admin leg read-only: a support read that fails somebody else's pending\nplanning turn is a mutation nobody asked for and nothing records. So the\nsweep runs only for the owner, whose own turn it is. Nothing is lost: the\nowner's own GET sweeps, and every mutating planning path sweeps under the\nwrite grade before it does anything.",
         "operationId": "list_planning_turns_api_v1_projects__project_id__planning_turns_get",
         "parameters": [
           {

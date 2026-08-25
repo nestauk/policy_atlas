@@ -82,13 +82,19 @@ beforeEach(() => {
 });
 
 describe("PortfolioDetailView — the portfolio_id filter (task 033 phase 10a)", () => {
-  it("requests its member tasks with the portfolio_id filter, not the unfiltered global page", () => {
+  it("requests its member tasks with the portfolio_id filter and the 200-row page size, not the unfiltered global page or the 50-row default", () => {
     renderDetail();
-    expect(queries.useProjects).toHaveBeenCalledWith({ portfolio_id: PORTFOLIO_ID });
+    expect(queries.useProjects).toHaveBeenCalledWith({
+      portfolio_id: PORTFOLIO_ID,
+      page_size: 200,
+    });
     // Never called with no filter — that would be the pre-10a client-side
     // filter over the global 50-row page, the exact bug this phase fixes.
     expect(queries.useProjects).not.toHaveBeenCalledWith();
     expect(queries.useProjects).not.toHaveBeenCalledWith({});
+    // Never called with the filter alone, either — that would fall back to
+    // the server's 50-row default and silently truncate a 51+-task portfolio.
+    expect(queries.useProjects).not.toHaveBeenCalledWith({ portfolio_id: PORTFOLIO_ID });
   });
 });
 
@@ -103,7 +109,10 @@ describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)
   it("rubric 14 dark launch: hides the switcher when /me has no organisation", () => {
     renderList();
     expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
-    // The unenrolled call shape must stay exactly what it was pre-033.
+    // The 200-row page size is a deliberate fix shared by every caller,
+    // enrolled or not — it is not part of the dark-launch invariant. What
+    // rubric 14 actually pins is that an unenrolled caller's call carries no
+    // org affordance at all: no `scope` param, enrolled or not.
     expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200 });
     expect(queries.useProjects).not.toHaveBeenCalledWith(
       expect.objectContaining({ scope: expect.anything() }),

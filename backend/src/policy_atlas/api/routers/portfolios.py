@@ -29,6 +29,7 @@ from policy_atlas.api.contract import (
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.routers._access import (
+    OWNER_EMAIL_MAX,
     accessible_portfolio,
     accessible_project,
     creator_org_id,
@@ -172,7 +173,7 @@ def list_portfolios(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     scope: Annotated[Literal["all", "mine"], Query()] = "all",
-    owner_email: Annotated[str | None, Query()] = None,
+    owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[PortfolioOut]:
@@ -185,7 +186,9 @@ def list_portfolios(
             organisation's org-visible rows, and for an administrator every
             row in every organisation — or `mine` for owner-only.
         owner_email: Narrow to one owner's rows. **Administrators only**; any
-            other caller gets 422 `validation_error`.
+            other caller gets 422 `validation_error`, as does a value longer
+            than `OWNER_EMAIL_MAX` or one carrying no `@` — see
+            `projects.list_projects`.
         page: 1-indexed page number.
         page_size: Rows per page, server-capped.
 

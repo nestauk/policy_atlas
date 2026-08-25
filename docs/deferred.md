@@ -2124,8 +2124,9 @@ omissions.
   **(1) it does not stop them signing in** — the Cognito account survives, so an
   offboarded person still authenticates and still sees their own work; disabling or
   deleting the account is a Cognito operation done outside this tooling; **(2) erasure is
-  two-part** — de-enrolment clears `org_id`, `email`, `display_name` and `is_admin` from
-  the application database, but the address in Cognito is untouched, so a genuine erasure
+  two-part** — de-enrolment clears `org_id`, `email` and `is_admin` from
+  the application database (`display_name` is NOT NULL and stays), but the address in
+  Cognito is untouched, so a genuine erasure
   request needs the Cognito side handled separately.
 - **Three standing discrepancies in the published privacy notice** (escalated by 033,
   2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open
@@ -2186,13 +2187,31 @@ omissions.
 
 ## Organisations (task 033 build seams)
 
-- **No CLI path to an organisation-less administrator** (build finding, 2026-08-25).
-  `admin grant --email` resolves by the address on `app_user`, which only
-  `user enrol --org` writes — so every admin is enrolled somewhere. The live check's
-  "admin in neither org" is met by enrolling the admin into a third organisation.
-  If a truly org-less admin is ever wanted: an org-less enrol mode (clean) or
-  grant-by-sub (rejected in 033 — it bypasses the address-mediated FOR UPDATE
-  compare-and-refuse that stops concurrent operators resurrecting admin).
+- **The admin/ops audit trail has no durable sink** (review-stack finding,
+  2026-08-25 — three lanes converged). Two halves: **(1)** the in-app admin
+  trace (`admin_read` / `admin_listing` / `admin_stream_read`) lands in the
+  application log group with `ONE_MONTH` retention — the admin leg's sole
+  compensating control self-destructs after 30 days. Cheap fix when taken:
+  a CloudWatch subscription filter on the three event names into a
+  long-retention group or S3 (infra change — prod-config gate). **(2)** ops
+  CLI privilege changes (`admin grant/revoke`, and a de-enrolment that
+  clears the flag) emit their trace line — post-commit, always naming the
+  verified STS ARN — only to the operator's own terminal; `rows assign`
+  emits none. A durable record means an append-only `ops_audit` table
+  written in the same transaction (schema gate) or accepting
+  session-manager/CloudTrail tunnel logs as the record. Both halves
+  escalated in the 033 PR alongside the DPIA.
+- **No CLI path to an organisation-less administrator** (build finding, 2026-08-25;
+  amended by the review stack). `admin grant` refuses any subject whose
+  `org_id` is NULL — so every admin is enrolled somewhere, and neither
+  selector (`--email` or the review-added `--sub`) can produce an org-less
+  admin, deliberately or by the resync-then-grant accident the review
+  closed. (The build's original note rejected grant-by-sub as bypassing the
+  FOR UPDATE interlock — half wrong: the sub path locks the same way; what
+  it bypassed was the address-as-selector rule, now superseded by the
+  stronger org-enrolment refusal.) The live check's "admin in neither org"
+  is met by enrolling the admin into a third organisation. If a truly
+  org-less admin is ever wanted, an org-less enrol mode is the only route.
 - **`PortfolioOut` carries no last-task-updated timestamp**, so the Projects
   overview derives "most recently active" from one global projects page raised to
   the 200-row server cap — an approximation that can mis-order the overview beyond
@@ -2201,6 +2220,15 @@ omissions.
 - **`admin_stream_read` volume** — an idle admin SSE stream emits one trace line per
   0.4 s poll (~2.5/s), which is § 3a's grain implemented as written. If CloudWatch
   cost bites, the lever is the poll interval (or batching), never dropping the grain.
+- **Membership moves race API row creation** (review finding, 2026-08-25, declined
+  as a code fix). `creator_org_id` is a non-locking read, so a project created in
+  the window around an enrol/re-enrol/de-enrol can carry the old membership's
+  stamp — after a re-enrol A→B, one new row can land org-visible in A. Closing it
+  in code taxes every create with a shared `app_user` lock to cover an
+  operator-attended window. Runbook rule instead: after any membership move (and
+  after any downgrade/re-upgrade cycle, which resets visibility), re-confirm row
+  visibility with the owner — `user enrol`'s re-run re-privatises. A DB-enforced
+  serialization (trigger) is the upgrade path if enrolment ever becomes frequent.
 - **`RunPane`/`JourneyPane` are dead code** — imported by no route; 033 Phase 10c
   gated and tested them anyway, so re-wiring them inherits the affordance matrix.
   Either re-wire or delete in a later slice.

@@ -32,6 +32,13 @@ a portfolio's members are always owned by the portfolio's owner, so one person's
 rows are a closed set: stamping the set leaves every project matching its
 portfolio on both ``org_id`` and ``visibility``. Walking row by row through the
 cascade path would transiently violate it.
+
+**Nothing here logs.** A privilege change is recorded by
+:mod:`policy_atlas.ops.cli` *after* the transaction commits, from the
+:class:`AdminTrace` values a record carries. A ``log.info`` emitted inside the
+transaction is a durable claim about a write a failed commit then discarded,
+which is worse than no trace at all: contract § 3a wants the line to be
+evidence.
 """
 
 from __future__ import annotations
@@ -41,7 +48,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-import structlog
+from botocore.exceptions import ClientError
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef
 from sqlalchemy import insert, select, update
@@ -52,13 +59,12 @@ from sqlalchemy.exc import IntegrityError
 from policy_atlas.core.schema import app_user, organisation, portfolio, project
 from policy_atlas.ops.errors import OpsError
 
-log = structlog.get_logger()
-
 #: The visibility every moved row arrives at. Owner call (j): **no operator
-#: action can expose a row.** Enrolment stamps the organisation *and*
-#: privatises, so the person opts each row into their organisation
-#: deliberately, and a re-enrolment cannot carry work shared with the previous
-#: organisation into the next one.
+#: action can expose a row.** Enrolment and ``rows assign`` stamp the
+#: organisation *and* privatise, so the person opts each row into their
+#: organisation deliberately, and neither a re-enrolment nor an operator
+#: assignment can carry work shared with the previous organisation into the
+#: next one.
 _PRIVATE = "private"
 
 
@@ -69,11 +75,47 @@ _PRIVATE = "private"
 # outcome. Code words throughout ("project", "portfolio") — they match the
 # flags the operator just typed, and the rename slice that follows 033 covers
 # this module.
+#
+# A record also carries the audit lines its command owes, for the CLI to emit
+# once the transaction has committed. `Record.admin_changes` returning `()` is
+# the default because most commands owe none, and the two that do owe theirs
+# for the same reason — `is_admin` moved.
 # --------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class Organisation:
+class AdminTrace:
+    """One privilege change, to be recorded after the transaction commits.
+
+    Carries only what the command knows. The operator identity and the
+    environment are the CLI's to add (:func:`policy_atlas.ops.cli._trace`) —
+    they come from the verified ``GetCallerIdentity`` ARN, not from anything a
+    command function is handed.
+
+    Attributes:
+        subject: The Cognito subject whose ``is_admin`` moved.
+        direction: ``grant`` or ``revoke``.
+    """
+
+    subject: str
+    direction: str
+
+
+class Record:
+    """Base for every command record: what to print, and what to trace.
+
+    Not an ABC and deliberately not carrying ``summary``: every subclass
+    defines its own line, and :class:`policy_atlas.ops.cli.Outcome` is the
+    structural protocol both halves are checked against.
+    """
+
+    def admin_changes(self) -> Sequence[AdminTrace]:
+        """The privilege changes this command made, if any."""
+        return ()
+
+
+@dataclass(frozen=True)
+class Organisation(Record):
     """One organisation, created or resolved."""
 
     org_id: uuid.UUID
@@ -85,7 +127,7 @@ class Organisation:
 
 
 @dataclass(frozen=True)
-class Enrolment:
+class Enrolment(Record):
     """One person placed in an organisation, with the rows that moved.
 
     Attributes:
@@ -115,7 +157,7 @@ class Enrolment:
 
 
 @dataclass(frozen=True)
-class DeEnrolment:
+class DeEnrolment(Record):
     """One person removed from their organisation, with the rows released."""
 
     user_id: str
@@ -133,9 +175,21 @@ class DeEnrolment:
             f"project(s) and {self.portfolios_cleared} portfolio(s){admin}"
         )
 
+    def admin_changes(self) -> Sequence[AdminTrace]:
+        """A de-enrolment that cleared ``is_admin`` is a revoke, and traces as one.
+
+        Contract § 3a asks for a record of every privilege change, not of every
+        ``admin revoke`` invocation. De-enrolment is the *other* way the support
+        role is taken away — and the one an investigation is most likely to be
+        asking about, because it is what offboarding runs.
+        """
+        if not self.admin_revoked:
+            return ()
+        return (AdminTrace(subject=self.user_id, direction="revoke"),)
+
 
 @dataclass(frozen=True)
-class Resync:
+class Resync(Record):
     """One stored address re-resolved from the identity provider."""
 
     user_id: str
@@ -154,21 +208,37 @@ class Resync:
 
 
 @dataclass(frozen=True)
-class Assignment:
-    """Rows moved into an organisation by a single-row assignment."""
+class Assignment(Record):
+    """Rows moved into an organisation by a single-row assignment.
+
+    Attributes:
+        org: The destination organisation.
+        portfolio_id: The portfolio the move went through, if any.
+        projects_moved: Projects stamped.
+        portfolios_moved: Portfolios stamped.
+        followed_membership: Whether a named project widened the move to its
+            portfolio and siblings.
+        privatised: Whether the move changed the rows' organisation and
+            therefore forced them ``private``. ``False`` only when the rows
+            were already in the destination organisation, where there is no
+            new audience to privatise against.
+    """
 
     org: Organisation
     portfolio_id: uuid.UUID | None
     projects_moved: int
     portfolios_moved: int
     followed_membership: bool
+    privatised: bool
 
     def summary(self) -> str:
-        """Render the assignment line, saying so when membership widened it."""
+        """Render the assignment line, naming the destination and the privatisation."""
         moved = (
             f"moved {self.portfolios_moved} portfolio(s) and {self.projects_moved} "
             f"project(s) into {self.org.name!r}"
         )
+        if self.privatised:
+            moved += ", all private"  # same words `Enrolment` uses, for the same rule
         if self.followed_membership:
             return (
                 f"{moved} — the project is a member of portfolio {self.portfolio_id}, "
@@ -178,16 +248,22 @@ class Assignment:
 
 
 @dataclass(frozen=True)
-class AdminChange:
+class AdminChange(Record):
     """A grant or revoke of the support role."""
 
     user_id: str
-    email: str
+    email: str | None
     direction: str
 
     def summary(self) -> str:
         """Render the admin-change line."""
+        if self.email is None:  # resolved by --sub, on a row carrying no address
+            return f"{self.direction}: {self.user_id}"
         return f"{self.direction}: {self.email} ({self.user_id})"
+
+    def admin_changes(self) -> Sequence[AdminTrace]:
+        """The change itself, for the CLI to trace after the commit."""
+        return (AdminTrace(subject=self.user_id, direction=self.direction),)
 
 
 # --------------------------------------------------------------------------
@@ -299,8 +375,9 @@ def create_user(
         The enrolment (zero rows moved — a new account owns nothing yet).
 
     Raises:
-        OpsError: If the address already exists in the pool, or if the database
-            write fails after the account was created.
+        OpsError: If the address already exists in the pool, if Cognito refuses
+            the creation, or if the database write fails after the account was
+            created.
     """
     _require_filter_safe(email)
     if _find_sub_by_email(cognito, pool_id=pool_id, email=email) is not None:
@@ -309,15 +386,28 @@ def create_user(
             f"`user enrol --email {email} --org {org.name!r} "
             f"--display-name {display_name!r}`"
         )
-    response = cognito.admin_create_user(
-        UserPoolId=pool_id,
-        Username=email,
-        UserAttributes=[
-            {"Name": "email", "Value": email},
-            {"Name": "email_verified", "Value": "true"},
-        ],
-        DesiredDeliveryMediums=["EMAIL"],
-    )
+    try:
+        response = cognito.admin_create_user(
+            UserPoolId=pool_id,
+            Username=email,
+            UserAttributes=[
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+            DesiredDeliveryMediums=["EMAIL"],
+        )
+    except ClientError as error:
+        # The lookup above is Cognito's own exact-match filter, so it can lose
+        # a race, and it cannot see an account whose alias — not its `email`
+        # attribute — carries this address. Either way the answer is
+        # `UsernameExistsException`, and an operator is owed a refusal naming
+        # the remediation rather than a botocore traceback.
+        code = error.response.get("Error", {}).get("Code", "") or "ClientError"
+        raise OpsError(
+            f"Cognito refused to create {email} ({code}). Nothing was written. If the "
+            f"account already exists, enrol it: `user enrol --email {email} "
+            f"--org {org.name!r} --display-name {display_name!r}`"
+        ) from error
     sub = _sub_of(response["User"].get("Attributes", []))
     if not sub:
         raise OpsError(
@@ -454,6 +544,15 @@ def resync_user(
     § 3b), so it is the only fixed point available; the old address is not an
     input, and does not need to be known.
 
+    **It refuses a row with no organisation, and that refusal is load-bearing.**
+    De-enrolment clears ``email``, and ``admin grant`` resolves its subject *by*
+    address: that pairing is the whole interlock (see :func:`set_admin`).
+    Resync writing the address back onto a de-enrolled row would restore the
+    selector, so ``user resync`` followed by ``admin grant`` would hand the
+    support role to somebody who has been offboarded — in two commands, with
+    neither one looking wrong. Only ``user enrol`` re-establishes an address,
+    because only ``user enrol`` also names the organisation it is for.
+
     Args:
         conn: Open connection inside the command's transaction.
         cognito: Client bound to the verified pool.
@@ -465,7 +564,7 @@ def resync_user(
 
     Raises:
         OpsError: If the pool holds no such address, or the subject behind it
-            has never been enrolled.
+            has never been enrolled, or has been de-enrolled since.
     """
     _require_filter_safe(email)
     sub = _find_sub_by_email(cognito, pool_id=pool_id, email=email)
@@ -476,6 +575,12 @@ def resync_user(
         raise OpsError(
             f"{email} ({sub}) has a Cognito account but is not enrolled — "
             "use `user enrol`"
+        )
+    if row["org_id"] is None:
+        raise OpsError(
+            f"{sub} is in no organisation — de-enrolled, or has only ever signed in. "
+            f"Nothing was written: use `user enrol --email {email}` instead, which is "
+            "the only command that stores an address."
         )
     previous = row["email"]
     if previous == email:
@@ -533,55 +638,67 @@ def de_enrol_user(
 
 
 def set_admin(
-    conn: Connection, *, email: str, grant: bool, operator: str, env: str
+    conn: Connection, *, grant: bool, email: str | None = None, sub: str | None = None
 ) -> AdminChange:
-    """Grant or revoke the support role, and trace who did it.
+    """Grant or revoke the support role.
 
     Contract § 3a: "a privileged grant with no record of who made it is not
-    auditable", so this emits ``ops.admin_change`` naming **the operator, the
-    subject and the direction**. The operator identity is the CLI's
-    ``--operator`` value, defaulting to the ARN that ``GetCallerIdentity``
-    returned during the environment check — the AWS principal that actually held
-    the permission, not a shell variable anyone can set.
+    auditable". The record is :meth:`AdminChange.admin_changes`, emitted by the
+    CLI **after** the commit — this function does not log, for the reason the
+    module docstring gives.
 
-    **The subject is resolved by address in the database, not in Cognito**, and
-    that is the concurrency guard. De-enrolment clears ``email``; so if operator
-    A de-enrols while operator B grants, the ``FOR UPDATE`` read serialises them
-    and B finds no row carrying that address — the grant refuses instead of
-    resurrecting the role. In the other commit order B's grant lands first and
-    A's de-enrolment clears it. Neither order leaves an administrator behind.
+    **The subject is resolved in the database, not in Cognito**, and by address
+    by default: that is the concurrency guard. De-enrolment clears ``email``; so
+    if operator A de-enrols while operator B grants, the ``FOR UPDATE`` read
+    serialises them and B finds no row carrying that address — the grant refuses
+    instead of resurrecting the role. In the other commit order B's grant lands
+    first and A's de-enrolment clears it. Neither order leaves an administrator
+    behind.
+
+    ``--sub`` exists because an address is not unique (``app_user.email`` carries
+    no constraint) and the ambiguous case has to stay resolvable — revoking a
+    compromised administrator is the least acceptable place for a dead end. It
+    bypasses the address selector, not the interlock: a **grant** additionally
+    refuses a subject with no organisation, so neither selector can reach a
+    de-enrolled row.
 
     Args:
         conn: Open connection inside the command's transaction.
-        email: The stored address of the subject.
         grant: ``True`` to grant, ``False`` to revoke.
-        operator: Who is making the change; recorded on the trace line.
-        env: The environment, recorded on the trace line.
+        email: The stored address of the subject; mutually exclusive with
+            ``sub``.
+        sub: The Cognito subject to resolve by.
 
     Returns:
         The change that was made.
 
     Raises:
-        OpsError: If no enrolled subject carries that address, more than one
-            does, or the flag already holds the requested value.
+        OpsError: If no enrolled subject matches, more than one does, the flag
+            already holds the requested value, or a grant names a subject who is
+            in no organisation.
     """
-    row = _resolve_and_lock(conn, email=email, sub=None)
+    row = _resolve_and_lock(conn, email=email, sub=sub)
     user_id = str(row["user_id"])
+    stored_email: str | None = row["email"]
+    who = stored_email or user_id
     direction = "grant" if grant else "revoke"
+    if grant and row["org_id"] is None:
+        # Defence in depth behind `user resync`'s refusal: `user enrol --org` is
+        # the only command that writes an address, so a row with an address and
+        # no organisation should not exist — and if one ever does, it is not a
+        # row that gets the support role. Revoke is deliberately still allowed:
+        # taking the role away must never be the blocked direction.
+        raise OpsError(
+            f"{who} is in no organisation, so the support role cannot be granted — "
+            "`user enrol` first. Nothing was written."
+        )
     if bool(row["is_admin"]) == grant:
         state = "already an administrator" if grant else "not an administrator"
-        raise OpsError(f"{email} ({user_id}) is {state}; nothing to {direction}")
+        raise OpsError(f"{who} ({user_id}) is {state}; nothing to {direction}")
     conn.execute(
         update(app_user).where(app_user.c.user_id == user_id).values(is_admin=grant)
     )
-    log.info(
-        "ops.admin_change",
-        operator=operator,
-        subject=user_id,
-        direction=direction,
-        env=env,
-    )
-    return AdminChange(user_id=user_id, email=email, direction=direction)
+    return AdminChange(user_id=user_id, email=stored_email, direction=direction)
 
 
 # --------------------------------------------------------------------------
@@ -596,19 +713,35 @@ def assign_rows(
     project_id: uuid.UUID | None = None,
     portfolio_id: uuid.UUID | None = None,
 ) -> Assignment:
-    """Assign one row to an organisation, moving both where one is in the other.
+    """Assign one row to an organisation, privately, moving a membership whole.
 
     Contract § 9 sends this through § 6's invariant: a project carries its
     portfolio's ``org_id`` *and* ``visibility``. So there is no such thing as
     assigning half of a membership, and the command never offers to:
 
-    - a **portfolio** moves with every member project, which also takes the
-      portfolio's visibility (the same two statements the API's ``i.4`` cascade
-      runs, ``portfolios.py``);
+    - a **portfolio** moves with every member project;
     - a **project that is a member** of a portfolio moves the *portfolio* and
       therefore every sibling, and says so in the summary;
-    - a **project with no portfolio** is unconstrained and moves alone, keeping
-      its visibility.
+    - a **project with no portfolio** is unconstrained and moves alone.
+
+    **A move privatises, on exactly the enrolment rule** (:data:`_PRIVATE`,
+    owner call (j), ADR 0032 decision 7). Stamping ``org_id`` while preserving
+    ``visibility`` is the one way an operator command can expose a row: the
+    default visibility is ``org``, and a row whose ``org_id`` is NULL is
+    reachable by its owner alone however it is marked — the org leg reads
+    ``org_id IS NOT NULL AND visibility = 'org'`` (``routers/_access.py``). So
+    an unenrolled owner's estate is full of rows carrying ``visibility = 'org'``
+    that nobody can see, and an assignment that kept the column would hand every
+    one of them to every member of the destination organisation, instantly and
+    without the owner acting. The rows arrive private and the owner re-shares
+    from inside the new organisation, which is the same bargain enrolment
+    strikes.
+
+    Privatising is skipped only when the rows are **already** in the destination
+    organisation, because then the assignment moves nobody's audience and
+    flipping their visibility would be a gratuitous edit to the owner's choices.
+    In that case a member still takes its portfolio's visibility, which is the
+    ``i.4`` repair.
 
     ``updated_at`` is bumped on moved members, exactly as the API cascade bumps
     it: unlike enrolment — where contract § 7 requires the person to see no
@@ -622,7 +755,7 @@ def assign_rows(
         portfolio_id: The portfolio to assign.
 
     Returns:
-        What moved.
+        What moved, and whether it was privatised.
 
     Raises:
         OpsError: If neither or both ids are given, or the row does not exist.
@@ -633,41 +766,52 @@ def assign_rows(
     followed = False
     if project_id is not None:
         row = conn.execute(
-            select(project.c.project_id, project.c.portfolio_id)
+            select(project.c.project_id, project.c.portfolio_id, project.c.org_id)
             .where(project.c.project_id == project_id)
             .with_for_update()
         ).one_or_none()
         if row is None:
             raise OpsError(f"no project {project_id}")
         if row.portfolio_id is None:
-            conn.execute(
-                update(project)
-                .where(project.c.project_id == project_id)
-                .values(org_id=org.org_id, updated_at=_now())
-            )
+            privatised = row.org_id != org.org_id
+            moving = update(project).where(project.c.project_id == project_id)
+            # Two literal `.values()` calls rather than a built dict: rubric 24
+            # bars the blind splat on the API's patch, and the same discipline
+            # belongs on the operator writer of the same two columns.
+            if privatised:
+                conn.execute(
+                    moving.values(
+                        org_id=org.org_id, visibility=_PRIVATE, updated_at=_now()
+                    )
+                )
+            else:
+                conn.execute(moving.values(org_id=org.org_id, updated_at=_now()))
             return Assignment(
                 org=org,
                 portfolio_id=None,
                 projects_moved=1,
                 portfolios_moved=0,
                 followed_membership=False,
+                privatised=privatised,
             )
         target = row.portfolio_id
         followed = True
     else:
         target = portfolio_id
 
-    visibility = conn.execute(
-        select(portfolio.c.visibility)
+    current = conn.execute(
+        select(portfolio.c.org_id, portfolio.c.visibility)
         .where(portfolio.c.portfolio_id == target)
         .with_for_update()
-    ).scalar_one_or_none()
-    if visibility is None:
+    ).one_or_none()
+    if current is None:
         raise OpsError(f"no portfolio {target}")
+    privatised = current.org_id != org.org_id
+    visibility = _PRIVATE if privatised else current.visibility
     conn.execute(
         update(portfolio)
         .where(portfolio.c.portfolio_id == target)
-        .values(org_id=org.org_id)
+        .values(org_id=org.org_id, visibility=visibility)
     )
     # No status filter: archived members follow too, for the reason the API
     # cascade documents — an archived project is still readable by whoever may
@@ -683,6 +827,7 @@ def assign_rows(
         projects_moved=moved,
         portfolios_moved=1,
         followed_membership=followed,
+        privatised=privatised,
     )
 
 
@@ -806,7 +951,15 @@ def _resolve_and_lock(
 def _find_sub_by_email(
     cognito: CognitoIdentityProviderClient, *, pool_id: str, email: str
 ) -> str | None:
-    """Return the Cognito subject behind an address, or ``None``."""
+    """Return the Cognito subject behind an address, or ``None``.
+
+    ``ListUsers``'s ``=`` is an **exact, case-sensitive** match, so this asks
+    about one spelling of the address and no other. That is why every address
+    is lower-cased once at the CLI boundary
+    (:func:`policy_atlas.ops.cli._email`): without it, ``--email Alice@x``
+    against an account created as ``alice@x`` finds nothing, and ``user create``
+    goes on to try to mint a second identity for the same person.
+    """
     response = cognito.list_users(
         UserPoolId=pool_id, Filter=f'email = "{email}"', Limit=1
     )

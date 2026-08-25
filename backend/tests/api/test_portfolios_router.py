@@ -219,3 +219,35 @@ def test_project_with_no_portfolio_is_unaffected(tmp_path: Path) -> None:
         assert listed.status_code == 200
         row = next(row for row in listed.json()["data"] if row["project_id"] == project_id)
         assert row["portfolio_id"] is None
+
+
+def test_a_portfolio_patch_body_of_explicit_null_name_is_refused(tmp_path: Path) -> None:
+    """`{"name": null}` was written by the allow-list splat and 500d.
+
+    `PortfolioUpdate` already refused an explicit null `visibility`, and `name`
+    needed the same guard for the same reason: the route's splat takes whatever
+    the `exclude_unset` dump contains, so a null went to a NOT NULL column.
+    `description` is different and stays different — that column is nullable,
+    so a null clears it.
+    """
+    with api_client(tmp_path) as (client, owner, _):
+        created = client.post(
+            "/api/v1/portfolios",
+            headers=owner,
+            json={"name": "Housing", "description": "Housing policy work"},
+        )
+        assert created.status_code == 201, created.text
+        portfolio_id = created.json()["portfolio_id"]
+
+        refused = client.patch(
+            f"/api/v1/portfolios/{portfolio_id}", headers=owner, json={"name": None}
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "validation_error"
+
+        cleared = client.patch(
+            f"/api/v1/portfolios/{portfolio_id}", headers=owner, json={"description": None}
+        )
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["description"] is None
+        assert cleared.json()["name"] == "Housing"

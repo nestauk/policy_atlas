@@ -331,6 +331,27 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
 - Deploys interrupt executing runs — deploy in quiet windows. The hard-kill
   is recovered cleanly: the boot sweep marks interrupted runs `interrupted` on
   the next boot; this is not a data-loss condition.
+- **Blocker preflight before the 033 migration.** The 033 migration takes
+  `ACCESS EXCLUSIVE` on `project`, `portfolio` and `conversation` with
+  `lock_timeout = '5s'`, so any held lock aborts the migration rather than
+  queueing behind it (safe to re-run). With the API at zero, the only
+  realistic blocker is an idle-in-transaction jumpbox session. Run this over
+  the § 6 tunnel immediately before the migrate step:
+
+  ```sql
+  SELECT a.pid, a.usename, a.state, a.query_start, l.relation::regclass, l.mode
+  FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+  WHERE l.relation IN ('project'::regclass, 'portfolio'::regclass,
+                       'conversation'::regclass)
+    AND a.pid <> pg_backend_pid();
+  ```
+
+  Any row is a blocker: confirm the session is yours or stale, end it
+  (`SELECT pg_terminate_backend(<pid>)`), and re-run until the result is
+  empty. Note the limit: `lock_timeout` bounds lock *acquisition*, not how
+  long the migration then holds the lock — the `created_by` backfill runs
+  inside that exclusive lock, and its duration at production scale is what
+  the pending backfill rehearsal measures.
 - A crash means a brief outage until ECS restarts the task; the sweep recovers
   state cleanly in that case too.
 - **Stale lookup context after resource replacement:** `cdk.context.json`
@@ -422,6 +443,11 @@ task: Cognito permission belongs to the human operator, not to a task
 role, and the API task role gains no Cognito permission. Every command
 verifies the resolved AWS account and user pool against the connected
 database before acting and refuses on a mismatch (§ 3 has the commands).
+One consequence of that guard to plan for: against a **fresh deployment**
+(empty `app_user` — exactly the post-033-migration state) the database's
+identity cannot be proven, so the first command requires an interactive
+terminal for a typed confirmation. No flag lifts it and no piped or
+scripted invocation can make that first write.
 
 ```bash
 # 1. DB credentials from the generated cluster secret

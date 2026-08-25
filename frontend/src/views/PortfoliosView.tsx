@@ -39,9 +39,10 @@ import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
  *  from the 50-row default so this remains an approximation rather than
  *  systematically wrong, not a fix — a workspace with more than 200 active
  *  projects across portfolios can still miss a newer update that falls
- *  outside this page. `PortfolioDetailView` does not share this limitation:
- *  it fetches its own member list via `portfolio_id`, which is exact
- *  regardless of this page size (task 033 phase 10a). */
+ *  outside this page. `PortfolioDetailView` does not share the *last-update*
+ *  limitation: it fetches its own member list via `portfolio_id`, which is
+ *  exact up to the same 200-row cap (task 033 phase 10a) rather than the
+ *  50-row default. */
 const PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE = 200;
 
 export function PortfoliosView() {
@@ -196,8 +197,14 @@ export function PortfolioDetailView() {
   // Server-side `portfolio_id` filter (task 033 phase 10a) — this used to
   // filter the global 50-row projects page client-side, silently
   // under-reporting once a portfolio's membership (or the caller's visible
-  // estate) grew past that page.
-  const projects = useProjects({ portfolio_id: portfolioId });
+  // estate) grew past that page. `page_size` is raised to the same 200-row
+  // server-max convention as the overview page above: without it this call
+  // still falls back to the 50-row default and a portfolio with 51+ tasks
+  // would silently truncate.
+  const projects = useProjects({
+    portfolio_id: portfolioId,
+    page_size: PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE,
+  });
   const updatePortfolio = useUpdatePortfolio(portfolioId);
   const toast = useToast();
   useDocumentTitle(portfolio.data?.name, PROJECT.one);

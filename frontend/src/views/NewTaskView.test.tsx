@@ -79,6 +79,7 @@ describe("NewTaskView — capability step", () => {
               description: null,
               created_at: "2026-01-01T00:00:00Z",
               task_count: 0,
+              is_owner: true,
             },
           ],
         },
@@ -152,6 +153,7 @@ describe("NewTaskView — project selector", () => {
               description: null,
               created_at: "2026-01-01T00:00:00Z",
               task_count: 0,
+              is_owner: true,
             },
           ],
         },
@@ -169,5 +171,56 @@ describe("NewTaskView — project selector", () => {
       question: "A question",
       portfolioId: "portfolio-1",
     });
+  });
+
+  it("never offers a colleague-owned, org-visible project — the assignment PATCH is owner-only and would 403", () => {
+    vi.mocked(queries.usePortfolios).mockReturnValue(
+      {
+        data: {
+          data: [
+            {
+              portfolio_id: "portfolio-1",
+              name: "Housing",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              is_owner: true,
+            },
+            {
+              portfolio_id: "portfolio-2",
+              name: "A colleague's project",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              is_owner: false,
+            },
+          ],
+        },
+      } as unknown as ReturnType<typeof queries.usePortfolios>,
+    );
+    renderNewTask("/new?capability=evidence_base");
+    expect(screen.getByLabelText(/Add to a project/)).toBeInTheDocument();
+    expect(screen.queryByText("A colleague's project")).not.toBeInTheDocument();
+  });
+
+  it("hides the project selector entirely when every project is colleague-owned", () => {
+    vi.mocked(queries.usePortfolios).mockReturnValue(
+      {
+        data: {
+          data: [
+            {
+              portfolio_id: "portfolio-2",
+              name: "A colleague's project",
+              description: null,
+              created_at: "2026-01-01T00:00:00Z",
+              task_count: 0,
+              is_owner: false,
+            },
+          ],
+        },
+      } as unknown as ReturnType<typeof queries.usePortfolios>,
+    );
+    renderNewTask("/new?capability=evidence_base");
+    expect(screen.queryByLabelText(/Add to a project/)).not.toBeInTheDocument();
   });
 });

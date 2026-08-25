@@ -233,16 +233,22 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------
   if (method === "PATCH" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) {
     const body = await requestBody(request, init);
-    if (isRecord(body) && typeof body.name === "string") mockProject.name = body.name;
-    if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
     // Task 033 phase 10b: i.5 — a Task's own visibility can't be set while
     // it's in a Project (portfolio membership). The mock mirrors the real
     // 409 `visibility_conflict` so the control's error line is exercisable
-    // in mock mode too, not just against a live backend.
+    // in mock mode too, not just against a live backend. Checked before any
+    // field is assigned, matching the real API's all-or-nothing conflict —
+    // a 409 must leave every field (including a same-body rename) untouched.
+    if (
+      isRecord(body) &&
+      (body.visibility === "org" || body.visibility === "private") &&
+      mockProject.portfolio_id != null
+    ) {
+      return json({ error: { code: "visibility_conflict", message: "Task is in a Project." } }, 409);
+    }
+    if (isRecord(body) && typeof body.name === "string") mockProject.name = body.name;
+    if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
     if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
-      if (mockProject.portfolio_id != null) {
-        return json({ error: { code: "visibility_conflict", message: "Task is in a Project." } }, 409);
-      }
       mockProject.visibility = body.visibility;
     }
     mockProject.updated_at = new Date().toISOString();

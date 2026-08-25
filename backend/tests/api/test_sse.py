@@ -24,6 +24,7 @@ from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.routers import _access, sse
+from policy_atlas.api.routers.sse import _tail
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.liveness import tick_hub
@@ -214,25 +215,40 @@ class _SseStream:
             if predicate(item):
                 return items
 
-    async def closed(self, *, timeout: float = 5.0) -> bool:
-        """Consume whatever remains and report whether the response ends in time.
+    async def drain_until_closed(
+        self, *, timeout: float = 5.0
+    ) -> tuple[bool, list[_SseItem]]:
+        """Consume whatever remains, reporting closure **and what arrived**.
 
-        The revocation cases' assertion. A closed stream is the *absence* of
-        further output plus a completed HTTP body, so this drains keep-alives
-        and frames until the body ends (``StopAsyncIteration``) and calls a
-        stream that is merely quiet a failure rather than a pass.
+        The revocation cases' assertion, in two halves. A closed stream is the
+        *absence* of further output plus a completed HTTP body, so this drains
+        until the body ends (``StopAsyncIteration``) and calls a stream that is
+        merely quiet a failure rather than a pass.
+
+        It returns the drained items rather than discarding them because
+        "closes eventually" is the weaker half of the property. A stream that
+        emits one more frame about the project and *then* closes passes
+        "closed" and still disclosed the frame — which is exactly what the
+        pre-fix loop did with a tick, having yielded it before the tail
+        re-authorised. The caller asserts on the list.
         """
+        items: list[_SseItem] = []
         deadline = asyncio.get_running_loop().time() + timeout
         while True:
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
-                return False
+                return False, items
             try:
-                await self.next(timeout=remaining)
+                items.append(await self.next(timeout=remaining))
             except StopAsyncIteration:
-                return True
+                return True, items
             except TimeoutError:
-                return False
+                return False, items
+
+    async def closed(self, *, timeout: float = 5.0) -> bool:
+        """Report whether the response ends in time, ignoring what it carried."""
+        closed, _ = await self.drain_until_closed(timeout=timeout)
+        return closed
 
     async def aclose(self) -> None:
         """Stop consumption and cancel the app-side generator."""
@@ -728,22 +744,50 @@ async def _live(stream: _SseStream) -> None:
     assert (await stream.next(timeout=2.0)).comment == "keep-alive"
 
 
+def _frames(items: list[_SseItem]) -> list[_SseItem]:
+    """Every item that is a frame — durable or tick — and not a keep-alive.
+
+    A keep-alive is the literal comment `: keep-alive` and says nothing about
+    the project; a frame is content. So "no further frames" is the disclosure
+    property, and it does not become flaky because a heartbeat happened to fire
+    in the same millisecond as a revocation.
+    """
+    return [item for item in items if item.event is not None]
+
+
 async def _colleague_stream_closes_when(
     api: _ApiSession,
     project_id: uuid.UUID,
     revoke: Callable[[], Awaitable[None]],
 ) -> None:
-    """Hold a colleague's stream open, run one revocation, require closure.
+    """Hold a colleague's stream open, revoke, require closure **and silence**.
 
     The revocation is an awaitable rather than a statement, so a case can
     revoke by writing the database *or* by calling the real route that does
     it — which is what phase 7's cascade case does now that the lever exists.
+
+    **A tick is published immediately after the revocation commits**, and no
+    frame may follow it. That is what turns every revocation case into a
+    disclosure assertion rather than only a liveness one: the loop used to
+    yield `_encode_tick(tick)` — the project's current stage and progress
+    note — *before* the tail re-authorised, so a revoked caller received one
+    more frame about the project on their way out. Draining and discarding, as
+    these cases did before, cannot see that: the stream still closes.
+
+    The tick is the deterministic probe for it. Ticks are queued per
+    subscriber and delivered on the next pass of the loop, so a tick published
+    after the revocation is guaranteed to reach the iteration that also
+    discovers the revocation — it escapes on every run against the old order
+    and on none against the new one.
     """
     stream = await api.open_stream(project_id, headers=api.other_headers)
     try:
         await _live(stream)
         await revoke()
-        assert await stream.closed(timeout=5.0)
+        tick_hub.publish(project_id, stage="acquire", note="After the revocation")
+        closed, drained = await stream.drain_until_closed(timeout=5.0)
+        assert closed
+        assert _frames(drained) == []
     finally:
         await stream.aclose()
 
@@ -939,6 +983,57 @@ def test_sse_stream_closes_when_the_real_portfolio_cascade_runs(
     asyncio.run(exercise())
 
 
+def test_a_batch_read_after_the_grade_check_discloses_nothing_once_access_is_gone(
+    engine: Engine, monkeypatch: Any
+) -> None:
+    """The tail's batch select carries the grade, not just the check before it.
+
+    `_tail` asks `may_read_project` in one statement and reads the event batch
+    in another, so a revocation committing *between* the two was still worth
+    one batch of frames: the check had already answered "yes". The window is
+    small and unhittable on purpose in a test, so it is simulated exactly —
+    `may_read_project` is forced to answer "yes" while the row itself has been
+    privatised — and the assertion is that the batch comes back empty anyway,
+    because the select that reads the events applies the same read legs in the
+    same statement.
+
+    The two are not redundant. This gate makes the batch empty; the check is
+    what ends the response. Forced true here, the stream would poll for ever
+    and disclose nothing, which is the failure mode worth having.
+    """
+    owner_id = f"owner-{uuid.uuid4()}"
+    colleague_id = f"colleague-{uuid.uuid4()}"
+    _, project_id, _ = _org_seed(engine, owner_id=owner_id, colleague_id=colleague_id)
+    with seeded(engine) as conn:
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=None,
+            event_type="project.renamed",
+            payload={"name_to": "A name the colleague may still read"},
+        )
+
+    readable = _tail(engine, project_id=project_id, user_id=colleague_id, after=0)
+    assert readable is not None
+    assert [frame["type"] for frame in readable[1]] == ["project.updated"]
+
+    monkeypatch.setattr(
+        sse,
+        "may_read_project",
+        lambda *_args, **_kwargs: _access.ReadCheck(allowed=True, via_admin=False),
+    )
+    with seeded(engine) as conn:
+        conn.execute(
+            update(project)
+            .where(project.c.project_id == project_id)
+            .values(visibility="private")
+        )
+
+    revoked = _tail(engine, project_id=project_id, user_id=colleague_id, after=0)
+    assert revoked is not None
+    assert revoked[1] == []
+
+
 def test_sse_owner_stream_survives_every_revocation_event(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -1087,6 +1182,46 @@ def _admin_seed(engine: Engine, *, owner_id: str, admin_id: str) -> uuid.UUID:
         )
 
 
+def test_an_administrator_stream_on_an_ownerless_project_survives_its_polls(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The re-check must reach the rows only the admin leg reaches (contract § 11).
+
+    A `runtime/orchestrate.py` project has no owner and no organisation, so an
+    administrator is the only caller who can read it at all — and the own-leg
+    boolean the re-check selects beside its answer is **SQL NULL** on such a
+    row, because every disjunct of it compares a NULL column. Read through
+    `scalar_one_or_none()` that NULL was indistinguishable from "no row", so
+    this stream opened (the snapshot selects the row itself) and then closed as
+    revoked on its very first re-authorisation.
+
+    Two keep-alives is the assertion: the first proves the tail loop ran, the
+    second proves it ran again with the grade intact. Nothing is revoked here.
+    """
+
+    async def exercise() -> None:
+        async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
+            with seeded(engine) as conn:
+                ops_enrol(
+                    conn,
+                    user_id=api.other_id,
+                    org_id=make_org(conn, name="Support Org"),
+                    display_name="Support",
+                    is_admin=True,
+                )
+                project_id = make_project(
+                    conn, owner_user_id=None, org_id=None, visibility="org"
+                )
+            stream = await api.open_stream(project_id, headers=api.other_headers)
+            try:
+                await _live(stream)
+                await _live(stream)
+            finally:
+                await stream.aclose()
+
+    asyncio.run(exercise())
+
+
 def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation(
     engine: Engine, tmp_path: Path, monkeypatch: Any
 ) -> None:
@@ -1167,6 +1302,11 @@ def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
     The owner's own stream on the same project is untouched by the same write,
     which is what makes this a statement about the leg rather than about the
     tail closing whenever anything is written.
+
+    A tick published after the revoke must reach the owner and **not** the
+    former administrator, for the reason `_colleague_stream_closes_when`
+    documents: the revoked stream closing is the weaker half of the property,
+    and one last frame on the way out is the half that leaks.
     """
 
     async def exercise() -> None:
@@ -1181,8 +1321,20 @@ def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
                 await _live(admin_stream)
                 with seeded(engine) as conn:
                     ops_set_admin(conn, user_id=api.other_id, is_admin=False)
-                assert await admin_stream.closed(timeout=5.0)
-                await _live(owner_stream)
+                tick_hub.publish(
+                    project_id, stage="acquire", note="After the revocation"
+                )
+                closed, drained = await admin_stream.drain_until_closed(timeout=5.0)
+                assert closed
+                assert _frames(drained) == []
+                # The owner is still watching, and receives the same tick the
+                # revoked administrator did not. Collected rather than read as
+                # the next item: the owner's stream has been idling through
+                # both `_live` waits, so keep-alives are queued ahead of it.
+                owner_items = await owner_stream.collect_until(
+                    lambda item: item.event == "tick", timeout=5.0
+                )
+                assert _frames(owner_items)[-1].event == "tick"
             finally:
                 await owner_stream.aclose()
                 await admin_stream.aclose()

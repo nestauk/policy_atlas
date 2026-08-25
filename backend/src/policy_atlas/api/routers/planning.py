@@ -529,10 +529,23 @@ def list_planning_turns(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[PlanningTranscriptTurnOut]:
-    """Return the durable planning transcript in ascending conversation order."""
+    """Return the durable planning transcript in ascending conversation order.
+
+    **Read-graded, and the sweep is owner-only.** The grade here is the read
+    grade — owner ∪ same-org colleague ∪ administrator — but
+    :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
+    the admin leg read-only: a support read that fails somebody else's pending
+    planning turn is a mutation nobody asked for and nothing records. So the
+    sweep runs only for the owner, whose own turn it is. Nothing is lost: the
+    owner's own GET sweeps, and every mutating planning path sweeps under the
+    write grade before it does anything.
+    """
     with engine.begin() as conn:
-        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
-        _expire_stale_pending_turns(conn, project_id)
+        access = accessible_project(
+            conn, project_id=project_id, user_id=user.user_id, write=False
+        )
+        if access.is_owner:
+            _expire_stale_pending_turns(conn, project_id)
         total_items = conn.execute(
             select(func.count())
             .select_from(planning_transcript)
@@ -557,10 +570,17 @@ def get_plan(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> PlanOut:
-    """Return the durable approved plan or latest completed durable draft."""
+    """Return the durable approved plan or latest completed durable draft.
+
+    Owner-only sweep, for the reason :func:`list_planning_turns` states: a
+    colleague's or an administrator's read must not write the owner's rows.
+    """
     with engine.begin() as conn:
-        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
-        _expire_stale_pending_turns(conn, project_id)
+        access = accessible_project(
+            conn, project_id=project_id, user_id=user.user_id, write=False
+        )
+        if access.is_owner:
+            _expire_stale_pending_turns(conn, project_id)
         row = conn.execute(
             select(orchestration_plan)
             .where(orchestration_plan.c.project_id == project_id)

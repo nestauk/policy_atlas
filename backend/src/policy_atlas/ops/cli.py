@@ -10,16 +10,21 @@ The command tree, with every global option before the subcommand::
       user  resync    --email E
       user  de-enrol  (--email E | --sub SUB)
       rows  assign    (--project ID | --portfolio ID) --org ORG
-      admin grant     --email E
-      admin revoke    --email E
+      admin grant     (--email E | --sub SUB)
+      admin revoke    (--email E | --sub SUB)
 
 Global options: ``--env`` (required), ``--database-url``, ``--expected-account``,
-``--user-pool-id``, ``--operator``, ``--yes``.
+``--user-pool-id``, ``--operator``. **There is no ``--yes``**: the only
+confirmation this CLI asks is the environment check's database leg, and that one
+is not skippable (:func:`_prompt`).
 
 **There is no ``--password`` and no ``--temporary-password``**, on any command
 (contract § 9). The absence is asserted structurally by
 ``tests/ops/test_ops_structure.py``, over the built parser rather than over the
-source, so a flag added through any route fails the test.
+source, so a flag added through any route fails the test. ``--database-url``
+refuses a URL carrying a password for the same reason the make targets went:
+argv is in the shell history and in the process table. The credential belongs
+in ``DATABASE_URL``.
 
 **Order of operations, which is the whole safety design.** One transaction is
 opened, the environment is verified *inside it* — leg 3 samples the same session
@@ -28,6 +33,14 @@ connection and not about a different one — and only then does the command run.
 Anything that raises rolls the transaction back, and the success line prints
 **after** the commit, so no operator ever reads "enrolled" about a write that
 did not land.
+
+**The admin trace is emitted here, after that commit**, from whatever
+:class:`~policy_atlas.ops.commands.AdminTrace` values the record carries
+(:func:`_trace`). Contract § 3a wants the line to be evidence, and a line
+written inside the transaction is a durable claim about a write a failed commit
+then threw away. One mechanism serves every command that moves ``is_admin`` —
+``admin grant``, ``admin revoke``, and the ``is_admin`` a ``user de-enrol``
+clears.
 
 The one place that ordering cannot save anything is ``user create``: the Cognito
 account is made before the database is touched, because its ``sub`` is the key.
@@ -43,9 +56,10 @@ import uuid
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
+import structlog
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from sqlalchemy import create_engine
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection, Engine, make_url
 
 from policy_atlas.core.logging import configure_logging
 from policy_atlas.ops import commands
@@ -61,6 +75,8 @@ from policy_atlas.ops.environment import (
 )
 from policy_atlas.ops.errors import OpsError
 
+log = structlog.get_logger()
+
 #: Exit status for a refusal. Distinct from argparse's 2-for-usage only in
 #: intent; both mean "nothing was written", which is the property an operator
 #: needs from a non-zero exit.
@@ -72,6 +88,10 @@ class Outcome(Protocol):
 
     def summary(self) -> str:
         """One operator-facing line describing what was done."""
+        ...
+
+    def admin_changes(self) -> Sequence[commands.AdminTrace]:
+        """Privilege changes to trace once the transaction has committed."""
         ...
 
 
@@ -99,8 +119,8 @@ def main(
         sts: Security-token client; defaults to ambient operator credentials.
         write: Where operator-facing lines go; defaults to stdout.
         confirm: Asked when the environment check's database leg has nothing to
-            prove itself against; defaults to an interactive prompt, or to
-            automatic assent under ``--yes``.
+            prove itself against; defaults to the interactive prompt, which no
+            flag can lift.
 
     Returns:
         Process exit status: ``0`` on success, :data:`EXIT_REFUSED` on a refusal.
@@ -114,6 +134,26 @@ def main(
     except OpsError as error:
         print(f"refused: {error}", file=sys.stderr)
         return EXIT_REFUSED
+
+
+def _email(value: str) -> str:
+    """Normalise an address once, at the boundary every command shares.
+
+    Cognito's ``ListUsers`` filter is an exact, case-sensitive match, while the
+    pool treats ``Alice@x`` and ``alice@x`` as one account. Left alone, the two
+    spellings are two different commands: ``user create --email Alice@x`` finds
+    no account under the address it was given and goes on to ask
+    ``AdminCreateUser`` for a second identity for the same person. Normalising
+    at the parser means every command downstream — Cognito lookups *and* the
+    ``app_user.email`` selector ``admin grant`` resolves by — sees one spelling.
+
+    Args:
+        value: The address as typed.
+
+    Returns:
+        The address, trimmed and lower-cased.
+    """
+    return value.strip().lower()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -140,7 +180,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--database-url",
         default=None,
-        help="SQLAlchemy URL for the tunnelled database (default: $DATABASE_URL)",
+        help=(
+            "SQLAlchemy URL for the tunnelled database, without a password "
+            "(default: $DATABASE_URL, which is where the credential belongs)"
+        ),
     )
     parser.add_argument(
         "--expected-account",
@@ -155,16 +198,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--operator",
         default=None,
-        help="who is running this, for the admin trace (default: the AWS caller ARN)",
-    )
-    parser.add_argument(
-        "--yes",
-        action="store_true",
         help=(
-            "skip the confirmation asked when the database holds no accounts to "
-            "check the pool against; never overrides a positive mismatch"
+            "a note annotating the admin trace; the verified AWS caller ARN is "
+            "logged either way and this never replaces it"
         ),
     )
+    # There is deliberately no `--yes`. It existed to skip the environment
+    # check's database-leg confirmation, that confirmation is now un-skippable
+    # (see `_prompt`), and a flag that no longer does what its name promises is
+    # an operator trap: the operator most likely to reach for it is the one it
+    # would have hurt. `tests/ops/test_ops_cli.py` asserts its absence over the
+    # built parser, so it cannot come back by any route.
     groups = parser.add_subparsers(dest="group", required=True)
 
     org = groups.add_parser("org", help="organisations").add_subparsers(
@@ -179,21 +223,23 @@ def build_parser() -> argparse.ArgumentParser:
     user_create = user.add_parser(
         "create", help="create a Cognito account (emailed an invitation) and enrol it"
     )
-    user_create.add_argument("--email", required=True)
+    user_create.add_argument("--email", required=True, type=_email)
     user_create.add_argument("--display-name", required=True)
     user_create.add_argument("--org", required=True, help="organisation name or id")
 
     user_enrol = user.add_parser("enrol", help="enrol an existing account, moving its owner's rows")
-    user_enrol.add_argument("--email", required=True)
+    user_enrol.add_argument("--email", required=True, type=_email)
     user_enrol.add_argument("--display-name", required=True)
     user_enrol.add_argument("--org", required=True, help="organisation name or id")
 
     user_resync = user.add_parser("resync", help="re-resolve a stored address from Cognito")
-    user_resync.add_argument("--email", required=True, help="the address as it stands NOW")
+    user_resync.add_argument(
+        "--email", required=True, type=_email, help="the address as it stands NOW"
+    )
 
     user_de_enrol = user.add_parser("de-enrol", help="remove a person from their organisation")
     de_enrol_subject = user_de_enrol.add_mutually_exclusive_group(required=True)
-    de_enrol_subject.add_argument("--email")
+    de_enrol_subject.add_argument("--email", type=_email)
     de_enrol_subject.add_argument("--sub")
 
     rows = groups.add_parser("rows", help="row assignment").add_subparsers(
@@ -208,10 +254,16 @@ def build_parser() -> argparse.ArgumentParser:
     admin = groups.add_parser("admin", help="the support role").add_subparsers(
         dest="command", required=True
     )
-    admin_grant = admin.add_parser("grant", help="grant the support role")
-    admin_grant.add_argument("--email", required=True)
-    admin_revoke = admin.add_parser("revoke", help="revoke the support role")
-    admin_revoke.add_argument("--email", required=True)
+    # Both take `--sub` for the reason `de-enrol` does: `app_user.email` carries
+    # no unique constraint, so the ambiguous-address refusal recommends `--sub`
+    # and has to be able to. Revoking a compromised administrator is the last
+    # place a stale duplicate address should be a dead end.
+    for direction in ("grant", "revoke"):
+        subject = admin.add_parser(
+            direction, help=f"{direction} the support role"
+        ).add_mutually_exclusive_group(required=True)
+        subject.add_argument("--email", type=_email)
+        subject.add_argument("--sub")
 
     return parser
 
@@ -225,10 +277,8 @@ def _run(
     emit: Callable[[str], None],
     confirm: Callable[[Target], bool] | None,
 ) -> int:
-    """Open the transaction, verify the environment, then dispatch."""
-    database_url = args.database_url or os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise OpsError("no database: pass --database-url or set DATABASE_URL")
+    """Open the transaction, verify the environment, dispatch, then trace."""
+    database_url = _database_url(args)
     target = resolve_target(
         env=args.env,
         expected_account=args.expected_account,
@@ -237,18 +287,81 @@ def _run(
     )
     identity = cognito if cognito is not None else cognito_client()
     tokens = sts if sts is not None else sts_client()
-    ask = confirm if confirm is not None else _prompt(emit, assume_yes=args.yes)
+    ask = confirm if confirm is not None else _prompt(emit)
     db = engine if engine is not None else create_engine(database_url)
 
     with db.begin() as conn:
         verification = verify_environment(
             target, conn=conn, cognito=identity, sts=tokens, confirm=ask
         )
-        outcome = _dispatch(
-            args, conn=conn, cognito=identity, target=target, verification=verification
-        )
+        outcome = _dispatch(args, conn=conn, cognito=identity, target=target)
+    # Both of these are after the commit, and for the same reason: neither a
+    # printed line nor a logged one may claim a write the transaction discarded.
+    _trace(outcome, verification=verification, target=target, note=args.operator)
     emit(outcome.summary())
     return 0
+
+
+def _database_url(args: argparse.Namespace) -> str:
+    """Resolve the database URL, refusing a credential passed on the command line.
+
+    ``--database-url`` is a convenience for the tunnel's host and port. A
+    password in it lands in the shell history and in the process table, which is
+    exactly what the deleted ``cognito-user`` make target did with the Cognito
+    password and exactly why it went (contract § 9). ``DATABASE_URL`` is the
+    credential path, and it is unchanged: an environment variable is not on argv.
+
+    Raises:
+        OpsError: If no URL is configured, or ``--database-url`` carries a
+            password.
+    """
+    if args.database_url:
+        if make_url(args.database_url).password:
+            raise OpsError(
+                "--database-url carries a password, which puts it in your shell history "
+                "and in the process table. Pass the credential through DATABASE_URL "
+                "instead (export DATABASE_URL=...), or give a URL with no password. "
+                "Nothing was written."
+            )
+        url: str = args.database_url
+        return url
+    from_env = os.environ.get("DATABASE_URL")
+    if not from_env:
+        raise OpsError("no database: pass --database-url or set DATABASE_URL")
+    return from_env
+
+
+def _trace(
+    outcome: Outcome,
+    *,
+    verification: Verification,
+    target: Target,
+    note: str | None,
+) -> None:
+    """Emit one ``ops.admin_change`` per privilege change, after the commit.
+
+    ``operator_arn`` is **always** the ARN ``GetCallerIdentity`` returned during
+    the environment check — the AWS principal that actually held the permission.
+    ``--operator`` annotates that as ``operator_note`` and can never replace it:
+    a self-declared operator identity on an audit line is not an audit line, and
+    the previous ``--operator or caller_arn`` let one string be typed over the
+    other on precisely the entries an investigation would be reading.
+
+    Args:
+        outcome: The record the command returned.
+        verification: What the environment check proved, for the caller ARN.
+        target: The verified estate, for the environment name.
+        note: The ``--operator`` annotation, or ``None``.
+    """
+    for change in outcome.admin_changes():
+        log.info(
+            "ops.admin_change",
+            operator_arn=verification.caller_arn,
+            operator_note=note,
+            subject=change.subject,
+            direction=change.direction,
+            env=target.env,
+        )
 
 
 def _dispatch(
@@ -257,7 +370,6 @@ def _dispatch(
     conn: Connection,
     cognito: CognitoIdentityProviderClient,
     target: Target,
-    verification: Verification,
 ) -> Outcome:
     """Route one verified invocation to its command function."""
     if args.group == "org":
@@ -290,25 +402,41 @@ def _dispatch(
         )
 
     return commands.set_admin(
-        conn,
-        email=args.email,
-        grant=args.command == "grant",
-        operator=args.operator or verification.caller_arn,
-        env=target.env,
+        conn, email=args.email, sub=args.sub, grant=args.command == "grant"
     )
 
 
-def _prompt(emit: Callable[[str], None], *, assume_yes: bool) -> Callable[[Target], bool]:
-    """The interactive confirmation the unprovable database leg falls back to."""
+def _prompt(emit: Callable[[str], None]) -> Callable[[Target], bool]:
+    """The interactive confirmation the unprovable database leg falls back to.
+
+    **It takes no flag, and there is no flag to take.** An unproven database leg
+    is the state every fresh deployment is in — the 033 migration seeds no
+    ``app_user`` rows, so the very first ``org create`` against a new
+    environment reaches here — and it is the state in which the tunnel is least
+    accounted for. An earlier revision let ``--yes`` skip it, which made "wrong
+    tunnel plus one flag writes production" the cheapest mistake in the tool, in
+    exactly the window where nothing else is watching. That flag is gone rather
+    than made inert, because a flag whose name still promises to skip something
+    is read by exactly the operator it would have hurt. The environment name is
+    typed, every time, by a person.
+
+    That is also why there is no non-interactive fallback: with no terminal
+    there is nobody to be sure, and the command refuses rather than assenting on
+    somebody's behalf.
+    """
 
     def ask(target: Target) -> bool:
-        if assume_yes:
-            return True
         emit(
             f"the database at {target.database} holds no accounts, so it cannot be "
             f"checked against user pool {target.user_pool_id}."
         )
         emit(f"about to act on: env={target.env} account={target.account_id}")
+        if not sys.stdin.isatty():
+            raise OpsError(
+                "the environment cannot be proved and there is no terminal to confirm "
+                "on. Nothing was written. There is no flag for this: run the command "
+                "interactively."
+            )
         return input(f'type "{target.env}" to continue: ').strip() == target.env
 
     return ask

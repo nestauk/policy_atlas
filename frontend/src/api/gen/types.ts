@@ -195,7 +195,9 @@ export interface paths {
          *             organisation's org-visible rows, and for an administrator every
          *             row in every organisation — or `mine` for owner-only.
          *         owner_email: Narrow to one owner's rows. **Administrators only**; any
-         *             other caller gets 422 `validation_error`.
+         *             other caller gets 422 `validation_error`, as does a value longer
+         *             than `OWNER_EMAIL_MAX` or one carrying no `@` — see
+         *             `projects.list_projects`.
          *         page: 1-indexed page number.
          *         page_size: Rows per page, server-capped.
          *
@@ -333,7 +335,10 @@ export interface paths {
          *             client-side and would silently under-report once the visible
          *             estate spans an organisation.
          *         owner_email: Narrow to one owner's rows. **Administrators only**; any
-         *             other caller gets 422 `validation_error`.
+         *             other caller gets 422 `validation_error`, as does a value longer
+         *             than `OWNER_EMAIL_MAX` or one carrying no `@` — the value is
+         *             logged verbatim on the admin trace, so it is bounded and shaped at
+         *             the boundary rather than in the log.
          *         page: 1-indexed page number.
          *         page_size: Rows per page, server-capped.
          *
@@ -653,7 +658,8 @@ export interface paths {
          *
          *     The replay is authorised once by ``_snapshot``; the tail re-authorises on
          *     every batch through the same read legs and ends the response the moment the
-         *     caller's access is gone (contract § 5).
+         *     caller's access is gone (contract § 5). **Re-authorisation precedes every
+         *     frame of its iteration, ephemeral ticks included** — see the loop.
          */
         get: operations["stream_events_api_v1_projects__project_id__events_get"];
         put?: never;
@@ -774,6 +780,9 @@ export interface paths {
         /**
          * Get Plan
          * @description Return the durable approved plan or latest completed durable draft.
+         *
+         *     Owner-only sweep, for the reason :func:`list_planning_turns` states: a
+         *     colleague's or an administrator's read must not write the owner's rows.
          */
         get: operations["get_plan_api_v1_projects__project_id__plan_get"];
         put?: never;
@@ -798,6 +807,15 @@ export interface paths {
         /**
          * List Planning Turns
          * @description Return the durable planning transcript in ascending conversation order.
+         *
+         *     **Read-graded, and the sweep is owner-only.** The grade here is the read
+         *     grade — owner ∪ same-org colleague ∪ administrator — but
+         *     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
+         *     the admin leg read-only: a support read that fails somebody else's pending
+         *     planning turn is a mutation nobody asked for and nothing records. So the
+         *     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
+         *     owner's own GET sweeps, and every mutating planning path sweeps under the
+         *     write grade before it does anything.
          */
         get: operations["list_planning_turns_api_v1_projects__project_id__planning_turns_get"];
         put?: never;
@@ -2859,9 +2877,10 @@ export interface components {
          * @description Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).
          *
          *     Args:
-         *         name: New display name, when renaming. Omit to leave unchanged.
-         *         description: New description, when changing it. Omit to leave
-         *             unchanged.
+         *         name: New display name, when renaming. Omit to leave unchanged; an
+         *             explicit `null` is refused 422 (the column is NOT NULL).
+         *         description: New description, when changing it, or an explicit `null`
+         *             to clear it. Omit to leave unchanged.
          *         visibility: How widely to share this portfolio **and every project
          *             assigned to it** — supplying it runs the i.4 cascade, not a field
          *             write (contract § 6). Owner-only. Omit to leave unchanged; an
@@ -3008,8 +3027,16 @@ export interface components {
          *         portfolio_id: Portfolio to assign this project to, or an explicit
          *             `null` to unassign it. Omit to leave the assignment unchanged.
          *         visibility: How widely to share this project. Owner-only. Omit to
-         *             leave unchanged. Cannot be combined with `portfolio_id` in one
-         *             body — see :meth:`reject_visibility_with_portfolio`.
+         *             leave unchanged; an explicit `null` is refused 422. Cannot be
+         *             combined with `portfolio_id` in one body — see
+         *             :meth:`reject_visibility_with_portfolio`.
+         *
+         *     Note:
+         *         `name` and `visibility` back NOT NULL columns, so an explicit `null`
+         *         on either is refused rather than treated as "unchanged" — see
+         *         :meth:`reject_nulls_without_meaning`. `question` and `portfolio_id`
+         *         are not: null clears the question, and null on `portfolio_id` is
+         *         contract § 6's i.6 (unassign).
          */
         ProjectUpdate: {
             /** Name */

@@ -13,6 +13,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .common import reject_explicit_nulls
 from .tenancy import Visibility
 
 #: Portfolio display-name length bound, matching the project row's bound.
@@ -45,9 +46,10 @@ class PortfolioUpdate(BaseModel):
     """Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).
 
     Args:
-        name: New display name, when renaming. Omit to leave unchanged.
-        description: New description, when changing it. Omit to leave
-            unchanged.
+        name: New display name, when renaming. Omit to leave unchanged; an
+            explicit `null` is refused 422 (the column is NOT NULL).
+        description: New description, when changing it, or an explicit `null`
+            to clear it. Omit to leave unchanged.
         visibility: How widely to share this portfolio **and every project
             assigned to it** — supplying it runs the i.4 cascade, not a field
             write (contract § 6). Owner-only. Omit to leave unchanged; an
@@ -79,25 +81,29 @@ class PortfolioUpdate(BaseModel):
     visibility: Visibility | None = None
 
     @model_validator(mode="after")
-    def reject_explicit_null_visibility(self) -> PortfolioUpdate:
-        """Refuse `{"visibility": null}` rather than treat it as "unchanged".
+    def reject_nulls_without_meaning(self) -> PortfolioUpdate:
+        """Refuse `{"visibility": null}` and `{"name": null}` as "unchanged".
 
-        `None` is the *absent* value for this field, so the route can read
+        For `visibility`, `None` is the *absent* value, so the route can read
         "the caller asked for a cascade" straight off `visibility is not
         None`. An explicit null that validated would make that reading false
         for one body shape only — the kind of near-miss the invariant cannot
         afford — and it cannot mean anything else: `portfolio.visibility` is
         NOT NULL.
 
+        `name` joins it for the same reason and one more: the route writes it
+        by splat from an `exclude_unset` dump, so an explicit null was written
+        to a NOT NULL column and the request 500d. `description` does **not**
+        join them — that column is nullable and null clears it.
+
         Returns:
             The validated model.
 
         Raises:
-            ValueError: When `visibility` was supplied as null. FastAPI
+            ValueError: When either field was supplied as null. FastAPI
                 renders this as the contract's **422 `validation_error`**.
         """
-        if "visibility" in self.model_fields_set and self.visibility is None:
-            raise ValueError("visibility cannot be null; omit it to leave it unchanged")
+        reject_explicit_nulls(self, "name", "visibility")
         return self
 
 

@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
@@ -471,6 +471,16 @@ def _phase_one_turn(
     exactly the block the contract forbids. Pinned structurally by
     ``test_reservation_locks_the_conversation_row_never_the_owners_project``.
 
+    **A second lock covers the one thing the first cannot.** Moving the row
+    lock to the conversation left the ``_USER_PENDING_CAP`` check unserialized:
+    that count is keyed to the *acting user* and spans every conversation they
+    created, so two simultaneous POSTs to two different chats lock two
+    different rows, both count below the cap and both insert. The cap is
+    restored by a transaction-scoped advisory lock on the acting subject, taken
+    immediately before the count and released by the commit — the conversation
+    lock still serializing the turn indices, the title write and the
+    idempotency branch within one chat.
+
     Authorization is layered, not duplicated: the **router** resolves the
     caller's tenancy grade on the project (``chat_mutable_project`` — owner or
     same-org colleague, never an admin), and this function enforces the
@@ -510,6 +520,15 @@ def _phase_one_turn(
     if chat is None or chat["status"] != "active":
         raise LookupError("chat conversation not found")
 
+    # The advisory lock is taken before the sweep, not just before the cap
+    # count: the sweep UPDATEs stale rows across all of this user's
+    # conversations while the caller holds only one conversation's row lock,
+    # so two concurrent reservations by one user could otherwise deadlock on
+    # chat_turn rows swept in opposite orders. Full rationale at the cap
+    # check below.
+    conn.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:user_id))"), {"user_id": user_id}
+    )
     _expire_stale_pending_turns(conn, user_id=user_id)
     existing = (
         conn.execute(
@@ -601,6 +620,15 @@ def _phase_one_turn(
     # per-project chat-spend bound, so an organisation of N members can drive
     # 2N concurrent turns against one owner's project. Org-level capacity
     # policy is Out of this slice.
+    # The conversation-row lock cannot serialize a per-user count across
+    # conversations: two POSTs from one person to two different chats lock two
+    # different rows, so both read a count below the cap and both insert. The
+    # cap's subject is the acting user, so the lock has to be too — a
+    # transaction-scoped advisory lock keyed to their subject, held until this
+    # reservation commits, so the second transaction counts the first one's
+    # row instead of racing it. `hashtext` is stable within a database, and a
+    # collision between two subjects costs a needless wait and nothing else.
+    # (The lock itself is taken earlier, before the stale-turn sweep.)
     user_pending = conn.execute(
         select(func.count())
         .select_from(
