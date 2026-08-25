@@ -11,9 +11,14 @@ import type { components } from "./gen/types";
  * hook here needing to know about the stream.
  */
 export const queryKeys = {
+  me: () => ["me"] as const,
   projectRoot: (projectId: string) => ["projects", projectId] as const,
-  projects: (query?: { status?: "active" | "archived" | "all"; page?: number; page_size?: number }) =>
-    ["projects", "list", query] as const,
+  // `scope` and `portfolio_id` are embedded via the whole `query` object, so
+  // they participate in the key automatically (task 033 phase 10a) — every
+  // distinct filter combination, including the switcher's future `scope`,
+  // gets its own cache entry rather than silently serving another scope's
+  // rows.
+  projects: (query?: ProjectsQuery) => ["projects", "list", query] as const,
   project: (projectId: string) => ["projects", projectId, "detail"] as const,
   checkIns: (projectId: string, status?: "pending" | "all") =>
     ["projects", projectId, "check-ins", status] as const,
@@ -43,9 +48,30 @@ export const queryKeys = {
     [...queryKeys.conversationsRoot(projectId), query?.kind, query?.status] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
-  portfolios: (page?: number, pageSize?: number) => ["portfolios", "list", page, pageSize] as const,
+  // Same whole-object embedding as `projects` above, so `scope` differs the
+  // key without a separate positional argument.
+  portfolios: (query?: PortfoliosQuery) => ["portfolios", "list", query] as const,
   portfolio: (portfolioId: string) => ["portfolios", portfolioId, "detail"] as const,
 };
+
+/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope` and
+ *  `portfolio_id`). `scope` defaults server-side to `all`; the frontend
+ *  passes it explicitly only where a caller needs something other than that
+ *  default (the phase 10b switcher), so day-one behaviour is unchanged. */
+export interface ProjectsQuery {
+  status?: "active" | "archived" | "all";
+  scope?: "all" | "mine";
+  portfolio_id?: string | null;
+  page?: number;
+  page_size?: number;
+}
+
+/** `GET /api/v1/portfolios` filters (task 033 phase 10a adds `scope`). */
+export interface PortfoliosQuery {
+  scope?: "all" | "mine";
+  page?: number;
+  page_size?: number;
+}
 
 /** Shared shape for the paginated read models (`evidence`, `findings`,
  *  `decisions`) — server page-size cap is 200, default 50 (web-api.md
@@ -102,6 +128,31 @@ export function useApiClient() {
   return useMemo(() => createAuthedApiClient(auth), [auth]);
 }
 
+/**
+ * `GET /api/v1/me` — the caller's own identity row (task 033), provisioned
+ * on first call. Keys the whole tenancy UI: a `null` `organisation` hides
+ * the scope switcher and every org-scoped affordance.
+ *
+ * `staleTime: Infinity` is deliberate: the row changes only via an ops
+ * action (enrol/de-enrol, admin grant/revoke) — never something this app
+ * writes — so there is no in-session event that should invalidate it, and
+ * paying for a refetch on every navigation would buy nothing. The only path
+ * an ops change reaches an open session is a fresh load anyway, which starts
+ * a fresh `QueryClient` and re-fetches for free.
+ */
+export function useMe() {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.me(),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/me");
+      if (error) throw error;
+      return data;
+    },
+    staleTime: Infinity,
+  });
+}
+
 const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
 
 /** `GET /api/v1/projects` — paginated, owner-scoped. Live landing statuses
@@ -110,7 +161,7 @@ const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
-export function useProjects(query?: { status?: "active" | "archived" | "all"; page?: number; page_size?: number }) {
+export function useProjects(query?: ProjectsQuery) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.projects(query),
@@ -131,10 +182,10 @@ export function useProjects(query?: { status?: "active" | "archived" | "all"; pa
 }
 
 /** `GET /api/v1/portfolios` — the screen's Projects, with a derived task count. */
-export function usePortfolios(query?: { page?: number; page_size?: number }) {
+export function usePortfolios(query?: PortfoliosQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.portfolios(query?.page, query?.page_size),
+    queryKey: queryKeys.portfolios(query),
     queryFn: async () => {
       const { data, error } = await client.GET("/api/v1/portfolios", { params: { query } });
       if (error) throw error;

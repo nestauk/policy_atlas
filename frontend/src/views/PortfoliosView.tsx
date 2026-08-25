@@ -25,10 +25,23 @@ import { TaskListActions, TaskListPanel } from "./TaskListPanel";
  * shows a name and a count and stops there. Anything more would imply the
  * grouping has a state, which it does not.
  */
+/** `PortfolioOut` carries a derived `task_count` but no last-task-updated
+ *  timestamp, so this overview still leans on the global projects page to
+ *  derive "most recently active" per portfolio (`newestTaskUpdateByPortfolio`
+ *  below) — asking per-portfolio would be N+1 requests for a list page.
+ *  Server page-size cap (`PAGE_SIZE_MAX`, web-api.md § Pagination): raised
+ *  from the 50-row default so this remains an approximation rather than
+ *  systematically wrong, not a fix — a workspace with more than 200 active
+ *  projects across portfolios can still miss a newer update that falls
+ *  outside this page. `PortfolioDetailView` does not share this limitation:
+ *  it fetches its own member list via `portfolio_id`, which is exact
+ *  regardless of this page size (task 033 phase 10a). */
+const PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE = 200;
+
 export function PortfoliosView() {
   useDocumentTitle(PROJECT.many);
   const portfolios = usePortfolios();
-  const projects = useProjects();
+  const projects = useProjects({ page_size: PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE });
   const create = useCreatePortfolio();
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
@@ -149,12 +162,14 @@ export function PortfoliosView() {
 export function PortfolioDetailView() {
   const { portfolioId = "" } = useParams();
   const portfolio = usePortfolio(portfolioId);
-  const projects = useProjects();
+  // Server-side `portfolio_id` filter (task 033 phase 10a) — this used to
+  // filter the global 50-row projects page client-side, silently
+  // under-reporting once a portfolio's membership (or the caller's visible
+  // estate) grew past that page.
+  const projects = useProjects({ portfolio_id: portfolioId });
   useDocumentTitle(portfolio.data?.name, PROJECT.one);
 
-  const tasks = (projects.data?.data ?? []).filter(
-    (project) => project.portfolio_id === portfolioId,
-  );
+  const tasks = projects.data?.data ?? [];
 
   return (
     <main className="mx-auto max-w-[1180px] px-6 py-10">

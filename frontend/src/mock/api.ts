@@ -15,7 +15,9 @@ import {
   mockFunnel,
   mockGroups,
   mockLandscape,
+  mockMeUnenrolled,
   mockPlanReady,
+  mockPortfolio,
   mockProject,
   mockSourceDossiers,
   seedPlanningTurns,
@@ -31,6 +33,9 @@ import {
   MOCK_PROJECT_ID,
   MOCK_RUN_ID,
 } from "./fixtures";
+
+type MeOut = components["schemas"]["MeOut"];
+type PortfolioOut = components["schemas"]["PortfolioOut"];
 
 type RunOut = components["schemas"]["RunOut"];
 type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
@@ -166,6 +171,18 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 
+// --- Identity + portfolios (task 033 phase 10a) --------------------------
+// `currentMe` defaults to the unenrolled fixture — dark launch: every
+// pre-033 mock journey sees `organisation: null` and stays unchanged. Tests
+// that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
+let currentMe: MeOut = { ...mockMeUnenrolled };
+let mockPortfolios: PortfolioOut[] = [{ ...mockPortfolio }];
+
+/** Test helper: switch the mock's `/me` identity (e.g. to `mockMeEnrolled`). */
+export function setMockMe(me: MeOut) {
+  currentMe = { ...me };
+}
+
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
@@ -179,6 +196,8 @@ export function resetMockScenario() {
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
   currentPlan = { ...mockPlanReady };
+  currentMe = { ...mockMeUnenrolled };
+  mockPortfolios = [{ ...mockPortfolio }];
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -327,7 +346,23 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
 
-  if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page([mockProject]));
+  // --- Identity + portfolios (task 033 phase 10a) -------------------------
+  if (method === "GET" && path.endsWith("/api/v1/me")) return json(currentMe);
+  if (method === "GET" && path.endsWith("/api/v1/portfolios")) return json(page(mockPortfolios));
+  const portfolioDetailMatch = /\/api\/v1\/portfolios\/([^/]+)$/.exec(path);
+  if (method === "GET" && portfolioDetailMatch) {
+    const found = mockPortfolios.find((portfolio) => portfolio.portfolio_id === portfolioDetailMatch[1]);
+    return found !== undefined ? json(found) : json({ detail: "resource not found" }, 404);
+  }
+
+  // `portfolio_id` narrows to one portfolio's members, server-side — mirrors
+  // the real list's filter (contract task 033 phase 10a: `PortfolioDetailView`
+  // no longer filters the global page client-side).
+  if (method === "GET" && path.endsWith("/api/v1/projects")) {
+    const portfolioId = url.searchParams.get("portfolio_id");
+    const rows = portfolioId === null || mockProject.portfolio_id === portfolioId ? [mockProject] : [];
+    return json(page(rows));
+  }
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) return json(mockProject);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/funnel`)) return json(mockFunnel);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/landscape`)) return json(mockLandscape);

@@ -5,6 +5,8 @@ export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
 export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
+export const MOCK_PORTFOLIO_ID = "60000000-0000-4000-8000-000000000001";
+export const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
@@ -27,6 +29,46 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
+  // Assigned to `mockPortfolio` below so `GET /projects?portfolio_id=` has a
+  // real member to return (task 033 phase 10a).
+  portfolio_id: MOCK_PORTFOLIO_ID,
+};
+
+/** Task 033 phase 10a: the one portfolio the mock serves. `task_count`
+ *  mirrors the real read model's own derivation (never cached on the row) —
+ *  it counts `mockProject`, the fixture's only member. */
+export const mockPortfolio: components["schemas"]["PortfolioOut"] = {
+  portfolio_id: MOCK_PORTFOLIO_ID,
+  name: "Child health, Tower Hamlets",
+  description: "Tasks assessing childhood health policy levers for the borough.",
+  created_at: "2026-07-15T09:00:00Z",
+  task_count: 1,
+  visibility: "org",
+  is_owner: true,
+  owner_display: "Ada Lovelace",
+};
+
+/**
+ * `GET /api/v1/me` fixtures (task 033 phase 10a). `mockMeUnenrolled` is the
+ * mock's default identity — dark launch: an unenrolled caller (`organisation:
+ * null`) so the switcher and every org-scoped affordance stay hidden and
+ * every pre-033 mock journey is unchanged until a test opts into
+ * `mockMeEnrolled` via `setMockMe` (`mock/api.ts`).
+ */
+export const mockMeUnenrolled: components["schemas"]["MeOut"] = {
+  user_id: "mock-policy-lead",
+  display_name: "Ada Lovelace",
+  email: null,
+  organisation: null,
+  is_admin: false,
+};
+
+export const mockMeEnrolled: components["schemas"]["MeOut"] = {
+  user_id: "mock-policy-lead",
+  display_name: "Ada Lovelace",
+  email: "ada.lovelace@example.gov.uk",
+  organisation: { org_id: MOCK_ORGANISATION_ID, name: "Department for Local Growth" },
+  is_admin: false,
 };
 
 export const mockFunnel: components["schemas"]["FunnelOut"] = {

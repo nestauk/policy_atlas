@@ -117,7 +117,15 @@ export function useUpdateProject(projectId: string) {
     // The bare "projects" root covers BOTH this project's detail key and the
     // projects-list key (["projects", "list", …]) — a rename must refresh the
     // landing card, not just the workspace header (F.2 finding, 2026-07-29).
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    // "portfolios" is invalidated too (task 033 phase 10a): `visibility` and
+    // `portfolio_id` are both patchable here, and either can change a
+    // portfolio's derived `task_count` or member visibility — a cross-family
+    // effect from a project-family mutation, the same class of bug the
+    // portfolio-PATCH cascade below has to cover in the other direction.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    },
   });
 }
 
@@ -134,7 +142,42 @@ export function useArchiveProject(projectId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    // Same cross-family reasoning as `useUpdateProject`: archiving removes
+    // the project from its portfolio's active `task_count`.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    },
+  });
+}
+
+/**
+ * `PATCH /api/v1/portfolios/{id}` — rename, re-describe, or (supplying
+ * `visibility`) run the server's i.4 visibility cascade onto every member
+ * project in one transaction (contract § 6). No component calls this yet —
+ * the visibility control lands in phase 10b/10c — but the cache wiring is
+ * data-layer work: a cascade rewrites rows in the *project* family from a
+ * *portfolio* mutation, so both families are invalidated by prefix (not the
+ * exact filtered key) so every `scope` variant currently cached is covered,
+ * or a card would keep showing the pre-cascade visibility until an
+ * unrelated refetch.
+ */
+export function useUpdatePortfolio(portfolioId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["PortfolioUpdate"]) => {
+      const { data, error, response } = await client.PATCH("/api/v1/portfolios/{portfolio_id}", {
+        params: { path: { portfolio_id: portfolioId } },
+        body,
+      });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
   });
 }
 

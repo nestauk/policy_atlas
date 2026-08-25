@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns } from "./queries";
+import { useChatTurns, useMe } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -102,6 +102,67 @@ describe("useChatTurns", () => {
 
     const { result } = renderHook(() => useChatTurns(conversationId), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.data?.data).toHaveLength(1));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+function meResponse(body: unknown) {
+  return async () => new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+}
+
+const unenrolledMe = {
+  user_id: "u1",
+  display_name: "Ada Lovelace",
+  email: null,
+  organisation: null,
+  is_admin: false,
+};
+
+const enrolledMe = {
+  user_id: "u1",
+  display_name: "Ada Lovelace",
+  email: "ada@example.gov.uk",
+  organisation: { org_id: "org-1", name: "Department for Local Growth" },
+  is_admin: false,
+};
+
+describe("useMe", () => {
+  it("resolves an unenrolled caller — organisation: null", async () => {
+    const fetchMock = vi.fn(meResponse(unenrolledMe));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useMe(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.organisation).toBeNull();
+  });
+
+  it("resolves an enrolled caller's organisation", async () => {
+    const fetchMock = vi.fn(meResponse(enrolledMe));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useMe(), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.organisation?.name).toBe("Department for Local Growth");
+  });
+
+  it("does not refetch across a remount sharing a QueryClient (documented staleTime: Infinity)", async () => {
+    const fetchMock = vi.fn(meResponse(unenrolledMe));
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(
+        AuthContext.Provider,
+        { value: makeAuth() },
+        createElement(QueryClientProvider, { client: queryClient }, children),
+      );
+
+    const first = renderHook(() => useMe(), { wrapper: Wrapper });
+    await waitFor(() => expect(first.result.current.data).toBeDefined());
+    first.unmount();
+
+    const second = renderHook(() => useMe(), { wrapper: Wrapper });
+    await waitFor(() => expect(second.result.current.data).toBeDefined());
+
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

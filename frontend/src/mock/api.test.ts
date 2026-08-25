@@ -2,16 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { consumeEventStream } from "../api/sse";
 import type { SseFrame } from "../api/sseFrame";
-import { mockFetch, resetMockScenario } from "./api";
+import { mockFetch, resetMockScenario, setMockMe } from "./api";
 import {
   MOCK_CHAT_CITATION_CHUNK_ID,
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
   MOCK_PLANNING_CONVERSATION_ID,
+  MOCK_PORTFOLIO_ID,
   MOCK_PROJECT_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
   mockEvidenceThemeIds,
+  mockMeEnrolled,
 } from "./fixtures";
 
 interface MockChatTurn {
@@ -298,6 +300,61 @@ describe("mock API", () => {
       const context = await response.json() as { context: string; clamped: boolean };
       expect(context.context).toContain(MOCK_CHAT_CITATION_QUOTE.slice(0, 30));
       expect(context.clamped).toBe(false);
+    });
+  });
+
+  // Task 033 phase 10a: /me and the portfolio routes the § 11 journeys
+  // need that the mock never served before this phase.
+  describe("identity + portfolios (task 033 phase 10a)", () => {
+    it("GET /me defaults to the unenrolled fixture — dark launch", async () => {
+      resetMockScenario();
+      const response = await mockFetch("http://localhost/api/v1/me");
+      const me = await response.json() as { organisation: unknown };
+      expect(me.organisation).toBeNull();
+    });
+
+    it("GET /me reflects setMockMe(mockMeEnrolled) for tests that need the enrolled journey", async () => {
+      resetMockScenario();
+      setMockMe(mockMeEnrolled);
+      const response = await mockFetch("http://localhost/api/v1/me");
+      const me = await response.json() as { organisation: { name: string } | null };
+      expect(me.organisation?.name).toBe(mockMeEnrolled.organisation?.name);
+    });
+
+    it("GET /portfolios returns the fixture portfolio", async () => {
+      resetMockScenario();
+      const response = await mockFetch("http://localhost/api/v1/portfolios");
+      const { data } = await response.json() as { data: { portfolio_id: string }[] };
+      expect(data).toHaveLength(1);
+      expect(data[0].portfolio_id).toBe(MOCK_PORTFOLIO_ID);
+    });
+
+    it("GET /portfolios/{id} resolves the fixture and 404s for an unknown id", async () => {
+      resetMockScenario();
+      const found = await mockFetch(`http://localhost/api/v1/portfolios/${MOCK_PORTFOLIO_ID}`);
+      expect(found.status).toBe(200);
+      expect((await found.json() as { portfolio_id: string }).portfolio_id).toBe(MOCK_PORTFOLIO_ID);
+
+      const missing = await mockFetch("http://localhost/api/v1/portfolios/00000000-0000-4000-8000-000000000000");
+      expect(missing.status).toBe(404);
+    });
+
+    it("GET /projects?portfolio_id= narrows to that portfolio's members, server-side", async () => {
+      resetMockScenario();
+      const matching = await mockFetch(`http://localhost/api/v1/projects?portfolio_id=${MOCK_PORTFOLIO_ID}`);
+      const { data: matchingData } = await matching.json() as { data: { project_id: string }[] };
+      expect(matchingData).toHaveLength(1);
+      expect(matchingData[0].project_id).toBe(MOCK_PROJECT_ID);
+
+      const nonMatching = await mockFetch(
+        "http://localhost/api/v1/projects?portfolio_id=00000000-0000-4000-8000-000000000000",
+      );
+      const { data: nonMatchingData } = await nonMatching.json() as { data: unknown[] };
+      expect(nonMatchingData).toHaveLength(0);
+
+      const unfiltered = await mockFetch("http://localhost/api/v1/projects");
+      const { data: unfilteredData } = await unfiltered.json() as { data: unknown[] };
+      expect(unfilteredData).toHaveLength(1);
     });
   });
 });
