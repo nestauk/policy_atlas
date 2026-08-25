@@ -133,7 +133,7 @@ export function ThemesView() {
 
       {facets.map((facet) => (
         <section key={facet.facet} className="mt-8">
-          <h2 className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+          <h2 className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
             {scrub(facet.facet)}
           </h2>
           <ul role="list" className="mt-2">

@@ -8,6 +8,7 @@ import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import {
+  CHART_TICK_FONT_SIZE,
   DistributionChartTooltip,
   EvidenceDistributionChart,
   normaliseGeographies,
@@ -115,13 +116,13 @@ export function LandscapeView() {
                   <XAxis
                     type="number"
                     allowDecimals={false}
-                    tick={{ fontSize: 11, fill: CHART_TOKENS.text }}
+                    tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.text }}
                   />
                   <YAxis
                     type="category"
                     dataKey="label"
                     width={120}
-                    tick={{ fontSize: 11, fill: CHART_TOKENS.navy }}
+                    tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.navy }}
                   />
                   <Tooltip cursor={{ fill: CHART_TOKENS.blueTint }} content={<DistributionChartTooltip />} />
                   <Bar dataKey="count" fill={CHART_TOKENS.navy} isAnimationActive={false} barSize={14} />
@@ -180,7 +181,7 @@ export function LandscapeView() {
           <div className="space-y-4 p-4">
             {(groups.data.facets ?? []).map((facet) => (
               <div key={facet.facet}>
-                <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">
+                <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">
                   {scrub(facet.facet)}
                 </p>
                 <ul role="list" className="mt-1.5 flex flex-wrap gap-1.5">

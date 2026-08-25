@@ -27,6 +27,14 @@ export const SOURCE_SORT_COLUMNS: ReadonlyArray<{
   { key: "relevance", label: "Relevant", defaultOrder: "desc" },
 ];
 
+/** Status/cited/kind chips on All sources and Findings — same size as table headers. */
+export const FILTER_CHIP_CLASS =
+  "cursor-pointer border px-3 py-1.5 text-meta font-semibold focus-visible:outline-2 focus-visible:outline-blue";
+
+/** All-caps table header type — matches `PaneHeading` / `text-meta`. */
+export const TABLE_HEADER_TEXT_CLASS =
+  "text-meta font-extrabold uppercase tracking-[0.06em] text-grey";
+
 /** Cycle a sources-table header click: none → the column's own default
  *  direction → the opposite direction → none. */
 export function nextEvidenceSort(

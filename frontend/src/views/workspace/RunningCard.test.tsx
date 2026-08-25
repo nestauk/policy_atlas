@@ -126,11 +126,38 @@ describe("runningCard helpers", () => {
       planWithSteps(),
     );
     expect(rows.filter((row) => row.stage === "acquire").map((row) => row.label)).toEqual([
-      "Searching",
+      "Searching (Round 1)",
       "Searching (Round 2)",
     ]);
     expect(rows.filter((row) => row.stage === "screen").map((row) => row.label)).toEqual([
-      "Screening",
+      "Screening (Round 1)",
+      "Screening (Round 2)",
+    ]);
+    expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
+  });
+
+  it("numbers Screening from the preceding Searching round when the screen summary has no round_index", () => {
+    const rows = stageRows(
+      [
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 1 },
+        }),
+        stage({ stage: "screen", label: "Screening", status: "completed" }),
+        stage({
+          stage: "acquire",
+          label: "Searching",
+          status: "completed",
+          summary: { round_index: 2 },
+        }),
+        stage({ stage: "screen", label: "Screening", status: "completed" }),
+      ],
+      planWithSteps(),
+    );
+    expect(rows.filter((row) => row.stage === "screen").map((row) => row.label)).toEqual([
+      "Screening (Round 1)",
       "Screening (Round 2)",
     ]);
   });
@@ -167,6 +194,7 @@ describe("runningCard helpers", () => {
   it("lists blurb, counts and elapsed on a completed step", () => {
     expect(
       stageDetailLines({
+        id: "acquire:1:1",
         stage: "acquire",
         label: "Searching",
         status: "completed",
@@ -182,6 +210,7 @@ describe("runningCard helpers", () => {
       "running",
       [
         {
+          id: "acquire:1:1",
           stage: "acquire",
           label: "Searching",
           status: "started",
@@ -289,5 +318,76 @@ describe("RunningCard", () => {
     expect(CHAT_PRIMARY_CTA_CLASS).toContain("px-6 py-3.5 text-body font-bold");
     await user.click(screen.getByRole("button", { name: "See plan" }));
     expect(onSeePlan).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands only the Searching round that was clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <RunningCard
+          projectId={PROJECT_ID}
+          status="running"
+          stages={[
+            stage({
+              stage: "acquire",
+              label: "Searching",
+              status: "completed",
+              summary: { round_index: 1, found: 12 },
+              seconds: 4,
+            }),
+            stage({
+              stage: "screen",
+              label: "Screening",
+              status: "completed",
+              summary: { round_index: 1 },
+            }),
+            stage({
+              stage: "acquire",
+              label: "Searching",
+              status: "completed",
+              summary: { round_index: 2, found: 8 },
+              seconds: 6,
+            }),
+            stage({
+              stage: "screen",
+              label: "Screening",
+              status: "completed",
+              summary: { round_index: 2 },
+            }),
+          ]}
+          plan={planWithSteps()}
+          startedAt="2026-07-21T10:00:00Z"
+          hasFindings={false}
+          minimised={false}
+          onMinimisedChange={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Searching (Round 2)" }));
+    expect(screen.getByText("Took 6s")).toBeInTheDocument();
+    expect(screen.queryByText("Took 4s")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Searching (Round 1)" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Searching (Round 2)" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Screening (Round 1)" }));
+    expect(screen.getByRole("button", { name: "Searching (Round 2)" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Screening (Round 1)" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Screening (Round 2)" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   });
 });

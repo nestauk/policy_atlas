@@ -262,7 +262,7 @@ export function AppShell() {
         <TitleMarkerProvider active={hasPendingCheckIn}>
           <div
             className={cn(
-              "flex w-full flex-col",
+              "flex w-full min-w-0 max-w-full flex-col",
               base === null ? "min-h-svh" : "h-svh overflow-hidden",
             )}
           >

@@ -2172,10 +2172,151 @@ def _source_cited_in(
     ]
 
 
+# Immediate window around a located quote. Neighbour chunks are only attached
+# when this window hits that edge of the current chunk, and then only a short
+# snippet — never the whole adjacent chunk (that read as off-topic grey text).
+_CONTEXT_SIDE_CHARS = 800
+_ADJACENT_SNIPPET_CHARS = 220
+_ELLIPSIS = "..."
+
+
+def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
+    """Return one adjacent chunk's content when the sequence exists."""
+    return conn.execute(
+        select(chunk.c.content).where(
+            chunk.c.source_snapshot_id == source_snapshot_id, chunk.c.sequence == sequence
+        )
+    ).scalar_one_or_none()
+
+
+def _snap_start(text: str, index: int, *, not_past: int) -> int:
+    """Advance a start cut to the next word, without crossing ``not_past``.
+
+    A mid-word cut drops the partial word. An unspaced run that reaches the
+    quote is left as-is so the window does not collapse onto the span.
+    """
+    if index <= 0:
+        return 0
+    limit = min(not_past, len(text))
+    if index >= limit:
+        return limit
+    if not text[index].isspace() and not text[index - 1].isspace():
+        at = index
+        while at < limit and not text[at].isspace():
+            at += 1
+        if at >= limit:
+            return index
+        index = at
+    while index < limit and text[index].isspace():
+        index += 1
+    return index
+
+
+def _snap_end(text: str, index: int, *, not_before: int) -> int:
+    """Retreat an end cut to the previous word, without crossing ``not_before``.
+
+    A mid-word cut drops the partial word. An unspaced run out of the quote
+    is left as-is so the window does not collapse onto the span.
+    """
+    if index >= len(text):
+        return len(text)
+    limit = max(not_before, 0)
+    if index <= limit:
+        return limit
+    if not text[index - 1].isspace() and (index == len(text) or not text[index].isspace()):
+        at = index
+        while at > limit and not text[at - 1].isspace():
+            at -= 1
+        if at <= limit:
+            return index
+        index = at
+    while index > limit and text[index - 1].isspace():
+        index -= 1
+    return index
+
+
+def _edge_snippet(raw: str, *, from_end: bool) -> str:
+    """Clip an adjacent chunk to a short seam snippet, ellipsis-marked both sides."""
+    if from_end:
+        start = _snap_start(raw, max(0, len(raw) - _ADJACENT_SNIPPET_CHARS), not_past=len(raw))
+        snippet = raw[start:].strip()
+        if snippet == "":
+            snippet = raw[-_ADJACENT_SNIPPET_CHARS:].strip()
+            start = max(0, len(raw) - _ADJACENT_SNIPPET_CHARS)
+        prefix = _ELLIPSIS if start > 0 else ""
+        return f"{prefix}{snippet}{_ELLIPSIS}"
+    end = _snap_end(raw, min(len(raw), _ADJACENT_SNIPPET_CHARS), not_before=0)
+    snippet = raw[:end].strip()
+    if snippet == "":
+        snippet = raw[:_ADJACENT_SNIPPET_CHARS].strip()
+        end = min(len(raw), _ADJACENT_SNIPPET_CHARS)
+    suffix = _ELLIPSIS if end < len(raw) else ""
+    return f"{_ELLIPSIS}{snippet}{suffix}"
+
+
+def _clamped_quote_window(
+    conn: Connection,
+    project_id: uuid.UUID,
+    text: str,
+    quote: str,
+    sequence: int,
+    source_snapshot_id: uuid.UUID,
+) -> ChunkContextOut | None:
+    """Clamp a unique quote to a local window, with short edge neighbours.
+
+    Args:
+        conn: Open connection.
+        project_id: Owning project (for year/venue).
+        text: The cited chunk's raw content.
+        quote: The citation or chat quote, as stored.
+        sequence: Chunk sequence in the snapshot.
+        source_snapshot_id: Snapshot the chunk belongs to.
+
+    Returns:
+        The window, or ``None`` when the quote is absent or ambiguous.
+    """
+    span = locate_unique_span(build_basis([(None, text)]), quote)
+    if span is None:
+        return None
+    position, end = span
+    start_window = max(0, position - _CONTEXT_SIDE_CHARS)
+    end_window = min(len(text), end + _CONTEXT_SIDE_CHARS)
+    previous = None
+    following = None
+    if start_window == 0:
+        raw = _adjacent_chunk(conn, source_snapshot_id, sequence - 1)
+        if raw:
+            previous = _edge_snippet(raw, from_end=True)
+    if end_window == len(text):
+        raw = _adjacent_chunk(conn, source_snapshot_id, sequence + 1)
+        if raw:
+            following = _edge_snippet(raw, from_end=False)
+    start_window = _snap_start(text, start_window, not_past=position)
+    end_window = _snap_end(text, end_window, not_before=end)
+    prefix = _ELLIPSIS if start_window > 0 else ""
+    suffix = _ELLIPSIS if end_window < len(text) else ""
+    return ChunkContextOut(
+        context=prefix + text[start_window:end_window] + suffix,
+        span_start=position - start_window + len(prefix),
+        span_end=end - start_window + len(prefix),
+        clamped=start_window > 0 or end_window < len(text),
+        previous=previous,
+        next=following,
+        year=_chunk_year(conn, project_id, source_snapshot_id),
+        venue=_chunk_venue(conn, project_id, source_snapshot_id),
+    )
+
+
 def chunk_context_out(
     conn: Connection, project_id: uuid.UUID, citation_id: uuid.UUID
 ) -> ChunkContextOut | None:
-    """Return at most 800 characters either side of a cited, anchored source span."""
+    """Return a local window around an artefact citation's quote.
+
+    Locates the stored quote with the same ``locate_unique_span`` locator as
+    the chat/findings path (case, whitespace, curly quotes), then clamps to
+    :data:`_CONTEXT_SIDE_CHARS` either side. An ambiguous or absent quote is
+    honest absence, not a guessed span.
+    """
     row = conn.execute(
         select(citation.c.quote, chunk.c.content, chunk.c.sequence, chunk.c.source_snapshot_id)
         .select_from(
@@ -2188,28 +2329,13 @@ def chunk_context_out(
     ).one_or_none()
     if row is None:
         return None
-    quote = row.quote
-    text = row.content
-    # Citation rows keep a verified quote but not a character interval.  An
-    # ambiguous repeated quote has no honest recoverable span, so this seam is
-    # absent rather than guessing at a document position.
-    if text.count(quote) != 1:
-        return None
-    position = text.find(quote)
-    if position < 0:
-        return None
-    end = position + len(quote)
-    start_window = max(0, position - 800)
-    end_window = min(len(text), end + 800)
-    return ChunkContextOut(
-        context=text[start_window:end_window],
-        span_start=position - start_window,
-        span_end=end - start_window,
-        clamped=start_window > 0 or end_window < len(text),
-        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
-        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
-        year=_chunk_year(conn, project_id, row.source_snapshot_id),
-        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+    return _clamped_quote_window(
+        conn,
+        project_id,
+        row.content,
+        row.quote,
+        row.sequence,
+        row.source_snapshot_id,
     )
 
 
@@ -2247,32 +2373,9 @@ def chunk_quote_context_out(
     ).one_or_none()
     if row is None:
         return None
-    text = row.content
-    span = locate_unique_span(build_basis([(None, text)]), quote)
-    if span is None:
-        return None
-    position, end = span
-    start_window = max(0, position - 800)
-    end_window = min(len(text), end + 800)
-    return ChunkContextOut(
-        context=text[start_window:end_window],
-        span_start=position - start_window,
-        span_end=end - start_window,
-        clamped=start_window > 0 or end_window < len(text),
-        previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
-        next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
-        year=_chunk_year(conn, project_id, row.source_snapshot_id),
-        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+    return _clamped_quote_window(
+        conn, project_id, row.content, quote, row.sequence, row.source_snapshot_id
     )
-
-
-def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: int) -> str | None:
-    """Return one adjacent chunk's content when the sequence exists."""
-    return conn.execute(
-        select(chunk.c.content).where(
-            chunk.c.source_snapshot_id == source_snapshot_id, chunk.c.sequence == sequence
-        )
-    ).scalar_one_or_none()
 
 
 def _chunk_metadata(

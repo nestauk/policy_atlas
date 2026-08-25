@@ -162,7 +162,7 @@ export function RunningCard({
 
   return (
     <section aria-label="Analysis run" className="bg-green px-4 py-4 text-navy">
-      <p className="text-caption font-bold tracking-label text-navy/80">{eyebrow}</p>
+      <p className="text-meta font-bold tracking-label text-navy/80">{eyebrow}</p>
       <div className="mt-1 flex items-start justify-between gap-3">
         <h2 className="text-lead font-bold">{title}</h2>
         {tone !== "stopped" && (
@@ -181,13 +181,13 @@ export function RunningCard({
         <ol aria-label="Stage timeline" className="mt-3">
           {rows.map((row) => (
             <StepRow
-              key={row.stage}
+              key={row.id}
               projectId={projectId}
               row={row}
-              expanded={expandedStage === row.stage}
+              expanded={expandedStage === row.id}
               hasFindings={hasFindings}
               onToggle={() =>
-                setExpandedStage((current) => (current === row.stage ? null : row.stage))
+                setExpandedStage((current) => (current === row.id ? null : row.id))
               }
             />
           ))}

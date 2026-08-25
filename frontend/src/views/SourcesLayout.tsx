@@ -30,8 +30,8 @@ export function SourcesLayout() {
   ];
 
   return (
-    <div className={`${WIDE_PAGE_CLASS} py-6`}>
-      <div className="border border-line bg-paper">
+    <div className={`${WIDE_PAGE_CLASS} min-h-full py-6`}>
+      <div className="bg-paper">
         <nav aria-label="Sources" className="flex border-b border-line">
           {tabs.map((tab, index) => (
             <NavLink
@@ -40,7 +40,7 @@ export function SourcesLayout() {
               end={tab.end}
               className={({ isActive }) =>
                 cn(
-                  "flex-1 px-4 py-2.5 text-center text-caption font-extrabold uppercase tracking-[0.06em] no-underline",
+                  "flex-1 px-4 py-2.5 text-center text-meta font-extrabold uppercase tracking-[0.06em] no-underline",
                   index > 0 && "border-l border-line",
                   isActive ? "bg-navy text-white" : "text-grey hover:text-navy",
                 )

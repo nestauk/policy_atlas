@@ -49,7 +49,7 @@ export function ChatsLibrary({ projectId, open, onClose }: { projectId: string; 
     <div role="dialog" aria-modal="true" aria-label="Chats" className="absolute inset-x-3 top-3 z-20 max-h-[calc(100%-24px)] overflow-y-auto border border-line bg-paper p-4 shadow-lg">
       <div className="mb-3 flex items-center justify-between"><h2 className="font-display text-heading font-bold text-navy">Chats</h2><button type="button" aria-label="Close chats" onClick={onClose}>×</button></div>
       <LibraryGroups rows={active.data?.data ?? []} onOpen={openRow} editing={editing} title={title} setTitle={setTitle} onRename={startRename} onCommit={commitRename} onArchive={(id) => void archive(id)} />
-      {(archived.data?.data.length ?? 0) > 0 && <><h3 className="mt-5 border-b border-line pb-1 text-caption font-bold uppercase tracking-[0.06em] text-grey">Archived</h3><LibraryGroups rows={archived.data?.data ?? []} onOpen={openArchivedRow} editing={editing} title={title} setTitle={setTitle} onRename={startRename} onCommit={commitRename} onArchive={(id) => void unarchive(id)} archived /></>}
+      {(archived.data?.data.length ?? 0) > 0 && <><h3 className="mt-5 border-b border-line pb-1 text-meta font-bold uppercase tracking-[0.06em] text-grey">Archived</h3><LibraryGroups rows={archived.data?.data ?? []} onOpen={openArchivedRow} editing={editing} title={title} setTitle={setTitle} onRename={startRename} onCommit={commitRename} onArchive={(id) => void unarchive(id)} archived /></>}
     </div>
   );
 }
@@ -60,7 +60,7 @@ function LibraryGroups({ rows, ...props }: { rows: LibraryRow[]; onOpen: (row: L
     const label = dateGroup(row.latest_turn_preview?.at ?? row.created_at);
     groups.set(label, [...(groups.get(label) ?? []), row]);
   }
-  return <>{[...groups].map(([label, grouped]) => <section key={label}><h3 className="mt-3 text-caption font-bold uppercase tracking-[0.06em] text-grey">{label}</h3>{grouped.map((row) => <LibraryRow key={row.id} row={row} {...props} />)}</section>)}</>;
+  return <>{[...groups].map(([label, grouped]) => <section key={label}><h3 className="mt-3 text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</h3>{grouped.map((row) => <LibraryRow key={row.id} row={row} {...props} />)}</section>)}</>;
 }
 
 function LibraryRow({ row, onOpen, editing, title, setTitle, onRename, onCommit, onArchive, archived = false }: { row: LibraryRow; onOpen: (row: LibraryRow) => void; editing: string | null; title: string; setTitle: (value: string) => void; onRename: (row: LibraryRow) => void; onCommit: (id: string) => Promise<void>; onArchive: (id: string) => void; archived?: boolean }) {

@@ -333,7 +333,7 @@ export function CheckInCard({
 
       {suggestedOptions.length > 0 && (
         <div className="mt-4 border border-blue-tint bg-blue-tint/40 px-3 py-2.5">
-          <p className="text-caption font-bold uppercase tracking-[0.06em] text-blue">
+          <p className="text-meta font-bold uppercase tracking-[0.06em] text-blue">
             Suggested from this run's results
           </p>
           <div className="mt-2 flex flex-col gap-2">

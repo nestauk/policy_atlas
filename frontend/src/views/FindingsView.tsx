@@ -25,6 +25,7 @@ import {
   findingLabel,
   PROFILE_LABEL,
 } from "./findingsVocabulary";
+import { FILTER_CHIP_CLASS, TABLE_HEADER_TEXT_CLASS } from "./sourcesPresentation";
 
 type FindingOut = components["schemas"]["FindingOut"];
 type IofFinding = Extract<FindingOut, { profile: "iof" }>;
@@ -112,7 +113,7 @@ function ExactWords({
   });
   return (
     <div>
-      <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
+      <h3 className="mb-2 text-meta font-bold uppercase tracking-[0.06em] text-grey">
         The exact words
       </h3>
       {context.data?.context !== undefined && context.data.context !== "" ? (
@@ -142,7 +143,7 @@ function IofExpansion({ finding, projectId }: { finding: IofFinding; projectId: 
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
+        <h3 className="mb-2 text-meta font-bold uppercase tracking-[0.06em] text-grey">
           Reported numbers
         </h3>
         {stats.length === 0 && finding.estimate_level === null ? (
@@ -193,7 +194,7 @@ function IcfExpansion({ finding, projectId }: { finding: IcfFinding; projectId: 
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
-        <h3 className="mb-2 text-caption font-bold uppercase tracking-[0.06em] text-grey">
+        <h3 className="mb-2 text-meta font-bold uppercase tracking-[0.06em] text-grey">
           Context detail
         </h3>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-caption">
@@ -398,7 +399,7 @@ export function FindingsView() {
                 next.delete("page");
               })
             }
-            className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
+            className={`${FILTER_CHIP_CLASS} ${
               profile === value
                 ? "border-blue bg-blue-tint text-blue"
                 : "border-line bg-paper text-grey hover:bg-ground"
@@ -421,7 +422,7 @@ export function FindingsView() {
                 next.delete("page");
               })
             }
-            className={`cursor-pointer border px-2.5 py-1 text-caption focus-visible:outline-2 focus-visible:outline-blue ${
+            className={`${FILTER_CHIP_CLASS} ${
               group === undefined
                 ? "border-blue bg-blue-tint text-blue"
                 : "border-line bg-paper text-grey hover:bg-ground"
@@ -449,7 +450,7 @@ export function FindingsView() {
                     next.delete("page");
                   })
                 }
-                className={`cursor-pointer border px-2.5 py-1 text-caption focus-visible:outline-2 focus-visible:outline-blue ${
+                className={`${FILTER_CHIP_CLASS} ${
                   group === candidate.label
                     ? "border-blue bg-blue-tint text-blue"
                     : "border-line bg-paper text-grey hover:bg-ground"
@@ -487,19 +488,19 @@ export function FindingsView() {
 
       {findings.data !== undefined && (
         <>
-          <p className="mt-4 text-caption text-grey" role="status">
+          <p className="mt-4 text-meta text-grey" role="status">
             {totalItems} finding{totalItems === 1 ? "" : "s"}
             {profile !== undefined || group !== undefined ? " match the filters" : ""}
           </p>
           <div className="mt-2 overflow-x-auto bg-paper shadow-sm ring-1 ring-line">
             <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-line">
+              <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
+                <tr>
                   <th className="w-8 px-3 py-2.5">
                     <span className="sr-only">Expand</span>
                   </th>
                   {showKind && (
-                    <th className="px-3 py-2.5 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+                    <th className="px-3 py-2.5">
                       Kind
                     </th>
                   )}
@@ -507,7 +508,7 @@ export function FindingsView() {
                     (heading) => (
                       <th
                         key={heading}
-                        className="px-3 py-2.5 text-caption font-extrabold uppercase tracking-[0.06em] text-grey"
+                        className="px-3 py-2.5"
                       >
                         {heading}
                       </th>

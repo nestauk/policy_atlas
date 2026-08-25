@@ -3,15 +3,17 @@ import { describe, expect, it } from "vitest";
 import { LIFECYCLE_TABS, isTabOpen, lifecycleTabs, taskDestination } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
 
-/** The contract's locking table, transcribed independently of the source. */
+/** The locking table after the 2026-08-25 steer: Results opens while a run
+ *  is executing so the in-progress write-up is reachable. Failed runs still
+ *  lock Results. */
 const LOCKING_TABLE: ReadonlyArray<{
   state: string;
   status: Parameters<typeof isTabOpen>[1];
   open: readonly LifecycleTab[];
 }> = [
   { state: "no run yet", status: null, open: ["plan", "share"] },
-  { state: "running", status: "running", open: ["plan", "sources", "share", "history"] },
-  { state: "paused", status: "paused", open: ["plan", "sources", "share", "history"] },
+  { state: "running", status: "running", open: [...LIFECYCLE_TABS] },
+  { state: "paused", status: "paused", open: [...LIFECYCLE_TABS] },
   { state: "succeeded", status: "succeeded", open: [...LIFECYCLE_TABS] },
   { state: "degraded", status: "degraded", open: [...LIFECYCLE_TABS] },
   { state: "failed", status: "failed", open: ["plan", "sources", "share", "history"] },
@@ -60,10 +62,16 @@ describe("lifecycleTabs", () => {
   });
 
   it("marks the locked ones rather than dropping them", () => {
-    const locked = lifecycleTabs("/projects/p1", "running")
+    const locked = lifecycleTabs("/projects/p1", "failed")
       .filter((entry) => entry.locked)
       .map((entry) => entry.tab);
     expect(locked).toEqual(["results"]);
+  });
+
+  it("opens Results while a run is executing", () => {
+    expect(
+      lifecycleTabs("/projects/p1", "running").filter((entry) => entry.locked),
+    ).toEqual([]);
   });
 });
 

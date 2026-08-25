@@ -29,7 +29,8 @@ on the 032 surfaces. Screen word **Task** = `project` row; screen word
 (ADR 0032). Contract, plan and rubric:
 `docs/tasks/033-ux-snags/`. **Tier 3** — join table + public read/write shape
 (`portfolio_ids`, Included `source_count`, additive `FindingOut.chunk_id`) +
-`planner_v8` → `planner_v9` (OECD members source-origin default). No new
+`planner_v9` → `planner_v10` (OECD members source-origin default plus OECD
+study-setting screening criterion). No new
 runtime egress.
 
 **Owner decisions, 2026-08-24, recorded in the plan:** (1) **standard review,

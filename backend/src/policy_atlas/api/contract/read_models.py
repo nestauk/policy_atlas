@@ -604,10 +604,15 @@ class ChunkContextOut(BaseModel):
 
     Args:
         context: Context text, clamped to a character window around the
-            cited span.
+            cited span. Truncated edges are snapped to a word boundary and
+            marked with ``...``.
         span_start: Start offset of the clamped context.
         span_end: End offset of the clamped context.
         clamped: Whether the window was clamped (hit a chunk boundary).
+        previous: Short tail of the previous chunk, only when the window
+            reaches the start of this chunk; otherwise omitted.
+        next: Short head of the next chunk, only when the window reaches
+            the end of this chunk; otherwise omitted.
     """
 
     context: str

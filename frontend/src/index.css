@@ -276,8 +276,15 @@
 
 @layer base {
   html {
-    scrollbar-gutter: stable;
     background: var(--color-ground);
+    /* Reserve a scrollbar lane on document-scrolling pages (Tasks, Projects)
+       so the layout does not jump when the bar appears. Task views lock
+       `html` to `overflow-hidden` (AppShell); leaving the gutter on then
+       paints a dead ground strip down the right of the nav and every pane. */
+    scrollbar-gutter: stable;
+  }
+  html.overflow-hidden {
+    scrollbar-gutter: auto;
   }
   body,
   #root {

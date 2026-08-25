@@ -265,10 +265,12 @@ cross-owner, and — except where noted — archived conversations are 404).
   no-op read, not an error).
 - `GET /projects/{id}/chunks/{chunk_id}/context?quote=` — the chat-citation
   hover/click read: the same clamped context-window shape as the artefact
-  citation-context read above, resolved from a chat citation's durable chunk
-  id plus its quote (chat citations carry chunk ids, not artefact
-  citation-table ids). An ambiguous or unmatched quote is 404, same rule as
-  the artefact seam.
+  citation-context read above (including short edge-only `previous`/`next`
+  snippets), resolved from a chat citation's durable chunk id plus its quote
+  (chat citations carry chunk ids, not artefact citation-table ids). An
+  ambiguous or unmatched quote is 404, same rule as the artefact seam. Both
+  keyings locate the quote with `locate_unique_span` (case, whitespace,
+  curly quotes), not a literal unique-substring count.
 
 ### Runs
 
@@ -330,7 +332,8 @@ cited by the latest artefact only) · `decisions` (paginated
 decision log from `steering_history` + allowlisted events) · `artefact`
 (sections, span-anchored claims, citations; the chunk-context read model
 clamps context to a character window around the cited span — the 008
-seam's named consumer) · `coverage` (the composed one-line coverage
+seam's named consumer — and only attaches a short `previous`/`next`
+snippet when that window hits a chunk edge) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
 
