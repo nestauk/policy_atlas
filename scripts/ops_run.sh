@@ -21,7 +21,7 @@
 #
 # No credential ever touches argv: DATABASE_URL is assembled in-process and
 # exported. OPS_DRY_RUN=1 prints the CLI argv (one per line) instead of doing
-# anything — tests/ops/test_make_wrappers.py uses it to parse every make
+# anything — backend/tests/ops/test_make_wrappers.py uses it to parse every make
 # wrapper's output against the real parser, so wrapper↔CLI drift fails the
 # suite.
 set -euo pipefail

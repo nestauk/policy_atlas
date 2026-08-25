@@ -1,4 +1,4 @@
-.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -91,6 +91,12 @@ dev:
 	    --ttl 14400 2>/dev/null | tail -1); \
 	  cd frontend && VITE_DEV_TOKEN="$$token" pnpm dev & \
 	  wait)
+
+# Seed the LOCAL dev DB with "Dev Org" + three enrolled identities so the 033
+# tenancy UI is visible in `make dev` (which signs in as dev-user, the owner).
+# Local-only: the script refuses non-localhost hosts and *_test databases.
+dev-seed:
+	uv run --project backend python scripts/dev_org_seed.py
 
 test:
 	$(MAKE) -C backend test
