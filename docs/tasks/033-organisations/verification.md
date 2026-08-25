@@ -376,6 +376,68 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   gains `/me` (unenrolled default — dark launch), portfolio routes, and
   `portfolio_id` filtering. frontend-verify green (422 tests); `pnpm e2e` 11/11.
 
+### Phase 10b — Chrome and copy
+- Switcher (Organisation · Mine) on both list views, hidden entirely when `/me`
+  has no organisation — and no `scope` param is sent, so the unenrolled UI is
+  byte-identical (rubric 14). Owner column rule:
+  `showOwnerColumn = hasSwitcher || any non-owned row` (collapses to false for
+  every unenrolled state); null `owner_display` renders "—", and
+  "No organisation" on the admin wide list. Account menu (display name,
+  CSS-truncated email, organisation, "Administrator") extended in place in
+  AppShell. Check-in banner gated on `is_owner` at the one AppShell site that
+  covers poll, badge, tab marker and banner (rubric 38). HistoryView verified
+  non-owner-readable — no frontend gating existed to remove (rubric 39).
+  VisibilityControl ships the binding outcome lines (singular/plural) and the
+  i.5 conflict copy; copy strings were lead-authored and wired verbatim.
+- frontend-verify green (443 tests, 64 files); e2e 11/11.
+
+### Phase 10c — The read-only affordance matrix
+- Component by component (rubric 37): `ProjectSettingsMenu` rename/archive
+  hidden · `PlanningPane` + `ChatSidePanel` duplicate — composer disabled with
+  "Steering is limited to the project owner." (the one flag also covers retry
+  controls and in-transcript options; chips hidden as defense-in-depth) ·
+  `PlanCard` — Review kept, Start search hidden · `RunPane` both fresh-run
+  buttons · `CheckInCard` hidden entirely · the plan-start block via
+  `PlanDocument`'s existing `readOnly` (`hasRun || !isOwner`). Chat surfaces
+  stay enabled for colleagues (granted mutations).
+- **URL leg:** `/projects/:id` is the only mutation-bearing route; a non-owner
+  reaching it by address gets the read-only variant, no redirect; `isOwner`
+  fails closed while loading. Pinned by `WorkspaceView.test.tsx`.
+- **Live bug closed:** `stream.pendingCheckIn` is ownership-blind SSE state — a
+  colleague viewing during a pending check-in saw the full steering card
+  (options, free-text steer, Stop analysis) before this phase.
+- Findings flagged, not skipped: `RunPane`/`JourneyPane` are currently dead code
+  (gated + tested anyway); "plan-start card" resolved to `PlanDocument`'s Start
+  block (distinct from `PlanCard`); cosmetic quirk — the settings gear renders
+  an empty popover for a non-owner (not a safety issue, left alone).
+- frontend-verify green (460 tests, 66 files); e2e 11/11; `fe-api-smoke` is
+  CI-only (needs live backend credentials — sandbox denies `.env` reads).
+
+### Phase 11 — Records (spec flow-back)
+- `web-api.md`: § Auth boundary rewritten to the three read legs + write grade +
+  NULL rule + `/me` + filters + the admin trace; envelope gains 403 `forbidden`
+  and 409 `visibility_conflict` (422 reuse stated); Projects/Portfolios sections
+  carry the tenancy params, the three read fields, `from_project_id`, the cascade
+  and the invariant; Conversations carries the grades, `created_by`, the three
+  colleague mutations and the re-keyed cap/sweeper; read models re-headed to the
+  read grade; SSE gains the re-authorisation paragraph.
+- `data-model.md`: tenancy note under § Entity hierarchy.
+- `JUMPBOX.md`: operator IAM (exactly `ListUsers` + `AdminCreateUser`; no
+  deletable path; no task-role Cognito permission). `DEPLOYMENT.md`: § 6 ops-CLI
+  invocation over the tunnel; § 8 the 033 roll-forward posture, the evidenced
+  chat-exposure rationale, and the manual downgrade procedure (the ECS task
+  upgrades only).
+- `docs/deferred.md`: build seams added (org-less admin CLI gap · PortfolioOut
+  last-updated field · admin_stream_read volume · RunPane dead code · ops CLI
+  rename coverage); the stale mock-API portfolio entry discharged.
+- **ADR 0032 drift check: no drift** — all six decisions match the as-built code
+  (two tables/two columns; sub-only identity; three legs with the SQL NULL rule;
+  the read-only admin boolean with the structurally asserted four-reader list and
+  trace-as-sole-control; entrypoint logging; the invariant + ADR 0031 D4
+  amendment). The one sub-decision detail — `cache_logger_on_first_use` dropped —
+  is a flagged deviation above, not ADR-level drift.
+- okf-validate green (120 concepts, 0 violations).
+
 ## Diff summary
 
 (Assembled per phase; final pass at Phase 12.)

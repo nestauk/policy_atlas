@@ -160,6 +160,14 @@ have rotated or regenerated the password since it was last copied.
 
 ## Security notes
 
+- **Operator IAM for the ops CLI (task 033):** the human operator running
+  `python -m policy_atlas.ops` over this tunnel needs exactly two Cognito
+  permissions on the environment's user pool — `cognito-idp:ListUsers` and
+  `cognito-idp:AdminCreateUser` — plus STS `GetCallerIdentity` (always
+  allowed) for the environment guard. Grant nothing more: the CLI has no
+  delete path by design, and `AdminDeleteUser` must not be grantable
+  through this role. No Cognito permission ever attaches to an ECS task
+  role.
 - Session start and stop activity is controlled by AWS IAM and recorded by AWS.
   Session Manager cannot log the contents of port-forwarded database traffic;
   use database audit logging where query-level evidence is required.

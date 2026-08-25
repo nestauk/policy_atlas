@@ -2178,8 +2178,31 @@ omissions.
   `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
-- **Portfolio surfaces in the mock API** — `src/mock/api.ts` serves no
-  `/api/v1/portfolios`, so the projects list, the project detail page and find-a-task
-  cannot be driven in mock mode or in the CI mock journey. Their coverage is backend
-  route tests plus frontend unit tests only. Extending the mock fixture would let the
-  contract's live check 7 be driven in a browser.
+- **Portfolio surfaces in the mock API** — ~~`src/mock/api.ts` serves no
+  `/api/v1/portfolios`~~ **discharged by 033 Phase 10a** (2026-08-25): the mock now
+  serves `/api/v1/me`, `GET /api/v1/portfolios`, `GET /api/v1/portfolios/{id}` and
+  `portfolio_id` filtering on the projects list, enough for the 033 journeys. Mock
+  coverage of portfolio *mutations* beyond the visibility PATCH remains partial.
+
+## Organisations (task 033 build seams)
+
+- **No CLI path to an organisation-less administrator** (build finding, 2026-08-25).
+  `admin grant --email` resolves by the address on `app_user`, which only
+  `user enrol --org` writes — so every admin is enrolled somewhere. The live check's
+  "admin in neither org" is met by enrolling the admin into a third organisation.
+  If a truly org-less admin is ever wanted: an org-less enrol mode (clean) or
+  grant-by-sub (rejected in 033 — it bypasses the address-mediated FOR UPDATE
+  compare-and-refuse that stops concurrent operators resurrecting admin).
+- **`PortfolioOut` carries no last-task-updated timestamp**, so the Projects
+  overview derives "most recently active" from one global projects page raised to
+  the 200-row server cap — an approximation that can mis-order the overview beyond
+  200 active tasks. The fix is a derived field on the portfolio read shape; the
+  detail view is already exact via the `portfolio_id` filter.
+- **`admin_stream_read` volume** — an idle admin SSE stream emits one trace line per
+  0.4 s poll (~2.5/s), which is § 3a's grain implemented as written. If CloudWatch
+  cost bites, the lever is the poll interval (or batching), never dropping the grain.
+- **`RunPane`/`JourneyPane` are dead code** — imported by no route; 033 Phase 10c
+  gated and tested them anyway, so re-wiring them inherits the affordance matrix.
+  Either re-wire or delete in a later slice.
+- **The ops CLI reports in code words** (`project`/`portfolio`) — the post-033 rename
+  slice must cover `policy_atlas.ops` and its operator-facing strings.

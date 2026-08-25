@@ -413,6 +413,16 @@ to read the database secret. Do not grant the engineer role access to the
 AWS-managed remote-host port-forwarding document, which would let the caller
 choose a different remote target.
 
+**The ops CLI (task 033) runs over this same tunnel** — the operator's
+laptop, `uv run python -m policy_atlas.ops --env staging|prod ...` with
+`DATABASE_URL` pointing at `localhost:15432`, under the operator's own IAM
+(Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser`, nothing
+more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+task: Cognito permission belongs to the human operator, not to a task
+role, and the API task role gains no Cognito permission. Every command
+verifies the resolved AWS account and user pool against the connected
+database before acting and refuses on a mismatch (§ 3 has the commands).
+
 ```bash
 # 1. DB credentials from the generated cluster secret
 DB_SECRET=$(aws ssm get-parameter --name /policy_atlas_v3/db/secret_name \
@@ -457,6 +467,27 @@ in committable form — CI's font-guard stays green.
 
 ## 8. Rollback
 
+- **Task 033 (organisations): roll forward, not back.** The 033 migration's
+  downgrade is schema-reversible but **data-destructive and chat-exposing**:
+  it drops `conversation.created_by`, so every colleague's chat authorship
+  is lost and pre-033 code lists *all* conversations on a project to its
+  owner — a rollback after adoption exposes colleagues' private chats to
+  the project owner (evidenced by
+  `test_downgrade_erases_chat_authorship_exposing_colleague_chats`, which
+  also proves a re-upgrade misattributes the rows rather than undoing the
+  exposure). It also drops both `visibility` columns, so a later re-upgrade
+  resets every row to `org` and no private choice can be reconstructed. The
+  real safety net is the dark launch: with no organisations enrolled the
+  behaviour is byte-identical to pre-033, and **de-enrolling an
+  organisation reverts it without a deploy**. A schema downgrade is a last
+  resort requiring a backup restore first (Aurora keeps 7 days).
+- **Manual downgrade procedure (last resort — the ECS migration task runs
+  `alembic upgrade head` only and has no downgrade path):** scale the API
+  to zero → restore or snapshot the cluster → open the § 6 tunnel → from
+  `backend/` run `DATABASE_URL=<tunnel-url> uv run alembic downgrade
+  b3c7d914e0a2` → deploy the pre-033 image → scale up. Do not do this on a
+  database that has enrolled organisations without owner sign-off on the
+  chat-exposure consequence above.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in
