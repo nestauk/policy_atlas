@@ -21,9 +21,20 @@ export type StageSignpost = { href: string; label: string; message: string };
 export const CHAT_PRIMARY_CTA_CLASS =
   "cutout inline-block bg-blue px-6 py-3.5 text-body font-bold text-white";
 
-/** Outline CTA on the green running card (See plan). */
+/** Option C running-card shell: 15% Nesta-green tint, green as the accent. */
+export const RUNNING_CARD_SHELL_CLASS =
+  "border-2 border-[#17A88D] bg-[#DDF2EE] text-navy";
+
+/** Row rules on the tinted card — Nesta green at 40% opacity. */
+export const RUNNING_CARD_RULE_CLASS = "border-t border-[rgba(23,168,141,0.4)]";
+
+/** Outline CTA on the tinted running card (See plan). */
 export const SEE_PLAN_CTA_CLASS =
-  "inline-block cursor-pointer border border-blue bg-transparent px-6 py-3.5 text-body font-bold text-blue";
+  "inline-block cursor-pointer border-2 border-blue bg-paper px-6 py-3.5 text-body font-bold text-blue";
+
+/** Chat-thread notice once the run has landed. */
+export const RUN_FINISHED_MESSAGE =
+  "Evidence search is finished. You can read the report in the Results tab.";
 
 /** Eyebrow and title for the in-thread running card. */
 export function runningCardCopy(status: RunStatus | undefined): {
@@ -258,6 +269,21 @@ export function signpostForStage(
   return null;
 }
 
+/** Chat-thread destination once the write-up exists — last word, not a stage echo. */
+export function runFinishedSignpost(
+  projectId: string,
+  status: RunStatus | undefined,
+): StageSignpost | null {
+  if (status === "succeeded" || status === "degraded") {
+    return {
+      href: `/projects/${projectId}/results`,
+      label: "Results",
+      message: RUN_FINISHED_MESSAGE,
+    };
+  }
+  return null;
+}
+
 /** Completed-stage signposts in timeline order, one per destination. */
 export function completedSignposts(
   stages: StageEntry[],
@@ -285,7 +311,7 @@ export function resultsSignpost(
     return {
       href: `/projects/${projectId}/results`,
       label: "Read the evidence base",
-      message: "The evidence base is ready.",
+      message: RUN_FINISHED_MESSAGE,
     };
   }
   return null;

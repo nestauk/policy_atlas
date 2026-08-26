@@ -12,7 +12,11 @@ import {
   elapsedSeconds,
   formatElapsed,
   resultsSignpost,
+  RUN_FINISHED_MESSAGE,
+  runFinishedSignpost,
+  RUNNING_CARD_SHELL_CLASS,
   runningCardCopy,
+  SEE_PLAN_CTA_CLASS,
   signpostForStage,
   stageDetailLines,
   stageRows,
@@ -173,6 +177,12 @@ describe("runningCard helpers", () => {
     expect(signpostForStage("extract", PROJECT_ID, true)?.message).toBe("Findings are ready.");
     expect(resultsSignpost(PROJECT_ID, "succeeded")?.label).toBe("Read the evidence base");
     expect(resultsSignpost(PROJECT_ID, "running")).toBeNull();
+    expect(runFinishedSignpost(PROJECT_ID, "succeeded")).toEqual({
+      href: `/projects/${PROJECT_ID}/results`,
+      label: "Results",
+      message: RUN_FINISHED_MESSAGE,
+    });
+    expect(runFinishedSignpost(PROJECT_ID, "running")).toBeNull();
   });
 
   it("lists completed signposts in stage order", () => {
@@ -254,6 +264,12 @@ describe("RunningCard", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Analysis running…" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Analysis run" }).className).toContain("bg-[#DDF2EE]");
+    expect(screen.getByRole("region", { name: "Analysis run" }).className).toContain("border-[#17A88D]");
+    expect(RUNNING_CARD_SHELL_CLASS).toContain("bg-[#DDF2EE]");
+    expect(screen.getByRole("button", { name: "Minimise" }).className).toContain("text-blue");
+    expect(screen.getByText("Mapping").className).toContain("text-grey");
+    expect(screen.getByText("Done").className).toContain("text-navy");
     expect(screen.getByRole("list", { name: "Stage timeline" })).toHaveTextContent("Searching");
     expect(screen.queryByRole("link", { name: /Sources are ready/ })).toBeNull();
 
@@ -316,6 +332,8 @@ describe("RunningCard", () => {
     expect(results.className).toContain("px-6");
     expect(results.className).toContain("text-body");
     expect(CHAT_PRIMARY_CTA_CLASS).toContain("px-6 py-3.5 text-body font-bold");
+    expect(SEE_PLAN_CTA_CLASS).toContain("border-2");
+    expect(SEE_PLAN_CTA_CLASS).toContain("bg-paper");
     await user.click(screen.getByRole("button", { name: "See plan" }));
     expect(onSeePlan).toHaveBeenCalledTimes(1);
   });
