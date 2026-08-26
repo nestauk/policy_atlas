@@ -110,6 +110,34 @@ if ! nc -z 127.0.0.1 15432 2>/dev/null; then
   [ "$opened" = "1" ] || { echo "tunnel did not open :15432 within 30s" >&2; exit 2; }
 fi
 
+# Liveness probe: a listening :15432 is NOT a live tunnel — an SSM session
+# that expired overnight leaves a local listener that accepts and then drops
+# connections, which surfaces as a psycopg traceback mid-command. Probe with a
+# real database connection before handing over, and name the stale-tunnel
+# remedy when a REUSED port fails the probe.
+if ! DATABASE_URL="$DATABASE_URL" uv run --project "$repo_root/backend" python - <<'PY' 2>/dev/null
+import os
+import sys
+
+import psycopg
+
+url = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
+try:
+    psycopg.connect(url, connect_timeout=8).close()
+except Exception:
+    sys.exit(1)
+PY
+then
+  if [ -z "$tunnel_pid" ]; then
+    echo "STALE TUNNEL: :15432 is listening but the database did not answer —" >&2
+    echo "likely an expired SSM session from earlier. Close it and re-run:" >&2
+    echo "  lsof -ti :15432 | xargs kill" >&2
+  else
+    echo "tunnel opened but the database did not answer through it" >&2
+  fi
+  exit 2
+fi
+
 # stdin/tty pass through: the CLI's typed confirmation must reach a human.
 cd "$repo_root"
 uv run --project backend python -m policy_atlas.ops --env "$env" "$@"
