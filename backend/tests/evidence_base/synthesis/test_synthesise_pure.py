@@ -15,6 +15,7 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     build_judge_messages,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+    KEY_FINDINGS_GAP_MAX,
     ClaimWire,
     GapPayloadWire,
     PatternPayloadWire,
@@ -52,6 +53,7 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
     _bind_unspanned,
     _conclusions_focus,
     _judge_claims,
+    _key_findings_ledger,
     _section_claims,
     _validate_sections,
     bind_spans,
@@ -1149,7 +1151,7 @@ def test_proposed_conclusion_title_rejected_but_injected_title_is_exempt() -> No
     assert injected.title == "Conclusions"
     assert injected.role == "conclusions"
     assert "What works?" in injected.focus
-    assert "recommendations" in injected.focus
+    assert "recommendation" in injected.focus
 
 
 # --- Review-stack fixes (018 step 7): empty gate + unspanned-lane honesty ---
@@ -1552,3 +1554,114 @@ def test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal() -> None:
     # The judged claim carries its verdict; the pattern claim never gains one.
     assert reasoning_claim.verdict is not None
     assert pattern_claim.verdict is None
+
+
+def _gap_draft(*, text: str = "No rural trials.") -> ClaimDraft:
+    return ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="gap",
+        text=text,
+        annotation_type="gap",
+        payload={
+            "gap": {
+                "grade": "inferred",
+                "coverage_base": "screened",
+                "coverage_record_id": None,
+                "sparsity": None,
+            }
+        },
+        verdict="tier_1",
+    )
+
+
+def test_key_findings_ledger_carries_gap_payload() -> None:
+    section = SectionSpec(title="Coverage", focus="Where the evidence runs out.")
+    ledger = _key_findings_ledger([(section, [_gap_draft()])])
+    assert ledger[0]["claims"][0]["gap"] == {
+        "grade": "inferred",
+        "coverage_base": "screened",
+        "coverage_record_id": None,
+        "sparsity": None,
+    }
+
+
+def test_key_findings_gap_restatement_accepts_matching_grade_and_base() -> None:
+    text = "No rural trials."
+    claim = ClaimWire(
+        claim_type="gap",
+        text=text,
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    batch = validate_claims(
+        [claim],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, len(text))],
+        available_claim_types={"gap"},
+        gap_restatement_seeds=[
+            {"grade": "inferred", "coverage_base": "screened", "coverage_record_id": "cov-1"}
+        ],
+    )
+    assert batch.rejected == []
+    assert len(batch.drafts) == 1
+    assert batch.drafts[0].payload["gap"]["coverage_record_id"] == "cov-1"
+
+
+def test_key_findings_gap_restatement_rejects_forged_grade() -> None:
+    text = "Nothing found in the search."
+    claim = ClaimWire(
+        claim_type="gap",
+        text=text,
+        gap=GapPayloadWire(
+            grade="corpus_absence",
+            coverage_base="screened",
+            coverage_record_id="forged",
+        ),
+    )
+    batch = validate_claims(
+        [claim],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, len(text))],
+        available_claim_types={"gap"},
+        gap_restatement_seeds=[{"grade": "inferred", "coverage_base": "screened"}],
+    )
+    assert [item.reason for item in batch.rejected] == ["gap_not_restated"]
+
+
+def test_key_findings_gap_restatement_caps_at_two() -> None:
+    texts = [
+        "No rural trials.",
+        "No cost evidence.",
+        "No long-term follow-up.",
+    ]
+    claims = [
+        ClaimWire(
+            claim_type="gap",
+            text=text,
+            gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+        )
+        for text in texts
+    ]
+    prose = "\n".join(f"- {text}" for text in texts)
+    spans = bind_spans(prose, texts)
+    batch = validate_claims(
+        claims,
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=spans,
+        available_claim_types={"gap"},
+        gap_restatement_seeds=[{"grade": "inferred", "coverage_base": "screened"}],
+    )
+    assert len(batch.drafts) == KEY_FINDINGS_GAP_MAX
+    assert [item.reason for item in batch.rejected] == ["gap_restatement_cap"]

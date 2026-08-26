@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockArtefact } from "../mock/fixtures";
-import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename } from "./artefactPresentation";
+import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, splitLeadColon } from "./artefactPresentation";
 
 describe("mostRelevantSources", () => {
   it("ranks by how many claims cite each source, not how many citation rows", () => {
@@ -188,10 +188,12 @@ describe("artefactMarkdown", () => {
     references: [{ n: 1, title: "A study", year: 2022, venue: "BMJ Open" }],
   };
 
-  it("writes title, verified summary, sections in report order, citation markers, and references", () => {
+  it("writes title, labelled In brief, sections in report order, citation markers, and references", () => {
     const markdown = artefactMarkdown(artefact);
     expect(markdown).toContain("# Policy options for healthier childhoods");
+    expect(markdown).toContain("**In brief**");
     expect(markdown).toContain("Universal provision helps.");
+    expect(markdown.indexOf("**In brief**")).toBeLessThan(markdown.indexOf("## What appears to help"));
     expect(markdown.indexOf("## What appears to help")).toBeLessThan(markdown.indexOf("## Implications"));
     expect(markdown).toContain("Universal breakfast helps[1] children eat.");
     expect(markdown).toContain("## References");
@@ -208,6 +210,64 @@ describe("artefactMarkdown", () => {
     expect(markdown).toContain("support more consistent breakfast consumption[1]");
     expect(markdown).toContain("## References");
     expect(markdown).toMatch(/^1\. /m);
+  });
+
+  it("bolds lead-colon key-findings bullets and lists most relevant sources before the body", () => {
+    const markdown = artefactMarkdown({
+      title: "Report",
+      summary: "Takeaway.",
+      summary_status: "verified",
+      sections: [
+        {
+          title: "Key findings",
+          role: "key_findings",
+          blocks: [
+            {
+              prose: "- Universal breakfast helped: eleven of fifteen evaluations reported higher uptake.\n- No colon on this line.",
+            },
+          ],
+        },
+        {
+          title: "What works",
+          role: "standard",
+          blocks: [
+            {
+              prose: "Body prose.",
+              claims: [
+                {
+                  citations: [
+                    {
+                      n: 1,
+                      source_id: "src-1",
+                      source_title: "A breakfast study",
+                      appraisal_label: "high",
+                      evidence_type: "Trial",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      references: [{ n: 1, title: "A breakfast study" }],
+    });
+    expect(markdown).toContain("- **Universal breakfast helped:** eleven of fifteen evaluations reported higher uptake.");
+    expect(markdown).toContain("- No colon on this line.");
+    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("## Key findings"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("## What works"));
+    expect(markdown).toContain("**A breakfast study**");
+  });
+});
+
+describe("splitLeadColon", () => {
+  it("splits on the first colon-space and leaves no-colon lines alone", () => {
+    expect(splitLeadColon("Universal breakfast helped: eleven of fifteen.")).toEqual({
+      lead: "Universal breakfast helped",
+      rest: "eleven of fifteen.",
+    });
+    expect(splitLeadColon("No colon here.")).toBeNull();
+    expect(splitLeadColon(": leading colon is not a lead")).toBeNull();
   });
 });
 

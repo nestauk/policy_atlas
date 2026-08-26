@@ -5,7 +5,7 @@ import { Link, useParams, useSearchParams } from "react-router";
 import type { components } from "../api/gen/types";
 import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
-import { mostRelevantSources, sectionNavLabel } from "./artefactPresentation";
+import { mostRelevantSources, sectionNavLabel, splitLeadColon } from "./artefactPresentation";
 import type { TopSource } from "./artefactPresentation";
 import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
@@ -65,6 +65,7 @@ interface BlockLike {
 }
 interface SectionLike {
   title: string;
+  nav_label?: string | null;
   role?: "key_findings" | "standard" | "conclusions";
   focus?: string | null;
   blocks?: BlockLike[];
@@ -781,6 +782,88 @@ export function spanSegments<C extends { span?: number[] | null }>(
   return parts;
 }
 
+type BulletSegment = SpanSegment<ClaimLike>;
+
+function stripBulletPrefix(text: string, isFirst: boolean): string {
+  return isFirst ? text.replace(/^\s*- /, "") : text;
+}
+
+function sliceSegment(segment: BulletSegment, start: number, end: number): BulletSegment {
+  const text = segment.text.slice(start, end);
+  return segment.kind === "plain" ? { kind: "plain", text } : { kind: "claim", text, claim: segment.claim };
+}
+
+/**
+ * Bold everything before the first `: ` on a key-findings bullet (034 S3).
+ *
+ * The split is display-only. A claim span that crosses the colon is sliced
+ * into two affordances of the same claim rather than mis-joined. No colon
+ * leaves the line unbolded.
+ */
+function renderLeadColonBullet(
+  segments: BulletSegment[],
+  onOpenClaim: (claim: ClaimLike) => void,
+): ReactNode {
+  const cleaned: BulletSegment[] = segments.map((segment, index) => {
+    const text = stripBulletPrefix(segment.text, index === 0);
+    return segment.kind === "plain"
+      ? { kind: "plain", text }
+      : { kind: "claim", text, claim: segment.claim };
+  });
+  const full = cleaned.map((segment) => segment.text).join("");
+  const split = splitLeadColon(full);
+
+  const renderSegs = (parts: BulletSegment[], keyPrefix: string) =>
+    parts.map((segment, index) =>
+      segment.kind === "plain" ? (
+        <span key={`${keyPrefix}${index}`}>{scrub(segment.text)}</span>
+      ) : (
+        <ClaimSpan
+          key={`${keyPrefix}${index}`}
+          claim={segment.claim}
+          text={segment.text}
+          onOpen={onOpenClaim}
+        />
+      ),
+    );
+
+  if (split === null) return renderSegs(cleaned, "u");
+
+  const splitAt = full.indexOf(": ");
+  const colonEnd = splitAt + 2;
+  const leadPieces: BulletSegment[] = [];
+  const restPieces: BulletSegment[] = [];
+  let offset = 0;
+  for (const segment of cleaned) {
+    const start = offset;
+    const end = offset + segment.text.length;
+    offset = end;
+    if (end <= splitAt) {
+      leadPieces.push(segment);
+      continue;
+    }
+    if (start >= colonEnd) {
+      restPieces.push(segment);
+      continue;
+    }
+    if (start < splitAt) {
+      leadPieces.push(sliceSegment(segment, 0, splitAt - start));
+    }
+    if (end > colonEnd) {
+      restPieces.push(sliceSegment(segment, colonEnd - start, segment.text.length));
+    }
+  }
+  return (
+    <>
+      <strong>
+        {renderSegs(leadPieces, "l")}
+        :
+      </strong>
+      {restPieces.length > 0 ? <> {renderSegs(restPieces, "r")}</> : null}
+    </>
+  );
+}
+
 /**
  * Render a block's prose with its annotation layer IN the text: span-anchored
  * claims wrap their exact prose span (overlapping/oversize spans are skipped
@@ -833,25 +916,20 @@ export function AnnotatedProse({
     return (
       <div className="max-w-prose-measure text-lead text-ink">
         <ul className="list-none space-y-1.5">
-          {bullets.map((bullet, bulletIndex) => (
-            <li key={bulletIndex} className="flex gap-2">
-              <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 bg-blue" />
-              <span>
-                {bullet.map((segment, index) =>
-                  segment.kind === "plain" ? (
-                    <span key={index}>{scrub(segment.text.replace(/^\s*- /, ""))}</span>
-                  ) : (
-                    <ClaimSpan
-                      key={index}
-                      claim={segment.claim}
-                      text={segment.text.replace(/^\s*- /, "")}
-                      onOpen={onOpenClaim}
-                    />
-                  ),
-                )}
-              </span>
-            </li>
-          ))}
+          {bullets.map((bullet, bulletIndex) => {
+            const isGap = bullet.some(
+              (segment) => segment.kind === "claim" && segment.claim.claim_type === "gap",
+            );
+            return (
+              <li key={bulletIndex} className="flex gap-2">
+                <span
+                  aria-hidden="true"
+                  className={`mt-2 h-1.5 w-1.5 shrink-0 ${isGap ? "bg-yellow" : "bg-blue"}`}
+                />
+                <span>{renderLeadColonBullet(bullet, onOpenClaim)}</span>
+              </li>
+            );
+          })}
         </ul>
         {crossing.map((claim) => (
           <p key={claim.claim_id} className="mt-2 text-lead text-grey">
@@ -1048,9 +1126,12 @@ function AnswerCallout({
 }) {
   if (status === "verified" && summary != null && summary !== "") {
     return (
-      <p className="mt-4 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-4 py-3 text-lead text-ink">
-        {scrub(summary)}
-      </p>
+      <div className="mt-4">
+        <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">In brief</p>
+        <p className="mt-2 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-4 py-3 text-lead text-ink">
+          {scrub(summary)}
+        </p>
+      </div>
     );
   }
   if (status === "pending") {
@@ -1071,6 +1152,22 @@ function AnswerCallout({
  * a study matters: that is a judgement nobody made, and asserting it would be
  * the report inventing authority for itself.
  */
+function appraisalChipTone(label: string | null): ChipProps["tone"] {
+  if (label === null) return "soft";
+  switch (label.toLowerCase()) {
+    case "high":
+      return "green";
+    case "moderate":
+      return "blue";
+    case "low":
+      return "yellow";
+    case "very_low":
+      return "red";
+    default:
+      return "soft";
+  }
+}
+
 function MostRelevantSources({
   sources,
   onOpenDossier,
@@ -1080,13 +1177,11 @@ function MostRelevantSources({
 }) {
   if (sources.length === 0) return null;
   return (
-    <section className="mt-8 border-t border-line pt-6">
-      <h2 className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-        Most cited sources
-      </h2>
-      <ul role="list" className="mt-3 space-y-3">
+    <section id="sources" className="mb-9">
+      <h3 className="text-heading font-bold text-navy">Most relevant sources</h3>
+      <ul role="list" className="mt-3 grid gap-3 sm:grid-cols-2">
         {sources.map((source) => (
-          <li key={source.sourceId} className="border border-line p-3">
+          <li key={source.sourceId} className="border border-line p-4">
             <button
               type="button"
               onClick={() => onOpenDossier(source.title)}
@@ -1094,14 +1189,24 @@ function MostRelevantSources({
             >
               {scrub(source.title)}
             </button>
-            <p className="mt-1 text-body text-grey">
-              Cited by {source.citationCount === 1 ? "1 claim" : `${source.citationCount} claims`}
-              {source.appraisalLabel != null && ` · ${scrub(source.appraisalLabel)}`}
-              {source.evidenceType != null && ` · ${scrub(source.evidenceType)}`}
-            </p>
-            <p className="mt-1 text-body text-grey">
-              In {source.citedInSections.map((title) => scrub(title)).join(", ")}
-            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {source.appraisalLabel != null && (
+                <Chip tone={appraisalChipTone(source.appraisalLabel)}>
+                  {scrub(source.appraisalLabel)}
+                </Chip>
+              )}
+              {source.evidenceType != null && (
+                <Chip tone="default">{scrub(source.evidenceType)}</Chip>
+              )}
+              <Chip tone="soft">
+                {source.citationCount === 1 ? "Cited by 1 claim" : `Cited by ${source.citationCount} claims`}
+              </Chip>
+            </div>
+            {source.citedInSections.length > 0 && (
+              <p className="mt-2 text-caption text-grey">
+                In {source.citedInSections.map((title) => scrub(title)).join(", ")}
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -1223,16 +1328,22 @@ export function ArtefactView() {
   }
 
   const snapshot = data.coverage_snapshot;
-  // Study types and years count the CITED set (the live cited-scope
-  // landscape), not the whole included corpus.
-  const citedTypes = Object.entries(citedLandscape.data?.evidence_types ?? {}).sort(
-    ([, a], [, b]) => b - a,
-  );
-  const shownTypes = citedTypes.slice(0, 3);
+  // Years count the CITED set (the live cited-scope landscape), not the
+  // whole included corpus. Study types live under Method, not this strip.
   const citedYears = Object.keys(citedLandscape.data?.years ?? {})
     .map(Number)
     .filter(Number.isInteger);
   const sections = orderSections((data.sections ?? []) as SectionLike[]);
+  const firstBodyIndex = sections.findIndex((section) => section.role !== "key_findings");
+  const frontSections =
+    firstBodyIndex === -1 ? sections.map((section, index) => ({ section, index })) : sections.slice(0, firstBodyIndex).map((section, index) => ({ section, index }));
+  const bodySections =
+    firstBodyIndex === -1
+      ? []
+      : sections.slice(firstBodyIndex).map((section, index) => ({
+          section,
+          index: firstBodyIndex + index,
+        }));
 
   // Sources links into the sources view, filtered to the cited set
   // (028 F.5): there is no `status=cited` value, so the cited count routes
@@ -1247,17 +1358,9 @@ export function ArtefactView() {
       `/projects/${projectId}/sources/all?cited=true`,
     ]);
   }
-  if (shownTypes.length > 0) {
-    snapshotCells.push([
-      "Study types",
-      shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
-        (citedTypes.length > 3 ? ` · +${citedTypes.length - 3} more` : ""),
-      null,
-    ]);
-  }
   if (citedYears.length > 0) {
     snapshotCells.push([
-      "Years covered",
+      "Published",
       `${Math.min(...citedYears)}–${Math.max(...citedYears)}`,
       null,
     ]);
@@ -1274,19 +1377,25 @@ export function ArtefactView() {
   const topSources = mostRelevantSources(sections);
 
   const outlineEntries = [
-    ...orderSections((data.sections ?? []) as SectionLike[]).map((section, index) => ({
+    { id: "answer", title: "Executive summary" },
+    ...frontSections.map(({ section, index }) => ({
+      id: sectionAnchor(section.title, index),
+      title: sectionNavLabel(section, 28),
+    })),
+    ...(topSources.length > 0 ? [{ id: "sources", title: "Most relevant sources" }] : []),
+    ...bodySections.map(({ section, index }) => ({
       id: sectionAnchor(section.title, index),
       title: sectionNavLabel(section, 28),
     })),
     ...((data.references ?? []).length > 0 ? [{ id: "references", title: "References" }] : []),
-    { id: "gathered", title: "How the evidence was gathered" },
+    { id: "gathered", title: "Method" },
   ];
 
   return (
     <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 md:flex-row">
       <ContentsSidebar entries={outlineEntries} />
       <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
-      <header className="mb-8">
+      <header id="answer" className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
@@ -1302,7 +1411,7 @@ export function ArtefactView() {
         {/* No question subtitle — the title already carries it (owner, 2026-08-05). */}
         <AnswerCallout summary={data.summary ?? null} status={data.summary_status ?? null} />
         {snapshotCells.length > 0 && (
-          <div className="mt-5 grid grid-cols-4 border border-line">
+          <div className="mt-5 grid grid-cols-3 border border-line">
             {snapshotCells.map(([label, value, href]) => {
               const content = (
                 <>
@@ -1330,7 +1439,7 @@ export function ArtefactView() {
             surfaces where it matters — inside each gap claim's detail. */}
       </header>
 
-      {sections.map((section, index) => (
+      {frontSections.map(({ section, index }) => (
         <SectionDisclosure
           key={index}
           id={sectionAnchor(section.title, index)}
@@ -1348,6 +1457,20 @@ export function ArtefactView() {
       ))}
 
       <MostRelevantSources sources={topSources} onOpenDossier={openDossier} />
+
+      {bodySections.map(({ section, index }) => (
+        <SectionDisclosure
+          key={index}
+          id={sectionAnchor(section.title, index)}
+          section={section as OutlineSection}
+          collapsible={section.role !== "key_findings"}
+          defaultOpen={false}
+        >
+          {(section.blocks ?? []).map((block) => (
+            <AnnotatedProse key={block.block_id} block={block} onOpenClaim={setDetailClaim} />
+          ))}
+        </SectionDisclosure>
+      ))}
 
       {(data.references ?? []).length > 0 && (
         <ReferencesSection

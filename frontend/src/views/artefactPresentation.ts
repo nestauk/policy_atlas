@@ -8,7 +8,7 @@
  */
 type CitationLike = {
   source_id?: string | null;
-  source_title: string;
+  source_title?: string;
   appraisal_label?: string | null;
   evidence_type?: string | null;
 };
@@ -79,7 +79,7 @@ export function mostRelevantSources(
           if (existing === undefined) {
             bySource.set(sourceId, {
               sourceId,
-              title: citation.source_title,
+              title: citation.source_title ?? "",
               citationCount: 1,
               appraisalLabel: citation.appraisal_label ?? null,
               evidenceType: citation.evidence_type ?? null,
@@ -126,10 +126,59 @@ export function sectionNavLabel(section: SectionLike, max = 28): string {
   return `${(lastSpace > max / 2 ? clipped.slice(0, lastSpace) : clipped).trimEnd()}…`;
 }
 
+/**
+ * Split a key-findings bullet on the first `: ` (task 034 S3).
+ *
+ * Display-only: stored prose is unchanged. No colon, or a colon with no
+ * following space, returns null so the renderer leaves the line unbolded.
+ */
+export function splitLeadColon(text: string): { lead: string; rest: string } | null {
+  const index = text.indexOf(": ");
+  if (index <= 0) return null;
+  return { lead: text.slice(0, index), rest: text.slice(index + 2) };
+}
+
+function markdownKeyFindingsLine(line: string): string {
+  const stripped = line.replace(/^\s*- /, "");
+  const split = splitLeadColon(stripped);
+  if (split === null) return `- ${stripped}`;
+  return `- **${split.lead}:** ${split.rest}`;
+}
+
+function markdownKeyFindingsProse(prose: string): string {
+  const lines = prose.split("\n").filter((line) => line.trim() !== "");
+  const isBulleted = lines.length > 0 && lines.every((line) => line.trimStart().startsWith("- "));
+  if (!isBulleted) return prose;
+  return lines.map(markdownKeyFindingsLine).join("\n");
+}
+
+function markdownMostRelevantSources(sources: TopSource[]): string[] {
+  if (sources.length === 0) return [];
+  const lines: string[] = ["### Most relevant sources", ""];
+  for (const source of sources) {
+    const facts = [
+      source.citationCount === 1 ? "cited by 1 claim" : `cited by ${source.citationCount} claims`,
+      source.appraisalLabel,
+      source.evidenceType,
+    ].filter((part): part is string => part != null && part !== "");
+    const citedIn =
+      source.citedInSections.length > 0 ? ` In: ${source.citedInSections.join(", ")}.` : "";
+    lines.push(`- **${source.title}** — ${facts.join(" · ")}.${citedIn}`);
+  }
+  lines.push("");
+  return lines;
+}
+
 type MarkdownClaim = {
   claim_type?: string;
   span?: number[] | null;
-  citations?: Array<{ n: number }>;
+  citations?: Array<{
+    n?: number;
+    source_id?: string | null;
+    source_title?: string;
+    appraisal_label?: string | null;
+    evidence_type?: string | null;
+  }>;
 };
 
 type MarkdownSection = {
@@ -147,7 +196,13 @@ type MarkdownArtefact = {
 };
 
 function citationMarker(claim: MarkdownClaim): string {
-  const numbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
+  const numbers = [
+    ...new Set(
+      (claim.citations ?? [])
+        .map((citation) => citation.n)
+        .filter((n): n is number => typeof n === "number"),
+    ),
+  ];
   return numbers.length > 0 ? `[${numbers.join(",")}]` : "";
 }
 
@@ -199,16 +254,27 @@ function sectionsInReportOrder(sections: MarkdownSection[]): MarkdownSection[] {
 }
 
 /**
- * The report as a markdown file: title, verified summary, section prose,
- * numbered references. Unverified summaries are omitted (same honesty as
- * the on-screen callout).
+ * The report as a markdown file: title, labelled In brief, key findings,
+ * most relevant sources, body, conclusions, numbered references. Unverified
+ * summaries are omitted (same honesty as the on-screen callout).
  */
 export function artefactMarkdown(artefact: MarkdownArtefact): string {
   const lines: string[] = [`# ${artefact.title}`, ""];
   if (artefact.summary_status === "verified" && artefact.summary != null && artefact.summary !== "") {
-    lines.push(artefact.summary, "");
+    lines.push("**In brief**", "", artefact.summary, "");
   }
-  for (const section of sectionsInReportOrder(artefact.sections ?? [])) {
+  const ordered = sectionsInReportOrder(artefact.sections ?? []);
+  const keyFindings = ordered.filter((section) => section.role === "key_findings");
+  const rest = ordered.filter((section) => section.role !== "key_findings");
+  for (const section of keyFindings) {
+    lines.push(`## ${section.title}`, "");
+    for (const block of section.blocks ?? []) {
+      const prose = proseWithCitationMarkers(block.prose, block.claims ?? []).trim();
+      if (prose !== "") lines.push(markdownKeyFindingsProse(prose), "");
+    }
+  }
+  lines.push(...markdownMostRelevantSources(mostRelevantSources(artefact.sections)));
+  for (const section of rest) {
     lines.push(`## ${section.title}`, "");
     for (const block of section.blocks ?? []) {
       const prose = proseWithCitationMarkers(block.prose, block.claims ?? []).trim();

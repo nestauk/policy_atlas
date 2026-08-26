@@ -1,6 +1,6 @@
 """Tests for the B2′ synthesis consumer (024 / ADR 0023).
 
-The section-drafting prompt bumps to ``synthesise_section_v8`` (always), with
+The section-drafting prompt bumps to ``synthesise_section_v9`` (always), with
 the priority-findings block rendered conditionally on the run carrying
 relevance annotations; member findings and ``query_findings`` results gain a
 ``"relevance"`` mark when (and only when) the run carries annotations; and the
@@ -61,8 +61,8 @@ def _seed() -> dict[str, Any]:
 # --- 1. Version + conditional block ------------------------------------------
 
 
-def test_section_prompt_version_is_v8() -> None:
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v8"
+def test_section_prompt_version_is_v9() -> None:
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v9"
 
 
 def test_block_absent_when_not_active() -> None:

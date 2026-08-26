@@ -15,9 +15,16 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     build_envelope,
     build_judge_messages,
 )
+from policy_atlas.evidence_base.synthesis.summary_prompts import (
+    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
+    SUMMARISER_PROMPT_VERSION,
+)
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     EMIT_SECTION_TOOL_SCHEMA,
     FORBIDDEN_SECTION_TITLES,
+    KEY_FINDINGS_GAP_MAX,
+    KEY_FINDINGS_PROMPT_VERSION,
+    KEY_FINDINGS_SYSTEM_PROMPT,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SECTION_PROMPT_VERSION,
     SECTION_SYSTEM_PROMPT,
@@ -38,11 +45,12 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     PassThroughChunkReranker,
     ToolExchange,
 )
+from policy_atlas.evidence_base.synthesis.voice_prompt import VOICE_PRINCIPLES
 
 
 def test_prompt_versions_are_distinct_constants() -> None:
-    assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v4"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v8"
+    assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v5"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v9"
     assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
 
@@ -65,10 +73,14 @@ def test_query_findings_schema_is_kind_typed_and_pattern_payload_knows_icf() -> 
 
 def test_sections_prompt_negative_rules() -> None:
     prompt = SECTIONS_SYSTEM_PROMPT
-    # Verdict-sections prohibited; answer-shaped lead explicitly legal (rev 7.1).
+    # Verdict-sections prohibited; the 028 overview lead is gone (034 S6).
     assert "verdict-section" in prompt
-    assert "answer-shaped lead section" in prompt
+    assert "answer-shaped lead section" not in prompt
     assert "does not rule" in prompt
+    # P9: short contents-ready titles; over-long titles rejected.
+    assert "P9" in prompt
+    assert "contents-ready" in prompt
+    assert "rejected, not shortened for you" in prompt
     # Generic/catch-all sections prohibited; cap present.
     assert "generic or catch-all" in prompt
     assert f"between 1 and {SECTION_CAP} sections" in prompt
@@ -144,6 +156,10 @@ def test_section_prompt_negative_rules() -> None:
     assert "abstract-grounded" in prompt
     # Claim-within-evidence rule.
     assert "preserve scope, caveats, population" in prompt
+    # 034 voice + corpus-touring ban.
+    assert VOICE_PRINCIPLES in SECTION_SYSTEM_PROMPT
+    assert "a high-level reading of the documents" in prompt
+    assert "Inference:" in prompt
 
 
 def test_section_tool_schemas_are_the_closed_set_plus_emission() -> None:
@@ -208,6 +224,24 @@ def test_section_repair_is_loop_free_and_reword_down() -> None:
     assert "claim_id" in repair
     assert "in the same order as" not in repair
     assert "emit_repairs" in repair
+
+
+def test_key_findings_prompt_lead_colon_and_gap_restatement() -> None:
+    prompt = " ".join(KEY_FINDINGS_SYSTEM_PROMPT.split())
+    assert KEY_FINDINGS_PROMPT_VERSION == "synthesise_key_findings_v3"
+    assert VOICE_PRINCIPLES in KEY_FINDINGS_SYSTEM_PROMPT
+    assert "lead-colon form (P5)" in prompt
+    assert "4–8-word claim lead" in prompt
+    assert f"at most {KEY_FINDINGS_GAP_MAX}" in prompt
+    assert 'typed "gap"' in prompt
+    assert "Never force a gap bullet" in prompt
+
+
+def test_summariser_prompt_carries_voice_and_bans_confidence() -> None:
+    assert SUMMARISER_PROMPT_VERSION == "summariser_v2"
+    assert VOICE_PRINCIPLES in ARTEFACT_SUMMARY_SYSTEM_PROMPT
+    assert "no confidence language" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
+    assert "In brief" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
 
 
 # --- grounding_judge_v2 ---

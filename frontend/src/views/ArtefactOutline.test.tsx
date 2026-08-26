@@ -217,4 +217,50 @@ describe("AnnotatedProse bullets (fork B)", () => {
     const anchored = screen.getByRole("button");
     expect(anchored.textContent ?? "").toContain("second");
   });
+
+  it("bolds the lead before the first colon-space and leaves no-colon bullets unbolded", () => {
+    const prose =
+      "- Universal breakfast helped: eleven of fifteen evaluations reported higher uptake.\n- No colon on this line.";
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{ block_id: "b-lead", prose, claims: [] }}
+          onOpenClaim={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    const items = screen.getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+    expect(items[0].querySelector("strong")?.textContent).toBe("Universal breakfast helped:");
+    expect(items[0].textContent).toContain("eleven of fifteen");
+    expect(items[1].querySelector("strong")).toBeNull();
+    expect(items[1].textContent).toContain("No colon on this line.");
+  });
+
+  it("marks a gap bullet distinctly from an evidence bullet", () => {
+    const prose = "- No rural trials: the coverage record is empty.";
+    const text = "No rural trials: the coverage record is empty.";
+    render(
+      <TooltipProvider>
+        <AnnotatedProse
+          block={{
+            block_id: "b-gap",
+            prose,
+            claims: [
+              {
+                claim_id: "g1",
+                claim_type: "gap" as const,
+                text,
+                span: [2, 2 + text.length] as [number, number],
+                citations: [],
+              },
+            ],
+          }}
+          onOpenClaim={vi.fn()}
+        />
+      </TooltipProvider>,
+    );
+    const marker = screen.getByRole("listitem").querySelector("[aria-hidden]");
+    expect(marker?.className).toContain("bg-yellow");
+  });
 });

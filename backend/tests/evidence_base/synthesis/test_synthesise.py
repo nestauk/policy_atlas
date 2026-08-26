@@ -48,6 +48,7 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     NAV_LABEL_MAX,
+    SECTION_TITLE_PROPOSAL_MAX,
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
@@ -946,6 +947,39 @@ def test_section_validation_rejects_a_blank_nav_label() -> None:
     _sections, reasons, _normalisations = _validate_sections(proposal, grouping_group_ids=None)
     assert len(reasons) == 1
     assert "nav_label_invalid" in reasons[0]
+
+
+def test_section_validation_rejects_an_over_long_title_without_truncating() -> None:
+    """034 S6 / F10: title is rejected at 60 chars, never clamped."""
+    title = "a" * (SECTION_TITLE_PROPOSAL_MAX + 1)
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title=title,
+                focus="A focused evidence aspect.",
+            )
+        ]
+    )
+    _sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert len(reasons) == 1
+    assert "title_too_long" in reasons[0]
+    assert normalisations == []
+
+
+def test_section_validation_accepts_a_title_at_the_proposal_max() -> None:
+    title = "a" * SECTION_TITLE_PROPOSAL_MAX
+    proposal = SectionProposalWire(
+        sections=[
+            SectionWire(
+                title=title,
+                focus="A focused evidence aspect.",
+            )
+        ]
+    )
+    sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert normalisations == []
+    assert sections[0].title == title
 
 
 def test_transitive_resolution_from_grouping_reference(conn: Connection) -> None:
@@ -2232,7 +2266,7 @@ def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
 
     # The conclusions focus is evidence-descriptive, never a recommendation.
     conclusions = _blocks_by_role(row)["conclusions"][0]
-    assert "What this evidence amounts to against the question" in conclusions["focus"]
+    assert "What the evidence amounts to on:" in conclusions["focus"]
     assert "recommendations" in conclusions["focus"]
 
     # The key-findings block re-cites a section's chunk claim, verified anew.
@@ -2248,7 +2282,7 @@ def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
 
     # Provenance records the key-findings prompt version and its call counts.
     provenance = row.synthesis_provenance
-    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v2"
+    assert provenance["prompt_versions"]["key_findings"] == "synthesise_key_findings_v3"
     call_counts = provenance["call_counts"]
     assert call_counts["key_findings"] == 1
     assert call_counts["key_findings_judge"] >= 1

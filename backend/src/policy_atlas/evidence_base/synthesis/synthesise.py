@@ -71,11 +71,12 @@ from policy_atlas.evidence_base.synthesis.summary_prompts import (
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     FORBIDDEN_SECTION_TITLES,
+    KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
     NAV_LABEL_MAX,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
-    SECTION_TITLE_MAX,
+    SECTION_TITLE_PROPOSAL_MAX,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
     SYNTHESIS_MODEL,
@@ -144,10 +145,10 @@ KEY_FINDINGS_TITLE = "Key findings"
 KEY_FINDINGS_FOCUS = "The report's headline claims."
 # Section focus the judge sees for the key-findings pass (envelope v2).
 KEY_FINDINGS_SECTION_FOCUS = "key findings"
-# The headline evidence claim types the key-findings pass may re-state — no
-# theme/gap/reasoning (headline evidence only), intersected with the run's
-# available claim types.
-KEY_FINDINGS_CLAIM_TYPES = {"finding", "chunk", "pattern"}
+# The headline evidence claim types the key-findings pass may re-state —
+# finding/chunk/pattern plus gap restatements (task 034 S3). Theme and
+# reasoning stay out. Intersected with the run's available claim types.
+KEY_FINDINGS_CLAIM_TYPES = {"finding", "chunk", "pattern", "gap"}
 
 
 def _conclusions_focus(intent: str) -> str:
@@ -157,10 +158,9 @@ def _conclusions_focus(intent: str) -> str:
     whole, never a recommendation or a verdict (EB scope).
     """
     return (
-        f"What this evidence amounts to against the question: {intent}. "
-        "Weigh the assembled evidence as a whole — where it is strong, where it "
-        "is thin, where it conflicts, and what remains unanswered — "
-        "descriptively, never as recommendations or a verdict."
+        f"What the evidence amounts to on: {intent}. "
+        "Weigh strength, conflict and what remains unanswered — descriptively, "
+        "never as a recommendation."
     )
 
 
@@ -671,6 +671,8 @@ def validate_claims(
     claim_indices: Sequence[int] | None = None,
     available_claim_types: set[str] | None = None,
     reasoning_count_start: int = 0,
+    gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
+    gap_restatement_count_start: int = 0,
 ) -> ClaimValidationBatch:
     """Validate emitted claims against an in-memory substrate view.
 
@@ -691,6 +693,12 @@ def validate_claims(
         reasoning_count_start: Reasoning claims already accepted for this
             section outside this batch, so the per-section cap binds across
             the initial and repair passes together.
+        gap_restatement_seeds: When set (key-findings pass), gap claims must
+            re-state a seed gap by matching ``grade`` and ``coverage_base``.
+            ``None`` keeps the ordinary section-loop gap validator.
+        gap_restatement_count_start: Gap restatements already accepted in
+            this section, so the cap binds across the initial and repair
+            passes together.
 
     Returns:
         Validated drafts and rejected claims.
@@ -706,6 +714,7 @@ def validate_claims(
     drafts: list[ClaimDraft] = []
     rejected: list[RejectedClaim] = []
     reasoning_count = reasoning_count_start
+    gap_restatement_accepted = gap_restatement_count_start
     for offset, claim in enumerate(claims):
         claim_id = (
             claim_ids[offset]
@@ -744,6 +753,8 @@ def validate_claims(
             citable_chunk_ids=citable_chunk_ids,
             reasoning_count=reasoning_count,
             available_claim_types=available,
+            gap_restatement_seeds=gap_restatement_seeds,
+            gap_restatement_accepted=gap_restatement_accepted,
         )
         if isinstance(result, RejectedClaim):
             # A structural rejection carries its bound span so the repair lane
@@ -752,6 +763,8 @@ def validate_claims(
         else:
             result.span = span
             drafts.append(result)
+            if result.claim_type == "gap" and gap_restatement_seeds is not None:
+                gap_restatement_accepted += 1
     return ClaimValidationBatch(drafts=drafts, rejected=rejected)
 
 
@@ -1755,9 +1768,11 @@ def _validate_sections(
     for index, section in enumerate(sections):
         title = section.title
         focus = section.focus
-        if len(title) > SECTION_TITLE_MAX:
-            title = title[: SECTION_TITLE_MAX - 1] + "…"
-            normalisations.append(f"sections[{index}].title_truncated")
+        if len(title) > SECTION_TITLE_PROPOSAL_MAX:
+            reasons.append(
+                f"sections[{index}].title_too_long: title must be "
+                f"at most {SECTION_TITLE_PROPOSAL_MAX} characters"
+            )
         if len(focus) > SECTION_FOCUS_MAX:
             focus = focus[: SECTION_FOCUS_MAX - 1] + "…"
             normalisations.append(f"sections[{index}].focus_truncated")
@@ -2090,6 +2105,8 @@ def _validate_claim(
     citable_chunk_ids: set[str],
     reasoning_count: int,
     available_claim_types: set[str],
+    gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
+    gap_restatement_accepted: int = 0,
 ) -> ClaimDraft | RejectedClaim:
     if claim.claim_type not in available_claim_types:
         return _reject(
@@ -2132,7 +2149,12 @@ def _validate_claim(
         )
     if claim.claim_type == "gap":
         return _validate_gap_claim(
-            claim, claim_id=claim_id, claim_index=claim_index, substrate=substrate
+            claim,
+            claim_id=claim_id,
+            claim_index=claim_index,
+            substrate=substrate,
+            gap_restatement_seeds=gap_restatement_seeds,
+            gap_restatement_accepted=gap_restatement_accepted,
         )
     if claim.claim_type == "reasoning":
         return _validate_reasoning_claim(
@@ -2621,13 +2643,79 @@ def _validate_theme_claim(
     )
 
 
+def _validate_restated_gap_claim(
+    claim: ClaimWire,
+    *,
+    claim_id: str,
+    claim_index: int,
+    seeds: Sequence[Mapping[str, Any]],
+    accepted_count: int,
+) -> ClaimDraft | RejectedClaim:
+    """Accept a key-findings gap only as a re-statement of a seed section gap.
+
+    Matches on ``grade`` and ``coverage_base``. The stored payload is copied
+    from the seed so the headline cannot forge a coverage record the sections
+    did not establish. The cap is deterministic and never forces a gap.
+    """
+    if _claim_has_citation_payload(claim) or claim.pattern is not None or claim.theme is not None:
+        return _reject(
+            claim, claim_id=claim_id, claim_index=claim_index, reason="gap_payload_invalid"
+        )
+    gap = claim.gap
+    if gap is None or not gap.coverage_base:
+        return _reject(claim, claim_id=claim_id, claim_index=claim_index, reason="gap_invalid")
+    if accepted_count >= KEY_FINDINGS_GAP_MAX:
+        return _reject(
+            claim,
+            claim_id=claim_id,
+            claim_index=claim_index,
+            reason="gap_restatement_cap",
+        )
+    match = next(
+        (
+            seed
+            for seed in seeds
+            if seed.get("grade") == gap.grade and seed.get("coverage_base") == gap.coverage_base
+        ),
+        None,
+    )
+    if match is None:
+        return _reject(
+            claim,
+            claim_id=claim_id,
+            claim_index=claim_index,
+            reason="gap_not_restated",
+        )
+    payload = _base_payload(claim_id, claim)
+    payload["gap"] = dict(match)
+    return ClaimDraft(
+        claim_id=claim_id,
+        claim_index=claim_index,
+        claim_type="gap",
+        text=claim.text,
+        annotation_type="gap",
+        payload=payload,
+        flags=[],
+    )
+
+
 def _validate_gap_claim(
     claim: ClaimWire,
     *,
     claim_id: str,
     claim_index: int,
     substrate: SubstrateView,
+    gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
+    gap_restatement_accepted: int = 0,
 ) -> ClaimDraft | RejectedClaim:
+    if gap_restatement_seeds is not None:
+        return _validate_restated_gap_claim(
+            claim,
+            claim_id=claim_id,
+            claim_index=claim_index,
+            seeds=gap_restatement_seeds,
+            accepted_count=gap_restatement_accepted,
+        )
     if _claim_has_citation_payload(claim) or claim.pattern is not None or claim.theme is not None:
         return _reject(
             claim, claim_id=claim_id, claim_index=claim_index, reason="gap_payload_invalid"
@@ -3479,6 +3567,7 @@ def _apply_and_rebuild(
     accounting: SectionAccounting,
     intent: str = "",
     section_focus: str = "",
+    gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
 ) -> tuple[list[ClaimDraft], str, int, dict[str, int], list[dict[str, Any]]]:
     """Apply the prose-splice repair: rebuild prose in one pass, re-validate and
     re-judge the repaired claims, and rebind span-bind failures (ADR 0015 §4).
@@ -3592,6 +3681,15 @@ def _apply_and_rebuild(
         for idx in kept_draft_indices
         if draft_by_index[idx].claim_type == "reasoning"
     )
+    gap_restatement_accepted = (
+        sum(
+            1
+            for idx in kept_draft_indices
+            if draft_by_index[idx].claim_type == "gap"
+        )
+        if gap_restatement_seeds is not None
+        else 0
+    )
 
     replacement_drafts: list[ClaimDraft] = []
     for idx in sorted(replace_claim_by_index):
@@ -3616,6 +3714,8 @@ def _apply_and_rebuild(
             citable_chunk_ids=citable_chunk_ids,
             reasoning_count=reasoning_count,
             available_claim_types=available_claim_types,
+            gap_restatement_seeds=gap_restatement_seeds,
+            gap_restatement_accepted=gap_restatement_accepted,
         )
         if isinstance(result, RejectedClaim):
             _count_exclusion(result, accounting=accounting)
@@ -3624,6 +3724,8 @@ def _apply_and_rebuild(
             raise SynthesiseFailure("span_rebind_invariant")
         result.span = new_span
         replacement_drafts.append(result)
+        if result.claim_type == "gap" and gap_restatement_seeds is not None:
+            gap_restatement_accepted += 1
 
     # Span-bind-failed repairs: no splice — rebind the rewritten claim text into
     # the current prose; still unbound → excluded (span_bind_failures).
@@ -3660,6 +3762,8 @@ def _apply_and_rebuild(
             citable_chunk_ids=citable_chunk_ids,
             reasoning_count=reasoning_count,
             available_claim_types=available_claim_types,
+            gap_restatement_seeds=gap_restatement_seeds,
+            gap_restatement_accepted=gap_restatement_accepted,
         )
         if isinstance(result, RejectedClaim):
             _count_exclusion(result, accounting=accounting)
@@ -3667,6 +3771,8 @@ def _apply_and_rebuild(
         result.span = rebind
         blocked_spans.append(rebind)
         rebound_drafts.append(result)
+        if result.claim_type == "gap" and gap_restatement_seeds is not None:
+            gap_restatement_accepted += 1
 
     rejudged = replacement_drafts + rebound_drafts
 
@@ -3709,6 +3815,7 @@ def _section_claims(
     accounting: SectionAccounting,
     intent: str = "",
     section_focus: str = "",
+    gap_restatement_seeds: Sequence[Mapping[str, Any]] | None = None,
 ) -> tuple[list[ClaimDraft], str, list[dict[str, Any]], dict[str, int], dict[str, int]]:
     call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
     usage_totals = UsageAccumulator()
@@ -3723,6 +3830,7 @@ def _section_claims(
         citable_chunk_ids=citable_chunk_ids,
         spans=spans,
         available_claim_types=available_claim_types,
+        gap_restatement_seeds=gap_restatement_seeds,
     )
     judge_calls, judge_usage, unspanned = _judge_claims(
         claims=initial.drafts,
@@ -3788,6 +3896,7 @@ def _section_claims(
                 accounting=accounting,
                 intent=intent,
                 section_focus=section_focus,
+                gap_restatement_seeds=gap_restatement_seeds,
             )
             call_counts["rejudge"] += rejudge_calls
             usage_totals.add_payload(rejudge_usage)
@@ -4292,7 +4401,9 @@ def _key_findings_ledger(
 
     Per section: title, role, and each surviving claim's ``text``,
     ``claim_type``, ``verdict``, ``cited_finding_ids`` and chunk citations
-    (``chunk_record_id`` + ``quote``) — data, not instructions (ADR 0015 §8).
+    (``chunk_record_id`` + ``quote``). Gap claims also carry
+    ``payload["gap"]`` (grade + coverage base) so the pass can re-state
+    them (task 034 S3). Data, not instructions (ADR 0015 §8).
     """
     ledger: list[dict[str, Any]] = []
     for section, claims in section_claim_groups:
@@ -4306,19 +4417,47 @@ def _key_findings_ledger(
                 for citation in claim.payload.get("citations", [])
                 if isinstance(citation, dict) and citation.get("cited_chunk_record_id")
             ]
-            entries.append(
-                {
-                    "text": claim.text,
-                    "claim_type": claim.claim_type,
-                    "verdict": claim.verdict,
-                    "cited_finding_ids": list(claim.payload.get("cited_finding_ids", [])),
-                    "chunk_citations": chunk_citations,
-                }
-            )
+            entry: dict[str, Any] = {
+                "text": claim.text,
+                "claim_type": claim.claim_type,
+                "verdict": claim.verdict,
+                "cited_finding_ids": list(claim.payload.get("cited_finding_ids", [])),
+                "chunk_citations": chunk_citations,
+            }
+            if claim.claim_type == "gap":
+                gap = claim.payload.get("gap")
+                if isinstance(gap, dict):
+                    entry["gap"] = {
+                        "grade": gap.get("grade"),
+                        "coverage_base": gap.get("coverage_base"),
+                        "coverage_record_id": gap.get("coverage_record_id"),
+                        "sparsity": gap.get("sparsity"),
+                    }
+            entries.append(entry)
         ledger.append(
             {"title": section.title, "role": section.role, "claims": entries}
         )
     return ledger
+
+
+def _gap_restatement_seeds(ledger: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Collect verified gap payloads from the key-findings ledger."""
+    seeds: list[dict[str, Any]] = []
+    for section in ledger:
+        claims = section.get("claims")
+        if not isinstance(claims, list):
+            continue
+        for claim in claims:
+            if not isinstance(claim, dict) or claim.get("claim_type") != "gap":
+                continue
+            gap = claim.get("gap")
+            if (
+                isinstance(gap, dict)
+                and gap.get("grade")
+                and gap.get("coverage_base")
+            ):
+                seeds.append(dict(gap))
+    return seeds
 
 
 def _key_findings_pass(
@@ -4361,13 +4500,15 @@ def _key_findings_pass(
         if claim.claim_type == "chunk"
         for cited_id in claim.cited_ids
     }
+    ledger = _key_findings_ledger(section_claim_groups)
+    gap_seeds = _gap_restatement_seeds(ledger)
     seed = {
         "intent": intent,
         "substrate": {},
         "corpus": {},
         "available_tools": [],
         "available_claim_types": sorted(kf_available),
-        "ledger": _key_findings_ledger(section_claim_groups),
+        "ledger": ledger,
         # Chunk-content map filtered to chunks cited by surviving claims only
         # (022 rider 16) — the pass's evidence surface, since it runs
         # transcript-free. ``citable_chunk_ids`` (below) already IS that set:
@@ -4418,6 +4559,7 @@ def _key_findings_pass(
         accounting=accounting,
         intent=intent,
         section_focus=KEY_FINDINGS_SECTION_FOCUS,
+        gap_restatement_seeds=gap_seeds,
     )
     usage_totals.add_payload(section_usage)
     block_id = _write_section(
