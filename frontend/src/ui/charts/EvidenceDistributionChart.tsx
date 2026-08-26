@@ -84,13 +84,14 @@ export function DistributionChartTooltip({
   );
 }
 
-const TRUNCATE_AT = 24;
+const TRUNCATE_AT = { compact: 24, full: 42 } as const;
+const LABEL_WIDTH = { compact: 150, full: 280 } as const;
 
 /** Tick labels match `text-meta` (14px). */
 export const CHART_TICK_FONT_SIZE = 14;
 
-function truncateTick(value: string): string {
-  return value.length > TRUNCATE_AT ? `${value.slice(0, TRUNCATE_AT - 1)}…` : value;
+function truncateTick(value: string, limit: number): string {
+  return value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
 }
 
 /** Shared horizontal distribution chart for evidence types and publication
@@ -124,8 +125,8 @@ export function EvidenceDistributionChart({
           <YAxis
             type="category"
             dataKey="label"
-            width={size === "compact" ? 150 : 200}
-            tickFormatter={truncateTick}
+            width={LABEL_WIDTH[size]}
+            tickFormatter={(value: string) => truncateTick(value, TRUNCATE_AT[size])}
             tick={{ fontSize: CHART_TICK_FONT_SIZE, fill: CHART_TOKENS.navy }}
             axisLine={false}
             tickLine={false}
