@@ -29,16 +29,38 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _dry_run(target: str, **variables: str) -> list[str]:
-    """Run one make wrapper in dry-run mode and return the argv it assembled."""
+    """Run one make wrapper in dry-run mode and return the argv it assembled.
+
+    Inside ``make verify`` this test's subprocess inherits ``MAKEFLAGS`` from
+    the outer make, and GNU make then writes ``make[3]: Entering directory``
+    notices into stdout — which this helper would happily parse as CLI argv
+    (found by CI, not locally: a bare shell has no outer make). Scrub the
+    inherited make variables, pass ``--no-print-directory`` anyway, and refuse
+    any surviving make chatter loudly rather than letting it reach the parser.
+    """
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name not in ("MAKEFLAGS", "MFLAGS", "MAKELEVEL")
+    }
     result = subprocess.run(
-        ["make", "-s", target, *(f"{name}={value}" for name, value in variables.items())],
+        [
+            "make",
+            "-s",
+            "--no-print-directory",
+            target,
+            *(f"{name}={value}" for name, value in variables.items()),
+        ],
         cwd=_REPO_ROOT,
-        env={**os.environ, "OPS_DRY_RUN": "1"},
+        env={**env, "OPS_DRY_RUN": "1"},
         capture_output=True,
         text=True,
         check=True,
     )
-    return result.stdout.splitlines()
+    lines = result.stdout.splitlines()
+    polluted = [line for line in lines if line.startswith("make")]
+    assert not polluted, f"make chatter leaked into the parsed argv: {polluted}"
+    return lines
 
 
 def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
