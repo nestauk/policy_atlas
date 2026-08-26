@@ -88,6 +88,8 @@ describe("ThemesView — reader-facing themes and groups", () => {
       { data: { facets: [] }, isPending: false, isError: false } as unknown as ReturnType<typeof queries.useGroups>,
     );
     renderThemes();
-    expect(screen.getByRole("status")).toHaveTextContent("Themes appear once screening has run.");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Themes appear once the Mapping step has finished.",
+    );
   });
 });
