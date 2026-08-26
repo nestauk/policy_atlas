@@ -1,8 +1,9 @@
 # Design inputs: 034-synthesis-report
 
-Three sources, different jobs. The prototype binds layout; the good sample
-binds the language direction; the current sample is the anti-target. None of
-them is a contract — [contract.md](contract.md) is.
+The prototype binds layout. The obesity "good" sample and the housing
+executive-summary PDF bind the language direction; the obesity "current"
+sample and the live housing Policy Atlas report are the anti-target. None
+of them is a contract — [contract.md](contract.md) is.
 
 ## 1. The prototype (layout reference)
 
@@ -19,7 +20,10 @@ Owner notes supplied with it (2026-08-26):
   headings are visually flat. 034 must go past it on heading levels.
 - Note the **bold lead** on key-findings bullets (`**Lead phrase:** warrant`).
 - The good sample below is the language direction; **do not over-index on the
-  one example** — encode fundamental principles.
+  one example** — encode fundamental principles. Housing reports added the
+  same day as a second pair (clearer exec-summary PDF vs live Policy Atlas
+  download); same rule — register, not facts. **P10:** expand acronyms at
+  first use.
 
 Owner fork rulings (2026-08-26, design conversation):
 
@@ -157,7 +161,64 @@ the language principles ban.
 > "What the evidence shows about effectiveness for preventing or reducing
 > childhood obesity"
 
-## 4. What the prototype invents that the backend does not have
+## 4. Housing reports (owner, 2026-08-26)
+
+Two live-adjacent PDFs on the same Australian housing-affordability
+question. Same job as the obesity samples: register, not facts. The
+clearer one is **not** a Policy Atlas artefact — take its named-instrument
+voice, not its recommendations or unexplained acronyms.
+
+### Clearer (language direction)
+
+Chrome print titled *Executive Summary / Policies to improve housing
+affordability in Australia*. Opening:
+
+> Evidence favours an integrated national package that accelerates
+> well-located supply, scales social and affordable housing through
+> blended finance, and tightens investor/STRA and rental regulation to
+> curb speculative demand and improve access.
+
+What to take: claim first; named instruments (inclusionary zoning,
+bond-aggregator, rent protections); one mechanism per sentence; a
+concrete number when it decides something ("only about 8–16% of tenants
+obtained a rent variation").
+
+What **not** to take: the "Implement a staged national package…"
+prescription (P8 still bans recommendations); unexplained acronyms
+(STRA, CRA, AHURI, NFP, CHP, KPIs) — **P10**: expand at first use;
+confidence rating (already out).
+
+### Harder to read (anti-target, live Policy Atlas)
+
+The current synthesis download for the same question family (`policyatlas.uk`
+project `43a666f6-…`). Patterns P1–P4, P9 already ban, now from a live
+report rather than the obesity fixture:
+
+> The report concludes that housing affordability policy is best described
+> as a portfolio problem, with broad upzoning and by-right reform showing
+> the clearest—though concentrated—quantitative supply-and-price signal,
+> especially from Auckland. Other tools add below-market or non-market
+> supply, support renters or address short-stay conversion, but evidence
+> is mixed and implementation depends on feasibility, finance, planning
+> capacity, infrastructure, land release, monitoring and delivery
+> capacity; several long-run and mix-effect questions remain thinly
+> answered.
+
+> The documents group the policy mix into recurring families:
+> inclusionary zoning and developer contributions, social and public
+> housing investment, planning and zoning reform with infrastructure…
+
+> theme Across the affordability findings, reported effects are not
+> uniform: 21 findings describe decreases in costs, prices or affordability
+> burdens, 13 describe increases…
+
+The title restates the question in full (P9). The lead hedges instead of
+naming a finding (P1). "The documents group…" tours the corpus (P2).
+Stacked clauses and count-as-spine ("21 findings describe decreases")
+are P3/P6. Inline `theme` / `pattern` labels are pipeline vocabulary
+(standing invariant).
+
+## 5. What the prototype invents that the backend does not have
 
 Recorded so the contract can rule on each (032 precedent):
 

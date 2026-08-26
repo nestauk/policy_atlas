@@ -3,11 +3,13 @@
 One implementation slice. Keep it reviewable. Boundaries are in
 [AGENTS.md](../../../AGENTS.md). Specs are in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-08-26 · pending owner approval.
-> Contract approved (before planning): _date · who_ ·
-> Plan approved (before implementation): _date · who_ ·
-> ADR: expected (case-studies pass — a new grounded content form produced
-> late, shown early; and the S6 reversal of 028's overview lead section).
+> **Status:** approved.
+> Contract approved (before planning): **2026-08-26 · owner** (go-ahead to
+> plan; forks A–C settled the same day) ·
+> Plan approved (before implementation): **2026-08-26 · owner** ·
+> ADR: 0033 expected (case-studies pass — a new grounded content form
+> produced late, shown early; and the S6 reversal of 028's overview lead
+> section).
 >
 > **Branching:** `task/034-synthesis-report` from `task/033-ux-snags`
 > (stacked — 033's build is complete on its branch, review/PR pending). The
@@ -21,11 +23,21 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > confidence rating; Most relevant sources is a restyle/move only; case
 > studies land as a new synthesis pass.
 >
-> **Review-stack decision required at this gate:** Tier 3 standard includes
-> contract- and plan-stage adversarial review via `codex-rescue`; the Codex
-> CLI is not installed in this environment (the same gap recorded on 031,
-> 032 and 033, each with an explicit owner waiver). Confirm the same waiver
-> — or name another mechanism — before planning. The tier stays 3 either way.
+> **Review stack (owner, 2026-08-26):** the Codex CLI is now installed —
+> the Tier 3 standard applies in full: contract-stage and plan-stage
+> adversarial review via `codex-rescue` (read-only briefs), plus the step-7
+> stack. No waiver this slice; the first since 030 with a non-Claude
+> reviewer.
+>
+> **Contract-stage adversarial review adjudicated 2026-08-26:** 10 findings
+> (3 blockers · 5 majors · 2 minors), **10/10 adopted** — gap bullets by
+> re-statement (F1), the explicit `CaseStudyCardOut` public/wire/persistence
+> shape (F2), ordinal→`claim_id` result binding (F3), the card validation
+> contract (F4), S5 trimmed to existing fields rather than widening the
+> projection (F5), SSE deliberately unchanged (F6), programme-identity
+> validator keys + absence reasons (F7), prompt-count sweep (F8),
+> Last-updated source pinned (F9), title bound rejects (F10). Findings log:
+> [adversarial-review-contract.md](adversarial-review-contract.md).
 
 ## Goal
 
@@ -63,7 +75,7 @@ One PR on `task/034-synthesis-report` that:
 | **Case study** | One named programme a policy reader can point at (place — instrument), carried as a card: title, short mechanism prose, one bolded result claim, citations, honest strength/design metadata. Grain = programmes, never papers (papers are S5's job) and never raw finding rows. |
 | **Most relevant sources** | Today's deterministic top-3-by-citation-count block (`mostRelevantSources`). Ranking and facts-only rule unchanged in this slice. |
 | **Corpus-touring** | Prose about the act of reading the corpus ("a high-level reading of the documents", "in the material read here", "this body of work", "Inference:") instead of about programmes, populations and outcomes. Banned by P2. |
-| **P1–P9** | The language principles (§ Language principles). Prompt surfaces cite them by number. |
+| **P1–P10** | The language principles (§ Language principles). Prompt surfaces cite them by number. |
 | **S1–S9** | Defect ids. Goal, deliverable, scope, invariants, plan phases and rubric items all cite these. |
 
 ## Read first
@@ -120,8 +132,9 @@ executive block.
   Conclusions → References → Method.
 - Metadata strip: Sources ("M cited out of K included", cited links to the
   filtered sources view — unchanged meaning) · Published (the cited years
-  range, relabelled from "Years covered") · Last updated. Study types leave
-  the strip (they remain under Method). No Authors.
+  range, relabelled from "Years covered") · Last updated (**stays
+  `latest_run.ended_at`**, today's source — no new read field; adversarial
+  F9). Study types leave the strip (they remain under Method). No Authors.
 - The answer callout keeps its verified-only/pending/absent behaviour
   unchanged; it gains the label and the prototype's callout styling.
 
@@ -147,10 +160,16 @@ list of long titles.
 - Prompt (`synthesise_key_findings_v2` → **v3**): every bullet in lead-colon
   form — a 4–8-word claim lead, a colon, then the warrant (P5); one headline
   per bullet (P3); 3–7 bullets, 60–180 words total (unchanged).
-- **Gap bullets in** (owner ruling): the pass may emit at most **2**
-  gap-typed claims, each carrying its coverage base exactly as section gap
-  claims do; `KEY_FINDINGS_CLAIM_TYPES` gains `"gap"`. Never forced — a
-  report with no headline gap emits none.
+- **Gap bullets in** (owner ruling), by **re-statement only** (adversarial
+  F1): the pass has no tools and derives no fresh gap. A gap bullet
+  restates a verified section gap claim, copying that claim's grade and
+  coverage base. Today's `_key_findings_ledger` serializes only text,
+  type, verdict and citations — Phase A **adds the surviving gap's
+  `payload["gap"]` (grade + coverage base)** so the validator has something
+  to match. `KEY_FINDINGS_CLAIM_TYPES` gains `"gap"`; the validator rejects
+  a gap bullet whose grade/base does not match a seed gap claim; a
+  deterministic post-check caps gap bullets at **2**. Never forced — a
+  report with no verified gap claims emits none.
 - Renderer: split each bullet on the first `: `; bold the lead; a bullet with
   no colon renders whole and unbolded, never mis-split. Gap bullets get the
   distinct marker (prototype gold). Claim spans still anchor into the stored
@@ -164,29 +183,56 @@ the **programme grain** — the 032 parked design's IOF-shortlist detail is
 superseded by this contract.
 
 - New synthesis pass `synthesise_case_studies_v1`, modelled on the
-  key-findings pass: runs after key findings, reads the report's surviving
-  verified claims and cited chunk text, and emits 0 or 2–4 cards. Judged and
-  verified like any grounded block; absence is a recorded state
-  (`counts["case_studies"]`), never an error — mint nothing when the claims
-  do not support two distinct programmes.
-- Card anatomy: title (place — instrument, e.g. "United Kingdom — Soft
-  Drinks Industry Levy"), short mechanism prose, exactly one **result
-  claim** (the card's headline number/outcome — the wire marks its claim id;
-  the renderer bolds its span, S8), citations as usual. Strength/design/year
-  metadata comes from the cited sources' appraisal and classification where
-  present and is omitted honestly where not — never invented.
-- Storage: a new block with `role: "case_studies"` riding
-  `synthesis_result.blocks` — **no new table**. Public shape: `SectionRole`
-  gains `"case_studies"` (additive); the card structure is additive payload
-  on that section. Produced last, shown in front matter (the key-findings
-  production ≠ presentation pattern; the ADR records it).
+  key-findings pass's position (single bounded call, after key findings) but
+  on its **own constrained wire** (adversarial F4): `CaseStudyWire` — a list
+  of cards, each `{title, prose, claims, result_ordinal}`. Seed = the
+  surviving verified claims + cited chunk text (the key-findings seed shape)
+  **plus** the cited documents' appraisal label, evidence type and year
+  (deterministic DB fields). Emits 0 or 2–4 cards; judged and verified like
+  any grounded block.
+- **Card validation contract** (F4/F7): claims anchor into the card's own
+  prose (exact substrings, no overlap — the standing rule); uncited
+  evidential prose is flagged unverified exactly as in sections; **exactly
+  one result claim** per card, named by `result_ordinal` (an index into the
+  card's claims — F3); programme identity = the normalised card title, and
+  the validator rejects duplicate titles and cards sharing a result claim.
+  A failing card is **dropped, not repaired**; survivors stand. Fewer than
+  2 survivors ⇒ no block, with the absence reason recorded in
+  `counts["case_studies"]` distinguishing `insufficient_programmes` from
+  `cards_failed_validation`. Absence is a normal state, never an error.
+- **Public shape** (F2): `SectionRole` gains `"case_studies"` (additive);
+  `SectionOut` gains additive `cards: list[CaseStudyCardOut]` defaulting to
+  `[]` (old artefacts and non-case-study sections read `[]`).
+  `CaseStudyCardOut` = `{card_id (stable), title, prose,
+  claims (standard ClaimOut list), result_claim_id (nullable),
+  strength (nullable), design (nullable), since_year (nullable)}`. The
+  nullable metadata comes from the cited sources' appraisal/classification/
+  year where present and is omitted where not — never invented.
+- **Result-claim binding** (F3): the wire's `result_ordinal` is resolved to
+  the persisted public `claim_id` (the minted unit UUID) by the repository
+  projection after the write; an absent, duplicated or unresolvable ordinal
+  degrades to `result_claim_id: null` (card renders with no bold span,
+  never errors).
+- Storage: one block with `role: "case_studies"` riding
+  `synthesis_result.blocks`, its payload carrying the card list mirroring
+  the public shape — **no new table**. Produced last, shown in front matter
+  (the key-findings production ≠ presentation pattern; ADR 0033 records it).
+- **SSE / live render unchanged** (F6): the run's stream gains no
+  case-studies frames; cards appear only when the committed artefact read
+  model replaces the live view (the same behaviour as the artefact summary
+  today). Recorded as a deliberate path, with a test that the stream shape
+  is untouched.
 - Chat context and any other `blocks` readers must tolerate the new role
   (they already filter by role).
 
 ### S5 — Most relevant sources
 
-- Moves above the body (after Case studies) and restyles as cards: title,
-  appraisal chip, evidence type · venue/year, cited-in facts.
+- Moves above the body (after Case studies) and restyles as cards using
+  **only the fields the projection already has** (adversarial F5): title,
+  appraisal chip, evidence type, citation count, cited-in sections. Venue
+  and year are **not** added — that would widen the public projection
+  beyond this contract's gates, and joining references by title is
+  non-deterministic.
 - Ranking (citation count, appraisal tie-break) and the facts-only rule are
   **unchanged** — no "why this study matters" sentence (that seam stays in
   `docs/deferred.md`).
@@ -197,10 +243,14 @@ Body titles today restate the question ("What the evidence shows about
 effectiveness for preventing or reducing childhood obesity…").
 
 - Prompt (`synthesise_sections_v4` → **v5**): `title` is the short,
-  parallel, contents-ready theme name (P9), bounded tighter (proposal
-  validator: ≤ 60 chars); `focus` keeps the full writing brief; `nav_label`
-  may equal the title. `FORBIDDEN_SECTION_TITLES` still applies — one-word
-  titles must dodge the banned generics ("Findings", "Summary" …).
+  parallel, contents-ready theme name (P9), bounded tighter — the proposal
+  validator **rejects** a title over 60 chars, like `nav_label` and unlike
+  today's clamp-at-200 (adversarial F10; a contents-ready title the writer
+  was told to keep short is a proposal defect, and clipping one mid-word
+  helps nobody). `SECTION_TITLE_MAX` stays 200 on the read path for old
+  artefacts. `focus` keeps the full writing brief; `nav_label` may equal
+  the title. `FORBIDDEN_SECTION_TITLES` still applies — one-word titles
+  must dodge the banned generics ("Findings", "Summary" …).
 - **Named reversal of 028 strand 12:** the answer-shaped overview lead
   section is dropped from the proposal guidance — the front matter (answer
   callout + key findings) now does its framing job. Recorded in the ADR.
@@ -216,19 +266,21 @@ each refine-replay-evidenced per prompting doctrine:
 
 | Surface | Bump | Changes |
 |---|---|---|
-| `synthesise_section_v8` → **v9** | body + conclusions writer | P1–P4, P6–P8; the banned-vocabulary list gains corpus-touring phrases; the no-bullets/no-headers-inside-a-section rule stays |
-| `synthesise_key_findings_v2` → **v3** | S3's home | P3, P5; gap bullets |
+| `synthesise_section_v8` → **v9** | body + conclusions writer | P1–P4, P6–P8, P10; the banned-vocabulary list gains corpus-touring phrases; the no-bullets/no-headers-inside-a-section rule stays |
+| `synthesise_key_findings_v2` → **v3** | S3's home | P3, P5, P10; gap bullets |
 | `synthesise_sections_v4` → **v5** | S6's home | P9 |
-| `summariser_v1` → **v2** | the answer callout's source | P1–P2; still citation-free, still faithfulness-judged, still no confidence language |
+| `summariser_v1` → **v2** | the answer callout's source | P1–P2, P10; still citation-free, still faithfulness-judged, still no confidence language |
 
 The shared voice rules live in **one module constant** rendered into each
-surface (one instruction, one place); each surface adds only its form rules.
-The v6 frozen cost-baseline module is untouched.
+surface (P1–P8 and P10; P9 is the sections-proposer only); each surface
+adds only its form rules. The v6 frozen cost-baseline module is untouched.
 
 ### S8 — Result-span bolding
 
-- The case-study wire marks the result claim; the renderer bolds that
-  claim's span. No `ClaimOut` change — the mark rides the card payload.
+- The renderer bolds the span of the claim named by the card's
+  `result_claim_id` (resolved from the wire's `result_ordinal` at
+  projection time — S4). No `ClaimOut` change — the mark rides the card
+  payload. A null `result_claim_id` renders the card unbolded.
 - Body sections stay flowing prose: no bold leads, no pseudo-headings inside
   a section (the existing writer rule).
 
@@ -264,11 +316,16 @@ claims are exact substrings of prose.
   is in bounds; "so adopt X" is not.
 - **P9 — Titles name the theme.** Short, parallel, contents-ready; never a
   restatement of the question.
+- **P10 — Expand acronyms at first use.** Write "short-term rental
+  accommodation (STRA)" the first time; the abbreviation may stand alone
+  after that. Unexplained alphabet soup is not plain language (owner,
+  2026-08-26, on the housing samples).
 
 ## Scope / Out of scope
 
 **In:** the report page and its outline/presentation modules; the markdown
-export; the six prompt surfaces named above; `SectionRole` additive value;
+export; the five prompt surfaces named above (four bumps + one new);
+`SectionRole` additive value;
 the case-study pass and its wiring in `synthesise.py`; tests for every
 behaviour rule; spec flow-back (`web-api.md` read models); deferred.md
 discharge/narrowing; the ADR; `verification.md`.
@@ -301,6 +358,9 @@ Further constraints:
   route.
 - **Prompt-hash guard** re-pinned for every bumped module; the frozen v6
   baseline module untouched.
+- **Build may complete wire shapes** inside the two granted gates (gap-ledger
+  fields, card payload JSON, generation-cap bump). Halt if the pass needs a
+  table or a non-additive public change.
 
 ## Public / private boundary
 
@@ -310,8 +370,11 @@ follow the standing redaction rules (no raw source text beyond cited quotes).
 
 ## Model route
 
-Existing OpenAI route, `gpt-5.5` synthesis model — unchanged. All six prompt
-surfaces are named above; no other LLM-bearing step changes.
+Existing OpenAI route, `gpt-5.5` synthesis model — unchanged. All five
+prompt surfaces (four bumps + one new) are named above; no other LLM-bearing
+step changes. Prompt-hash pins re-recorded for exactly two modules:
+`synthesis_backend.py` and `summary_prompts.py`; the judge prompts are
+untouched and keep their pins.
 
 **Build pre-requisite (stop condition):** the refine-replay loop and the live
 check need a working model route. Staging's OpenAI quota is recorded
@@ -355,13 +418,13 @@ S1–S9; or the turn/token budget is spent.
 ## Verification evidence expected
 
 Command results; the live-run artefact id and screenshots; per-surface
-replay notes with before/after excerpts tagged P1–P9; the OpenAPI diff;
+replay notes with before/after excerpts tagged P1–P10; the OpenAPI diff;
 public-safety confirmation; known gaps; the review-stack record including
 the adversarial-review decision made at this gate.
 
 ## Risk tier & review focus
 
-**Tier 3** — five prompt bumps + one new prompt surface + an additive public
+**Tier 3** — four prompt bumps + one new prompt surface + an additive public
 interface change. Review focus: prompt-surface correctness and injection
 posture (the new pass reads chunk text), grounding integrity of the
 case-study cards, honest degrade paths (split, absence, old artefacts),

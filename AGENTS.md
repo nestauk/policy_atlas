@@ -22,14 +22,16 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `034-synthesis-report` **CONTRACT DRAFTED 2026-08-26, pending
-owner approval** (branch `task/034-synthesis-report`, stacked on
+Design — task `034-synthesis-report` **CONTRACT + PLAN APPROVED 2026-08-26 ·
+owner**; build not yet opened — **the Codex CLI is installed this slice;
+no adversarial waiver**
+(branch `task/034-synthesis-report`, stacked on
 `task/033-ux-snags`; the PR re-targets `dev` once 033 merges): improve the
 synthesis report's language and presentation — nine numbered defects S1–S9
 (front-matter page order · heading hierarchy · key-findings lead-colon
 bullets with gap bullets · a new case-studies synthesis pass discharging the
 032 parked seam · most-relevant-sources restyle · short section titles ·
-plainer voice per principles P1–P9 · result-span bolding · download parity).
+plainer voice per principles P1–P10 · result-span bolding · download parity).
 **Tier 3** — four prompt bumps (`synthesise_section_v8→v9`,
 `synthesise_key_findings_v2→v3` + gap claim type, `synthesise_sections_v4→v5`,
 `summariser_v1→v2`) + one new prompt surface (`synthesise_case_studies_v1`) +

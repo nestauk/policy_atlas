@@ -1,7 +1,7 @@
 # Rubric: 034-synthesis-report
 
 Core completion criteria. The task is **done only if every box holds** —
-otherwise it is in progress, not done. Terms and defect ids (S1–S9, P1–P9)
+otherwise it is in progress, not done. Terms and defect ids (S1–S9, P1–P10)
 are defined in [contract.md](contract.md); this rubric does not restate them.
 
 1. [ ] Implementation satisfies [contract.md](contract.md), including every
@@ -21,12 +21,16 @@ are defined in [contract.md](contract.md); this rubric does not restate them.
        an old artefact (long titles, no case-studies block) renders clean.
 7. [ ] S3 holds: v3 pin test; lead-colon bullets bold correctly; a no-colon
        bullet renders whole; a span crossing the split degrades honestly;
-       gap bullets (≤2, coverage base, distinct marker) render and verify;
-       a no-gap report emits none.
+       gap bullets are **re-statements** of seed gap claims (validator
+       match, ≤2 post-check, distinct marker) and a no-gap-claims report
+       emits none.
 8. [ ] S4 holds: composition test (0 or 2–4 cards, `role: "case_studies"`,
-       produced after key findings, judged/verified); absence recorded in
-       counts; result claim marked and bolded (S8); metadata omitted when
-       unsourced; chat-context and other `blocks` readers tolerate the role.
+       produced after key findings, judged/verified); `CaseStudyWire`
+       validation (exactly-one-result, title uniqueness, drop-failing-card);
+       absence **reasons** recorded; `result_ordinal` → `claim_id` binding
+       resolves and degrades to null honestly (S8); metadata omitted when
+       unsourced; SSE stream shape untouched; chat-context and other
+       `blocks` readers tolerate the role.
 9. [ ] S5 holds: block moved and restyled; ranking test unchanged; no
        "why this source matters" prose anywhere.
 10. [ ] S6 holds: v5 pin test; title bound enforced at the proposal
