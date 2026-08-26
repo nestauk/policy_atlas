@@ -328,23 +328,27 @@ export; the five prompt surfaces named above (four bumps + one new);
 `SectionRole` additive value;
 the case-study pass and its wiring in `synthesise.py`; tests for every
 behaviour rule; spec flow-back (`web-api.md` read models); deferred.md
-discharge/narrowing; the ADR; `verification.md`.
+discharge/narrowing; the ADR; `verification.md`; env-overridable
+`SYNTHESIS_MODEL` (default unchanged).
 
 **Out:** Authors; confidence ratings; "why this source matters" prose;
 mobile/narrow-viewport work; the full briefing page; the eval harness;
-re-synthesising or backfilling old artefacts; reference formatting; chat
-behaviour; any other capability; schema migrations (the pass rides
-`synthesis_result.blocks`); new dependencies; any new runtime egress.
+a Langfuse cost/clarity autopsy; shipping a new default writer; gather/writer
+model split; re-synthesising or backfilling old artefacts; reference
+formatting; chat behaviour; any other capability; schema migrations (the
+pass rides `synthesis_result.blocks`); new dependencies; any new runtime
+egress.
 
 ## Constraints & approval gates
 
-**Needs human approval before proceeding.** Two gates fire; both are named
+**Needs human approval before proceeding.** Three gates fire; all are named
 here for the combined contract gate:
 
 | Gate | What changes | Why gated |
 |---|---|---|
 | **Prompt surface** | `synthesise_section_v8→v9` · `synthesise_key_findings_v2→v3` (+ `"gap"` claim type) · `synthesise_sections_v4→v5` · `summariser_v1→v2` · **new** `synthesise_case_studies_v1` | Prompt-bearing work — lead-authored only, never delegated |
 | **Public interface** | `SectionRole` gains `"case_studies"` (additive); the case-study card payload on that section; OpenAPI regenerated | Public API surface |
+| **Runtime config (additive)** | `POLICY_ATLAS_SYNTHESIS_MODEL` env override; **default `gpt-5.6-terra`** (owner 2026-08-26 — cheaper live experiments); pin `gpt-5.5` via the env var | Same pattern as planner/chat |
 
 Further constraints:
 
@@ -358,7 +362,7 @@ Further constraints:
   route.
 - **Prompt-hash guard** re-pinned for every bumped module; the frozen v6
   baseline module untouched.
-- **Build may complete wire shapes** inside the two granted gates (gap-ledger
+- **Build may complete wire shapes** inside the granted gates (gap-ledger
   fields, card payload JSON, generation-cap bump). Halt if the pass needs a
   table or a non-additive public change.
 
@@ -370,9 +374,12 @@ follow the standing redaction rules (no raw source text beyond cited quotes).
 
 ## Model route
 
-Existing OpenAI route, `gpt-5.5` synthesis model — unchanged. All five
-prompt surfaces (four bumps + one new) are named above; no other LLM-bearing
-step changes. Prompt-hash pins re-recorded for exactly two modules:
+Existing OpenAI route, **default `gpt-5.6-terra`** (owner amendment
+2026-08-26 — cheaper live experiments). `SYNTHESIS_MODEL` is env-overridable
+(`POLICY_ATLAS_SYNTHESIS_MODEL`) so a live process can pin `gpt-5.5` (or
+another listed model) without a code edit. All five prompt surfaces (four
+bumps + one new) are named above; no other LLM-bearing step changes. Judge
+stays `gpt-5.4-mini`. Prompt-hash pins re-recorded for exactly two modules:
 `synthesis_backend.py` and `summary_prompts.py`; the judge prompts are
 untouched and keep their pins.
 

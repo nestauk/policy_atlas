@@ -35,7 +35,8 @@ plainer voice per principles P1–P10 · result-span bolding · download parity)
 **Tier 3** — four prompt bumps (`synthesise_section_v8→v9`,
 `synthesise_key_findings_v2→v3` + gap claim type, `synthesise_sections_v4→v5`,
 `summariser_v1→v2`) + one new prompt surface (`synthesise_case_studies_v1`) +
-an additive public `SectionRole` value. No schema migration; no new runtime
+an additive public `SectionRole` value; env-overridable `SYNTHESIS_MODEL`
+(default `gpt-5.6-terra`). No schema migration; no new runtime
 egress. Contract, rubric and design inputs: `docs/tasks/034-synthesis-report/`;
 frozen prototype: `docs/specs/sources/synthesis-report-ux/`. **Owner fork
 rulings 2026-08-26** recorded in the contract: softer answer-callout label

@@ -1,7 +1,8 @@
 # Implementation plan: 034-synthesis-report
 
 > **Status:** Contract approved 2026-08-26 · owner. Plan approved 2026-08-26 ·
-> owner.
+> owner. **Owner amendment 2026-08-26:** D9 — default writer `gpt-5.6-terra`,
+> env-overridable (`POLICY_ATLAS_SYNTHESIS_MODEL` restores `gpt-5.5`).
 > ADR: 0033 expected (case-studies pass; S6 reversal of 028's overview lead).
 >
 > Terms, S1–S9 and P1–P10 live in [contract.md](contract.md). This plan cites
@@ -20,7 +21,11 @@ new case-studies pass change what the model writes; the page reorder,
 hierarchy and card work change how it reads. One slice, one PR, stacked on
 033. Remaining synthesis-wire details (card JSON, gap-ledger fields beyond
 grade/base) land in the build — reopen the contract only if a granted gate
-is exceeded.
+is exceeded. Owner 2026-08-26: **D9** switches the synthesis default to
+`gpt-5.6-terra` (cheaper live experiments) and adds
+`POLICY_ATLAS_SYNTHESIS_MODEL` so 5.5 is an env flip, not a code edit.
+Langfuse autopsy and a calibrated cheaper-model ladder stay **out of this
+slice**.
 
 ## Decisions
 
@@ -34,6 +39,7 @@ is exceeded.
 | **D6** | Title bound (S6) | Proposal validator: title ≤ 60 chars (rejects, like `nav_label`); prompt instructs the short form. `SECTION_TITLE_MAX` stays 200 for old-artefact reads — the bound is enforced at the proposal validator, not the read path. |
 | **D7** | Review | Full Tier 3 stack: contract- and plan-stage adversarial (codex-rescue) + step-7 contract verifier, `/code-review`, `/security-review`, `/simplify`, human deep review. |
 | **D8** | Live route | **Phase 0** confirms a working model route (or the build does not open). Phase E is the replay/live-evidence gate, not the first route check. If quota dies mid-build, Phase E halts and escalates — deterministic work already landed stays. |
+| **D9** | Synthesis model | Default **`gpt-5.6-terra`** (owner 2026-08-26 — cheaper experiments). Env `POLICY_ATLAS_SYNTHESIS_MODEL` restores `gpt-5.5` (or any listed model). Tool-bearing and structured-parse synthesis calls pin `reasoning_effort="none"` **only when the resolved model is `gpt-5.6-terra`** (029 — terra 400s on function tools otherwise). 5.5 omits the field (provider default). Judge stays `gpt-5.4-mini`. Terra-as-writer is unmeasured vs 5.5; pin 5.5 via env if grounding regresses. Do not treat one 034 live check as a clean A/B (prompts also move). |
 
 ## Gates
 
@@ -57,6 +63,11 @@ Each phase ends in a commit on `task/034-synthesis-report`.
 
 Confirm a working model route (D8) — halt here if it is down. Then
 `make verify` + `make frontend-verify` on the branch. Record counts.
+**Also D9 (inline, cheaper than a phase):** `POLICY_ATLAS_SYNTHESIS_MODEL`
+env read with default `gpt-5.6-terra`; terra `reasoning_effort="none"` pin
+on every tool-bearing (and terra `parse`) synthesis call; kwargs pin test
+in the synthesis backend suite; `infra/DEPLOYMENT.md` row, omitted /
+development-tuning. Env restores `gpt-5.5`.
 **Gate:** live route + full `make verify`.
 
 ### Phase A — Prompt surfaces (S3 prompt, S6 prompt, S7) — lead
@@ -136,8 +147,10 @@ Prototype-pinned layout; contract § S1/S2 is the spec.
 1. Refine-replay per bumped surface (≤3 rounds each) on pinned inputs;
    before/after excerpts tagged P1–P10 into `verification.md`.
 2. One live run on a known question; front matter, hierarchy, bullets,
-   cards, markdown download eyeballed against the page; artefact id and
-   screenshots recorded.
+   cards, markdown download eyeballed against the page; artefact id,
+   **`SYNTHESIS_MODEL` actually used**, and screenshots recorded. Owner may
+   point this run at terra via the D9 env var; if so, say so — it is not a
+   5.5 baseline.
 
 **Gate:** prompt-guard green + replay notes complete. Requires the live
 model route (D8).
@@ -161,5 +174,15 @@ model route (D8).
   § Acceptance checks + the phase test lists).
 - **fast-worker** — C3 restyle, D1 renderer split, D3 markdown parity:
   mechanical transcription of exact specs with pinned tests.
-- Inline lead: OpenAPI/type regen, hash re-pins, pointer edits (cheaper than
-  delegation).
+- Inline lead: OpenAPI/type regen, hash re-pins, pointer edits, D9 env
+  knob (cheaper than delegation).
+
+## Out of this slice (follow-on)
+
+A Langfuse cost-and-clarity autopsy, a calibrated clarity judge, and a
+controlled cheaper-model ladder (5.4 writer · gather/writer split · mini
+summaries) are **not** 034. D9 is the only 034 deliverable that unblocks
+them: set `POLICY_ATLAS_SYNTHESIS_MODEL`, confirm `LANGFUSE_HOST` + keys
+in the agent environment, then inspect `run:synthesise:<run_id>`
+observations. Do not paste keys into chat. Shipping a new default writer
+still wants the deferred eval slice.

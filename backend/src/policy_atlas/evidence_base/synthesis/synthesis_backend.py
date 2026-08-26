@@ -30,6 +30,7 @@ plus the typed claims that anchor into it (ADR 0015).
 from __future__ import annotations
 
 import json
+import os
 from threading import Lock
 from typing import Any, Literal, NotRequired, Protocol, TypedDict
 
@@ -39,6 +40,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import (
+    openai_kwargs,
     require_parsed,
     require_single_tool_call,
     resolve_openai_client,
@@ -116,7 +118,24 @@ KEY_FINDINGS_PROMPT_VERSION = "synthesise_key_findings_v2"
 
 # The contracted model floor (the 009 nano lesson is binding); section/prose
 # quality on real corpora is eval territory, not asserted by the build.
-SYNTHESIS_MODEL = "gpt-5.5"
+# Default is gpt-5.6-terra (034 D9, owner 2026-08-26 — cheaper live
+# experiments); pin back to gpt-5.5 via POLICY_ATLAS_SYNTHESIS_MODEL.
+SYNTHESIS_MODEL = os.environ.get("POLICY_ATLAS_SYNTHESIS_MODEL", "gpt-5.6-terra")
+
+
+def _synthesis_openai_kwargs() -> dict[str, Any]:
+    """Return model kwargs for every live synthesis OpenAI call.
+
+    Pins ``reasoning_effort="none"`` when the resolved model is
+    ``gpt-5.6-terra`` so tool-bearing (and structured-parse) calls do not
+    400 (029). Other models omit the field so ``gpt-5.5`` keeps the
+    provider default.
+
+    Returns:
+        Kwargs suitable for ``chat.completions.create`` / ``parse``.
+    """
+    effort = "none" if SYNTHESIS_MODEL == "gpt-5.6-terra" else None
+    return openai_kwargs(SYNTHESIS_MODEL, reasoning_effort=effort)
 
 # Bounds on proposal output (deterministic output-checking beyond prompt
 # rules — the 009 validate_themes precedent; enforced by the Task-5 validator).
@@ -1662,7 +1681,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SectionProposalWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            model=SYNTHESIS_MODEL,
+            **_synthesis_openai_kwargs(),
             messages=messages,
             response_format=SectionProposalWire,
         )
@@ -1729,7 +1748,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SummaryWire]:
         completions: Any = self._client.chat.completions
         response = completions.parse(
-            model=SYNTHESIS_MODEL,
+            **_synthesis_openai_kwargs(),
             messages=messages,
             response_format=SummaryWire,
         )
@@ -1790,7 +1809,7 @@ class OpenAISynthesisBackend:
         def _call() -> UsageResult[SummaryJudgeWire]:
             completions: Any = self._client.chat.completions
             response = completions.parse(
-                model=SYNTHESIS_MODEL,
+                **_synthesis_openai_kwargs(),
                 messages=messages,
                 response_format=SummaryJudgeWire,
             )
@@ -1828,7 +1847,7 @@ class OpenAISynthesisBackend:
             tool_choice = "required"
         completions: Any = self._client.chat.completions
         response = completions.create(
-            model=SYNTHESIS_MODEL,
+            **_synthesis_openai_kwargs(),
             messages=messages,
             tools=SECTION_TOOL_SCHEMAS,
             parallel_tool_calls=not force_emit,
@@ -1957,7 +1976,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SectionRepairWire]:
         completions: Any = self._client.chat.completions
         response = completions.create(
-            model=SYNTHESIS_MODEL,
+            **_synthesis_openai_kwargs(),
             messages=messages,
             tools=[EMIT_REPAIRS_TOOL_SCHEMA],
             tool_choice={"type": "function", "function": {"name": "emit_repairs"}},
@@ -2030,7 +2049,7 @@ class OpenAISynthesisBackend:
     ) -> UsageResult[SectionProseWire]:
         completions: Any = self._client.chat.completions
         response = completions.create(
-            model=SYNTHESIS_MODEL,
+            **_synthesis_openai_kwargs(),
             messages=messages,
             tools=[EMIT_SECTION_TOOL_SCHEMA],
             tool_choice={"type": "function", "function": {"name": "emit_section"}},

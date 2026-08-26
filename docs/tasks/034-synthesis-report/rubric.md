@@ -9,10 +9,14 @@ are defined in [contract.md](contract.md); this rubric does not restate them.
        label, 031 count wording, reference format unchanged).
 2. [ ] `make verify` and `make frontend-verify` pass; the declared manual
        live check ran (or its blocker is escalated, never silently skipped).
-3. [ ] No approval-gated change beyond the two granted gates: the named
-       prompt bumps + `synthesise_case_studies_v1`, and the additive
-       `SectionRole` value with its card payload. No schema migration, no
-       new dependency, no new runtime egress, no other public change.
+3. [ ] No approval-gated change beyond the three granted gates: the named
+       prompt bumps + `synthesise_case_studies_v1`, the additive
+       `SectionRole` value with its card payload, and
+       `POLICY_ATLAS_SYNTHESIS_MODEL` (default `gpt-5.6-terra`; env restores
+       `gpt-5.5`). No schema
+       migration, no new dependency, no new runtime egress, no other public
+       change. The D9 terra `reasoning_effort` pin is in; 5.5 effort stays
+       unset.
 4. [ ] No generated files or secrets edited by hand (`types.ts` regenerated
        from the OpenAPI export).
 5. [ ] No tests deleted, skipped or weakened without written justification.
