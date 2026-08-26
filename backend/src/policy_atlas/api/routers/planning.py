@@ -150,7 +150,12 @@ def _draft_from_plan(plan: OrchestrationPlan) -> PlanDraft:
     seen_stages: set[str] = set()
     for step in compose(plan).steps:
         registry_component = registry_component_for(step.component)
-        stage = STAGE_BY_REGISTRY[registry_component]
+        # Ingest is unmapped from public acquire so Searching is not overwritten
+        # by full-text fetch (033 S5). Skip any registry component with no
+        # public stage rather than crashing the draft projection.
+        stage = STAGE_BY_REGISTRY.get(registry_component)
+        if stage is None:
+            continue
         if stage in seen_stages:
             continue
         seen_stages.add(stage)

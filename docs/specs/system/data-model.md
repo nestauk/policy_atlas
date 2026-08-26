@@ -20,6 +20,11 @@ origin ([ADR 0002](../../adr/0002-spec-governance.md)).
 name for the derived side ("the artefacts" suffices — a symmetry-only term would be inert,
 Principle 10).
 
+A **portfolio** sits *above* the project (screen word Project; ADR 0031,
+amended by ADR 0032). Membership is many-to-many via `portfolio_membership`.
+That is not a container between project and artefact — nothing below the
+project row gains a parent.
+
 Whole-item organisation is **just columns + tags + scoping** — no special container between
 project and artefact.
 - **Structured columns** — single-valued, closed/known vocabulary on the item record:

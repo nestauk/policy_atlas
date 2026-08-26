@@ -9,6 +9,7 @@ import { SITE_DISCLAIMER } from "./AppFooter";
 import { PrivacyView } from "./legal/PrivacyView";
 import { TermsView } from "./legal/TermsView";
 import { TASK } from "../lib/vocabulary";
+import { BETA_CHIP_HINT } from "../ui/brand/Nav";
 
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -91,6 +92,13 @@ describe("AppShell — global chrome", () => {
     expect(screen.getByRole("link", { name: "Projects" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+  });
+
+  it("explains the BETA chip on hover", async () => {
+    const user = userEvent.setup();
+    renderShell("/new");
+    await user.hover(screen.getByText("BETA"));
+    expect(await screen.findByText(BETA_CHIP_HINT)).toBeInTheDocument();
   });
 
   it("underlines the active global nav item", () => {

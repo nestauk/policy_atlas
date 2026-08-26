@@ -5,6 +5,8 @@ import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 export type RunningCardTone = "running" | "paused" | "done" | "stopped";
 
 export type StageRow = {
+  /** Unique among rows on this card — stage repeats across search rounds. */
+  id: string;
   stage: string;
   label: string;
   status: StageStatus | "upcoming";
@@ -19,9 +21,20 @@ export type StageSignpost = { href: string; label: string; message: string };
 export const CHAT_PRIMARY_CTA_CLASS =
   "cutout inline-block bg-blue px-6 py-3.5 text-body font-bold text-white";
 
-/** Outline CTA on the green running card (See plan). */
+/** Option C running-card shell: 15% Nesta-green tint, green as the accent. */
+export const RUNNING_CARD_SHELL_CLASS =
+  "border-2 border-[#17A88D] bg-[#DDF2EE] text-navy";
+
+/** Row rules on the tinted card — Nesta green at 40% opacity. */
+export const RUNNING_CARD_RULE_CLASS = "border-t border-[rgba(23,168,141,0.4)]";
+
+/** Outline CTA on the tinted running card (See plan). */
 export const SEE_PLAN_CTA_CLASS =
-  "inline-block cursor-pointer border border-blue bg-transparent px-6 py-3.5 text-body font-bold text-blue";
+  "inline-block cursor-pointer border-2 border-blue bg-paper px-6 py-3.5 text-body font-bold text-blue";
+
+/** Chat-thread notice once the run has landed. */
+export const RUN_FINISHED_MESSAGE =
+  "Evidence search is finished. You can read the report in the Results tab.";
 
 /** Eyebrow and title for the in-thread running card. */
 export function runningCardCopy(status: RunStatus | undefined): {
@@ -76,10 +89,12 @@ function vocabByStage(backendScope?: string | null): Map<string, PlanStepPreview
 function rowFromVocab(
   step: PlanStepPreview,
   live: StageEntry | undefined,
+  { label = step.label, id }: { label?: string; id: string },
 ): StageRow {
   return {
+    id,
     stage: step.stage,
-    label: step.label,
+    label,
     blurb: step.blurb,
     status: live?.status ?? "upcoming",
     summary: live?.summary,
@@ -87,7 +102,49 @@ function rowFromVocab(
   };
 }
 
-/** Agreed plan steps with live SSE status/counts overlaid — labels from the plan panel. */
+const SEARCH_CYCLE_STAGES = new Set(["acquire", "screen"]);
+
+function roundIndexOf(entry: StageEntry): number {
+  const value = entry.summary?.round_index;
+  return typeof value === "number" && Number.isFinite(value) ? value : 1;
+}
+
+/** Screen payloads often omit `round_index`; inherit the last Searching round. */
+function cycleRounds(stages: StageEntry[]): number[] {
+  let lastAcquireRound = 1;
+  return stages.map((entry) => {
+    if (entry.stage === "acquire") {
+      lastAcquireRound = roundIndexOf(entry);
+      return lastAcquireRound;
+    }
+    if (entry.stage === "screen") {
+      const explicit = entry.summary?.round_index;
+      return typeof explicit === "number" && Number.isFinite(explicit)
+        ? explicit
+        : lastAcquireRound;
+    }
+    return roundIndexOf(entry);
+  });
+}
+
+function cycleLabel(base: string, roundIndex: number, maxRound: number): string {
+  if (maxRound <= 1) return base;
+  return `${base} (Round ${roundIndex})`;
+}
+
+function nextRowId(counts: Map<string, number>, stage: string, roundIndex: number): string {
+  const key = `${stage}:${roundIndex}`;
+  const n = (counts.get(key) ?? 0) + 1;
+  counts.set(key, n);
+  return `${key}:${n}`;
+}
+
+/** Agreed plan steps with live SSE status/counts overlaid — labels from the plan panel.
+
+Every acquire/screen SSE entry is kept so Broad/Broadest rounds do not
+collapse to the last one. Ingest is omitted from Searching by the server
+(unmapped from public acquire).
+*/
 export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefined): StageRow[] {
   const liveByStage = new Map<string, StageEntry>(stages.map((entry) => [entry.stage, entry]));
   const scope = plan?.backend_scope;
@@ -95,30 +152,68 @@ export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefin
   const depth = plan?.analysis_depth;
   const agreed =
     depth !== undefined && depth !== null ? stepsForAnalysisDepth(depth, scope) : [];
+  const rounds = cycleRounds(stages);
+  const maxRound = Math.max(1, ...rounds.filter((_, index) => SEARCH_CYCLE_STAGES.has(stages[index]?.stage ?? "")));
+  const ids = new Map<string, number>();
+
+  const labelled = (
+    step: PlanStepPreview,
+    entry: StageEntry | undefined,
+    roundIndex: number,
+  ): StageRow => {
+    const id = nextRowId(ids, step.stage, SEARCH_CYCLE_STAGES.has(step.stage) ? roundIndex : 1);
+    if (entry !== undefined && SEARCH_CYCLE_STAGES.has(entry.stage)) {
+      return rowFromVocab(step, entry, {
+        id,
+        label: cycleLabel(step.label, roundIndex, maxRound),
+      });
+    }
+    return rowFromVocab(step, entry, { id });
+  };
 
   if (agreed.length > 0) {
     const seen = new Set(agreed.map((step) => step.stage));
-    const extras = stages.flatMap((entry) => {
+    const extras = stages.flatMap((entry, index) => {
       if (seen.has(entry.stage)) return [];
       const step = vocab.get(entry.stage);
-      return step === undefined ? [] : [rowFromVocab(step, entry)];
+      return step === undefined ? [] : [labelled(step, entry, rounds[index] ?? 1)];
     });
-    return [...agreed.map((step) => rowFromVocab(step, liveByStage.get(step.stage))), ...extras];
+    const rows: StageRow[] = [];
+    for (const step of agreed) {
+      if (SEARCH_CYCLE_STAGES.has(step.stage)) {
+        const matches = stages.flatMap((entry, index) =>
+          entry.stage === step.stage ? [{ entry, roundIndex: rounds[index] ?? 1 }] : [],
+        );
+        if (matches.length === 0) {
+          rows.push(rowFromVocab(step, undefined, { id: nextRowId(ids, step.stage, 1) }));
+        } else {
+          for (const match of matches) rows.push(labelled(step, match.entry, match.roundIndex));
+        }
+      } else {
+        rows.push(labelled(step, liveByStage.get(step.stage), 1));
+      }
+    }
+    return [...rows, ...extras];
   }
 
-  return stages.map((entry) => {
+  return stages.map((entry, index) => {
+    const roundIndex = rounds[index] ?? 1;
     const step = vocab.get(entry.stage);
     if (step === undefined) {
+      const base = entry.label;
       return {
+        id: nextRowId(ids, entry.stage, SEARCH_CYCLE_STAGES.has(entry.stage) ? roundIndex : 1),
         stage: entry.stage,
-        label: entry.label,
+        label: SEARCH_CYCLE_STAGES.has(entry.stage)
+          ? cycleLabel(base, roundIndex, maxRound)
+          : base,
         blurb: entry.blurb,
         status: entry.status,
         summary: entry.summary,
         seconds: entry.seconds,
       };
     }
-    return rowFromVocab(step, entry);
+    return labelled(step, entry, roundIndex);
   });
 }
 
@@ -174,6 +269,21 @@ export function signpostForStage(
   return null;
 }
 
+/** Chat-thread destination once the write-up exists — last word, not a stage echo. */
+export function runFinishedSignpost(
+  projectId: string,
+  status: RunStatus | undefined,
+): StageSignpost | null {
+  if (status === "succeeded" || status === "degraded") {
+    return {
+      href: `/projects/${projectId}/results`,
+      label: "Results",
+      message: RUN_FINISHED_MESSAGE,
+    };
+  }
+  return null;
+}
+
 /** Completed-stage signposts in timeline order, one per destination. */
 export function completedSignposts(
   stages: StageEntry[],
@@ -201,7 +311,7 @@ export function resultsSignpost(
     return {
       href: `/projects/${projectId}/results`,
       label: "Read the evidence base",
-      message: "The evidence base is ready.",
+      message: RUN_FINISHED_MESSAGE,
     };
   }
   return null;

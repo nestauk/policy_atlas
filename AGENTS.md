@@ -22,36 +22,26 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `032-task-lifecycle-ia` **CONTRACT APPROVED 2026-08-17 · PLAN
-DRAFTED → awaiting plan approval (step 3 🛑)** (branch
-`task/032-task-lifecycle-ia`, based on `dev`): reshape the app around one task
-and one lifecycle, and add a named grouping above tasks. Screen word **Task** =
-the existing `project` row; screen word **Project** = a new `portfolio` row.
-Fifteen gaps G1–G15; the planning conversation's own behaviour is deliberately
-untouched, but G14 lists it in the chats overlay once it stops being the live
-surface, and G15 is a type-scale pass (the frontend uses 12px 250 times against
-its own declared 16px floor). Case studies are parked by the owner (they need a
-new synthesis pass). Contract:
-`docs/tasks/032-task-lifecycle-ia/contract.md`; plan and rubric alongside.
-Thirteen build phases; the two gated backend phases run FIRST so a refused gate
-surfaces before frontend is built against the field. **Tier 3** — new table +
-new public routes + one prompt-surface field (`nav_label`) are three approval
-gates, each to be signed off before its phase starts. ADR 0031 expected for the
-portfolio layer.
+Build — task `033-ux-snags` **CONTRACT + PLAN APPROVED 2026-08-24** (combined
+gate; branch `task/033-ux-snags`, based on `dev`): fix ten numbered UX snags
+on the 032 surfaces. Screen word **Task** = `project` row; screen word
+**Project** = `portfolio` row (ADR 0031). Membership is many-to-many
+(ADR 0032). Contract, plan and rubric:
+`docs/tasks/033-ux-snags/`. **Tier 3** — join table + public read/write shape
+(`portfolio_ids`, Included `source_count`, additive `FindingOut.chunk_id`) +
+`planner_v9` → `planner_v10` (OECD members source-origin default plus OECD
+study-setting screening criterion). No new
+runtime egress.
 
-**Owner decisions, 2026-08-17, both recorded in the plan:** (1) **standard
-review, no adversarial lanes** — contract verifier, `/code-review`,
-`/security-review`, `/simplify` and the human deep review run; adversarial review
-at the contract, plan and code stages is waived, and `verification.md` plus the
-PR must say so. The tier stays 3. (2) **Three full `make verify` runs**, not
-eight — baseline, end of Phase 2, step-6 exit. Frontend phases gate on
-`make frontend-verify`, because `make verify-fast` is backend-only and would
-prove nothing on a ~90%-frontend slice. No phase routes to `codex`: the CLI is
-not installed here (`codex` is not on PATH).
+**Owner decisions, 2026-08-24, recorded in the plan:** (1) **standard review,
+no adversarial lanes** (032 precedent) — contract verifier, `/code-review`,
+`/security-review`, `/simplify` and the human deep review run; adversarial
+review is waived, and `verification.md` plus the PR must say so. The tier
+stays 3. (2) **Three full `make verify` runs** — baseline, end of schema/API
+phase, step-6 exit. Frontend phases gate on `make frontend-verify`. No phase
+routes to `codex` (`codex` is not on PATH).
 
-Design reference: the owner's prototype at
-`scripts/scratchpad/frontend_v20260817/Policy Atlas_new search standalone.html`
-(a bundled artifact — see the contract's § Reading the prototype).
+Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55).
 
 Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
 clear meaning per user-visible source count across the P1 check-in, Where I

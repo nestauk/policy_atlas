@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { MOCK_CHAT_CLAIM_TEXT, MOCK_PROJECT_ID, mockCheckIn, mockProject } from "../src/mock/fixtures";
+import {
+  MOCK_CHAT_CLAIM_TEXT,
+  MOCK_PROJECT_ID,
+  mockCheckIn,
+  mockEvidence,
+  mockProject,
+} from "../src/mock/fixtures";
 
 /**
  * End-to-end mock journey (task 025 I.1; rewritten 027 F.2 for the uplifted
@@ -100,11 +106,12 @@ test.describe("mock task-lifecycle journey", () => {
     await settings.click(); // close the popover
 
     // (d) The lifecycle bar shows all five stages from the first moment —
-    // with no run yet, only Plan is open; Results/Sources/Share/History
+    // with no run yet, Plan and Share are open; Results/Sources/History
     // render but are locked (a `<span aria-disabled>`, not a link).
     const nav = lifecycleNav(page);
     await expect(nav.getByRole("link", { name: "Plan", exact: true })).toBeVisible();
-    for (const label of ["Results", "Sources", "Share", "History"]) {
+    await expect(nav.getByRole("link", { name: "Share", exact: true })).toBeVisible();
+    for (const label of ["Results", "Sources", "History"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
       await expect(nav.getByText(label)).toBeVisible();
     }
@@ -147,18 +154,14 @@ test.describe("mock task-lifecycle journey", () => {
     // (h) The check-in card appears; the run genuinely parks here. Paused
     // reads distinct from executing on this tab (028 contract: pause
     // salience) — the running card's heading changes. While paused,
-    // Results/Share are locked; Sources stays open so interim results can
-    // be read; Plan/History stay open.
+    // Results is open so the in-progress write-up is reachable; Share and
+    // Sources stay open; Plan/History stay open.
     await expect(page.getByText("Waiting on your input")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(mockCheckIn.render)).toBeVisible();
     await expect(runCard.getByRole("heading", { name: "Paused — waiting on you" })).toBeVisible();
 
-    await expect(nav.getByRole("link", { name: "Plan", exact: true })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "History", exact: true })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Sources", exact: true })).toBeVisible();
-    for (const label of ["Results", "Share"]) {
-      await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
-      await expect(nav.getByText(label)).toBeVisible();
+    for (const label of ["Plan", "Results", "Sources", "Share", "History"]) {
+      await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
 
     // Answering the suggested option collapses the card to the "Answered" echo.
@@ -177,9 +180,9 @@ test.describe("mock task-lifecycle journey", () => {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
 
-    // (j) Results: the committed A4 report. Live "writing this section"
-    // cannot be seen here — Results stays locked until the run succeeds,
-    // and a finished run must not replay the in-progress view.
+    // (j) Results: the committed A4 report. The tab is reachable while
+    // writing is in progress; a finished run must not replay the in-progress
+    // view.
     await nav.getByRole("link", { name: "Results", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/results$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
@@ -263,10 +266,14 @@ test.describe("mock task-lifecycle journey", () => {
     // collection-true shown count.
     await sourcesSubnav.getByRole("link", { name: "All sources" }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/all$`));
-    const sourceRows = page.getByRole("row");
+    // Scope to the sources table — S6's Search queries section adds its own
+    // tables below, and a page-wide `row` count would include them.
+    const sourcesTable = page.getByRole("table").first();
+    const sourceRows = sourcesTable.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
     // Default view = All, sorted on the relevance spectrum.
-    await expect(sourceRows).toHaveCount(10);
+    await expect(sourceRows).toHaveCount(mockEvidence.length + 1);
+    await expect(page.getByRole("heading", { name: "Search queries" })).toBeVisible();
     // The retracted verdict lives in the Relevant column's hover button.
     await expect(
       page.getByRole("button", { name: "Excluded — retracted: screening details" }),
@@ -275,7 +282,8 @@ test.describe("mock task-lifecycle journey", () => {
     const sourceFilters = page.getByRole("group", { name: "Filter sources" });
     await sourceFilters.getByRole("button", { name: "Screened out" }).click();
     await expect(page).toHaveURL(/[?&]status=screened_out/);
-    await expect(sourceRows).toHaveCount(2);
+    const screenedOut = mockEvidence.filter((item) => item.status === "screened_out").length;
+    await expect(sourceRows).toHaveCount(screenedOut + 1);
 
     // (m) An unknown route renders the honest "nothing here" view.
     await page.goto("/this-route-does-not-exist");
@@ -283,9 +291,9 @@ test.describe("mock task-lifecycle journey", () => {
   });
 
   // (n) Keyboard check: Tab to a citation marker and open it with Enter.
-  // Results is now gated on run state (task 032's locking table), so a bare
-  // direct navigation no longer reaches it — the run has to actually
-  // succeed first, unlike the old evidence-base route, which was ungated.
+  // Results is gated on run state: locked with no run / after a failed run,
+  // open while executing so the in-progress write-up is reachable. A bare
+  // direct navigation still needs a succeeded run to see the finished page.
   test("keyboard: tab to a citation marker and open it with Enter", async ({ page }) => {
     await driveRunToSuccess(page);
     await runCompletionLink(page).click();

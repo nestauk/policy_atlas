@@ -117,7 +117,7 @@ describe("PlanDocument", () => {
     expect(screen.getByText("Searching")).toBeInTheDocument();
     expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
     expect(screen.getByText("2015–2024")).toBeInTheDocument();
-    expect(screen.getByText("Document geography")).toBeInTheDocument();
+    expect(screen.getByText("Source geography")).toBeInTheDocument();
     expect(screen.getByText("Academic + Policy (OpenAlex, Overton)")).toBeInTheDocument();
     expect(screen.getByText("Thoroughness")).toBeInTheDocument();
     expect(screen.getByText("Standard report")).toBeInTheDocument();
@@ -129,7 +129,8 @@ describe("PlanDocument", () => {
     mockUsePlan({ data: planOut(emptyPlan()) });
     renderPlan();
     expect(screen.getByText("Publication years")).toBeInTheDocument();
-    expect(screen.getAllByText("No preference")).toHaveLength(2);
+    expect(screen.getByText("No preference")).toBeInTheDocument();
+    expect(screen.getByText("None selected")).toBeInTheDocument();
     expect(screen.getAllByText(COPY.notDecided).length).toBeGreaterThan(0);
   });
 

@@ -20,7 +20,9 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api import continuation
 from policy_atlas.api.app import create_app
 from policy_atlas.api.dev_issuer import init, mint_token
+from policy_atlas.api.routers.sse import _summary
 from policy_atlas.api.settings import Settings
+from policy_atlas.api.stage_vocabulary import stage_for_payload
 from policy_atlas.core import events
 from policy_atlas.core.liveness import tick_hub
 from policy_atlas.core.schema import event_log, project
@@ -340,6 +342,20 @@ def _finished(item: _SseItem) -> bool:
     }
 
 
+def test_stage_completed_summary_flattens_nested_round_index() -> None:
+    """Search-loop round_index is nested; the public summary must surface it."""
+    summary = _summary(
+        {
+            "component": "acquire",
+            "registry_component": "acquire",
+            "search": {"round_index": 2, "queries_run": 4},
+        }
+    )
+    assert summary["round_index"] == 2
+    assert "search" not in summary
+    assert "component" not in summary
+
+
 def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path) -> None:
     """Replay rebuilds the same durable narrative and cursors select its exact suffix."""
 
@@ -372,8 +388,12 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                 with engine.connect() as conn:
                     started = sum(
                         event["event_type"] == "run.started"
+                        and isinstance(event["payload"], dict)
+                        and stage_for_payload(event["payload"]) is not None
                         for event in events.read(conn, project_id)
                     )
+                # ingest_full_text (and screen_full) still write run.started but
+                # are not public stages, so the counts match the mapped subset.
                 assert sum(item.event == "stage.started" for item in first) == started
 
                 cursor = first[len(first) // 2].sequence

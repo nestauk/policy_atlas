@@ -1,7 +1,13 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 
+import { Tooltip } from "../radix/Tooltip";
+import { Chip } from "./Chip";
 import { cn } from "./cn";
+
+/** Hover copy for the BETA chip beside the wordmark. */
+export const BETA_CHIP_HINT =
+  "Beta means Policy Atlas is an experimental tool under development. Features may be incomplete or change, and outputs should be verified before they inform advice or decisions. We're testing with users and improving it continuously.";
 
 /** Height of one chrome row. The shell stacks two of these inside a task. */
 export const NAV_BAR_HEIGHT_PX = 64;
@@ -32,9 +38,18 @@ export function NavLogo() {
  */
 export function NavHomeLink() {
   return (
-    <Link to="/" className="min-w-0 no-underline">
-      <NavLogo />
-    </Link>
+    <div className="flex min-w-0 items-center gap-2">
+      <Link to="/" className="min-w-0 no-underline">
+        <NavLogo />
+      </Link>
+      <Tooltip
+        content={<p className="text-body leading-relaxed text-navy">{BETA_CHIP_HINT}</p>}
+      >
+        <span tabIndex={0} className="inline-flex">
+          <Chip tone="blue">BETA</Chip>
+        </span>
+      </Tooltip>
+    </div>
   );
 }
 

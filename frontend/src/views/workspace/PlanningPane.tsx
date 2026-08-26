@@ -19,7 +19,6 @@ import type {
   StageEntry,
 } from "../../store";
 import { Button } from "../../ui/brand/Button";
-import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
@@ -31,10 +30,10 @@ import type { PlanOverlay } from "./planOverlay";
 import { COMPONENT_LABEL, RUN_BLOCK_STATUS } from "./planVocabulary";
 import { RunningCard, RunningCardDock } from "./RunningCard";
 import {
-  CHAT_PRIMARY_CTA_CLASS,
   completedSignposts,
   elapsedSeconds,
   formatElapsed,
+  runFinishedSignpost,
 } from "./runProgress";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
@@ -337,6 +336,28 @@ function AnsweredCheckIns({
   ));
 }
 
+function RunFinishedNotice({
+  projectId,
+  status,
+}: {
+  projectId: string;
+  status: RunStatus | undefined;
+}) {
+  const notice = runFinishedSignpost(projectId, status);
+  if (notice === null) return null;
+  return (
+    <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
+      <p className="max-w-prose-measure text-lead text-navy">
+        Evidence search is finished. You can read the report in the{" "}
+        <Link to={notice.href} className="font-semibold text-blue underline">
+          {notice.label}
+        </Link>{" "}
+        tab.
+      </p>
+    </div>
+  );
+}
+
 function RunBlock({
   projectId,
   run,
@@ -354,7 +375,6 @@ function RunBlock({
 }) {
   const status = RUN_BLOCK_STATUS[run.status] ?? null;
   const presentedDecisions = presentRunDecisions(decisions, stages);
-  const complete = run.status === "succeeded" || run.status === "degraded";
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-caption text-grey">
@@ -375,14 +395,7 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
-      {complete && (
-        <div className="anim-rise mr-8 border border-green-tint bg-green-tint/40 px-4 py-3">
-          <p className="text-body font-semibold text-navy">The evidence base is ready.</p>
-          <Link to={`/projects/${projectId}/results`} className={cn("mt-2", CHAT_PRIMARY_CTA_CLASS)}>
-            Read the evidence base
-          </Link>
-        </div>
-      )}
+      <RunFinishedNotice projectId={projectId} status={run.status} />
     </div>
   );
 }
@@ -601,6 +614,7 @@ export function PlanningPane({
                 {liveCard}
                 <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
+                <RunFinishedNotice projectId={projectId} status={stream.run?.status} />
               </div>
             ) : (
               <RunBlock
@@ -694,6 +708,7 @@ export function PlanningPane({
             {liveCard}
             <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
+            <RunFinishedNotice projectId={projectId} status={stream.run?.status} />
           </div>
         )}
         </div>

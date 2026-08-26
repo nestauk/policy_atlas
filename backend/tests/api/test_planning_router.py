@@ -164,6 +164,13 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
     assert (
         stage_for_payload({"component": "screen_full", "registry_component": "screen_full"}) is None
     )
+    # Full-text ingest used to map onto public acquire and overwrite Searching.
+    assert (
+        stage_for_payload(
+            {"component": "ingest_full_text", "registry_component": "ingest_full_text"}
+        )
+        is None
+    )
 
 
 def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(

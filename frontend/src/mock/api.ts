@@ -16,6 +16,7 @@ import {
   mockGroups,
   mockLandscape,
   mockPlanReady,
+  mockPortfolios,
   mockProject,
   mockSourceDossiers,
   seedPlanningTurns,
@@ -216,6 +217,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     const body = await requestBody(request, init);
     if (isRecord(body) && typeof body.name === "string") mockProject.name = body.name;
     if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
+    if (isRecord(body) && Array.isArray(body.portfolio_ids)) {
+      mockProject.portfolio_ids = body.portfolio_ids.filter(
+        (value): value is string => typeof value === "string",
+      );
+    }
     mockProject.updated_at = new Date().toISOString();
     return json(mockProject);
   }
@@ -327,6 +333,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
 
+  if (method === "GET" && path.endsWith("/api/v1/portfolios")) return json(page(mockPortfolios));
   if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page([mockProject]));
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) return json(mockProject);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/funnel`)) return json(mockFunnel);

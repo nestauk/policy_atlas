@@ -10,8 +10,8 @@ import {
 describe("listPageChrome — portfolio last updated", () => {
   it("uses the newest task update when tasks exist", () => {
     const map = newestTaskUpdateByPortfolio([
-      { portfolio_id: "p1", updated_at: "2026-03-01T00:00:00Z" },
-      { portfolio_id: "p1", updated_at: "2026-06-01T00:00:00Z" },
+      { portfolio_ids: ["p1"], updated_at: "2026-03-01T00:00:00Z" },
+      { portfolio_ids: ["p1"], updated_at: "2026-06-01T00:00:00Z" },
     ]);
     expect(
       portfolioLastUpdated(
@@ -32,8 +32,8 @@ describe("listPageChrome — portfolio last updated", () => {
 
   it("sorts portfolios by last updated, newest first", () => {
     const map = newestTaskUpdateByPortfolio([
-      { portfolio_id: "older", updated_at: "2026-01-01T00:00:00Z" },
-      { portfolio_id: "newer", updated_at: "2026-08-01T00:00:00Z" },
+      { portfolio_ids: ["older"], updated_at: "2026-01-01T00:00:00Z" },
+      { portfolio_ids: ["newer"], updated_at: "2026-08-01T00:00:00Z" },
     ]);
     const sorted = sortPortfoliosByLastUpdated(
       [

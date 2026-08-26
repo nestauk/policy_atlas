@@ -223,6 +223,8 @@ class FindingBaseOut(BaseModel):
         source_title: Title of that source.
         profile: Extraction profile the finding came from.
         relevance: Run-scoped B2' relevance mark, when the run has them.
+        chunk_id: Verified chunk identity from the first grounding anchor, or
+            ``None`` for abstract-only findings.
     """
 
     finding_id: uuid.UUID
@@ -231,6 +233,7 @@ class FindingBaseOut(BaseModel):
     source_title: str
     profile: ExtractProfile
     relevance: FindingRelevance | None = None
+    chunk_id: uuid.UUID | None = None
 
 
 class IofStatisticsOut(BaseModel):
@@ -601,10 +604,15 @@ class ChunkContextOut(BaseModel):
 
     Args:
         context: Context text, clamped to a character window around the
-            cited span.
+            cited span. Truncated edges are snapped to a word boundary and
+            marked with ``...``.
         span_start: Start offset of the clamped context.
         span_end: End offset of the clamped context.
         clamped: Whether the window was clamped (hit a chunk boundary).
+        previous: Short tail of the previous chunk, only when the window
+            reaches the start of this chunk; otherwise omitted.
+        next: Short head of the next chunk, only when the window reaches
+            the end of this chunk; otherwise omitted.
     """
 
     context: str

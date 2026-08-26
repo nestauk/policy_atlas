@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
+import { mockCoverage, mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
@@ -11,6 +11,7 @@ import * as queries from "../api/queries";
 vi.mock("../api/queries", () => ({
   useProject: vi.fn(),
   useLandscape: vi.fn(),
+  useCoverage: vi.fn(),
   useEvidence: vi.fn(),
   useFindings: vi.fn(),
   useSourceDossier: vi.fn(),
@@ -75,6 +76,9 @@ beforeEach(() => {
   );
   vi.mocked(queries.useFunnel).mockReturnValue(
     { data: mockFunnel } as unknown as ReturnType<typeof queries.useFunnel>,
+  );
+  vi.mocked(queries.useCoverage).mockReturnValue(
+    { data: mockCoverage } as unknown as ReturnType<typeof queries.useCoverage>,
   );
   vi.mocked(queries.useEvidence).mockReturnValue({
     data: evidencePage(),
@@ -161,9 +165,32 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });
 
-  it("shows a sources count footer from the pagination total", () => {
+  it("shows a sources count between the filters and the table", () => {
     renderSources();
     expect(screen.getByText(`${mockEvidence.length} sources`)).toBeInTheDocument();
+  });
+
+  it("lists search queries as a results table per backend", () => {
+    renderSources();
+    expect(screen.getByRole("heading", { name: "Search queries" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OpenAlex" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Overton" })).toBeInTheDocument();
+    expect(
+      screen.getByText("childhood obesity school intervention UK"),
+    ).toBeInTheDocument();
+    const tables = screen.getAllByRole("table");
+    expect(tables.length).toBeGreaterThanOrEqual(3);
+    const openAlexTable = tables[1];
+    const overtonTable = tables[2];
+    expect(openAlexTable).toBeTruthy();
+    expect(overtonTable).toBeTruthy();
+    expect(within(openAlexTable).getByRole("columnheader", { name: "Query" })).toBeInTheDocument();
+    expect(within(openAlexTable).getByRole("columnheader", { name: "Results" })).toBeInTheDocument();
+    expect(within(openAlexTable).getByText("34")).toBeInTheDocument();
+    expect(within(overtonTable).getByText("19")).toBeInTheDocument();
+    expect(
+      within(openAlexTable).getByText("childhood obesity school intervention UK"),
+    ).toHaveClass("break-all");
   });
 });
 
@@ -174,7 +201,9 @@ describe("SourcesView — fixture-driven render (mock mode)", () => {
     // tier renders them as two distinct chips, not one merged cell.
     expect(screen.getByText("Cohort study")).toBeInTheDocument();
     expect(screen.getByText("Moderate confidence")).toBeInTheDocument();
-    expect(screen.getAllByRole("row")).toHaveLength(mockEvidence.length + 1); // + header row
+    const sourcesTable = screen.getAllByRole("table")[0];
+    expect(sourcesTable).toBeTruthy();
+    expect(within(sourcesTable).getAllByRole("row")).toHaveLength(mockEvidence.length + 1);
   });
 });
 

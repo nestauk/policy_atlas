@@ -27,7 +27,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.routers._common import owned_portfolio
-from policy_atlas.core.schema import portfolio, project
+from policy_atlas.core.schema import portfolio, portfolio_membership, project
 
 router = APIRouter(
     prefix="/api/v1/portfolios",
@@ -41,10 +41,16 @@ def _task_counts(conn: Connection, portfolio_ids: list[uuid.UUID]) -> dict[uuid.
     if not portfolio_ids:
         return {}
     rows = conn.execute(
-        select(project.c.portfolio_id, func.count())
-        .where(project.c.portfolio_id.in_(portfolio_ids))
+        select(portfolio_membership.c.portfolio_id, func.count())
+        .select_from(
+            portfolio_membership.join(
+                project,
+                project.c.project_id == portfolio_membership.c.project_id,
+            )
+        )
+        .where(portfolio_membership.c.portfolio_id.in_(portfolio_ids))
         .where(project.c.status == "active")
-        .group_by(project.c.portfolio_id)
+        .group_by(portfolio_membership.c.portfolio_id)
     ).all()
     return {row[0]: int(row[1]) for row in rows}
 

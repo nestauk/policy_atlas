@@ -299,13 +299,24 @@ def _uuid(value: Any) -> uuid.UUID | None:
 def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
     """Keep only scalar terminal counts; never expose nested raw component payloads."""
     hidden = {"component", "registry_component", "plan_id", "plan_version", "session_id"}
-    return {
+    summary: dict[str, int | float | str] = {
         key: value
         for key, value in payload.items()
         if key not in hidden
         and isinstance(value, (int, float, str))
         and not isinstance(value, bool)
     }
+    # Search-loop round index is nested under ``search`` today; flatten it
+    # so the running card can label Searching (Round 2) without seeing the
+    # raw component payload.
+    if "round_index" not in summary:
+        for value in payload.values():
+            if isinstance(value, dict):
+                round_index = value.get("round_index")
+                if isinstance(round_index, int):
+                    summary["round_index"] = round_index
+                    break
+    return summary
 
 
 def _seconds(
