@@ -8,12 +8,17 @@ truth") for the full methodology and why precision is not scored directly
 against a single review's bibliography.
 
 Usage (needs a real Postgres via DATABASE_URL, OPENAI_API_KEY,
-OPENALEX_API_KEY, OVERTON_API_KEY):
+OPENALEX_API_KEY, OVERTON_API_KEY). ``--env-file backend/.env`` is REQUIRED:
+nothing in the code loads a .env, so without it every one of those variables is
+unset (see backend/Makefile — ``uv run --env-file`` is the one place local env
+loading happens, which keeps settings on pure os.environ):
 
-    uv run --project backend python scripts/eval_ground_truth/run_and_score.py \\
+    uv run --project backend --env-file backend/.env \\
+        python scripts/eval_ground_truth/run_and_score.py \\
         --title "..." --doi "10.xxxx/yyyy"
 
-    uv run --project backend python scripts/eval_ground_truth/run_and_score.py \\
+    uv run --project backend --env-file backend/.env \\
+        python scripts/eval_ground_truth/run_and_score.py \\
         --title "..." --url "https://.../review.pdf" --published-before 2018-09-01
 
 ``--published-before`` (ISO YYYY-MM-DD) is auto-derived from OpenAlex's
@@ -28,6 +33,21 @@ available for an arbitrary URL) and used exactly as given there — an explicit
 
 Every query runs inside its own rolled-back transaction — nothing this script
 does is ever committed to the database.
+
+Two separate caps bound how many candidates a run collects, and confusing them
+wastes a lot of time. Both are reported in every run's JSON:
+
+* ``result_cap_per_backend`` — records requested per HTTP call. With the depth's
+  ``http_budget`` (number of calls allowed), this bounds what a backend can be
+  *asked* for.
+* ``record_cap_per_backend`` — candidates acquire *keeps* per backend, applied
+  after dedup, before persisting. This is the ``acquire.capped`` log line, and
+  normally the tighter of the two: records past it were fetched and paid for,
+  then discarded. This is the cap that sets the recall ceiling.
+
+This eval overrides the second one to ``RECORD_CAP_PER_BACKEND`` (see the
+constant for the measurement behind that choice). Both overrides are applied to
+this process only and never touch the committed pipeline file.
 """
 
 from __future__ import annotations
@@ -53,6 +73,7 @@ from ground_truth import (
     build_ground_truth_from_url,
     fetch_openalex_work,
     normalize_doi,
+    record_key,
 )
 from relevance_judge import judge_relevance
 
@@ -68,6 +89,14 @@ from policy_atlas.evidence_base.sourcing.search_live import live_search_backends
 from policy_atlas.evidence_base.sourcing.search_loop import run_search
 
 QUERY_COUNT = 3
+# How many candidates acquire keeps per backend, overriding the depth's own
+# value for this eval. rapid ships 50; measured on
+# 10.1016/S2468-2667(22)00311-5, the API calls returned 23 of the review's 60
+# cited papers and this cap discarded 18 of them — the papers were fetched and
+# paid for, then dropped. 200 is a deliberate experiment knob, not a pipeline
+# recommendation: raising it also grows the screening LLM bill roughly in
+# proportion, since every kept candidate gets screened.
+RECORD_CAP_PER_BACKEND = 200
 # The LLM-as-a-judge precision proxy is off for now (token cost) while this
 # pilot focuses on getting recall right — flip back on when precision matters.
 RUN_JUDGE = False
@@ -129,13 +158,22 @@ def _seed_scope(conn: Connection, project_id: uuid.UUID, intent: str) -> uuid.UU
     return scope_id
 
 
-def _search_candidate_dois(conn: Connection, project_id: uuid.UUID) -> set[str]:
+def _search_candidate_docs(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]]:
+    """Metadata for every candidate that reached the database — i.e. what
+    survived acquire's dedup and cap, not everything the APIs returned."""
     rows = conn.execute(
         select(source_snapshot.c.metadata)
         .join(project_source_snapshot, project_source_snapshot.c.source_snapshot_id == source_snapshot.c.source_snapshot_id)
         .where(project_source_snapshot.c.project_id == project_id)
     ).fetchall()
-    return {doi for (metadata,) in rows if (doi := normalize_doi(metadata.get("doi")))}
+    return [metadata for (metadata,) in rows]
+
+
+def _keys_of(docs: list[dict[str, Any]]) -> set[str]:
+    """Scoring keys for a set of documents: DOI where there is one, else the
+    Overton document id (see ``ground_truth.record_key``). Documents with
+    neither cannot be matched against the ground truth and are dropped."""
+    return {key for d in docs if (key := record_key(d))}
 
 
 def _screened_relevant_docs(conn: Connection, project_id: uuid.UUID, scope_id: uuid.UUID) -> list[dict[str, Any]]:
@@ -163,20 +201,24 @@ def _recall(found: set[str], target: set[str]) -> float:
 
 
 def partition_screened(
-    screened: list[dict[str, Any]], ground_truth_dois: set[str]
+    screened: list[dict[str, Any]], ground_truth_keys: set[str]
 ) -> tuple[set[str], list[dict[str, Any]], list[dict[str, Any]]]:
-    """Split screened-in docs into: all their DOIs, docs IN the ground-truth
-    reference list (judge-calibration sample — known true positives), and docs
-    NOT in it (judge-precision-proxy sample).
+    """Split screened-in docs into: all their scoring keys, docs IN the
+    ground-truth reference list (judge-calibration sample — known true
+    positives), and docs NOT in it (judge-precision-proxy sample).
+
+    Keys are DOIs where a document has one and Overton document ids otherwise,
+    so a screened-in policy document is matched rather than silently treated as
+    unexplained (see ``ground_truth.record_key``).
     """
     screened_dois: set[str] = set()
     in_ground_truth: list[dict[str, Any]] = []
     unexplained: list[dict[str, Any]] = []
     for doc in screened:
-        doi = normalize_doi(doc.get("doi"))
-        if doi:
-            screened_dois.add(doi)
-        if doi and doi in ground_truth_dois:
+        key = record_key(doc)
+        if key:
+            screened_dois.add(key)
+        if key and key in ground_truth_keys:
             in_ground_truth.append(doc)
         else:
             unexplained.append(doc)
@@ -262,7 +304,9 @@ class QueryResult:
     search_candidate_count: int
     screened_relevant_count: int
     search_recall: float
-    screen_recall: float
+    screen_recall: float | None
+    """None when the run skipped screening (``run_screen=False``) — screening
+    was not measured, which is different from screening scoring zero."""
     judge_calibration_rate: float | None
     judge_precision_proxy: float | None
     n_calibration_sampled: int
@@ -270,6 +314,13 @@ class QueryResult:
     search_calls: list[dict[str, Any]]
     """Every generated query + its raw returned provider records, one entry per
     backend call this run made — for offline diagnosis, not scored itself."""
+    search_docs: list[dict[str, Any]]
+    """Metadata for every candidate that survived acquire's dedup + cap into the
+    database. Diagnosis only: lets you tell "the API never returned it" from
+    "the cap threw it away" (see inspect_run.funnel_table)."""
+    screened_docs: list[dict[str, Any]]
+    """Metadata for every candidate the screening LLM marked relevant.
+    Diagnosis only — the scored numbers above are counts over these."""
 
 
 def run_one_query(
@@ -279,8 +330,16 @@ def run_one_query(
     *,
     published_before: str,
     depth: str = "rapid",
+    run_screen: bool = True,
     langfuse_client: Langfuse | None = None,
 ) -> QueryResult:
+    """Run one intent through search (and optionally screening), and score it.
+
+    Args:
+        run_screen: False skips the screening stage entirely — no screening LLM
+            calls, no screening bill. Use it when the experiment is about search
+            retrieval only; ``screen_recall`` comes back None.
+    """
     project_id, run_id = _seed_project_and_run(conn)
     scope_id = _seed_scope(conn, project_id, query)
 
@@ -303,17 +362,21 @@ def run_one_query(
         backends=recording_backends,
         generation_backend=OpenAISearchGenerationBackend(langfuse_client=langfuse_client),
     )
-    search_dois = _search_candidate_dois(conn, project_id)
+    search_docs = _search_candidate_docs(conn, project_id)
+    search_dois = _keys_of(search_docs)
 
-    screen_sources(
-        conn,
-        project_id=project_id,
-        run_id=run_id,
-        context=ScreenContext(scope_id=scope_id, intent=query, context={}),
-        screening_backend=OpenAIScreeningBackend(langfuse_client=langfuse_client),
-    )
-    screened = _screened_relevant_docs(conn, project_id, scope_id)
-    screened_dois, in_ground_truth, unexplained = partition_screened(screened, ground_truth.dois)
+    if run_screen:
+        screen_sources(
+            conn,
+            project_id=project_id,
+            run_id=run_id,
+            context=ScreenContext(scope_id=scope_id, intent=query, context={}),
+            screening_backend=OpenAIScreeningBackend(langfuse_client=langfuse_client),
+        )
+        screened = _screened_relevant_docs(conn, project_id, scope_id)
+    else:
+        screened = []
+    screened_dois, in_ground_truth, unexplained = partition_screened(screened, ground_truth.keys)
 
     calibration_verdicts = (
         [
@@ -333,8 +396,8 @@ def run_one_query(
         query=query,
         search_candidate_count=len(search_dois),
         screened_relevant_count=len(screened_dois),
-        search_recall=_recall(search_dois, ground_truth.dois),
-        screen_recall=_recall(screened_dois, ground_truth.dois),
+        search_recall=_recall(search_dois, ground_truth.keys),
+        screen_recall=_recall(screened_dois, ground_truth.keys) if run_screen else None,
         judge_calibration_rate=(
             sum(v.relevant for v in calibration_verdicts) / len(calibration_verdicts)
             if calibration_verdicts
@@ -348,6 +411,8 @@ def run_one_query(
         n_calibration_sampled=len(calibration_verdicts),
         n_precision_sampled=len(precision_verdicts),
         search_calls=search_calls,
+        search_docs=search_docs,
+        screened_docs=screened,
     )
 
 
@@ -368,6 +433,7 @@ def build_report(
     published_before: str,
     depth: str,
     result_cap_per_backend: int,
+    record_cap_per_backend: int,
     ground_truth: GroundTruth,
     results: list[QueryResult],
 ) -> dict[str, Any]:
@@ -379,17 +445,26 @@ def build_report(
             "published_before": published_before,
             "search_depth": depth,
             "result_cap_per_backend": result_cap_per_backend,
+            "record_cap_per_backend": record_cap_per_backend,
         },
         "ground_truth": {
             "n_dois": len(ground_truth.dois),
+            # The recall target itself, not just its size — without it a saved
+            # report cannot be re-scored or unpicked offline (inspect_run.py).
+            "dois": sorted(ground_truth.dois),
             "openalex_resolvable_fraction": ground_truth.resolvable_fraction,
+            # Reference-list entries with no DOI that Overton does hold — the
+            # policy-document half of the target. Empty in --doi mode.
+            "n_overton_ids": len(ground_truth.overton_ids),
+            "overton_ids": sorted(ground_truth.overton_ids),
+            "n_target_keys": len(ground_truth.keys),
             "n_unresolved_citations": len(ground_truth.unresolved),
             "unresolved_citations": ground_truth.unresolved,
         },
         "per_query": [asdict(r) for r in results],
         "aggregate": {
             "search_recall": _agg([r.search_recall for r in results]),
-            "screen_recall": _agg([r.screen_recall for r in results]),
+            "screen_recall": _agg([r.screen_recall for r in results if r.screen_recall is not None]),
             "judge_calibration_rate": _agg(
                 [r.judge_calibration_rate for r in results if r.judge_calibration_rate is not None]
             ),
@@ -408,18 +483,28 @@ def build_report(
             "had its own time cutoff and scope). judge_precision_proxy is the actual "
             "precision signal, and is only as trustworthy as judge_calibration_rate "
             "from the same run — a low calibration rate means discount the proxy.",
-            "OpenAlex + Overton is the entire search space; recall is bounded above "
-            "by ground_truth.openalex_resolvable_fraction.",
+            "OpenAlex + Overton is the entire search space. DOI-keyed targets are "
+            "bounded above by ground_truth.openalex_resolvable_fraction; Overton-keyed "
+            "targets exist in the ground truth only because a title lookup found them "
+            "in Overton, so their ceiling is 100% by construction — a cited policy "
+            "document Overton does not hold is unresolvable and left out of the target "
+            "entirely, which flatters neither backend but does narrow what is measured.",
             f"Search depth was '{depth}' — 'rapid' means a single round with no "
             "reformulation loop; only 'standard'/'deep' exercise it.",
             f"Search was constrained to sources published before {published_before} "
             "(the review's own publication date) — a candidate the pipeline could "
             "only have found by time-traveling past the review is excluded up front.",
-            f"result_cap_per_backend was {result_cap_per_backend} for this run — the max "
-            "candidates any single backend can contribute, split across however many "
-            "queries search-generation produced. This bounds candidate-pool size "
-            "directly; a reference list larger than the candidate pool caps recall "
-            "structurally, before search/screen quality even enters into it.",
+            f"result_cap_per_backend was {result_cap_per_backend} for this run — the "
+            "number of records requested per HTTP call (search_loop trims each "
+            "response to it). With the depth's http_budget, this bounds how much a "
+            "backend can be ASKED for.",
+            f"record_cap_per_backend was {record_cap_per_backend} for this run — the "
+            "number of search-arm candidates acquire KEEPS per backend, applied after "
+            "dedup and before persisting (the 'acquire.capped' log line). This is the "
+            "tighter of the two caps and the one that bounds candidate-pool size: "
+            "records beyond it were fetched, paid for, and then discarded. A reference "
+            "list larger than the candidate pool caps recall structurally, before "
+            "search/screen quality even enters into it.",
         ],
     }
 
@@ -454,27 +539,31 @@ def run_review(
     published_before: str,
     depth: str,
     result_cap_per_backend: int,
+    record_cap_per_backend: int,
     ground_truth: GroundTruth,
     langfuse_client: Langfuse | None,
+    run_screen: bool = True,
 ) -> tuple[dict[str, Any], list[QueryResult]]:
     """Run one review's cleaned-title intent through search+screen
     ``QUERY_COUNT`` times, score against its ground truth. Shared by both
     single-review and ``--corpus`` batch mode — the raw ``QueryResult`` list is
     returned alongside the report so batch mode can pool metrics across reviews.
 
-    ``result_cap_per_backend`` is report-only here — the value that actually
-    governs ``run_search()`` is whatever ``main()`` already set on
-    ``search_loop.DEPTH_CONSTANTS[depth]`` before calling in; this parameter
-    just carries the effective number through to ``build_report()``.
+    Both cap arguments are report-only here — the values that actually govern
+    ``run_search()`` are whatever ``main()`` already set on
+    ``search_loop.DEPTH_CONSTANTS[depth]`` before calling in; these parameters
+    just carry the effective numbers through to ``build_report()``.
     """
     print(
-        f"Ground truth: {len(ground_truth.dois)} reference-list DOIs, "
-        f"{ground_truth.resolvable_fraction:.0%} OpenAlex-resolvable, "
+        f"Ground truth: {len(ground_truth.keys)} scorable entries — "
+        f"{len(ground_truth.dois)} DOIs ({ground_truth.resolvable_fraction:.0%} "
+        f"OpenAlex-resolvable) + {len(ground_truth.overton_ids)} Overton policy documents, "
         f"{len(ground_truth.unresolved)} unresolved citations"
     )
     print(
         f"Search constrained to depth={depth}, published_before={published_before}, "
-        f"result_cap_per_backend={result_cap_per_backend}"
+        f"result_cap_per_backend={result_cap_per_backend} (per HTTP call), "
+        f"record_cap_per_backend={record_cap_per_backend} (kept per backend)"
     )
 
     query = clean_review_title(title)
@@ -493,11 +582,13 @@ def run_review(
                     ground_truth,
                     published_before=published_before,
                     depth=depth,
+                    run_screen=run_screen,
                     langfuse_client=langfuse_client,
                 )
                 results.append(result)
                 print(
-                    f"  search_recall={result.search_recall:.0%} screen_recall={result.screen_recall:.0%} "
+                    f"  search_recall={result.search_recall:.0%} "
+                    f"screen_recall={_fmt_pct(result.screen_recall)} "
                     f"judge_calibration={_fmt_pct(result.judge_calibration_rate)} "
                     f"judge_precision_proxy={_fmt_pct(result.judge_precision_proxy)} "
                     f"({len(result.search_calls)} search calls recorded)"
@@ -513,6 +604,7 @@ def run_review(
         published_before=published_before,
         depth=depth,
         result_cap_per_backend=result_cap_per_backend,
+        record_cap_per_backend=record_cap_per_backend,
         ground_truth=ground_truth,
         results=results,
     )
@@ -546,16 +638,27 @@ def main() -> None:
         "--result-cap-per-backend",
         type=int,
         default=None,
-        help="Override the chosen depth's max accepted results per backend (default: the depth's "
-        "own built-in cap, e.g. 50 for rapid — see search_loop.DEPTH_CONSTANTS). Raises the "
-        "candidate-pool ceiling without changing depth's round/reformulation shape.",
+        help="Override how many records are requested per HTTP call (default: the depth's own "
+        "value, e.g. 50 for rapid — see search_loop.DEPTH_CONSTANTS). With the depth's "
+        "http_budget this bounds how much a backend can be ASKED for. Usually NOT the cap "
+        "you want: see --record-cap-per-backend.",
     )
     parser.add_argument(
-        "--disable-wall-clock",
+        "--record-cap-per-backend",
+        type=int,
+        default=RECORD_CAP_PER_BACKEND,
+        help="Override how many search-arm candidates acquire KEEPS per backend, applied "
+        f"after dedup (the 'acquire.capped' log line). Defaults to {RECORD_CAP_PER_BACKEND} "
+        "for this eval, above rapid's built-in 50, because 50 was measured discarding "
+        "reference-list papers the APIs had already returned. This is the cap that bounds "
+        "the candidate pool, and so the recall ceiling. Pass 0 to use the depth's own value.",
+    )
+    parser.add_argument(
+        "--no-screen",
         action="store_true",
-        help="Remove the chosen depth's wall-clock budget (e.g. 30s for rapid) so a raised "
-        "--result-cap-per-backend has time to actually fetch/paginate through. Eval-only — "
-        "never touches the pipeline file.",
+        help="Skip the screening stage — search only, no screening LLM calls and no "
+        "screening bill. screen_recall is reported as n/a. Use when the experiment is "
+        "about search retrieval.",
     )
     parser.add_argument(
         "--out",
@@ -573,14 +676,18 @@ def main() -> None:
     overrides: dict[str, Any] = {}
     if args.result_cap_per_backend is not None:
         overrides["result_cap_per_backend"] = args.result_cap_per_backend
-    if args.disable_wall_clock:
-        overrides["wall_clock_s"] = float("inf")
+    if args.record_cap_per_backend:  # 0 means "leave the depth's own value alone"
+        overrides["record_cap_per_backend"] = args.record_cap_per_backend
     if overrides:
         search_loop.DEPTH_CONSTANTS[args.depth] = {
             **search_loop.DEPTH_CONSTANTS[args.depth],
             **overrides,
         }
-    result_cap_per_backend = search_loop.DEPTH_CONSTANTS[args.depth]["result_cap_per_backend"]
+    # Read both back from DEPTH_CONSTANTS, not from args, so the report always
+    # states the value the run actually used — including when no override applied.
+    constants = search_loop.DEPTH_CONSTANTS[args.depth]
+    result_cap_per_backend = constants["result_cap_per_backend"]
+    record_cap_per_backend = constants["record_cap_per_backend"]
 
     langfuse_client = tracing.get_langfuse()
     print(f"Langfuse tracing: {'on' if langfuse_client is not None else 'off (no LANGFUSE_* env vars)'}")
@@ -607,8 +714,10 @@ def main() -> None:
                 published_before=_months_earlier(entry["publication_date"], 1),
                 depth=args.depth,
                 result_cap_per_backend=result_cap_per_backend,
+                record_cap_per_backend=record_cap_per_backend,
                 ground_truth=ground_truth,
                 langfuse_client=langfuse_client,
+                run_screen=not args.no_screen,
             )
             review_reports.append(report)
             all_results.extend(results)
@@ -618,7 +727,9 @@ def main() -> None:
             "reviews": review_reports,
             "aggregate_across_reviews": {
                 "search_recall": _agg([r.search_recall for r in all_results]),
-                "screen_recall": _agg([r.screen_recall for r in all_results]),
+                "screen_recall": _agg(
+                    [r.screen_recall for r in all_results if r.screen_recall is not None]
+                ),
             },
         }
         out_path = args.out or Path(__file__).parent / "results" / "corpus_eval_report.json"
@@ -658,8 +769,10 @@ def main() -> None:
         published_before=published_before,
         depth=args.depth,
         result_cap_per_backend=result_cap_per_backend,
+        record_cap_per_backend=record_cap_per_backend,
         ground_truth=ground_truth,
         langfuse_client=langfuse_client,
+        run_screen=not args.no_screen,
     )
     out_dir = Path(__file__).parent / "results"
     out_dir.mkdir(exist_ok=True)

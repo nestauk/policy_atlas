@@ -15,7 +15,18 @@ The methodology is:
 - Recall is calculated both at the search stage and at the screening stage. This is because if we just calculated recall after screening, we wouldn't know if recall was low because screening had filtered out too many relevant papers (i.e. screening was to blame for False Negatives (FN)), or if the search had failed to find TP.
 
 Some other points worth knowing:
-- At present this only evaluates against academic reviews - **still need to add a policy source(s) of ground truth**
+- A reference is scored on a **key**, not always on a DOI. The key is the DOI
+  where the reference has one, and the Overton policy-document id otherwise
+  (`ground_truth.record_key`). This is what makes Overton measurable: a
+  government evidence review cites statistical bulletins and departmental
+  reports with no DOI at all, and DOI-only scoring drops every one of them from
+  the target — so Overton could never score a hit, however well it searched.
+  In `--doi` mode there is no citation text to look up, so the target stays
+  DOI-only and the numbers are unchanged from before this existed.
+- A cited policy document that Overton itself does not hold stays unresolvable
+  and is left out of the target rather than counted as a miss. Overton recall
+  is therefore measured over documents Overton could in principle return — the
+  same shape of ceiling that `resolvable_fraction` states for OpenAlex.
 - The date cut off is `<date review published> - 1 month`. The OpenAlex date cut off is inclusive so if the date of publication is used directly, you can end up accidentally including the source review itself. We put the cut off 1 month behind that to be on the safe side, as anything published less than a month before the review's publication is highly unlikely to make it into te systematic review.
 
 ## How to run
@@ -148,16 +159,17 @@ NB the column `ground_truth.resolvable_fraction` refers to the proportion of wor
    adjusted — only auto-derived dates get shifted.
 7. **Search depth defaults to `rapid`** (single round, no reformulation loop)
    so search and screen stay cleanly attributable to each other. `standard`
-   (75 results/backend, 2 rounds) and `deep` (150/backend, full
+   (2 rounds) and `deep` (full
    reformulate/snowball/suggest/diversity loop) are available via `--depth`
    but mix in the loop's own steering behavior, muddying that attribution —
    see `search_loop.py:DEPTH_CONSTANTS` for the exact per-depth caps.
-8. **`--result-cap-per-backend` raises the candidate pool without changing
+8. **`--record-cap-per-backend` raises the candidate pool without changing
    depth's shape at all** — a `search_loop.DEPTH_CONSTANTS[depth]` override
    applied only inside this script's own process (never touches the committed
    pipeline file). Useful because reference lists (44–240 entries observed)
-   are routinely much larger than rapid's default 50-per-backend cap can ever
-   surface — see "Diagnosing low recall."
+   are routinely much larger than rapid's default 50-kept-per-backend cap can
+   ever surface. See "The two caps" for why this is the cap that matters, and
+   "Diagnosing low recall" for the measurement.
 
 ## Prerequisites
 
@@ -192,20 +204,92 @@ uv run --project backend --env-file backend/.env python scripts/eval_ground_trut
   --title "<review title>" --url "https://.../review.pdf" --published-before 2018-09-01
 ```
 
-Add `--result-cap-per-backend 200` (or any value) to raise rapid's default
-50-per-backend cap while keeping its single-round, no-reformulation shape —
-see "Diagnosing low recall". `--depth standard`/`--depth deep` also raise the
-cap (75/150 per backend) but bring in a second round and reformulation with
-it — a different tradeoff, not a substitute.
+### The two caps
 
-A large cap may need `--disable-wall-clock` alongside it: rapid's 30-second
-wall-clock budget (`RAPID_WALL_CLOCK_S`) is untouched by
-`--result-cap-per-backend` and can cut a run off before it finishes fetching
-a big cap's worth of results — remaining planned calls are silently skipped
-when that happens, which reads as a mysteriously small result count rather
-than an obvious error. `--disable-wall-clock` removes the depth's wall-clock
-budget entirely (same eval-local `DEPTH_CONSTANTS` override mechanism,
-never touches the pipeline file).
+Search has two per-backend caps with similar names and different jobs. Both
+are recorded in every run's JSON, and confusing them wastes a lot of time.
+
+| flag | limits | rapid | standard | deep |
+|---|---|---|---|---|
+| `--result-cap-per-backend` | records requested **per HTTP call** | 50 | 75 | 100 |
+| `--record-cap-per-backend` | candidates acquire **keeps per backend** | 50 | 100 | 200 |
+
+`record_cap_per_backend` is applied after merge and dedup, and is the
+`acquire.capped` line in the run log. It is normally the tighter of the two,
+so it — not the per-call cap — is what bounds the candidate pool and therefore
+the recall ceiling. Records past it were fetched and paid for, then discarded.
+
+This is usually the one to raise. It defaults to `RECORD_CAP_PER_BACKEND`
+(200) in this eval, above rapid's built-in 50: measured on
+`10.1016/S2468-2667(22)00311-5`, the API calls returned 23 of the review's 60
+cited papers and a cap of 50 kept only 5. Pass `--record-cap-per-backend 0` to
+use the depth's own value instead.
+
+Raising it also raises cost roughly in proportion — every kept candidate is
+embedded on acquisition and screened afterwards.
+
+Both flags keep rapid's single-round, no-reformulation shape.
+`--depth standard`/`--depth deep` raise both caps too, but bring in extra
+rounds and reformulation with them — a different tradeoff, not a substitute.
+
+### Sweeping the keep cap and the prompt (search only)
+
+`sweep_record_cap.py` answers two questions at once: "how high does
+`record_cap_per_backend` have to go before recall stops improving?" and "which
+query-generation prompt finds more of the review's references?". It runs one
+review at every combination of cap and prompt, with:
+
+* depth `rapid` — one round, no reformulation, as before;
+* `result_cap_per_backend` at 2,000 — 40× the pipeline's own 50, so how many
+  records one API call may return stops being the limiting factor and the keep
+  cap is the only thing changing. (10,000 was tried first; page-numbered paging
+  runs out around there and the APIs push back.);
+* caps 50, 100, 250, 500, 1000, 2000 (`--caps`);
+* prompts `v2` and `v3` (`--prompts`) — the `search_queries_system_<version>.txt`
+  files beside `search_prompts.py`. Add a file there, name it in `--prompts`,
+  and it joins the sweep; nothing else needs changing;
+* **screening off** — no screening LLM calls, so no screening bill. Retrieval
+  is what is being measured; `screen_recall` is not reported.
+
+```
+uv run --project backend --env-file backend/.env \
+    python scripts/eval_ground_truth/sweep_record_cap.py \
+    --title "..." --doi "10.xxxx/yyyy" --repeats 1
+```
+
+`--url` replaces `--doi` for a review with no DOI (grey literature — a
+government evidence review published as a web page, say). Its reference list is
+fetched, transcribed by an LLM, then resolved entry by entry: to a DOI where
+one exists, and otherwise to an Overton policy document by title lookup. That
+second pass is what puts Overton's own performance on the scoreboard, and it
+adds about 1.2 seconds per DOI-less citation to the one-off ground-truth build.
+`--published-before` is required in this mode, because no machine-readable
+publication date exists. See "Method" for how keys are scored.
+
+It writes three CSVs into `results/`, all joinable on `run_id` and all carrying
+the review's identifier and title, so several reviews' sweeps concatenate into
+one table:
+
+| file | one row per | holds |
+|---|---|---|
+| `record_cap_sweep_runs.csv` | run × backend | calls made, records returned, candidates kept, papers found, recall. A `backend=all` row per run gives the run's own de-duplicated totals |
+| `record_cap_sweep_queries.csv` | API call | the generated query text, its wire parameters, how many records came back, how many the review actually cited (`gt_hits`) |
+| `record_cap_sweep_papers.csv` | run × reference-list entry | `key`, `space` (`doi` or `overton`), `returned_by_api` / `returned_by`, `reached_db` / `kept_from`. Filter to `reached_db` for the true positives each run found; group by `space` to score OpenAlex and Overton targets apart |
+
+A paper both providers return is kept once, under whichever backend reached it
+first, so per-backend `n_found` never double-counts and the backend rows sum to
+at most the `all` row.
+
+`--repeats` runs each combination more than once, which averages out the fact
+that query generation is an LLM call and gives slightly different queries every
+time.
+
+Cost warning: one repeat can pull thousands of records from OpenAlex and
+Overton — up to 10 pages per OpenAlex call, 40 per Overton call — and the
+defaults are already 2 prompts × 6 caps = 12 runs. Start with `--repeats 1`.
+
+`run_and_score.py` also accepts `--no-screen` for the same "search only, no
+screening bill" behaviour on a normal run.
 
 ### Batch mode (many reviews at once)
 
@@ -255,18 +339,48 @@ uv run --project backend python scripts/eval_ground_truth/test_metrics.py
 **Known finding (2026-07-28, 15-review batch)**: `search_recall` averages
 **2.4%** (0–9% range), with `screen_recall` nearly identical to
 `search_recall` everywhere — screening isn't discarding true positives, there
-simply aren't many in the candidate pool to discard. Root cause: rapid depth's
-`result_cap_per_backend` (50) is split across up to 5 OpenAlex queries + 2
-Overton paraphrases (`search_prompts.py:N_QUERIES`), so raw candidate counts
-land around 17–36 total per run — while reference lists run 44–240 entries.
-Recall is capped by that ratio before search quality even matters (e.g. 240
-GT DOIs vs. 20-ish candidates caps recall at ~8% even with perfect precision).
+simply aren't many in the candidate pool to discard.
 `openalex_resolvable_fraction: 1.0` on every review rules out "not indexed" —
-the papers are there, just not pulled in given the tiny per-query quota.
-**Use `--result-cap-per-backend`** (Methodology point 8) to raise the ceiling
-without changing rapid's single-round shape, then re-check `search_calls`
-(below) to see whether recall moves with a bigger candidate pool, or whether
-query *diversity* (not just depth) is the remaining bottleneck.
+the papers are there.
+
+**Root cause (revised 2026-08-24, single-review measurement)**: it is
+`record_cap_per_backend`, not `result_cap_per_backend`.
+
+An earlier version of this note blamed rapid's `result_cap_per_backend` (50)
+being "split across" the query fan-out. That splitting *was* the behaviour, it
+was a bug, and it has since been fixed — `result_cap_per_backend` is now
+per-HTTP-call, and `search_loop.py:DepthConstants` says so explicitly. The
+diagnosis outlived the bug.
+
+Measured on `10.1016/S2468-2667(22)00311-5` (60 cited papers, all 60 indexed
+in OpenAlex, rapid depth), one run:
+
+| stage | ground-truth papers still alive |
+|---|---|
+| indexed in OpenAlex at all | 60 / 60 |
+| returned by some API call | **23 / 60** |
+| survived dedup + `record_cap_per_backend` (50) | **5 / 60** → `search_recall` 8.3% |
+| screened in | 5 / 60 → `screen_recall` 8.3% |
+
+18 API calls returned 617 records. The APIs *did* return 23 of the cited
+papers; the keep-cap then discarded 18 of those 23. So roughly 30 of the 52
+lost percentage points were fetched, paid for, and thrown away — not missed by
+search. Screening lost nothing.
+
+**Use `--record-cap-per-backend`** (Methodology point 8, "The two caps") to
+raise the ceiling without changing rapid's single-round shape, then re-check
+whether recall moves. Two further findings from the same run point at query
+*diversity* as the next bottleneck once the cap stops binding:
+
+- Only 4 of 18 calls returned any cited paper. The `"systematic review" OR
+  "meta-analysis"` and RCT-filtered query variants returned none — expected,
+  since the recall target is the primary studies a review *cites*, not other
+  reviews.
+- Overton returned 150 records carrying 3 DOIs between them. Recall is keyed
+  on DOIs, so the Overton leg cannot currently score at all.
+
+`inspect_run.py` reproduces all of the above from a saved report — see
+"Unpicking a run" below.
 
 Each `per_query` entry in the report includes `search_calls`: every
 OpenAlex/Overton query the search-generation stage actually produced for that
@@ -283,13 +397,48 @@ wrapping the live backends in a transparent `_RecordingBackend`
 ]
 ```
 
-Load a report's JSON in a notebook (`json.load` + `pandas.json_normalize` on
-`report["per_query"][i]["search_calls"]`) to inspect exactly what queries were
-generated and what came back, e.g. to check whether a known ground-truth DOI
-ever appeared in any raw result set (if not, that's a search-generation/
-OpenAlex-coverage problem) versus appeared but got dropped before screening
-(a different problem — check `result_count` vs. what ends up in
-`source_snapshot` for that project).
+### Unpicking a run
+
+`inspect_run.py` turns that raw data into per-stage tables, so you can see the
+**title and DOI** of every record every API call returned instead of only the
+counts. Every function is a read-only view over data a run already produced,
+so a run sitting in a notebook kernel (or a saved report) can be inspected
+without paying for the API calls again.
+
+```python
+from inspect_run import call_table, records_table, funnel_table, ground_truth_table
+
+summarize(ground_truth, RUN)                        # the funnel, as counts
+call_table(RUN.search_calls, ground_truth.dois)     # one row per API call
+records_table(RUN.search_calls, ground_truth.dois)  # one row per returned record
+gt = ground_truth_table(ground_truth)               # the recall target, with titles
+funnel_table(ground_truth, RUN, gt)                 # where each cited paper was lost
+cap_losses(ground_truth, RUN, gt)                   # found by API, dropped by the cap
+unexplained_screened(RUN, ground_truth)             # screened in, not cited
+```
+
+`funnel_table` answers the question that matters, per cited paper, in pipeline
+order:
+
+- `returned_by_api` False → no generated query reached it. A search-generation
+  or coverage problem.
+- `returned_by_api` True, `reached_db` False → the API found it and
+  `record_cap_per_backend` threw it away. Raise the cap; do not rewrite the
+  queries.
+- `reached_db` True, `screened_in` False → the pipeline had the paper in hand
+  and judged it irrelevant.
+
+Titles and DOIs come from the pipeline's own record mappers
+(`acquire._MAPPERS`), not a second parse of the provider JSON, so what you see
+is what the pipeline saw.
+
+`funnel_table`'s last two columns need `search_docs` / `screened_docs` on
+`QueryResult`; a report saved before those fields existed shows them as `None`
+rather than failing. The API-call views need only `search_calls`.
+
+`run_and_score.ipynb` drives all of this for a single review, one cell per
+stage. Note that the notebook calls `run_one_query` directly and so bypasses
+`main()` — it applies the cap override in its own cell.
 
 ## Choosing a review
 
@@ -331,8 +480,18 @@ something intent-shaped into `intent`.
   partitions results against the ground-truth set, runs the judge, computes
   metrics, writes the report. `--corpus` runs this over every review in a
   `fetch_review_corpus.py` corpus and adds an aggregate-across-reviews report.
+- `sweep_record_cap.py` — search-only sweep of `record_cap_per_backend` and of
+  the query-generation prompt, with the per-call fetch cap effectively removed
+  and screening off. Writes three joinable CSVs (runs, queries, papers). See
+  "Sweeping the keep cap and the prompt".
+- `inspect_run.py` — per-stage diagnosis views over a finished run: titles and
+  DOIs per API call, and a per-paper funnel showing where each cited paper was
+  lost. Read-only, no network or DB of its own. See "Unpicking a run".
+  `python inspect_run.py` runs its own self-check on synthetic data.
 - `test_metrics.py` — self-check for the pure scoring functions (DOI
   normalization, recall, partitioning).
+- `run_and_score.ipynb` — the same pipeline as `run_and_score.py`, one cell per
+  stage, for inspecting a single review interactively.
 - `experiment_generate_queries.ipynb` — interactive notebook for the
   query-generation LLM call in isolation (no DB/OpenAlex/Overton needed, just
   `OPENAI_API_KEY`): build an intent, generate queries, see the rapid-depth

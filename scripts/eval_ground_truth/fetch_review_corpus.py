@@ -53,7 +53,7 @@ from typing import Any
 
 import httpx
 
-from ground_truth import build_ground_truth_from_doi, decode_abstract, normalize_doi
+from ground_truth import build_ground_truth_from_doi, decode_abstract, normalize_doi, openalex_get
 
 OPENALEX_HOST = "https://api.openalex.org"
 
@@ -68,15 +68,12 @@ _PER_PAGE_CAP = 200
 
 def fetch_candidates(limit: int) -> list[dict[str, Any]]:
     """Top-``limit`` OQL candidates by citation count, most-cited first."""
-    resp = httpx.get(
-        f"{OPENALEX_HOST}/works",
-        params={
-            "filter": QUERY_FILTER,
-            "select": _SELECT,
-            "sort": "cited_by_count:desc",
-            "per-page": str(min(limit, _PER_PAGE_CAP)),
-        },
-        timeout=30.0,
+    resp = openalex_get(
+        "/works",
+        filter=QUERY_FILTER,
+        select=_SELECT,
+        sort="cited_by_count:desc",
+        per_page=str(min(limit, _PER_PAGE_CAP)),
     )
     resp.raise_for_status()
     return resp.json().get("results", [])[:limit]

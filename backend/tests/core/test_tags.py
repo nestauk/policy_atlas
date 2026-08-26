@@ -1,13 +1,69 @@
 """Tests for the shared ``source_tag`` write path in ``policy_atlas.core.tags``."""
 
 import uuid
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import METHODOLOGICAL_STRUCTURAL, source_tag
-from policy_atlas.core.tags import insert_source_tags
+from policy_atlas.core.tags import TAG_INSERT_BATCH, insert_source_tags
 from tests.helpers import now, seed_project_and_run, seed_source
+
+# PostgreSQL's hard limit on bind parameters in one statement.
+_MAX_BIND_PARAMS = 65_535
+
+
+def test_insert_source_tags_batches_more_rows_than_one_statement_can_bind() -> None:
+    """A big acquire round must not be sent as one oversized statement.
+
+    PostgreSQL accepts at most 65,535 bind parameters per statement and a tag
+    row spends 9 of them, so a single insert breaks above ~7,281 rows — which a
+    search round at a high record cap reaches. No database needed: this counts
+    the statements the write path emits and checks each one's parameter load.
+    """
+
+    class _RecordingConn:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
+        def execute(self, statement: Any) -> None:
+            self.statements.append(statement)
+
+    recorder = _RecordingConn()
+    pss_id = uuid.uuid4()
+    n_rows = TAG_INSERT_BATCH * 2 + 1
+
+    insert_source_tags(
+        cast(Connection, recorder),
+        project_id=uuid.uuid4(),
+        run_id=uuid.uuid4(),
+        now=now(),
+        assertions=[(pss_id, f"tag-{i}", "test") for i in range(n_rows)],
+    )
+
+    assert len(recorder.statements) == 3
+    for statement in recorder.statements:
+        assert len(statement.compile().params) <= _MAX_BIND_PARAMS
+
+
+def test_insert_source_tags_no_rows_executes_nothing() -> None:
+    class _RecordingConn:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
+        def execute(self, statement: Any) -> None:
+            self.statements.append(statement)
+
+    recorder = _RecordingConn()
+    insert_source_tags(
+        cast(Connection, recorder),
+        project_id=uuid.uuid4(),
+        run_id=uuid.uuid4(),
+        now=now(),
+        assertions=[],
+    )
+    assert recorder.statements == []
 
 
 def test_insert_source_tags_default_topic_theme(conn: Connection) -> None:

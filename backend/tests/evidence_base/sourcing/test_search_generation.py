@@ -26,7 +26,9 @@ def _backend(
 
 
 def test_generate_queries_passes_model_and_returns_parsed_wire() -> None:
-    assert SEARCH_QUERIES_PROMPT_VERSION == "search_queries_v1"
+    # Derived from the prompt file's name (search_queries_system_v3.txt), so
+    # swapping the prompt file relabels the traces automatically.
+    assert SEARCH_QUERIES_PROMPT_VERSION == "search_queries_v3"
     wire = SearchQueriesWire(
         queries=["policy evaluation", "randomized trial"],
         overton_paraphrases=["Evidence about policy evaluation"],
