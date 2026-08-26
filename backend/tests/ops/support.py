@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import boto3
-from botocore.stub import Stubber
+from botocore.stub import ANY, Stubber
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 
 #: A pool id shaped like a real one. Never reached — the Stubber answers first.
@@ -92,6 +92,30 @@ def expect_lookup(stubber: Stubber, *, email: str, sub: str | None) -> None:
         "list_users",
         {"Users": users},
         {"UserPoolId": POOL_ID, "Filter": f'email = "{email}"', "Limit": 1},
+    )
+
+
+def expect_create_manual(stubber: Stubber, *, email: str, sub: str) -> None:
+    """Queue the suppressed-invitation ``AdminCreateUser`` of ``--invite manual``.
+
+    ``TemporaryPassword`` is ``ANY`` because the CLI mints it (never accepts
+    one — rubric 30 stands); ``MessageAction: SUPPRESS`` and the ABSENCE of
+    ``DesiredDeliveryMediums`` are exact-matched, so an email leaking out of
+    manual mode fails here.
+    """
+    stubber.add_response(
+        "admin_create_user",
+        {"User": {"Username": sub, "Attributes": [{"Name": "sub", "Value": sub}]}},
+        {
+            "UserPoolId": POOL_ID,
+            "Username": email,
+            "UserAttributes": [
+                {"Name": "email", "Value": email},
+                {"Name": "email_verified", "Value": "true"},
+            ],
+            "TemporaryPassword": ANY,
+            "MessageAction": "SUPPRESS",
+        },
     )
 
 

@@ -36,6 +36,7 @@ from tests.ops.support import (
     POOL_ID,
     cognito,
     expect_create,
+    expect_create_manual,
     expect_lookup,
     fresh_sub,
 )
@@ -132,6 +133,99 @@ def test_user_create_sends_the_email_delivery_medium_explicitly(conn: Connection
     row = _user_row(conn, sub)
     assert row is not None
     assert (row.org_id, row.email, row.display_name) == (org.org_id, email, "New Person")
+
+
+def test_user_create_manual_invite_mints_and_prints_a_single_use_password(
+    conn: Connection,
+) -> None:
+    """Owner amendment 2026-08-26: `--invite manual` for spam-swallowed inboxes.
+
+    The Stubber pins the wire shape (``MessageAction: SUPPRESS``, a minted
+    ``TemporaryPassword``, and NO ``DesiredDeliveryMediums``). The minted value
+    is generated, never accepted — rubric 30 stands — and appears exactly once,
+    in the operator-facing summary, with every Cognito-default character class
+    so the pool's password policy cannot refuse it.
+    """
+    org = _org(conn)
+    email = unique_email("manual")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create_manual(stubber, email=email, sub=sub)
+        with capture_logs() as logged:
+            enrolment = commands.create_user(
+                conn,
+                client,
+                pool_id=POOL_ID,
+                email=email,
+                display_name="Manual Person",
+                org=org,
+                invite="manual",
+            )
+        stubber.assert_no_pending_responses()
+
+    minted = enrolment.temporary_password
+    assert minted is not None
+    assert len(minted) == 20
+    assert any(c.islower() for c in minted)
+    assert any(c.isupper() for c in minted)
+    assert any(c.isdigit() for c in minted)
+    assert any(not c.isalnum() for c in minted)
+    assert minted in enrolment.summary()
+    assert "single-use" in enrolment.summary()
+    # The credential reaches stdout once, and structlog never sees it.
+    assert not any(minted in str(event) for event in logged)
+    assert _user_row(conn, sub) is not None
+
+
+def test_user_create_email_invite_carries_no_temporary_password(
+    conn: Connection,
+) -> None:
+    """The default mode is byte-identical to before the amendment."""
+    org = _org(conn)
+    email = unique_email("emailed")
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create(stubber, email=email, sub=fresh_sub())
+        enrolment = commands.create_user(
+            conn, client, pool_id=POOL_ID, email=email, display_name="E", org=org
+        )
+        stubber.assert_no_pending_responses()
+    assert enrolment.temporary_password is None
+    assert "temporary password" not in enrolment.summary()
+
+
+def test_a_kept_account_failure_still_surfaces_the_minted_password(
+    conn: Connection,
+) -> None:
+    """Losing the minted value would strand the account.
+
+    In manual mode no email was ever sent and `user create` refuses existing
+    addresses, so if the database write fails after Cognito succeeded, the
+    refusal is the only place the credential can survive.
+    """
+    ghost = commands.Organisation(org_id=uuid.uuid4(), name="Ghost Org")
+    email = unique_email("manual-orphan")
+    sub = fresh_sub()
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=None)
+        expect_create_manual(stubber, email=email, sub=sub)
+        with conn.begin_nested() as savepoint:
+            with pytest.raises(OpsError) as refusal:
+                commands.create_user(
+                    conn,
+                    client,
+                    pool_id=POOL_ID,
+                    email=email,
+                    display_name="X",
+                    org=ghost,
+                    invite="manual",
+                )
+            savepoint.rollback()
+        stubber.assert_no_pending_responses()
+    message = str(refusal.value)
+    assert "KEPT" in message
+    assert "temporary password is:" in message
 
 
 def test_user_create_refuses_an_existing_address_and_says_use_enrol(conn: Connection) -> None:

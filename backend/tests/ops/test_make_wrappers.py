@@ -98,6 +98,19 @@ def test_exclusive_pairs_are_forwarded_as_given_so_the_cli_owns_the_refusal() ->
         build_parser().parse_args(argv)
 
 
+def test_the_invite_mode_rides_the_create_wrapper() -> None:
+    argv = _dry_run(
+        "user-create",
+        ENV="staging",
+        EMAIL="a@b.org",
+        NAME="A Name",
+        ORG="Org",
+        INVITE="manual",
+    )
+    args = build_parser().parse_args(argv)
+    assert args.invite == "manual"
+
+
 def test_the_operator_annotation_rides_every_wrapper() -> None:
     argv = _dry_run("admin-revoke", ENV="staging", SUB="sub-1234", OPERATOR="ticket-9")
     args = build_parser().parse_args(argv)

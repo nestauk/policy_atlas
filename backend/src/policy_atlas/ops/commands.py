@@ -43,9 +43,11 @@ evidence.
 
 from __future__ import annotations
 
+import secrets
+import string
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 from botocore.exceptions import ClientError
@@ -145,15 +147,25 @@ class Enrolment(Record):
     created: bool
     projects_moved: int
     portfolios_moved: int
+    #: Set only by `user create --invite manual` (owner amendment 2026-08-26).
+    #: Rendered ONCE in the summary for out-of-band handover; never logged —
+    #: `summary()` output goes to the operator's stdout, not through structlog.
+    temporary_password: str | None = None
 
     def summary(self) -> str:
         """Render the enrolment line, including what moved."""
         verb = "enrolled" if self.created else "re-enrolled"
-        return (
+        line = (
             f"{verb} {self.email} ({self.user_id}) in {self.org.name!r}; "
             f"moved {self.projects_moved} project(s), {self.portfolios_moved} "
             "portfolio(s), all private"
         )
+        if self.temporary_password is not None:
+            line += (
+                f"\ntemporary password (single-use, 7-day expiry, they set their "
+                f"own at first sign-in): {self.temporary_password}"
+            )
+        return line
 
 
 @dataclass(frozen=True)
@@ -338,6 +350,26 @@ def resolve_organisation(conn: Connection, token: str) -> Organisation:
 # --------------------------------------------------------------------------
 
 
+def _mint_temporary_password() -> str:
+    """Mint a policy-compliant single-use temporary password.
+
+    Generated, never accepted: rubric 30's "no command accepts a password"
+    holds because this value originates here, not from an operator. 20
+    characters with every Cognito-default class guaranteed (upper, lower,
+    digit, symbol); the symbol set avoids quotes, backslashes and ``$`` so the
+    printed value copies cleanly through a shell.
+    """
+    symbols = "!@#%^*-_+="
+    pools = (string.ascii_lowercase, string.ascii_uppercase, string.digits, symbols)
+    everything = "".join(pools)
+    chars = [secrets.choice(pool) for pool in pools]
+    chars += [secrets.choice(everything) for _ in range(16)]
+    # secrets-driven order, so the guaranteed classes are not positionally fixed.
+    return "".join(
+        chars.pop(secrets.randbelow(len(chars))) for _ in range(len(chars))
+    )
+
+
 def create_user(
     conn: Connection,
     cognito: CognitoIdentityProviderClient,
@@ -346,6 +378,7 @@ def create_user(
     email: str,
     display_name: str,
     org: Organisation,
+    invite: str = "email",
 ) -> Enrolment:
     """Create a Cognito account, then enrol it.
 
@@ -357,11 +390,20 @@ def create_user(
     coupled to ownership transfer), and no path in this package calls
     ``AdminDeleteUser``.
 
-    ``DesiredDeliveryMediums=["EMAIL"]`` is passed explicitly because **AWS
-    defaults it to SMS** and the pool holds no phone numbers. The invitation is
-    *not* suppressed — that, and the password the deleted ``cognito-user`` make
-    target took on the command line, are the two things this command exists to
-    stop doing.
+    Two invitation modes (owner amendment 2026-08-26 — the ``COGNITO_DEFAULT``
+    sender lands in spam; SES integration is the deferred fix):
+
+    - ``email`` (default): ``DesiredDeliveryMediums=["EMAIL"]``, passed
+      explicitly because **AWS defaults it to SMS** and the pool holds no
+      phone numbers.
+    - ``manual``: the invitation is suppressed and this command **mints** a
+      single-use temporary password (printed once in the summary for
+      out-of-band handover; the person sets their own at first sign-in —
+      ``FORCE_CHANGE_PASSWORD``). Distinct from the deleted ``cognito-user``
+      make target on every axis that killed it: nothing is accepted from the
+      operator, nothing rides argv, and the credential is single-use and
+      force-rotated rather than permanent. Uses no IAM beyond
+      ``AdminCreateUser``.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -370,14 +412,17 @@ def create_user(
         email: The new account's address; also its sign-in identifier.
         display_name: Required, and never the email (contract § 3b).
         org: Where to enrol them.
+        invite: ``email`` or ``manual`` (validated by the parser).
 
     Returns:
-        The enrolment (zero rows moved — a new account owns nothing yet).
+        The enrolment (zero rows moved — a new account owns nothing yet),
+        carrying the minted temporary password in ``manual`` mode.
 
     Raises:
         OpsError: If the address already exists in the pool, if Cognito refuses
             the creation, or if the database write fails after the account was
-            created.
+            created — in ``manual`` mode that message carries the minted
+            password, because the kept account has it and no email was sent.
     """
     _require_filter_safe(email)
     if _find_sub_by_email(cognito, pool_id=pool_id, email=email) is not None:
@@ -386,16 +431,23 @@ def create_user(
             f"`user enrol --email {email} --org {org.name!r} "
             f"--display-name {display_name!r}`"
         )
+    minted: str | None = None
+    request: dict[str, object] = {
+        "UserPoolId": pool_id,
+        "Username": email,
+        "UserAttributes": [
+            {"Name": "email", "Value": email},
+            {"Name": "email_verified", "Value": "true"},
+        ],
+    }
+    if invite == "manual":
+        minted = _mint_temporary_password()
+        request["TemporaryPassword"] = minted
+        request["MessageAction"] = "SUPPRESS"
+    else:
+        request["DesiredDeliveryMediums"] = ["EMAIL"]
     try:
-        response = cognito.admin_create_user(
-            UserPoolId=pool_id,
-            Username=email,
-            UserAttributes=[
-                {"Name": "email", "Value": email},
-                {"Name": "email_verified", "Value": "true"},
-            ],
-            DesiredDeliveryMediums=["EMAIL"],
-        )
+        response = cognito.admin_create_user(**request)  # type: ignore[arg-type]
     except ClientError as error:
         # The lookup above is Cognito's own exact-match filter, so it can lose
         # a race, and it cannot see an account whose alias — not its `email`
@@ -416,7 +468,7 @@ def create_user(
             f"--org {org.name!r} --display-name {display_name!r}`."
         )
     try:
-        return _enrol(
+        enrolment = _enrol(
             conn,
             sub=sub,
             email=email,
@@ -424,12 +476,20 @@ def create_user(
             org=org,
         )
     except Exception as error:
+        # In manual mode the minted password must ride the refusal: the kept
+        # account carries it, no email was ever sent, and `user create` refuses
+        # existing addresses — losing it here would strand the account.
+        kept_password = (
+            f" Its single-use temporary password is: {minted} (printed once, "
+            f"7-day expiry)." if minted is not None else ""
+        )
         raise OpsError(
             f"the Cognito account for {email} was created and has been KEPT, but the "
-            f"database write failed ({error}). Nothing was enrolled. Re-run just the "
-            f"enrolment: `user enrol --email {email} --org {org.name!r} "
-            f"--display-name {display_name!r}`"
+            f"database write failed ({error}).{kept_password} Nothing was enrolled. "
+            f"Re-run just the enrolment: `user enrol --email {email} "
+            f"--org {org.name!r} --display-name {display_name!r}`"
         ) from error
+    return replace(enrolment, temporary_password=minted)
 
 
 def enrol_user(

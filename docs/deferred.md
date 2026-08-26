@@ -2220,6 +2220,16 @@ omissions.
 - **`admin_stream_read` volume** — an idle admin SSE stream emits one trace line per
   0.4 s poll (~2.5/s), which is § 3a's grain implemented as written. If CloudWatch
   cost bites, the lever is the poll interval (or batching), never dropping the grain.
+- **SES-backed pool email** (owner call, 2026-08-26 — the durable fix for
+  invitation deliverability). The pool has no `EmailConfiguration`, so
+  invitations leave via `COGNITO_DEFAULT` from `no-reply@verificationemail.com`
+  (spam-prone, 50/day). The slice: a verified SES domain identity for the
+  product domain with DKIM/SPF in Route53, `EmailConfiguration` (DEVELOPER
+  mode, `SourceArn` + a real `From`) on the pool — infra/prod-config gated —
+  **plus an SES production-access request** (a fresh SES account is sandboxed
+  to verified recipients) and the note that the 50/day cap becomes SES's own
+  limits. Until then `user create --invite manual` (single-use minted temp
+  password, printed once, forced change at first sign-in) is the workaround.
 - **Membership moves race API row creation** (review finding, 2026-08-25, declined
   as a code fix). `creator_org_id` is a non-locking read, so a project created in
   the window around an enrol/re-enrol/de-enrol can carry the old membership's

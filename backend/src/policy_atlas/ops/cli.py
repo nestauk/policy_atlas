@@ -226,6 +226,17 @@ def build_parser() -> argparse.ArgumentParser:
     user_create.add_argument("--email", required=True, type=_email)
     user_create.add_argument("--display-name", required=True)
     user_create.add_argument("--org", required=True, help="organisation name or id")
+    user_create.add_argument(
+        "--invite",
+        choices=("email", "manual"),
+        default="email",
+        help=(
+            "email: Cognito emails the invitation (COGNITO_DEFAULT sender). "
+            "manual: suppress the email; the CLI mints a single-use temporary "
+            "password and prints it once for out-of-band handover — it never "
+            "accepts one (owner amendment 2026-08-26)"
+        ),
+    )
 
     user_enrol = user.add_parser("enrol", help="enrol an existing account, moving its owner's rows")
     user_enrol.add_argument("--email", required=True, type=_email)
@@ -383,10 +394,17 @@ def _dispatch(
         if args.command == "de-enrol":
             return commands.de_enrol_user(conn, email=args.email, sub=args.sub)
         org = commands.resolve_organisation(conn, args.org)
-        create_or_enrol = (
-            commands.create_user if args.command == "create" else commands.enrol_user
-        )
-        return create_or_enrol(
+        if args.command == "create":
+            return commands.create_user(
+                conn,
+                cognito,
+                pool_id=target.user_pool_id,
+                email=args.email,
+                display_name=args.display_name,
+                org=org,
+                invite=args.invite,
+            )
+        return commands.enrol_user(
             conn,
             cognito,
             pool_id=target.user_pool_id,

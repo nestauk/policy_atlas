@@ -817,6 +817,27 @@ default asserted + colleague 404 until the owner shares); the lock-timeout
 structural test now covers both tenancy migrations. Contract line 39
 stands as history; data-model.md and web-api.md record the amendment.
 
+### Post-review owner amendment (2026-08-26): `--invite manual`
+
+The `COGNITO_DEFAULT` invitation sender (`no-reply@verificationemail.com`)
+lands in spam, so the owner chose operator-mediated temporary passwords as
+the interim, with SES-backed pool email as the deferred durable fix (new
+deferred.md entry). `user create --invite manual` suppresses the email and
+**mints** a single-use temporary password (20 chars, every Cognito-default
+class), printed once in the summary for out-of-band handover; the person
+sets their own at first sign-in (`FORCE_CHANGE_PASSWORD`, 7-day validity).
+Rubric 30's pin survives intact — no command *accepts* a password (the
+structural parser test is unchanged and still passes), nothing rides argv,
+the minted value never reaches structlog (asserted), and operator IAM
+stays exactly `ListUsers` + `AdminCreateUser`. The kept-account failure
+path carries the minted value in its refusal — the account holds it and no
+email was sent, so losing it would strand the account (pinned). Distinct
+from the deleted `cognito-user` target on every axis that killed it:
+generated not accepted, single-use not permanent, forced rotation.
+Wire shape Stubber-pinned (`MessageAction: SUPPRESS` + `TemporaryPassword`
+present + `DesiredDeliveryMediums` absent); default email mode pinned
+byte-identical. Four new tests; wrapper passthrough `INVITE=manual`.
+
 ## Deviations flagged (minor, resolved within the contract's vocabulary)
 
 1. **`cache_logger_on_first_use=True` dropped from `configure_logging()`** (Phase 0b).

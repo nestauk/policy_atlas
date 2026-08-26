@@ -61,7 +61,7 @@ OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 org-create:
 	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
 user-create:
-	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)"
+	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)" $(if $(INVITE),--invite "$(INVITE)")
 user-enrol:
 	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user enrol --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)"
 user-resync:

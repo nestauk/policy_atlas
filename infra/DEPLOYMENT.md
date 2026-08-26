@@ -259,6 +259,16 @@ synth-time context query and must not run before the VPC exists.
      `PA_OPS_*_PROD` variables and prod-account credentials, not
      `AWS_PROFILE=pa-dev`.
 
+     **When the invitation email is not viable** (the `COGNITO_DEFAULT` sender
+     is `no-reply@verificationemail.com`, which spam filters routinely
+     swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
+     suppressed and the CLI **mints** a single-use temporary password, printed
+     once for out-of-band handover — the person sets their own at first
+     sign-in (`FORCE_CHANGE_PASSWORD`, 7-day validity). The CLI still accepts
+     no password from anyone, and the mode needs no IAM beyond
+     `AdminCreateUser`. The durable fix is SES-backed pool email
+     (docs/deferred.md § Organisations — SES entry).
+
      The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
      `EmailConfiguration`), which is capped at 50 messages a day and needs a
      real deliverable mailbox.
