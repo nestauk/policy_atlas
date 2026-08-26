@@ -107,7 +107,7 @@ export function ThemesView() {
 
       {isEmpty && (
         <Card role="status" className="p-8 text-center text-body text-grey">
-          Themes appear once screening has run.
+          Themes appear once the Mapping step has finished.
         </Card>
       )}
 

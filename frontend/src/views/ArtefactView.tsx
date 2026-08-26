@@ -1201,9 +1201,9 @@ export function ArtefactView() {
     return (
       <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         <Card role="status" className="p-8 text-center">
-          <h1 className="text-title font-bold text-navy">No evidence base yet</h1>
+          <h1 className="text-title font-bold text-navy">Preparing your results...</h1>
           <p className="mt-1.5 text-body text-grey">
-            The evidence base appears here once an analysis reaches synthesis.
+          Your synthesised report will appear here when the Writing step begins.
           </p>
         </Card>
       </main>
