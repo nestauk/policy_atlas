@@ -1,6 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { MOCK_CHAT_CLAIM_TEXT, MOCK_PROJECT_ID, mockCheckIn, mockProject } from "../src/mock/fixtures";
+import {
+  MOCK_CHAT_CLAIM_TEXT,
+  MOCK_PROJECT_ID,
+  mockCheckIn,
+  mockEvidence,
+  mockProject,
+} from "../src/mock/fixtures";
 
 /**
  * End-to-end mock journey (task 025 I.1; rewritten 027 F.2 for the uplifted
@@ -260,10 +266,14 @@ test.describe("mock task-lifecycle journey", () => {
     // collection-true shown count.
     await sourcesSubnav.getByRole("link", { name: "All sources" }).click();
     await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}/sources/all$`));
-    const sourceRows = page.getByRole("row");
+    // Scope to the sources table — S6's Search queries section adds its own
+    // tables below, and a page-wide `row` count would include them.
+    const sourcesTable = page.getByRole("table").first();
+    const sourceRows = sourcesTable.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
     // Default view = All, sorted on the relevance spectrum.
-    await expect(sourceRows).toHaveCount(10);
+    await expect(sourceRows).toHaveCount(mockEvidence.length + 1);
+    await expect(page.getByRole("heading", { name: "Search queries" })).toBeVisible();
     // The retracted verdict lives in the Relevant column's hover button.
     await expect(
       page.getByRole("button", { name: "Excluded — retracted: screening details" }),
@@ -272,7 +282,8 @@ test.describe("mock task-lifecycle journey", () => {
     const sourceFilters = page.getByRole("group", { name: "Filter sources" });
     await sourceFilters.getByRole("button", { name: "Screened out" }).click();
     await expect(page).toHaveURL(/[?&]status=screened_out/);
-    await expect(sourceRows).toHaveCount(2);
+    const screenedOut = mockEvidence.filter((item) => item.status === "screened_out").length;
+    await expect(sourceRows).toHaveCount(screenedOut + 1);
 
     // (m) An unknown route renders the honest "nothing here" view.
     await page.goto("/this-route-does-not-exist");

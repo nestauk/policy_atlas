@@ -21,13 +21,15 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     await page.goto("/");
     await loadedProjects;
 
-    await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "New task" })).toBeVisible();
+    // S4: a first-time account has no active or archived tasks, so `/`
+    // redirects to `/new`. The GET 200 above is still the wiring check.
+    await expect(page).toHaveURL(/\/new$/);
+    await expect(page.getByRole("heading", { name: "What would you like to do?" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Evidence search" })).toBeVisible();
   });
 
   test("creates a project through the real authenticated POST", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("link", { name: "New", exact: true }).click();
+    await page.goto("/new");
     await page.getByRole("button", { name: "Evidence search" }).click();
     await page.getByLabel("Your question").fill("FE API smoke project");
 

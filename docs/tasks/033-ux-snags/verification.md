@@ -31,6 +31,13 @@ combined contract+plan gate, before implementation:
 
 No extra table, route, or prompt surface beyond those three.
 
+**Round 2 (owner steers, 2026-08-25):** the prompt gate shipped as
+**`planner_v10`**, superseding v9 within this branch — the owner added a
+verbatim OECD study-setting screening criterion (`OECD_SETTING_CRITERION`)
+alongside the origin default, because origin filters cannot see study
+setting. Same gate, one further rev; hash re-pinned; pin test asserts v10.
+See § Round 2 below for the other steers.
+
 ## Commands run
 
 | Command | Result | Notes |
@@ -104,7 +111,8 @@ make -C backend test \
 
 ## Diff summary
 
-Uncommitted on `task/033-ux-snags` (from `dev`). One slice, ten snags:
+Committed on `task/033-ux-snags` (from `dev`): `518cff2` (round 1, below)
+and `5594693` (round 2, § Round 2). One slice, ten snags:
 
 1. **S1** — `source_count` counts effective screens with status `relevant`
    (Included). `None` iff no `capability_run`; `0` if a run exists and none
@@ -135,6 +143,41 @@ Uncommitted on `task/033-ux-snags` (from `dev`). One slice, ten snags:
 
 Specs `web-api.md` and `data-model.md` updated. Many-to-many and mock
 `/portfolios` discharged in `docs/deferred.md`. Real sharing stays deferred.
+
+## Round 2 — owner steers after the round-1 build (2026-08-25/26)
+
+Commit `5594693`, plus a small uncommitted tail (journey.spec.ts scoping,
+OpenAPI regen). Not new snags; all are steers on the shipped surfaces:
+
+1. **`planner_v10`** — OECD study-setting screening criterion added verbatim
+   (`OECD_SETTING_CRITERION`), on top of v9's origin default. Hash re-pinned
+   via `prompt_hash_guard.py --update`; `test_planner_prompt_version_pinned`
+   asserts v10.
+2. **Results tab unlocked while `running`/`paused`** — supersedes 032's
+   locking table so the in-progress write-up is reachable; failed/aborted/
+   interrupted still lock Results. `lifecycle.ts` + tests updated.
+3. **Citation-context rework** (grey off-topic neighbours; artefact 404s) —
+   both context keyings now share `_clamped_quote_window` in
+   `repository.py`: `locate_unique_span` for the artefact path too (curly
+   quotes/case/whitespace now 200 instead of 404), `previous`/`next` reduced
+   from whole adjacent chunks to ≤220-char edge snippets attached only when
+   the ±800 window hits that chunk boundary, cuts snapped to word boundaries,
+   `...` marking truncated edges. Spec § chunk context and
+   `docs/knowledge/chunk-context-two-keyings.md` updated; new tests in
+   `test_read_models.py`.
+4. **Type-scale / layout pass** — all-caps labels and chips `text-caption` →
+   `text-meta` (14px); chart ticks 14px; `scrollbar-gutter` released under
+   `html.overflow-hidden` (dead right-edge strip); Sources/Plan widths kept;
+   query cells `break-all`; count line moved between filters and table.
+5. **Failed summary placeholder removed** — `AnswerCallout` renders nothing
+   on `failed` (pending copy stays).
+
+Round-2 verification: `make frontend-verify` green 2026-08-25 (414 tests /
+62 files); targeted backend suites 2026-08-26 — `test_read_models.py` +
+`test_conversations_router.py` 33 passed, ruff clean; `make openapi-sync` +
+`make drift-check` OK 2026-08-26 after the ChunkContextOut docstring change.
+A full `make verify` has **not** been re-run after round 2 — run it before
+the PR.
 
 ## Incidents (build-time, for the review conversation)
 
@@ -234,7 +277,10 @@ running-card round list was not done in a browser in this conversation.**
 - Live group-chip 422: one `setSearchParams` updater is in place; **not**
   exercised against a live API. If CI or a human finds a remaining
   label-vs-`group_id` mismatch, fix or record — do not drop.
-- Per-phase git commits (working tree uncommitted).
+- Per-phase git commits — the work landed as two commits (round 1 + round 2),
+  not the plan's per-phase commits.
+- Full `make verify` after round 2 (only targeted suites + frontend-verify +
+  drift-check re-run since the owner's 2026-08-24 green run).
 
 ## Review handoff (step-7/8 inputs)
 
