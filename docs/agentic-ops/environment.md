@@ -121,6 +121,23 @@ make verify              # test (against policy_atlas_test) -> typecheck -> lint
 - User / password are `policy_atlas` (local dev only — not secrets). **Two databases** on the one
   container: `policy_atlas` (dev / smoke) and `policy_atlas_test` (tests; created by `make setup`).
 
+## Claude Code MCP (optional)
+
+Skills that read from the local database (currently `policy-options`) go through a Model
+Context Protocol server called `postgres-local`. It uses the reference
+`@modelcontextprotocol/server-postgres`, which wraps every query in a Postgres
+`BEGIN TRANSACTION READ ONLY`, so writes are refused at the transaction level even though
+the DB user has read/write grants.
+
+To register it (one-off, per developer):
+
+```
+claude mcp add postgres-local -- npx -y @modelcontextprotocol/server-postgres postgresql://policy_atlas:policy_atlas@localhost:5432/policy_atlas
+```
+
+Verify with `claude mcp list` — the entry should show as `✓ Connected`. Requires the
+`db` container from `make setup` to be up and Node available for `npx`.
+
 ## Seed data
 
 None. The only fixture data is **synthetic**, hand-written in `src/policy_atlas/fixtures.py`, loaded
