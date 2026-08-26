@@ -25,7 +25,9 @@ hierarchy: `organisation` (name, unique) and `app_user` (`user_id` = the
 token `sub`; nullable `org_id`; `display_name` NOT NULL; nullable `email`,
 ops/admin-facing only; `is_admin`, one global read-only boolean). `project`
 and `portfolio` each carry a nullable `org_id` and a `visibility`
-(`org|private`, default `org`); `conversation` carries `created_by` (NULL on
+(`org|private`, default `private` — owner amendment 2026-08-26, from the
+staging canary: new work is unshared until deliberately shared);
+`conversation` carries `created_by` (NULL on
 pre-033 rows = the project owner's). Nothing below the project row is
 tenancy-aware — access to children resolves through their project. A row
 with NULL `org_id` is reachable by its owner and an admin only; membership

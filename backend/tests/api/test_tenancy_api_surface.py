@@ -861,6 +861,68 @@ def test_create_stamps_the_creators_organisation_onto_both_row_kinds(
         assert stamped_portfolio == org_id
 
 
+def test_a_new_row_is_private_until_its_owner_shares_it(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Owner amendment 2026-08-26 (staging canary): the column default is `private`.
+
+    The create paths deliberately write no `visibility`, so this pins the
+    DATABASE default — an enrolled creator's fresh project and portfolio are
+    invisible to a same-org colleague until the owner deliberately shares.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(
+                conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+            )
+
+        project_id = client.post(
+            "/api/v1/projects", headers=owner.headers, json={"name": "Fresh"}
+        ).json()["project_id"]
+        portfolio_id = client.post(
+            "/api/v1/portfolios", headers=owner.headers, json={"name": "Fresh"}
+        ).json()["portfolio_id"]
+
+        with seeded(engine) as conn:
+            stored = {
+                conn.execute(
+                    select(project_table.c.visibility).where(
+                        project_table.c.project_id == uuid.UUID(project_id)
+                    )
+                ).scalar_one(),
+                conn.execute(
+                    select(portfolio_table.c.visibility).where(
+                        portfolio_table.c.portfolio_id == uuid.UUID(portfolio_id)
+                    )
+                ).scalar_one(),
+            }
+        assert stored == {"private"}
+
+        assert (
+            client.get(f"/api/v1/projects/{project_id}", headers=colleague.headers).status_code
+            == 404
+        )
+        assert uuid.UUID(portfolio_id) not in {
+            uuid.UUID(row) for row in _ids(
+                client.get("/api/v1/portfolios", headers=colleague.headers).json(),
+                "portfolio_id",
+            )
+        }
+
+        shared = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=owner.headers,
+            json={"visibility": "org"},
+        )
+        assert shared.status_code == 200
+        assert (
+            client.get(f"/api/v1/projects/{project_id}", headers=colleague.headers).status_code
+            == 200
+        )
+
+
 def test_create_leaves_an_unenrolled_creators_rows_without_an_organisation(
     engine: Engine, tmp_path: Path
 ) -> None:

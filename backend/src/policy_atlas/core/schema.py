@@ -60,7 +60,7 @@ portfolio = Table(
     Column("description", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
-    Column("visibility", Text, nullable=False, server_default="org"),
+    Column("visibility", Text, nullable=False, server_default="private"),
     CheckConstraint("visibility IN ('org', 'private')", name="ck_portfolio_visibility"),
     Index("ix_portfolio_org_visibility", "org_id", "visibility"),
 )
@@ -83,7 +83,7 @@ project = Table(
         nullable=True,
     ),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
-    Column("visibility", Text, nullable=False, server_default="org"),
+    Column("visibility", Text, nullable=False, server_default="private"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",

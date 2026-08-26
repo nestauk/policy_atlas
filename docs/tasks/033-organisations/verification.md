@@ -801,6 +801,22 @@ the real `build_parser()` inside `make verify` — the pin caught its first
 bug pre-ship (`--operator` emitted after the subcommand, which argparse
 refuses). The three deleted targets stay deleted and their pin stands.
 
+### Post-review owner amendment (2026-08-26): visibility defaults private
+
+Found during the staging canary: the contract's owner call (c) made new
+rows `visibility='org'` by default, and the owner reversed it live — new
+work must be private until deliberately shared. Implemented as a
+column-default flip only (migration `d8e2a6c4f7b1`, `SET LOCAL` both
+directions; schema.py in step): the create paths already rely on the
+column default, `from_project_id` inheritance and the i.4 cascade are
+untouched, and rows the 033 migration stamped `org` stay as they are —
+the only paths that make them reachable (enrolment, `rows assign`) both
+privatise on the way through, so no exposure path survives the old value.
+Pinned by `test_a_new_row_is_private_until_its_owner_shares_it` (DB
+default asserted + colleague 404 until the owner shares); the lock-timeout
+structural test now covers both tenancy migrations. Contract line 39
+stands as history; data-model.md and web-api.md record the amendment.
+
 ## Deviations flagged (minor, resolved within the contract's vocabulary)
 
 1. **`cache_logger_on_first_use=True` dropped from `configure_logging()`** (Phase 0b).

@@ -6329,7 +6329,7 @@
         ]
       },
       "post": {
-        "description": "Create one active project owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `org`, inert while `org_id`\nis NULL.",
+        "description": "Create one active project owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).",
         "operationId": "create_project_api_v1_projects_post",
         "requestBody": {
           "content": {

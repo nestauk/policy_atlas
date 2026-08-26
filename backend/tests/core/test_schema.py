@@ -437,26 +437,28 @@ def test_the_tenancy_migrations_lock_timeout_cannot_outlive_the_migration() -> N
     one that does contend is a production deploy.
     """
     script = ScriptDirectory.from_config(AlembicConfig("alembic.ini"))
-    source = Path(script.get_revision("a4f1c8e3b6d2").path).read_text()
-    statements = re.findall(r'op\.execute\("(SET[^"]*lock_timeout[^"]*)"\)', source)
+    # Every tenancy-family migration whose ALTERs take ACCESS EXCLUSIVE.
+    for revision_id in ("a4f1c8e3b6d2", "d8e2a6c4f7b1"):
+        source = Path(script.get_revision(revision_id).path).read_text()
+        statements = re.findall(r'op\.execute\("(SET[^"]*lock_timeout[^"]*)"\)', source)
 
-    assert statements == ["SET LOCAL lock_timeout = '5s'"] * 2, statements
-    # One per direction, not two in `upgrade` and none in `downgrade`.
-    module = ast.parse(source)
-    for name in ("upgrade", "downgrade"):
-        function = next(
-            node
-            for node in module.body
-            if isinstance(node, ast.FunctionDef) and node.name == name
-        )
-        found = [
-            node.value
-            for node in ast.walk(function)
-            if isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and "lock_timeout" in node.value
-        ]
-        assert found == ["SET LOCAL lock_timeout = '5s'"], (name, found)
+        assert statements == ["SET LOCAL lock_timeout = '5s'"] * 2, (revision_id, statements)
+        # One per direction, not two in `upgrade` and none in `downgrade`.
+        module = ast.parse(source)
+        for name in ("upgrade", "downgrade"):
+            function = next(
+                node
+                for node in module.body
+                if isinstance(node, ast.FunctionDef) and node.name == name
+            )
+            found = [
+                node.value
+                for node in ast.walk(function)
+                if isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and "lock_timeout" in node.value
+            ]
+            assert found == ["SET LOCAL lock_timeout = '5s'"], (revision_id, name, found)
 
 
 def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engine) -> None:

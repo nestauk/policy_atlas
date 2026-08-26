@@ -123,7 +123,8 @@ artefact, groups) are whole-object.
   running/paused/complete/interrupted from it.
 - `POST /api/v1/projects` `{name, question?}` → 201 project, stamped with
   the creator's `org_id` (NULL for an unenrolled creator) and
-  `visibility='org'` (inert until the owner is enrolled).
+  `visibility='private'` (the column default — new work is unshared until
+  its owner shares it; owner amendment 2026-08-26).
 - `GET /api/v1/projects/{id}` → project (read grade).
 - `PATCH /api/v1/projects/{id}` `{name?, question?, visibility?}` —
   partial, owner-only; rename emits a transactional `project.renamed`

@@ -356,8 +356,8 @@ export interface paths {
          *
          *     Stamps the creator's organisation onto the row (contract § 7) — NULL when
          *     the creator is unenrolled, which leaves the row reachable by its owner
-         *     alone. `visibility` takes the column default `org`, inert while `org_id`
-         *     is NULL.
+         *     alone. `visibility` takes the column default `private` (owner amendment
+         *     2026-08-26 — new work is unshared until its owner deliberately shares it).
          */
         post: operations["create_project_api_v1_projects_post"];
         delete?: never;

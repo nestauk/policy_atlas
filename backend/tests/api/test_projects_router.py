@@ -150,5 +150,6 @@ def test_a_patch_body_of_explicit_nulls_is_refused_rather_than_written(
         )
         assert cleared.status_code == 200
         assert cleared.json()["question"] is None
-        assert cleared.json()["visibility"] == "org"
+        # untouched: the column default ('private', owner amendment 2026-08-26)
+        assert cleared.json()["visibility"] == "private"
         assert cleared.json()["name"] == "Test project"
