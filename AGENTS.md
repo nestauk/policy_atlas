@@ -22,24 +22,35 @@
 - Touch only what the task requires.
 
 # Current phase
-Build — task `033-ux-snags` **CONTRACT + PLAN APPROVED 2026-08-24** (combined
-gate; branch `task/033-ux-snags`, based on `dev`): fix ten numbered UX snags
-on the 032 surfaces. Screen word **Task** = `project` row; screen word
-**Project** = `portfolio` row (ADR 0031). Membership is many-to-many
-(ADR 0032). Contract, plan and rubric:
-`docs/tasks/033-ux-snags/`. **Tier 3** — join table + public read/write shape
-(`portfolio_ids`, Included `source_count`, additive `FindingOut.chunk_id`) +
-`planner_v9` → `planner_v10` (OECD members source-origin default plus OECD
-study-setting screening criterion). No new
-runtime egress.
+Design — task `034-synthesis-report` **CONTRACT DRAFTED 2026-08-26, pending
+owner approval** (branch `task/034-synthesis-report`, stacked on
+`task/033-ux-snags`; the PR re-targets `dev` once 033 merges): improve the
+synthesis report's language and presentation — nine numbered defects S1–S9
+(front-matter page order · heading hierarchy · key-findings lead-colon
+bullets with gap bullets · a new case-studies synthesis pass discharging the
+032 parked seam · most-relevant-sources restyle · short section titles ·
+plainer voice per principles P1–P9 · result-span bolding · download parity).
+**Tier 3** — four prompt bumps (`synthesise_section_v8→v9`,
+`synthesise_key_findings_v2→v3` + gap claim type, `synthesise_sections_v4→v5`,
+`summariser_v1→v2`) + one new prompt surface (`synthesise_case_studies_v1`) +
+an additive public `SectionRole` value. No schema migration; no new runtime
+egress. Contract, rubric and design inputs: `docs/tasks/034-synthesis-report/`;
+frozen prototype: `docs/specs/sources/synthesis-report-ux/`. **Owner fork
+rulings 2026-08-26** recorded in the contract: softer answer-callout label
+(spec stands), 031 count wording stays, gap bullets in key findings, no
+Authors/confidence, Most relevant sources restyle-only. **Build
+pre-requisite:** a working model route — staging quota is exhausted (below);
+confirm top-up before the build conversation opens.
 
-**Owner decisions, 2026-08-24, recorded in the plan:** (1) **standard review,
-no adversarial lanes** (032 precedent) — contract verifier, `/code-review`,
-`/security-review`, `/simplify` and the human deep review run; adversarial
-review is waived, and `verification.md` plus the PR must say so. The tier
-stays 3. (2) **Three full `make verify` runs** — baseline, end of schema/API
-phase, step-6 exit. Frontend phases gate on `make frontend-verify`. No phase
-routes to `codex` (`codex` is not on PATH).
+Task `033-ux-snags` build is **complete on its branch** (`task/033-ux-snags`;
+contract + plan approved 2026-08-24; step-6 exit `make verify` green
+2026-08-24; round-2 owner steers 2026-08-25 shipped `planner_v10`): ten UX
+snags on the 032 surfaces. Screen word **Task** = `project` row; screen word
+**Project** = `portfolio` row (ADR 0031); membership many-to-many (ADR 0032).
+Tier 3 — join table + public read/write shape (`portfolio_ids`, Included
+`source_count`, additive `FindingOut.chunk_id`) + `planner_v10`. Adversarial
+review waived (owner, 2026-08-24; 032 precedent — `codex` not on PATH);
+`verification.md` and the PR must say so. **Review stack + PR pending.**
 
 Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55).
 
