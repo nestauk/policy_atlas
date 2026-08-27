@@ -395,10 +395,12 @@ export interface paths {
          *     Three of the invariant's six paths run here (contract § 6). Setting
          *     `visibility` on a project that belongs to a portfolio is **i.5**, refused
          *     409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
-         *     member takes its portfolios' `visibility` and `org_id`, promotion and
-         *     demotion being the same rule read in two directions, and a set that
-         *     disagrees on either is refused 409. Setting it to `[]` (or `null`) is
-         *     **i.6** — the row leaves with the visibility and organisation it had.
+         *     member becomes org-visible if **any** named portfolio is org-visible and
+         *     private otherwise (owner ruling 2026-08-27), promotion and demotion being
+         *     the same rule read in two directions; a set spanning two organisations is
+         *     refused 409, since a row carries one `org_id`. Setting it to `[]` (or
+         *     `null`) is **i.6** — the row leaves with the visibility and organisation
+         *     it had.
          *
          *     Args:
          *         project_id: The project to update.

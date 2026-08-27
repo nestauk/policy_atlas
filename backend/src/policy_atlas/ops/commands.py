@@ -53,7 +53,7 @@ from datetime import UTC, datetime
 from botocore.exceptions import ClientError
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef
-from sqlalchemy import insert, select, update
+from sqlalchemy import case, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -809,8 +809,11 @@ def assign_rows(
     Privatising is skipped only when the rows are **already** in the destination
     organisation, because then the assignment moves nobody's audience and
     flipping their visibility would be a gratuitous edit to the owner's choices.
-    In that case a member still takes its portfolio's visibility, which is the
-    ``i.4`` repair.
+    In that case portfolio visibility is left alone — a component may
+    legitimately mix visibilities — and each member is recomputed to the
+    derived value: org-visible iff *any* portfolio it is in is org-visible
+    (owner ruling 2026-08-27). That recompute is the ``i.4`` self-heal for a
+    member that ever slipped out of step.
 
     ``updated_at`` is bumped on moved members, exactly as the API cascade bumps
     it: unlike enrolment — where contract § 7 requires the person to see no
@@ -908,26 +911,59 @@ def assign_rows(
         frontier = linked - component
         component |= frontier
     privatised = current.org_id != org.org_id
-    visibility = _PRIVATE if privatised else current.visibility
-    portfolios_moved = conn.execute(
-        update(portfolio)
-        .where(portfolio.c.portfolio_id.in_(component))
-        .values(org_id=org.org_id, visibility=visibility)
-    ).rowcount
-    # No status filter: archived members follow too, for the reason the API
-    # cascade documents — an archived project is still readable by whoever may
-    # read it, so leaving it behind strands exactly the rows nobody watches.
-    moved = conn.execute(
-        update(project)
-        .where(
-            project.c.project_id.in_(
-                select(portfolio_membership.c.project_id).where(
-                    portfolio_membership.c.portfolio_id.in_(component)
+    member_rows = project.c.project_id.in_(
+        select(portfolio_membership.c.project_id).where(
+            portfolio_membership.c.portfolio_id.in_(component)
+        )
+    )
+    # A cross-organisation move privatises everything it carries (owner call
+    # (j)). A same-organisation assignment moves nobody's audience, so the
+    # portfolios keep their visibility and each member is **recomputed** to
+    # the derived value — org-visible iff any portfolio it is in is
+    # org-visible (owner ruling 2026-08-27) — which is the i.4 self-heal for
+    # a member that ever slipped out of step.
+    # No status filter on members: archived projects follow too, for the
+    # reason the API cascade documents — an archived project is still
+    # readable by whoever may read it, so leaving it behind strands exactly
+    # the rows nobody watches.
+    if privatised:
+        portfolios_moved = conn.execute(
+            update(portfolio)
+            .where(portfolio.c.portfolio_id.in_(component))
+            .values(org_id=org.org_id, visibility=_PRIVATE)
+        ).rowcount
+        moved = conn.execute(
+            update(project)
+            .where(member_rows)
+            .values(org_id=org.org_id, visibility=_PRIVATE, updated_at=_now())
+        ).rowcount
+    else:
+        portfolios_moved = conn.execute(
+            update(portfolio)
+            .where(portfolio.c.portfolio_id.in_(component))
+            .values(org_id=org.org_id)
+        ).rowcount
+        in_any_org_portfolio = (
+            select(portfolio_membership.c.project_id)
+            .select_from(
+                portfolio_membership.join(
+                    portfolio,
+                    portfolio.c.portfolio_id == portfolio_membership.c.portfolio_id,
                 )
             )
+            .where(portfolio_membership.c.project_id == project.c.project_id)
+            .where(portfolio.c.visibility == "org")
+            .exists()
         )
-        .values(org_id=org.org_id, visibility=visibility, updated_at=_now())
-    ).rowcount
+        moved = conn.execute(
+            update(project)
+            .where(member_rows)
+            .values(
+                org_id=org.org_id,
+                visibility=case((in_any_org_portfolio, "org"), else_=_PRIVATE),
+                updated_at=_now(),
+            )
+        ).rowcount
     return Assignment(
         org=org,
         portfolio_id=target,

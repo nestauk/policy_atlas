@@ -205,10 +205,12 @@ def update_project(
     Three of the invariant's six paths run here (contract § 6). Setting
     `visibility` on a project that belongs to a portfolio is **i.5**, refused
     409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
-    member takes its portfolios' `visibility` and `org_id`, promotion and
-    demotion being the same rule read in two directions, and a set that
-    disagrees on either is refused 409. Setting it to `[]` (or `null`) is
-    **i.6** — the row leaves with the visibility and organisation it had.
+    member becomes org-visible if **any** named portfolio is org-visible and
+    private otherwise (owner ruling 2026-08-27), promotion and demotion being
+    the same rule read in two directions; a set spanning two organisations is
+    refused 409, since a row carries one `org_id`. Setting it to `[]` (or
+    `null`) is **i.6** — the row leaves with the visibility and organisation
+    it had.
 
     Args:
         project_id: The project to update.
@@ -291,22 +293,24 @@ def update_project(
         assignment: dict[str, object] = {"updated_at": now}
         if groups:
             # i.2 (promotion) and i.3 (demotion) are one rule, not two
-            # branches: the member takes its portfolios' `visibility` **and**
-            # `org_id`. Membership is many-to-many (ADR 0032), so the rule
-            # only stays deterministic if every named portfolio agrees on
-            # both fields — a disagreeing set is refused rather than picking
-            # a winner. (Merge-time generalisation of contract 033 § 6;
-            # owner to ratify.)
-            visibilities = {group.row["visibility"] for group in groups}
+            # branches: the member is org-visible if **any** of its portfolios
+            # is org-visible, private otherwise (owner ruling 2026-08-27 on
+            # the ADR 0032 merge). Organisation is different — a row carries
+            # exactly one `org_id`, so a set spanning two organisations has
+            # no honest answer and is refused rather than picking a winner.
             org_ids = {group.row["org_id"] for group in groups}
-            if len(visibilities) > 1 or len(org_ids) > 1:
+            if len(org_ids) > 1:
                 raise ApiConflict(
                     "visibility_conflict",
-                    "these projects disagree on visibility or organisation — a "
-                    "task can only join projects that agree on both",
+                    "these projects belong to different organisations — a task "
+                    "can only join projects in one organisation",
                 )
-            assignment["visibility"] = groups[0].row["visibility"]
-            assignment["org_id"] = groups[0].row["org_id"]
+            assignment["visibility"] = (
+                "org"
+                if any(group.row["visibility"] == "org" for group in groups)
+                else "private"
+            )
+            assignment["org_id"] = org_ids.pop()
         # i.6, the empty-list case: clearing every membership writes neither
         # field. The row keeps the visibility and organisation it had inside
         # its portfolios — leaving is not a way to change either, and a row

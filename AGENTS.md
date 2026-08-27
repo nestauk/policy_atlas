@@ -134,8 +134,10 @@ on the 032 surfaces, portfolio membership made **many-to-many**
 `source_count` = Included/`relevant` screens), and `planner_v9` →
 `planner_v10`. That merge landed on `task/033-organisations` on 2026-08-27;
 033's tenancy ADR renumbered to **0033**, and the § 6 invariant is
-generalised to "every portfolio a project belongs to must agree on
-`visibility` and `org_id`" (owner to ratify).
+generalised per the owner ruling 2026-08-27: **a task is org-visible iff any
+portfolio it is in is org-visible** (recomputed on assignment and cascade);
+its portfolios must span one organisation (409 otherwise); ops `rows assign`
+moves the connected component.
 
 Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
 clear meaning per user-visible source count across the P1 check-in, Where I

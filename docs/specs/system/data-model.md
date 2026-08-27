@@ -39,9 +39,10 @@ with NULL `org_id` is reachable by its owner and an admin only; membership
 is app-owned and ops-assigned, never read from the IdP. A project inside a
 portfolio matches it on `visibility` **and** `org_id` (the write-path
 invariant; the visibility cascade is the sole writer of
-`portfolio.visibility`). Membership being many-to-many (ADR 0032), every
-portfolio a project belongs to must agree on both fields; a write that would
-make them disagree is refused.
+`portfolio.visibility`). Membership being many-to-many (ADR 0032), a
+project is org-visible iff *any* portfolio it belongs to is org-visible
+(owner ruling 2026-08-27), and its portfolios span one organisation — a
+write that would put one task in two organisations is refused.
 
 Whole-item organisation is **just columns + tags + scoping** — no special container between
 project and artefact.

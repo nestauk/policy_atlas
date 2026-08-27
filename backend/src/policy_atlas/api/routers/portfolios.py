@@ -12,10 +12,9 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.engine import Connection, RowMapping
 
-from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
@@ -95,45 +94,46 @@ def _cascade_visibility(
         conn: Open database connection, inside the request transaction.
         portfolio_id: The portfolio whose visibility is changing.
         org_id: That portfolio's organisation — what members are synced to.
-        visibility: The new visibility for the portfolio and every member.
-
-    Raises:
-        ApiConflict: 409 `visibility_conflict` when a member also belongs to
-            another portfolio whose visibility differs from the new value —
-            membership is many-to-many (ADR 0032), and "every member matches
-            every portfolio it is in" only stays true if the cascade refuses
-            to make two containing portfolios disagree.
+        visibility: The new visibility for the portfolio. Each member is then
+            **recomputed, not assigned**: membership is many-to-many
+            (ADR 0032), and a member is org-visible if *any* portfolio it is
+            in is org-visible, private otherwise (owner ruling 2026-08-27).
+            With a single membership that collapses to "the member follows
+            its portfolio", the pre-0032 behaviour; a member shared with an
+            org-visible portfolio stays org-visible when this one goes
+            private.
     """
-    member_ids = select(portfolio_membership.c.project_id).where(
-        portfolio_membership.c.portfolio_id == portfolio_id
-    )
-    # ponytail: merge-time generalisation of contract 033 § 6 to many-to-many
-    # membership — all containing portfolios must agree; owner to ratify.
-    disagreeing = conn.execute(
-        select(func.count())
-        .select_from(portfolio_membership.join(
-            portfolio, portfolio.c.portfolio_id == portfolio_membership.c.portfolio_id
-        ))
-        .where(portfolio_membership.c.project_id.in_(member_ids))
-        .where(portfolio_membership.c.portfolio_id != portfolio_id)
-        .where(portfolio.c.visibility != visibility)
-    ).scalar_one()
-    if int(disagreeing) > 0:
-        raise ApiConflict(
-            "visibility_conflict",
-            "a task in this project is also in another project with a different "
-            "visibility — align or remove that membership first",
-        )
     conn.execute(
         update(portfolio)
         .where(portfolio.c.portfolio_id == portfolio_id)
         .values(visibility=visibility)
     )
+    member_ids = select(portfolio_membership.c.project_id).where(
+        portfolio_membership.c.portfolio_id == portfolio_id
+    )
+    # The portfolio row is written first, so this EXISTS reads the new value
+    # along with every other membership the member holds.
+    in_any_org_portfolio = (
+        select(portfolio_membership.c.project_id)
+        .select_from(
+            portfolio_membership.join(
+                portfolio,
+                portfolio.c.portfolio_id == portfolio_membership.c.portfolio_id,
+            )
+        )
+        .where(portfolio_membership.c.project_id == project.c.project_id)
+        .where(portfolio.c.visibility == "org")
+        .exists()
+    )
     # No status filter, on purpose: archived members follow too.
     conn.execute(
         update(project)
         .where(project.c.project_id.in_(member_ids))
-        .values(visibility=visibility, org_id=org_id, updated_at=datetime.now(UTC))
+        .values(
+            visibility=case((in_any_org_portfolio, "org"), else_="private"),
+            org_id=org_id,
+            updated_at=datetime.now(UTC),
+        )
     )
 
 

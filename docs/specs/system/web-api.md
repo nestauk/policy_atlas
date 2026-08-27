@@ -94,7 +94,7 @@ project's visibility while it is in a portfolio — change the portfolio's
 visibility, or leave the project out of it) · 422 `validation_error`
 (Pydantic detail list under `details`, assert on `loc`/`type` not `msg`;
 also the code for a non-admin passing `owner_email` and for a PATCH body
-carrying both `visibility` and `portfolio_id` — not a third semantic) ·
+carrying both `visibility` and `portfolio_ids` — not a third semantic) ·
 429 `chat_capacity`
 (a distinct code from the 409 run-capacity bound — too many in-flight chat
 turns, never a run-slot conflict) · 500 `internal` (opaque).
@@ -130,10 +130,10 @@ artefact, groups) are whole-object.
   partial, owner-only; rename emits a transactional `project.renamed`
   audit event. `visibility` on a project in a portfolio is 409
   `visibility_conflict`; a body carrying both `visibility` and
-  `portfolio_id` is 422 (the two orderings differ). An explicit
+  `portfolio_ids` is 422 (the two orderings differ). An explicit
   `null` on a NOT NULL column (`name`, `visibility` — here and on
   `PATCH /portfolios/{id}`) is 422 rather than a 500; nulls that mean
-  something (`question`, `description`, `portfolio_id`) still work.
+  something (`question`, `description`, `portfolio_ids`) still work.
 - `POST /api/v1/projects/{id}/archive` → idempotent archive (soft-delete:
   hidden from default listings, rows retained; `project.archived` audit
   event on first archive only). 409 `run_active` while a run is executing
@@ -178,26 +178,30 @@ run and no evidence of its own, and carries a name, a description and an owner
   partial, owner-only. `visibility` runs **the cascade**: the portfolio and
   every member project (archived included) take the new value together, in
   one transaction. The cascade is the only writer of
-  `portfolio.visibility`, and it is refused 409 when a member also belongs
-  to another portfolio whose visibility would then disagree.
+  `portfolio.visibility`; each member is **recomputed**, not assigned — a
+  task is org-visible iff *any* portfolio it is in is org-visible (owner
+  ruling 2026-08-27), so a member shared with an org-visible portfolio
+  stays org-visible when this one goes private.
 - `PATCH /api/v1/projects/{id}` accepts `portfolio_ids` (replace-all). Omit
   to leave membership unchanged; `[]` (or `null`) unassigns every portfolio;
   a list replaces the set. Each id must resolve under the **write** grade
   (404 unreadable, 403 readable-not-owned) before anything is written —
   otherwise the route would be an existence oracle for another owner's rows.
-  A set whose portfolios disagree on `visibility` or `org_id` is refused
-  409. Rename and membership writes are not `run_active` conflicts; they
-  serialize on the project row lock.
+  The task becomes org-visible if any named portfolio is org-visible,
+  private otherwise; a set spanning two organisations is refused 409 (a row
+  carries one `org_id`). Rename and membership writes are not `run_active`
+  conflicts; they serialize on the project row lock.
 
 **The visibility/org invariant (task 033, owner call (i); generalised to
-many-to-many membership at the ADR 0032 merge — owner to ratify).** A project
-in one or more portfolios carries its portfolios' `visibility` **and**
-`org_id`, and those portfolios must agree on both; a project with no
-membership is unconstrained. Deterministic, no prompts: assignment syncs the
-member to its portfolios on both fields (promotion or demotion alike);
-removal changes neither; the cascade carries every member and refuses to
-create disagreement. The invariant spans three tables, so it is enforced in
-the write paths and pinned by a property test — no CHECK can express it.
+many-to-many membership — owner ruling 2026-08-27).** A project in one or
+more portfolios is **org-visible iff any of those portfolios is
+org-visible**, private otherwise, and carries their `org_id` (its portfolios
+span one organisation; a cross-organisation set is refused). A project with
+no membership is unconstrained. Deterministic, no prompts: assignment and
+the cascade both recompute the member across its whole membership set
+(promotion or demotion alike); removal changes neither field. The invariant
+spans three tables, so it is enforced in the write paths and pinned by a
+property test — no CHECK can express it.
 
 Tenancy scoping matches projects exactly: an unknown portfolio and an
 unreadable one are the same indistinguishable 404. There is no portfolio

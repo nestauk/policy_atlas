@@ -1,8 +1,9 @@
 """The visibility and organisation invariant, i.1-i.6 (contract § 6, owner call (i)).
 
-**A `project` with portfolio memberships carries its portfolios'
-`visibility` *and* `org_id` (which must agree — ADR 0032 merge
-generalisation). A project in no portfolio is unconstrained.**
+**A `project` with portfolio memberships is org-visible iff *any* portfolio
+it is in is org-visible, and carries its portfolios' `org_id` (one
+organisation across the set — owner ruling 2026-08-27, on the ADR 0032
+merge). A project in no portfolio is unconstrained.**
 
 The invariant spans two tables, so no CHECK can express it: enforcement is the
 write paths plus the property at the bottom of this file. Every case here
@@ -30,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi.testclient import TestClient
-from sqlalchemy import or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers.portfolios import _PATCHABLE_COLUMNS
@@ -89,6 +90,11 @@ def _portfolio_row(engine: Engine, portfolio_id: uuid.UUID | str) -> Any:
 def _members(engine: Engine, owner_user_id: str) -> list[Any]:
     """Return every portfolio member one owner has, each flagged for breach.
 
+    One row per member, aggregated over the member's whole membership set,
+    because the rule is derived across it (owner ruling 2026-08-27, on the
+    ADR 0032 merge): a member is org-visible iff **any** portfolio it is in
+    is org-visible, and its `org_id` matches every portfolio it is in.
+
     The breach test is computed **in SQL** (`IS DISTINCT FROM` for the
     nullable organisation), for the same reason the access legs are: two
     NULLs are equal for this question and unequal for that one, and asking
@@ -102,8 +108,15 @@ def _members(engine: Engine, owner_user_id: str) -> list[Any]:
 
     Returns:
         One mapping per member project, carrying both sides of the comparison
-        and a `breached` flag, so a failure names the offending pair.
+        and a `breached` flag, so a failure names the offending row.
     """
+    derived_visibility = case(
+        (func.bool_or(portfolio_table.c.visibility == "org"), "org"),
+        else_="private",
+    )
+    org_mismatch = func.bool_or(
+        portfolio_table.c.org_id.is_distinct_from(project_table.c.org_id)
+    )
     with seeded(engine) as conn:
         return list(
             conn.execute(
@@ -111,12 +124,11 @@ def _members(engine: Engine, owner_user_id: str) -> list[Any]:
                     project_table.c.project_id,
                     project_table.c.status,
                     project_table.c.visibility.label("member_visibility"),
-                    portfolio_table.c.visibility.label("portfolio_visibility"),
+                    derived_visibility.label("derived_visibility"),
                     project_table.c.org_id.label("member_org"),
-                    portfolio_table.c.org_id.label("portfolio_org"),
                     or_(
-                        project_table.c.visibility != portfolio_table.c.visibility,
-                        project_table.c.org_id.is_distinct_from(portfolio_table.c.org_id),
+                        project_table.c.visibility != derived_visibility,
+                        org_mismatch,
                     ).label("breached"),
                 )
                 .select_from(
@@ -129,6 +141,12 @@ def _members(engine: Engine, owner_user_id: str) -> list[Any]:
                     )
                 )
                 .where(project_table.c.owner_user_id == owner_user_id)
+                .group_by(
+                    project_table.c.project_id,
+                    project_table.c.status,
+                    project_table.c.visibility,
+                    project_table.c.org_id,
+                )
             ).mappings()
         )
 
@@ -179,6 +197,55 @@ def test_assigning_a_private_project_to_an_org_portfolio_promotes_it(
         stored = _row(engine, row)
         assert stored["visibility"] == "org"
         assert stored["org_id"] == org_id
+        assert _breaches(engine, owner.user_id) == []
+
+
+def test_any_org_visible_portfolio_makes_the_member_org_visible(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Owner ruling 2026-08-27: with many memberships, org-visible wins.
+
+    A task assigned to one org-visible and one private portfolio is
+    org-visible. Making the org-visible portfolio private then recomputes the
+    member across its whole set — both portfolios now private, so it goes
+    private with them, not before.
+    """
+    with tenancy_client(tmp_path, count=1) as (client, (owner,)):
+        org_id = _enrolled_owner(engine, owner)
+        with seeded(engine) as conn:
+            shared = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            quiet = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
+            )
+            row = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
+            )
+
+        assigned = client.patch(
+            f"/api/v1/projects/{row}",
+            headers=owner.headers,
+            json={"portfolio_ids": [str(shared), str(quiet)]},
+        )
+        assert assigned.status_code == 200, assigned.text
+        assert assigned.json()["visibility"] == "org"
+        assert _breaches(engine, owner.user_id) == []
+
+        # The private portfolio's cascade cannot demote a member the
+        # org-visible portfolio still carries.
+        renamed_private = client.patch(
+            f"/api/v1/portfolios/{quiet}", headers=owner.headers, json={"visibility": "private"}
+        )
+        assert renamed_private.status_code == 200, renamed_private.text
+        assert _row(engine, row)["visibility"] == "org"
+
+        # Once the last org-visible portfolio goes private, the member follows.
+        demoted = client.patch(
+            f"/api/v1/portfolios/{shared}", headers=owner.headers, json={"visibility": "private"}
+        )
+        assert demoted.status_code == 200, demoted.text
+        assert _row(engine, row)["visibility"] == "private"
         assert _breaches(engine, owner.user_id) == []
 
 
@@ -890,13 +957,10 @@ def _walk_step(
             headers=headers,
             json={"visibility": rng.choice(("org", "private"))},
         )
-        # 409 is the many-to-many refusal (ADR 0032 merge): a member shared
-        # with a disagreeing portfolio blocks the cascade rather than letting
-        # it create the very breach this walk asserts against. A refusal
-        # writes nothing, so the invariant check below still applies.
-        assert response.status_code in (200, 409), response.text
-        if response.status_code == 409:
-            assert response.json()["error"]["code"] == "visibility_conflict"
+        # Never a 409: each member is recomputed across its whole membership
+        # set (org-visible iff any portfolio it is in is org-visible — owner
+        # ruling 2026-08-27), so the cascade always has an answer.
+        assert response.status_code == 200, response.text
         return
     if operation == "ops_reenrol":
         # The whole estate moves as one set operation and arrives private, so
