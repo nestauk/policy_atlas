@@ -27,11 +27,13 @@ admin grant that raced a de-enrolment finds no row to grant and refuses, in
 either commit order. See :func:`set_admin`.
 
 *Row moves are set operations, never walks.* ``UPDATE ... WHERE owner_user_id =
-:sub`` in one statement per table. The invariant (contract § 6) survives because
-a portfolio's members are always owned by the portfolio's owner, so one person's
-rows are a closed set: stamping the set leaves every project matching its
-portfolio on both ``org_id`` and ``visibility``. Walking row by row through the
-cascade path would transiently violate it.
+:sub`` in one statement per table. Colleague assignment (owner ruling
+2026-08-27) means a portfolio's members are no longer always owned by its
+owner, so a move first **severs** every membership pairing the mover's rows
+with someone else's (:func:`_sever_cross_owner_memberships`) — after which one
+person's rows are again a closed set, and stamping the set leaves every
+project matching its portfolios on both ``org_id`` and ``visibility``. Walking
+row by row through the cascade path would transiently violate it.
 
 **Nothing here logs.** A privilege change is recorded by
 :mod:`policy_atlas.ops.cli` *after* the transaction commits, from the
@@ -53,7 +55,7 @@ from datetime import UTC, datetime
 from botocore.exceptions import ClientError
 from mypy_boto3_cognito_idp.client import CognitoIdentityProviderClient
 from mypy_boto3_cognito_idp.type_defs import AttributeTypeTypeDef
-from sqlalchemy import case, insert, select, update
+from sqlalchemy import and_, case, delete, insert, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
@@ -157,6 +159,9 @@ class Enrolment(Record):
     #: Rendered ONCE in the summary for out-of-band handover; never logged —
     #: `summary()` output goes to the operator's stdout, not through structlog.
     temporary_password: str | None = None
+    #: Cross-owner membership links cut because the rows moved organisation
+    #: (colleague assignment, owner ruling 2026-08-27).
+    memberships_severed: int = 0
 
     def summary(self) -> str:
         """Render the enrolment line, including what moved."""
@@ -166,6 +171,11 @@ class Enrolment(Record):
             f"moved {self.projects_moved} project(s), {self.portfolios_moved} "
             "portfolio(s), all private"
         )
+        if self.memberships_severed:
+            line += (
+                f"; cut {self.memberships_severed} membership(s) linking their "
+                "rows to colleagues' rows left behind"
+            )
         if self.temporary_password is not None:
             line += (
                 f"\ntemporary password (single-use, 7-day expiry, they set their "
@@ -183,14 +193,23 @@ class DeEnrolment(Record):
     projects_cleared: int
     portfolios_cleared: int
     admin_revoked: bool
+    #: Cross-owner membership links cut because the rows left the organisation
+    #: (colleague assignment, owner ruling 2026-08-27).
+    memberships_severed: int = 0
 
     def summary(self) -> str:
         """Render the de-enrolment line, including what was cleared."""
         who = self.email or self.user_id
         admin = "; support role revoked" if self.admin_revoked else ""
+        severed = (
+            f"; cut {self.memberships_severed} membership(s) linking their "
+            "rows to colleagues' rows"
+            if self.memberships_severed
+            else ""
+        )
         return (
             f"de-enrolled {who}; cleared the organisation on {self.projects_cleared} "
-            f"project(s) and {self.portfolios_cleared} portfolio(s){admin}"
+            f"project(s) and {self.portfolios_cleared} portfolio(s){severed}{admin}"
         )
 
     def admin_changes(self) -> Sequence[AdminTrace]:
@@ -580,6 +599,7 @@ def _enrol(
             },
         )
     )
+    severed = _sever_cross_owner_memberships(conn, sub=sub)
     projects_moved, portfolios_moved = _stamp_owned_rows(
         conn, sub=sub, org_id=org.org_id, visibility=_PRIVATE
     )
@@ -590,6 +610,7 @@ def _enrol(
         created=existing is None,
         projects_moved=projects_moved,
         portfolios_moved=portfolios_moved,
+        memberships_severed=severed,
     )
 
 
@@ -693,6 +714,7 @@ def de_enrol_user(
         .where(app_user.c.user_id == user_id)
         .values(org_id=None, email=None, is_admin=False)
     )
+    severed = _sever_cross_owner_memberships(conn, sub=user_id)
     projects_cleared, portfolios_cleared = _clear_owned_rows(conn, sub=user_id)
     return DeEnrolment(
         user_id=user_id,
@@ -700,6 +722,7 @@ def de_enrol_user(
         projects_cleared=projects_cleared,
         portfolios_cleared=portfolios_cleared,
         admin_revoked=bool(row["is_admin"]),
+        memberships_severed=severed,
     )
 
 
@@ -1016,6 +1039,52 @@ def _stamp_owned_rows(
         .values(org_id=org_id, visibility=visibility)
     ).rowcount
     return projects, portfolios
+
+
+def _sever_cross_owner_memberships(conn: Connection, *, sub: str) -> int:
+    """Delete every membership pairing one of `sub`'s rows with someone else's.
+
+    Colleague assignment (owner ruling 2026-08-27) means a portfolio's members
+    are no longer always owned by the portfolio's owner — so "one person's
+    rows are a closed set" (the module docstring's invariant argument) is only
+    true after the cross-owner links are cut. Called by every membership move
+    (enrol, re-enrol, de-enrol): the moved rows change organisation and the
+    other owner's rows do not, so any membership between them would leave a
+    member and a portfolio disagreeing on `org_id`. Severing keeps i.6's
+    reading — the rows on both sides keep the visibility and organisation
+    they had; only the link is removed.
+
+    An ownerless row (NULL `owner_user_id`, the CLI-created ones) is "someone
+    else's" for this question: it does not move with `sub`, so a link to it
+    is cut on the same grounds.
+
+    Args:
+        conn: Open connection inside the command's transaction.
+        sub: The owner whose rows are moving.
+
+    Returns:
+        The number of membership rows deleted.
+    """
+    own_projects = select(project.c.project_id).where(project.c.owner_user_id == sub)
+    own_portfolios = select(portfolio.c.portfolio_id).where(
+        portfolio.c.owner_user_id == sub
+    )
+    return int(
+        conn.execute(
+            delete(portfolio_membership).where(
+                or_(
+                    and_(
+                        portfolio_membership.c.project_id.in_(own_projects),
+                        portfolio_membership.c.portfolio_id.notin_(own_portfolios),
+                    ),
+                    and_(
+                        portfolio_membership.c.portfolio_id.in_(own_portfolios),
+                        portfolio_membership.c.project_id.notin_(own_projects),
+                    ),
+                )
+            )
+        ).rowcount
+    )
 
 
 def _clear_owned_rows(conn: Connection, *, sub: str) -> tuple[int, int]:

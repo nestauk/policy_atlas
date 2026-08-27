@@ -189,8 +189,15 @@ run and no evidence of its own, and carries a name, a description and an owner
   otherwise the route would be an existence oracle for another owner's rows.
   The task becomes org-visible if any named portfolio is org-visible,
   private otherwise; a set spanning two organisations is refused 409 (a row
-  carries one `org_id`). Rename and membership writes are not `run_active`
-  conflicts; they serialize on the project row lock.
+  carries one `org_id`). Newly added ids resolve under the
+  **colleague-mutation** grade (owner ∪ same-org org-visible, never the
+  admin leg — owner ruling 2026-08-27): a colleague may add their own task
+  to an org-visible portfolio they did not create; anything outside that
+  estate is 404 before any write. Ids the task already belongs to are kept
+  without re-resolution, so a membership that later went private never
+  locks the owner out of editing their own set. Rename and membership
+  writes are not `run_active` conflicts; they serialize on the project row
+  lock.
 
 **The visibility/org invariant (task 033, owner call (i); generalised to
 many-to-many membership — owner ruling 2026-08-27).** A project in one or

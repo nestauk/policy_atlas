@@ -453,12 +453,10 @@ def update_portfolio(
     # The i.4 outcome number. Defined through the **caller's readable set**
     # (`_task_counts` is per-caller: read grade minus admin, active only), not
     # through "how many rows the cascade touched" — the outcome copy must
-    # never name rows the reader cannot see. For this route the two coincide
-    # bar archived members: the write grade means the caller is the owner, and
-    # a portfolio's members are always owned by its owner (032: setting
-    # `portfolio_id` requires ownership of both rows), so the owner reads every
-    # member. It is still derived the honest way, because "the caller happens
-    # to own everything" is a property of today's write grade, not a rule.
+    # never name rows the reader cannot see. Since colleague assignment
+    # (owner ruling 2026-08-27) a member may be owned by a same-org
+    # colleague, so the two genuinely differ: the count names the members
+    # this owner can read, which is the honest number for the copy.
     counts = _task_counts(conn, [portfolio_id], user_id=user.user_id)
     return _portfolio_out(
         row,

@@ -961,6 +961,52 @@ def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: st
     return Access(row=row, is_owner=row["owner_user_id"] == user_id)
 
 
+def assignable_portfolio(
+    conn: Connection, *, portfolio_id: uuid.UUID, user_id: str
+) -> Access:
+    """Resolve one portfolio as an assignment target, or 404.
+
+    The **colleague-mutation** grade (:func:`own_estate` — owner ∪ same-org,
+    **never** the admin leg), on a portfolio: a same-org colleague may add
+    their own task to an org-visible portfolio they did not create (owner
+    ruling 2026-08-27, from staging live testing). Like
+    :func:`chat_mutable_project`, it exists as its own function so it can
+    never widen to the admin leg — an administrator is not a colleague, and
+    an assignment through the admin leg would be the admin-write escape the
+    contract bars. An out-of-organisation administrator gets the same 404 as
+    everyone this grade refuses: there is no read grade here to disclose the
+    row with.
+
+    **Locked** (``FOR UPDATE``), unlike the chat grade: the assignment path
+    reads the portfolio's ``visibility``/``org_id`` and writes them onto the
+    member, so a cascade committing between that read and the write would
+    leave the member carrying a stale value. A portfolio row lock is brief
+    (one PATCH transaction) and blocks only the cascade and other
+    assignments, not the owner's project operations.
+
+    Args:
+        conn: Open database connection.
+        portfolio_id: Requested portfolio identity.
+        user_id: The caller's token subject.
+
+    Returns:
+        The portfolio row and whether the owner leg matched.
+
+    Raises:
+        HTTPException: 404 for a missing or unreachable row. There is no 403
+            on this grade — a caller who fails it is not told the row exists.
+    """
+    row = conn.execute(
+        select(portfolio)
+        .where(portfolio.c.portfolio_id == portfolio_id)
+        .where(own_estate(portfolio, user_id))
+        .with_for_update()
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
+    return Access(row=row, is_owner=row["owner_user_id"] == user_id)
+
+
 def accessible_portfolio(
     conn: Connection,
     *,

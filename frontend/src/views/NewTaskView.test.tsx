@@ -173,7 +173,8 @@ describe("NewTaskView — project selector", () => {
     });
   });
 
-  it("never offers a colleague-owned, org-visible project — the assignment PATCH is owner-only and would 403", () => {
+  it("offers a colleague-owned, org-visible project — colleague assignment (owner ruling 2026-08-27)", async () => {
+    const user = userEvent.setup();
     vi.mocked(queries.usePortfolios).mockReturnValue(
       {
         data: {
@@ -199,11 +200,11 @@ describe("NewTaskView — project selector", () => {
       } as unknown as ReturnType<typeof queries.usePortfolios>,
     );
     renderNewTask("/new?capability=evidence_base");
-    expect(screen.getByLabelText(/Add to a project/)).toBeInTheDocument();
-    expect(screen.queryByText("A colleague's project")).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText(/Add to a project/));
+    expect(screen.getByRole("option", { name: "A colleague's project" })).toBeInTheDocument();
   });
 
-  it("hides the project selector entirely when every project is colleague-owned", () => {
+  it("keeps the project selector when every project is colleague-owned", () => {
     vi.mocked(queries.usePortfolios).mockReturnValue(
       {
         data: {
@@ -221,6 +222,6 @@ describe("NewTaskView — project selector", () => {
       } as unknown as ReturnType<typeof queries.usePortfolios>,
     );
     renderNewTask("/new?capability=evidence_base");
-    expect(screen.queryByLabelText(/Add to a project/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Add to a project/)).toBeInTheDocument();
   });
 });

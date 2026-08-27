@@ -398,7 +398,10 @@ export interface paths {
          *     member becomes org-visible if **any** named portfolio is org-visible and
          *     private otherwise (owner ruling 2026-08-27), promotion and demotion being
          *     the same rule read in two directions; a set spanning two organisations is
-         *     refused 409, since a row carries one `org_id`. Setting it to `[]` (or
+         *     refused 409, since a row carries one `org_id`. Targets resolve under the
+         *     **colleague-mutation** grade (owner ∪ same-org org-visible, never the
+         *     admin leg — owner ruling 2026-08-27): a colleague may add their own task
+         *     to an org-visible portfolio they did not create. Setting it to `[]` (or
          *     `null`) is **i.6** — the row leaves with the visibility and organisation
          *     it had.
          *

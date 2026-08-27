@@ -28,6 +28,7 @@ from tests.api.org_support import (
     make_portfolio,
     make_project,
     ops_enrol,
+    ops_set_admin,
     seeded,
     tenancy_client,
     unique_email,
@@ -951,3 +952,162 @@ def test_create_leaves_an_unenrolled_creators_rows_without_an_organisation(
         theirs = client.get("/api/v1/projects", headers=stranger.headers).json()
         assert project_id in _ids(mine, "project_id")
         assert project_id not in _ids(theirs, "project_id")
+
+
+# --- colleague assignment (owner ruling 2026-08-27) ---------------------------
+
+
+def test_colleague_can_add_their_task_to_an_org_visible_portfolio(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """A same-org colleague may join an org-visible portfolio they did not create.
+
+    The target resolves under the colleague-mutation grade, so the old 403
+    is gone; the task inherits the derived visibility (org — the portfolio
+    is org-visible) and the portfolio's organisation, and the portfolio
+    owner sees it counted.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            group = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            row = make_project(
+                conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="private"
+            )
+
+        response = client.patch(
+            f"/api/v1/projects/{row}",
+            headers=colleague.headers,
+            json={"portfolio_ids": [str(group)]},
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["portfolio_ids"] == [str(group)]
+        assert response.json()["visibility"] == "org"
+
+        owners_card = next(
+            card
+            for card in client.get("/api/v1/portfolios", headers=owner.headers).json()["data"]
+            if card["portfolio_id"] == str(group)
+        )
+        assert owners_card["task_count"] == 1
+
+
+def test_colleague_cannot_join_a_private_or_cross_org_portfolio(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Outside the caller's estate the target stays an indistinguishable 404."""
+    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            elsewhere = make_org(conn, name="Elsewhere")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            ops_enrol(conn, user_id=outsider.user_id, org_id=elsewhere, display_name="Outsider")
+            hidden = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
+            )
+            foreign = make_portfolio(
+                conn, owner_user_id=outsider.user_id, org_id=elsewhere, visibility="org"
+            )
+            row = make_project(
+                conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="private"
+            )
+
+        for target in (hidden, foreign):
+            response = client.patch(
+                f"/api/v1/projects/{row}",
+                headers=colleague.headers,
+                json={"portfolio_ids": [str(target)]},
+            )
+            assert response.status_code == 404, (target, response.text)
+
+        untouched = client.get(f"/api/v1/projects/{row}", headers=colleague.headers)
+        assert untouched.json()["portfolio_ids"] == []
+
+
+def test_the_admin_leg_never_grants_assignment(engine: Engine, tmp_path: Path) -> None:
+    """An out-of-organisation administrator can read the portfolio but not join it.
+
+    The colleague-mutation grade resolves through `own_estate`, which has no
+    admin leg — the same structural guarantee the chat mutations rely on. The
+    admin gets the grade's 404, not a 403: there is no read grade here to
+    disclose the row with.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, admin)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            elsewhere = make_org(conn, name="Elsewhere")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=admin.user_id, org_id=elsewhere, display_name="Admin")
+            ops_set_admin(conn, user_id=admin.user_id, is_admin=True)
+            group = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            row = make_project(
+                conn, owner_user_id=admin.user_id, org_id=elsewhere, visibility="private"
+            )
+
+        readable = client.get(f"/api/v1/portfolios/{group}", headers=admin.headers)
+        assert readable.status_code == 200
+
+        refused = client.patch(
+            f"/api/v1/projects/{row}",
+            headers=admin.headers,
+            json={"portfolio_ids": [str(group)]},
+        )
+        assert refused.status_code == 404
+
+
+def test_a_kept_membership_survives_the_portfolio_going_private(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """Replace-all never locks an owner out of a set they are already in.
+
+    The colleague joins an org-visible portfolio; its owner then cascades it
+    private, which takes the colleague's task private with it (derived) and
+    makes the portfolio unreadable to the colleague. Re-sending the same set
+    still succeeds — ids the task already belongs to are kept without
+    re-resolving the grade — and `[]` still removes.
+    """
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            group = make_portfolio(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+            row = make_project(
+                conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="private"
+            )
+
+        joined = client.patch(
+            f"/api/v1/projects/{row}",
+            headers=colleague.headers,
+            json={"portfolio_ids": [str(group)]},
+        )
+        assert joined.status_code == 200, joined.text
+
+        cascaded = client.patch(
+            f"/api/v1/portfolios/{group}", headers=owner.headers, json={"visibility": "private"}
+        )
+        assert cascaded.status_code == 200, cascaded.text
+
+        resent = client.patch(
+            f"/api/v1/projects/{row}",
+            headers=colleague.headers,
+            json={"portfolio_ids": [str(group)]},
+        )
+        assert resent.status_code == 200, resent.text
+        assert resent.json()["visibility"] == "private"
+
+        removed = client.patch(
+            f"/api/v1/projects/{row}", headers=colleague.headers, json={"portfolio_ids": []}
+        )
+        assert removed.status_code == 200, removed.text
+        assert removed.json()["portfolio_ids"] == []

@@ -26,15 +26,21 @@ from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_project, rename_project
 from policy_atlas.api.routers._access import (
     OWNER_EMAIL_MAX,
-    accessible_portfolio,
     accessible_project,
+    assignable_portfolio,
     creator_org_id,
     listing_scope,
     owner_email_filter,
     trace_admin_listing,
 )
 from policy_atlas.api.routers._common import memberships_for_projects, project_out
-from policy_atlas.core.schema import app_user, capability_run, portfolio_membership, project
+from policy_atlas.core.schema import (
+    app_user,
+    capability_run,
+    portfolio,
+    portfolio_membership,
+    project,
+)
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -208,7 +214,10 @@ def update_project(
     member becomes org-visible if **any** named portfolio is org-visible and
     private otherwise (owner ruling 2026-08-27), promotion and demotion being
     the same rule read in two directions; a set spanning two organisations is
-    refused 409, since a row carries one `org_id`. Setting it to `[]` (or
+    refused 409, since a row carries one `org_id`. Targets resolve under the
+    **colleague-mutation** grade (owner ∪ same-org org-visible, never the
+    admin leg — owner ruling 2026-08-27): a colleague may add their own task
+    to an org-visible portfolio they did not create. Setting it to `[]` (or
     `null`) is **i.6** — the row leaves with the visibility and organisation
     it had.
 
@@ -266,39 +275,58 @@ def update_project(
     assigned_ids: list[uuid.UUID] | None = None
     if "portfolio_ids" in changes:
         assigned_ids = list(dict.fromkeys(changes["portfolio_ids"] or []))
-        # An unowned portfolio must be as invisible here as it is on its
-        # own route, or PATCH becomes an existence oracle for someone
-        # else's rows. Locked (`for_update`) so a cascade running on the
-        # same portfolio cannot commit between this read and the write
-        # below and leave the assigned row carrying the old visibility —
-        # which is precisely an org-visible row inside a private Project.
+        # NEW targets resolve under the colleague-mutation grade (owner ∪
+        # same-org org-visible, never the admin leg — owner ruling
+        # 2026-08-27): a colleague may add their own task to an org-visible
+        # portfolio they did not create. A portfolio outside that estate
+        # must be as invisible here as it is on its own route, or PATCH
+        # becomes an existence oracle for someone else's rows. A portfolio
+        # the task is ALREADY in is kept without re-resolving the grade:
+        # the body is replace-all, so re-checking would lock the owner out
+        # of editing their own membership set the moment a colleague's
+        # portfolio they had joined went private. Its row is still loaded
+        # and locked, because the visibility derivation below reads it.
         #
-        # Both paths lock the portfolio row before writing, and the
-        # cascade's member UPDATE takes row locks on the members it
-        # carries. The one interleaving that can deadlock is a re-assign
-        # of a project *into the portfolio it is already in* racing that
-        # portfolio's cascade; Postgres aborts one side, and the request
-        # is a no-op the caller can repeat.
-        groups = [
-            accessible_portfolio(
-                conn,
-                portfolio_id=target,
-                user_id=user.user_id,
-                write=True,
-                for_update=True,
-            )
+        # Locked either way, so a cascade running on the same portfolio
+        # cannot commit between this read and the write below and leave the
+        # assigned row carrying the old visibility — which is precisely an
+        # org-visible row inside a private Project. Both paths lock the
+        # portfolio row before writing, and the cascade's member UPDATE
+        # takes row locks on the members it carries. The one interleaving
+        # that can deadlock is a re-assign of a project *into the portfolio
+        # it is already in* racing that portfolio's cascade; Postgres
+        # aborts one side, and the request is a no-op the caller can
+        # repeat.
+        current_ids = {
+            membership_row[0]
+            for membership_row in conn.execute(
+                select(portfolio_membership.c.portfolio_id).where(
+                    portfolio_membership.c.project_id == project_id
+                )
+            ).all()
+        }
+        group_rows = [
+            conn.execute(
+                select(portfolio)
+                .where(portfolio.c.portfolio_id == target)
+                .with_for_update()
+            ).mappings().one()
+            if target in current_ids
+            else assignable_portfolio(
+                conn, portfolio_id=target, user_id=user.user_id
+            ).row
             for target in assigned_ids
         ]
         now = datetime.now(UTC)
         assignment: dict[str, object] = {"updated_at": now}
-        if groups:
+        if group_rows:
             # i.2 (promotion) and i.3 (demotion) are one rule, not two
             # branches: the member is org-visible if **any** of its portfolios
             # is org-visible, private otherwise (owner ruling 2026-08-27 on
             # the ADR 0032 merge). Organisation is different — a row carries
             # exactly one `org_id`, so a set spanning two organisations has
             # no honest answer and is refused rather than picking a winner.
-            org_ids = {group.row["org_id"] for group in groups}
+            org_ids = {group_row["org_id"] for group_row in group_rows}
             if len(org_ids) > 1:
                 raise ApiConflict(
                     "visibility_conflict",
@@ -307,7 +335,7 @@ def update_project(
                 )
             assignment["visibility"] = (
                 "org"
-                if any(group.row["visibility"] == "org" for group in groups)
+                if any(group_row["visibility"] == "org" for group_row in group_rows)
                 else "private"
             )
             assignment["org_id"] = org_ids.pop()

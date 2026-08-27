@@ -21,7 +21,13 @@ from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import DBAPIError
 from structlog.testing import capture_logs
 
-from policy_atlas.core.schema import app_user, organisation, portfolio, project
+from policy_atlas.core.schema import (
+    app_user,
+    organisation,
+    portfolio,
+    portfolio_membership,
+    project,
+)
 from policy_atlas.ops import commands
 from policy_atlas.ops.errors import OpsError
 from tests.api.org_support import (
@@ -32,6 +38,7 @@ from tests.api.org_support import (
     seeded,
     unique_email,
 )
+from tests.helpers import now
 from tests.ops.support import (
     POOL_ID,
     cognito,
@@ -334,6 +341,58 @@ def test_user_enrol_moves_every_owned_row_private_and_reports_the_counts(
     assert _portfolio_row(conn, portfolio_id) == (org.org_id, "private")
     # (d) still holds for the database at large: nobody else's row moved.
     assert _project_row(conn, stranger)[:2] == (None, "org")
+
+
+def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
+    conn: Connection,
+) -> None:
+    """An org move cuts cross-owner membership links, and says so.
+
+    Colleague assignment (owner ruling 2026-08-27) lets a colleague's task sit
+    in someone else's portfolio. When either person's rows move organisation,
+    those links would leave a member and a portfolio disagreeing on `org_id`,
+    so the move severs them — both directions — and reports the count. The
+    rows on each side keep the visibility and organisation the move gives
+    them; only the links go.
+    """
+    org = _org(conn)
+    mover = fresh_sub()
+    email = unique_email("severed")
+    colleague = fresh_sub("colleague")
+    movers_portfolio = make_portfolio(conn, owner_user_id=mover, visibility="org")
+    movers_task = make_project(conn, owner_user_id=mover, visibility="org")
+    colleagues_portfolio = make_portfolio(conn, owner_user_id=colleague, visibility="org")
+    colleagues_task = make_project(
+        conn, owner_user_id=colleague, visibility="org", portfolio_id=movers_portfolio
+    )
+    # The mover's task sits in the colleague's portfolio; the colleague's task
+    # sits in the mover's portfolio; the mover's own pairing must survive.
+    conn.execute(
+        portfolio_membership.insert().values(
+            portfolio_id=colleagues_portfolio, project_id=movers_task, created_at=now()
+        )
+    )
+    own_link = make_project(
+        conn, owner_user_id=mover, visibility="org", portfolio_id=movers_portfolio
+    )
+
+    with cognito() as (client, stubber):
+        expect_lookup(stubber, email=email, sub=mover)
+        enrolment = commands.enrol_user(
+            conn, client, pool_id=POOL_ID, email=email, display_name="Mover", org=org
+        )
+
+    assert enrolment.memberships_severed == 2
+    assert "cut 2 membership(s)" in enrolment.summary()
+    remaining = {
+        (row.portfolio_id, row.project_id)
+        for row in conn.execute(select(portfolio_membership)).all()
+    }
+    assert (movers_portfolio, own_link) in remaining
+    assert (movers_portfolio, colleagues_task) not in remaining
+    assert (colleagues_portfolio, movers_task) not in remaining
+    # The colleague's rows did not move; they just lost the links.
+    assert _project_row(conn, colleagues_task)[:2] == (None, "org")
 
 
 def test_user_enrol_is_one_transaction_and_moves_nothing_when_the_move_fails(
