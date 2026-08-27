@@ -394,15 +394,16 @@ export interface paths {
          *
          *     Three of the invariant's six paths run here (contract § 6). Setting
          *     `visibility` on a project that belongs to a portfolio is **i.5**, refused
-         *     409. Setting `portfolio_id` to a portfolio is **i.2/i.3** — the member
-         *     takes that portfolio's `visibility` and `org_id`, promotion and demotion
-         *     being the same rule read in two directions. Setting it to `null` is
+         *     409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
+         *     member takes its portfolios' `visibility` and `org_id`, promotion and
+         *     demotion being the same rule read in two directions, and a set that
+         *     disagrees on either is refused 409. Setting it to `[]` (or `null`) is
          *     **i.6** — the row leaves with the visibility and organisation it had.
          *
          *     Args:
          *         project_id: The project to update.
          *         payload: The partial update. A body carrying both `visibility` and
-         *             `portfolio_id` was already rejected 422 by the model.
+         *             `portfolio_ids` was already rejected 422 by the model.
          *         user: The authenticated caller.
          *         conn: Open database connection.
          *
@@ -1381,10 +1382,15 @@ export interface components {
          *
          *     Args:
          *         context: Context text, clamped to a character window around the
-         *             cited span.
+         *             cited span. Truncated edges are snapped to a word boundary and
+         *             marked with ``...``.
          *         span_start: Start offset of the clamped context.
          *         span_end: End offset of the clamped context.
          *         clamped: Whether the window was clamped (hit a chunk boundary).
+         *         previous: Short tail of the previous chunk, only when the window
+         *             reaches the start of this chunk; otherwise omitted.
+         *         next: Short head of the next chunk, only when the window reaches
+         *             the end of this chunk; otherwise omitted.
          */
         ChunkContextOut: {
             /** Clamped */
@@ -2041,6 +2047,8 @@ export interface components {
          * @description An implementation-context finding, discriminated by ``profile='icf'``.
          */
         IcfFindingOut: {
+            /** Chunk Id */
+            chunk_id?: string | null;
             /** Claim */
             claim: string;
             /** Claim Basis */
@@ -2106,6 +2114,8 @@ export interface components {
         IofFindingOut: {
             /** Causality By Design */
             causality_by_design?: string | null;
+            /** Chunk Id */
+            chunk_id?: string | null;
             /** Comparator */
             comparator?: string | null;
             /** Effect Basis */
@@ -2811,7 +2821,7 @@ export interface components {
          *             `visibility` and organisation and takes it as its first member,
          *             in one transaction (contract § 6, i.1). Omit to create an empty
          *             portfolio. This amends ADR 0031 decision 4 ("assignment is a
-         *             PATCH, not a field on create"); ADR 0032 records the amendment.
+         *             PATCH, not a field on create"); ADR 0033 records the amendment.
          */
         PortfolioCreate: {
             /** Description */
@@ -2956,12 +2966,12 @@ export interface components {
          *         archived_at: When the project was archived, or `None` if active.
          *         latest_run: The derived latest-run read model, or `None` before any
          *             run has been created.
-         *         portfolio_id: The portfolio this project belongs to, or `None` when it
-         *             belongs to none. Unassigned is a normal state, not an error.
-         *         source_count: How many sources this project has gathered, or `None`
-         *             when no run has started. `None` and `0` differ: `None` means the
-         *             question has not been asked yet, `0` means a run asked and found
-         *             nothing.
+         *         portfolio_ids: Portfolios this project belongs to. Empty means
+         *             unassigned, which is a normal state, not an error.
+         *         source_count: How many Included sources this project has (funnel
+         *             `relevant`), or `None` when no run has started. `None` and `0`
+         *             differ: `None` means the question has not been asked yet, `0`
+         *             means a run asked and none are Included.
          *         visibility: How widely the row is shared (task 033). `org` where the
          *             organisation may read it, `private` where only its owner may.
          *         is_owner: Whether the *calling* user owns this row. Per-caller, not a
@@ -2989,8 +2999,8 @@ export interface components {
             name: string;
             /** Owner Display */
             owner_display: string | null;
-            /** Portfolio Id */
-            portfolio_id?: string | null;
+            /** Portfolio Ids */
+            portfolio_ids?: string[];
             /**
              * Project Id
              * Format: uuid
@@ -3024,25 +3034,26 @@ export interface components {
          *         name: New display name, when renaming. Omit to leave unchanged.
          *         question: New evidence question, when changing it. Omit to leave
          *             unchanged.
-         *         portfolio_id: Portfolio to assign this project to, or an explicit
-         *             `null` to unassign it. Omit to leave the assignment unchanged.
+         *         portfolio_ids: Portfolios to assign this project to. Omit to leave
+         *             membership unchanged; `[]` unassigns every portfolio; a list
+         *             replaces the set.
          *         visibility: How widely to share this project. Owner-only. Omit to
          *             leave unchanged; an explicit `null` is refused 422. Cannot be
-         *             combined with `portfolio_id` in one body — see
+         *             combined with `portfolio_ids` in one body — see
          *             :meth:`reject_visibility_with_portfolio`.
          *
          *     Note:
          *         `name` and `visibility` back NOT NULL columns, so an explicit `null`
          *         on either is refused rather than treated as "unchanged" — see
-         *         :meth:`reject_nulls_without_meaning`. `question` and `portfolio_id`
-         *         are not: null clears the question, and null on `portfolio_id` is
-         *         contract § 6's i.6 (unassign).
+         *         :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`
+         *         are not: null clears the question, and null on `portfolio_ids` is
+         *         read as `[]` (unassign every portfolio).
          */
         ProjectUpdate: {
             /** Name */
             name?: string | null;
-            /** Portfolio Id */
-            portfolio_id?: string | null;
+            /** Portfolio Ids */
+            portfolio_ids?: string[] | null;
             /** Question */
             question?: string | null;
             /** Visibility */

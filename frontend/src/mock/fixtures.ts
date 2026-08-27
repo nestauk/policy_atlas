@@ -30,8 +30,8 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   is_owner: true,
   owner_display: "Ada Lovelace",
   // Assigned to `mockPortfolio` below so `GET /projects?portfolio_id=` has a
-  // real member to return (task 033 phase 10a).
-  portfolio_id: MOCK_PORTFOLIO_ID,
+  // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
+  portfolio_ids: [MOCK_PORTFOLIO_ID],
 };
 
 /** Task 033 phase 10a: the one portfolio the mock serves. `task_count`
@@ -199,6 +199,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     stratum_qualifiers: [{ "Age band": "5-7" }, { Deprivation: "IMD quintile 1-2" }],
     quote: "Breakfast participation increased when provision was universal, particularly where uptake carried no separate sign-up.",
     quote_verified: true,
+    chunk_id: "70000000-0000-4000-8000-000000000001",
     groups: { "Intervention type": "Universal breakfast provision" },
   },
   {
@@ -223,6 +224,7 @@ export const mockFindings: components["schemas"]["FindingOut"][] = [
     workforce_requirements: "School travel coordinator time",
     quote: "Where routes felt safe and arrival was coordinated with the school day, participation held up over the term.",
     quote_verified: false,
+    chunk_id: null,
     groups: { "Intervention type": "Active-travel offers" },
   },
 ];

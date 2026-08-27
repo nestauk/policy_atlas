@@ -113,7 +113,7 @@ dev server already on :5173, including a plain (non-mock) one**, and every
 spec then fails at the sign-in panel. If you had `pnpm dev` running for step
 4, stop it before `pnpm e2e`.
 
-## Running the orchestrator CLI
+## Running the orchestrator CLI 
 
 The capability-runner CLI is the non-web entry point:
 

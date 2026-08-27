@@ -68,7 +68,7 @@ export function useCreateTask() {
           "/api/v1/projects/{project_id}",
           {
             params: { path: { project_id: project.project_id } },
-            body: { portfolio_id: input.portfolioId },
+            body: { portfolio_ids: [input.portfolioId] },
           },
         );
         if (patched === undefined) raise(patchError, patchResponse.status);
@@ -125,7 +125,7 @@ export function useUpdateProject(projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     // `visibility` (task 033 phase 10b): owner-only, and refused 422 combined
-    // with `portfolio_id` in one body — see `ProjectUpdate`'s own docstring.
+    // with `portfolio_ids` in one body — see `ProjectUpdate`'s own docstring.
     mutationFn: async (body: components["schemas"]["ProjectUpdate"]) => {
       const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}", {
         params: { path: { project_id: projectId } },
@@ -138,7 +138,7 @@ export function useUpdateProject(projectId: string) {
     // projects-list key (["projects", "list", …]) — a rename must refresh the
     // landing card, not just the workspace header (F.2 finding, 2026-07-29).
     // "portfolios" is invalidated too (task 033 phase 10a): `visibility` and
-    // `portfolio_id` are both patchable here, and either can change a
+    // `portfolio_ids` are both patchable here, and either can change a
     // portfolio's derived `task_count` or member visibility — a cross-family
     // effect from a project-family mutation, the same class of bug the
     // portfolio-PATCH cascade below has to cover in the other direction.

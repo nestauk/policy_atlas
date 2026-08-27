@@ -152,14 +152,14 @@ def test_an_update_body_refuses_an_explicit_null_on_a_not_null_column() -> None:
 def test_an_update_body_keeps_the_nulls_that_mean_something() -> None:
     """The guard is per-field: `null` is a real instruction on three of them.
 
-    `portfolio_id: null` is contract § 6's i.6 — take the Task out of the
-    Project — and `question` / `description` are nullable columns that a null
-    clears. A blanket "no nulls in a PATCH body" rule would have removed all
-    three capabilities to fix two crashes.
+    `portfolio_ids: null` is contract § 6's i.6 — take the Task out of every
+    Project (read as `[]`) — and `question` / `description` are nullable
+    columns that a null clears. A blanket "no nulls in a PATCH body" rule
+    would have removed all three capabilities to fix two crashes.
     """
-    unassigned = ProjectUpdate.model_validate({"portfolio_id": None})
-    assert "portfolio_id" in unassigned.model_fields_set
-    assert unassigned.portfolio_id is None
+    unassigned = ProjectUpdate.model_validate({"portfolio_ids": None})
+    assert "portfolio_ids" in unassigned.model_fields_set
+    assert unassigned.portfolio_ids is None
 
     cleared = ProjectUpdate.model_validate({"question": None})
     assert "question" in cleared.model_fields_set

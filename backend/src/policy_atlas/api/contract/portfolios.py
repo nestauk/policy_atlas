@@ -32,7 +32,7 @@ class PortfolioCreate(BaseModel):
             `visibility` and organisation and takes it as its first member,
             in one transaction (contract § 6, i.1). Omit to create an empty
             portfolio. This amends ADR 0031 decision 4 ("assignment is a
-            PATCH, not a field on create"); ADR 0032 records the amendment.
+            PATCH, not a field on create"); ADR 0033 records the amendment.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)

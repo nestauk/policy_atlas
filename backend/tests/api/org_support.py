@@ -39,6 +39,7 @@ from policy_atlas.core.schema import (
     conversation,
     organisation,
     portfolio,
+    portfolio_membership,
     project,
 )
 from tests.helpers import now
@@ -309,7 +310,7 @@ def make_project(
     portfolio_id: uuid.UUID | None = None,
     name: str = "Task",
 ) -> uuid.UUID:
-    """Insert one project row and return its id."""
+    """Insert one project row (and its portfolio membership) and return its id."""
     project_id = uuid.uuid4()
     moment = now()
     conn.execute(
@@ -322,11 +323,18 @@ def make_project(
             question=None,
             status=status,
             owner_user_id=owner_user_id,
-            portfolio_id=portfolio_id,
             org_id=org_id,
             visibility=visibility,
         )
     )
+    if portfolio_id is not None:
+        conn.execute(
+            portfolio_membership.insert().values(
+                portfolio_id=portfolio_id,
+                project_id=project_id,
+                created_at=moment,
+            )
+        )
     return project_id
 
 

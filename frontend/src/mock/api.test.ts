@@ -359,7 +359,7 @@ describe("mock API", () => {
 
     it("PATCH /projects/{id} refuses a rename bundled with a visibility conflict all-or-nothing — the name is never assigned before the 409", async () => {
       resetMockScenario();
-      // `mockProject.portfolio_id` is seeded non-null (task 033 phase 10a
+      // `mockProject.portfolio_ids` is seeded non-empty (task 033 phase 10a
       // fixture), so any `visibility` in the body always conflicts here.
       const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}`, {
         method: "PATCH",

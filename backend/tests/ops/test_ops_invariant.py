@@ -28,7 +28,7 @@ import uuid
 from sqlalchemy import select, update
 from sqlalchemy.engine import Engine
 
-from policy_atlas.core.schema import organisation, portfolio, project
+from policy_atlas.core.schema import organisation, portfolio, portfolio_membership, project
 from policy_atlas.ops import commands
 from tests.api.org_support import make_org, make_portfolio, make_project, seeded, unique_email
 from tests.api.test_visibility_invariant import _breaches
@@ -117,7 +117,13 @@ def test_the_invariant_holds_across_enrol_re_enrol_and_de_enrol(engine: Engine) 
             )
             conn.execute(
                 update(project)
-                .where(project.c.portfolio_id == portfolio_id)
+                .where(
+                    project.c.project_id.in_(
+                        select(portfolio_membership.c.project_id).where(
+                            portfolio_membership.c.portfolio_id == portfolio_id
+                        )
+                    )
+                )
                 .values(visibility="org")
             )
         assert _breaches(engine, owner) == []

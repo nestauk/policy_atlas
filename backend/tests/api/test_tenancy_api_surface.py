@@ -21,6 +21,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.identity import sub_display
 from policy_atlas.core.schema import portfolio as portfolio_table
+from policy_atlas.core.schema import portfolio_membership as membership_table
 from policy_atlas.core.schema import project as project_table
 from tests.api.org_support import (
     make_org,
@@ -565,7 +566,7 @@ def test_patch_with_both_visibility_and_portfolio_id_is_422(
         response = client.patch(
             f"/api/v1/projects/{row}",
             headers=owner.headers,
-            json={"visibility": "private", "portfolio_id": str(group)},
+            json={"visibility": "private", "portfolio_ids": [str(group)]},
         )
 
         assert response.status_code == 422
@@ -585,7 +586,7 @@ def test_patch_with_visibility_and_an_explicit_null_portfolio_is_also_422(
         response = client.patch(
             f"/api/v1/projects/{row}",
             headers=owner.headers,
-            json={"visibility": "private", "portfolio_id": None},
+            json={"visibility": "private", "portfolio_ids": None},
         )
 
         assert response.status_code == 422
@@ -778,7 +779,13 @@ def test_from_project_id_inherits_visibility_and_organisation_and_takes_the_memb
             ).mappings().one()
         assert created["org_id"] == org_id
         assert created["visibility"] == "private"
-        assert member["portfolio_id"] == uuid.UUID(body["portfolio_id"])
+        with seeded(engine) as conn:
+            memberships = conn.execute(
+                select(membership_table.c.portfolio_id).where(
+                    membership_table.c.project_id == source
+                )
+            ).scalars().all()
+        assert memberships == [uuid.UUID(body["portfolio_id"])]
         assert member["visibility"] == created["visibility"]
         assert member["org_id"] == created["org_id"]
 
@@ -820,11 +827,11 @@ def test_from_project_id_resolves_under_the_write_grade(
         assert missing.json()["error"]["code"] == "not_found"
         with seeded(engine) as conn:
             still_loose = conn.execute(
-                select(project_table.c.portfolio_id).where(
-                    project_table.c.project_id == source
+                select(membership_table.c.portfolio_id).where(
+                    membership_table.c.project_id == source
                 )
-            ).scalar_one()
-        assert still_loose is None
+            ).scalars().all()
+        assert still_loose == []
 
 
 # --- org stamping on create (contract § 7) ------------------------------------

@@ -1030,18 +1030,14 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
   );
 }
 
-/** The evidence base: A4 page frame, coverage snapshot, key-findings-first
- *  ordering, typed annotated prose, citation ladder, shared dossier
- *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
- *  while synthesis writes. */
 /**
  * The report's opening statement.
  *
  * Only a verified summary is shown as the answer: an unverified one has not
  * passed the faithfulness check, and presenting it as the answer would be the
- * report vouching for something it has not checked. `pending` and `failed`
- * each say what is true instead, and the report still opens correctly at Key
- * findings beneath.
+ * report vouching for something it has not checked. A pending summary says
+ * that the check is still running. A failed summary is omitted — nothing is
+ * shown in its place.
  */
 function AnswerCallout({
   summary,
@@ -1061,14 +1057,6 @@ function AnswerCallout({
     return (
       <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
         The summary is still being checked. The findings below are complete.
-      </p>
-    );
-  }
-  if (status === "failed") {
-    return (
-      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
-        A summary couldn't be verified for this report, so none is shown. The
-        findings below are complete.
       </p>
     );
   }
@@ -1093,7 +1081,7 @@ function MostRelevantSources({
   if (sources.length === 0) return null;
   return (
     <section className="mt-8 border-t border-line pt-6">
-      <h2 className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+      <h2 className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
         Most cited sources
       </h2>
       <ul role="list" className="mt-3 space-y-3">
@@ -1121,6 +1109,10 @@ function MostRelevantSources({
   );
 }
 
+/** The evidence base: A4 page frame, coverage snapshot, key-findings-first
+ *  ordering, typed annotated prose, citation ladder, shared dossier
+ *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
+ *  while synthesis writes. */
 export function ArtefactView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
@@ -1209,9 +1201,9 @@ export function ArtefactView() {
     return (
       <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         <Card role="status" className="p-8 text-center">
-          <h1 className="text-title font-bold text-navy">No evidence base yet</h1>
+          <h1 className="text-title font-bold text-navy">Preparing your results...</h1>
           <p className="mt-1.5 text-body text-grey">
-            The evidence base appears here once an analysis reaches synthesis.
+          Your synthesised report will appear here when the Writing step begins.
           </p>
         </Card>
       </main>
@@ -1297,7 +1289,7 @@ export function ArtefactView() {
       <header className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+            <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
               Evidence base
             </p>
             <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
@@ -1314,7 +1306,7 @@ export function ArtefactView() {
             {snapshotCells.map(([label, value, href]) => {
               const content = (
                 <>
-                  <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
+                  <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</p>
                   <p className="mt-1 text-body font-medium leading-snug text-navy">{scrub(value)}</p>
                 </>
               );

@@ -128,6 +128,15 @@ screen word **Task** = the `project` row, screen word **Project** = the new
 open until the workspace-cluster slice. Seams in `docs/deferred.md` § Task
 lifecycle IA — note that `src/mock/api.ts` serves no `/api/v1/portfolios`.
 
+Task `033-ux-snags` is **merged to `dev`** (PR #57, `91d275d`): ten UX snags
+on the 032 surfaces, portfolio membership made **many-to-many**
+(`portfolio_membership`, ADR 0032; `portfolio_ids` replace-all PATCH;
+`source_count` = Included/`relevant` screens), and `planner_v9` →
+`planner_v10`. That merge landed on `task/033-organisations` on 2026-08-27;
+033's tenancy ADR renumbered to **0033**, and the § 6 invariant is
+generalised to "every portfolio a project belongs to must agree on
+`visibility` and `org_id`" (owner to ratify).
+
 Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
 clear meaning per user-visible source count across the P1 check-in, Where I
 looked and the publisher-country charts. Two items were escalated to the owner

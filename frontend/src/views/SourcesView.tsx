@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
+import { useCoverage, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
@@ -21,9 +21,11 @@ import {
   screeningDetails,
   sourceStatusLabel,
   strengthHint,
+  FILTER_CHIP_CLASS,
   ORIGIN_FILTER_OPTIONS,
   SOURCE_SORT_COLUMNS,
   STRENGTH_FILTER_OPTIONS,
+  TABLE_HEADER_TEXT_CLASS,
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
@@ -39,6 +41,7 @@ export function SourcesView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   const landscape = useLandscape(projectId);
+  const coverage = useCoverage(projectId);
   useDocumentTitle(project.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
@@ -90,6 +93,9 @@ export function SourcesView() {
   });
   const dossier = useSourceDossier(projectId, sourceId);
   const findings = useFindings(projectId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
+  const queryBackends = (coverage.data?.backends_detail ?? []).filter(
+    (backend) => (backend.queries ?? []).length > 0,
+  );
   const totalPages = evidence.data === undefined
     ? 0
     : Math.ceil(evidence.data.pagination.total_items / evidence.data.pagination.page_size);
@@ -130,7 +136,7 @@ export function SourcesView() {
                 else next.set("status", filter.key);
                 next.delete("page");
               })}
-              className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
+              className={`${FILTER_CHIP_CLASS} ${
                 statusFilter === filter.key
                   ? "border-blue bg-blue-tint text-blue"
                   : "border-line-2 bg-paper text-grey hover:text-navy"
@@ -147,7 +153,7 @@ export function SourcesView() {
               else next.set("cited", "true");
               next.delete("page");
             })}
-            className={`cursor-pointer border px-2.5 py-1 text-caption font-semibold focus-visible:outline-2 focus-visible:outline-blue ${
+            className={`${FILTER_CHIP_CLASS} ${
               citedFilter
                 ? "border-blue bg-blue-tint text-blue"
                 : "border-line-2 bg-paper text-grey hover:text-navy"
@@ -187,9 +193,13 @@ export function SourcesView() {
       )}
 
       {evidence.data !== undefined && evidence.data.data.length > 0 && (
-        <Card className="overflow-x-auto">
+        <>
+          <p className="mb-3 text-meta text-grey" role="status">
+            {evidence.data.pagination.total_items} sources
+          </p>
+          <Card className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left">
-            <thead className="border-b border-line bg-paper-2 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">
+            <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
               <tr>
                 <SortableColumnHeader
                   column={SOURCE_SORT_COLUMNS[0]}
@@ -339,11 +349,8 @@ export function SourcesView() {
               ))}
             </tbody>
           </table>
-        </Card>
-      )}
-
-      {evidence.data !== undefined && evidence.data.data.length > 0 && (
-        <p className="mt-2 text-caption text-grey">{evidence.data.pagination.total_items} sources</p>
+          </Card>
+        </>
       )}
 
       {evidence.data !== undefined && totalPages > 1 && (
@@ -366,6 +373,48 @@ export function SourcesView() {
             Next
           </button>
         </nav>
+      )}
+
+      {queryBackends.length > 0 && (
+        <section
+          className="mt-8"
+          aria-labelledby="search-queries-heading"
+        >
+          <h2 id="search-queries-heading" className="text-lead font-semibold text-navy">
+            Search queries
+          </h2>
+          <div className="mt-4 space-y-6">
+            {queryBackends.map((backend) => (
+              <div key={backend.backend}>
+                <h3 className="mb-2 text-body font-semibold text-navy">{backend.backend}</h3>
+                <Card>
+                  <table className="w-full table-fixed text-left">
+                    <thead className={`border-b border-line bg-paper-2 ${TABLE_HEADER_TEXT_CLASS}`}>
+                      <tr>
+                        <th scope="col" className="px-4 py-3">
+                          Query
+                        </th>
+                        <th scope="col" className="w-32 px-4 py-3 text-right tabular-nums">
+                          Results
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(backend.queries ?? []).map((item) => (
+                        <tr key={item.query} className="border-b border-line last:border-b-0">
+                          <td className="break-all px-4 py-3 text-body text-navy">{scrub(item.query)}</td>
+                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy">
+                            {typeof item.results === "number" ? item.results : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <SourceDossier
@@ -422,7 +471,7 @@ function SortableColumnHeader({
           type="button"
           aria-label={`Sort by ${column.label.toLowerCase()}`}
           onClick={() => onSort(column.key)}
-          className="flex cursor-pointer items-center gap-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+          className={`flex cursor-pointer items-center gap-1 ${TABLE_HEADER_TEXT_CLASS} hover:text-navy focus-visible:outline-2 focus-visible:outline-blue`}
         >
           {column.label}
           {order !== null && <span aria-hidden="true">{order === "asc" ? "↑" : "↓"}</span>}
@@ -579,12 +628,12 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-caption font-semibold text-grey">
+    <label className="flex items-center gap-1.5 text-meta font-semibold text-grey">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="cursor-pointer border border-line-2 bg-paper px-2 py-1 text-caption font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
+        className="cursor-pointer border border-line-2 bg-paper px-2 py-1.5 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (
@@ -733,7 +782,7 @@ export function SourceDossierBody({
         <DossierSection title="Tags">
           {[...byAsserter.entries()].map(([asserter, tags]) => (
             <div key={asserter} className="mb-3">
-              <p className="mb-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">Asserted by {scrub(asserter)}</p>
+              <p className="mb-1 text-meta font-extrabold uppercase tracking-[0.06em] text-grey">Asserted by {scrub(asserter)}</p>
               <div className="flex flex-wrap gap-1.5">{tags.map((tag) => <Chip key={`${tag.tag_type}-${tag.tag}`} tone="soft">{scrub(tag.tag)}</Chip>)}</div>
             </div>
           ))}
@@ -745,7 +794,7 @@ export function SourceDossierBody({
             <div key={`${citation.section_title}-${index}`} className="border-l-2 border-blue pl-3">
               <p className="text-body leading-snug text-navy">{scrub(citation.claim)}</p>
               <p className="mt-1 text-body italic text-grey">“{scrub(citation.quote)}”</p>
-              <p className="mt-1 text-caption font-extrabold uppercase tracking-[0.06em] text-grey">{scrub(citation.section_title)}</p>
+              <p className="mt-1 text-meta font-extrabold uppercase tracking-[0.06em] text-grey">{scrub(citation.section_title)}</p>
             </div>
           ))}</div>
         </DossierSection>

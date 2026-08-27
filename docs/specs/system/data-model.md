@@ -20,7 +20,12 @@ origin ([ADR 0002](../../adr/0002-spec-governance.md)).
 name for the derived side ("the artefacts" suffices — a symmetry-only term would be inert,
 Principle 10).
 
-**Tenancy (task 033, ADR 0032).** An **organisation** sits *above* the
+A **portfolio** sits *above* the project (screen word Project; ADR 0031,
+amended by ADR 0032). Membership is many-to-many via `portfolio_membership`.
+That is not a container between project and artefact — nothing below the
+project row gains a parent.
+
+**Tenancy (task 033, ADR 0033).** An **organisation** sits *above* the
 hierarchy: `organisation` (name, unique) and `app_user` (`user_id` = the
 token `sub`; nullable `org_id`; `display_name` NOT NULL; nullable `email`,
 ops/admin-facing only; `is_admin`, one global read-only boolean). `project`
@@ -34,7 +39,9 @@ with NULL `org_id` is reachable by its owner and an admin only; membership
 is app-owned and ops-assigned, never read from the IdP. A project inside a
 portfolio matches it on `visibility` **and** `org_id` (the write-path
 invariant; the visibility cascade is the sole writer of
-`portfolio.visibility`).
+`portfolio.visibility`). Membership being many-to-many (ADR 0032), every
+portfolio a project belongs to must agree on both fields; a write that would
+make them disagree is refused.
 
 Whole-item organisation is **just columns + tags + scoping** — no special container between
 project and artefact.

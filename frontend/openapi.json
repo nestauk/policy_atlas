@@ -751,7 +751,7 @@
         "type": "object"
       },
       "ChunkContextOut": {
-        "description": "The chunk-context read model for a cited span (the 008 seam).\n\nArgs:\n    context: Context text, clamped to a character window around the\n        cited span.\n    span_start: Start offset of the clamped context.\n    span_end: End offset of the clamped context.\n    clamped: Whether the window was clamped (hit a chunk boundary).",
+        "description": "The chunk-context read model for a cited span (the 008 seam).\n\nArgs:\n    context: Context text, clamped to a character window around the\n        cited span. Truncated edges are snapped to a word boundary and\n        marked with ``...``.\n    span_start: Start offset of the clamped context.\n    span_end: End offset of the clamped context.\n    clamped: Whether the window was clamped (hit a chunk boundary).\n    previous: Short tail of the previous chunk, only when the window\n        reaches the start of this chunk; otherwise omitted.\n    next: Short head of the next chunk, only when the window reaches\n        the end of this chunk; otherwise omitted.",
         "properties": {
           "clamped": {
             "title": "Clamped",
@@ -2142,6 +2142,18 @@
       "IcfFindingOut": {
         "description": "An implementation-context finding, discriminated by ``profile='icf'``.",
         "properties": {
+          "chunk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
+          },
           "claim": {
             "title": "Claim",
             "type": "string"
@@ -2369,6 +2381,18 @@
               }
             ],
             "title": "Causality By Design"
+          },
+          "chunk_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Id"
           },
           "comparator": {
             "anyOf": [
@@ -3946,7 +3970,7 @@
       },
       "PortfolioCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/portfolios`.\n\nArgs:\n    name: Portfolio display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_project_id: Seed the new portfolio from an existing project the\n        caller **owns**: the portfolio inherits that project's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        portfolio. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0032 records the amendment.",
+        "description": "Inbound body for `POST /api/v1/portfolios`.\n\nArgs:\n    name: Portfolio display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_project_id: Seed the new portfolio from an existing project the\n        caller **owns**: the portfolio inherits that project's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        portfolio. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0033 records the amendment.",
         "properties": {
           "description": {
             "anyOf": [
@@ -4148,7 +4172,7 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_id: The portfolio this project belongs to, or `None` when it\n        belongs to none. Unassigned is a normal state, not an error.\n    source_count: How many sources this project has gathered, or `None`\n        when no run has started. `None` and `0` differ: `None` means the\n        question has not been asked yet, `0` means a run asked and found\n        nothing.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same project is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_ids: Portfolios this project belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this project has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same project is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -4196,17 +4220,13 @@
             ],
             "title": "Owner Display"
           },
-          "portfolio_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Portfolio Id"
+          "portfolio_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Portfolio Ids",
+            "type": "array"
           },
           "project_id": {
             "format": "uuid",
@@ -4272,7 +4292,7 @@
       },
       "ProjectUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_id: Portfolio to assign this project to, or an explicit\n        `null` to unassign it. Omit to leave the assignment unchanged.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `portfolio_id` in one body \u2014 see\n        :meth:`reject_visibility_with_portfolio`.\n\nNote:\n    `name` and `visibility` back NOT NULL columns, so an explicit `null`\n    on either is refused rather than treated as \"unchanged\" \u2014 see\n    :meth:`reject_nulls_without_meaning`. `question` and `portfolio_id`\n    are not: null clears the question, and null on `portfolio_id` is\n    contract \u00a7 6's i.6 (unassign).",
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_ids: Portfolios to assign this project to. Omit to leave\n        membership unchanged; `[]` unassigns every portfolio; a list\n        replaces the set.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `portfolio_ids` in one body \u2014 see\n        :meth:`reject_visibility_with_portfolio`.\n\nNote:\n    `name` and `visibility` back NOT NULL columns, so an explicit `null`\n    on either is refused rather than treated as \"unchanged\" \u2014 see\n    :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`\n    are not: null clears the question, and null on `portfolio_ids` is\n    read as `[]` (unassign every portfolio).",
         "properties": {
           "name": {
             "anyOf": [
@@ -4287,17 +4307,20 @@
             ],
             "title": "Name"
           },
-          "portfolio_id": {
+          "portfolio_ids": {
             "anyOf": [
               {
-                "format": "uuid",
-                "type": "string"
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Portfolio Id"
+            "title": "Portfolio Ids"
           },
           "question": {
             "anyOf": [
@@ -6423,7 +6446,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the supplied project fields without changing omitted fields.\n\nResolves under the **write** grade (contract \u00a7 3: write is owner-only), so\na same-org colleague who can now *see* this row in their listing gets 403\n`forbidden` here rather than the 404 that would claim the row does not\nexist \u2014 they are already looking at it.\n\nThree of the invariant's six paths run here (contract \u00a7 6). Setting\n`visibility` on a project that belongs to a portfolio is **i.5**, refused\n409. Setting `portfolio_id` to a portfolio is **i.2/i.3** \u2014 the member\ntakes that portfolio's `visibility` and `org_id`, promotion and demotion\nbeing the same rule read in two directions. Setting it to `null` is\n**i.6** \u2014 the row leaves with the visibility and organisation it had.\n\nArgs:\n    project_id: The project to update.\n    payload: The partial update. A body carrying both `visibility` and\n        `portfolio_id` was already rejected 422 by the model.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated project.\n\nRaises:\n    HTTPException: 404 when the row is unreadable, 403 when it is\n        readable but not owned.\n    ApiConflict: 409 `visibility_conflict` when setting `visibility` on a\n        project that belongs to a portfolio.",
+        "description": "Apply the supplied project fields without changing omitted fields.\n\nResolves under the **write** grade (contract \u00a7 3: write is owner-only), so\na same-org colleague who can now *see* this row in their listing gets 403\n`forbidden` here rather than the 404 that would claim the row does not\nexist \u2014 they are already looking at it.\n\nThree of the invariant's six paths run here (contract \u00a7 6). Setting\n`visibility` on a project that belongs to a portfolio is **i.5**, refused\n409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** \u2014 the\nmember takes its portfolios' `visibility` and `org_id`, promotion and\ndemotion being the same rule read in two directions, and a set that\ndisagrees on either is refused 409. Setting it to `[]` (or `null`) is\n**i.6** \u2014 the row leaves with the visibility and organisation it had.\n\nArgs:\n    project_id: The project to update.\n    payload: The partial update. A body carrying both `visibility` and\n        `portfolio_ids` was already rejected 422 by the model.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated project.\n\nRaises:\n    HTTPException: 404 when the row is unreadable, 403 when it is\n        readable but not owned.\n    ApiConflict: 409 `visibility_conflict` when setting `visibility` on a\n        project that belongs to a portfolio.",
         "operationId": "update_project_api_v1_projects__project_id__patch",
         "parameters": [
           {

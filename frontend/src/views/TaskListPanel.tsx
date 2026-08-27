@@ -17,11 +17,19 @@ export type TaskListItem = {
   name: string;
   updated_at: string;
   latest_run?: LatestRun;
-  portfolio_id?: string | null;
+  portfolio_ids?: string[];
   source_count?: number | null;
   is_owner?: boolean;
   owner_display?: string | null;
 };
+
+function portfolioPrefix(
+  ids: readonly string[] | undefined,
+  names?: ReadonlyMap<string, string>,
+): string {
+  if (ids == null || ids.length === 0) return "";
+  return ids.map((id) => names?.get(id) ?? "").filter((name) => name !== "").join(" · ");
+}
 
 function FindTask({
   rows,
@@ -42,9 +50,7 @@ function FindTask({
       ? rows
       : rows.filter((row) => {
           const portfolio =
-            showProjectPrefix && row.portfolio_id != null
-              ? (portfolioNames?.get(row.portfolio_id) ?? "")
-              : "";
+            showProjectPrefix ? portfolioPrefix(row.portfolio_ids, portfolioNames) : "";
           const haystack = `${portfolio} ${row.name}`.toLowerCase();
           return haystack.includes(needle);
         });
@@ -85,10 +91,9 @@ function FindTask({
           <li className="px-1 py-3 text-body text-grey">Nothing matches “{scrub(term)}”.</li>
         )}
         {matches.map((row) => {
-          const portfolioName =
-            showProjectPrefix && row.portfolio_id != null
-              ? (portfolioNames?.get(row.portfolio_id) ?? null)
-              : null;
+          const portfolioName = showProjectPrefix
+            ? portfolioPrefix(row.portfolio_ids, portfolioNames) || null
+            : null;
           const label =
             portfolioName != null ? `${portfolioName} / ${row.name}` : row.name;
           return (
@@ -215,9 +220,7 @@ export function TaskListPanel({
             to={taskDestination(row.project_id, row.latest_run?.status)}
             name={row.name}
             portfolioName={
-              showProjectPrefix && row.portfolio_id != null
-                ? (portfolioNames?.get(row.portfolio_id) ?? null)
-                : null
+              showProjectPrefix ? portfolioPrefix(row.portfolio_ids, portfolioNames) || null : null
             }
             showProjectPrefix={showProjectPrefix}
             sourceCount={row.source_count}

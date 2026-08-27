@@ -47,26 +47,27 @@ class ProjectUpdate(BaseModel):
         name: New display name, when renaming. Omit to leave unchanged.
         question: New evidence question, when changing it. Omit to leave
             unchanged.
-        portfolio_id: Portfolio to assign this project to, or an explicit
-            `null` to unassign it. Omit to leave the assignment unchanged.
+        portfolio_ids: Portfolios to assign this project to. Omit to leave
+            membership unchanged; `[]` unassigns every portfolio; a list
+            replaces the set.
         visibility: How widely to share this project. Owner-only. Omit to
             leave unchanged; an explicit `null` is refused 422. Cannot be
-            combined with `portfolio_id` in one body — see
+            combined with `portfolio_ids` in one body — see
             :meth:`reject_visibility_with_portfolio`.
 
     Note:
         `name` and `visibility` back NOT NULL columns, so an explicit `null`
         on either is refused rather than treated as "unchanged" — see
-        :meth:`reject_nulls_without_meaning`. `question` and `portfolio_id`
-        are not: null clears the question, and null on `portfolio_id` is
-        contract § 6's i.6 (unassign).
+        :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`
+        are not: null clears the question, and null on `portfolio_ids` is
+        read as `[]` (unassign every portfolio).
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str | None = Field(default=None, min_length=1, max_length=PROJECT_NAME_MAX)
     question: str | None = None
-    portfolio_id: uuid.UUID | None = None
+    portfolio_ids: list[uuid.UUID] | None = None
     visibility: Visibility | None = None
 
     @model_validator(mode="after")
@@ -91,7 +92,7 @@ class ProjectUpdate(BaseModel):
 
     @model_validator(mode="after")
     def reject_visibility_with_portfolio(self) -> ProjectUpdate:
-        """Refuse a body carrying both `visibility` and `portfolio_id`.
+        """Refuse a body carrying both `visibility` and `portfolio_ids`.
 
         Contract 033 § 6: the two orderings give different results — assign
         then set flips the row into a conflict, set then assign inherits the
@@ -101,7 +102,7 @@ class ProjectUpdate(BaseModel):
         the invariant deterministic.
 
         Tested against `model_fields_set`, not against `None`: an explicit
-        `{"portfolio_id": null, "visibility": "private"}` (unassign *and*
+        `{"portfolio_ids": null, "visibility": "private"}` (unassign *and*
         set) is exactly the ambiguous case, and a `None` check would wave it
         through.
 
@@ -113,9 +114,9 @@ class ProjectUpdate(BaseModel):
                 as the contract's **422 `validation_error`**.
         """
         supplied = self.model_fields_set
-        if "visibility" in supplied and "portfolio_id" in supplied:
+        if "visibility" in supplied and "portfolio_ids" in supplied:
             raise ValueError(
-                "visibility and portfolio_id cannot be changed in the same request"
+                "visibility and portfolio_ids cannot be changed in the same request"
             )
         return self
 
@@ -150,12 +151,12 @@ class ProjectOut(BaseModel):
         archived_at: When the project was archived, or `None` if active.
         latest_run: The derived latest-run read model, or `None` before any
             run has been created.
-        portfolio_id: The portfolio this project belongs to, or `None` when it
-            belongs to none. Unassigned is a normal state, not an error.
-        source_count: How many sources this project has gathered, or `None`
-            when no run has started. `None` and `0` differ: `None` means the
-            question has not been asked yet, `0` means a run asked and found
-            nothing.
+        portfolio_ids: Portfolios this project belongs to. Empty means
+            unassigned, which is a normal state, not an error.
+        source_count: How many Included sources this project has (funnel
+            `relevant`), or `None` when no run has started. `None` and `0`
+            differ: `None` means the question has not been asked yet, `0`
+            means a run asked and none are Included.
         visibility: How widely the row is shared (task 033). `org` where the
             organisation may read it, `private` where only its owner may.
         is_owner: Whether the *calling* user owns this row. Per-caller, not a
@@ -177,7 +178,7 @@ class ProjectOut(BaseModel):
     updated_at: datetime
     archived_at: datetime | None = None
     latest_run: LatestRun | None = None
-    portfolio_id: uuid.UUID | None = None
+    portfolio_ids: list[uuid.UUID] = Field(default_factory=list)
     source_count: int | None = None
     visibility: Visibility
     is_owner: bool

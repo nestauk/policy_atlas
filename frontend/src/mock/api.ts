@@ -242,7 +242,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     if (
       isRecord(body) &&
       (body.visibility === "org" || body.visibility === "private") &&
-      mockProject.portfolio_id != null
+      (mockProject.portfolio_ids?.length ?? 0) > 0
     ) {
       return json({ error: { code: "visibility_conflict", message: "Task is in a Project." } }, 409);
     }
@@ -250,6 +250,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
     if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
       mockProject.visibility = body.visibility;
+    }
+    if (isRecord(body) && Array.isArray(body.portfolio_ids)) {
+      mockProject.portfolio_ids = body.portfolio_ids.filter(
+        (value): value is string => typeof value === "string",
+      );
     }
     mockProject.updated_at = new Date().toISOString();
     return json(mockProject);
@@ -382,7 +387,9 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     if (isRecord(body) && typeof body.description === "string") found.description = body.description;
     if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
       found.visibility = body.visibility;
-      if (mockProject.portfolio_id === found.portfolio_id) mockProject.visibility = body.visibility;
+      if (mockProject.portfolio_ids?.includes(found.portfolio_id) === true) {
+        mockProject.visibility = body.visibility;
+      }
     }
     return json(found);
   }
@@ -392,7 +399,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // no longer filters the global page client-side).
   if (method === "GET" && path.endsWith("/api/v1/projects")) {
     const portfolioId = url.searchParams.get("portfolio_id");
-    const rows = portfolioId === null || mockProject.portfolio_id === portfolioId ? [mockProject] : [];
+    const rows =
+      portfolioId === null || mockProject.portfolio_ids?.includes(portfolioId) === true
+        ? [mockProject]
+        : [];
     return json(page(rows));
   }
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) return json(mockProject);

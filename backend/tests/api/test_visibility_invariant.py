@@ -1,7 +1,8 @@
 """The visibility and organisation invariant, i.1-i.6 (contract § 6, owner call (i)).
 
-**A `project` with a non-NULL `portfolio_id` carries its portfolio's
-`visibility` *and* its `org_id`. A project in no portfolio is unconstrained.**
+**A `project` with portfolio memberships carries its portfolios'
+`visibility` *and* `org_id` (which must agree — ADR 0032 merge
+generalisation). A project in no portfolio is unconstrained.**
 
 The invariant spans two tables, so no CHECK can express it: enforcement is the
 write paths plus the property at the bottom of this file. Every case here
@@ -34,6 +35,7 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers.portfolios import _PATCHABLE_COLUMNS
 from policy_atlas.core.schema import portfolio as portfolio_table
+from policy_atlas.core.schema import portfolio_membership as membership_table
 from policy_atlas.core.schema import project as project_table
 from policy_atlas.ops import commands as ops_commands
 from tests.api.org_support import (
@@ -50,16 +52,28 @@ from tests.ops.support import POOL_ID, cognito, expect_lookup
 
 
 def _row(engine: Engine, project_id: uuid.UUID | str) -> Any:
-    """Read one project's invariant-bearing fields straight from the database."""
+    """Read one project's invariant-bearing fields straight from the database.
+
+    ``portfolio_ids`` is derived from ``portfolio_membership`` (ADR 0032) —
+    the singular column is gone.
+    """
     with seeded(engine) as conn:
-        return conn.execute(
+        row = dict(conn.execute(
             select(
-                project_table.c.portfolio_id,
                 project_table.c.visibility,
                 project_table.c.org_id,
                 project_table.c.status,
             ).where(project_table.c.project_id == uuid.UUID(str(project_id)))
-        ).mappings().one()
+        ).mappings().one())
+        row["portfolio_ids"] = [
+            membership[0]
+            for membership in conn.execute(
+                select(membership_table.c.portfolio_id)
+                .where(membership_table.c.project_id == uuid.UUID(str(project_id)))
+                .order_by(membership_table.c.created_at, membership_table.c.portfolio_id)
+            ).all()
+        ]
+        return row
 
 
 def _portfolio_row(engine: Engine, portfolio_id: uuid.UUID | str) -> Any:
@@ -107,8 +121,11 @@ def _members(engine: Engine, owner_user_id: str) -> list[Any]:
                 )
                 .select_from(
                     project_table.join(
+                        membership_table,
+                        project_table.c.project_id == membership_table.c.project_id,
+                    ).join(
                         portfolio_table,
-                        project_table.c.portfolio_id == portfolio_table.c.portfolio_id,
+                        membership_table.c.portfolio_id == portfolio_table.c.portfolio_id,
                     )
                 )
                 .where(project_table.c.owner_user_id == owner_user_id)
@@ -154,7 +171,7 @@ def test_assigning_a_private_project_to_an_org_portfolio_promotes_it(
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_id": str(group)}
+            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
         )
 
         assert response.status_code == 200, response.text
@@ -180,7 +197,7 @@ def test_assigning_an_org_project_to_a_private_portfolio_demotes_it(
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_id": str(group)}
+            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
         )
 
         assert response.status_code == 200, response.text
@@ -213,7 +230,7 @@ def test_assignment_carries_the_portfolios_organisation_not_only_its_visibility(
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_id": str(group)}
+            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
         )
 
         assert response.status_code == 200, response.text
@@ -261,13 +278,13 @@ def test_removing_a_project_from_a_portfolio_changes_neither_field(
 
         for member, expected in ((shared_member, "org"), (secret_member, "private")):
             response = client.patch(
-                f"/api/v1/projects/{member}", headers=owner.headers, json={"portfolio_id": None}
+                f"/api/v1/projects/{member}", headers=owner.headers, json={"portfolio_ids": []}
             )
             assert response.status_code == 200, response.text
-            assert response.json()["portfolio_id"] is None
+            assert response.json()["portfolio_ids"] == []
             assert response.json()["visibility"] == expected
             stored = _row(engine, member)
-            assert stored["portfolio_id"] is None
+            assert stored["portfolio_ids"] == []
             assert stored["visibility"] == expected
             assert stored["org_id"] == org_id
 
@@ -654,7 +671,7 @@ def test_the_i5_then_i2_loop_ends_org_visible(engine: Engine, tmp_path: Path) ->
         assert "leave the task out of the project" in blocked.json()["error"]["message"].lower()
 
         removed = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_id": None}
+            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": []}
         )
         assert removed.status_code == 200
         assert removed.json()["visibility"] == "org"
@@ -666,7 +683,7 @@ def test_the_i5_then_i2_loop_ends_org_visible(engine: Engine, tmp_path: Path) ->
         assert privatised.json()["visibility"] == "private"
 
         readded = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_id": str(group)}
+            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
         )
 
         assert readded.status_code == 200, readded.text
@@ -855,7 +872,7 @@ def _walk_step(
         response = client.patch(
             f"/api/v1/projects/{moving}",
             headers=headers,
-            json={"portfolio_id": into},
+            json={"portfolio_ids": [into]},
         )
         assert response.status_code == 200, response.text
         return
@@ -863,7 +880,7 @@ def _walk_step(
         response = client.patch(
             f"/api/v1/projects/{rng.choice(estate.projects)}",
             headers=headers,
-            json={"portfolio_id": None},
+            json={"portfolio_ids": []},
         )
         assert response.status_code == 200, response.text
         return
@@ -873,7 +890,13 @@ def _walk_step(
             headers=headers,
             json={"visibility": rng.choice(("org", "private"))},
         )
-        assert response.status_code == 200, response.text
+        # 409 is the many-to-many refusal (ADR 0032 merge): a member shared
+        # with a disagreeing portfolio blocks the cascade rather than letting
+        # it create the very breach this walk asserts against. A refusal
+        # writes nothing, so the invariant check below still applies.
+        assert response.status_code in (200, 409), response.text
+        if response.status_code == 409:
+            assert response.json()["error"]["code"] == "visibility_conflict"
         return
     if operation == "ops_reenrol":
         # The whole estate moves as one set operation and arrives private, so
@@ -912,7 +935,7 @@ def _walk_step(
     # i.5 is a statement about the row's state, so the expectation is read
     # from the database rather than modelled in the test: a shadow copy of
     # the state machine could agree with a broken implementation.
-    in_portfolio = _row(engine, target)["portfolio_id"] is not None
+    in_portfolio = _row(engine, target)["portfolio_ids"] != []
     response = client.patch(
         f"/api/v1/projects/{target}",
         headers=headers,

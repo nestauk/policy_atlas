@@ -76,7 +76,7 @@ streams; the re-keyed chat pending cap **and its sweeper**; `GET /api/v1/me`; `s
 and org invariant; the ops CLI (org create, user create, enrol, de-enrol, row assignment,
 admin grant/revoke) with `boto3` in a declared dependency group; the frontend switcher,
 read-only affordance matrix, account menu, cache invalidation and visibility-outcome copy;
-spec flow-back; ADR 0032; and `verification.md`. **No privacy-notice copy changes**
+spec flow-back; ADR 0033; and `verification.md`. **No privacy-notice copy changes**
 (owner, 2026-08-24) — the three discrepancies ship as a recorded escalation instead.
 
 **Removed by this slice:** the `staging-user`, `prod-user` and `cognito-user` make targets
@@ -234,7 +234,7 @@ forbids.
    A `project` with no portfolio is unconstrained. Deterministic; nothing prompts.
    - **(i.1)** `POST /portfolios {from_project_id}` — the new portfolio inherits that
      project's `visibility` and `org_id` and takes it as its first member. **This amends
-     ADR 0031 decision 4** ("assignment is a PATCH, not a field on create"); ADR 0032 must
+     ADR 0031 decision 4** ("assignment is a PATCH, not a field on create"); ADR 0033 must
      record the amendment. The source project resolves under the **write** grade — under a
      read grade a colleague, or an admin, could change the visibility of a row they do not
      own, which is the concrete admin-write escape.
@@ -536,7 +536,7 @@ summary; public-safety confirmation; known gaps.
 
 ## Risk tier & review focus
 
-**Tier 4.** Human-approved plan · ADR 0032 (recording the ADR 0031 D4 amendment) · the
+**Tier 4.** Human-approved plan · ADR 0033 (recording the ADR 0031 D4 amendment) · the
 rollback posture above · security lane · adversarial review at plan and code stages · human
 deep review.
 

@@ -26,12 +26,16 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-# planner_v8: Analysis level screen words (Evidence overview / Full-text
-# synthesis / Findings synthesis); research-approach "report" not
-# "review"; search-scope acquire caps in thoroughness option subs.
-# Succeeds planner_v7 (plain reader language; ready-update copy).
+# planner_v10: OECD members source-origin default PLUS an OECD study-setting
+# screening criterion (origin filters cannot see setting; junk otherwise
+# still gets in). Spoken chip; publisher/author origin still not the same
+# as study setting. Succeeds planner_v9.
 # The router and watch moments live in orchestrator_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v8"
+PLANNER_PROMPT_VERSION = "planner_v10"
+
+# Default screening criterion when the OECD source-origin default applies.
+# Emitted verbatim into screening_criteria. Contiguous for pin tests.
+OECD_SETTING_CRITERION = "Study, programme, or policy setting is in an OECD member country."
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a
 # bound, not a filter (the screen prompt's M10 discipline).
@@ -428,9 +432,10 @@ Intent-awareness — binding:
   outcomes...). Never invent scoping the user did not give.
 - screening_criteria: inclusion/exclusion rules for individual documents
   ("only studies with under-5s", "exclude opinion pieces") — user-expressed,
-  plus ones you suggest when the intent type warrants them. Each criterion
-  is ONE short rule, strictly under 200 characters; split compound rules
-  into separate criteria rather than writing long sentences.
+  plus ones you suggest when the intent type warrants them, plus the OECD
+  setting criterion when the source-origin default below applies. Each
+  criterion is ONE short rule, strictly under 200 characters; split compound
+  rules into separate criteria rather than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
   recency window. NEVER set published_before unless the user explicitly
@@ -470,6 +475,21 @@ Intent-awareness — binding:
     countries — "what are G7 governments publishing", "Nordic ministry
     documents", or the user confirms the origin reading): set
     country_group.
+  Default SOURCE ORIGIN when the user has named no geography and has not
+  cleared it: set country_group to the pinned label "OECD members"
+  (countries null). Say so in `reply` — this is publisher / author-affiliation
+  origin, not study setting — and emit the matching scope chip.
+  Also add this screening criterion, verbatim, to screening_criteria:
+  "Study, programme, or policy setting is in an OECD member country."
+  Origin filters cannot see study setting; without this rule, documents about
+  other settings still get in. If they name a different geography, replace
+  both the country_group default and this OECD setting criterion — do not
+  stack them. If they ask about a specific study setting (e.g. UK), use that
+  setting as the screening criterion instead.
+  Do NOT add a UK or high-income screening criterion unless the user asks
+  about study setting. If they cleared geography, leave country_group unset,
+  omit that OECD screening criterion, and do not re-apply this default on
+  later turns.
   Three cases for the label:
   - Pinned groups — emit the label EXACTLY as written, countries null
     (membership expands at compile from provenance-stamped tables, never

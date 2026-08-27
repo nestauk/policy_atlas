@@ -34,7 +34,7 @@ No cookies; no CSRF machinery by construction. **Tokens never appear in
 query strings** — SSE clients authenticate via fetch-stream with the bearer
 header.
 
-**Tenancy (task 033, ADR 0032).** Users belong to at most one organisation
+**Tenancy (task 033, ADR 0033).** Users belong to at most one organisation
 (`app_user.org_id`, ops-assigned). Access resolves through one graded
 helper with **three read legs and one write grade**:
 
@@ -145,13 +145,14 @@ UI translates, from one shared module. Nothing below the project row was
 re-parented.
 
 Additive fields on the project read shape:
-`portfolio_id` (the portfolio it belongs to, or `null` — unassigned is a
-normal state), `source_count` (sources gathered, or `null` when no run
-exists — `null` and `0` differ: `null` means the question has not been asked,
-`0` means a run asked and found nothing), and — task 033 — `visibility`
-(`org|private`), `is_owner` (caller-relative), and `owner_display`
-(the owner's `display_name`, else a `sub` rendering, **never the email**;
-`null` for ownerless rows).
+`portfolio_ids` (the portfolios this task belongs to; empty list is
+unassigned — a normal state; a task may belong to many portfolios,
+ADR 0032), `source_count` (Included sources — funnel `relevant` — or `null`
+when no run exists. `null` and `0` differ: `null` means the question has not
+been asked, `0` means a run asked and none are Included), and — task 033 —
+`visibility` (`org|private`), `is_owner` (caller-relative), and
+`owner_display` (the owner's `display_name`, else a `sub` rendering,
+**never the email**; `null` for ownerless rows).
 
 ### Portfolios
 
@@ -177,19 +178,26 @@ run and no evidence of its own, and carries a name, a description and an owner
   partial, owner-only. `visibility` runs **the cascade**: the portfolio and
   every member project (archived included) take the new value together, in
   one transaction. The cascade is the only writer of
-  `portfolio.visibility`.
-- `PATCH /api/v1/projects/{id}` additively accepts `portfolio_id`, including
-  an explicit `null` to unassign. Assigning a portfolio the caller does not
-  own is 404 and does not write — otherwise the route would be an existence
-  oracle for another owner's rows.
+  `portfolio.visibility`, and it is refused 409 when a member also belongs
+  to another portfolio whose visibility would then disagree.
+- `PATCH /api/v1/projects/{id}` accepts `portfolio_ids` (replace-all). Omit
+  to leave membership unchanged; `[]` (or `null`) unassigns every portfolio;
+  a list replaces the set. Each id must resolve under the **write** grade
+  (404 unreadable, 403 readable-not-owned) before anything is written —
+  otherwise the route would be an existence oracle for another owner's rows.
+  A set whose portfolios disagree on `visibility` or `org_id` is refused
+  409. Rename and membership writes are not `run_active` conflicts; they
+  serialize on the project row lock.
 
-**The visibility/org invariant (task 033, owner call (i)).** A project with
-a `portfolio_id` carries its portfolio's `visibility` **and** `org_id`;
-a project with no portfolio is unconstrained. Deterministic, no prompts:
-assignment syncs the member to the portfolio on both fields (promotion or
-demotion alike); removal changes neither; the cascade carries every member.
-The invariant spans two tables, so it is enforced in the write paths and
-pinned by a property test — no CHECK can express it.
+**The visibility/org invariant (task 033, owner call (i); generalised to
+many-to-many membership at the ADR 0032 merge — owner to ratify).** A project
+in one or more portfolios carries its portfolios' `visibility` **and**
+`org_id`, and those portfolios must agree on both; a project with no
+membership is unconstrained. Deterministic, no prompts: assignment syncs the
+member to its portfolios on both fields (promotion or demotion alike);
+removal changes neither; the cascade carries every member and refuses to
+create disagreement. The invariant spans three tables, so it is enforced in
+the write paths and pinned by a property test — no CHECK can express it.
 
 Tenancy scoping matches projects exactly: an unknown portfolio and an
 unreadable one are the same indistinguishable 404. There is no portfolio
@@ -370,10 +378,12 @@ archived conversations are the same 404.
   no-op read, not an error).
 - `GET /projects/{id}/chunks/{chunk_id}/context?quote=` — the chat-citation
   hover/click read: the same clamped context-window shape as the artefact
-  citation-context read above, resolved from a chat citation's durable chunk
-  id plus its quote (chat citations carry chunk ids, not artefact
-  citation-table ids). An ambiguous or unmatched quote is 404, same rule as
-  the artefact seam.
+  citation-context read above (including short edge-only `previous`/`next`
+  snippets), resolved from a chat citation's durable chunk id plus its quote
+  (chat citations carry chunk ids, not artefact citation-table ids). An
+  ambiguous or unmatched quote is 404, same rule as the artefact seam. Both
+  keyings locate the quote with `locate_unique_span` (case, whitespace,
+  curly quotes), not a literal unique-substring count.
 
 ### Runs
 
@@ -435,7 +445,8 @@ cited by the latest artefact only) · `decisions` (paginated
 decision log from `steering_history` + allowlisted events) · `artefact`
 (sections, span-anchored claims, citations; the chunk-context read model
 clamps context to a character window around the cited span — the 008
-seam's named consumer) · `coverage` (the composed one-line coverage
+seam's named consumer — and only attaches a short `previous`/`next`
+snippet when that window hits a chunk edge) · `coverage` (the composed one-line coverage
 sentence: stop condition + adequacy, composed server-side). Read models
 render honest absence: missing stages are `null`/absent, never faked.
 

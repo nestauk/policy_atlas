@@ -263,10 +263,11 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
     with engine.connect() as up_conn:
         inspector = inspect(up_conn)
         assert "portfolio" in inspector.get_table_names()
+        assert "portfolio_membership" in inspector.get_table_names()
         # `org_id` and `visibility` join the set because this upgrades to *head*,
-        # which is now 033's tenancy migration rather than the portfolio layer —
-        # the equality is kept (it is what catches an unintended column) and the
-        # two columns 033 adds to `portfolio` are named explicitly.
+        # which now includes 033's tenancy migrations as well as the membership
+        # layer — the equality is kept (it is what catches an unintended column)
+        # and the two columns 033 adds to `portfolio` are named explicitly.
         assert {c["name"] for c in inspector.get_columns("portfolio")} == {
             "portfolio_id",
             "owner_user_id",
@@ -276,7 +277,12 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
             "org_id",
             "visibility",
         }
-        assert "portfolio_id" in {c["name"] for c in inspector.get_columns("project")}
+        assert {c["name"] for c in inspector.get_columns("portfolio_membership")} == {
+            "portfolio_id",
+            "project_id",
+            "created_at",
+        }
+        assert "portfolio_id" not in {c["name"] for c in inspector.get_columns("project")}
 
 
 def _seed_pre_033_project_and_conversation(

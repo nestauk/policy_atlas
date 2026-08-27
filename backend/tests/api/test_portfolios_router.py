@@ -45,13 +45,13 @@ def test_list_portfolios_derives_task_counts(tmp_path: Path) -> None:
             patched = client.patch(
                 f"/api/v1/projects/{project_id}",
                 headers=owner,
-                json={"portfolio_id": first},
+                json={"portfolio_ids": [first]},
             )
             assert patched.status_code == 200, patched.text
         patched = client.patch(
             f"/api/v1/projects/{project_ids[2]}",
             headers=owner,
-            json={"portfolio_id": second},
+            json={"portfolio_ids": [second]},
         )
         assert patched.status_code == 200, patched.text
 
@@ -82,7 +82,7 @@ def test_get_portfolio_returns_derived_task_count(tmp_path: Path) -> None:
         patched = client.patch(
             f"/api/v1/projects/{project_id}",
             headers=owner,
-            json={"portfolio_id": portfolio_id},
+            json={"portfolio_ids": [portfolio_id]},
         )
         assert patched.status_code == 200, patched.text
 
@@ -130,18 +130,18 @@ def test_assign_project_to_portfolio(tmp_path: Path) -> None:
         patched = client.patch(
             f"/api/v1/projects/{project_id}",
             headers=owner,
-            json={"portfolio_id": portfolio_id},
+            json={"portfolio_ids": [portfolio_id]},
         )
         assert patched.status_code == 200, patched.text
-        assert patched.json()["portfolio_id"] == portfolio_id
+        assert patched.json()["portfolio_ids"] == [portfolio_id]
 
         fetched = client.get(f"/api/v1/projects/{project_id}", headers=owner)
         assert fetched.status_code == 200
-        assert fetched.json()["portfolio_id"] == portfolio_id
+        assert fetched.json()["portfolio_ids"] == [portfolio_id]
 
 
 def test_unassign_project_from_portfolio_drops_task_count(tmp_path: Path) -> None:
-    """Setting portfolio_id back to null clears it and shrinks the count."""
+    """Setting portfolio_ids to [] clears membership and shrinks the count."""
     with api_client(tmp_path) as (client, owner, _):
         created = client.post("/api/v1/portfolios", headers=owner, json={"name": "Housing"})
         portfolio_id = created.json()["portfolio_id"]
@@ -149,17 +149,17 @@ def test_unassign_project_from_portfolio_drops_task_count(tmp_path: Path) -> Non
         assigned = client.patch(
             f"/api/v1/projects/{project_id}",
             headers=owner,
-            json={"portfolio_id": portfolio_id},
+            json={"portfolio_ids": [portfolio_id]},
         )
         assert assigned.status_code == 200, assigned.text
 
         unassigned = client.patch(
             f"/api/v1/projects/{project_id}",
             headers=owner,
-            json={"portfolio_id": None},
+            json={"portfolio_ids": []},
         )
         assert unassigned.status_code == 200, unassigned.text
-        assert unassigned.json()["portfolio_id"] is None
+        assert unassigned.json()["portfolio_ids"] == []
 
         fetched = client.get(f"/api/v1/portfolios/{portfolio_id}", headers=owner)
         assert fetched.status_code == 200
@@ -197,13 +197,13 @@ def test_assign_project_to_unowned_portfolio_is_404_and_does_not_write(tmp_path:
         response = client.patch(
             f"/api/v1/projects/{project_id}",
             headers=owner,
-            json={"portfolio_id": other_portfolio_id},
+            json={"portfolio_ids": [other_portfolio_id]},
         )
         assert response.status_code == 404
 
         fetched = client.get(f"/api/v1/projects/{project_id}", headers=owner)
         assert fetched.status_code == 200
-        assert fetched.json()["portfolio_id"] is None
+        assert fetched.json()["portfolio_ids"] == []
 
 
 def test_project_with_no_portfolio_is_unaffected(tmp_path: Path) -> None:
@@ -213,12 +213,12 @@ def test_project_with_no_portfolio_is_unaffected(tmp_path: Path) -> None:
 
         fetched = client.get(f"/api/v1/projects/{project_id}", headers=owner)
         assert fetched.status_code == 200
-        assert fetched.json()["portfolio_id"] is None
+        assert fetched.json()["portfolio_ids"] == []
 
         listed = client.get("/api/v1/projects", headers=owner)
         assert listed.status_code == 200
         row = next(row for row in listed.json()["data"] if row["project_id"] == project_id)
-        assert row["portfolio_id"] is None
+        assert row["portfolio_ids"] == []
 
 
 def test_a_portfolio_patch_body_of_explicit_null_name_is_refused(tmp_path: Path) -> None:
@@ -251,3 +251,51 @@ def test_a_portfolio_patch_body_of_explicit_null_name_is_refused(tmp_path: Path)
         assert cleared.status_code == 200, cleared.text
         assert cleared.json()["description"] is None
         assert cleared.json()["name"] == "Housing"
+
+
+def test_task_can_belong_to_many_portfolios(tmp_path: Path) -> None:
+    """One task in two projects counts in both task_counts and lists both ids."""
+    with api_client(tmp_path) as (client, owner, _):
+        first = client.post("/api/v1/portfolios", headers=owner, json={"name": "First"}).json()[
+            "portfolio_id"
+        ]
+        second = client.post("/api/v1/portfolios", headers=owner, json={"name": "Second"}).json()[
+            "portfolio_id"
+        ]
+        project_id = create_project(client, owner)
+        patched = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=owner,
+            json={"portfolio_ids": [first, second, first]},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["portfolio_ids"] == [first, second]
+
+        listed = client.get("/api/v1/portfolios", headers=owner)
+        counts = {row["portfolio_id"]: row["task_count"] for row in listed.json()["data"]}
+        assert counts[first] == 1
+        assert counts[second] == 1
+
+
+def test_omitting_portfolio_ids_leaves_membership_unchanged(tmp_path: Path) -> None:
+    """A name-only PATCH does not drop existing memberships."""
+    with api_client(tmp_path) as (client, owner, _):
+        portfolio_id = client.post(
+            "/api/v1/portfolios", headers=owner, json={"name": "Housing"}
+        ).json()["portfolio_id"]
+        project_id = create_project(client, owner)
+        assigned = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=owner,
+            json={"portfolio_ids": [portfolio_id]},
+        )
+        assert assigned.status_code == 200, assigned.text
+
+        renamed = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=owner,
+            json={"name": "Renamed only"},
+        )
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()["name"] == "Renamed only"
+        assert renamed.json()["portfolio_ids"] == [portfolio_id]

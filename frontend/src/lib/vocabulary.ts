@@ -62,7 +62,7 @@ export const COPY = {
   /** A locked tab explains itself rather than showing an empty page. */
   lockedHint: "Available once the analysis has run",
   notDecided: "Not decided yet",
-  shareComingSoon: "Sharing features coming soon",
+  shareComingSoon: "More sharing features coming soon",
 } as const;
 
 /**

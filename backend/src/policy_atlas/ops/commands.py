@@ -58,7 +58,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.exc import IntegrityError
 
-from policy_atlas.core.schema import app_user, organisation, portfolio, project
+from policy_atlas.core.schema import (
+    app_user,
+    organisation,
+    portfolio,
+    portfolio_membership,
+    project,
+)
 from policy_atlas.ops.errors import OpsError
 
 #: The visibility every moved row arrives at. Owner call (j): **no operator
@@ -779,13 +785,16 @@ def assign_rows(
     portfolio's ``org_id`` *and* ``visibility``. So there is no such thing as
     assigning half of a membership, and the command never offers to:
 
-    - a **portfolio** moves with every member project;
-    - a **project that is a member** of a portfolio moves the *portfolio* and
-      therefore every sibling, and says so in the summary;
+    - a **portfolio** moves with every member project — and, membership being
+      many-to-many (ADR 0032), with every portfolio reachable through shared
+      members (the connected component), or a shared member would be left
+      breaching its other portfolio;
+    - a **project that is a member** of portfolios moves those portfolios'
+      component and therefore every sibling, and says so in the summary;
     - a **project with no portfolio** is unconstrained and moves alone.
 
     **A move privatises, on exactly the enrolment rule** (:data:`_PRIVATE`,
-    owner call (j), ADR 0032 decision 7). Stamping ``org_id`` while preserving
+    owner call (j), ADR 0033 decision 7). Stamping ``org_id`` while preserving
     ``visibility`` is the one way an operator command can expose a row: the
     default visibility is ``org``, and a row whose ``org_id`` is NULL is
     reachable by its owner alone however it is marked — the org leg reads
@@ -826,13 +835,21 @@ def assign_rows(
     followed = False
     if project_id is not None:
         row = conn.execute(
-            select(project.c.project_id, project.c.portfolio_id, project.c.org_id)
+            select(project.c.project_id, project.c.org_id)
             .where(project.c.project_id == project_id)
             .with_for_update()
         ).one_or_none()
         if row is None:
             raise OpsError(f"no project {project_id}")
-        if row.portfolio_id is None:
+        member_of = [
+            membership_row[0]
+            for membership_row in conn.execute(
+                select(portfolio_membership.c.portfolio_id)
+                .where(portfolio_membership.c.project_id == project_id)
+                .order_by(portfolio_membership.c.created_at, portfolio_membership.c.portfolio_id)
+            ).all()
+        ]
+        if not member_of:
             privatised = row.org_id != org.org_id
             moving = update(project).where(project.c.project_id == project_id)
             # Two literal `.values()` calls rather than a built dict: rubric 24
@@ -854,9 +871,11 @@ def assign_rows(
                 followed_membership=False,
                 privatised=privatised,
             )
-        target = row.portfolio_id
+        seeds = list(member_of)
+        target = member_of[0]
         followed = True
     else:
+        seeds = [portfolio_id]
         target = portfolio_id
 
     current = conn.execute(
@@ -866,26 +885,54 @@ def assign_rows(
     ).one_or_none()
     if current is None:
         raise OpsError(f"no portfolio {target}")
+    # Membership is many-to-many (ADR 0032), so "a membership moves whole"
+    # means the **connected component**: every portfolio reachable through
+    # shared members moves too, or the shared member would be left matching
+    # one portfolio and breaching the other. Within a component every row
+    # already agrees on both fields (each shared member matches all of its
+    # portfolios), so the set moves coherently.
+    component: set[uuid.UUID] = set(seeds)
+    frontier: set[uuid.UUID] = set(seeds)
+    while frontier:
+        member_ids = select(portfolio_membership.c.project_id).where(
+            portfolio_membership.c.portfolio_id.in_(frontier)
+        )
+        linked = {
+            linked_row[0]
+            for linked_row in conn.execute(
+                select(portfolio_membership.c.portfolio_id)
+                .where(portfolio_membership.c.project_id.in_(member_ids))
+                .distinct()
+            ).all()
+        }
+        frontier = linked - component
+        component |= frontier
     privatised = current.org_id != org.org_id
     visibility = _PRIVATE if privatised else current.visibility
-    conn.execute(
+    portfolios_moved = conn.execute(
         update(portfolio)
-        .where(portfolio.c.portfolio_id == target)
+        .where(portfolio.c.portfolio_id.in_(component))
         .values(org_id=org.org_id, visibility=visibility)
-    )
+    ).rowcount
     # No status filter: archived members follow too, for the reason the API
     # cascade documents — an archived project is still readable by whoever may
     # read it, so leaving it behind strands exactly the rows nobody watches.
     moved = conn.execute(
         update(project)
-        .where(project.c.portfolio_id == target)
+        .where(
+            project.c.project_id.in_(
+                select(portfolio_membership.c.project_id).where(
+                    portfolio_membership.c.portfolio_id.in_(component)
+                )
+            )
+        )
         .values(org_id=org.org_id, visibility=visibility, updated_at=_now())
     ).rowcount
     return Assignment(
         org=org,
         portfolio_id=target,
         projects_moved=moved,
-        portfolios_moved=1,
+        portfolios_moved=portfolios_moved,
         followed_membership=followed,
         privatised=privatised,
     )

@@ -88,14 +88,15 @@ export function sortPortfoliosByLastUpdated<
 
 /** Build a map of portfolio id → newest assigned task `updated_at`. */
 export function newestTaskUpdateByPortfolio(
-  tasks: ReadonlyArray<{ portfolio_id?: string | null; updated_at: string }>,
+  tasks: ReadonlyArray<{ portfolio_ids?: readonly string[] | null; updated_at: string }>,
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const task of tasks) {
-    if (task.portfolio_id == null) continue;
-    const existing = map.get(task.portfolio_id);
-    if (existing === undefined || task.updated_at > existing) {
-      map.set(task.portfolio_id, task.updated_at);
+    for (const portfolioId of task.portfolio_ids ?? []) {
+      const existing = map.get(portfolioId);
+      if (existing === undefined || task.updated_at > existing) {
+        map.set(portfolioId, task.updated_at);
+      }
     }
   }
   return map;

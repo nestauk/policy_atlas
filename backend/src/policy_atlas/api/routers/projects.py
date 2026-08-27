@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.api.app import ApiConflict
@@ -33,8 +33,8 @@ from policy_atlas.api.routers._access import (
     owner_email_filter,
     trace_admin_listing,
 )
-from policy_atlas.api.routers._common import project_out
-from policy_atlas.core.schema import app_user, capability_run, project
+from policy_atlas.api.routers._common import memberships_for_projects, project_out
+from policy_atlas.core.schema import app_user, capability_run, portfolio_membership, project
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -93,7 +93,13 @@ def list_projects(
     if status_filter != "all":
         where.append(project.c.status == status_filter)
     if portfolio_id is not None:
-        where.append(project.c.portfolio_id == portfolio_id)
+        where.append(
+            project.c.project_id.in_(
+                select(portfolio_membership.c.project_id).where(
+                    portfolio_membership.c.portfolio_id == portfolio_id
+                )
+            )
+        )
     total = conn.execute(select(func.count()).select_from(project).where(*where)).scalar_one()
     # One join, not one lookup per row: `owner_display` on a 200-row page
     # would otherwise be 200 extra round trips.
@@ -121,6 +127,7 @@ def list_projects(
         row_count=len(rows),
         total_items=int(total),
     )
+    memberships = memberships_for_projects(conn, [row["project_id"] for row in rows])
     return Page(
         data=[
             project_out(
@@ -130,6 +137,7 @@ def list_projects(
                 owner_display=owner_display_for(
                     row["owner_user_id"], row["owner_display_name"]
                 ),
+                portfolio_ids=memberships[row["project_id"]],
             )
             for row in rows
         ],
@@ -196,15 +204,16 @@ def update_project(
 
     Three of the invariant's six paths run here (contract § 6). Setting
     `visibility` on a project that belongs to a portfolio is **i.5**, refused
-    409. Setting `portfolio_id` to a portfolio is **i.2/i.3** — the member
-    takes that portfolio's `visibility` and `org_id`, promotion and demotion
-    being the same rule read in two directions. Setting it to `null` is
+    409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
+    member takes its portfolios' `visibility` and `org_id`, promotion and
+    demotion being the same rule read in two directions, and a set that
+    disagrees on either is refused 409. Setting it to `[]` (or `null`) is
     **i.6** — the row leaves with the visibility and organisation it had.
 
     Args:
         project_id: The project to update.
         payload: The partial update. A body carrying both `visibility` and
-            `portfolio_id` was already rejected 422 by the model.
+            `portfolio_ids` was already rejected 422 by the model.
         user: The authenticated caller.
         conn: Open database connection.
 
@@ -217,7 +226,7 @@ def update_project(
         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
             project that belongs to a portfolio.
     """
-    access = accessible_project(
+    accessible_project(
         conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
     )
     changes = payload.model_dump(exclude_unset=True)
@@ -228,7 +237,12 @@ def update_project(
         # out of the Project" — never a silent write that the cascade would
         # contradict. The cascade itself, and the property over i.1-i.6,
         # land with the invariant.
-        if access.row["portfolio_id"] is not None:
+        in_portfolio = conn.execute(
+            select(func.count())
+            .select_from(portfolio_membership)
+            .where(portfolio_membership.c.project_id == project_id)
+        ).scalar_one()
+        if int(in_portfolio) > 0:
             raise ApiConflict(
                 "visibility_conflict",
                 "this task follows its project's visibility — change the project's "
@@ -247,53 +261,78 @@ def update_project(
             .where(project.c.project_id == project_id)
             .values(question=changes["question"], updated_at=datetime.now(UTC))
         )
-    if "portfolio_id" in changes:
-        target = changes["portfolio_id"]
-        assignment: dict[str, object] = {
-            "portfolio_id": target,
-            "updated_at": datetime.now(UTC),
-        }
-        if target is not None:
-            # An unowned portfolio must be as invisible here as it is on its
-            # own route, or PATCH becomes an existence oracle for someone
-            # else's rows. Locked (`for_update`) so a cascade running on the
-            # same portfolio cannot commit between this read and the write
-            # below and leave the assigned row carrying the old visibility —
-            # which is precisely an org-visible row inside a private Project.
-            #
-            # Both paths lock the portfolio row before writing, and the
-            # cascade's member UPDATE takes row locks on the members it
-            # carries. The one interleaving that can deadlock is a re-assign
-            # of a project *into the portfolio it is already in* racing that
-            # portfolio's cascade; Postgres aborts one side, and the request
-            # is a no-op the caller can repeat.
-            group = accessible_portfolio(
+    assigned_ids: list[uuid.UUID] | None = None
+    if "portfolio_ids" in changes:
+        assigned_ids = list(dict.fromkeys(changes["portfolio_ids"] or []))
+        # An unowned portfolio must be as invisible here as it is on its
+        # own route, or PATCH becomes an existence oracle for someone
+        # else's rows. Locked (`for_update`) so a cascade running on the
+        # same portfolio cannot commit between this read and the write
+        # below and leave the assigned row carrying the old visibility —
+        # which is precisely an org-visible row inside a private Project.
+        #
+        # Both paths lock the portfolio row before writing, and the
+        # cascade's member UPDATE takes row locks on the members it
+        # carries. The one interleaving that can deadlock is a re-assign
+        # of a project *into the portfolio it is already in* racing that
+        # portfolio's cascade; Postgres aborts one side, and the request
+        # is a no-op the caller can repeat.
+        groups = [
+            accessible_portfolio(
                 conn,
                 portfolio_id=target,
                 user_id=user.user_id,
                 write=True,
                 for_update=True,
             )
+            for target in assigned_ids
+        ]
+        now = datetime.now(UTC)
+        assignment: dict[str, object] = {"updated_at": now}
+        if groups:
             # i.2 (promotion) and i.3 (demotion) are one rule, not two
-            # branches: the member takes its portfolio's `visibility` **and**
-            # `org_id`. Deterministic and silent by design — the request that
-            # carries `visibility` for a row in a portfolio is the one that
-            # 409s above, so an assignment cannot be a disguised visibility
-            # argument, and the response states the resulting visibility.
-            # (The screen names that outcome before the click; the copy is
-            # phase 10b's, and `test_the_i5_then_i2_loop_ends_org_visible`
-            # pins the sequence the copy exists to describe.)
-            assignment["visibility"] = group.row["visibility"]
-            assignment["org_id"] = group.row["org_id"]
-        # i.6, the `target is None` case: clearing the assignment writes
-        # neither field. The row keeps the visibility and organisation it had
-        # inside the portfolio — leaving is not a way to change either, and a
-        # row that was org-visible does not become private by being taken out.
+            # branches: the member takes its portfolios' `visibility` **and**
+            # `org_id`. Membership is many-to-many (ADR 0032), so the rule
+            # only stays deterministic if every named portfolio agrees on
+            # both fields — a disagreeing set is refused rather than picking
+            # a winner. (Merge-time generalisation of contract 033 § 6;
+            # owner to ratify.)
+            visibilities = {group.row["visibility"] for group in groups}
+            org_ids = {group.row["org_id"] for group in groups}
+            if len(visibilities) > 1 or len(org_ids) > 1:
+                raise ApiConflict(
+                    "visibility_conflict",
+                    "these projects disagree on visibility or organisation — a "
+                    "task can only join projects that agree on both",
+                )
+            assignment["visibility"] = groups[0].row["visibility"]
+            assignment["org_id"] = groups[0].row["org_id"]
+        # i.6, the empty-list case: clearing every membership writes neither
+        # field. The row keeps the visibility and organisation it had inside
+        # its portfolios — leaving is not a way to change either, and a row
+        # that was org-visible does not become private by being taken out.
+        conn.execute(
+            delete(portfolio_membership).where(
+                portfolio_membership.c.project_id == project_id
+            )
+        )
+        if assigned_ids:
+            conn.execute(
+                portfolio_membership.insert(),
+                [
+                    {
+                        "portfolio_id": target,
+                        "project_id": project_id,
+                        "created_at": now,
+                    }
+                    for target in assigned_ids
+                ],
+            )
         conn.execute(
             update(project).where(project.c.project_id == project_id).values(**assignment)
         )
     row = conn.execute(select(project).where(project.c.project_id == project_id)).mappings().one()
-    return project_out(conn, row, user_id=user.user_id)
+    return project_out(conn, row, user_id=user.user_id, portfolio_ids=assigned_ids)
 
 
 @router.post("/{project_id}/archive", response_model=ProjectOut)

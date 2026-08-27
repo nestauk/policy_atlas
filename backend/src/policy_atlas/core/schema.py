@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-five tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-six tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -65,6 +65,25 @@ portfolio = Table(
     Index("ix_portfolio_org_visibility", "org_id", "visibility"),
 )
 
+portfolio_membership = Table(
+    "portfolio_membership",
+    metadata,
+    Column(
+        "portfolio_id",
+        UUID(as_uuid=True),
+        ForeignKey("portfolio.portfolio_id"),
+        primary_key=True,
+    ),
+    Column(
+        "project_id",
+        UUID(as_uuid=True),
+        ForeignKey("project.project_id"),
+        primary_key=True,
+    ),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Index("ix_portfolio_membership_project_id", "project_id"),
+)
+
 project = Table(
     "project",
     metadata,
@@ -76,12 +95,6 @@ project = Table(
     Column("updated_at", DateTime(timezone=True), nullable=False),
     Column("archived_at", DateTime(timezone=True), nullable=True),
     Column("owner_user_id", Text, nullable=True),
-    Column(
-        "portfolio_id",
-        UUID(as_uuid=True),
-        ForeignKey("portfolio.portfolio_id"),
-        nullable=True,
-    ),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),

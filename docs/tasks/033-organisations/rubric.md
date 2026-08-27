@@ -18,7 +18,7 @@ one unfalsifiable box absorbed everything the other items missed.
 6. [ ] Tier-4 review stack ran — contract verifier · code review · **security lane in
        three scoped passes** (tenancy boundary · privileged read and audit · operator CLI)
        · plan- and code-stage adversarial · simplification · human deep review.
-7. [ ] Spec flow-back landed per § 13; ADR 0032 Accepted **and recording that it amends
+7. [ ] Spec flow-back landed per § 13; ADR 0033 Accepted **and recording that it amends
        ADR 0031 decision 4**; AGENTS.md phase pointer current.
 
 ## Tenancy

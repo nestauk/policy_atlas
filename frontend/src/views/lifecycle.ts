@@ -21,28 +21,29 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
 /**
  * The set of tabs a task at this run state can open.
  *
- * A direct transcription of the contract's locking table (task 032 § Behaviour
- * rules). Availability is computed from run state, never from whether a page
- * would happen to render empty — that is the difference between an honest
- * locked tab and a blank one.
+ * Task 032 locked Results until the run succeeded. Owner steer 2026-08-25
+ * reopens it while a run is executing or paused so the in-progress write-up
+ * is reachable (LiveArtefactBody already streams sections as they fill).
+ * Availability is still computed from run state, never from whether a page
+ * would happen to render empty.
  *
  * Sources stays open after a failed run on purpose: the corpus that was
  * gathered is real and readable, and dropping it would hide work that exists.
- * That is the flag-don't-drop discipline, not a special case.
+ * That is the flag-don't-drop discipline, not a special case. Results stays
+ * locked after a failed run — a partial write-up is still on Plan.
  */
 function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
-  if (status === null || status === undefined) return ["plan"];
+  if (status === null || status === undefined) return ["plan", "share"];
   switch (status) {
     case "running":
     case "paused":
-      return ["plan", "sources", "history"];
     case "succeeded":
     case "degraded":
       return LIFECYCLE_TABS;
     case "failed":
     case "aborted":
     case "interrupted":
-      return ["plan", "sources", "history"];
+      return ["plan", "sources", "share", "history"];
   }
 }
 

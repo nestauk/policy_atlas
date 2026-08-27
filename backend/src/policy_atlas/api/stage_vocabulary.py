@@ -33,7 +33,6 @@ STAGE_BY_REGISTRY: dict[str, StageKey] = {
     "screen_full": "screen",
     "classify": "classify",
     "appraise": "appraise",
-    "ingest_full_text": "acquire",
     "characterise": "characterise",
     "select": "select",
     "extract": "extract",

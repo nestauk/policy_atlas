@@ -628,7 +628,7 @@ def test_rows_assign_of_a_member_project_moves_its_portfolio_and_siblings(
 
 
 def test_rows_assign_privatises_the_rows_it_moves(conn: Connection) -> None:
-    """Rubric 29's last clause, ADR 0032 decision 7: no operator action exposes a row.
+    """Rubric 29's last clause, ADR 0033 decision 7: no operator action exposes a row.
 
     The row this pins is the one the previous revision of the command got
     wrong. ``visibility`` defaults to ``org``, and a row whose ``org_id`` is

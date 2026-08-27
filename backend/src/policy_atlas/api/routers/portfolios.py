@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection, RowMapping
 
+from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
@@ -39,7 +40,7 @@ from policy_atlas.api.routers._access import (
     trace_admin_listing,
 )
 from policy_atlas.api.routers._common import resolve_owner_display
-from policy_atlas.core.schema import app_user, portfolio, project
+from policy_atlas.core.schema import app_user, portfolio, portfolio_membership, project
 
 router = APIRouter(
     prefix="/api/v1/portfolios",
@@ -95,7 +96,34 @@ def _cascade_visibility(
         portfolio_id: The portfolio whose visibility is changing.
         org_id: That portfolio's organisation — what members are synced to.
         visibility: The new visibility for the portfolio and every member.
+
+    Raises:
+        ApiConflict: 409 `visibility_conflict` when a member also belongs to
+            another portfolio whose visibility differs from the new value —
+            membership is many-to-many (ADR 0032), and "every member matches
+            every portfolio it is in" only stays true if the cascade refuses
+            to make two containing portfolios disagree.
     """
+    member_ids = select(portfolio_membership.c.project_id).where(
+        portfolio_membership.c.portfolio_id == portfolio_id
+    )
+    # ponytail: merge-time generalisation of contract 033 § 6 to many-to-many
+    # membership — all containing portfolios must agree; owner to ratify.
+    disagreeing = conn.execute(
+        select(func.count())
+        .select_from(portfolio_membership.join(
+            portfolio, portfolio.c.portfolio_id == portfolio_membership.c.portfolio_id
+        ))
+        .where(portfolio_membership.c.project_id.in_(member_ids))
+        .where(portfolio_membership.c.portfolio_id != portfolio_id)
+        .where(portfolio.c.visibility != visibility)
+    ).scalar_one()
+    if int(disagreeing) > 0:
+        raise ApiConflict(
+            "visibility_conflict",
+            "a task in this project is also in another project with a different "
+            "visibility — align or remove that membership first",
+        )
     conn.execute(
         update(portfolio)
         .where(portfolio.c.portfolio_id == portfolio_id)
@@ -104,7 +132,7 @@ def _cascade_visibility(
     # No status filter, on purpose: archived members follow too.
     conn.execute(
         update(project)
-        .where(project.c.portfolio_id == portfolio_id)
+        .where(project.c.project_id.in_(member_ids))
         .values(visibility=visibility, org_id=org_id, updated_at=datetime.now(UTC))
     )
 
@@ -133,11 +161,17 @@ def _task_counts(
     if not portfolio_ids:
         return {}
     rows = conn.execute(
-        select(project.c.portfolio_id, func.count())
-        .where(project.c.portfolio_id.in_(portfolio_ids))
+        select(portfolio_membership.c.portfolio_id, func.count())
+        .select_from(
+            portfolio_membership.join(
+                project,
+                project.c.project_id == portfolio_membership.c.project_id,
+            )
+        )
+        .where(portfolio_membership.c.portfolio_id.in_(portfolio_ids))
         .where(project.c.status == "active")
         .where(own_estate(project, user_id))
-        .group_by(project.c.portfolio_id)
+        .group_by(portfolio_membership.c.portfolio_id)
     ).all()
     return {row[0]: int(row[1]) for row in rows}
 
@@ -306,9 +340,16 @@ def create_portfolio(
     conn.execute(portfolio.insert().values(**values))
     if source is not None:
         conn.execute(
+            portfolio_membership.insert().values(
+                portfolio_id=portfolio_id,
+                project_id=source.row["project_id"],
+                created_at=datetime.now(UTC),
+            )
+        )
+        conn.execute(
             update(project)
             .where(project.c.project_id == source.row["project_id"])
-            .values(portfolio_id=portfolio_id, updated_at=datetime.now(UTC))
+            .values(updated_at=datetime.now(UTC))
         )
     row = conn.execute(
         select(portfolio).where(portfolio.c.portfolio_id == portfolio_id)

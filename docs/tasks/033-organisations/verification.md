@@ -460,7 +460,7 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
 - `docs/deferred.md`: build seams added (org-less admin CLI gap · PortfolioOut
   last-updated field · admin_stream_read volume · RunPane dead code · ops CLI
   rename coverage); the stale mock-API portfolio entry discharged.
-- **ADR 0032 drift check: no drift** — all six decisions match the as-built code
+- **ADR 0033 drift check: no drift** — all six decisions match the as-built code
   (two tables/two columns; sub-only identity; three legs with the SQL NULL rule;
   the read-only admin boolean with the structurally asserted four-reader list and
   trace-as-sole-control; entrypoint logging; the invariant + ADR 0031 D4
@@ -506,7 +506,7 @@ What changed, in one read:
   menu, owner-scoped check-in banner, outcome copy; the read-only affordance
   matrix component by component with the URL leg.
 - **Records**: spec flow-back (web-api, data-model, JUMPBOX, DEPLOYMENT,
-  deferred); ADR 0032 drift-checked, no drift.
+  deferred); ADR 0033 drift-checked, no drift.
 
 Per-phase detail, deviations and executor provenance: § Phase evidence above.
 
@@ -635,7 +635,7 @@ Operator CLI (all with named tests):
   unenrolled owner's default-`org` estate to the whole destination org,
   silently, with a test pinning the exposing end state. Now follows the
   enrol rule (arrive private; the owner re-shares), and the summary says
-  so. Rubric 29's unqualified non-exposure property and ADR 0032 D7 now
+  so. Rubric 29's unqualified non-exposure property and ADR 0033 D7 now
   hold as written.
 - **Resync-then-grant re-arm** (security pass 3 + contract verifier):
   `resync` restored a de-enrolled row's address, and `grant` then minted
@@ -728,7 +728,7 @@ loading-state pin, the i.5 copy location).
    the owner's call.
 3. **`rows assign` semantics** changed to privatise-on-move (the fix
    above) — flagged for owner ratification since it reshapes an operator
-   command's behaviour, though it is what rubric 29 and ADR 0032 D7
+   command's behaviour, though it is what rubric 29 and ADR 0033 D7
    already promised.
 4. The pre-existing escalations stand: privacy-notice discrepancies
    (rubric 34), DPIA before merge (rubric 36), org-less-admin owner call

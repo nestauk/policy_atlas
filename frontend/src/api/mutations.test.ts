@@ -123,7 +123,7 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
     const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
 
     const { result } = renderHook(() => useUpdateProject("proj-1"), { wrapper: wrapper(queryClient) });
-    result.current.mutate({ portfolio_id: "p1" });
+    result.current.mutate({ portfolio_ids: ["p1"] });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);

@@ -1,4 +1,4 @@
-# ADR 0032 — Organisation tenancy above the entity hierarchy, and a global admin read
+# ADR 0033 — Organisation tenancy above the entity hierarchy, and a global admin read
 
 - **Status:** Accepted — 2026-08-24 (owner, with the 033 contract and plan approvals)
 - **Date:** 2026-08-24

@@ -86,6 +86,12 @@ describe("LifecycleRoute — a locked stage is unreachable by URL", () => {
     expect(screen.getByText("Sources page")).toBeInTheDocument();
   });
 
+  it("opens Results while a run is executing so the in-progress write-up is reachable", () => {
+    mockProject("running");
+    renderAt(`/projects/${PROJECT_ID}/results`);
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
   it("still locks Results after a failed run", () => {
     mockProject("failed");
     renderAt(`/projects/${PROJECT_ID}/results`);

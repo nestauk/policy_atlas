@@ -579,9 +579,9 @@ export function PlanDocument({
                     </dd>
                   </div>
                   <div>
-                    <dt className={panelHintClass}>Document geography</dt>
+                    <dt className={panelHintClass}>Source geography</dt>
                     <dd className={`${panelValueClass} text-[#e8edf2]`}>
-                      {geography !== "" ? scrub(geography) : "No preference"}
+                      {geography !== "" ? scrub(geography) : "None selected"}
                     </dd>
                   </div>
                 </dl>
@@ -624,7 +624,7 @@ export function PlanDocument({
                   />
                 </label>
                 <label className="block">
-                  <span className={`mb-1 block ${panelHintClass}`}>Document geography</span>
+                  <span className={`mb-1 block ${panelHintClass}`}>Source geography</span>
                   <input
                     type="text"
                     placeholder="For example, UK"

@@ -182,7 +182,7 @@ export function ContentsSidebar({
       aria-label="Contents"
       className="mb-6 w-full shrink-0 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
     >
-      <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Contents</p>
+      <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">Contents</p>
       <ul className="mt-2 space-y-1 border-l border-line">
         {entries.map((entry) => (
           <li key={entry.id}>
@@ -340,7 +340,7 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
           )}
           {distributions.map((row) => (
             <div key={row.label}>
-              <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">{row.label}</p>
+              <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">{row.label}</p>
               <ul className="mt-1 space-y-0.5">
                 {row.entries.slice(0, 8).map(([label, count]) => (
                   <li key={label} className="flex items-baseline gap-2 text-body text-navy">
@@ -361,7 +361,7 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
           ))}
           {(cited?.themes ?? []).length > 0 && (
             <div>
-              <p className="text-caption font-bold uppercase tracking-[0.06em] text-grey">Key themes</p>
+              <p className="text-meta font-bold uppercase tracking-[0.06em] text-grey">Key themes</p>
               <ul className="mt-1 space-y-0.5">
                 {(cited?.themes ?? []).map((theme) => (
                   <li key={theme.name} className="flex items-baseline gap-2 text-body text-navy">

@@ -2093,9 +2093,9 @@ omissions.
 - **Portfolio soft-delete** — the `portfolio` row has no `archived_at` and there is
   no archive route (ADR 0031 decision 3). Both land together when archiving a project
   is actually wanted.
-- **Portfolio membership beyond one** — a task belongs to at most one project, by the
-  single nullable FK. Many-to-many needs a join table and a decision about what a
-  task in two projects means for counts.
+- **Portfolio membership beyond one** — **discharged in 033** (ADR 0032):
+  `portfolio_membership` is many-to-many; a task in two projects counts in
+  both `task_count`s; `source_count` stays on the task.
 - **The code-word/screen-word split** (ADR 0031) — screen **Task** = code `project`,
   screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this gets its own
   rename slice, scheduled after 033-organisations** — `project` → `task`,
@@ -2166,9 +2166,10 @@ omissions.
   task entity, so the code word `project` still means what the screen calls a Task,
   and the vocabulary split recorded in ADR 0031 persists. The cluster slice remains
   the place where that split is finally resolved.
-- **Sharing and export** — the Share stage says sharing is coming soon and does
-  nothing else. The download control reuses the evidence-base print stylesheet that
-  already ships; any other format says coming soon. The share/export product seam is
+- **Sharing and export** — Share hosts **project membership** from task
+  creation (033). Sharing and export themselves stay coming soon. The
+  download control reuses the evidence-base print stylesheet that already
+  ships; any other format says coming soon. The share/export product seam is
   unchanged from `docs/deferred.md` § Web app.
 - **The three unbuilt capabilities** — scoping policy options, theory of change and
   map stakeholders are listed on the new-task page as coming soon, with no route and
@@ -2180,10 +2181,11 @@ omissions.
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
 - **Portfolio surfaces in the mock API** — ~~`src/mock/api.ts` serves no
-  `/api/v1/portfolios`~~ **discharged by 033 Phase 10a** (2026-08-25): the mock now
-  serves `/api/v1/me`, `GET /api/v1/portfolios`, `GET /api/v1/portfolios/{id}` and
-  `portfolio_id` filtering on the projects list, enough for the 033 journeys. Mock
-  coverage of portfolio *mutations* beyond the visibility PATCH remains partial.
+  `/api/v1/portfolios`~~ **discharged by 033** (Phase 10a + ux-snags): the mock now
+  serves `/api/v1/me`, `GET /api/v1/portfolios`, `GET /api/v1/portfolios/{id}`,
+  `portfolio_id` filtering on the projects list, and membership on the project so
+  Share and the projects list work under `VITE_MOCK=1`. Mock coverage of portfolio
+  *mutations* beyond the visibility PATCH remains partial.
 
 ## Organisations (task 033 build seams)
 
