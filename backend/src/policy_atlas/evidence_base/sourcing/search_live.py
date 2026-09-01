@@ -28,11 +28,13 @@ __all__ = (
     "HTTP_TIMEOUT_S",
     "OA_SELECT",
     "OPENALEX_HOST",
+    "OPENALEX_MIN_INTERVAL_S",
     "OVERTON_HOST",
     "OVERTON_MIN_INTERVAL_S",
     "OpenAlexLiveBackend",
     "OvertonLiveBackend",
     "RETRY_BACKOFF_S",
+    "RETRY_MAX_ATTEMPTS",
     "SearchTransportError",
     "USER_AGENT",
     "live_search_backends",
@@ -42,7 +44,24 @@ __all__ = (
 
 HTTP_TIMEOUT_S = 30.0
 OVERTON_MIN_INTERVAL_S = 1.2
-RETRY_BACKOFF_S = 2.0
+# Smallest gap between two consecutive OpenAlex requests. OpenAlex documents a
+# ceiling near 10 requests/second and answers a burst over it with 429, then
+# 500s once it starts shedding load. 0.2s (5/second) sits at half the documented
+# ceiling, which leaves room for their limit being lower in practice than on
+# paper. Paging makes this matter: one logical search call fetching 2,000
+# records is 10 back-to-back HTTP requests, not one.
+#
+# ponytail: fixed interval, not an adaptive limiter. Raise this if 429s come
+# back; a token bucket that widens on 429 and narrows on success is the upgrade
+# if a fixed gap ever proves too blunt.
+OPENALEX_MIN_INTERVAL_S = 0.2
+# Transient-failure retry (see ``_TransportMixin._request_json``). Four attempts
+# with a doubling wait: try, wait 1s, try, wait 2s, try, wait 4s, try, give up.
+# OpenAlex returns 500/504 in bursts under load, and a burst usually outlasts a
+# single short wait — one flat retry gave up while the API was still coming
+# back. Worst case a dead host costs 7s of waiting before the call fails.
+RETRY_BACKOFF_S = 1.0
+RETRY_MAX_ATTEMPTS = 4
 USER_AGENT = "policy-atlas/0.1"
 OPENALEX_HOST = "https://api.openalex.org"
 OVERTON_HOST = "https://app.overton.io"
@@ -80,6 +99,9 @@ _Fetch = Callable[[str, dict[str, str]], Any]
 _SearchCacheKey = tuple[str, str, str, tuple[tuple[str, str], ...]]
 _RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 _CACHE_CREDENTIAL_PARAMS = frozenset({"api_key", "mailto"})
+# Never logged: the two credential params, plus OpenAlex's constant `select`
+# field list, which is long and identical on every call (see _loggable_params).
+_UNLOGGABLE_PARAMS = _CACHE_CREDENTIAL_PARAMS | {"select"}
 _DEFAULT_SEARCH_CACHE_TTL_S = 3600.0
 _SEARCH_CACHE_MAX_ENTRIES = 512
 _SEARCH_CACHE: OrderedDict[_SearchCacheKey, tuple[float, Any]] = OrderedDict()
@@ -156,8 +178,13 @@ class _TransportMixin:
     _fetch: _Fetch
     http_calls: int
 
+    # Smallest gap between consecutive requests this backend sends. Subclasses
+    # override it; 0.0 means no pacing.
+    _min_interval_s: float = 0.0
+
     def _init_transport(self, fetch: _Fetch | None) -> None:
         self.http_calls = 0
+        self._last_request_at: float | None = None
         if fetch is None:
             self._client = httpx.Client(
                 timeout=httpx.Timeout(HTTP_TIMEOUT_S),
@@ -182,12 +209,29 @@ class _TransportMixin:
         response.raise_for_status()
         return response.json()
 
+    def _wait_rate_limit(self) -> None:
+        """Sleep until ``_min_interval_s`` has passed since the last request.
+
+        Shared by both backends so neither can burst past its provider's rate
+        limit. Called before every attempt, retries included — a retry that
+        ignored pacing would arrive during exactly the overload that caused the
+        failure.
+        """
+        if self._min_interval_s <= 0:
+            return
+        now = _monotonic()
+        if self._last_request_at is not None:
+            wait_s = self._min_interval_s - (now - self._last_request_at)
+            if wait_s > 0:
+                _sleep(wait_s)
+                now = _monotonic()
+        self._last_request_at = now
+
     def _request_json(
         self,
         url: str,
         params: dict[str, str],
         *,
-        rate_limit: Callable[[], None] | None = None,
         overton_retry_wait: bool = False,
     ) -> Any:
         host = _host_from_url(url)
@@ -201,19 +245,20 @@ class _TransportMixin:
 
         attempts = 0
         while True:
-            if rate_limit is not None:
-                rate_limit()
+            self._wait_rate_limit()
             self.http_calls += 1
             try:
                 data = self._fetch(url, dict(params))
             except Exception as exc:
                 redacted = _redacted_error(exc, host)
                 retryable = _is_retryable_error(exc, redacted)
-                if attempts >= 1 or not retryable:
+                if attempts + 1 >= RETRY_MAX_ATTEMPTS or not retryable:
                     log.warning(
                         "search.http_failed",
                         host=host,
                         status_code=redacted.status_code,
+                        attempts=attempts + 1,
+                        params=_loggable_params(params),
                     )
                     raise redacted from None
                 log.warning(
@@ -222,7 +267,7 @@ class _TransportMixin:
                     status_code=redacted.status_code,
                     attempt=attempts + 1,
                 )
-                _sleep(RETRY_BACKOFF_S)
+                _sleep(RETRY_BACKOFF_S * 2**attempts)
                 if overton_retry_wait and redacted.status_code == 429:
                     _sleep(OVERTON_MIN_INTERVAL_S)
                 attempts += 1
@@ -247,6 +292,7 @@ class OpenAlexLiveBackend(_TransportMixin):
     trust_class = "academic_aggregator"
     mode = "live"
     caps = BackendCaps(has_snowball=True, has_title_lookup=True, has_doi_lookup=True)
+    _min_interval_s = OPENALEX_MIN_INTERVAL_S
 
     def __init__(self, api_key: str, *, email: str | None = None, fetch: _Fetch | None = None):
         self._api_key = api_key
@@ -421,10 +467,10 @@ class OvertonLiveBackend(_TransportMixin):
     trust_class = "grey_literature_aggregator"
     mode = "live"
     caps = BackendCaps(has_snowball=False, has_title_lookup=False)
+    _min_interval_s = OVERTON_MIN_INTERVAL_S
 
     def __init__(self, api_key: str, *, fetch: _Fetch | None = None):
         self._api_key = api_key
-        self._last_request_at: float | None = None
         self.last_post_filter_excluded: int | None = None
         self._init_transport(fetch)
 
@@ -509,16 +555,10 @@ class OvertonLiveBackend(_TransportMixin):
                 data = self._request_json(
                     f"{OVERTON_HOST}/documents.php",
                     params,
-                    rate_limit=self._wait_rate_limit,
                     overton_retry_wait=True,
                 )
             else:
-                data = self._request_json(
-                    next_url,
-                    {},
-                    rate_limit=self._wait_rate_limit,
-                    overton_retry_wait=True,
-                )
+                data = self._request_json(next_url, {}, overton_retry_wait=True)
             response = _json_object(data, _host_from_url(OVERTON_HOST))
             page_results = _results_array(response, _host_from_url(OVERTON_HOST))
             if source_country_post_filter is None:
@@ -599,15 +639,6 @@ class OvertonLiveBackend(_TransportMixin):
             NotImplementedError: Always — ``caps.has_doi_lookup`` is False.
         """
         raise NotImplementedError("OvertonLiveBackend caps.has_doi_lookup=False")
-
-    def _wait_rate_limit(self) -> None:
-        now = time.monotonic()
-        if self._last_request_at is not None:
-            wait_s = OVERTON_MIN_INTERVAL_S - (now - self._last_request_at)
-            if wait_s > 0:
-                _sleep(wait_s)
-                now = time.monotonic()
-        self._last_request_at = now
 
 
 def live_search_backends(
@@ -791,6 +822,24 @@ def _cacheable_payload(data: Any) -> bool:
         return False
     results = data.get("results")
     return isinstance(results, list) and all(isinstance(item, dict) for item in results)
+
+
+def _loggable_params(params: dict[str, str]) -> dict[str, str]:
+    """Request params with credentials and bulk noise removed, safe to log.
+
+    Both providers carry their key as a query PARAMETER (``api_key``), so the
+    raw params — and the full URL — must never reach a log. What is left is the
+    part worth reading: OpenAlex's ``filter`` and Overton's ``squery`` carry the
+    generated query text, which is what identifies a failed call.
+
+    ``select`` is dropped for length only: it is the same 24-field constant on
+    every OpenAlex call and would bury the query it sits beside.
+
+    An Overton paging request sends no params at all (the whole request is the
+    validated ``next_page_url``), so an empty dict here means "a page 2+ fetch",
+    not "nothing was sent".
+    """
+    return {k: v for k, v in params.items() if k not in _UNLOGGABLE_PARAMS}
 
 
 def _redacted_error(exc: Exception, host: str) -> SearchTransportError:

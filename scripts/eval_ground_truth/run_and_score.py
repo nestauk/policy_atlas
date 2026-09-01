@@ -58,6 +58,7 @@ import json
 import re
 import statistics
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -72,7 +73,6 @@ from ground_truth import (
     build_ground_truth_from_doi,
     build_ground_truth_from_url,
     fetch_openalex_work,
-    normalize_doi,
     record_key,
 )
 from relevance_judge import judge_relevance
@@ -84,7 +84,10 @@ from policy_atlas.evidence_base.assess.screen import ScreenContext, effective_sc
 from policy_atlas.evidence_base.assess.screening_backend import OpenAIScreeningBackend
 from policy_atlas.evidence_base.sourcing import search_loop
 from policy_atlas.evidence_base.sourcing.acquire import AcquireContext
-from policy_atlas.evidence_base.sourcing.search_generation import OpenAISearchGenerationBackend
+from policy_atlas.evidence_base.sourcing.search_generation import (
+    OpenAISearchGenerationBackend,
+    V2SearchGenerationBackend,
+)
 from policy_atlas.evidence_base.sourcing.search_live import live_search_backends
 from policy_atlas.evidence_base.sourcing.search_loop import run_search
 
@@ -100,6 +103,21 @@ RECORD_CAP_PER_BACKEND = 200
 # The LLM-as-a-judge precision proxy is off for now (token cost) while this
 # pilot focuses on getting recall right — flip back on when precision matters.
 RUN_JUDGE = False
+
+# The two query-generation methodologies this eval compares:
+#
+# * ``v1`` — one shared prompt writes both the OpenAlex keyword queries and the
+#   Overton paraphrases (``search_queries_system_v3.txt``).
+# * ``v2`` — one prompt per provider (``search_queries_openalex_system_v2.txt``
+#   and ``search_queries_overton_system_v2.txt``), each called once per query.
+#
+# Both read their prompts from the committed files beside ``search_prompts.py``,
+# so picking a variant is the whole choice — there is nothing to swap at
+# runtime.
+GENERATION_BACKENDS = {
+    "v1": OpenAISearchGenerationBackend,
+    "v2": V2SearchGenerationBackend,
+}
 
 # Trailing review-type clause, anchored to a colon/dash separator at the END
 # of the title only — e.g. "...: a systematic review", "...: a scoping review
@@ -255,8 +273,36 @@ class _RecordingBackend:
         return self._inner.caps
 
     def _record(
-        self, method: str, query: str, wire_params: dict[str, str] | None, records: list[dict[str, Any]]
-    ) -> None:
+        self,
+        method: str,
+        query: str,
+        wire_params: dict[str, str] | None,
+        call: Callable[[], list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        """Run one backend call and record it, whether it succeeds or fails.
+
+        A failed call is recorded with zero records and the error text, then
+        re-raised so the pipeline behaves exactly as it would without this
+        wrapper (``search_loop`` catches it and marks the call errored). Without
+        this, a query that 500ed was invisible: it never reached the recorded
+        call list, so the queries CSV silently omitted it and the run looked
+        like it had simply found less.
+        """
+        try:
+            records = call()
+        except Exception as exc:
+            self._calls.append(
+                {
+                    "backend": self._inner.name,
+                    "method": method,
+                    "query": query,
+                    "wire_params": wire_params,
+                    "result_count": 0,
+                    "records": [],
+                    "error": str(exc),
+                }
+            )
+            raise
         self._calls.append(
             {
                 "backend": self._inner.name,
@@ -265,37 +311,51 @@ class _RecordingBackend:
                 "wire_params": wire_params,
                 "result_count": len(records),
                 "records": records,
+                "error": None,
             }
         )
+        return records
 
     def search(
         self, query: str, *, wire_params: dict[str, str] | None = None, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        records = self._inner.search(query, wire_params=wire_params, max_results=max_results)
-        self._record("search", query, wire_params, records)
-        return records  # type: ignore[no-any-return]
+        return self._record(
+            "search",
+            query,
+            wire_params,
+            lambda: self._inner.search(query, wire_params=wire_params, max_results=max_results),
+        )
 
     def fetch_citations(self, record_id: str, *, max_results: int | None = None) -> list[dict[str, Any]]:
-        records = self._inner.fetch_citations(record_id, max_results=max_results)
-        self._record("fetch_citations", record_id, None, records)
-        return records  # type: ignore[no-any-return]
+        return self._record(
+            "fetch_citations",
+            record_id,
+            None,
+            lambda: self._inner.fetch_citations(record_id, max_results=max_results),
+        )
 
     def fetch_references(
         self, record_ids: list[str], *, max_results: int | None = None
     ) -> list[dict[str, Any]]:
-        records = self._inner.fetch_references(record_ids, max_results=max_results)
-        self._record("fetch_references", ",".join(record_ids), None, records)
-        return records  # type: ignore[no-any-return]
+        return self._record(
+            "fetch_references",
+            ",".join(record_ids),
+            None,
+            lambda: self._inner.fetch_references(record_ids, max_results=max_results),
+        )
 
     def lookup_title(self, title: str) -> list[dict[str, Any]]:
-        records = self._inner.lookup_title(title)
-        self._record("lookup_title", title, None, records)
-        return records  # type: ignore[no-any-return]
+        return self._record(
+            "lookup_title", title, None, lambda: self._inner.lookup_title(title)
+        )
 
     def lookup_dois(self, dois: list[str], *, max_results: int | None = None) -> list[dict[str, Any]]:
-        records = self._inner.lookup_dois(dois, max_results=max_results)
-        self._record("lookup_dois", ",".join(dois), None, records)
-        return records  # type: ignore[no-any-return]
+        return self._record(
+            "lookup_dois",
+            ",".join(dois),
+            None,
+            lambda: self._inner.lookup_dois(dois, max_results=max_results),
+        )
 
 
 @dataclass
@@ -332,6 +392,7 @@ def run_one_query(
     depth: str = "rapid",
     run_screen: bool = True,
     langfuse_client: Langfuse | None = None,
+    generation_backend_variant: str = "v1",
 ) -> QueryResult:
     """Run one intent through search (and optionally screening), and score it.
 
@@ -360,7 +421,9 @@ def run_one_query(
         run_id=run_id,
         context=AcquireContext(scope_id=scope_id, intent=query, context=search_context),
         backends=recording_backends,
-        generation_backend=OpenAISearchGenerationBackend(langfuse_client=langfuse_client),
+        generation_backend=GENERATION_BACKENDS[generation_backend_variant](
+            langfuse_client=langfuse_client
+        ),
     )
     search_docs = _search_candidate_docs(conn, project_id)
     search_dois = _keys_of(search_docs)
@@ -434,6 +497,7 @@ def build_report(
     depth: str,
     result_cap_per_backend: int,
     record_cap_per_backend: int,
+    generation_backend_variant: str,
     ground_truth: GroundTruth,
     results: list[QueryResult],
 ) -> dict[str, Any]:
@@ -446,6 +510,7 @@ def build_report(
             "search_depth": depth,
             "result_cap_per_backend": result_cap_per_backend,
             "record_cap_per_backend": record_cap_per_backend,
+            "generation_backend_variant": generation_backend_variant,
         },
         "ground_truth": {
             "n_dois": len(ground_truth.dois),
@@ -543,6 +608,7 @@ def run_review(
     ground_truth: GroundTruth,
     langfuse_client: Langfuse | None,
     run_screen: bool = True,
+    generation_backend_variant: str = "v1",
 ) -> tuple[dict[str, Any], list[QueryResult]]:
     """Run one review's cleaned-title intent through search+screen
     ``QUERY_COUNT`` times, score against its ground truth. Shared by both
@@ -562,6 +628,7 @@ def run_review(
     )
     print(
         f"Search constrained to depth={depth}, published_before={published_before}, "
+        f"generation_backend_variant={generation_backend_variant}, "
         f"result_cap_per_backend={result_cap_per_backend} (per HTTP call), "
         f"record_cap_per_backend={record_cap_per_backend} (kept per backend)"
     )
@@ -584,6 +651,7 @@ def run_review(
                     depth=depth,
                     run_screen=run_screen,
                     langfuse_client=langfuse_client,
+                    generation_backend_variant=generation_backend_variant,
                 )
                 results.append(result)
                 print(
@@ -605,6 +673,7 @@ def run_review(
         depth=depth,
         result_cap_per_backend=result_cap_per_backend,
         record_cap_per_backend=record_cap_per_backend,
+        generation_backend_variant=generation_backend_variant,
         ground_truth=ground_truth,
         results=results,
     )
@@ -633,6 +702,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--depth", choices=["rapid", "standard", "deep"], default="rapid", help="Search depth (default: rapid)."
+    )
+    parser.add_argument(
+        "--generation-backend",
+        choices=list(GENERATION_BACKENDS),
+        default="v1",
+        help="Query-generation methodology: v1 = one shared prompt "
+        "(search_queries_system_v3.txt); v2 = one prompt per provider "
+        "(search_queries_openalex_system_v2.txt + "
+        "search_queries_overton_system_v2.txt). Default: v1.",
     )
     parser.add_argument(
         "--result-cap-per-backend",
@@ -718,6 +796,7 @@ def main() -> None:
                 ground_truth=ground_truth,
                 langfuse_client=langfuse_client,
                 run_screen=not args.no_screen,
+                generation_backend_variant=args.generation_backend,
             )
             review_reports.append(report)
             all_results.extend(results)
@@ -731,6 +810,7 @@ def main() -> None:
                     [r.screen_recall for r in all_results if r.screen_recall is not None]
                 ),
             },
+            "generation_backend_variant": args.generation_backend,
         }
         out_path = args.out or Path(__file__).parent / "results" / "corpus_eval_report.json"
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -773,6 +853,7 @@ def main() -> None:
         ground_truth=ground_truth,
         langfuse_client=langfuse_client,
         run_screen=not args.no_screen,
+        generation_backend_variant=args.generation_backend,
     )
     out_dir = Path(__file__).parent / "results"
     out_dir.mkdir(exist_ok=True)

@@ -1,9 +1,10 @@
-"""Search-only sweep: which prompt, and which ``record_cap_per_backend``, buys recall?
+"""Search-only sweep: which query-generation method, and which
+``record_cap_per_backend``, buys recall?
 
 The question this answers: the search stage fetches far more records than it
 keeps. ``record_cap_per_backend`` is the number it keeps per backend, and so the
 ceiling on recall. How high does that cap have to go before recall stops
-improving — and does the query-generation prompt change the answer?
+improving — and does the way queries are generated change the answer?
 
 The setup, and how it differs from ``run_and_score.py``:
 
@@ -15,34 +16,50 @@ The setup, and how it differs from ``run_and_score.py``:
   (OpenAlex requires page x per-page <= 10,000), and 1,000 rapid page requests
   per run is far more traffic than this pipeline normally sends.
 * ``record_cap_per_backend`` swept over 50, 100, 250, 500, 1000, 2000.
-* The query-generation system prompt swept over ``--prompts`` (default v2 and
-  v3, the ``search_queries_system_*.txt`` files beside ``search_prompts.py``).
-  Every prompt is run at every cap, so the two effects can be told apart.
+* The generation backend swept over ``--generation-backends`` — ``v1`` (one
+  shared prompt) and ``v2`` (one prompt per provider). See
+  ``run_and_score.GENERATION_BACKENDS`` for which prompt files each one reads.
+  Every backend is run at every cap, so the two effects can be told apart.
 * Screening OFF. Retrieval is what is being measured here, and screening every
   kept candidate is where the LLM bill is. ``screen_recall`` is not reported.
 
 Each combination is run ``--repeats`` times because query generation is an LLM
 call and gives slightly different queries each time; comparing single runs
-would confuse prompt and cap effects with query luck.
+would confuse generation-method and cap effects with query luck.
 
 Cost warning: one repeat can pull thousands of records from OpenAlex and
-Overton — up to 10 pages per OpenAlex call and 40 per Overton call. Prompts x
-caps x repeats multiplies that: the defaults are already 2 x 6 = 12 runs. Start
-with ``--repeats 1`` and one review.
+Overton — up to 10 pages per OpenAlex call and 40 per Overton call. Reviews x
+backends x caps x repeats multiplies that: the defaults are 2 x 6 = 12 runs per
+review, so a 5-review CSV is 60 runs. Start with ``--repeats 1``, one review,
+and a single ``--caps`` value.
 
 Usage (same environment requirements as run_and_score.py — a real Postgres via
 DATABASE_URL, plus OPENAI_API_KEY / OPENALEX_API_KEY / OVERTON_API_KEY, which
-is what ``--env-file backend/.env`` supplies):
+is what ``--env-file backend/.env`` supplies). One review:
 
     uv run --project backend --env-file backend/.env \\
         python scripts/eval_ground_truth/sweep_record_cap.py \\
         --title "..." --doi "10.xxxx/yyyy" --repeats 1
 
-``--url`` replaces ``--doi`` for grey literature with no DOI — a government
+Or a batch of reviews from a CSV, which also reports mean and median recall
+across them:
+
+    uv run --project backend --env-file backend/.env \\
+        python scripts/eval_ground_truth/sweep_record_cap.py \\
+        --reviews scripts/eval_ground_truth/input/gt_reviews.csv --repeats 1
+
+The CSV's columns are described in ``_load_reviews``: ``title`` plus one of
+``doi``/``url``, an optional ``published_before``, and an ``exclude`` flag.
+Every row is validated before any network call, so a malformed sheet fails in a
+second rather than part-way through an expensive run. A review whose ground
+truth cannot be built is reported and skipped, not fatal — the reviews already
+swept are still written out.
+
+``url`` replaces ``doi`` for grey literature with no DOI — a government
 evidence review published as a web page, say. There is no ``referenced_works``
 API for such a document, so its reference list is fetched, transcribed by an
 LLM and resolved citation by citation to DOIs; only the citations that resolve
-can be scored, and ``--published-before`` must be given by hand because no
+can be scored, and ``published_before`` must be given by hand because no
 machine-readable publication date exists. Expect a smaller, noisier recall
 target than the DOI path gives.
 
@@ -71,10 +88,13 @@ changes what Overton keeps.
 from __future__ import annotations
 
 import argparse
+import csv
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
+from langfuse import Langfuse
 from ground_truth import (
     GroundTruth,
     build_ground_truth_from_doi,
@@ -86,8 +106,9 @@ from inspect_run import call_table, ground_truth_table, records_table
 
 from policy_atlas.core import tracing
 from policy_atlas.core.db import get_engine
-from policy_atlas.evidence_base.sourcing import search_generation, search_loop, search_prompts
+from policy_atlas.evidence_base.sourcing import search_loop
 from run_and_score import (
+    GENERATION_BACKENDS,
     QueryResult,
     _iso_date,
     _months_earlier,
@@ -103,31 +124,6 @@ RECORD_CAPS = [50, 100, 250, 500, 1000, 2000]
 # records to the keep cap's door. 40x the pipeline's own value of 50 — high
 # enough not to bind, without the deep-paging trouble 10,000 caused.
 RESULT_CAP_PER_BACKEND = 2_000
-
-# The query-generation prompts live beside search_prompts.py as
-# search_queries_system_<version>.txt. Add a file there and name it in
-# --prompts to include it in the sweep; nothing else needs changing.
-PROMPT_DIR = Path(search_prompts.__file__).parent
-PROMPT_VERSIONS = ["v2", "v3"]
-
-
-def _prompt_file(version: str) -> Path:
-    return PROMPT_DIR / f"search_queries_system_{version}.txt"
-
-
-def _apply_prompt(version: str) -> None:
-    """Point this process's query generation at one prompt file.
-
-    ``build_queries_messages`` reads the system prompt off its module every
-    time it assembles a call, so replacing the attribute is enough — no import
-    order to worry about. The trace label is a plain constant that
-    ``search_generation`` imported by value, so it has to be set on that module
-    too, or Langfuse would label every run with the prompt loaded at startup.
-
-    In-memory only: the committed prompt files are read, never written.
-    """
-    search_prompts.SEARCH_QUERIES_SYSTEM_PROMPT = _prompt_file(version).read_text(encoding="utf-8")
-    search_generation.SEARCH_QUERIES_PROMPT_VERSION = f"search_queries_{version}"
 
 
 def _apply_caps(record_cap: int) -> dict[str, Any]:
@@ -172,7 +168,7 @@ def _run_frames(
         result: The finished ``QueryResult``.
         ground_truth: The review's reference list (the recall target).
         gt_titles: ``ground_truth_table()`` output — titles for the target keys.
-        meta: Identity columns (run_id, review, prompt, cap, repeat) written
+        meta: Identity columns (run_id, review, generation backend, cap, repeat) written
             onto every row of every frame, so the three files join and several
             reviews' sweeps concatenate.
     """
@@ -229,6 +225,11 @@ def _run_frames(
                 **meta,
                 "backend": backend,
                 "n_api_calls": len(calls),
+                # Calls that exhausted their retries and returned nothing. Any
+                # value above 0 means this row's recall is an undercount caused
+                # by the provider, not by the queries — check before comparing
+                # it with another run's.
+                "n_failed_calls": sum(1 for c in calls if c.get("error")),
                 "n_api_records": sum(c["result_count"] for c in calls),
                 "n_candidates_kept": len(kept_here),
                 "n_ground_truth": n_gt,
@@ -239,9 +240,136 @@ def _run_frames(
     return pd.DataFrame(runs_rows), queries, papers
 
 
+@dataclass
+class ReviewSpec:
+    """One review to sweep, from the CSV or from the single-review flags.
+
+    Exactly one of ``doi``/``url`` is set. ``published_before`` is the search
+    cutoff: optional for a DOI (derived from OpenAlex) and required for a URL,
+    where no machine-readable publication date exists.
+    """
+
+    title: str
+    doi: str | None = None
+    url: str | None = None
+    published_before: str | None = None
+
+    @property
+    def identifier(self) -> str:
+        return self.doi or self.url or ""
+
+
+def _load_reviews(path: Path) -> list[ReviewSpec]:
+    """Read the review list from a CSV, validating it before any network call.
+
+    Recognised columns (case-insensitive, extras ignored):
+
+    * ``title`` — required; cleaned into the search intent.
+    * ``doi`` — bare (``10.xxxx/yyyy``) or as a ``https://doi.org/...`` URL.
+    * ``url`` — used only when ``doi`` is empty, for grey literature.
+    * ``published_before`` — ISO ``YYYY-MM-DD``. Optional for a DOI row, and
+      REQUIRED for a URL row.
+    * ``exclude`` — any non-empty value skips the row.
+
+    Validation happens here, up front, so a bad row fails in a second rather
+    than after an hour of sweeping the rows before it.
+
+    Raises:
+        ValueError: With every problem found, one per line, so a broken sheet is
+            fixed in one pass instead of one row at a time.
+    """
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        raise ValueError(f"{path} has no rows.")
+
+    reviews: list[ReviewSpec] = []
+    problems: list[str] = []
+    for line_no, raw in enumerate(rows, start=2):  # start=2: row 1 is the header
+        row = {(k or "").strip().lower(): (v or "").strip() for k, v in raw.items()}
+        if row.get("exclude"):
+            print(f"  row {line_no}: skipped (exclude={row['exclude']!r})")
+            continue
+        title, doi, url = row.get("title", ""), row.get("doi", ""), row.get("url", "")
+        published_before = row.get("published_before", "")
+        if not title:
+            problems.append(f"row {line_no}: no title")
+            continue
+        if not doi and not url:
+            problems.append(f"row {line_no} ({title[:50]}): neither doi nor url")
+            continue
+        if published_before:
+            try:
+                _iso_date(published_before)
+            except argparse.ArgumentTypeError as exc:
+                problems.append(f"row {line_no} ({title[:50]}): {exc}")
+                continue
+        elif not doi:
+            problems.append(
+                f"row {line_no} ({title[:50]}): a url row needs a published_before date "
+                "(ISO YYYY-MM-DD) — there is no machine-readable publication date to "
+                "derive one from. Add a 'published_before' column, or set 'exclude' to "
+                "skip this review."
+            )
+            continue
+        reviews.append(
+            ReviewSpec(
+                title=title,
+                # A DOI wins when both are present: its reference list comes
+                # straight from OpenAlex, rather than via LLM transcription.
+                doi=doi or None,
+                url=None if doi else (url or None),
+                published_before=published_before or None,
+            )
+        )
+
+    if problems:
+        raise ValueError(f"{path} has {len(problems)} unusable row(s):\n  " + "\n  ".join(problems))
+    if not reviews:
+        raise ValueError(f"{path} has no usable rows (every row excluded?).")
+    return reviews
+
+
+def _build_ground_truth(
+    spec: ReviewSpec, langfuse_client: Langfuse | None
+) -> tuple[GroundTruth, str]:
+    """Build one review's recall target, and settle its search cutoff.
+
+    Returns:
+        ``(ground_truth, published_before)``.
+
+    Raises:
+        ValueError: If a DOI has no OpenAlex publication date and the spec gives
+            no explicit cutoff.
+    """
+    if spec.doi:
+        work = fetch_openalex_work(spec.doi)
+        published_before = spec.published_before or (
+            _months_earlier(work["publication_date"], 1) if work.get("publication_date") else None
+        )
+        if not published_before:
+            raise ValueError(
+                f"OpenAlex has no publication_date for {spec.doi}; give this row an "
+                "explicit published_before date."
+            )
+        return build_ground_truth_from_doi(spec.doi, work=work), published_before
+    # Fetches the page, has an LLM transcribe its reference list, then resolves
+    # each citation to a DOI — the pipeline can only be scored on what OpenAlex
+    # and Overton can be asked for.
+    assert spec.url and spec.published_before  # guaranteed by _load_reviews
+    return (
+        build_ground_truth_from_url(spec.url, spec.title, langfuse_client),
+        spec.published_before,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--title", required=True, help="The review's title — cleaned into the search intent.")
+    parser.add_argument(
+        "--title",
+        help="The review's title — cleaned into the search intent. Required with "
+        "--doi/--url; ignored with --reviews, which carries its own titles.",
+    )
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
         "--doi", help="The review's DOI — ground truth is its OpenAlex reference list."
@@ -253,6 +381,14 @@ def main() -> None:
         "resolved to DOIs, so it is smaller and noisier than the --doi path. Requires "
         "--published-before.",
     )
+    source_group.add_argument(
+        "--reviews",
+        type=Path,
+        help="Path to a CSV of reviews to sweep together, with columns title, doi, url, "
+        "published_before and exclude (see _load_reviews). Every review is swept at "
+        "every cap and generation backend, and the summary adds mean and median "
+        "recall across reviews.",
+    )
     parser.add_argument(
         "--published-before",
         type=_iso_date,
@@ -262,7 +398,10 @@ def main() -> None:
         "with --url, where no machine-readable date exists.",
     )
     parser.add_argument(
-        "--repeats", type=int, default=1, help="Runs per prompt x cap (default 1). Each repeat is a full search."
+        "--repeats",
+        type=int,
+        default=1,
+        help="Runs per generation backend x cap (default 1). Each repeat is a full search.",
     )
     parser.add_argument(
         "--caps",
@@ -272,11 +411,14 @@ def main() -> None:
         help=f"record_cap_per_backend values to sweep (default: {RECORD_CAPS}).",
     )
     parser.add_argument(
-        "--prompts",
+        "--generation-backends",
         nargs="+",
-        default=PROMPT_VERSIONS,
-        help="Query-generation prompt versions to compare — the <version> part of "
-        f"search_queries_system_<version>.txt (default: {PROMPT_VERSIONS}).",
+        choices=list(GENERATION_BACKENDS),
+        default=list(GENERATION_BACKENDS),
+        help="Query-generation methodologies to compare: v1 = one shared prompt "
+        "(search_queries_system_v3.txt); v2 = one prompt per provider "
+        "(search_queries_openalex_system_v2.txt + "
+        "search_queries_overton_system_v2.txt). Default: both.",
     )
     parser.add_argument(
         "--out",
@@ -286,50 +428,115 @@ def main() -> None:
         "beside it (default results/record_cap_sweep).",
     )
     args = parser.parse_args()
+    if not args.reviews and not args.title:
+        parser.error("--title is required with --doi/--url.")
 
-    missing = [v for v in args.prompts if not _prompt_file(v).exists()]
-    if missing:
-        parser.error(f"no prompt file for {missing} — expected {[str(_prompt_file(v)) for v in missing]}")
+    if args.reviews:
+        print(f"Reading reviews from {args.reviews}")
+        try:
+            reviews = _load_reviews(args.reviews)
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(f"{len(reviews)} review(s) to sweep")
+    else:
+        if args.url and not args.published_before:
+            parser.error("--published-before is required with --url (no machine-readable date available).")
+        reviews = [
+            ReviewSpec(
+                title=args.title,
+                doi=args.doi,
+                url=args.url,
+                published_before=args.published_before,
+            )
+        ]
 
     langfuse_client = tracing.get_langfuse()
     print(f"Langfuse tracing: {'on' if langfuse_client is not None else 'off (no LANGFUSE_* env vars)'}")
-
-    identifier = args.doi or args.url
-    print(f"Building ground truth for: {args.title} ({identifier})")
-    if args.doi:
-        work = fetch_openalex_work(args.doi)
-        published_before = args.published_before or (
-            _months_earlier(work["publication_date"], 1) if work.get("publication_date") else None
-        )
-        if not published_before:
-            parser.error("OpenAlex has no publication_date for this DOI; pass --published-before explicitly.")
-        ground_truth = build_ground_truth_from_doi(args.doi, work=work)
-    else:
-        if not args.published_before:
-            parser.error("--published-before is required with --url (no machine-readable date available).")
-        published_before = args.published_before
-        # Fetches the page, has an LLM transcribe its reference list, then
-        # resolves each citation to a DOI — the pipeline can only be scored on
-        # what OpenAlex and Overton can be asked for.
-        ground_truth = build_ground_truth_from_url(args.url, args.title, langfuse_client)
-    intent = clean_review_title(args.title)
-
     print(
-        f"Ground truth: {len(ground_truth.keys)} scorable reference-list entries — "
-        f"{len(ground_truth.dois)} DOIs ({ground_truth.resolvable_fraction:.0%} "
-        f"OpenAlex-resolvable) + {len(ground_truth.overton_ids)} Overton policy "
-        f"documents; {len(ground_truth.unresolved)} citations resolved to neither "
-        "and are excluded from the target"
-    )
-    print(f"Intent: {intent}")
-    print(
-        f"Sweep: depth={DEPTH}, result_cap={RESULT_CAP_PER_BACKEND}, prompts={args.prompts}, "
-        f"caps={args.caps}, repeats={args.repeats}, screening OFF "
-        f"({len(args.prompts) * len(args.caps) * args.repeats} runs)"
+        f"Sweep: depth={DEPTH}, result_cap={RESULT_CAP_PER_BACKEND}, "
+        f"generation_backends={args.generation_backends}, caps={args.caps}, "
+        f"repeats={args.repeats}, screening OFF"
     )
 
     engine = get_engine()
 
+    all_runs: list[pd.DataFrame] = []
+    all_queries: list[pd.DataFrame] = []
+    all_papers: list[pd.DataFrame] = []
+    skipped: list[str] = []
+    for review_index, spec in enumerate(reviews, start=1):
+        print(f"\n########## [{review_index}/{len(reviews)}] {spec.title} ##########")
+        print(f"Building ground truth from {spec.identifier}")
+        try:
+            ground_truth, published_before = _build_ground_truth(spec, langfuse_client)
+        except Exception as exc:
+            # One unreachable review must not throw away the hours already spent
+            # on the reviews before it. Note it and carry on; the skipped list is
+            # reprinted at the end so it cannot be missed.
+            print(f"  SKIPPED — could not build ground truth: {exc}")
+            skipped.append(f"{spec.title} ({spec.identifier}): {exc}")
+            continue
+        if not ground_truth.keys:
+            print("  SKIPPED — ground truth is empty, so recall is undefined")
+            skipped.append(f"{spec.title} ({spec.identifier}): empty ground truth")
+            continue
+
+        intent = clean_review_title(spec.title)
+        print(
+            f"Ground truth: {len(ground_truth.keys)} scorable reference-list entries — "
+            f"{len(ground_truth.dois)} DOIs ({ground_truth.resolvable_fraction:.0%} "
+            f"OpenAlex-resolvable) + {len(ground_truth.overton_ids)} Overton policy "
+            f"documents; {len(ground_truth.unresolved)} citations resolved to neither "
+            "and are excluded from the target"
+        )
+        print(f"Intent: {intent}")
+        print(f"Search cutoff: published_before={published_before}")
+
+        runs, queries, papers = _sweep_review(
+            engine,
+            spec=spec,
+            intent=intent,
+            ground_truth=ground_truth,
+            published_before=published_before,
+            caps=args.caps,
+            generation_backends=args.generation_backends,
+            repeats=args.repeats,
+            langfuse_client=langfuse_client,
+        )
+        all_runs.extend(runs)
+        all_queries.extend(queries)
+        all_papers.extend(papers)
+
+    if not all_runs:
+        parser.error("no review produced any results — nothing to write.")
+
+    _write_and_summarise(
+        args.out or Path(__file__).parent / "results" / "record_cap_sweep",
+        all_runs,
+        all_queries,
+        all_papers,
+        skipped,
+    )
+
+
+def _sweep_review(
+    engine: Any,
+    *,
+    spec: ReviewSpec,
+    intent: str,
+    ground_truth: GroundTruth,
+    published_before: str,
+    caps: list[int],
+    generation_backends: list[str],
+    repeats: int,
+    langfuse_client: Langfuse | None,
+) -> tuple[list[pd.DataFrame], list[pd.DataFrame], list[pd.DataFrame]]:
+    """Sweep one review over every generation backend x cap x repeat.
+
+    Returns:
+        ``(runs, queries, papers)`` frame lists, each row tagged with this
+        review's identity so several reviews concatenate into one table.
+    """
     # Titles for the reference list: one batched OpenAlex call, reused by every
     # run rather than re-fetched per run.
     gt_titles = ground_truth_table(ground_truth)
@@ -337,15 +544,15 @@ def main() -> None:
     all_runs: list[pd.DataFrame] = []
     all_queries: list[pd.DataFrame] = []
     all_papers: list[pd.DataFrame] = []
-    for prompt_version in args.prompts:
-        _apply_prompt(prompt_version)
-        for record_cap in args.caps:
+    for generation_backend_variant in generation_backends:
+        for record_cap in caps:
             constants = _apply_caps(record_cap)
             print(
-                f"\n=== prompt={prompt_version} record_cap_per_backend={record_cap} "
+                f"\n=== generation_backend={generation_backend_variant} "
+                f"record_cap_per_backend={record_cap} "
                 f"(http_budget={constants['http_budget']}) ==="
             )
-            for repeat in range(1, args.repeats + 1):
+            for repeat in range(1, repeats + 1):
                 with engine.connect() as connection:
                     trans = connection.begin()
                     try:
@@ -357,6 +564,7 @@ def main() -> None:
                             depth=DEPTH,
                             run_screen=False,
                             langfuse_client=langfuse_client,
+                            generation_backend_variant=generation_backend_variant,
                         )
                     finally:
                         # Rolled back, never committed — the database writes are
@@ -364,15 +572,20 @@ def main() -> None:
                         trans.rollback()
 
                 meta = {
-                    "run_id": f"{prompt_version}-cap{record_cap}-r{repeat}",
+                    # Carries the review too, so run_ids stay unique when
+                    # several reviews land in one file.
+                    "run_id": (
+                        f"{spec.identifier}|{generation_backend_variant}"
+                        f"-cap{record_cap}-r{repeat}"
+                    ),
                     # DOI or URL, whichever identified the review — with the
                     # source beside it, since the two ground-truth paths differ
                     # in how complete their reference lists are.
-                    "review_id": identifier,
+                    "review_id": spec.identifier,
                     "review_source": ground_truth.source,
-                    "review_title": args.title,
+                    "review_title": spec.title,
                     "intent": intent,
-                    "prompt_version": prompt_version,
+                    "generation_backend_variant": generation_backend_variant,
                     "record_cap_per_backend": record_cap,
                     "repeat": repeat,
                 }
@@ -388,14 +601,29 @@ def main() -> None:
                 per_backend = ", ".join(
                     f"{r.backend} {r.n_found}" for r in runs[runs["backend"] != "all"].itertuples()
                 )
+                failed = (
+                    f", {total.n_failed_calls} CALLS FAILED — recall is an undercount"
+                    if total.n_failed_calls
+                    else ""
+                )
                 print(
                     f"  repeat {repeat}: search_recall={total.search_recall:.0%} "
                     f"({total.n_found}/{total.n_ground_truth}; {per_backend}), "
                     f"{total.n_candidates_kept} candidates kept from "
-                    f"{total.n_api_records} records over {total.n_api_calls} calls"
+                    f"{total.n_api_records} records over {total.n_api_calls} calls{failed}"
                 )
 
-    base = args.out or Path(__file__).parent / "results" / "record_cap_sweep"
+    return all_runs, all_queries, all_papers
+
+
+def _write_and_summarise(
+    base: Path,
+    all_runs: list[pd.DataFrame],
+    all_queries: list[pd.DataFrame],
+    all_papers: list[pd.DataFrame],
+    skipped: list[str],
+) -> None:
+    """Write the three CSVs and print the recall tables."""
     base.parent.mkdir(parents=True, exist_ok=True)
     runs_frame = pd.concat(all_runs, ignore_index=True)
     for name, frame in (
@@ -405,19 +633,52 @@ def main() -> None:
     ):
         path = base.with_name(f"{base.name}_{name}.csv")
         frame.to_csv(path, index=False)
-        print(f"Wrote {path} ({len(frame)} rows)")
+        print(f"\nWrote {path} ({len(frame)} rows)")
 
-    print("\nMean recall (de-duplicated across backends):")
-    print(
-        runs_frame[runs_frame["backend"] == "all"]
-        .pivot_table(
+    # One row per run: the de-duplicated total across both backends.
+    totals = runs_frame[runs_frame["backend"] == "all"]
+    n_reviews = totals["review_id"].nunique()
+    pct = lambda v: f"{v:.0%}"  # noqa: E731 - pandas float_format wants a callable
+
+    print("\n" + "=" * 72)
+    print("Recall per review (rows = record_cap_per_backend, columns = generation backend)")
+    for review_id, group in totals.groupby("review_id", sort=False):
+        print(f"\n{group['review_title'].iloc[0]}")
+        print(f"  {review_id} — {group['n_ground_truth'].iloc[0]} scorable references")
+        table = group.pivot_table(
             index="record_cap_per_backend",
-            columns="prompt_version",
+            columns="generation_backend_variant",
             values="search_recall",
             aggfunc="mean",
         )
-        .to_string(float_format=lambda v: f"{v:.0%}")
-    )
+        print("\n".join("  " + line for line in table.to_string(float_format=pct).splitlines()))
+
+    if n_reviews > 1:
+        print("\n" + "=" * 72)
+        print(f"Across all {n_reviews} reviews")
+        # Mean and median side by side: mean moves with one review that has a
+        # much larger reference list, median does not. A wide gap between them
+        # means one review is carrying the result.
+        print(
+            totals.pivot_table(
+                index="record_cap_per_backend",
+                columns="generation_backend_variant",
+                values="search_recall",
+                aggfunc=["mean", "median"],
+            ).to_string(float_format=pct)
+        )
+
+    failed_calls = int(totals["n_failed_calls"].sum())
+    if failed_calls:
+        print(
+            f"\nWARNING: {failed_calls} API call(s) failed after all retries. Those runs "
+            "returned fewer records than they should have, so their recall is an "
+            "undercount — see the 'error' column in the queries CSV."
+        )
+    if skipped:
+        print(f"\nWARNING: {len(skipped)} review(s) skipped and NOT in these numbers:")
+        for line in skipped:
+            print(f"  - {line}")
 
 
 if __name__ == "__main__":

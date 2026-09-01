@@ -148,6 +148,11 @@ def call_table(
                 "query": call["query"],
                 "wire_params": call["wire_params"],
                 "results": call["result_count"],
+                # None on a call that succeeded. Anything else is a call that
+                # failed after its retries: it returned no records, so it drags
+                # recall down without being a search-quality problem. Filter on
+                # this before reading a run's recall as a real result.
+                "error": call.get("error"),
                 "with_doi": int(mine["doi"].notna().sum()),
                 **(
                     {"gt_hits": int(mine["in_gt"].sum())}

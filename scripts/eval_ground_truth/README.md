@@ -36,7 +36,7 @@ Some other points worth knowing:
 Gather a single review and run metrics:
 ```
 uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/run_and_score.py \
-  --title "<review title>" --doi "10.xxxx/yyyy"
+  --title "<review title>" --doi "10.xxxx/yyyy" --generation-backend v1
 ```
 
 Gather the top 15 reviews from the OpenAlex query below:
@@ -61,14 +61,26 @@ works where title/abstract has (systematic review and policy)
 At present you can run the evaluation for either one single systematic review with:
 ```
 uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/run_and_score.py \
-  --title "<review title>" --doi "10.xxxx/yyyy"
+  --title "<review title>" --doi "10.xxxx/yyyy" --generation-backend v2
 ```
 or run it over the set of 15 systematic reviews:
 
 ```
 uv run --project backend --env-file backend/.env python scripts/eval_ground_truth/run_and_score.py \
-  --corpus scripts/eval_ground_truth/results/corpus.json
+  --corpus scripts/eval_ground_truth/results/corpus.json --generation-backend v1
 ```
+
+`--generation-backend` picks which of the two query-generation methodologies
+runs. These are the only two arms compared:
+
+| value | class | prompt files |
+|---|---|---|
+| `v1` | `OpenAISearchGenerationBackend` | `search_queries_system_v3.txt` — one shared prompt writes both the OpenAlex keyword queries and the Overton paraphrases |
+| `v2` | `V2SearchGenerationBackend` | `search_queries_openalex_system_v2.txt` and `search_queries_overton_system_v2.txt` — one prompt per provider, called once per query |
+
+Each backend reads its prompts from the committed files beside
+`search_prompts.py`. Nothing is swapped at runtime, so to change an arm's
+wording you edit its prompt file.
 
 
 ### Downstream analysis
@@ -232,12 +244,12 @@ Both flags keep rapid's single-round, no-reformulation shape.
 `--depth standard`/`--depth deep` raise both caps too, but bring in extra
 rounds and reformulation with them — a different tradeoff, not a substitute.
 
-### Sweeping the keep cap and the prompt (search only)
+### Sweeping the keep cap and generation backend (search only)
 
 `sweep_record_cap.py` answers two questions at once: "how high does
 `record_cap_per_backend` have to go before recall stops improving?" and "which
-query-generation prompt finds more of the review's references?". It runs one
-review at every combination of cap and prompt, with:
+query-generation methodology finds more of the review's references?". It runs one
+review at every combination of cap and generation backend, with:
 
 * depth `rapid` — one round, no reformulation, as before;
 * `result_cap_per_backend` at 2,000 — 40× the pipeline's own 50, so how many
@@ -245,17 +257,63 @@ review at every combination of cap and prompt, with:
   cap is the only thing changing. (10,000 was tried first; page-numbered paging
   runs out around there and the APIs push back.);
 * caps 50, 100, 250, 500, 1000, 2000 (`--caps`);
-* prompts `v2` and `v3` (`--prompts`) — the `search_queries_system_<version>.txt`
-  files beside `search_prompts.py`. Add a file there, name it in `--prompts`,
-  and it joins the sweep; nothing else needs changing;
+* generation backends `v1` and `v2` (`--generation-backends`) — the two
+  methodologies compared;
 * **screening off** — no screening LLM calls, so no screening bill. Retrieval
   is what is being measured; `screen_recall` is not reported.
+
+The two generation backends are:
+
+| value | class | prompt files |
+|---|---|---|
+| `v1` | `OpenAISearchGenerationBackend` | `search_queries_system_v3.txt` — one shared prompt writes both the OpenAlex keyword queries and the Overton paraphrases |
+| `v2` | `V2SearchGenerationBackend` | `search_queries_openalex_system_v2.txt` and `search_queries_overton_system_v2.txt` — one prompt per provider, called once per query |
+
+All prompt files live beside `search_prompts.py` and are read from the
+committed copies, so choosing a backend is the whole choice — nothing is
+swapped at runtime. To try a different wording, edit the file for the arm you
+want to change.
 
 ```
 uv run --project backend --env-file backend/.env \
     python scripts/eval_ground_truth/sweep_record_cap.py \
-    --title "..." --doi "10.xxxx/yyyy" --repeats 1
+  --title "..." --doi "10.xxxx/yyyy" \
+  --generation-backends v1 v2 --repeats 1
 ```
+
+#### Sweeping several reviews at once
+
+`--reviews` takes a CSV instead of a single `--title`/`--doi`, sweeps every
+review in it, and adds mean and median recall across reviews to the summary:
+
+```
+uv run --project backend --env-file backend/.env \
+    python scripts/eval_ground_truth/sweep_record_cap.py \
+  --reviews scripts/eval_ground_truth/input/gt_reviews.csv --repeats 1
+```
+
+| column | required | meaning |
+|---|---|---|
+| `title` | yes | cleaned into the search intent |
+| `doi` | one of doi/url | bare (`10.xxxx/yyyy`) or as `https://doi.org/...` |
+| `url` | one of doi/url | used only when `doi` is empty, for grey literature |
+| `published_before` | only for `url` rows | ISO `YYYY-MM-DD` search cutoff. Derived from OpenAlex for a `doi` row; there is nothing to derive it from for a URL, so it must be given |
+| `exclude` | no | any non-empty value skips the row |
+
+Every row is checked before any network call, so a malformed sheet fails in a
+second rather than part-way through an expensive run. If a review's ground
+truth cannot be built (no OpenAlex record, an unreachable page), it is reported
+and skipped rather than killing the batch, and the skipped list is reprinted at
+the end so it cannot be missed.
+
+The console summary gives a cap × backend recall table per review, then a
+combined table with **mean and median side by side**. Read them together: the
+mean moves with one review that has a much larger reference list, the median
+does not, so a wide gap between them means a single review is carrying the
+result.
+
+Cost scales with the number of reviews. The defaults are 12 runs per review, so
+a 5-review CSV is 60 full searches — start with one `--caps` value.
 
 `--url` replaces `--doi` for a review with no DOI (grey literature — a
 government evidence review published as a web page, say). Its reference list is
@@ -272,9 +330,9 @@ one table:
 
 | file | one row per | holds |
 |---|---|---|
-| `record_cap_sweep_runs.csv` | run × backend | calls made, records returned, candidates kept, papers found, recall. A `backend=all` row per run gives the run's own de-duplicated totals |
-| `record_cap_sweep_queries.csv` | API call | the generated query text, its wire parameters, how many records came back, how many the review actually cited (`gt_hits`) |
-| `record_cap_sweep_papers.csv` | run × reference-list entry | `key`, `space` (`doi` or `overton`), `returned_by_api` / `returned_by`, `reached_db` / `kept_from`. Filter to `reached_db` for the true positives each run found; group by `space` to score OpenAlex and Overton targets apart |
+| `record_cap_sweep_runs.csv` | run × backend | calls made, records returned, candidates kept, papers found, recall. Includes `generation_backend_variant`; a `backend=all` row per run gives the run's own de-duplicated totals |
+| `record_cap_sweep_queries.csv` | API call | the generated query text, its wire parameters, how many records came back, how many the review actually cited (`gt_hits`). Includes `generation_backend_variant` |
+| `record_cap_sweep_papers.csv` | run × reference-list entry | `key`, `space` (`doi` or `overton`), `returned_by_api` / `returned_by`, `reached_db` / `kept_from`. Includes `generation_backend_variant`. Filter to `reached_db` for the true positives each run found; group by `space` to score OpenAlex and Overton targets apart |
 
 A paper both providers return is kept once, under whichever backend reached it
 first, so per-backend `n_found` never double-counts and the backend rows sum to
@@ -286,7 +344,7 @@ time.
 
 Cost warning: one repeat can pull thousands of records from OpenAlex and
 Overton — up to 10 pages per OpenAlex call, 40 per Overton call — and the
-defaults are already 2 prompts × 6 caps = 12 runs. Start with `--repeats 1`.
+defaults are already 2 generation backends × 6 caps = 12 runs. Start with `--repeats 1`.
 
 `run_and_score.py` also accepts `--no-screen` for the same "search only, no
 screening bill" behaviour on a normal run.

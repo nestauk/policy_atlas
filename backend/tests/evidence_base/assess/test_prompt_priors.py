@@ -21,6 +21,8 @@ from policy_atlas.evidence_base.assess.screen_prompt import (
     build_screen_messages,
 )
 from policy_atlas.evidence_base.sourcing.search_prompts import (
+    PARAPHRASE_MAX_CHARS,
+    QUERY_MAX_CHARS,
     ExemplarRecord,
     ReformulatePayload,
     SearchQueriesWire,
@@ -304,6 +306,33 @@ def test_search_prompt_sanitizers_and_validated_queries_enforce_output_shape() -
     queries, paraphrases = validated_queries(wire)
     assert len(queries) <= 5
     assert len(paraphrases) <= 2
-    assert all(len(query) <= 120 for query in queries)
-    assert all(len(paraphrase) <= 300 for paraphrase in paraphrases)
+    assert all(len(query) <= QUERY_MAX_CHARS for query in queries)
+    assert all(len(paraphrase) <= PARAPHRASE_MAX_CHARS for paraphrase in paraphrases)
     assert len({query.casefold() for query in queries}) == len(queries)
+
+
+def test_validated_queries_drops_over_length_instead_of_truncating() -> None:
+    """A boolean query must arrive intact or not at all — never cut mid-token.
+
+    Truncation used to leave ``(a OR b OR c`` with an unbalanced bracket, which
+    OpenAlex answers with HTTP 500 after all four retry attempts.
+    """
+    boolean = (
+        "(lonely OR loneliness OR social isolation OR social alienation OR "
+        "social disconnectedness OR perceived isolation OR perceived social isolation)"
+    )
+    assert len(boolean) > 120, "must exceed the old cap for this to be a regression test"
+
+    queries, _ = validated_queries(
+        SearchQueriesWire(queries=[boolean], overton_paraphrases=[])
+    )
+    assert queries == [boolean]
+    assert queries[0].count("(") == queries[0].count(")")
+
+    # Past the safety ceiling the value is dropped, and a valid sibling survives.
+    absurd = "(" + " OR ".join(["term"] * 2_000) + ")"
+    assert len(absurd) > QUERY_MAX_CHARS
+    queries, _ = validated_queries(
+        SearchQueriesWire(queries=[absurd, "housing policy"], overton_paraphrases=[])
+    )
+    assert queries == ["housing policy"]
