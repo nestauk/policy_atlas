@@ -618,12 +618,13 @@ Instructions:
   is a defect. Stay within the title character limit; an over-long title is
   rejected, not shortened for you.
 - Also give each section a "nav_label": a short scannable name for the
-  contents list, at most {NAV_LABEL_MAX} characters, written in the
-  vocabulary of that section's own title. It names the same aspect the title
-  names, more briefly — it is not a different or broader topic, and it is
-  never a generic word like "Overview" or "Findings". If the title is already
-  within that limit, nav_label may repeat it. Stay within the limit; an
-  over-long label is rejected, not shortened for you.
+  contents list, at most {NAV_LABEL_MAX} characters (count every character,
+  including spaces), written in the vocabulary of that section's own title.
+  Prefer 2–4 words. It names the same aspect the title names, more briefly —
+  it is not a different or broader topic, and it is never a generic word
+  like "Overview" or "Findings". If the title is already within that limit,
+  nav_label may repeat it. Stay within the limit; an over-long label is
+  rejected, not shortened for you.
 - The section list must read as ONE coherent narrative, not a pile of
   parallel topics. The reader meets the sections in order: each section's
   title should make sense given the titles before it, and together the

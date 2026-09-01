@@ -25,6 +25,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
     KEY_FINDINGS_SYSTEM_PROMPT,
+    NAV_LABEL_MAX,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SECTION_PROMPT_VERSION,
     SECTION_SYSTEM_PROMPT,
@@ -77,10 +78,13 @@ def test_sections_prompt_negative_rules() -> None:
     assert "verdict-section" in prompt
     assert "answer-shaped lead section" not in prompt
     assert "does not rule" in prompt
-    # P9: short contents-ready titles; over-long titles rejected.
+    # P9: short contents-ready titles; over-long titles/labels rejected.
     assert "P9" in prompt
     assert "contents-ready" in prompt
     assert "rejected, not shortened for you" in prompt
+    assert f"at most {NAV_LABEL_MAX} characters" in prompt
+    assert "count every character" in prompt
+    assert "Prefer 2–4 words" in prompt
     # Generic/catch-all sections prohibited; cap present.
     assert "generic or catch-all" in prompt
     assert f"between 1 and {SECTION_CAP} sections" in prompt
