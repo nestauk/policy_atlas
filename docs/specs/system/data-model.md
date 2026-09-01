@@ -3,7 +3,7 @@ type: System contract
 title: Core data model
 description: Entity hierarchy, blocks and addressable units, the annotation layer, findings, versioning and staleness.
 tags: [system, data-model, schema, annotations]
-timestamp: 2026-07-06
+timestamp: 2026-08-25
 ---
 
 # System contract — Core data model
@@ -24,6 +24,25 @@ A **portfolio** sits *above* the project (screen word Project; ADR 0031,
 amended by ADR 0032). Membership is many-to-many via `portfolio_membership`.
 That is not a container between project and artefact — nothing below the
 project row gains a parent.
+
+**Tenancy (task 033, ADR 0033).** An **organisation** sits *above* the
+hierarchy: `organisation` (name, unique) and `app_user` (`user_id` = the
+token `sub`; nullable `org_id`; `display_name` NOT NULL; nullable `email`,
+ops/admin-facing only; `is_admin`, one global read-only boolean). `project`
+and `portfolio` each carry a nullable `org_id` and a `visibility`
+(`org|private`, default `private` — owner amendment 2026-08-26, from the
+staging canary: new work is unshared until deliberately shared);
+`conversation` carries `created_by` (NULL on
+pre-033 rows = the project owner's). Nothing below the project row is
+tenancy-aware — access to children resolves through their project. A row
+with NULL `org_id` is reachable by its owner and an admin only; membership
+is app-owned and ops-assigned, never read from the IdP. A project inside a
+portfolio matches it on `visibility` **and** `org_id` (the write-path
+invariant; the visibility cascade is the sole writer of
+`portfolio.visibility`). Membership being many-to-many (ADR 0032), a
+project is org-visible iff *any* portfolio it belongs to is org-visible
+(owner ruling 2026-08-27), and its portfolios span one organisation — a
+write that would put one task in two organisations is refused.
 
 Whole-item organisation is **just columns + tags + scoping** — no special container between
 project and artefact.

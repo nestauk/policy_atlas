@@ -72,12 +72,15 @@ function usePanelWidth() {
  * planning plus those chats; selecting planning renders that thread here.
  *
  * Args:
- *   props: The owning project id.
+ *   props: The owning project id, and `isOwner` for the planning duplicate's
+ *     read-only gate (task 033 phase 10c, contract § 11 / rubric 37) — this
+ *     is the `ChatSidePanel` duplicate the rubric names alongside the
+ *     workspace's own `PlanningPane`.
  *
  * Returns:
  *   The open panel beside the view, or a compact edge toggle when closed.
  */
-export function ChatSidePanel({ projectId }: { projectId: string }) {
+export function ChatSidePanel({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const [libraryOpen, setLibraryOpen] = useState(false);
   const panel = usePanelWidth();
@@ -146,6 +149,7 @@ export function ChatSidePanel({ projectId }: { projectId: string }) {
             projectId={projectId}
             runStatus={undefined}
             stream={createInitialRunStreamState()}
+            isOwner={isOwner}
             onReviewPlan={() => void navigate(`/projects/${projectId}`)}
           />
         ) : (

@@ -15,9 +15,31 @@ const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
 const authState = vi.hoisted(() => ({ signOut: vi.fn() }));
 
+// Task 033 phase 10b: mutable per-test so the owner-scoped check-in banner
+// and the account-menu tests can each set their own `/me`/`is_owner` shape
+// without a fresh `vi.mock` factory per test.
+const meState = vi.hoisted(() => ({
+  data: {
+    user_id: "policy-lead",
+    display_name: "Ada Lovelace",
+    email: null as string | null,
+    organisation: null as { org_id: string; name: string } | null,
+    is_admin: false,
+  },
+}));
+const projectState = vi.hoisted(() => ({ isOwner: true }));
+
 vi.mock("../api/queries", () => ({
+  useMe: () => ({ data: meState.data }),
   useProject: (projectId: string) => ({
-    data: projectId ? { project_id: PROJECT_ID, name: "Acme project" } : undefined,
+    data: projectId
+      ? {
+          project_id: PROJECT_ID,
+          name: "Acme project",
+          visibility: "org",
+          is_owner: projectState.isOwner,
+        }
+      : undefined,
   }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace project routes.
@@ -27,6 +49,11 @@ vi.mock("../api/queries", () => ({
   // mutations, which resolve their API client through this hook — a bare
   // object is enough since these tests never open the popover.
   useApiClient: () => ({}),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useUpdateProject: () => ({ mutate: vi.fn(), isPending: false }),
+  useArchiveProject: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 vi.mock("../auth", () => ({
@@ -66,6 +93,7 @@ function renderShell(initialPath: string) {
 describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
   beforeEach(() => {
     authState.signOut.mockClear();
+    projectState.isOwner = true;
   });
 
   it("shows the Workspace nav badge when a check-in is pending outside the workspace", () => {
@@ -76,6 +104,56 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
   it("hides the badge while already on the workspace view", () => {
     renderShell(`/projects/${PROJECT_ID}`);
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell — the check-in banner is owner-scoped (task 033 phase 10b, rubric 38)", () => {
+  beforeEach(() => {
+    authState.signOut.mockClear();
+  });
+
+  it("shows the cross-tab pause banner for the Task's owner", () => {
+    projectState.isOwner = true;
+    renderShell(`/projects/${PROJECT_ID}/sources`);
+    expect(
+      screen.getByText(/a check-in is waiting on you/),
+    ).toBeInTheDocument();
+  });
+
+  it("a colleague reading a non-owned Task is never told a check-in is waiting on them", () => {
+    projectState.isOwner = false;
+    renderShell(`/projects/${PROJECT_ID}/sources`);
+    expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
+    expect(screen.queryByText(/a check-in is waiting on you/)).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell — the project-settings popover (task 033 phase 10c, contract § 11 / rubric 37)", () => {
+  beforeEach(() => {
+    authState.signOut.mockClear();
+  });
+
+  async function openProjectSettings() {
+    const user = userEvent.setup();
+    renderShell(`/projects/${PROJECT_ID}`);
+    await user.click(screen.getByRole("button", { name: "Project settings" }));
+    return user;
+  }
+
+  it("owner: shows Rename and Archive", async () => {
+    projectState.isOwner = true;
+    await openProjectSettings();
+    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
+  });
+
+  it("non-owner: hides the settings gear itself, not just the items inside it — an empty popover is not a fix", () => {
+    projectState.isOwner = false;
+    renderShell(`/projects/${PROJECT_ID}`);
+    expect(screen.queryByRole("button", { name: "Project settings" })).not.toBeInTheDocument();
+    // With the trigger gone, Rename and Archive can never be reached either.
+    expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
   });
 });
 
@@ -146,6 +224,79 @@ describe("AppShell — global chrome", () => {
   it("shows the site footer inside a task", () => {
     renderShell(`/projects/${PROJECT_ID}`);
     expect(screen.getByRole("contentinfo")).toHaveTextContent(SITE_DISCLAIMER);
+  });
+});
+
+describe("AppShell — the account menu (task 033 phase 10b, contract § 11 / rubric 41)", () => {
+  beforeEach(() => {
+    authState.signOut.mockClear();
+    meState.data = {
+      user_id: "policy-lead",
+      display_name: "Ada Lovelace",
+      email: null,
+      organisation: null,
+      is_admin: false,
+    };
+  });
+
+  async function openAccountMenu() {
+    const user = userEvent.setup();
+    renderShell("/");
+    await user.click(screen.getByRole("button", { name: "Account" }));
+    return user;
+  }
+
+  it("unenrolled: shows the display name, 'No organisation', and no email line", async () => {
+    await openAccountMenu();
+    expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.getByText("No organisation")).toBeInTheDocument();
+    expect(screen.queryByText("Administrator")).not.toBeInTheDocument();
+  });
+
+  it("enrolled: shows the email and the organisation name", async () => {
+    meState.data = {
+      user_id: "policy-lead",
+      display_name: "Ada Lovelace",
+      email: "ada.lovelace@example.gov.uk",
+      organisation: { org_id: "org-1", name: "Department for Local Growth" },
+      is_admin: false,
+    };
+    await openAccountMenu();
+    expect(screen.getByText("ada.lovelace@example.gov.uk")).toBeInTheDocument();
+    expect(screen.getByText("Department for Local Growth")).toBeInTheDocument();
+    expect(screen.queryByText("Administrator")).not.toBeInTheDocument();
+  });
+
+  it("admin: shows the word Administrator", async () => {
+    meState.data = {
+      user_id: "admin-1",
+      display_name: "Grace Hopper",
+      email: "grace.hopper@example.gov.uk",
+      organisation: { org_id: "org-1", name: "Department for Local Growth" },
+      is_admin: true,
+    };
+    await openAccountMenu();
+    expect(screen.getByText("Administrator")).toBeInTheDocument();
+  });
+
+  it("truncates a long email with CSS rather than breaking the popover layout", async () => {
+    meState.data = {
+      user_id: "policy-lead",
+      display_name: "Ada Lovelace",
+      email: "a.very.long.civil.service.email.address.indeed@example.gov.uk",
+      organisation: null,
+      is_admin: false,
+    };
+    await openAccountMenu();
+    const emailNode = screen.getByText("a.very.long.civil.service.email.address.indeed@example.gov.uk");
+    expect(emailNode.className).toContain("truncate");
+  });
+});
+
+describe("AppShell — global chrome, continued", () => {
+  beforeEach(() => {
+    authState.signOut.mockClear();
+    sessionStorage.clear();
   });
 
   it("shows a dismissible sensitivity banner under the nav", async () => {

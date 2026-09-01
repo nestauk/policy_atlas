@@ -27,6 +27,11 @@ export function useCreateProject() {
       if (data === undefined) raise(error, response.status);
       return data;
     },
+    // `ProjectCreate` (this body) carries no `portfolio_id` — a project made
+    // here is never assigned to a portfolio at creation, so this mutation
+    // cannot change any portfolio's `task_count`. No "portfolios"
+    // invalidation belongs here (contrast `useCreateTask` below, whose
+    // second call can assign one).
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 }
@@ -54,10 +59,19 @@ export function useCreateTask() {
       if (project === undefined) raise(error, response.status);
 
       if (input.portfolioId != null) {
-        await client.PATCH("/api/v1/projects/{project_id}", {
-          params: { path: { project_id: project.project_id } },
-          body: { portfolio_ids: [input.portfolioId] },
-        });
+        // Unlike the opening turn below, this result IS checked: openapi-fetch
+        // never throws on its own, so an ignored error here (e.g. a colleague
+        // picking a colleague-owned org-visible portfolio, which is readable
+        // but not writable) would silently leave the task unassigned with no
+        // sign anything went wrong.
+        const { data: patched, error: patchError, response: patchResponse } = await client.PATCH(
+          "/api/v1/projects/{project_id}",
+          {
+            params: { path: { project_id: project.project_id } },
+            body: { portfolio_ids: [input.portfolioId] },
+          },
+        );
+        if (patched === undefined) raise(patchError, patchResponse.status);
       }
 
       // The opening turn. A failure here leaves a real, usable task whose
@@ -69,7 +83,15 @@ export function useCreateTask() {
       });
       return project;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    // "portfolios" is invalidated too, symmetric with `useUpdateProject`/
+    // `useArchiveProject` below: a successful `portfolioId` assignment above
+    // changes that portfolio's derived `task_count`, a cross-family effect
+    // the portfolio list would otherwise keep showing stale until an
+    // unrelated refetch.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    },
   });
 }
 
@@ -102,11 +124,9 @@ export function useUpdateProject(projectId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (body: {
-      name?: string | null;
-      question?: string | null;
-      portfolio_ids?: string[] | null;
-    }) => {
+    // `visibility` (task 033 phase 10b): owner-only, and refused 422 combined
+    // with `portfolio_ids` in one body — see `ProjectUpdate`'s own docstring.
+    mutationFn: async (body: components["schemas"]["ProjectUpdate"]) => {
       const { data, error, response } = await client.PATCH("/api/v1/projects/{project_id}", {
         params: { path: { project_id: projectId } },
         body,
@@ -117,6 +137,11 @@ export function useUpdateProject(projectId: string) {
     // The bare "projects" root covers BOTH this project's detail key and the
     // projects-list key (["projects", "list", …]) — a rename must refresh the
     // landing card, not just the workspace header (F.2 finding, 2026-07-29).
+    // "portfolios" is invalidated too (task 033 phase 10a): `visibility` and
+    // `portfolio_ids` are both patchable here, and either can change a
+    // portfolio's derived `task_count` or member visibility — a cross-family
+    // effect from a project-family mutation, the same class of bug the
+    // portfolio-PATCH cascade below has to cover in the other direction.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["portfolios"] });
@@ -137,7 +162,42 @@ export function useArchiveProject(projectId: string) {
       if (data === undefined) raise(error, response.status);
       return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    // Same cross-family reasoning as `useUpdateProject`: archiving removes
+    // the project from its portfolio's active `task_count`.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+    },
+  });
+}
+
+/**
+ * `PATCH /api/v1/portfolios/{id}` — rename, re-describe, or (supplying
+ * `visibility`) run the server's i.4 visibility cascade onto every member
+ * project in one transaction (contract § 6). No component calls this yet —
+ * the visibility control lands in phase 10b/10c — but the cache wiring is
+ * data-layer work: a cascade rewrites rows in the *project* family from a
+ * *portfolio* mutation, so both families are invalidated by prefix (not the
+ * exact filtered key) so every `scope` variant currently cached is covered,
+ * or a card would keep showing the pre-cascade visibility until an
+ * unrelated refetch.
+ */
+export function useUpdatePortfolio(portfolioId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["PortfolioUpdate"]) => {
+      const { data, error, response } = await client.PATCH("/api/v1/portfolios/{portfolio_id}", {
+        params: { path: { portfolio_id: portfolioId } },
+        body,
+      });
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
   });
 }
 

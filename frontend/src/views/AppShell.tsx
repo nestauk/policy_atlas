@@ -2,7 +2,7 @@ import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveProject, useUpdateProject } from "../api/mutations";
-import { useCheckIns, useProject } from "../api/queries";
+import { useCheckIns, useMe, useProject } from "../api/queries";
 import { useAuth } from "../auth";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
@@ -11,7 +11,7 @@ import { StatusDot } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
-import { COPY, PROJECT, TASK } from "../lib/vocabulary";
+import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { lifecycleTabs } from "./lifecycle";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
@@ -24,8 +24,17 @@ import { TooltipProvider } from "../ui/radix/Tooltip";
 /** Project settings affordance (028 F.5): rename + archive, wired to the
  *  existing project mutations — the project-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
- *  explicit confirm step before the mutation fires. */
-function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; projectName: string }) {
+ *  explicit confirm step before the mutation fires. Visibility moved to the
+ *  Share page (`ShareView`). */
+function ProjectSettingsMenu({
+  projectId,
+  projectName,
+  isOwner,
+}: {
+  projectId: string;
+  projectName: string;
+  isOwner: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
@@ -33,6 +42,13 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
   const update = useUpdateProject(projectId);
   const archive = useArchiveProject(projectId);
   const toast = useToast();
+
+  // Non-owner (task 033 phase 10c, contract § 11 / rubric 37): every item
+  // inside this popover is owner-gated — a non-owner has nothing to do here
+  // at all, so the trigger itself must not render. Rev 1 of this gate
+  // covered only the items, leaving a colleague a gear that opened onto an
+  // empty popover.
+  if (!isOwner) return null;
 
   const reset = () => {
     setEditing(false);
@@ -123,53 +139,61 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
           </form>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={() => setEditing(true)}
-              className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-            >
-              Rename
-            </button>
-            {archive.isError && (
+            {/* Rename and archive are owner-only mutations (task 033 phase
+                10c, contract § 11 / rubric 37) — hidden entirely for a
+                non-owner. Rev 1 of this menu shipped these ungated: a
+                colleague would see Rename, click, and get "The project
+                couldn't be renamed." */}
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
+              >
+                Rename
+              </button>
+            )}
+            {isOwner && archive.isError && (
               <p role="alert" className="text-body text-red">
                 The project couldn't be archived. Try again.
               </p>
             )}
-            {confirmingArchive ? (
-              <div className="space-y-2 text-body text-grey">
-                <p>Archiving removes this project from your active projects.</p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    disabled={archive.isPending}
-                    onClick={() =>
-                      archive.mutate(undefined, {
-                        onSuccess: () => setOpen(false),
-                        onError: () =>
-                          toast.toast({
-                            title: "Archive failed",
-                            description: "The project couldn't be archived. Try again.",
-                            tone: "error",
-                          }),
-                      })
-                    }
-                  >
-                    Confirm archive
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
-                    Cancel
-                  </Button>
+            {isOwner &&
+              (confirmingArchive ? (
+                <div className="space-y-2 text-body text-grey">
+                  <p>Archiving removes this project from your active projects.</p>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      disabled={archive.isPending}
+                      onClick={() =>
+                        archive.mutate(undefined, {
+                          onSuccess: () => setOpen(false),
+                          onError: () =>
+                            toast.toast({
+                              title: "Archive failed",
+                              description: "The project couldn't be archived. Try again.",
+                              tone: "error",
+                            }),
+                        })
+                      }
+                    >
+                      Confirm archive
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmingArchive(false)}>
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setConfirmingArchive(true)}
-                className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
-              >
-                Archive
-              </button>
-            )}
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingArchive(true)}
+                  className="block w-full cursor-pointer text-left text-meta font-semibold text-navy hover:text-blue"
+                >
+                  Archive
+                </button>
+              ))}
           </>
         )}
       </PopoverContent>
@@ -177,8 +201,19 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
   );
 }
 
-/** Account menu: a user icon in the global bar, Sign out inside the popover. */
+/**
+ * Account menu: a user icon in the global bar, identity above Sign out
+ * inside the popover (task 033 phase 10b, contract § 11 / rubric 41).
+ *
+ * Renders exactly what `/me` returns: `display_name` (ops already falls it
+ * back to the `sub` rendering for an unenrolled caller — nothing here
+ * duplicates that), `email` only when non-null, the organisation name or
+ * `TENANCY_COPY.noOrganisation`, and `Administrator` only when `is_admin`.
+ * The email line truncates with CSS (`truncate`) rather than being clipped
+ * in script — a long address must not break the popover's fixed width.
+ */
 function AccountMenu({ signOut }: { signOut: () => void }) {
+  const me = useMe();
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -203,7 +238,23 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
           </svg>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-44 p-1">
+      <PopoverContent align="end" className="w-56 p-1">
+        {me.data !== undefined && (
+          <div className="min-w-0 border-b border-line px-3 py-2">
+            <p className="truncate text-meta font-bold text-navy">{scrub(me.data.display_name)}</p>
+            {me.data.email != null && (
+              <p className="truncate text-caption text-grey">{scrub(me.data.email)}</p>
+            )}
+            <p className="truncate text-caption text-grey">
+              {me.data.organisation != null
+                ? scrub(me.data.organisation.name)
+                : TENANCY_COPY.noOrganisation}
+            </p>
+            {me.data.is_admin && (
+              <p className="text-caption font-bold text-blue">{TENANCY_COPY.administrator}</p>
+            )}
+          </div>
+        )}
         <button
           type="button"
           onClick={() => signOut()}
@@ -242,11 +293,20 @@ export function AppShell() {
   // the workspace view (where the check-in card itself is the live source of
   // truth) — the nav badge and title marker exist precisely to be seen from
   // everywhere else.
+  //
+  // Owner-scoped (task 033 phase 10b, contract § 11 / rubric 38): steering
+  // is owner-only, so a colleague reading an org-shared Task must never be
+  // told a check-in is "waiting on you" — this used to poll and show for
+  // every viewer. `project.data?.is_owner` gates both the poll (cheapest
+  // honest rule: don't even ask) and, transitively through `hasPendingCheckIn`
+  // below, the nav badge, the lifecycle-tab marker and the cross-tab banner.
+  const isOwner = project.data?.is_owner === true;
   const pendingCheckIns = useCheckIns(projectId ?? "", "pending", {
-    enabled: base !== null && !inWorkspace,
+    enabled: base !== null && !inWorkspace && isOwner,
     refetchInterval: 15_000,
   });
-  const hasPendingCheckIn = base !== null && !inWorkspace && (pendingCheckIns.data?.data.length ?? 0) > 0;
+  const hasPendingCheckIn =
+    base !== null && !inWorkspace && isOwner && (pendingCheckIns.data?.data.length ?? 0) > 0;
 
   // Task views lock to the viewport so the app/lifecycle chrome stays put
   // and only the panes below scroll. List pages keep normal document scroll.
@@ -295,6 +355,7 @@ export function AppShell() {
                       <ProjectSettingsMenu
                         projectId={project.data.project_id}
                         projectName={project.data.name}
+                        isOwner={project.data.is_owner}
                       />
                     </>
                   )}
@@ -345,7 +406,7 @@ export function AppShell() {
                   out the rest of the shell (nav, the routed view). */}
               {showChatPanel && (
                 <ErrorBoundary key={projectId}>
-                  <ChatSidePanel projectId={projectId ?? ""} />
+                  <ChatSidePanel projectId={projectId ?? ""} isOwner={isOwner} />
                 </ErrorBoundary>
               )}
               <div

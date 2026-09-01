@@ -1,22 +1,28 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 
-import { usePortfolio, usePortfolios, useProjects } from "../api/queries";
-import { useCreatePortfolio } from "../api/mutations";
+import { useMe, usePortfolio, usePortfolios, useProjects } from "../api/queries";
+import { useCreatePortfolio, useUpdatePortfolio } from "../api/mutations";
+import { isConflictCode, conflictSentences } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
-import { PROJECT, TASK } from "../lib/vocabulary";
+import { PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
+import { useToast } from "../ui/radix/Toast";
 import {
   listPageTitleClass,
   listSecondaryActionClass,
   newTaskHref,
   newestTaskUpdateByPortfolio,
   portfolioLastUpdated,
+  showOwnerColumn,
   sortPortfoliosByLastUpdated,
 } from "./listPageChrome";
+import type { Scope } from "./ScopeSwitcher";
+import { ScopeSwitcher } from "./ScopeSwitcher";
 import { TaskListActions, TaskListPanel } from "./TaskListPanel";
+import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
 /**
  * Projects: named groupings of tasks, and nothing else.
@@ -25,21 +31,48 @@ import { TaskListActions, TaskListPanel } from "./TaskListPanel";
  * shows a name and a count and stops there. Anything more would imply the
  * grouping has a state, which it does not.
  */
+/** `PortfolioOut` carries a derived `task_count` but no last-task-updated
+ *  timestamp, so this overview still leans on the global projects page to
+ *  derive "most recently active" per portfolio (`newestTaskUpdateByPortfolio`
+ *  below) — asking per-portfolio would be N+1 requests for a list page.
+ *  Server page-size cap (`PAGE_SIZE_MAX`, web-api.md § Pagination): raised
+ *  from the 50-row default so this remains an approximation rather than
+ *  systematically wrong, not a fix — a workspace with more than 200 active
+ *  projects across portfolios can still miss a newer update that falls
+ *  outside this page. `PortfolioDetailView` does not share the *last-update*
+ *  limitation: it fetches its own member list via `portfolio_id`, which is
+ *  exact up to the same 200-row cap (task 033 phase 10a) rather than the
+ *  50-row default. */
+const PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE = 200;
+
 export function PortfoliosView() {
   useDocumentTitle(PROJECT.many);
-  const portfolios = usePortfolios();
-  const projects = useProjects();
+  const me = useMe();
+  // Hidden entirely with no organisation (rubric 14's dark-launch invariant):
+  // an unenrolled caller's page — including its queries — stays unchanged.
+  const hasSwitcher = me.data?.organisation != null;
+  const [scope, setScope] = useState<Scope>("all");
+  const portfolios = usePortfolios(hasSwitcher ? { scope } : undefined);
+  const projects = useProjects(
+    hasSwitcher
+      ? { page_size: PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE, scope }
+      : { page_size: PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE },
+  );
   const create = useCreatePortfolio();
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
   const taskUpdatedAt = newestTaskUpdateByPortfolio(projects.data?.data ?? []);
   const rows = sortPortfoliosByLastUpdated(portfolios.data?.data ?? [], taskUpdatedAt);
+  const showOwner = showOwnerColumn(hasSwitcher, rows);
+  const isAdminWideList = hasSwitcher && me.data?.is_admin === true && scope === "all";
+  const ownerlessLabel = isAdminWideList ? TENANCY_COPY.noOrganisation : TENANCY_COPY.ownerlessRow;
 
   return (
     <main className="mx-auto max-w-[1180px] px-6 py-10">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <h1 className={listPageTitleClass}>{PROJECT.many}</h1>
         <div className="flex items-center gap-4">
+          {hasSwitcher && <ScopeSwitcher scope={scope} onChange={setScope} />}
           {!creating && (
             <Button className="px-6 py-3.5 text-body" onClick={() => setCreating(true)}>
               New {PROJECT.lower}
@@ -47,6 +80,12 @@ export function PortfoliosView() {
           )}
         </div>
       </header>
+
+      {isAdminWideList && (
+        <p role="status" className="mb-4 text-meta font-semibold text-grey">
+          {TENANCY_COPY.adminWiderList}
+        </p>
+      )}
 
       {creating && (
         <Card className="mb-8 max-w-md p-5">
@@ -124,6 +163,11 @@ export function PortfoliosView() {
                   <span className="min-w-0 flex-1 text-body font-semibold text-navy">
                     {scrub(portfolio.name)}
                   </span>
+                  {showOwner && (
+                    <span className="text-meta text-grey">
+                      {portfolio.owner_display !== null ? scrub(portfolio.owner_display) : ownerlessLabel}
+                    </span>
+                  )}
                   <span className="text-meta text-grey">
                     {portfolio.task_count === 1
                       ? `1 ${TASK.lower}`
@@ -148,13 +192,46 @@ export function PortfoliosView() {
 /** One project: its tasks, with the same list chrome as the Tasks page. */
 export function PortfolioDetailView() {
   const { portfolioId = "" } = useParams();
+  const me = useMe();
   const portfolio = usePortfolio(portfolioId);
-  const projects = useProjects();
+  // Server-side `portfolio_id` filter (task 033 phase 10a) — this used to
+  // filter the global 50-row projects page client-side, silently
+  // under-reporting once a portfolio's membership (or the caller's visible
+  // estate) grew past that page. `page_size` is raised to the same 200-row
+  // server-max convention as the overview page above: without it this call
+  // still falls back to the 50-row default and a portfolio with 51+ tasks
+  // would silently truncate.
+  const projects = useProjects({
+    portfolio_id: portfolioId,
+    page_size: PORTFOLIOS_OVERVIEW_PROJECTS_PAGE_SIZE,
+  });
+  const updatePortfolio = useUpdatePortfolio(portfolioId);
+  const toast = useToast();
   useDocumentTitle(portfolio.data?.name, PROJECT.one);
 
-  const tasks = (projects.data?.data ?? []).filter(
-    (project) => project.portfolio_ids?.includes(portfolioId) === true,
-  );
+  const tasks = projects.data?.data ?? [];
+  const hasSwitcher = me.data?.organisation != null;
+  const showOwner = showOwnerColumn(hasSwitcher, tasks);
+  const isAdminWideList = hasSwitcher && me.data?.is_admin === true;
+  const ownerlessLabel = isAdminWideList ? TENANCY_COPY.noOrganisation : TENANCY_COPY.ownerlessRow;
+
+  const changeVisibility = (next: "org" | "private") => {
+    updatePortfolio.mutate(
+      { visibility: next },
+      {
+        onSuccess: (updated) => {
+          toast.toast({ title: visibilityOutcomeLine(next, updated.task_count), tone: "default" });
+        },
+        onError: (error) => {
+          const code = (error as { code?: string }).code;
+          const message = isConflictCode(code)
+            ? conflictSentences[code]
+            : `The ${PROJECT.lower} couldn't be updated. Try again.`;
+          toast.toast({ title: message, tone: "error" });
+        },
+      },
+    );
+  };
 
   return (
     <main className="mx-auto max-w-[1180px] px-6 py-10">
@@ -172,7 +249,17 @@ export function PortfolioDetailView() {
             </p>
           )}
         </div>
-        <TaskListActions rows={tasks} newTaskHref={newTaskHref(portfolioId)} />
+        <div className="flex items-center gap-4">
+          {portfolio.data !== undefined && (
+            <VisibilityControl
+              visibility={portfolio.data.visibility}
+              isOwner={portfolio.data.is_owner}
+              pending={updatePortfolio.isPending}
+              onChange={changeVisibility}
+            />
+          )}
+          <TaskListActions rows={tasks} newTaskHref={newTaskHref(portfolioId)} />
+        </div>
       </header>
 
       <TaskListPanel
@@ -184,6 +271,8 @@ export function PortfolioDetailView() {
           void projects.refetch();
         }}
         loaded={portfolio.data !== undefined && projects.data !== undefined}
+        showOwner={showOwner}
+        ownerlessLabel={ownerlessLabel}
       />
     </main>
   );

@@ -3,7 +3,7 @@ type: System contract
 title: Web API
 description: The /api/v1 surface — resources, error envelope, pagination, SSE event vocabulary, auth boundary. One schema generates both ends; additive-only evolution.
 tags: [system, api, sse, auth, contract]
-timestamp: 2026-07-21
+timestamp: 2026-08-25
 ---
 
 # System contract — Web API (`/api/v1`)
@@ -26,25 +26,76 @@ here — never a parallel version.
 ## Auth boundary
 
 OIDC/JWT bearer verification on every data route (`Authorization: Bearer`);
-`user_id` = token `sub`. RS256 against the issuer JWKS (Cognito-shaped;
-dev issuer = local keypair, visibly non-production). Unauthenticated:
-`/healthz` (liveness, process-only) and `/readyz` only. Ownership is strict
-per-owner: another owner's resource — and an unknown or archived one — is
-**404** with an indistinguishable body (BOLA rule; 403 is reserved for
-future role failures within an owned scope). 401 carries
-`WWW-Authenticate: Bearer`. No cookies; no CSRF machinery by construction.
-**Tokens never appear in query strings** — SSE clients authenticate via
-fetch-stream with the bearer header.
+`user_id` = token `sub`, the **only** claim any request path reads.
+RS256 against the issuer JWKS (Cognito-shaped; dev issuer = local keypair,
+visibly non-production). Unauthenticated: `/healthz` (liveness,
+process-only) and `/readyz` only. 401 carries `WWW-Authenticate: Bearer`.
+No cookies; no CSRF machinery by construction. **Tokens never appear in
+query strings** — SSE clients authenticate via fetch-stream with the bearer
+header.
+
+**Tenancy (task 033, ADR 0033).** Users belong to at most one organisation
+(`app_user.org_id`, ops-assigned). Access resolves through one graded
+helper with **three read legs and one write grade**:
+
+- **read** = owner ∪ **same-org** (the row's `org_id` is non-NULL and equals
+  the caller's, and the row's `visibility` is `org`; archived/status rules
+  unchanged) ∪ **admin** (`app_user.is_admin`: any row, any org, any
+  visibility, read-only, traced — see below).
+- **write** = **owner only**, with exactly one exception: the three chat
+  mutations a same-org colleague holds (create a chat on a readable
+  project, post a turn to their own conversation, cancel their own turn).
+  An admin is not a colleague and holds none of them.
+- **The NULL rule:** a row with `org_id IS NULL` is reachable by its owner
+  and an admin only; a caller with NULL `org_id` matches no org leg. The
+  org leg is a SQL predicate (a correlated `EXISTS` equating the caller's
+  `app_user.org_id` to the row's non-NULL `org_id`) — never a Python
+  comparison of two loaded values, because `None == None` is `True`.
+
+Not-visible → **404** with an indistinguishable body (BOLA rule: unknown,
+cross-org and — where the route excludes them — archived rows are the same
+404). Visible-but-not-writable → **403 `forbidden`**.
+
+`GET /api/v1/me` → `{user_id, display_name, email, organisation:
+{org_id, name} | null, is_admin}` — provisions the caller's `app_user` row
+just-in-time with `ON CONFLICT DO NOTHING` (a once-per-user insert that
+never clobbers ops-set fields; ops enrolment is the deliberate
+`DO UPDATE`). `get_current_user` stays DB-free and Cognito-free.
+
+Listing filters: `scope=all|mine` (default `all` = owner ∪ org-visible;
+for an admin, `all` spans every organisation) on both listings ·
+`portfolio_id` on `GET /projects` · `owner_email` on both listings,
+admin-only — a non-admin passing it gets 422 `validation_error`, as does
+any value over 254 characters or without an `@` (the value is logged
+verbatim into the audit line, so it is bounded and shape-checked first).
+
+**The admin trace.** Reads served by the admin leg — and only those — are
+logged: one line per direct row read (`admin_read`), one per cross-org
+listing or search request including zero-result searches
+(`admin_listing`), one per SSE subscribe and per re-authorisation batch
+(`admin_stream_read`). Nothing is emitted for a read the caller was
+entitled to anyway. The flag has exactly four readers, asserted
+structurally as a closed code-site list (`_access.admin_read_leg` and
+`_access._is_admin` — which between them serve the row/listing legs, the
+`owner_email` gate and the trace decision — plus `me.get_me` and the
+`MeOut` field declaration); no write path reads it, and no HTTP surface
+can set it.
 
 ## Error envelope
 
 Every non-2xx: `{"error": {"code": <machine string>, "message": <human>,
 "details"?: <structured>}}`. Codes are contract; message text is not.
-Mapping: 400 `malformed` · 401 `unauthenticated` · 404 `not_found` ·
+Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
+(visible but not writable — task 033) · 404 `not_found` ·
 409 `run_active` | `already_answered` | `capacity` |
 `planning_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
-`no_completed_run` | `plan_stale` · 422 `validation_error` (Pydantic detail
-list under `details`, assert on `loc`/`type` not `msg`) · 429 `chat_capacity`
+`no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
+project's visibility while it is in a portfolio — change the portfolio's
+visibility, or leave the project out of it) · 422 `validation_error`
+(Pydantic detail list under `details`, assert on `loc`/`type` not `msg`;
+also the code for a non-admin passing `owner_email` and for a PATCH body
+carrying both `visibility` and `portfolio_ids` — not a third semantic) ·
+429 `chat_capacity`
 (a distinct code from the 409 run-capacity bound — too many in-flight chat
 turns, never a run-slot conflict) · 500 `internal` (opaque).
 
@@ -62,15 +113,27 @@ artefact, groups) are whole-object.
 
 ### Projects
 
-- `GET /api/v1/projects` — paginated, owner-scoped, `status=active` by
-  default (`?status=archived|all` to widen). Each item carries the derived
-  `latest_run` read model (`capability_run_id`, `status`, `started_at`,
-  `ended_at`) — **run state is never cached on the project row**; the
-  landing card derives running/paused/complete/interrupted from it.
-- `POST /api/v1/projects` `{name, question?}` → 201 project.
-- `GET /api/v1/projects/{id}` → project.
-- `PATCH /api/v1/projects/{id}` `{name?, question?}` — partial; rename
-  emits a transactional `project.renamed` audit event.
+- `GET /api/v1/projects` — paginated, tenancy-scoped (`scope=all|mine`,
+  default `all` = own ∪ same-org org-visible; admin `all` spans every
+  organisation), `status=active` by default (`?status=archived|all` to
+  widen); `portfolio_id` filters to one portfolio's members; `owner_email`
+  is admin-only. Each item carries the derived `latest_run` read model
+  (`capability_run_id`, `status`, `started_at`, `ended_at`) — **run state
+  is never cached on the project row**; the landing card derives
+  running/paused/complete/interrupted from it.
+- `POST /api/v1/projects` `{name, question?}` → 201 project, stamped with
+  the creator's `org_id` (NULL for an unenrolled creator) and
+  `visibility='private'` (the column default — new work is unshared until
+  its owner shares it; owner amendment 2026-08-26).
+- `GET /api/v1/projects/{id}` → project (read grade).
+- `PATCH /api/v1/projects/{id}` `{name?, question?, visibility?}` —
+  partial, owner-only; rename emits a transactional `project.renamed`
+  audit event. `visibility` on a project in a portfolio is 409
+  `visibility_conflict`; a body carrying both `visibility` and
+  `portfolio_ids` is 422 (the two orderings differ). An explicit
+  `null` on a NOT NULL column (`name`, `visibility` — here and on
+  `PATCH /portfolios/{id}`) is 422 rather than a 500; nulls that mean
+  something (`question`, `description`, `portfolio_ids`) still work.
 - `POST /api/v1/projects/{id}/archive` → idempotent archive (soft-delete:
   hidden from default listings, rows retained; `project.archived` audit
   event on first archive only). 409 `run_active` while a run is executing
@@ -81,12 +144,15 @@ and a `portfolio` row is a **Project**. The API keeps the code words; only the
 UI translates, from one shared module. Nothing below the project row was
 re-parented.
 
-Two derived fields on the project read shape (033):
+Additive fields on the project read shape:
 `portfolio_ids` (the portfolios this task belongs to; empty list is
-unassigned — a normal state), and `source_count` (Included sources — funnel
-`relevant` — or `null` when no run exists. `null` and `0` differ: `null`
-means the question has not been asked, `0` means a run asked and none are
-Included). A task may belong to many portfolios (ADR 0032).
+unassigned — a normal state; a task may belong to many portfolios,
+ADR 0032), `source_count` (Included sources — funnel `relevant` — or `null`
+when no run exists. `null` and `0` differ: `null` means the question has not
+been asked, `0` means a run asked and none are Included), and — task 033 —
+`visibility` (`org|private`), `is_owner` (caller-relative), and
+`owner_display` (the owner's `display_name`, else a `sub` rendering,
+**never the email**; `null` for ownerless rows).
 
 ### Portfolios
 
@@ -94,20 +160,58 @@ A portfolio is a named grouping **above** the project. It holds no plan, no
 run and no evidence of its own, and carries a name, a description and an owner
 — no status, no lifecycle, no cached counts (ADR 0031).
 
-- `GET /api/v1/portfolios` — paginated, owner-scoped. Each item carries a
-  `task_count` **derived per read** from the caller's active projects.
-- `POST /api/v1/portfolios` `{name, description?}` → 201 portfolio.
-- `GET /api/v1/portfolios/{id}` → portfolio with its derived `task_count`.
-- `PATCH /api/v1/portfolios/{id}` `{name?, description?}` — partial.
+- `GET /api/v1/portfolios` — paginated, tenancy-scoped (`scope`,
+  `owner_email` — same semantics as projects). Each item carries a
+  `task_count` **derived per read** from members the caller can read in
+  their own estate (owner ∪ same-org; never the admin leg), plus the same
+  three 033 read fields as projects (`visibility`, `is_owner`,
+  `owner_display`).
+- `POST /api/v1/portfolios` `{name, description?, from_project_id?}` →
+  201 portfolio, stamped with the creator's `org_id`. `from_project_id`
+  (task 033, amending ADR 0031 decision 4) resolves the source project
+  under the **write** grade; the new portfolio inherits that project's
+  `visibility` and `org_id` and takes it as its first member, in one
+  transaction.
+- `GET /api/v1/portfolios/{id}` → portfolio with its derived `task_count`
+  (read grade).
+- `PATCH /api/v1/portfolios/{id}` `{name?, description?, visibility?}` —
+  partial, owner-only. `visibility` runs **the cascade**: the portfolio and
+  every member project (archived included) take the new value together, in
+  one transaction. The cascade is the only writer of
+  `portfolio.visibility`; each member is **recomputed**, not assigned — a
+  task is org-visible iff *any* portfolio it is in is org-visible (owner
+  ruling 2026-08-27), so a member shared with an org-visible portfolio
+  stays org-visible when this one goes private.
 - `PATCH /api/v1/projects/{id}` accepts `portfolio_ids` (replace-all). Omit
-  to leave membership unchanged; `[]` unassigns every portfolio; a list
-  replaces the set. Each id must be an owned portfolio or the write is 404
-  and does not happen — otherwise the route would be an existence oracle for
-  another owner's rows. Rename and membership writes are not `run_active`
-  conflicts; they serialize on the project row lock.
+  to leave membership unchanged; `[]` (or `null`) unassigns every portfolio;
+  a list replaces the set. Each id must resolve under the **write** grade
+  (404 unreadable, 403 readable-not-owned) before anything is written —
+  otherwise the route would be an existence oracle for another owner's rows.
+  The task becomes org-visible if any named portfolio is org-visible,
+  private otherwise; a set spanning two organisations is refused 409 (a row
+  carries one `org_id`). Newly added ids resolve under the
+  **colleague-mutation** grade (owner ∪ same-org org-visible, never the
+  admin leg — owner ruling 2026-08-27): a colleague may add their own task
+  to an org-visible portfolio they did not create; anything outside that
+  estate is 404 before any write. Ids the task already belongs to are kept
+  without re-resolution, so a membership that later went private never
+  locks the owner out of editing their own set. Rename and membership
+  writes are not `run_active` conflicts; they serialize on the project row
+  lock.
 
-Owner scoping matches projects exactly: an unknown portfolio and a
-cross-owner one are the same indistinguishable 404. There is no portfolio
+**The visibility/org invariant (task 033, owner call (i); generalised to
+many-to-many membership — owner ruling 2026-08-27).** A project in one or
+more portfolios is **org-visible iff any of those portfolios is
+org-visible**, private otherwise, and carries their `org_id` (its portfolios
+span one organisation; a cross-organisation set is refused). A project with
+no membership is unconstrained. Deterministic, no prompts: assignment and
+the cascade both recompute the member across its whole membership set
+(promotion or demotion alike); removal changes neither field. The invariant
+spans three tables, so it is enforced in the write paths and pinned by a
+property test — no CHECK can express it.
+
+Tenancy scoping matches projects exactly: an unknown portfolio and an
+unreadable one are the same indistinguishable 404. There is no portfolio
 archive route and no `archived_at` on the row; both land together if archiving
 is wanted (`docs/deferred.md` § Task lifecycle IA).
 
@@ -185,27 +289,47 @@ user-created, project-scoped, answering across every artefact in the
 project — an entry artefact is context, never a scope fence). Chats are
 **read-only**: they never mutate a plan, never start a run, never write an
 artefact — a question needing new evidence hands off to the planning
-conversation as a typed affordance, never a plan mutation from chat. All
-routes below are owner-scoped under the standard BOLA rule (unknown,
-cross-owner, and — except where noted — archived conversations are 404).
+conversation as a typed affordance, never a plan mutation from chat.
 
-- `GET /projects/{id}/conversations?kind=&status=` — the library read model,
-  both kinds, newest first, standard `{data, pagination}` envelope; each row
-  carries a `latest_turn_preview` (bounded snippet of its most recent chat or
-  planning turn, from whichever turn table its `kind` reads). Default
-  listing excludes archived rows; `status=archived` is the one filter that
-  lists an owner's own archived chats (planning conversations are never
-  archived).
+**Grades (task 033).** Conversations carry `created_by` (the author's
+`sub`; NULL on pre-033 rows, which belong to the project owner — the
+legacy disjunct `created_by = :me OR (created_by IS NULL AND
+owner_user_id = :me)`). A same-org colleague who can read the project
+holds exactly three mutations: create a **chat** conversation, post a turn
+to **their own** conversation, cancel **their own** turn. On the
+conversation-id routes a chat resolves for its creator only and a planning
+conversation for the project owner only — anyone else, colleague included,
+gets **404**, never 403 (the row's existence is not theirs to learn; this
+is what closes the `GET /{cid}/turns` transcript deep link). An admin may
+read `GET /{cid}` and `GET /{cid}/turns` (traced) and write nothing here.
+The creator's access dies with the project's read grade: de-enrolment or a
+visibility flip revokes their own chats too. The per-user pending-turn cap
+and its stale-turn sweeper are keyed to the acting user (`created_by`),
+not the project owner. Unknown, unreachable, and — except where noted —
+archived conversations are the same 404.
+
+- `GET /projects/{id}/conversations?kind=&status=` — the library read model
+  (project read grade + the own-chats filter: each caller sees the
+  conversations *they* created, plus legacy NULL rows if they own the
+  project), both kinds, newest first, standard `{data, pagination}`
+  envelope; each row carries a `latest_turn_preview` (bounded snippet of
+  its most recent chat or planning turn, from whichever turn table its
+  `kind` reads). Default listing excludes archived rows; `status=archived`
+  is the one filter that lists the caller's own archived chats (planning
+  conversations are never archived).
 - `GET /conversations/{cid}` → `ConversationOut` (`id`, `project_id`, `kind`,
   `title`, `status`, `entry_artefact_id`, `created_at`, `closed_at`,
   `archived_at`) — the deep-link resolver. An archived conversation is 404
   here (as on every route below except the list above and unarchive);
   unarchiving is the one call that resolves it back into reach.
 - `POST /projects/{id}/conversations` `{entry_artefact_id?}` → 201 chat
-  conversation, titled `"New chat"` until its first turn (kind is always
-  `chat` — planning conversations are lifecycle-created, never minted by
-  hand). `entry_artefact_id` must name an artefact belonging to the same
-  project, else 404.
+  conversation with `created_by = sub`, titled `"New chat"` until its first
+  turn (kind is always `chat` — planning conversations are
+  lifecycle-created, never minted by hand; the request model has no `kind`
+  field, so asking for one is 422 by construction). Granted to owner and
+  same-org colleague alike on a readable project; takes no lock on the
+  project row. `entry_artefact_id` must name an artefact belonging to the
+  same project, else 404.
 - `PATCH /conversations/{cid}` `{title?, entry_artefact_id?}` — chats only
   (422 on a planning conversation); partial, an explicit `null`
   `entry_artefact_id` clears the entry-context chip; a replacement artefact
@@ -321,7 +445,7 @@ cross-owner, and — except where noted — archived conversations are 404).
   never surfaces (B2′ relevance-emphasis is in-scope steering and arrives
   as ordinary options).
 
-### Read models (owner-scoped GETs under `/api/v1/projects/{id}/…`)
+### Read models (read-grade GETs under `/api/v1/projects/{id}/…` — task 033: owner, same-org colleague, or admin)
 
 `funnel` · `landscape` (distributions over the screened-in set only) ·
 `groups` · `evidence` (paginated source list with status ladder) ·
@@ -393,6 +517,16 @@ consistent view (race-tested: no loss, no duplication). Each frame:
 client passes its own `cursor`; `Last-Event-ID` is not relied on),
 `event:` = frame type, `data:` = the typed payload. 15 s heartbeat
 comments; `X-Accel-Buffering: no`; generator cleanup on disconnect.
+
+**Re-authorisation (task 033).** The snapshot resolves under the read
+grade, and the tail re-authorises through the same predicate on every poll
+(batches and heartbeats alike), **before** reading the batch — a caller who
+loses access mid-stream never receives that interval's events and the
+stream closes as a normal end, no error frame. Revocation events that
+close an open stream: de-enrolment, a visibility flip on the project, a
+portfolio cascade privatising the member, and admin revoke. The owner's
+stream never revokes, and archiving does not close it (archived filtering
+is not tenancy).
 
 Frame vocabulary (discriminated union, `type` names are contract):
 

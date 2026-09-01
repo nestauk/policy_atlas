@@ -11,8 +11,21 @@ import { JourneyPane } from "./journey/JourneyPane";
  * the authoritative SSE stream. Check-ins retain their precise chain
  * position; artefact streaming deliberately remains owned by the artefact
  * view (027 E.3).
+ *
+ * `isOwner` (task 033 phase 10c, contract § 11 / rubric 37): starting a run
+ * — including a fresh run after an interruption or failure — is an
+ * owner-only mutation, hidden here the same way `VisibilityControl`
+ * established rather than left clickable to a 403.
  */
-export function RunPane({ projectId, stream }: { projectId: string; stream: RunStreamState }) {
+export function RunPane({
+  projectId,
+  stream,
+  isOwner,
+}: {
+  projectId: string;
+  stream: RunStreamState;
+  isOwner: boolean;
+}) {
   const startRun = useStartRun(projectId);
   const plan = usePlan(projectId);
   const funnel = useFunnel(projectId);
@@ -44,12 +57,16 @@ export function RunPane({ projectId, stream }: { projectId: string; stream: RunS
             landscape={landscape.data}
             terminal={
               <>
-                {runStatus === "interrupted" && <InterruptedRunCard onStartFreshRun={() => startRun.mutate()} />}
+                {runStatus === "interrupted" && isOwner && (
+                  <InterruptedRunCard onStartFreshRun={() => startRun.mutate()} />
+                )}
                 {runStatus === "failed" && (
                   <div role="alert" className="border-l-2 border-l-red bg-paper p-4 shadow-[0_1px_3px_rgba(15,41,74,0.05)]">
                     <p className="text-body font-bold text-navy">The analysis failed.</p>
-                    <p className="mt-1 text-body text-grey">Whatever completed is kept and readable. You can start a fresh run.</p>
-                    <Button className="mt-3" size="sm" disabled={startRun.isPending} onClick={() => startRun.mutate()}>Start a fresh run</Button>
+                    <p className="mt-1 text-body text-grey">Whatever completed is kept and readable.{isOwner ? " You can start a fresh run." : ""}</p>
+                    {isOwner && (
+                      <Button className="mt-3" size="sm" disabled={startRun.isPending} onClick={() => startRun.mutate()}>Start a fresh run</Button>
+                    )}
                   </div>
                 )}
               </>

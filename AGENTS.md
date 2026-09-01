@@ -54,16 +54,132 @@ Tier 3 — join table + public read/write shape (`portfolio_ids`, Included
 `source_count`, additive `FindingOut.chunk_id`) + `planner_v10`. Adversarial
 review waived (owner, 2026-08-24; 032 precedent — `codex` not on PATH);
 `verification.md` and the PR must say so. **Review stack + PR pending.**
+**BUILD COMPLETE (steps 5–6, 2026-08-25) — task `033-organisations` is ready
+for the review stack.** All sixteen phases implemented and committed on
+`task/033-organisations`; exit gate green (`make verify` 2327 backend + 460
+frontend, `make audit`, `make drift-check`, `pnpm e2e` all pass);
+`docs/tasks/033-organisations/verification.md` complete. **Next: a FRESH
+conversation runs `task-cycle-review` (steps 7–10)** — the adjudicator of
+findings must not be the chat that wrote the code. The security lane runs as
+**three scoped passes** (tenancy boundary · privileged read + audit · operator
+CLI), and the heterogeneous peer lane goes to Codex (no non-Claude model has
+read this slice). **Tier 4.**
 
-Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55).
+**Open items the review and merge must carry** (detail + exact commands in
+`verification.md` § Known unverified): the built-image boto3 check (Docker
+daemon here has no registry egress); the staging httpx INFO check and the
+backfill rehearsal (AWS SSO expired — `aws sso login --profile pa-dev`); the
+attended staging live check (needs a deliverable mailbox; **no enrolment
+before the CloudFront invalidation completes**); **DPIA screening +
+processing-record update — required before merge**; and the three
+privacy-notice discrepancies escalated verbatim in `verification.md` (while
+they stand, the admin leg's only control is the trace log — state this in the
+PR). Owner decisions surfaced by the build: the org-less-admin CLI gap
+(Phase 9b escalation) and the "admin in a third org" reading of the live
+check.
+
+**Contract-stage adversarial review ran 2026-08-24** across three lanes —
+tenancy/authorization, scope/coherence, and Codex as the heterogeneous peer. All
+three recommended against approving rev 2.0; the scope lane recommended
+splitting into three slices. **Owner ruled: keep one slice, patch every
+finding.** Rev 3.0 is that rewrite. The review cost of that decision is recorded
+in the contract: **the security lane reads three unrelated threat models and
+must be scoped as three passes, not one.**
+
+**What the review found, in four kinds.** (1) *Self-contradictions* — `is_admin`
+declared the helper its only reader while two listings must consult it; "write =
+owner only, exactly like an org colleague" false in both halves, and taken
+literally it would have let an admin post chat turns on any private project in
+any organisation, untraced. (2) *Wrong about the world* — `PrivacyView` **§ 3
+already claims the email is stored** (it is not, so the live page is inaccurate
+today) and **§ 7 already promises permanent Aurora deletion on request**, which
+de-enrolment cannot honour; the repo already ships `staging-user`/`prod-user`/
+`cognito-user`, which create without enrolling and take a password in argv (this
+slice deletes them); the `boto3` non-default group broke `uv sync`, strict mypy
+and `pip-audit`; **the downgrade is data-destructive and exposes colleagues'
+chats to the Task owner**, because pre-033 code lists every conversation on a
+project — so the posture is now **roll forward, not back**. (3) *Design holes* —
+no stated NULL-`org_id` rule (and `None == None` is `True` in Python, which would
+have exposed every unenrolled user's work to every other one), nothing stamping
+`org_id` on new rows, and i.5's stated way out was a no-op loop that silently
+re-exposed the row. (4) *Single-owner assumptions baked into existing code* —
+seven routes on `conversations.py`'s conversation-id router (including a
+transcript by id), SSE that authorises once and streams through revocation, a
+stale-turn sweeper keyed to the project owner, and `update_portfolio`'s blind
+`.values(**changes)` splat. **Category 4 is why this slice is larger than it
+looked: tenancy is not a refactor of ownership checks — it invalidates
+assumptions held throughout the request, streaming, sweeping and caching paths.**
+
+**Owner call (j), 2026-08-24 — enrolment carries the person's work, private
+(amends (d)):** `user enrol` stamps `org_id` onto every `project` and
+`portfolio` the person owns **and sets those rows `visibility='private'`**, in
+one transaction with the `app_user` upsert. So **no operator action can ever
+expose a row**, and the person sees no change (NULL-`org_id` rows were already
+invisible to everyone but them). The invariant survives because a portfolio's
+members are always owned by the portfolio's owner, making one person's rows a
+closed set. Re-enrolment moves them again and re-privatises anything shared with
+the previous org; de-enrolment clears `org_id` on their rows, so an org loses
+sight of a departing member's work — **flagged as an owner decision**, since the
+alternative (the org retains access) needs ownership transfer, which is Out.
+`reassign-rows` is dropped as redundant. **The privacy notice is NOT edited by
+this slice** (owner): its three discrepancies ship as a written escalation in
+`verification.md` and `docs/deferred.md`, and while they stand the admin leg's
+only control is the trace log.
+
+**Owner call (k), 2026-08-24 — structured logging at the API entrypoint.**
+Found during the plan review, and it explains a live symptom: **nothing
+deployed has ever configured logging.** `configure_logging()` is called only by
+`runtime/orchestrate.py`'s `main()`, which runs solely via `__main__` as a local
+CLI. The container starts `uvicorn ... api.app:create_app` directly, and runs
+execute **in-process** in a `ThreadPoolExecutor` calling `runtime/runner.py` —
+there is no separate runner container (infra defines only the backend and the
+one-shot migration task). So `LOG_FORMAT=json` has always been inert and
+CloudWatch carries no structured output for anything, including the whole
+evidence-base pipeline. `orchestrate.py` *is* used by the API, but only as a
+library (`deps.py` → `live_planner_and_backends`; `planning.py` → `build_plan`,
+`persist_approved_plan`). Fixed in this slice (plan **Phase 0b**) because the
+admin trace is the admin leg's only control and an unstructured line is not an
+audit trail. **Also to check:** `configure_logging()` sets httpx to WARNING
+because httpx logs full URLs at INFO and both search providers carry `api_key`
+in the query string — the "inert today" comment assumes the function ran.
+
+**Owner calls carried into rev 3.0:** (a)-(d) from 2026-08-11 (app-owned
+ops-assigned membership; read-everything + own chats; per-row `visibility`; no
+enrolment backfill) and (e)-(i) from 2026-08-24 — portfolio takes the same
+tenancy grades; `is_admin` reads every row in every org including `private`,
+read-only; `app_user` stores the Cognito email with an admin `owner_email`
+filter; the CLI creates Cognito users but **deleting them is Out**, coupled to
+ownership transfer; and the portfolio/project invariant, deterministic with no
+prompts. **A standalone rename slice follows 033** (`project` → `task`,
+`portfolio` → `project`) and must cover this slice's code.
+
+Task `032-task-lifecycle-ia` is **merged to `dev`** (PR #55, `c6bf772`) — the app
+reshaped around one task and one lifecycle, with a named grouping above tasks:
+screen word **Task** = the `project` row, screen word **Project** = the new
+`portfolio` row. ADR 0031 (Accepted) records the vocabulary split, which stays
+open until the workspace-cluster slice. Seams in `docs/deferred.md` § Task
+lifecycle IA — note that `src/mock/api.ts` serves no `/api/v1/portfolios`.
+
+Task `033-ux-snags` is **merged to `dev`** (PR #57, `91d275d`): ten UX snags
+on the 032 surfaces, portfolio membership made **many-to-many**
+(`portfolio_membership`, ADR 0032; `portfolio_ids` replace-all PATCH;
+`source_count` = Included/`relevant` screens), and `planner_v9` →
+`planner_v10`. That merge landed on `task/033-organisations` on 2026-08-27;
+033's tenancy ADR renumbered to **0033**, and the § 6 invariant is
+generalised per the owner ruling 2026-08-27: **a task is org-visible iff any
+portfolio it is in is org-visible** (recomputed on assignment and cascade);
+its portfolios must span one organisation (409 otherwise); ops `rows assign`
+moves the connected component.
 
 Task `031-search-count-honesty` is **merged to `dev`** (PR #51, `23b3dfa`) — one
 clear meaning per user-visible source count across the P1 check-in, Where I
 looked and the publisher-country charts. Two items were escalated to the owner
-in that PR and remain true of it: the **manual browser check was not run** (it
-needs a live model route; staging's OpenAI quota is recorded exhausted below),
-and **no non-Claude reviewer read the slice** (the Codex CLI is not installed in
-this environment, so the family flip did not happen).
+in that PR and remain true of it: the **manual browser check was not run**, and
+**no non-Claude reviewer read the slice** (the Codex CLI was not installed at
+the time, so the family flip did not happen). **Corrected 2026-08-24: `codex`
+IS now on PATH**, so the heterogeneous peer lane is available again and later
+slices should route review to it — 031's gap stands as history, not as a
+standing limitation.
 
 Task `029-copilot-chat` is **merged to `dev`** (PR #47, `5f2e9b1`) — the unified
 conversation model: a project holds many conversations, Claude-Projects-style.
@@ -78,19 +194,22 @@ chain conversation → plan → run → artefact). ADR 0029 (Accepted); API surf
 Tasks 001–028 are merged (2026-08-06 merge day: dev = #33 → #44 → #45 =
 `c501022`); system **live** at `v3.policyatlas.uk`.
 
-Search-volume work carries two plan-only docs, renumbered 2026-08-06 when
-`028` was taken by the UX slice on `dev`: `029-search-volume-cap` (record
-caps per backend per round; standard/deep wall clocks removed — was
-`028-…`) and `030-multi-round-search` (rapid's clock removed, the
-runner-orchestrated round loop wired — was `029-…`). Their code is **merged to
-`dev`** (PR #46, the `37-hotfix-remove-quota` hotfix). **Numbering collision
-still to settle:** `029` and ADR `0029` belong to the copilot-chat slice, and
-`031` is now this count-honesty slice — so if the search-volume docs are
-renumbered they need `032`/`033`, not `031`/`032`. No ADRs written for them yet.
+Search-volume work is **merged to `dev`** (PR #46, the
+`37-hotfix-remove-quota` hotfix) — `029-search-volume-cap` (record caps per
+backend per round; standard/deep wall clocks removed) and
+`030-multi-round-search` (rapid's clock removed, the runner-orchestrated round
+loop wired). It **did not go through the task cycle**: each carries a `plan.md`
+and nothing else — no contract, no rubric, no verification, no ADR — so its
+`docs/tasks/029-…`/`030-…` directories are leftover plan docs, not the record of
+a cycled slice. They collide by name only, with the copilot-chat slice and with
+three merged 030 tasks. **Nothing depends on renumbering them**; the live
+behaviour is on `dev`. If the record is ever reconstructed it takes the next free
+numbers, not `029`/`030`.
 
-Known operational state: staging's OpenAI quota exhausted 2026-07-28 (runs
-fail honest-429 until billing tops up). The eval slice (former 027 draft)
-stays deferred — contract draft at unpushed `a5c9708`.
+Known operational state: staging's OpenAI quota is **healthy** (the
+2026-07-28 exhaustion was topped up; corrected here 2026-08-24 — live checks
+needing a model route are unblocked). The eval slice (former 027 draft) stays
+deferred — contract draft at unpushed `a5c9708`.
 
 Tasks `001-walking-skeleton` through `025-web-app-foundation` are
 complete (merged — 025 is PR #32, 2026-07-21: monorepo hoist

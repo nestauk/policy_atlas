@@ -8,11 +8,19 @@ import { AppShell } from "./AppShell";
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
 vi.mock("../api/queries", () => ({
-  useProject: () => ({ data: { project_id: PROJECT_ID, name: "Acme project" } }),
+  useMe: () => ({ data: { user_id: "policy-lead", display_name: "Ada Lovelace", organisation: null, is_admin: false } }),
+  useProject: () => ({
+    data: { project_id: PROJECT_ID, name: "Acme project", visibility: "org", is_owner: true },
+  }),
   useCheckIns: () => ({ data: { data: [] } }),
   // The header's project-settings popover wires rename/archive mutations,
   // which resolve their client through this hook.
   useApiClient: () => ({}),
+}));
+
+vi.mock("../api/mutations", () => ({
+  useUpdateProject: () => ({ mutate: vi.fn(), isPending: false }),
+  useArchiveProject: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 vi.mock("../auth", () => ({

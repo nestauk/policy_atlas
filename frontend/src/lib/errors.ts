@@ -10,7 +10,8 @@ export type ConflictCode =
   | "plan_stale"
   | "no_completed_run"
   | "chat_turn_in_progress"
-  | "chat_capacity";
+  | "chat_capacity"
+  | "visibility_conflict";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -25,6 +26,10 @@ export const conflictSentences: Record<ConflictCode, string> = {
   no_completed_run: "This project needs a completed run before you can chat about the evidence.",
   chat_turn_in_progress: "A chat turn is already running. Refresh to see it finish.",
   chat_capacity: "Chat is at capacity right now. Try again shortly.",
+  // Task 033 i.5, contract § 11 (lead-owned, binding): a Task's own
+  // visibility can't diverge from the Project it belongs to.
+  visibility_conflict:
+    "This Task is in a Project. Change the Project's visibility, or leave the Task out of the Project.",
 };
 
 /**

@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get Conversation
-         * @description Resolve an owned active or closed conversation deep link.
+         * @description Resolve an active or closed conversation deep link under its grade.
          */
         get: operations["get_conversation_api_v1_conversations__conversation_id__get"];
         put?: never;
@@ -64,6 +64,24 @@ export interface paths {
         /**
          * Create Chat Turn Stream
          * @description Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.
+         *
+         *     The second of the three colleague mutations (contract § 4): post a turn to
+         *     **your own** conversation. Two conditions, both resolved in the one
+         *     statement below, both 404 on failure:
+         *
+         *     - :func:`own_chat_leg` — the conversation is a chat the caller created,
+         *       or a legacy pre-033 chat on a project they own. An owner cannot post
+         *       into a colleague's chat and a colleague cannot post into the owner's.
+         *     - :func:`own_estate` on the project — the caller must still reach the
+         *       project as its owner or as a same-org colleague. This is the leg that
+         *       **dies on de-enrolment**: clearing a colleague's ``org_id`` takes their
+         *       turn POST to 404 on the next request, even though they still match
+         *       ``created_by``. Deliberately :func:`own_estate` rather than the full
+         *       read grade, so phase 8's admin leg never reaches this mutation.
+         *
+         *     No lock is taken here. The reservation's lock lives one layer down, on the
+         *     **conversation** row (``chat_turns._phase_one_turn``) — never on the
+         *     owner's project row.
          */
         post: operations["create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post"];
         delete?: never;
@@ -84,6 +102,20 @@ export interface paths {
         /**
          * Cancel Chat Turn
          * @description Explicitly stop a pending chat turn, preserving any streamed partial.
+         *
+         *     The third colleague mutation (contract § 4): cancel **your own** turn,
+         *     resolved through the same two conditions as the turn POST —
+         *     :func:`own_chat_leg` on the conversation and :func:`own_estate` on the
+         *     project — so cancellation is isolated in both directions and dies with a
+         *     colleague's org leg.
+         *
+         *     One deliberate asymmetry with the POST: no ``project.status = 'active'``
+         *     filter, which is the pre-033 behaviour preserved. Cancelling is a stop,
+         *     not a start; refusing it on an archived project would strand a pending
+         *     row for the TTL sweep with no way for its author to close it.
+         *
+         *     No lock: the write below is already a compare-and-set guarded on
+         *     ``status = 'pending'``.
          */
         post: operations["cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post"];
         delete?: never;
@@ -112,6 +144,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me
+         * @description Return the caller's identity row, provisioning it on first call.
+         *
+         *     The insert carries only what the API can know: the subject, and a display
+         *     name derived from it. `email`, `org_id` and `is_admin` are ops-owned and
+         *     are never written here — not even as explicit NULLs on the conflict path,
+         *     because `DO NOTHING` means the statement touches an existing row not at
+         *     all.
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The caller's identity, with their organisation resolved by name.
+         */
+        get: operations["get_me_api_v1_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/portfolios": {
         parameters: {
             query?: never;
@@ -121,13 +186,59 @@ export interface paths {
         };
         /**
          * List Portfolios
-         * @description List the authenticated user's portfolios with a derived task count.
+         * @description List the portfolios the caller may see, with a derived task count.
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *         scope: `all` (default) — the caller's own rows plus their
+         *             organisation's org-visible rows, and for an administrator every
+         *             row in every organisation — or `mine` for owner-only.
+         *         owner_email: Narrow to one owner's rows. **Administrators only**; any
+         *             other caller gets 422 `validation_error`, as does a value longer
+         *             than `OWNER_EMAIL_MAX` or one carrying no `@` — see
+         *             `projects.list_projects`.
+         *         page: 1-indexed page number.
+         *         page_size: Rows per page, server-capped.
+         *
+         *     Returns:
+         *         One page of portfolios.
+         *
+         *     Raises:
+         *         HTTPException: 422 when a non-administrator passes `owner_email`.
          */
         get: operations["list_portfolios_api_v1_portfolios_get"];
         put?: never;
         /**
          * Create Portfolio
          * @description Create one portfolio owned by the authenticated subject.
+         *
+         *     With `from_project_id` (contract § 6, i.1) the new portfolio inherits that
+         *     project's `visibility` **and** organisation and takes it as its first
+         *     member, all in the request's single transaction — so the invariant "a
+         *     project in a portfolio matches its portfolio on both" holds from the
+         *     moment the row exists rather than being repaired afterwards.
+         *
+         *     The source project resolves under the **write** grade, not a read grade.
+         *     Under a read grade a same-org colleague — or, once the admin leg lands, an
+         *     administrator — could pull a row they do not own into a portfolio and
+         *     change its visibility, which is the concrete admin-write escape the
+         *     contract names.
+         *
+         *     Without `from_project_id`, the portfolio is empty and its organisation is
+         *     stamped from the creator (contract § 7).
+         *
+         *     Args:
+         *         payload: The create body.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The created portfolio.
+         *
+         *     Raises:
+         *         HTTPException: 404 when `from_project_id` names a project the caller
+         *             cannot read, 403 when they can read it but do not own it.
          */
         post: operations["create_portfolio_api_v1_portfolios_post"];
         delete?: never;
@@ -145,7 +256,7 @@ export interface paths {
         };
         /**
          * Get Portfolio
-         * @description Return one portfolio when it belongs to the caller.
+         * @description Return one portfolio readable by the caller (owner or same-org colleague).
          */
         get: operations["get_portfolio_api_v1_portfolios__portfolio_id__get"];
         put?: never;
@@ -156,6 +267,45 @@ export interface paths {
         /**
          * Update Portfolio
          * @description Apply the supplied portfolio fields without changing omitted fields.
+         *
+         *     **Two code paths, not one.** `name` and `description` are written by an
+         *     explicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off
+         *     the model **by name** and routed to :func:`_cascade_visibility`, and never
+         *     joins the splat. Contract § 6, i.4 makes the cascade the only writer of
+         *     `portfolio.visibility`; a blind `.values(**changes)` hands the column to
+         *     whatever field a later slice adds to `PortfolioUpdate`, and the failure it
+         *     produces is silent — the owner sets a Project private, the UI agrees, and
+         *     its Tasks stay readable by the whole organisation. The field now exists on
+         *     the model, so the allow-list is the thing keeping that true.
+         *
+         *     `payload.visibility is not None` **is** "the caller supplied it": the
+         *     model refuses an explicit null, so the absent value and the None value are
+         *     the same state.
+         *
+         *     **Owner-only, like every other write** (contract § 3): the route resolves
+         *     through the write grade, so a same-org colleague gets 403 and an
+         *     administrator — whose leg is a *read* leg — never reaches the cascade
+         *     however wide their read becomes.
+         *
+         *     The row is locked (`for_update`) because the cascade and the assignment
+         *     path in `projects.py` write overlapping rows: without it, an assignment
+         *     that read this portfolio's visibility a moment before the cascade
+         *     committed would write the stale value onto the project it is assigning and
+         *     leave an org-visible row inside a private Project.
+         *
+         *     Args:
+         *         portfolio_id: The portfolio to update.
+         *         payload: The partial update. Supplying `visibility` runs the cascade.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The updated portfolio. Its `task_count` is the caller-visible active
+         *         member count — see the note below on what the outcome copy may claim.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the portfolio is unreadable, 403 when it is
+         *             readable but not owned.
          */
         patch: operations["update_portfolio_api_v1_portfolios__portfolio_id__patch"];
         trace?: never;
@@ -169,13 +319,45 @@ export interface paths {
         };
         /**
          * List Projects
-         * @description List the authenticated user's projects with derived latest-run state.
+         * @description List the projects the caller may see, with derived latest-run state.
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *         status_filter: `active` (default), `archived` or `all`.
+         *         scope: `all` (default) — the caller's own rows plus their
+         *             organisation's org-visible rows, and for an administrator every
+         *             row in every organisation — or `mine` for owner-only, the
+         *             pre-033 behaviour. **The default is `all`**: a `mine` default
+         *             would hide the whole feature behind a switcher.
+         *         portfolio_id: Narrow to one portfolio's members. Server-side because
+         *             `PortfolioDetailView` filtered the default 50-row global page
+         *             client-side and would silently under-report once the visible
+         *             estate spans an organisation.
+         *         owner_email: Narrow to one owner's rows. **Administrators only**; any
+         *             other caller gets 422 `validation_error`, as does a value longer
+         *             than `OWNER_EMAIL_MAX` or one carrying no `@` — the value is
+         *             logged verbatim on the admin trace, so it is bounded and shaped at
+         *             the boundary rather than in the log.
+         *         page: 1-indexed page number.
+         *         page_size: Rows per page, server-capped.
+         *
+         *     Returns:
+         *         One page of projects.
+         *
+         *     Raises:
+         *         HTTPException: 422 when a non-administrator passes `owner_email`.
          */
         get: operations["list_projects_api_v1_projects_get"];
         put?: never;
         /**
          * Create Project
          * @description Create one active project owned by the authenticated subject.
+         *
+         *     Stamps the creator's organisation onto the row (contract § 7) — NULL when
+         *     the creator is unenrolled, which leaves the row reachable by its owner
+         *     alone. `visibility` takes the column default `private` (owner amendment
+         *     2026-08-26 — new work is unshared until its owner deliberately shares it).
          */
         post: operations["create_project_api_v1_projects_post"];
         delete?: never;
@@ -193,7 +375,7 @@ export interface paths {
         };
         /**
          * Get Project
-         * @description Return one active project when it belongs to the caller.
+         * @description Return one active project readable by the caller (owner or same-org colleague).
          */
         get: operations["get_project_api_v1_projects__project_id__get"];
         put?: never;
@@ -204,6 +386,40 @@ export interface paths {
         /**
          * Update Project
          * @description Apply the supplied project fields without changing omitted fields.
+         *
+         *     Resolves under the **write** grade (contract § 3: write is owner-only), so
+         *     a same-org colleague who can now *see* this row in their listing gets 403
+         *     `forbidden` here rather than the 404 that would claim the row does not
+         *     exist — they are already looking at it.
+         *
+         *     Three of the invariant's six paths run here (contract § 6). Setting
+         *     `visibility` on a project that belongs to a portfolio is **i.5**, refused
+         *     409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
+         *     member becomes org-visible if **any** named portfolio is org-visible and
+         *     private otherwise (owner ruling 2026-08-27), promotion and demotion being
+         *     the same rule read in two directions; a set spanning two organisations is
+         *     refused 409, since a row carries one `org_id`. Targets resolve under the
+         *     **colleague-mutation** grade (owner ∪ same-org org-visible, never the
+         *     admin leg — owner ruling 2026-08-27): a colleague may add their own task
+         *     to an org-visible portfolio they did not create. Setting it to `[]` (or
+         *     `null`) is **i.6** — the row leaves with the visibility and organisation
+         *     it had.
+         *
+         *     Args:
+         *         project_id: The project to update.
+         *         payload: The partial update. A body carrying both `visibility` and
+         *             `portfolio_ids` was already rejected 422 by the model.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The updated project.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the row is unreadable, 403 when it is
+         *             readable but not owned.
+         *         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
+         *             project that belongs to a portfolio.
          */
         patch: operations["update_project_api_v1_projects__project_id__patch"];
         trace?: never;
@@ -346,13 +562,47 @@ export interface paths {
         };
         /**
          * List Conversations
-         * @description List one owned project's conversations, newest first, with turn previews.
+         * @description List one readable project's conversations the caller created, newest first.
+         *
+         *     Read-graded on the project (owner or same-org colleague may open the
+         *     library), but the conversation rows themselves are narrowed further: a
+         *     colleague sees only the chats *they* created, never the owner's or
+         *     another colleague's. The owner keeps seeing every legacy pre-033 row
+         *     (``created_by IS NULL``) as their own, in addition to rows their own
+         *     subject created since.
+         *
+         *     The filter is :func:`own_conversation_leg`, **not** its chat-narrowed
+         *     sibling: this library lists both kinds, and the owner must keep seeing
+         *     their project's planning conversation here. A colleague never matches a
+         *     planning row anyway — planning conversations are minted by the runtime
+         *     and record no ``created_by``, so only the project owner reaches them
+         *     through the legacy disjunct.
          */
         get: operations["list_conversations_api_v1_projects__project_id__conversations_get"];
         put?: never;
         /**
          * Create Conversation
          * @description Create one active chat conversation with optional entry context.
+         *
+         *     The first of the three mutations owner call (b) grants a same-org
+         *     colleague (contract § 4). The grade is :func:`chat_mutable_project` — the
+         *     owner or a colleague who can read the project, and never an admin.
+         *
+         *     **This route can only ever mint a chat**, for anybody: ``kind`` is not a
+         *     field on ``ConversationCreate`` (which forbids extras), it is written as
+         *     the literal ``"chat"`` below, and planning conversations are minted
+         *     exclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s
+         *     owner-graded project lock. So "a planning conversation can only ever be
+         *     created by the project owner" needs no branch here to hold — the shape of
+         *     the request body is what enforces it, and a body carrying ``kind`` is
+         *     rejected 422 before this function runs.
+         *
+         *     **No project-row lock** (contract § 4). The lock this route used to take
+         *     protected nothing a chat insert needs: the only uniqueness constraint on
+         *     ``conversation`` is the partial index over ``kind = 'planning' AND status
+         *     = 'active'``, which a chat row cannot collide with, and the insert itself
+         *     carries a freshly minted primary key. Kept, it would have let any
+         *     colleague block the owner's rename, archive and run-start.
          */
         post: operations["create_conversation_api_v1_projects__project_id__conversations_post"];
         delete?: never;
@@ -410,7 +660,12 @@ export interface paths {
         };
         /**
          * Stream Events
-         * @description Stream an owner-scoped durable replay followed by a non-blocking live tail.
+         * @description Stream a read-graded durable replay followed by a re-authorising live tail.
+         *
+         *     The replay is authorised once by ``_snapshot``; the tail re-authorises on
+         *     every batch through the same read legs and ends the response the moment the
+         *     caller's access is gone (contract § 5). **Re-authorisation precedes every
+         *     frame of its iteration, ephemeral ticks included** — see the loop.
          */
         get: operations["stream_events_api_v1_projects__project_id__events_get"];
         put?: never;
@@ -531,6 +786,9 @@ export interface paths {
         /**
          * Get Plan
          * @description Return the durable approved plan or latest completed durable draft.
+         *
+         *     Owner-only sweep, for the reason :func:`list_planning_turns` states: a
+         *     colleague's or an administrator's read must not write the owner's rows.
          */
         get: operations["get_plan_api_v1_projects__project_id__plan_get"];
         put?: never;
@@ -555,6 +813,15 @@ export interface paths {
         /**
          * List Planning Turns
          * @description Return the durable planning transcript in ascending conversation order.
+         *
+         *     **Read-graded, and the sweep is owner-only.** The grade here is the read
+         *     grade — owner ∪ same-org colleague ∪ administrator — but
+         *     :func:`_expire_stale_pending_turns` is a *write*, and contract § 3 makes
+         *     the admin leg read-only: a support read that fails somebody else's pending
+         *     planning turn is a mutation nobody asked for and nothing records. So the
+         *     sweep runs only for the owner, whose own turn it is. Nothing is lost: the
+         *     owner's own GET sweeps, and every mutating planning path sweeps under the
+         *     write grade before it does anything.
          */
         get: operations["list_planning_turns_api_v1_projects__project_id__planning_turns_get"];
         put?: never;
@@ -602,7 +869,7 @@ export interface paths {
         };
         /**
          * Get Run
-         * @description Return one owned project's capability run, or the opaque 404.
+         * @description Return one readable project's capability run, or the opaque 404.
          */
         get: operations["get_run_api_v1_projects__project_id__runs__run_id__get"];
         put?: never;
@@ -2011,6 +2278,38 @@ export interface components {
             user_message: string;
         };
         /**
+         * MeOut
+         * @description The authenticated caller's own identity row.
+         *
+         *     Returned by `GET /api/v1/me`, which also provisions the row on first call
+         *     (contract § 2). The frontend keys the whole tenancy UI off this shape: a
+         *     `null` organisation hides the scope switcher entirely, which is what makes
+         *     the slice a dark launch for anyone not yet enrolled.
+         *
+         *     Args:
+         *         user_id: The caller's token subject — the identity the API keys on.
+         *         display_name: How the caller is named on screen. Never an address:
+         *             the ops-set name, or a rendering derived from `user_id` for a
+         *             caller provisioned by their first `/me` call.
+         *         email: The caller's own address once ops has resolved it, else
+         *             `None`. Ops- and admin-facing; never another person's.
+         *         organisation: The caller's organisation, or `None` when unenrolled.
+         *         is_admin: Whether the caller holds the read-across-organisations
+         *             support role. Read-only in every sense: no route and no request
+         *             body can set it, and no write path consults it.
+         */
+        MeOut: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email?: string | null;
+            /** Is Admin */
+            is_admin: boolean;
+            organisation?: components["schemas"]["OrganisationRef"] | null;
+            /** User Id */
+            user_id: string;
+        };
+        /**
          * OptionResponse
          * @description Response picking a canonical or authored option.
          *
@@ -2036,6 +2335,23 @@ export interface components {
             params: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * OrganisationRef
+         * @description The organisation the caller belongs to.
+         *
+         *     Args:
+         *         org_id: The organisation's identity.
+         *         name: Its display name.
+         */
+        OrganisationRef: {
+            /** Name */
+            name: string;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
         };
         /**
          * PageMeta
@@ -2505,10 +2821,18 @@ export interface components {
          *         name: Portfolio display name, 1-200 characters. Outer whitespace is
          *             stripped before the length constraint is applied.
          *         description: Optional free-text description.
+         *         from_project_id: Seed the new portfolio from an existing project the
+         *             caller **owns**: the portfolio inherits that project's
+         *             `visibility` and organisation and takes it as its first member,
+         *             in one transaction (contract § 6, i.1). Omit to create an empty
+         *             portfolio. This amends ADR 0031 decision 4 ("assignment is a
+         *             PATCH, not a field on create"); ADR 0033 records the amendment.
          */
         PortfolioCreate: {
             /** Description */
             description?: string | null;
+            /** From Project Id */
+            from_project_id?: string | null;
             /** Name */
             name: string;
         };
@@ -2521,8 +2845,20 @@ export interface components {
          *         name: Current display name.
          *         description: Current description, or `None` if not set.
          *         created_at: When the portfolio was created.
-         *         task_count: How many of the caller's active projects are assigned to
-         *             this portfolio, derived per request and never cached on the row.
+         *         task_count: How many active projects **the caller may read, in the
+         *             caller's own organisation** are assigned to this portfolio,
+         *             derived per request and never cached on the row (contract § 8).
+         *             A colleague's private member is not counted, and an
+         *             administrator's count stays their own organisation's count rather
+         *             than a cross-organisation sum.
+         *         visibility: How widely the row is shared (task 033). `org` where the
+         *             organisation may read it, `private` where only its owner may.
+         *         is_owner: Whether the *calling* user owns this row. Per-caller, not a
+         *             property of the row.
+         *         owner_display: How to name the row's owner — the owner's display
+         *             name, or a rendering derived from their subject when they have no
+         *             identity row yet. **Never an email** (contract § 3b). `None` when
+         *             the row has no owner at all.
          */
         PortfolioOut: {
             /**
@@ -2532,8 +2868,12 @@ export interface components {
             created_at: string;
             /** Description */
             description?: string | null;
+            /** Is Owner */
+            is_owner: boolean;
             /** Name */
             name: string;
+            /** Owner Display */
+            owner_display: string | null;
             /**
              * Portfolio Id
              * Format: uuid
@@ -2541,21 +2881,51 @@ export interface components {
             portfolio_id: string;
             /** Task Count */
             task_count: number;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "org" | "private";
         };
         /**
          * PortfolioUpdate
          * @description Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).
          *
          *     Args:
-         *         name: New display name, when renaming. Omit to leave unchanged.
-         *         description: New description, when changing it. Omit to leave
-         *             unchanged.
+         *         name: New display name, when renaming. Omit to leave unchanged; an
+         *             explicit `null` is refused 422 (the column is NOT NULL).
+         *         description: New description, when changing it, or an explicit `null`
+         *             to clear it. Omit to leave unchanged.
+         *         visibility: How widely to share this portfolio **and every project
+         *             assigned to it** — supplying it runs the i.4 cascade, not a field
+         *             write (contract § 6). Owner-only. Omit to leave unchanged; an
+         *             explicit `null` is refused 422, because there is no such thing as
+         *             "no visibility" (the column is NOT NULL) and silently ignoring it
+         *             would give one request shape two outcomes.
+         *
+         *     Note:
+         *         The field arrives here **with** the cascade and never without it
+         *         (contract § 6, i.4: the cascade is the only writer of
+         *         `portfolio.visibility`, because a portfolio's visibility change must
+         *         carry every member with it). The route keeps it out of its patchable
+         *         column list and routes it explicitly, so no splat can ever hand the
+         *         column to this field: an owner setting a Project private and leaving
+         *         its Tasks readable by the whole organisation is not a state this
+         *         route can produce.
+         *
+         *         Unlike `ProjectUpdate`, no pairing is rejected: `name`, `description`
+         *         and `visibility` are independent writes with no ordering between
+         *         them, so one body carrying all three has exactly one outcome. The
+         *         pairing `ProjectUpdate` refuses is ambiguous for the opposite reason —
+         *         there `visibility` and `portfolio_id` fight over the same column.
          */
         PortfolioUpdate: {
             /** Description */
             description?: string | null;
             /** Name */
             name?: string | null;
+            /** Visibility */
+            visibility?: ("org" | "private") | null;
         };
         /**
          * ProgressEvent
@@ -2607,6 +2977,17 @@ export interface components {
          *             `relevant`), or `None` when no run has started. `None` and `0`
          *             differ: `None` means the question has not been asked yet, `0`
          *             means a run asked and none are Included.
+         *         visibility: How widely the row is shared (task 033). `org` where the
+         *             organisation may read it, `private` where only its owner may.
+         *         is_owner: Whether the *calling* user owns this row. Per-caller, not a
+         *             property of the row: the same project is `true` for its owner and
+         *             `false` for a colleague reading it. Every read-only affordance on
+         *             screen keys off this.
+         *         owner_display: How to name the row's owner — the owner's display
+         *             name, or a rendering derived from their subject when they have no
+         *             identity row yet. **Never an email** (contract § 3b). `None` when
+         *             the row has no owner at all (the CLI-created rows), leaving the
+         *             placeholder glyph to the frontend.
          */
         ProjectOut: {
             /** Archived At */
@@ -2616,9 +2997,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Is Owner */
+            is_owner: boolean;
             latest_run?: components["schemas"]["LatestRun"] | null;
             /** Name */
             name: string;
+            /** Owner Display */
+            owner_display: string | null;
             /** Portfolio Ids */
             portfolio_ids?: string[];
             /**
@@ -2640,6 +3025,11 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "org" | "private";
         };
         /**
          * ProjectUpdate
@@ -2652,6 +3042,17 @@ export interface components {
          *         portfolio_ids: Portfolios to assign this project to. Omit to leave
          *             membership unchanged; `[]` unassigns every portfolio; a list
          *             replaces the set.
+         *         visibility: How widely to share this project. Owner-only. Omit to
+         *             leave unchanged; an explicit `null` is refused 422. Cannot be
+         *             combined with `portfolio_ids` in one body — see
+         *             :meth:`reject_visibility_with_portfolio`.
+         *
+         *     Note:
+         *         `name` and `visibility` back NOT NULL columns, so an explicit `null`
+         *         on either is refused rather than treated as "unchanged" — see
+         *         :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`
+         *         are not: null clears the question, and null on `portfolio_ids` is
+         *         read as `[]` (unassign every portfolio).
          */
         ProjectUpdate: {
             /** Name */
@@ -2660,6 +3061,8 @@ export interface components {
             portfolio_ids?: string[] | null;
             /** Question */
             question?: string | null;
+            /** Visibility */
+            visibility?: ("org" | "private") | null;
         };
         /**
          * ProjectUpdatedFrame
@@ -3408,9 +3811,31 @@ export interface operations {
             };
         };
     };
+    get_me_api_v1_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+        };
+    };
     list_portfolios_api_v1_portfolios_get: {
         parameters: {
             query?: {
+                scope?: "all" | "mine";
+                owner_email?: string | null;
                 page?: number;
                 page_size?: number;
             };
@@ -3543,6 +3968,9 @@ export interface operations {
         parameters: {
             query?: {
                 status?: "active" | "archived" | "all";
+                scope?: "all" | "mine";
+                portfolio_id?: string | null;
+                owner_email?: string | null;
                 page?: number;
                 page_size?: number;
             };

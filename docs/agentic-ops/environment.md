@@ -1,7 +1,13 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–029 — 029 adds the chat surface: no new env vars required locally,
+stands (tasks 001–033; 030–032 change no env; 033 adds the `ops` dependency
+group to `[tool.uv] default-groups` — synced automatically by `uv run`, excluded
+from the image — plus the organisation schema, so run `alembic upgrade head`
+against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)
+is tunnel-only and needs no local setup, but `make dev-seed` puts the tenancy
+UI on screen locally — it enrols dev-user/dev-colleague/dev-admin into
+"Dev Org" on the dev DB via the real enrol logic with a faked Cognito; 029 adds the chat surface: no new env vars required locally,
 `POLICY_ATLAS_CHAT_MODEL` optional with an application default; a live chat turn needs the
 funded OpenAI key `make dev` already loads; 025 hoists the Python project to `backend/` and adds the `frontend/`
 web app; 026 adds `infra/` (CDK, own venv from `infra/requirements*.txt`; `make -C infra test`

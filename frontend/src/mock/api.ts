@@ -15,8 +15,9 @@ import {
   mockFunnel,
   mockGroups,
   mockLandscape,
+  mockMeUnenrolled,
   mockPlanReady,
-  mockPortfolios,
+  mockPortfolio,
   mockProject,
   mockSourceDossiers,
   seedPlanningTurns,
@@ -32,6 +33,9 @@ import {
   MOCK_PROJECT_ID,
   MOCK_RUN_ID,
 } from "./fixtures";
+
+type MeOut = components["schemas"]["MeOut"];
+type PortfolioOut = components["schemas"]["PortfolioOut"];
 
 type RunOut = components["schemas"]["RunOut"];
 type PlanningTranscriptTurnOut = components["schemas"]["PlanningTranscriptTurnOut"];
@@ -167,6 +171,18 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 
+// --- Identity + portfolios (task 033 phase 10a) --------------------------
+// `currentMe` defaults to the unenrolled fixture — dark launch: every
+// pre-033 mock journey sees `organisation: null` and stays unchanged. Tests
+// that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
+let currentMe: MeOut = { ...mockMeUnenrolled };
+let mockPortfolios: PortfolioOut[] = [{ ...mockPortfolio }];
+
+/** Test helper: switch the mock's `/me` identity (e.g. to `mockMeEnrolled`). */
+export function setMockMe(me: MeOut) {
+  currentMe = { ...me };
+}
+
 /** Reset every scripted scenario; useful for isolated mock tests. */
 export function resetMockScenario() {
   checkInAnswer = createDeferred();
@@ -180,6 +196,8 @@ export function resetMockScenario() {
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
   currentPlan = { ...mockPlanReady };
+  currentMe = { ...mockMeUnenrolled };
+  mockPortfolios = [{ ...mockPortfolio }];
 }
 
 function currentMockScenario(requestUrl: URL): MockScenario {
@@ -215,8 +233,24 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------
   if (method === "PATCH" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) {
     const body = await requestBody(request, init);
+    // Task 033 phase 10b: i.5 — a Task's own visibility can't be set while
+    // it's in a Project (portfolio membership). The mock mirrors the real
+    // 409 `visibility_conflict` so the control's error line is exercisable
+    // in mock mode too, not just against a live backend. Checked before any
+    // field is assigned, matching the real API's all-or-nothing conflict —
+    // a 409 must leave every field (including a same-body rename) untouched.
+    if (
+      isRecord(body) &&
+      (body.visibility === "org" || body.visibility === "private") &&
+      (mockProject.portfolio_ids?.length ?? 0) > 0
+    ) {
+      return json({ error: { code: "visibility_conflict", message: "Task is in a Project." } }, 409);
+    }
     if (isRecord(body) && typeof body.name === "string") mockProject.name = body.name;
     if (isRecord(body) && typeof body.question === "string") mockProject.question = body.question;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      mockProject.visibility = body.visibility;
+    }
     if (isRecord(body) && Array.isArray(body.portfolio_ids)) {
       mockProject.portfolio_ids = body.portfolio_ids.filter(
         (value): value is string => typeof value === "string",
@@ -333,8 +367,44 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
 
+  // --- Identity + portfolios (task 033 phase 10a) -------------------------
+  if (method === "GET" && path.endsWith("/api/v1/me")) return json(currentMe);
   if (method === "GET" && path.endsWith("/api/v1/portfolios")) return json(page(mockPortfolios));
-  if (method === "GET" && path.endsWith("/api/v1/projects")) return json(page([mockProject]));
+  const portfolioDetailMatch = /\/api\/v1\/portfolios\/([^/]+)$/.exec(path);
+  if (method === "GET" && portfolioDetailMatch) {
+    const found = mockPortfolios.find((portfolio) => portfolio.portfolio_id === portfolioDetailMatch[1]);
+    return found !== undefined ? json(found) : json({ detail: "resource not found" }, 404);
+  }
+  // Task 033 phase 10b: the visibility control's cascade (i.4) — the mock's
+  // one project is the portfolio's only member, so "every member follows"
+  // is a single assignment, but the shape (mutate both rows, return the
+  // updated `task_count`) matches what the visibility-outcome copy reads.
+  if (method === "PATCH" && portfolioDetailMatch) {
+    const found = mockPortfolios.find((portfolio) => portfolio.portfolio_id === portfolioDetailMatch[1]);
+    if (found === undefined) return json({ detail: "resource not found" }, 404);
+    const body = await requestBody(request, init);
+    if (isRecord(body) && typeof body.name === "string") found.name = body.name;
+    if (isRecord(body) && typeof body.description === "string") found.description = body.description;
+    if (isRecord(body) && (body.visibility === "org" || body.visibility === "private")) {
+      found.visibility = body.visibility;
+      if (mockProject.portfolio_ids?.includes(found.portfolio_id) === true) {
+        mockProject.visibility = body.visibility;
+      }
+    }
+    return json(found);
+  }
+
+  // `portfolio_id` narrows to one portfolio's members, server-side — mirrors
+  // the real list's filter (contract task 033 phase 10a: `PortfolioDetailView`
+  // no longer filters the global page client-side).
+  if (method === "GET" && path.endsWith("/api/v1/projects")) {
+    const portfolioId = url.searchParams.get("portfolio_id");
+    const rows =
+      portfolioId === null || mockProject.portfolio_ids?.includes(portfolioId) === true
+        ? [mockProject]
+        : [];
+    return json(page(rows));
+  }
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}`)) return json(mockProject);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/funnel`)) return json(mockFunnel);
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/landscape`)) return json(mockLandscape);

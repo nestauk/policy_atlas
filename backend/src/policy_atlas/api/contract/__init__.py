@@ -146,6 +146,7 @@ from .sse import (
     StageStartedFrame,
     TickFrame,
 )
+from .tenancy import MeOut, OrganisationRef, Visibility
 
 __all__ = [
     "EVIDENCE_STATUS_INCLUDED",
@@ -226,7 +227,9 @@ __all__ = [
     "LandscapeOut",
     "LatestRun",
     "LatestTurnPreviewOut",
+    "MeOut",
     "OptionResponse",
+    "OrganisationRef",
     "Page",
     "PageMeta",
     "PlanDraft",
@@ -271,4 +274,5 @@ __all__ = [
     "ThemeSourceOut",
     "ThemeOut",
     "TickFrame",
+    "Visibility",
 ]

@@ -19,6 +19,8 @@ export type TaskListItem = {
   latest_run?: LatestRun;
   portfolio_ids?: string[];
   source_count?: number | null;
+  is_owner?: boolean;
+  owner_display?: string | null;
 };
 
 function portfolioPrefix(
@@ -162,6 +164,11 @@ type TaskListPanelProps = {
   isError?: boolean;
   onRetry?: () => void;
   loaded?: boolean;
+  /** Task 033 phase 10b: render the `owner_display` column, and what a null
+   *  value renders as (see `ownerLabelRule` — the em dash by default, or
+   *  the admin-wide-list's "No organisation" when the caller passes it). */
+  showOwner?: boolean;
+  ownerlessLabel?: string;
 };
 
 /** Shared task list body: loading, empty, and rows. */
@@ -173,6 +180,8 @@ export function TaskListPanel({
   isError = false,
   onRetry,
   loaded = true,
+  showOwner = false,
+  ownerlessLabel,
 }: TaskListPanelProps) {
   if (isPending) {
     return (
@@ -217,6 +226,8 @@ export function TaskListPanel({
             sourceCount={row.source_count}
             updatedAt={row.updated_at}
             latestRun={row.latest_run}
+            ownerDisplay={showOwner ? (row.owner_display ?? null) : undefined}
+            ownerlessLabel={ownerlessLabel}
           />
         </li>
       ))}

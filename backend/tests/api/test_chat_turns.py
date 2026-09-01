@@ -8,11 +8,12 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import event, func, select, update
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api import chat_turns
 from policy_atlas.api.app import ApiCapacity, ApiConflict
+from policy_atlas.api.chat_turns import ChatTurnResult
 from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
 from policy_atlas.evidence_base.synthesis.synthesis_tools import build_section_tools
 from policy_atlas.runtime.chat_backend import StubChatBackend
@@ -54,8 +55,17 @@ class CancellingChatBackend(StubChatBackend):
         return super().chat_turn(*args, on_delta=on_delta, **kwargs)
 
 
-def _chat(engine: Engine, *, owner: str = "chat-owner") -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-    """Create an owned active chat over a project fixture."""
+def _chat(
+    engine: Engine, *, owner: str = "chat-owner", created_by: str | None = None
+) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
+    """Create an active chat over a project fixture.
+
+    ``created_by`` defaults to ``None``, the legacy pre-033 shape: an
+    unattributed chat belongs to the project owner through the contract's NULL
+    disjunct, so every case in this file that predates task 033 goes on
+    exercising exactly what it always did. Pass it to make the chat somebody
+    else's — a colleague's.
+    """
     project_id, scope_id = _seed_project(engine)
     conversation_id = uuid.uuid4()
     with engine.begin() as conn:
@@ -73,6 +83,7 @@ def _chat(engine: Engine, *, owner: str = "chat-owner") -> tuple[uuid.UUID, uuid
                 created_at=now(),
                 closed_at=None,
                 archived_at=None,
+                created_by=created_by,
             )
         )
     return project_id, scope_id, conversation_id
@@ -299,7 +310,9 @@ def test_explicit_cancel_keeps_partial_prose_without_citations(
         _cleanup(engine, project_id)
 
 
-def _second_chat_in_same_project(engine: Engine, project_id: uuid.UUID) -> uuid.UUID:
+def _second_chat_in_same_project(
+    engine: Engine, project_id: uuid.UUID, *, created_by: str | None = None
+) -> uuid.UUID:
     """Insert an additional active chat conversation onto an existing project."""
     conversation_id = uuid.uuid4()
     with engine.begin() as conn:
@@ -314,29 +327,44 @@ def _second_chat_in_same_project(engine: Engine, project_id: uuid.UUID) -> uuid.
                 created_at=now(),
                 closed_at=None,
                 archived_at=None,
+                created_by=created_by,
             )
         )
     return conversation_id
 
 
-def _insert_pending_turn(engine: Engine, *, conversation_id: uuid.UUID) -> None:
-    """Insert a fresh (non-stale) pending chat_turn row directly."""
+def _insert_pending_turn(
+    engine: Engine,
+    *,
+    conversation_id: uuid.UUID,
+    turn_index: int = 0,
+    stale: bool = False,
+) -> uuid.UUID:
+    """Insert one pending chat_turn row directly and return its id.
+
+    ``stale=True`` back-dates ``created_at`` past ``_PENDING_TTL``, which is
+    how the sweeper cases simulate a turn whose process died — the same
+    direct-timestamp trick `test_stale_pending_is_failed_before_reservation`
+    uses.
+    """
+    turn_id = uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
             chat_turn.insert().values(
-                id=uuid.uuid4(),
+                id=turn_id,
                 conversation_id=conversation_id,
-                turn_index=0,
+                turn_index=turn_index,
                 client_turn_id=uuid.uuid4(),
                 user_message="in flight",
                 answer=None,
                 answer_payload=None,
                 capability_run_id=None,
                 status="pending",
-                created_at=now(),
+                created_at=now() - timedelta(minutes=11) if stale else now(),
                 completed_at=None,
             )
         )
+    return turn_id
 
 
 class FailOnceChatBackend(StubChatBackend):
@@ -1438,5 +1466,402 @@ def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
             chat_backend=StubChatBackend(),
         )
         assert set(captured["tools"]) == {"search_chunks", "query_findings", "lookup"}
+    finally:
+        _cleanup(engine, project_id)
+
+
+# --- Task 033 phase 5: the cap, the sweeper and the reservation lock --------
+#
+# Both the pending cap and `_expire_stale_pending_turns` were keyed to
+# `project.owner_user_id`. They re-key to the conversation's creator together,
+# because re-keying either alone is a defect the contract names: a colleague
+# whose turns die would be rate-limited permanently with no operator lever,
+# and an owner's sweep would silently fail other people's in-flight turns.
+
+
+def _owner_of(engine: Engine, project_id: uuid.UUID) -> str:
+    """Read one project's owner subject."""
+    with engine.connect() as conn:
+        return str(
+            conn.execute(
+                select(project.c.owner_user_id).where(project.c.project_id == project_id)
+            ).scalar_one()
+        )
+
+
+def _status_of(engine: Engine, turn_id: uuid.UUID) -> str:
+    """Read one durable turn's status."""
+    with engine.connect() as conn:
+        return str(
+            conn.execute(select(chat_turn.c.status).where(chat_turn.c.id == turn_id)).scalar_one()
+        )
+
+
+def _statements(conn: Any) -> list[str]:
+    """Record every SQL statement the connection issues from now on."""
+    recorded: list[str] = []
+
+    def _record(
+        _conn: Any, _cursor: Any, statement: str, *_rest: Any
+    ) -> None:  # pragma: no cover - trivial
+        recorded.append(statement)
+
+    event.listen(conn, "before_cursor_execute", _record)
+    return recorded
+
+
+def test_pending_cap_is_keyed_to_the_acting_user_not_the_project_owner(engine: Engine) -> None:
+    """Neither party's in-flight turns can exhaust the other's allowance.
+
+    Before task 033 the cap counted every pending turn under a project the
+    *owner* held, so the first colleague to open two chats would have locked
+    the owner out of their own project — and vice versa. It now counts the
+    turns of whoever is acting, over the conversations they created.
+    """
+    owner = f"cap-owner-{uuid.uuid4()}"
+    colleague = f"cap-colleague-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, owner_chat = _chat(engine, owner=owner)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        owner_second = _second_chat_in_same_project(engine, project_id)
+        owner_third = _second_chat_in_same_project(engine, project_id)
+        colleague_chat = _second_chat_in_same_project(engine, project_id, created_by=colleague)
+        colleague_second = _second_chat_in_same_project(engine, project_id, created_by=colleague)
+        colleague_third = _second_chat_in_same_project(engine, project_id, created_by=colleague)
+
+        # The owner holds two pending turns, on chats that record no author —
+        # the legacy disjunct is what makes them count as theirs.
+        _insert_pending_turn(engine, conversation_id=owner_chat)
+        _insert_pending_turn(engine, conversation_id=owner_second)
+
+        def _reserve(conversation_id: uuid.UUID, user_id: str) -> uuid.UUID | ChatTurnResult:
+            with engine.begin() as conn:
+                return chat_turns._phase_one_turn(
+                    conn,
+                    project_id=project_id,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    message="a question",
+                    client_turn_id=uuid.uuid4(),
+                )
+
+        with pytest.raises(ApiCapacity) as owner_capped:
+            _reserve(owner_third, owner)
+        assert owner_capped.value.code == "chat_capacity"
+
+        # The colleague, at zero pending turns of their own, is unaffected by
+        # the owner sitting at the cap on the very same project.
+        assert isinstance(_reserve(colleague_chat, colleague), uuid.UUID)
+
+        # And the reverse: the colleague's own two now cap the colleague...
+        _insert_pending_turn(engine, conversation_id=colleague_second)
+        with pytest.raises(ApiCapacity) as colleague_capped:
+            _reserve(colleague_third, colleague)
+        assert colleague_capped.value.code == "chat_capacity"
+
+        # ...while the owner, whose two pending turns we now clear, is not.
+        with engine.begin() as conn:
+            conn.execute(
+                update(chat_turn)
+                .where(chat_turn.c.conversation_id.in_([owner_chat, owner_second]))
+                .values(status="completed", answer="done", completed_at=now())
+            )
+        assert isinstance(_reserve(owner_third, owner), uuid.UUID)
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_pending_cap_still_spans_every_project_the_acting_user_chats_in(engine: Engine) -> None:
+    """The cap's *scope* is unchanged — only its subject was re-keyed.
+
+    It has always been one allowance per person across the whole estate, not a
+    per-project or per-conversation budget, and it stays that way: a colleague
+    holding two pending turns on two different projects is capped on a third.
+    What changed is who "their" turns are — the conversations they created,
+    rather than every conversation under a project someone else owns.
+    """
+    colleague = f"cap-colleague-{uuid.uuid4()}"
+    project_ids: list[uuid.UUID] = []
+    try:
+        project_a, _scope_a, chat_a = _chat(
+            engine, owner=f"cap-owner-a-{uuid.uuid4()}", created_by=colleague
+        )
+        project_b, _scope_b, chat_b = _chat(
+            engine, owner=f"cap-owner-b-{uuid.uuid4()}", created_by=colleague
+        )
+        project_c, scope_c, chat_c = _chat(
+            engine, owner=f"cap-owner-c-{uuid.uuid4()}", created_by=colleague
+        )
+        project_ids = [project_a, project_b, project_c]
+        _walk(engine, project_id=project_c, scope_id=scope_c, status="succeeded")
+        _insert_pending_turn(engine, conversation_id=chat_a)
+        _insert_pending_turn(engine, conversation_id=chat_b)
+
+        with pytest.raises(ApiCapacity) as raised, engine.begin() as conn:
+            chat_turns._phase_one_turn(
+                conn,
+                project_id=project_c,
+                conversation_id=chat_c,
+                user_id=colleague,
+                message="a third question",
+                client_turn_id=uuid.uuid4(),
+            )
+        assert raised.value.code == "chat_capacity"
+
+        # The owner of project C holds no pending turns of their own and is
+        # not capped by a colleague's spend on two other people's projects.
+        owners_own = _second_chat_in_same_project(engine, project_c)
+        with engine.begin() as conn:
+            reserved = chat_turns._phase_one_turn(
+                conn,
+                project_id=project_c,
+                conversation_id=owners_own,
+                user_id=_owner_of(engine, project_c),
+                message="the owner's own question",
+                client_turn_id=uuid.uuid4(),
+            )
+        assert isinstance(reserved, uuid.UUID)
+    finally:
+        for project_id in project_ids:
+            _cleanup(engine, project_id)
+
+
+def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: Engine) -> None:
+    """The sweep re-keys with the cap, and only ever touches the actor's own turns.
+
+    Two halves, both named by the contract. The owner acting must **not** fail
+    a colleague's in-flight turn — nor even a colleague's expired one, which
+    is not theirs to close. And the colleague's own expired turn must be swept
+    when *they* next act, or the re-keyed cap would count a dead turn against
+    them for ever.
+    """
+    owner = f"sweep-owner-{uuid.uuid4()}"
+    colleague = f"sweep-colleague-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, owner_chat = _chat(engine, owner=owner)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        owner_second = _second_chat_in_same_project(engine, project_id)
+        colleague_stale_chat = _second_chat_in_same_project(
+            engine, project_id, created_by=colleague
+        )
+        colleague_live_chat = _second_chat_in_same_project(
+            engine, project_id, created_by=colleague
+        )
+        colleague_next_chat = _second_chat_in_same_project(
+            engine, project_id, created_by=colleague
+        )
+
+        owner_stale = _insert_pending_turn(engine, conversation_id=owner_chat, stale=True)
+        colleague_stale = _insert_pending_turn(
+            engine, conversation_id=colleague_stale_chat, stale=True
+        )
+        colleague_live = _insert_pending_turn(engine, conversation_id=colleague_live_chat)
+
+        with engine.begin() as conn:
+            chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=owner_second,
+                user_id=owner,
+                message="the owner acts",
+                client_turn_id=uuid.uuid4(),
+            )
+        assert _status_of(engine, owner_stale) == "failed"
+        # The owner's sweep reaches neither of the colleague's rows.
+        assert _status_of(engine, colleague_live) == "pending"
+        assert _status_of(engine, colleague_stale) == "pending"
+
+        with engine.begin() as conn:
+            chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=colleague_next_chat,
+                user_id=colleague,
+                message="the colleague acts",
+                client_turn_id=uuid.uuid4(),
+            )
+        assert _status_of(engine, colleague_stale) == "failed"
+        assert _status_of(engine, colleague_live) == "pending"
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
+    engine: Engine,
+) -> None:
+    """The cap survives concurrency, on two real connections.
+
+    The row lock this reservation takes is on the **conversation**, and the cap
+    it has to enforce is on the **acting user across every conversation they
+    created**. Two POSTs from one person to two different chats therefore lock
+    two different rows: neither sees the other's uncommitted insert, both count
+    one pending turn against a cap of two, and both proceed — three pending
+    turns from an allowance of two, repeatable to any width.
+
+    Written with an explicit hand-off rather than by racing two threads and
+    hoping: the first transaction reserves and is **held open**, the second is
+    started in a thread and must still be waiting when we look. Then the first
+    commits, and the second — now able to see the row it was racing — is
+    refused for capacity. Unserialized, it returns a turn id here instead.
+    """
+    actor = f"cap-race-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, first_chat = _chat(engine, owner=actor)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        second_chat = _second_chat_in_same_project(engine, project_id)
+        held_chat = _second_chat_in_same_project(engine, project_id)
+        # One pending turn already in flight, so the cap of two allows exactly
+        # one of the two reservations below.
+        _insert_pending_turn(engine, conversation_id=held_chat)
+
+        started = threading.Event()
+        finished = threading.Event()
+        outcome: list[Any] = []
+
+        def second_reservation() -> None:
+            started.set()
+            try:
+                with engine.begin() as conn:
+                    outcome.append(
+                        chat_turns._phase_one_turn(
+                            conn,
+                            project_id=project_id,
+                            conversation_id=second_chat,
+                            user_id=actor,
+                            message="the simultaneous question",
+                            client_turn_id=uuid.uuid4(),
+                        )
+                    )
+            except BaseException as exc:  # noqa: BLE001 - reported to the test
+                outcome.append(exc)
+            finally:
+                finished.set()
+
+        with engine.begin() as conn:
+            reserved = chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=first_chat,
+                user_id=actor,
+                message="the first question",
+                client_turn_id=uuid.uuid4(),
+            )
+            assert isinstance(reserved, uuid.UUID)
+            racer = threading.Thread(target=second_reservation)
+            racer.start()
+            assert started.wait(5.0)
+            # Still blocked: the first transaction holds the per-user lock, so
+            # the second cannot reach its count until this one commits.
+            assert not finished.wait(0.5)
+
+        racer.join(timeout=10.0)
+        assert finished.is_set()
+        assert len(outcome) == 1
+        assert isinstance(outcome[0], ApiCapacity), outcome[0]
+        assert outcome[0].code == "chat_capacity"
+
+        with engine.connect() as conn:
+            pending = conn.execute(
+                select(func.count())
+                .select_from(
+                    chat_turn.join(
+                        conversation, chat_turn.c.conversation_id == conversation.c.id
+                    )
+                )
+                .where(conversation.c.project_id == project_id)
+                .where(chat_turn.c.status == "pending")
+            ).scalar_one()
+        assert pending == chat_turns._USER_PENDING_CAP
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_the_per_user_lock_is_taken_before_the_pending_turns_are_counted(
+    engine: Engine,
+) -> None:
+    """Order, asserted structurally — a lock after the count serializes nothing.
+
+    The concurrency case above is the behavioural proof; this is the one that
+    stays readable when someone moves a line. The advisory lock has to be held
+    *before* the count is read, or the two transactions still both count below
+    the cap and only serialize the insert that follows.
+    """
+    actor = f"cap-order-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, chat_id = _chat(engine, owner=actor)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+
+        with engine.begin() as conn:
+            issued = _statements(conn)
+            chat_turns._phase_one_turn(
+                conn,
+                project_id=project_id,
+                conversation_id=chat_id,
+                user_id=actor,
+                message="a question",
+                client_turn_id=uuid.uuid4(),
+            )
+
+        locks = [index for index, sql in enumerate(issued) if "pg_advisory_xact_lock" in sql]
+        counts = [
+            index
+            for index, sql in enumerate(issued)
+            if "count(*)" in sql.lower() and "chat_turn" in sql
+        ]
+        assert len(locks) == 1, issued
+        assert counts, issued
+        assert locks[0] < counts[0]
+        # Transaction-scoped, not session-scoped: a `pg_advisory_lock` here
+        # would outlive the reservation and leak into the pooled connection.
+        assert "pg_advisory_lock(" not in issued[locks[0]]
+    finally:
+        _cleanup(engine, project_id)
+
+
+def test_reservation_locks_the_conversation_row_never_the_owners_project(
+    engine: Engine,
+) -> None:
+    """Contract § 4's lock rule, asserted structurally rather than by timing.
+
+    The reservation used to take `SELECT … FOR UPDATE` on the owner's project
+    row. A colleague doing that would block the owner's own rename, archive
+    and run-start for the length of their transaction, so the lock moved to
+    the `conversation` row — the row the reservation actually mutates.
+
+    `OF conversation` is the load-bearing detail: the statement joins
+    `project`, and a bare `FOR UPDATE` would lock the joined project row too,
+    silently reinstating exactly what the contract forbids. Asserted for the
+    colleague *and* the owner — the path is the same one for both, which is
+    why there is no caller-dependent lock to get wrong.
+    """
+    owner = f"lock-owner-{uuid.uuid4()}"
+    colleague = f"lock-colleague-{uuid.uuid4()}"
+    project_id: uuid.UUID | None = None
+    try:
+        project_id, scope_id, owner_chat = _chat(engine, owner=owner)
+        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        colleague_chat = _second_chat_in_same_project(engine, project_id, created_by=colleague)
+
+        for conversation_id, user_id in ((colleague_chat, colleague), (owner_chat, owner)):
+            with engine.begin() as conn:
+                issued = _statements(conn)
+                chat_turns._phase_one_turn(
+                    conn,
+                    project_id=project_id,
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    message="a question",
+                    client_turn_id=uuid.uuid4(),
+                )
+            locking = [statement for statement in issued if "FOR UPDATE" in statement]
+            assert len(locking) == 1, locking
+            assert "FOR UPDATE OF conversation" in locking[0]
+            # The lock target is named explicitly, so the joined project row
+            # is read but never locked.
+            assert "FOR UPDATE OF project" not in locking[0]
     finally:
         _cleanup(engine, project_id)
