@@ -1,11 +1,9 @@
 import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
-import type { components } from "../api/gen/types";
 import { useArchiveProject, useUpdateProject } from "../api/mutations";
 import { useCheckIns, useMe, useProject } from "../api/queries";
 import { useAuth } from "../auth";
-import { conflictSentences, isConflictCode } from "../lib/errors";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
@@ -19,66 +17,38 @@ import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { AppFooter } from "./AppFooter";
 import { SensitiveInfoBanner } from "./SensitiveInfoBanner";
-import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
-type Visibility = components["schemas"]["ProjectOut"]["visibility"];
-
 /** Project settings affordance (028 F.5): rename + archive, wired to the
  *  existing project mutations — the project-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
- *  explicit confirm step before the mutation fires. */
+ *  explicit confirm step before the mutation fires. Visibility moved to the
+ *  Share page (`ShareView`). */
 function ProjectSettingsMenu({
   projectId,
   projectName,
-  visibility,
   isOwner,
 }: {
   projectId: string;
   projectName: string;
-  visibility: Visibility;
   isOwner: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
   const [draftName, setDraftName] = useState(projectName);
-  const me = useMe();
   const update = useUpdateProject(projectId);
   const archive = useArchiveProject(projectId);
   const toast = useToast();
 
   // Non-owner (task 033 phase 10c, contract § 11 / rubric 37): every item
-  // inside this popover is owner-gated (Rename and Archive directly below,
-  // `VisibilityControl` internally) — a non-owner has nothing to do here at
-  // all, so the trigger itself must not render. Rev 1 of this gate covered
-  // only the items, leaving a colleague a gear that opened onto an empty
-  // popover.
+  // inside this popover is owner-gated — a non-owner has nothing to do here
+  // at all, so the trigger itself must not render. Rev 1 of this gate
+  // covered only the items, leaving a colleague a gear that opened onto an
+  // empty popover.
   if (!isOwner) return null;
-
-  // Visibility (task 033 phase 10b): hidden entirely without an
-  // organisation — sharing "with your organisation" means nothing when
-  // there isn't one, and this is new UI, so it doesn't get to add chrome an
-  // unenrolled caller never had (rubric 14's dark-launch invariant).
-  const changeVisibility = (next: Visibility) => {
-    update.mutate(
-      { visibility: next },
-      {
-        onSuccess: () => toast.toast({ title: visibilityOutcomeLine(next), tone: "default" }),
-        onError: (error) => {
-          const code = (error as { code?: string }).code;
-          toast.toast({
-            title: isConflictCode(code)
-              ? conflictSentences[code]
-              : "The project's visibility couldn't be changed. Try again.",
-            tone: "error",
-          });
-        },
-      },
-    );
-  };
 
   const reset = () => {
     setEditing(false);
@@ -171,10 +141,9 @@ function ProjectSettingsMenu({
           <>
             {/* Rename and archive are owner-only mutations (task 033 phase
                 10c, contract § 11 / rubric 37) — hidden entirely for a
-                non-owner, the same idiom `VisibilityControl` already
-                established for visibility. Rev 1 of this menu shipped these
-                ungated: a colleague would see Rename, click, and get "The
-                project couldn't be renamed." */}
+                non-owner. Rev 1 of this menu shipped these ungated: a
+                colleague would see Rename, click, and get "The project
+                couldn't be renamed." */}
             {isOwner && (
               <button
                 type="button"
@@ -183,15 +152,6 @@ function ProjectSettingsMenu({
               >
                 Rename
               </button>
-            )}
-            {me.data?.organisation != null && (
-              <VisibilityControl
-                visibility={visibility}
-                isOwner={isOwner}
-                pending={update.isPending}
-                onChange={changeVisibility}
-                className="block w-full justify-start px-0 py-0 text-left text-meta font-semibold text-navy hover:text-blue"
-              />
             )}
             {isOwner && archive.isError && (
               <p role="alert" className="text-body text-red">
@@ -395,7 +355,6 @@ export function AppShell() {
                       <ProjectSettingsMenu
                         projectId={project.data.project_id}
                         projectName={project.data.name}
-                        visibility={project.data.visibility}
                         isOwner={project.data.is_owner}
                       />
                     </>
