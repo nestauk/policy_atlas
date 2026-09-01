@@ -40,5 +40,8 @@ def configure_logging() -> None:
         wrapper_class=structlog.make_filtering_bound_logger(20),  # INFO
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
-        cache_logger_on_first_use=True,
+        # No cache_logger_on_first_use: a cached module-level logger ignores
+        # later reconfiguration, which breaks structlog.testing.capture_logs
+        # for every test that runs after anything calls create_app (033).
+        cache_logger_on_first_use=False,
     )

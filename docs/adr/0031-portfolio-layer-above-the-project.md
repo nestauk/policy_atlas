@@ -1,7 +1,7 @@
 # ADR 0031 — A portfolio layer above the project, and the screen/code vocabulary split
 
 - **Status:** Accepted — 2026-08-17 (owner, with the 032 plan approval and the
-  schema gate). **Amended 2026-08-24** by [ADR 0032](0032-portfolio-membership-many-to-many.md)
+  schema gate). **Amended 2026-08-24** by [ADR 0033](0032-portfolio-membership-many-to-many.md)
   on membership cardinality (decision 1) and PATCH shape (decision 4). The
   portfolio still sits *above* the project; the screen/code vocabulary split
   is unchanged.
@@ -96,6 +96,14 @@ Two constraints bound the answer:
    `PATCH /api/v1/projects/{id}` additively accepts `portfolio_id`, including
    an explicit `null` to unassign. `POST /api/v1/projects` is left alone,
    which keeps the gated public-interface surface smaller (plan D6).
+
+   > **Amended by [ADR 0033](0033-organisation-tenancy-and-global-admin-read.md)
+   > decision 6 (2026-08-24).** `POST /api/v1/portfolios` now additively accepts
+   > `from_project_id`, which creates the portfolio, inherits the source
+   > project's `visibility` and `org_id`, and takes it as the first member.
+   > `POST /api/v1/projects` is still left alone. The amendment is narrow: it
+   > adds one create-side assignment path on the *portfolio* route, because
+   > without it the inheritance 0032 needs would describe nothing.
 
    Assigning a portfolio the caller does not own is a 404 and does not write,
    matching the existing project rule — otherwise the PATCH would be an

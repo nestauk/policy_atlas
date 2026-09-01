@@ -52,10 +52,10 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
   };
 }
 
-function renderCard(checkIn: CheckInOut, stages: StageEntry[] = []) {
+function renderCard(checkIn: CheckInOut, stages: StageEntry[] = [], isOwner = true) {
   return render(
     <ToastProvider>
-      <CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} />
+      <CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} isOwner={isOwner} />
     </ToastProvider>,
   );
 }
@@ -189,5 +189,22 @@ describe("CheckInCard — toast on failure (027 strand 14)", () => {
     );
     expect(messages).toHaveLength(2);
     expect(screen.getByRole("alert")).toHaveTextContent("already been answered");
+  });
+});
+
+describe("CheckInCard — non-owner read-only (task 033 phase 10c, contract § 11 / rubric 37)", () => {
+  it("renders nothing for a non-owner — steering stays owner-scoped, the same invariant as the check-in banner", () => {
+    // `ToastProvider`'s own portal region is the only thing in the tree —
+    // the card itself renders null, not an empty wrapper.
+    renderCard(
+      baseCheckIn({
+        options: [option({ id: "continue", label: "Continue" })],
+      }),
+      [],
+      false,
+    );
+    expect(screen.queryByText("Waiting on your input")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop the analysis" })).not.toBeInTheDocument();
   });
 });

@@ -168,6 +168,62 @@ describe("connectEventStream — bearer auth, never a query-string token", () =>
     await vi.waitFor(() => expect(onUnauthenticated).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledTimes(2); // one attempt + one refreshed retry, then it stops
   });
+
+  it.each([403, 404])(
+    "surfaces onAccessEnded and stops reconnecting on a %d, rather than looping forever",
+    async (status) => {
+      const fetchMock = vi.fn(async () => new Response(null, { status }));
+      const getAccessToken = vi.fn(async () => "token");
+      const onAccessEnded = vi.fn();
+      const onError = vi.fn();
+
+      connectEventStream({
+        projectId: "proj-1",
+        cursor: 0,
+        fetchImpl: fetchMock,
+        getAccessToken,
+        onFrame: () => {},
+        onAccessEnded,
+        onError,
+        sleepImpl: fastSleep,
+      });
+
+      await vi.waitFor(() => expect(onAccessEnded).toHaveBeenCalled());
+      expect(fetchMock).toHaveBeenCalledTimes(1); // no 401-style refresh retry, and no backoff reconnect
+      expect(onError).not.toHaveBeenCalled(); // terminal, not an error to back off from
+    },
+  );
+
+  it("on revocation mid-stream (clean end, then a 404 reconnect), stops without ever surfacing onError", async () => {
+    let callCount = 0;
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockImplementation(async () => {
+      callCount += 1;
+      if (callCount === 1) return emptyStreamResponse(); // the backend's clean end
+      return new Response(null, { status: 404 }); // the reconnect that follows
+    });
+    const getAccessToken = vi.fn(async () => "token");
+    const onAccessEnded = vi.fn();
+    const onDisconnected = vi.fn();
+    const onError = vi.fn();
+
+    connectEventStream({
+      projectId: "proj-1",
+      cursor: 0,
+      fetchImpl: fetchMock,
+      getAccessToken,
+      onFrame: () => {},
+      onAccessEnded,
+      onDisconnected,
+      onError,
+      sleepImpl: fastSleep,
+    });
+
+    await vi.waitFor(() => expect(onAccessEnded).toHaveBeenCalled());
+    expect(onDisconnected).toHaveBeenCalledTimes(1); // the clean end still reports as a disconnect
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onError).not.toHaveBeenCalled();
+  });
 });
 
 describe("nextBackoffDelayMs — capped exponential backoff with jitter", () => {

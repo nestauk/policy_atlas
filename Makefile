@@ -1,4 +1,4 @@
-.PHONY: setup dev test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap staging-user prod-user cognito-user
+.PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
 
 # Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
@@ -27,36 +27,53 @@ setup:
 	@echo "Test DB ready (policy_atlas_test)."
 	$(MAKE) -C backend setup
 
-# Create a Cognito user (self-signup is off by design; accounts are
-# operator-created). The pool's sign-in identifier is email-FORMAT. Invite
-# email is suppressed and the password set directly (permanent, no forced
-# change). Needs ambient AWS credentials for the *target* account — staging
-# and prod are separate accounts sharing the same SSM path.
-# NB the password is visible in shell history and process listings.
-# Staging (test users; fake inboxes OK; recovery is CLI-only):
-#   AWS_PROFILE=pa-dev make staging-user EMAIL=tester1@policyatlas.uk PASSWORD='...'
-# Prod (real users; prod-account credentials, not pa-dev):
-#   AWS_PROFILE=<prod-profile> make prod-user EMAIL=name@policyatlas.uk PASSWORD='...'
-staging-user: SIGNIN_URL=https://v3.policyatlas.uk
-staging-user: cognito-user
+# Ops CLI wrappers (owner request, 2026-08-25). The old `staging-user` /
+# `prod-user` / `cognito-user` targets stay deleted (they took a password on
+# argv, suppressed the invitation, and left the account unenrolled — pinned by
+# test_the_user_provisioning_make_targets_are_deleted). These wrappers avoid
+# what killed them:
+#   - no credential on argv or in a variable: scripts/ops_run.sh assembles
+#     DATABASE_URL in-process from Secrets Manager, opens/reuses the § 6
+#     tunnel, checks the AWS session, and fetches the pool id from SSM.
+#     PA_OPS_ACCOUNT_<ENV> stays operator-exported — deriving it here would
+#     make the environment guard's account leg a tautology;
+#   - the targets only map VAR names to flag names and forward. The CLI's own
+#     parser is the sole grammar authority: mutually exclusive pairs
+#     (EMAIL/SUB, PROJECT/PORTFOLIO) are forwarded as given and ITS refusal is
+#     the error you see;
+#   - backend/tests/ops/test_make_wrappers.py dry-runs every target and parses the
+#     assembled argv with the real parser, so Makefile↔CLI drift fails `make
+#     verify`;
+#   - the tty passes through, so the environment guard's typed day-zero
+#     confirmation still reaches a human.
+# Usage: make user-create ENV=staging EMAIL=a@b.org NAME="A Name" ORG="Org"
+# Optional on every target: OPERATOR="ticket-123" (an annotation; the STS ARN
+# is logged regardless).
+# The wrappers forward through scripts/ops_run.sh to the real CLI
+# (`uv run python -m policy_atlas.ops`); see that package for the command tree.
+# OPS_COMMON rides immediately after ENV because --operator is a top-level
+# flag: argparse refuses it after the subcommand (pinned by the wrapper tests).
+ops-require = $(foreach v,$(1),$(if $($(v)),,$(error $(v)=... is required for this target)))
+OPS_COMMON = $(if $(OPERATOR),--operator "$(OPERATOR)")
 
-prod-user: SIGNIN_URL=https://policyatlas.uk
-prod-user: cognito-user
+.PHONY: org-create user-create user-enrol user-resync user-de-enrol rows-assign admin-grant admin-revoke
 
-cognito-user:
-	@test -n "$(EMAIL)" -a -n "$(PASSWORD)" -a -n "$(SIGNIN_URL)" || \
-		{ echo "usage: make staging-user|prod-user EMAIL=<email-format-username> PASSWORD='<password>'" >&2; exit 2; }
-	@POOL_ID=$$(AWS_REGION=eu-west-2 aws ssm get-parameter \
-		--name /policy_atlas_v3/auth/user_pool_id \
-		--query Parameter.Value --output text) && \
-	AWS_REGION=eu-west-2 aws cognito-idp admin-create-user \
-		--user-pool-id "$$POOL_ID" --username "$(EMAIL)" \
-		--user-attributes Name=email,Value="$(EMAIL)" Name=email_verified,Value=true \
-		--message-action SUPPRESS >/dev/null && \
-	AWS_REGION=eu-west-2 aws cognito-idp admin-set-user-password \
-		--user-pool-id "$$POOL_ID" --username "$(EMAIL)" \
-		--password "$(PASSWORD)" --permanent && \
-	echo "Created $(EMAIL) — sign in at $(SIGNIN_URL)"
+org-create:
+	@$(call ops-require,ENV NAME) scripts/ops_run.sh $(ENV) $(OPS_COMMON) org create --name "$(NAME)"
+user-create:
+	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user create --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)" $(if $(INVITE),--invite "$(INVITE)")
+user-enrol:
+	@$(call ops-require,ENV EMAIL NAME ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user enrol --email "$(EMAIL)" --display-name "$(NAME)" --org "$(ORG)"
+user-resync:
+	@$(call ops-require,ENV EMAIL) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user resync --email "$(EMAIL)"
+user-de-enrol:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+rows-assign:
+	@$(call ops-require,ENV ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) rows assign $(if $(PROJECT),--project "$(PROJECT)") $(if $(PORTFOLIO),--portfolio "$(PORTFOLIO)") --org "$(ORG)"
+admin-grant:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
+admin-revoke:
+	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin revoke $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 
 # Run the whole app locally: API on :8000 + Vite on :5173, one Ctrl-C stops
 # both. Self-contained auth: initialises the dev issuer on first run
@@ -74,6 +91,12 @@ dev:
 	    --ttl 14400 2>/dev/null | tail -1); \
 	  cd frontend && VITE_DEV_TOKEN="$$token" pnpm dev & \
 	  wait)
+
+# Seed the LOCAL dev DB with "Dev Org" + three enrolled identities so the 033
+# tenancy UI is visible in `make dev` (which signs in as dev-user, the owner).
+# Local-only: the script refuses non-localhost hosts and *_test databases.
+dev-seed:
+	uv run --project backend python scripts/dev_org_seed.py
 
 test:
 	$(MAKE) -C backend test

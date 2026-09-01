@@ -2096,6 +2096,70 @@ omissions.
 - **Portfolio membership beyond one** — **discharged in 033** (ADR 0032):
   `portfolio_membership` is many-to-many; a task in two projects counts in
   both `task_count`s; `source_count` stays on the task.
+- **The code-word/screen-word split** (ADR 0031) — screen **Task** = code `project`,
+  screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this gets its own
+  rename slice, scheduled after 033-organisations** — `project` → `task`,
+  `portfolio` → `project`, mechanical, no behaviour change. It was not folded into 033
+  because a ~249-file rename would bury the ~200 lines of tenancy logic that 033's
+  security review has to read, and it must also cover the code 033 adds. It breaks
+  `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are the
+  only consumers. Until it lands, `frontend/src/lib/vocabulary.ts` stays the single place
+  the mapping is written down.
+- **MFA on the Cognito pool** — the pool is `MfaConfiguration: None` and sets no explicit
+  password policy (`Policies: null`, so Cognito's account defaults apply: 8 characters,
+  upper/lower/number/symbol). That was proportionate while every account could read only
+  its owner's work. 033's `is_admin` (owner call (f)) changes the calculus: an admin
+  account reads every row in every organisation, `private` included, behind a password
+  alone. **Owner ruling 2026-08-24: recorded as a known accepted risk, not fixed in 033** —
+  the slice holds its no-infra-change constraint, and the security lane is told this is a
+  decided gap rather than an oversight. Cognito supports per-user MFA
+  (`admin_set_user_mfa_preference`), so requiring it for `is_admin` holders alone is
+  possible without friction for ordinary users. **Revisit before the first real
+  organisation is enrolled in prod.**
+- **Deleting a user from the ops CLI, and ownership transfer — coupled** (owner,
+  2026-08-24). 033 creates and enrols Cognito users but does not delete them: a delete
+  that cannot reassign the person's work would strand it, and transfer is itself Out, so
+  the two ship together or not at all. Until then **de-enrolment is the only removal
+  lever**, and it carries two consequences whoever offboards a real user must know:
+  **(1) it does not stop them signing in** — the Cognito account survives, so an
+  offboarded person still authenticates and still sees their own work; disabling or
+  deleting the account is a Cognito operation done outside this tooling; **(2) erasure is
+  two-part** — de-enrolment clears `org_id`, `email` and `is_admin` from
+  the application database (`display_name` is NOT NULL and stays), but the address in
+  Cognito is untouched, so a genuine erasure
+  request needs the Cognito side handled separately.
+- **Three standing discrepancies in the published privacy notice** (escalated by 033,
+  2026-08-24; the owner ruled that the slice does not edit legal copy, so these are open
+  items for whoever owns the notice — the page names a Data Protection Officer):
+  **(1) § 7** states that on request personal data "will be permanently deleted from our
+  Amazon Aurora PostgreSQL database". No lever in the product does that: de-enrolment
+  keeps every Task, query, result and transcript, keeps the `sub`, leaves the Cognito
+  account untouched, and leaves seven days of Aurora backups.
+  **(2) § 3** calls the email "the only user-specific identifier we store" — the `sub` is
+  one too, and until 033 the database stored no email at all, so the sentence has been
+  inaccurate in the other direction.
+  **(3) § 6** does not mention that an ops-assigned administrator can read every row in
+  every organisation, `private` included (033 owner call (f)). **Consequence while these
+  stand:** the admin leg's only control is the trace log, because nothing discloses the
+  access to users.
+- **Org-level chat and run capacity policy** — 033 re-keys the chat pending cap from the
+  project owner to the acting user (owner call (b) fairness), which removes the only
+  per-project bound: an organisation of N members can drive 2N concurrent chat turns
+  against one owner's project. Named rather than presented as neutral.
+- **Cognito email re-sync as an automatic process** — 033 ships `user resync --email` as a
+  manual lever. Nothing detects an address changed in Cognito, so the stored value goes
+  stale until an operator acts. Staleness is not correctness-critical (`sub` is the key)
+  but it does break admin search and means the app holds an inaccurate address.
+- **NULL-owner pre-025 rows are still not adopted, but they are no longer unreachable** —
+  033's admin read leg has no owner predicate, so `runtime/orchestrate.py` CLI rows and
+  pre-025 rows appear in an admin's cross-org listing with a null owner and null
+  organisation. This amends the "unreachable" wording in the recorded posture.
+- **An admin dashboard / admin surface** — 033 adds `app_user.is_admin` (owner call (f),
+  2026-08-24) as a read grade over every row in every organisation, and says so plainly:
+  it is the designated home for admin capability, but it ships **no admin screen**. An
+  admin sees the ordinary product, wider. A dashboard, an impersonation tool or an ops
+  view is the slice that adds the surface — and the first one to need *per-organisation*
+  admin rather than a global boolean turns this flag into the roles slice.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
@@ -2116,6 +2180,69 @@ omissions.
   `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
-- **Portfolio surfaces in the mock API** — **discharged in 033**: mock
-  `/api/v1/portfolios` plus membership on the project so Share and the
-  projects list work under `VITE_MOCK=1`.
+- **Portfolio surfaces in the mock API** — ~~`src/mock/api.ts` serves no
+  `/api/v1/portfolios`~~ **discharged by 033** (Phase 10a + ux-snags): the mock now
+  serves `/api/v1/me`, `GET /api/v1/portfolios`, `GET /api/v1/portfolios/{id}`,
+  `portfolio_id` filtering on the projects list, and membership on the project so
+  Share and the projects list work under `VITE_MOCK=1`. Mock coverage of portfolio
+  *mutations* beyond the visibility PATCH remains partial.
+
+## Organisations (task 033 build seams)
+
+- **The admin/ops audit trail has no durable sink** (review-stack finding,
+  2026-08-25 — three lanes converged). Two halves: **(1)** the in-app admin
+  trace (`admin_read` / `admin_listing` / `admin_stream_read`) lands in the
+  application log group with `ONE_MONTH` retention — the admin leg's sole
+  compensating control self-destructs after 30 days. Cheap fix when taken:
+  a CloudWatch subscription filter on the three event names into a
+  long-retention group or S3 (infra change — prod-config gate). **(2)** ops
+  CLI privilege changes (`admin grant/revoke`, and a de-enrolment that
+  clears the flag) emit their trace line — post-commit, always naming the
+  verified STS ARN — only to the operator's own terminal; `rows assign`
+  emits none. A durable record means an append-only `ops_audit` table
+  written in the same transaction (schema gate) or accepting
+  session-manager/CloudTrail tunnel logs as the record. Both halves
+  escalated in the 033 PR alongside the DPIA.
+- **No CLI path to an organisation-less administrator** (build finding, 2026-08-25;
+  amended by the review stack). `admin grant` refuses any subject whose
+  `org_id` is NULL — so every admin is enrolled somewhere, and neither
+  selector (`--email` or the review-added `--sub`) can produce an org-less
+  admin, deliberately or by the resync-then-grant accident the review
+  closed. (The build's original note rejected grant-by-sub as bypassing the
+  FOR UPDATE interlock — half wrong: the sub path locks the same way; what
+  it bypassed was the address-as-selector rule, now superseded by the
+  stronger org-enrolment refusal.) The live check's "admin in neither org"
+  is met by enrolling the admin into a third organisation. If a truly
+  org-less admin is ever wanted, an org-less enrol mode is the only route.
+- **`PortfolioOut` carries no last-task-updated timestamp**, so the Projects
+  overview derives "most recently active" from one global projects page raised to
+  the 200-row server cap — an approximation that can mis-order the overview beyond
+  200 active tasks. The fix is a derived field on the portfolio read shape; the
+  detail view is already exact via the `portfolio_id` filter.
+- **`admin_stream_read` volume** — an idle admin SSE stream emits one trace line per
+  0.4 s poll (~2.5/s), which is § 3a's grain implemented as written. If CloudWatch
+  cost bites, the lever is the poll interval (or batching), never dropping the grain.
+- **SES-backed pool email** (owner call, 2026-08-26 — the durable fix for
+  invitation deliverability). The pool has no `EmailConfiguration`, so
+  invitations leave via `COGNITO_DEFAULT` from `no-reply@verificationemail.com`
+  (spam-prone, 50/day). The slice: a verified SES domain identity for the
+  product domain with DKIM/SPF in Route53, `EmailConfiguration` (DEVELOPER
+  mode, `SourceArn` + a real `From`) on the pool — infra/prod-config gated —
+  **plus an SES production-access request** (a fresh SES account is sandboxed
+  to verified recipients) and the note that the 50/day cap becomes SES's own
+  limits. Until then `user create --invite manual` (single-use minted temp
+  password, printed once, forced change at first sign-in) is the workaround.
+- **Membership moves race API row creation** (review finding, 2026-08-25, declined
+  as a code fix). `creator_org_id` is a non-locking read, so a project created in
+  the window around an enrol/re-enrol/de-enrol can carry the old membership's
+  stamp — after a re-enrol A→B, one new row can land org-visible in A. Closing it
+  in code taxes every create with a shared `app_user` lock to cover an
+  operator-attended window. Runbook rule instead: after any membership move (and
+  after any downgrade/re-upgrade cycle, which resets visibility), re-confirm row
+  visibility with the owner — `user enrol`'s re-run re-privatises. A DB-enforced
+  serialization (trigger) is the upgrade path if enrolment ever becomes frequent.
+- **`RunPane`/`JourneyPane` are dead code** — imported by no route; 033 Phase 10c
+  gated and tested them anyway, so re-wiring them inherits the affordance matrix.
+  Either re-wire or delete in a later slice.
+- **The ops CLI reports in code words** (`project`/`portfolio`) — the post-033 rename
+  slice must cover `policy_atlas.ops` and its operator-facing strings.

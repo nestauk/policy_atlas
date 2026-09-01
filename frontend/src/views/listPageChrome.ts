@@ -31,6 +31,33 @@ export const listSecondaryActionClass =
 export const taskListRowGridClass =
   "grid grid-cols-[minmax(0,1fr)_auto_12rem_5.5rem_7rem] items-center gap-x-4";
 
+/** Same grid, with an owner column before the source count (task 033 phase
+ *  10b) — only used where the caller has decided to show `owner_display`. */
+export const taskListRowGridClassWithOwner =
+  "grid grid-cols-[minmax(0,1fr)_auto_12rem_8rem_5.5rem_7rem] items-center gap-x-4";
+
+/**
+ * Whether a list page shows the `owner_display` column (task 033 phase
+ * 10b, contract § 11 / rubric 41).
+ *
+ * The dark-launch invariant (rubric 14) is the anchor: an unenrolled caller
+ * never has the switcher, and can never be handed a row they don't own (no
+ * organisation means no colleague's row is reachable), so `hasSwitcher`
+ * false and `rows.some(is_owner === false)` false always travel together for
+ * that caller — the column stays off, byte-identical to today.
+ *
+ * When it's on, every row in the list renders the column (including the
+ * caller's own rows, where `owner_display` is just their own name) — a
+ * column that appears on some rows and not others reads as broken
+ * alignment, not as a considered omission.
+ */
+export function showOwnerColumn(
+  hasSwitcher: boolean,
+  rows: readonly { is_owner?: boolean }[],
+): boolean {
+  return hasSwitcher || rows.some((row) => row.is_owner === false);
+}
+
 /** New-task URL, optionally scoped to a project. Capability is chosen on that page. */
 export function newTaskHref(portfolioId?: string | null): string {
   if (portfolioId == null || portfolioId === "") return "/new";

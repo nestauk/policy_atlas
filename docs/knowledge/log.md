@@ -1,6 +1,45 @@
 # Knowledge update log
 
-## 2026-08-13 (task 031 step 8)
+## 2026-08-25 (task 033 step 8)
+* **Creation**: Added
+  [tenancy-predicates-in-sql](tenancy-predicates-in-sql.md) — four ways a
+  tenancy predicate's compiled SQL or lock semantics diverge from its Python
+  intent (missing `.correlate` → cross join; un-coalesced boolean leg → SQL
+  NULL read as denial; bare `with_for_update` on a join; lock subject ≠
+  invariant subject), each hit in 033.
+* **Creation**: Added
+  [uv-run-resyncs-default-groups](uv-run-resyncs-default-groups.md) — a CI
+  dependency group must live in `[tool.uv] default-groups`; `uv run` silently
+  reverts install-step syncs; the image excludes via `--no-group` on every
+  Dockerfile sync line.
+* **Creation**: Added
+  [state-keyed-guards-day-zero](state-keyed-guards-day-zero.md) — a guard
+  keyed on accumulated state is weakest on deploy day, a wrong write in the
+  weak state self-certifies, and the honest degradation is an unliftable
+  interactive confirmation (033 deleted its assume-yes flag).
+* **Creation**: Added
+  [stream-fed-state-needs-ownership-gates](stream-fed-state-needs-ownership-gates.md)
+  — SSE-fed store state is ownership-blind; widening read access converts
+  implicit owner-only assumptions into live bugs (`stream.pendingCheckIn`).
+* **Update**: [guard-tests-name-real-invariant](guard-tests-name-real-invariant.md)
+  — two 033 additions to the vacuity family: a property walk whose fixture
+  cannot produce the breach (single-org invariant walk; non-vacuity counts
+  promoted to assertions), and a drain-and-ignore stream helper that cannot
+  see a post-revocation leak.
+* **Update**: [alembic-roundtrip-explicit-revisions](alembic-roundtrip-explicit-revisions.md)
+  — a second `"-1"` instance survived fifteen revisions; the rule needs a
+  sweep of existing tests when it lands, plus the own-connection seed-cleanup
+  corollary.
+* **Update**: [logging-structlog](logging-structlog.md) —
+  `cache_logger_on_first_use` × `capture_logs` mutual exclusion; contextvars
+  binding requires an async dependency (worker-thread context copies).
+* **Update**: [testing-database](testing-database.md) — delegation briefs
+  must state the shared-DB pytest fence explicitly (033 build-open baseline).
+* **Declined** (with reasons, per the step-8 rule): Stubber+capture_logs as a
+  technique preference (marginal durability); red-baseline triage order and
+  subagent transient-death recovery (agentic-ops/failure-log territory, not
+  system knowledge); "widen grade + filter together" folded into the tenancy
+  concept rather than standing alone.
 * **Creation**: Added
   [success-map-is-stale-on-the-failure-path](success-map-is-stale-on-the-failure-path.md)
   — `successful_runs` is written only on the success path, but the runner still presents

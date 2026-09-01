@@ -1354,7 +1354,10 @@ def test_licence_guard() -> None:
 
 
 def test_migration_roundtrip_and_checks(conn: Connection) -> None:
-    assert len(metadata.tables) == 34
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `portfolio_membership`; no
+    # evidence-base table changed.
+    assert len(metadata.tables) == 36
     project_id, _ = seed_project_and_run(conn)
     snap_id, pss_id = seed_source(conn, project_id)
 

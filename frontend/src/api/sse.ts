@@ -22,6 +22,13 @@ export interface ConnectEventStreamOptions {
   onFrame: (frame: SseFrame) => void;
   /** Called once if a 401 survives a forced-refresh retry — the stream stops. */
   onUnauthenticated?: () => void;
+  /** Called once if a connect or reconnect attempt gets a 403 or 404 — e.g.
+   *  the project's access was revoked or it no longer exists. The backend
+   *  ends an active stream cleanly on revocation, so this fires on the
+   *  reconnect that follows rather than mid-stream; like `onUnauthenticated`,
+   *  it is terminal — retrying a 403/404 forever would just poll a state
+   *  that will never clear itself. */
+  onAccessEnded?: () => void;
   /** Called after the server accepts an SSE connection. */
   onConnected?: () => void;
   /** Called when an accepted stream ends and a reconnect is about to start. */
@@ -62,6 +69,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
     getAccessToken,
     onFrame,
     onUnauthenticated,
+    onAccessEnded,
     onError,
     onConnected,
     onDisconnected,
@@ -91,7 +99,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
 
   /** One connect attempt (with the single 401-refresh-retry), consuming the
    *  stream to completion. Returns why the attempt ended. */
-  async function connectOnce(): Promise<"stream-ended" | "unauthenticated"> {
+  async function connectOnce(): Promise<"stream-ended" | "unauthenticated" | "access-ended"> {
     const token = await getAccessToken();
     let response = await fetchWithToken(token);
 
@@ -101,6 +109,11 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
       response = await fetchWithToken(refreshed);
       if (response.status === 401) return "unauthenticated";
     }
+
+    // A revoked or gone project: the backend ends an active stream cleanly
+    // on revocation, and any reconnect after that gets a 403/404 — a state
+    // no amount of backoff-and-retry will ever clear.
+    if (response.status === 403 || response.status === 404) return "access-ended";
 
     if (!response.ok || !response.body) {
       throw new Error(`SSE connect failed with status ${response.status}`);
@@ -118,6 +131,10 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
         const outcome = await connectOnce();
         if (outcome === "unauthenticated") {
           onUnauthenticated?.();
+          return;
+        }
+        if (outcome === "access-ended") {
+          onAccessEnded?.();
           return;
         }
         onDisconnected?.();

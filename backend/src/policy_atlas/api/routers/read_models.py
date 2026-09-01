@@ -28,7 +28,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.readmodels import repository
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._access import accessible_project
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -38,8 +38,8 @@ router = APIRouter(
 
 
 def _owned(conn: Connection, project_id: uuid.UUID, user: AuthenticatedUser) -> None:
-    """Enforce the API's indistinguishable missing/cross-owner 404 once per route."""
-    owned_project(conn, project_id=project_id, user_id=user.user_id)
+    """Enforce the read grade (owner or same-org colleague) once per route."""
+    accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
 
 
 @router.get("/{project_id}/funnel", response_model=FunnelOut)

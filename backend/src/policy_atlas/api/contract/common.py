@@ -19,6 +19,42 @@ PAGE_SIZE_DEFAULT = 50
 PAGE_SIZE_MAX = 200
 
 
+def reject_explicit_nulls(model: BaseModel, *fields: str) -> None:
+    """Refuse `{"field": null}` on partial-update fields that have no null meaning.
+
+    A PATCH body's fields are `T | None` so that *absence* can mean "leave this
+    alone". That makes `null` a second spelling of absence — and for a field
+    backed by a NOT NULL column it is a spelling with no meaning at all. Left
+    unchecked it does not behave as "unchanged" either: the route's
+    `exclude_unset` dump *includes* the field, so the null reaches the UPDATE
+    and the request 500s on the constraint. A caller's malformed body should
+    not be an internal error.
+
+    Contrast the fields deliberately **not** passed here. `portfolio_id: null`
+    is contract § 6's i.6 (unassign), and `question: null` / `description:
+    null` clear nullable columns. Null is a real instruction on those, so this
+    guard is per-field and never blanket.
+
+    Args:
+        model: The validated partial-update model, inside a `mode="after"`
+            validator so `model_fields_set` distinguishes null from absent.
+        fields: The field names for which null is not a valid instruction.
+
+    Raises:
+        ValueError: When any named field was supplied as null. FastAPI renders
+            this as the contract's **422 `validation_error`**.
+    """
+    nulled = [
+        field
+        for field in fields
+        if field in model.model_fields_set and getattr(model, field) is None
+    ]
+    if nulled:
+        raise ValueError(
+            f"{', '.join(nulled)} cannot be null; omit to leave unchanged"
+        )
+
+
 class ErrorBody(BaseModel):
     """The machine-readable body of a non-2xx error envelope.
 

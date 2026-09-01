@@ -230,12 +230,48 @@ synth-time context query and must not run before the VPC exists.
      (Self-signup is disabled — operator-created users only, for the migration
      window.)
 
-     For test users day-to-day, `make staging-user EMAIL=<email-format-username>
-     PASSWORD='<password>'` wraps this: invite email suppressed, permanent
-     password set directly (the address needs no real inbox; recovery for fake
-     addresses is `admin-set-user-password` again). `make prod-user` is the same
-     helper against the production pool (`https://policyatlas.uk`); it needs
-     prod-account credentials, not `AWS_PROFILE=pa-dev`.
+     Day-to-day, use the operator CLI instead of the raw call — it creates the
+     account **and enrols it**, which the raw call does not (task 033). The
+     make wrappers own the setup (session check, pool id from SSM, DB
+     credentials, the § 6 tunnel opened or reused):
+
+     ```bash
+     export PA_OPS_ACCOUNT_STAGING=<account id>   # operator-asserted, never derived
+     make user-create ENV=staging EMAIL=<user-email> NAME="<name>" ORG="<organisation>"
+     ```
+
+     The direct form remains equivalent (the wrappers only forward to it):
+
+     ```bash
+     export PA_OPS_USER_POOL_STAGING=$(aws ssm get-parameter \
+       --name /policy_atlas_v3/auth/user_pool_id --query Parameter.Value --output text)
+     # DATABASE_URL points at the § 6 tunnel
+     uv run python -m policy_atlas.ops --env staging user create \
+       --email <user-email> --display-name "<name>" --org "<organisation>"
+     ```
+
+     The CLI verifies that the AWS account and user pool it resolved match the
+     database on the far end of the tunnel before it writes anything, and it
+     takes **no password**: Cognito emails the invitation. The former
+     `make staging-user` / `make prod-user` / `make cognito-user` targets are
+     **deleted** — they suppressed the invitation, set a password from argv, and
+     left the account unenrolled. For prod, use `--env prod`, the
+     `PA_OPS_*_PROD` variables and prod-account credentials, not
+     `AWS_PROFILE=pa-dev`.
+
+     **When the invitation email is not viable** (the `COGNITO_DEFAULT` sender
+     is `no-reply@verificationemail.com`, which spam filters routinely
+     swallow), add `INVITE=manual` (CLI: `--invite manual`): the email is
+     suppressed and the CLI **mints** a single-use temporary password, printed
+     once for out-of-band handover — the person sets their own at first
+     sign-in (`FORCE_CHANGE_PASSWORD`, 7-day validity). The CLI still accepts
+     no password from anyone, and the mode needs no IAM beyond
+     `AdminCreateUser`. The durable fix is SES-backed pool email
+     (docs/deferred.md § Organisations — SES entry).
+
+     The invitation goes through the `COGNITO_DEFAULT` sender (the pool has no
+     `EmailConfiguration`), which is capped at 50 messages a day and needs a
+     real deliverable mailbox.
 
 4. **Migration task** — one-shot ECS task running the backend image
    (`alembic upgrade head`), invoked with a fail-loud wait on the task's exit
@@ -313,6 +349,27 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
 - Deploys interrupt executing runs — deploy in quiet windows. The hard-kill
   is recovered cleanly: the boot sweep marks interrupted runs `interrupted` on
   the next boot; this is not a data-loss condition.
+- **Blocker preflight before the 033 migration.** The 033 migration takes
+  `ACCESS EXCLUSIVE` on `project`, `portfolio` and `conversation` with
+  `lock_timeout = '5s'`, so any held lock aborts the migration rather than
+  queueing behind it (safe to re-run). With the API at zero, the only
+  realistic blocker is an idle-in-transaction jumpbox session. Run this over
+  the § 6 tunnel immediately before the migrate step:
+
+  ```sql
+  SELECT a.pid, a.usename, a.state, a.query_start, l.relation::regclass, l.mode
+  FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+  WHERE l.relation IN ('project'::regclass, 'portfolio'::regclass,
+                       'conversation'::regclass)
+    AND a.pid <> pg_backend_pid();
+  ```
+
+  Any row is a blocker: confirm the session is yours or stale, end it
+  (`SELECT pg_terminate_backend(<pid>)`), and re-run until the result is
+  empty. Note the limit: `lock_timeout` bounds lock *acquisition*, not how
+  long the migration then holds the lock — the `created_by` backfill runs
+  inside that exclusive lock, and its duration at production scale is what
+  the pending backfill rehearsal measures.
 - A crash means a brief outage until ECS restarts the task; the sweep recovers
   state cleanly in that case too.
 - **Stale lookup context after resource replacement:** `cdk.context.json`
@@ -395,6 +452,24 @@ to read the database secret. Do not grant the engineer role access to the
 AWS-managed remote-host port-forwarding document, which would let the caller
 choose a different remote target.
 
+**The ops CLI (task 033) runs over this same tunnel** — the operator's
+laptop, `uv run python -m policy_atlas.ops --env staging|prod ...` with
+`DATABASE_URL` pointing at `localhost:15432`, or the equivalent make
+wrappers (`make user-create ENV=... EMAIL=... NAME=... ORG=...` — see the
+Makefile's ops block; `scripts/ops_run.sh` performs this section's setup
+and tunnel automatically, reusing an already-open one), under the operator's own IAM
+(Cognito `cognito-idp:ListUsers` + `cognito-idp:AdminCreateUser`, nothing
+more — see `JUMPBOX.md` § Security notes). It is **not** run as an ECS
+task: Cognito permission belongs to the human operator, not to a task
+role, and the API task role gains no Cognito permission. Every command
+verifies the resolved AWS account and user pool against the connected
+database before acting and refuses on a mismatch (§ 3 has the commands).
+One consequence of that guard to plan for: against a **fresh deployment**
+(empty `app_user` — exactly the post-033-migration state) the database's
+identity cannot be proven, so the first command requires an interactive
+terminal for a typed confirmation. No flag lifts it and no piped or
+scripted invocation can make that first write.
+
 ```bash
 # 1. DB credentials from the generated cluster secret
 DB_SECRET=$(aws ssm get-parameter --name /policy_atlas_v3/db/secret_name \
@@ -439,6 +514,27 @@ in committable form — CI's font-guard stays green.
 
 ## 8. Rollback
 
+- **Task 033 (organisations): roll forward, not back.** The 033 migration's
+  downgrade is schema-reversible but **data-destructive and chat-exposing**:
+  it drops `conversation.created_by`, so every colleague's chat authorship
+  is lost and pre-033 code lists *all* conversations on a project to its
+  owner — a rollback after adoption exposes colleagues' private chats to
+  the project owner (evidenced by
+  `test_downgrade_erases_chat_authorship_exposing_colleague_chats`, which
+  also proves a re-upgrade misattributes the rows rather than undoing the
+  exposure). It also drops both `visibility` columns, so a later re-upgrade
+  resets every row to `org` and no private choice can be reconstructed. The
+  real safety net is the dark launch: with no organisations enrolled the
+  behaviour is byte-identical to pre-033, and **de-enrolling an
+  organisation reverts it without a deploy**. A schema downgrade is a last
+  resort requiring a backup restore first (Aurora keeps 7 days).
+- **Manual downgrade procedure (last resort — the ECS migration task runs
+  `alembic upgrade head` only and has no downgrade path):** scale the API
+  to zero → restore or snapshot the cluster → open the § 6 tunnel → from
+  `backend/` run `DATABASE_URL=<tunnel-url> uv run alembic downgrade
+  b3c7d914e0a2` → deploy the pre-033 image → scale up. Do not do this on a
+  database that has enrolled organisations without owner sign-off on the
+  chat-exposure consequence above.
 - **Automation:** disable the GitHub Environment or revoke its OIDC role trust to
   stop new deploys, then revert the workflow change. This does not repair an
   already interrupted stop→migrate→scale sequence; use the recovery procedure in

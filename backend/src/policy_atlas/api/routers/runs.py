@@ -24,7 +24,8 @@ from policy_atlas.api.deps import (
     get_runner_backends,
     get_settings,
 )
-from policy_atlas.api.routers._common import owned_project, run_out
+from policy_atlas.api.routers._access import accessible_project
+from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
@@ -125,7 +126,9 @@ def create_run(
     """Dispatch an approved plan off the request path and return its walk row."""
     with _dispatch_lock:
         with engine.begin() as conn:
-            owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
+            accessible_project(
+                conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
+            )
             active = conn.execute(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.project_id == project_id)
@@ -198,7 +201,7 @@ def list_runs(
 ) -> Page[RunOut]:
     """List a project's walks from newest to oldest (paginated — runs accumulate)."""
     with engine.connect() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
         total = conn.execute(
             select(func.count())
             .select_from(capability_run)
@@ -224,9 +227,9 @@ def get_run(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> RunOut:
-    """Return one owned project's capability run, or the opaque 404."""
+    """Return one readable project's capability run, or the opaque 404."""
     with engine.connect() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
+        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
         row = conn.execute(
             select(capability_run)
             .where(capability_run.c.project_id == project_id)

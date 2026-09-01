@@ -87,7 +87,10 @@ def _appraisal_rows(conn: Connection, project_id: uuid.UUID) -> list[sa.Row[Any]
 # --- Schema ---
 
 def test_table_count(conn: Connection) -> None:
-    assert len(metadata.tables) == 34
+    # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
+    # entity hierarchy) and ADR 0032 adds `portfolio_membership`; no
+    # evidence-base table changed.
+    assert len(metadata.tables) == 36
 
 
 # --- Rubric and labels (pure Python, no DB) ---

@@ -55,6 +55,19 @@ letter diverges from its invariant is an instruction to diverge.
   because the seeded project already holds the records the stub returns. `assert
   headline > 0` off a plain walk fails; a non-zero headline has to be seeded, or the test
   has to use a backend that yields fresh records per call.
+- **A property walk is vacuous wherever its fixture cannot produce the breach** (033):
+  the tenancy-invariant walk checked `project.org_id IS DISTINCT FROM portfolio.org_id`
+  after every op — over a fixture with exactly one organisation, so the predicate could
+  never fire regardless of implementation. Mutation-testing proved it: deleting the org
+  sync still passed, because the interaction never occurred. The fix is twofold — widen
+  the fixture (a second org, real membership moves interleaved) AND **promote the
+  non-vacuity counts to assertions** (`cross_org_assignments >= 1`, splits observed):
+  a counter is a hope; an asserted counter is part of the pin.
+- **A stream helper that drains-and-ignores cannot see a leak** (033): the SSE
+  revocation tests' `closed()` discarded every frame until the stream ended, so a stream
+  that leaked frames after revocation and *then* closed still passed. The pin for "no
+  output after X" must record what arrived after X and assert the list is empty — closure
+  alone proves eventual termination, not silence.
 - Same family:
   [untrusted-prompt-fields-json-records](untrusted-prompt-fields-json-records.md)
   (the boundary is the mechanism, not the sanitizer's pattern),

@@ -51,7 +51,7 @@ function mockPlanQuery(data: PlanOut | undefined) {
 }
 
 function renderCard(overrides: Partial<Parameters<typeof PlanCard>[0]> = {}) {
-  return render(<PlanCard projectId={PROJECT_ID} runActive={false} {...overrides} />);
+  return render(<PlanCard projectId={PROJECT_ID} runActive={false} isOwner {...overrides} />);
 }
 
 describe("PlanCard — ready actions", () => {
@@ -82,5 +82,23 @@ describe("PlanCard — ready actions", () => {
     mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
     const { container } = renderCard({ started: true });
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("PlanCard — non-owner read-only (task 033 phase 10c, rubric 37)", () => {
+  it("keeps Review the plan but hides Start search for a non-owner", () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    renderCard({ isOwner: false });
+    expect(screen.getByRole("button", { name: "Review the plan" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start search" })).not.toBeInTheDocument();
+  });
+
+  it("Review the plan still opens the plan document for a non-owner", async () => {
+    mockPlanQuery({ plan: basePlan(), status: "approved", version: 1 });
+    const onReviewPlan = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ isOwner: false, onReviewPlan });
+    await user.click(screen.getByRole("button", { name: "Review the plan" }));
+    expect(onReviewPlan).toHaveBeenCalledTimes(1);
   });
 });

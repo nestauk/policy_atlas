@@ -142,6 +142,11 @@ function QuestionForm() {
   const [question, setQuestion] = useState("");
   const [portfolioId, setPortfolioId] = useState(presetPortfolio);
   const portfolios = usePortfolios();
+  // Every project this caller can read is a valid target: assignment
+  // resolves under the colleague-mutation grade (owner ruling 2026-08-27),
+  // so a colleague may add their task to an org-visible project they did
+  // not create. The listing is already scoped to what the caller may read.
+  const assignablePortfolios = portfolios.data?.data ?? [];
   const create = useCreateTask();
   const navigate = useNavigate();
   const canSend = question.trim().length > 0 && !create.isPending;
@@ -203,7 +208,7 @@ function QuestionForm() {
         Enter to send · Shift+Enter for a new line
       </p>
 
-      {(portfolios.data?.data.length ?? 0) > 0 && (
+      {assignablePortfolios.length > 0 && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <label className="text-meta font-normal text-grey" htmlFor="new-task-portfolio">
             Add to a {PROJECT.lower}
@@ -211,7 +216,7 @@ function QuestionForm() {
           <ProjectPicker
             id="new-task-portfolio"
             value={portfolioId}
-            options={portfolios.data?.data ?? []}
+            options={assignablePortfolios}
             onChange={setPortfolioId}
           />
         </div>
