@@ -47,14 +47,14 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     UnspannedAssertionWire,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
-    CaseStudyWire,
-    IntroWire,
     NAV_LABEL_MAX,
-    NoteWire,
     SECTION_TITLE_PROPOSAL_MAX,
+    CaseStudyWire,
     ChunkCitationWire,
     ClaimWire,
     GapPayloadWire,
+    IntroWire,
+    NoteWire,
     PatternPayloadWire,
     RepairItemWire,
     SectionProposalWire,

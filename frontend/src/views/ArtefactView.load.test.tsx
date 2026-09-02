@@ -120,10 +120,10 @@ function renderResults(initialPending: boolean) {
         data: pending ? undefined : loadedArtefact,
       }) as ReturnType<typeof queries.useArtefact>,
   );
-  vi.mocked(queries.useConversations).mockReturnValue({ data: { data: [] } } as ReturnType<
+  vi.mocked(queries.useConversations).mockReturnValue({ data: { data: [] } } as unknown as ReturnType<
     typeof queries.useConversations
   >);
-  vi.mocked(queries.useLandscape).mockReturnValue({ data: { years: { 2020: 1 } } } as ReturnType<
+  vi.mocked(queries.useLandscape).mockReturnValue({ data: { years: { 2020: 1 } } } as unknown as ReturnType<
     typeof queries.useLandscape
   >);
   vi.mocked(queries.useFunnel).mockReturnValue({ data: undefined } as ReturnType<
@@ -133,10 +133,10 @@ function renderResults(initialPending: boolean) {
   vi.mocked(store.useRunStream).mockReturnValue(createInitialRunStreamState());
   vi.mocked(conversationState.useActiveConversation).mockReturnValue({
     setActiveConversation: vi.fn(),
-  } as ReturnType<typeof conversationState.useActiveConversation>);
+  } as unknown as ReturnType<typeof conversationState.useActiveConversation>);
   vi.mocked(conversationState.useConversationMutations).mockReturnValue({
     create: vi.fn(),
-  } as ReturnType<typeof conversationState.useConversationMutations>);
+  } as unknown as ReturnType<typeof conversationState.useConversationMutations>);
 
   const view = render(
     <QueryClientProvider client={queryClient}>

@@ -225,7 +225,7 @@ export function ContentsSidebar({
 }: {
   entries: SidebarEntry[];
 }) {
-  const navEntries = sidebarNavEntries(entries);
+  const navEntries = useMemo(() => sidebarNavEntries(entries), [entries]);
   const [activeId, setActiveId] = useState<string | null>(navEntries[0]?.id ?? null);
   const spyLockUntil = useRef(0);
 
@@ -258,8 +258,7 @@ export function ContentsSidebar({
     scroller.addEventListener("scroll", checkpoint, { passive: true });
     checkpoint();
     return () => scroller.removeEventListener("scroll", checkpoint);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries]);
+  }, [navEntries]);
 
   return (
     <nav

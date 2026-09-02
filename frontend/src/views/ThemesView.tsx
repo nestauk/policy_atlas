@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router";
 
-import { useGroups, useLandscape, useProject } from "../api/queries";
+import { useLandscape, useProject } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -49,32 +49,26 @@ function ThemeRow({
 }
 
 /**
- * Themes: the reader-facing landscape themes plus every grouping facet,
- * built only from existing read models (`landscape.themes`, `groups.facets`)
- * — no new text is generated here (rubric 25).
+ * Themes: the reader-facing landscape themes, built only from the existing
+ * `landscape.themes` read model — no new text is generated here (rubric 25).
+ * Finding-facet groups (intervention, barrier, …) live on the Findings tab.
  */
 export function ThemesView() {
   const { projectId = "" } = useParams();
   const project = useProject(projectId);
   useDocumentTitle(project.data?.name, "Themes");
   const landscape = useLandscape(projectId);
-  const groups = useGroups(projectId);
 
-  // `not_found` is the server's honest shape for "no landscape/groups yet"
+  // `not_found` is the server's honest shape for "no landscape yet"
   // (screening hasn't run) — the expected empty state below, not a failure
   // to surface as an error, matching LandscapeView's own treatment.
   const landscapeErrorCode = landscape.isError ? errorCode(landscape.error) : null;
-  const groupsErrorCode = groups.isError ? errorCode(groups.error) : null;
-  const isUnauthenticated =
-    landscapeErrorCode === "unauthenticated" || groupsErrorCode === "unauthenticated";
-  const isError =
-    (landscape.isError && landscapeErrorCode !== "not_found") ||
-    (groups.isError && groupsErrorCode !== "not_found");
-  const isPending = landscape.isPending || groups.isPending;
+  const isUnauthenticated = landscapeErrorCode === "unauthenticated";
+  const isError = landscape.isError && landscapeErrorCode !== "not_found";
+  const isPending = landscape.isPending;
 
   const themes = orderThemes(landscape.data?.themes ?? []);
-  const facets = (groups.data?.facets ?? []).filter((facet) => (facet.groups ?? []).length > 0);
-  const isEmpty = !isPending && !isError && themes.length === 0 && facets.length === 0;
+  const isEmpty = !isPending && !isError && themes.length === 0;
 
   return (
     <main className="py-8">
@@ -97,7 +91,6 @@ export function ThemesView() {
               className="cursor-pointer font-bold text-blue hover:underline"
               onClick={() => {
                 void landscape.refetch();
-                void groups.refetch();
               }}
             >
               Retry
@@ -130,24 +123,6 @@ export function ThemesView() {
           </ul>
         </section>
       )}
-
-      {facets.map((facet) => (
-        <section key={facet.facet} className="mt-8">
-          <h2 className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-            {scrub(facet.facet)}
-          </h2>
-          <ul role="list" className="mt-2">
-            {(facet.groups ?? []).map((group) => (
-              <ThemeRow
-                key={group.label}
-                name={group.label}
-                size={group.size}
-                description={group.description}
-              />
-            ))}
-          </ul>
-        </section>
-      ))}
     </main>
   );
 }

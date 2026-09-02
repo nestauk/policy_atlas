@@ -67,6 +67,12 @@ vi.mock("../auth", () => ({
   }),
 }));
 
+// AppShell owns RunStreamProvider on task routes — stub the SSE client so
+// tests never open a real fetch-stream.
+vi.mock("../api/sse", () => ({
+  connectEventStream: () => ({ close: vi.fn() }),
+}));
+
 function renderShell(initialPath: string) {
   // The header's project-settings popover (028 F.5) wires rename/archive
   // mutations, which resolve useQueryClient — a real QueryClient is needed
@@ -221,9 +227,11 @@ describe("AppShell — global chrome", () => {
     expect(screen.getByRole("link", { name: "Terms of use" })).toHaveAttribute("href", "/terms");
   });
 
-  it("shows the site footer inside a task workspace", () => {
+  it("does not pin the site footer under the Plan tab (it scrolls with the chat)", () => {
     renderShell(`/projects/${PROJECT_ID}`);
-    expect(screen.getByRole("contentinfo")).toHaveTextContent(SITE_DISCLAIMER);
+    // AppShell stubs the Plan outlet — the real footer mounts inside
+    // PlanningPane's transcript scroll, not as a shell chrome strip.
+    expect(screen.queryByRole("contentinfo")).not.toBeInTheDocument();
   });
 
   it("puts the site footer at the bottom of task tab scroll content", () => {

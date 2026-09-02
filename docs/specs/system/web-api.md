@@ -475,7 +475,9 @@ render honest absence: missing stages are `null`/absent, never faked.
   own `claims` (span-anchored into `card.prose`) and a `result_claim_id`
   for the primary finding. `ArtefactOut.most_relevant_notes` (additive,
   default empty list) carries grounded one-liner notes for the top cited
-  sources.
+  sources. `ArtefactOut.full_report_intro` (additive, nullable) carries the
+  generated roadmap line for the full-report body; absence is a normal
+  state and the client renders nothing in its place.
 
 - Artefact `ClaimOut.theme` resolves a theme claim's durable characterisation
   or grouping references to named items (`name`, optional `description` and

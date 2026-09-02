@@ -4,9 +4,7 @@ import { useParams } from "react-router";
 import { useProject } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { useRunStream } from "../store";
-import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
-import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { PlanningPane } from "./workspace/PlanningPane";
 import type { PlanOverlay } from "./workspace/planOverlay";
@@ -63,12 +61,9 @@ export function WorkspaceView() {
   }
 
   return (
-    <main className="relative flex h-full min-h-0 justify-center overflow-hidden bg-paper">
+    <main className="relative flex h-full min-h-0 overflow-hidden bg-paper">
       <div
-        className={cn(
-          "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-          LIFECYCLE_PAGE_CLASS,
-        )}
+        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         inert={planOpen && planPlacement === "center" ? true : undefined}
       >
         <PlanningPane

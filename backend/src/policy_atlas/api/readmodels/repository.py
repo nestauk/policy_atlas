@@ -1457,7 +1457,11 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                         )
                         card_id_str = raw_card.get("card_id")
                         try:
-                            card_uuid = uuid.UUID(card_id_str) if isinstance(card_id_str, str) else uuid.uuid4()
+                            card_uuid = (
+                                uuid.UUID(card_id_str)
+                                if isinstance(card_id_str, str)
+                                else uuid.uuid4()
+                            )
                         except ValueError:
                             card_uuid = uuid.uuid4()
                         # Project per-card claims from stored claim_ids/spans
@@ -1553,7 +1557,9 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     mrs_notes_out = [
         MostRelevantNoteOut(source_id=str(note["source_id"]), note=str(note["note"]))
         for note in (raw_mrs_notes if isinstance(raw_mrs_notes, list) else [])
-        if isinstance(note, dict) and isinstance(note.get("source_id"), str) and isinstance(note.get("note"), str)
+        if isinstance(note, dict)
+        and isinstance(note.get("source_id"), str)
+        and isinstance(note.get("note"), str)
     ]
     raw_full_report_intro = (
         raw_counts.get("full_report_intro")
@@ -1606,9 +1612,9 @@ def _card_evidence_fields(
     design = raw_card.get("design") if isinstance(raw_card.get("design"), str) else None
     since_year = raw_card.get("since_year") if isinstance(raw_card.get("since_year"), int) else None
     for claim in card_claims:
-        for citation in claim.citations:
-            strength = strength or citation.appraisal_label
-            design = design or citation.evidence_type
+        for cite in claim.citations:
+            strength = strength or cite.appraisal_label
+            design = design or cite.evidence_type
     return strength, design, since_year
 
 
@@ -1649,7 +1655,7 @@ def _project_card_claims(
             block_claim = block_claim_by_id.get(cid)
             if block_claim is None:
                 continue
-            span = span_by_id.get(cid, None)
+            span = span_by_id.get(cid)
             result.append(ClaimOut(
                 claim_id=block_claim.claim_id,
                 claim_type=block_claim.claim_type,
@@ -1662,9 +1668,12 @@ def _project_card_claims(
             ))
         return result
 
-    # Fallback: match block claims whose text is a substring of card prose
+    # Fallback: match block claims whose text is a substring of card prose.
+    # The lookup holds each claim under both its UUID and its synthesis alias,
+    # so dedupe by identity before matching.
+    unique_claims = {claim.claim_id: claim for claim in block_claim_by_id.values()}
     result = []
-    for claim in block_claim_by_id.values():
+    for claim in unique_claims.values():
         pos = card_prose.find(claim.text)
         if pos >= 0:
             result.append(ClaimOut(

@@ -34,6 +34,10 @@ vi.mock("../auth", () => ({
   }),
 }));
 
+vi.mock("../api/sse", () => ({
+  connectEventStream: () => ({ close: vi.fn() }),
+}));
+
 // A render error inside the chat subtree (029 fix 6): the panel must not
 // take the whole shell down with it — it sits in its own `ErrorBoundary`,
 // separate from the routed view's.

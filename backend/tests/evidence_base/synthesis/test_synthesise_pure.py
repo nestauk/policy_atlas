@@ -41,12 +41,12 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
 from policy_atlas.evidence_base.synthesis.synthesise import (
     CASE_STUDIES_MAX_CARDS,
     CONCLUSIONS_TITLE,
+    MRS_NOTE_MAX,
     ChunkInfo,
     ClaimDraft,
     CorpusProfile,
     CoverageRecord,
     FindingInfo,
-    MRS_NOTE_MAX,
     SectionAccounting,
     SectionSpec,
     SpliceItem,
@@ -1694,13 +1694,21 @@ def test_validate_case_study_cards_drops_bad_ordinal() -> None:
         CaseStudyCardWire(
             title="Good card",
             prose="A sentence about evidence.",
-            claims=[CaseStudyClaimWire(claim_type="finding", text="Evidence (stub).", cited_finding_ids=["f-1"])],
+            claims=[
+                CaseStudyClaimWire(
+                    claim_type="finding", text="Evidence (stub).", cited_finding_ids=["f-1"]
+                )
+            ],
             result_ordinal=0,
         ),
         CaseStudyCardWire(
             title="Bad ordinal card",
             prose="Another sentence.",
-            claims=[CaseStudyClaimWire(claim_type="finding", text="More evidence.", cited_finding_ids=["f-2"])],
+            claims=[
+                CaseStudyClaimWire(
+                    claim_type="finding", text="More evidence.", cited_finding_ids=["f-2"]
+                )
+            ],
             result_ordinal=5,
         ),
     ])

@@ -24,10 +24,10 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     CASE_STUDIES_SYSTEM_PROMPT,
     EMIT_SECTION_TOOL_SCHEMA,
     FORBIDDEN_SECTION_TITLES,
+    FULL_REPORT_INTRO_PROMPT_VERSION,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
     KEY_FINDINGS_SYSTEM_PROMPT,
-    FULL_REPORT_INTRO_PROMPT_VERSION,
     MOST_RELEVANT_NOTE_PROMPT_VERSION,
     MRS_NOTE_SYSTEM_PROMPT,
     NAV_LABEL_MAX,
@@ -65,7 +65,7 @@ def test_prompt_versions_are_distinct_constants() -> None:
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
     assert CASE_STUDIES_PROMPT_VERSION == "synthesise_case_studies_v1"
     assert MOST_RELEVANT_NOTE_PROMPT_VERSION == "most_relevant_note_v1"
-    assert FULL_REPORT_INTRO_PROMPT_VERSION == "full_report_intro_v1"
+    assert FULL_REPORT_INTRO_PROMPT_VERSION == "full_report_intro_v2"
 
 
 def test_query_findings_schema_is_kind_typed_and_pattern_payload_knows_icf() -> None:
@@ -280,7 +280,13 @@ def test_case_study_wire_shape() -> None:
             {
                 "title": "Finland — School meals",
                 "prose": "Finland provides universal school meals.",
-                "claims": [{"claim_type": "finding", "text": "universal school meals.", "cited_finding_ids": ["f1"]}],
+                "claims": [
+                    {
+                        "claim_type": "finding",
+                        "text": "universal school meals.",
+                        "cited_finding_ids": ["f1"],
+                    }
+                ],
                 "result_ordinal": 0,
             }
         ]

@@ -74,12 +74,12 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     CASE_STUDIES_MODEL,
     CASE_STUDIES_PROMPT_VERSION,
     FORBIDDEN_SECTION_TITLES,
+    FULL_REPORT_INTRO_MODEL,
+    FULL_REPORT_INTRO_PROMPT_VERSION,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
     MOST_RELEVANT_NOTE_PROMPT_VERSION,
     MRS_NOTE_MODEL,
-    FULL_REPORT_INTRO_PROMPT_VERSION,
-    FULL_REPORT_INTRO_MODEL,
     NAV_LABEL_MAX,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
@@ -4882,7 +4882,7 @@ def _case_studies_pass(
     intent: str,
     section_claim_groups: Sequence[tuple[SectionSpec, Sequence[ClaimDraft]]],
     all_claims: Sequence[ClaimDraft],
-    substrate: "SubstrateView",
+    substrate: SubstrateView,
     synthesis_backend: SynthesisBackend,
     grounding_judge_backend: GroundingJudgeBackend,
     run_chunk_content: dict[str, str],
@@ -5014,7 +5014,7 @@ def _case_studies_pass(
     # block offsets.
     claim_offset = 0
     cards_out: list[dict[str, Any]] = []
-    for card_payload, (card_wire, _) in zip(card_payloads, grounded_cards):
+    for card_payload, (card_wire, _) in zip(card_payloads, grounded_cards, strict=True):
         card_claim_count = card_payload["claim_count"]
         result_claim_id: str | None = None
         ordinal = card_payload["result_ordinal"]
@@ -5026,8 +5026,8 @@ def _case_studies_pass(
         strength: str | None = None
         design: str | None = None
         since_year: int | None = None
-        for claim in card_wire.claims:
-            for fid in claim.cited_finding_ids:
+        for wire_claim in card_wire.claims:
+            for fid in wire_claim.cited_finding_ids:
                 meta = doc_meta.get(fid)
                 if isinstance(meta, dict):
                     strength = strength or meta.get("appraisal_label")

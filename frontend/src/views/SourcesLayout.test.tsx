@@ -9,10 +9,6 @@ vi.mock("../api/queries", () => ({
   useFunnel: vi.fn(),
 }));
 
-vi.mock("../store", () => ({
-  useRunStream: () => ({ run: null, stages: [] }),
-}));
-
 const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
 
 function renderLayout(path = `/projects/${PROJECT_ID}/sources`) {

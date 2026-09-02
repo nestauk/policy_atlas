@@ -23,11 +23,18 @@ type CitationLike = {
   evidence_type?: string | null;
 };
 
+type ClaimSourceLike = {
+  claim_id?: string;
+  citations?: CitationLike[] | null;
+};
+
+type ClaimBearerLike = { claims?: ClaimSourceLike[] | null };
+
 type SectionLike = {
   title: string;
   nav_label?: string | null;
-  blocks?: { claims?: { citations?: CitationLike[] }[] }[];
-  cards?: { claims?: { citations?: CitationLike[] }[] }[];
+  blocks?: ClaimBearerLike[] | null;
+  cards?: ClaimBearerLike[] | null;
 };
 
 /** One source the report leans on, with only facts about it. */
@@ -78,13 +85,20 @@ export function mostRelevantSources(
   limit = 3,
 ): TopSource[] {
   const bySource = new Map<string, TopSource>();
+  // Case-study cards carry re-projections of their section block's claims
+  // (same claim_id), so a claim seen under both must count once.
+  const seenClaimIds = new Set<string>();
   for (const section of sections ?? []) {
-    const claimSources: Array<{ claims?: { citations?: CitationLike[] }[] | null }> = [
+    const claimSources: ClaimBearerLike[] = [
       ...(section.blocks ?? []),
       ...(section.cards ?? []),
     ];
     for (const block of claimSources) {
       for (const claim of block.claims ?? []) {
+        if (claim.claim_id != null) {
+          if (seenClaimIds.has(claim.claim_id)) continue;
+          seenClaimIds.add(claim.claim_id);
+        }
         // One claim citing the same source twice counts once for that claim:
         // the ranking is "how many claims lean on this", not "how many
         // citation rows exist".
@@ -158,7 +172,8 @@ export function splitLeadColon(text: string): { lead: string; rest: string } | n
 }
 
 /**
- * Deterministic intro for the full-report part when synthesis did not produce one.
+ * The full-report roadmap line: the synthesised intro when one was produced,
+ * otherwise nothing (absence is a normal state, never a fabricated line).
  */
 export function fullReportIntro(
   sectionCount: number,
@@ -167,11 +182,6 @@ export function fullReportIntro(
   if (sectionCount <= 0) return null;
   if (generatedIntro != null && generatedIntro.trim() !== "") return generatedIntro.trim();
   return null;
-}
-
-/** @deprecated Use {@link fullReportIntro} with a generated intro when available. */
-export function reportRoadmap(_titles: string[]): string | null {
-  return fullReportIntro(_titles.length);
 }
 
 /** Why case-study cards appear (matches the case-studies synthesis pass). */
@@ -184,7 +194,7 @@ type CardEvidenceInput = {
   strength?: string | null;
   design?: string | null;
   since_year?: number | null;
-  claims?: Array<{ citations?: CitationLike[] }>;
+  claims?: ClaimSourceLike[] | null;
 };
 
 /**
@@ -303,7 +313,8 @@ function markdownCaseStudyCardProse(card: MarkdownCard): string {
   return marked;
 }
 
-function mergeMostRelevantNotes(
+/** Attach grounded one-liner notes to their ranked sources (034 S5). */
+export function mergeMostRelevantNotes(
   sources: TopSource[],
   notes?: Array<{ source_id: string; note: string }> | null,
 ): TopSource[] {
@@ -402,12 +413,13 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
 
   lines.push("## Executive summary", "");
   for (const section of execSections) {
-    lines.push(`### ${section.title}`, "");
     if (section.role === "case_studies") {
-      lines.push(CASE_STUDIES_INTRO, "");
-    }
-    if (section.role === "case_studies" && (section.cards ?? []).length > 0) {
-      for (const card of section.cards ?? []) {
+      // Parity with the page: a case-studies section with no cards renders
+      // nothing (absence is normal, never an empty heading).
+      const cards = section.cards ?? [];
+      if (cards.length === 0) continue;
+      lines.push(`### ${section.title}`, "", CASE_STUDIES_INTRO, "");
+      for (const card of cards) {
         lines.push(`**${card.title}**`, "");
         if (card.prose) {
           lines.push(markdownCaseStudyCardProse(card), "");
@@ -416,6 +428,7 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
         if (facts.length > 0) lines.push(`_${facts.join(" · ")}_`, "");
       }
     } else {
+      lines.push(`### ${section.title}`, "");
       for (const block of section.blocks ?? []) {
         const prose = proseWithCitationMarkers(block.prose, block.claims ?? []).trim();
         if (prose !== "") lines.push(markdownKeyFindingsProse(prose), "");

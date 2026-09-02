@@ -11,6 +11,7 @@ import {
   EXECUTIVE_SUMMARY_ANCHOR,
   fullReportIntro,
   FULL_REPORT_ANCHOR,
+  mergeMostRelevantNotes,
   mostRelevantSources,
   MOST_RELEVANT_SOURCES_INTRO,
   REPORT_BODY_CLASS,
@@ -1163,42 +1164,6 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
 }
 
 /**
- * The report's opening statement.
- *
- * Only a verified summary is shown as the answer: an unverified one has not
- * passed the faithfulness check, and presenting it as the answer would be the
- * report vouching for something it has not checked. A pending summary says
- * that the check is still running. A failed summary is omitted — nothing is
- * shown in its place.
- */
-function AnswerCallout({
-  summary,
-  status,
-}: {
-  summary: string | null;
-  status: "pending" | "verified" | "failed" | null;
-}) {
-  if (status === "verified" && summary != null && summary !== "") {
-    return (
-      <div className="mt-4">
-        <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">In brief</p>
-        <p className="mt-2 max-w-prose-measure border-l-2 border-l-blue bg-blue-tint/30 px-4 py-3 text-lead text-ink">
-          {scrub(summary)}
-        </p>
-      </div>
-    );
-  }
-  if (status === "pending") {
-    return (
-      <p role="status" className="mt-4 max-w-prose-measure text-body text-grey">
-        The summary is still being checked. The findings below are complete.
-      </p>
-    );
-  }
-  return null;
-}
-
-/**
  * The handful of sources the report leans on most.
  *
  * Every line is a fact the data already asserts — how often it is cited, its
@@ -1492,18 +1457,10 @@ export function ArtefactView() {
     snapshotCells.push(["Last updated", new Date(lastUpdated).toLocaleDateString(), null]);
   }
 
-  const topSources = (() => {
-    const sources = mostRelevantSources(sections);
-    const rawNotes = (data.most_relevant_notes ?? []) as Array<{ source_id: string; note: string }>;
-    const notesBySourceId = new Map<string, string>();
-    for (const note of rawNotes) {
-      if (note?.source_id && note?.note) notesBySourceId.set(note.source_id, note.note);
-    }
-    return sources.map((source) => ({
-      ...source,
-      note: notesBySourceId.get(source.sourceId) ?? source.note ?? null,
-    }));
-  })();
+  const topSources = mergeMostRelevantNotes(
+    mostRelevantSources(sections),
+    (data.most_relevant_notes ?? []) as Array<{ source_id: string; note: string }>,
+  );
 
   const roadmapText = fullReportIntro(bodySections.length, data.full_report_intro);
 

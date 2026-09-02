@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockArtefact } from "../mock/fixtures";
-import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, reportRoadmap, fullReportIntro, splitLeadColon, cardEvidenceChipLabels } from "./artefactPresentation";
+import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, cardEvidenceChipLabels } from "./artefactPresentation";
 
 describe("mostRelevantSources", () => {
   it("ranks by how many claims cite each source, not how many citation rows", () => {
@@ -275,13 +275,6 @@ describe("fullReportIntro", () => {
   });
 });
 
-describe("reportRoadmap", () => {
-  it("delegates to fullReportIntro", () => {
-    expect(reportRoadmap([])).toBeNull();
-    expect(reportRoadmap(["A", "B", "C"])).toBeNull();
-  });
-});
-
 describe("cardEvidenceMeta", () => {
   it("falls back to claim citations when rollup metadata is absent", () => {
     expect(
@@ -341,7 +334,7 @@ describe("artefactMarkdown case studies", () => {
         { title: "Case studies", role: "case_studies", blocks: [], cards: [] },
       ],
     });
-    expect(markdown).toContain("### Case studies");
+    expect(markdown).not.toContain("### Case studies");
     expect(markdown).not.toContain("**Finland");
   });
 
@@ -457,6 +450,24 @@ describe("mostRelevantSources case-study cards", () => {
     const result = mostRelevantSources(sections);
     expect(result).toHaveLength(2);
     expect(result.map((source) => source.sourceId).sort()).toEqual(["block-source", "card-source"]);
+  });
+
+  it("counts a claim once when a card re-projects its section block's claim", () => {
+    const sharedClaim = {
+      claim_id: "claim-1",
+      citations: [{ source_id: "shared-source", source_title: "Shared Source" }],
+    };
+    const sections = [
+      {
+        title: "Case studies",
+        role: "case_studies",
+        blocks: [{ claims: [sharedClaim] }],
+        cards: [{ title: "Finland", claims: [sharedClaim] }],
+      },
+    ];
+    const result = mostRelevantSources(sections);
+    expect(result).toHaveLength(1);
+    expect(result[0].citationCount).toBe(1);
   });
 });
 

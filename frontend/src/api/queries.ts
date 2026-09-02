@@ -6,7 +6,7 @@ import { createAuthedApiClient } from "./client";
 import type { components } from "./gen/types";
 
 /**
- * Query-key roots, shared with `src/store/useRunStream.ts` so SSE-driven
+ * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
  * invalidation can target "everything under this project" without every
  * hook here needing to know about the stream.
  */
@@ -213,9 +213,10 @@ export function usePortfolio(portfolioId: string) {
 /** `GET /api/v1/projects/{project_id}`.
  *
  *  `options.pollWhileRunning` keeps `latest_run.status` fresh for a caller
- *  with no run stream of its own — the app shell's lifecycle locking. On the
- *  pages that do mount `useRunStream`, the stream already invalidates this
- *  query, so those callers leave it off rather than pay for both. */
+ *  with no run stream of its own — historically the app shell's lifecycle
+ *  locking. The shell now also owns `RunStreamProvider`, which invalidates
+ *  this query on `stage.completed` / `run.status`; polling remains as a
+ *  reconnect-gap belt-and-braces. */
 export function useProject(projectId: string, options?: { pollWhileRunning?: boolean }) {
   const client = useApiClient();
   return useQuery({
