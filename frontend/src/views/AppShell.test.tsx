@@ -221,9 +221,17 @@ describe("AppShell — global chrome", () => {
     expect(screen.getByRole("link", { name: "Terms of use" })).toHaveAttribute("href", "/terms");
   });
 
-  it("shows the site footer inside a task", () => {
+  it("shows the site footer inside a task workspace", () => {
     renderShell(`/projects/${PROJECT_ID}`);
     expect(screen.getByRole("contentinfo")).toHaveTextContent(SITE_DISCLAIMER);
+  });
+
+  it("puts the site footer at the bottom of task tab scroll content", () => {
+    renderShell(`/projects/${PROJECT_ID}/sources`);
+    const pane = screen.getByTestId("task-scroll-pane");
+    const footer = screen.getByRole("contentinfo");
+    expect(pane).toContainElement(footer);
+    expect(footer).toHaveTextContent(SITE_DISCLAIMER);
   });
 });
 

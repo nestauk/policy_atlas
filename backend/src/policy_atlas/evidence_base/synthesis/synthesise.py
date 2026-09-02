@@ -44,6 +44,7 @@ from policy_atlas.core.schema import (
     search_coverage_record,
     selection_result,
     source_appraisal_result,
+    source_classification_result,
     source_extraction_record,
     source_snapshot,
     synthesis_result,
@@ -70,9 +71,15 @@ from policy_atlas.evidence_base.synthesis.summary_prompts import (
     SUMMARY_JUDGE_PROMPT_VERSION,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+    CASE_STUDIES_MODEL,
+    CASE_STUDIES_PROMPT_VERSION,
     FORBIDDEN_SECTION_TITLES,
     KEY_FINDINGS_GAP_MAX,
     KEY_FINDINGS_PROMPT_VERSION,
+    MOST_RELEVANT_NOTE_PROMPT_VERSION,
+    MRS_NOTE_MODEL,
+    FULL_REPORT_INTRO_PROMPT_VERSION,
+    FULL_REPORT_INTRO_MODEL,
     NAV_LABEL_MAX,
     SECTION_FOCUS_MAX,
     SECTION_PROMPT_VERSION,
@@ -80,6 +87,8 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
     SYNTHESIS_MODEL,
+    CaseStudyCardWire,
+    CaseStudyWire,
     ClaimWire,
     RepairItemWire,
     SectionProposalWire,
@@ -149,6 +158,13 @@ KEY_FINDINGS_SECTION_FOCUS = "key findings"
 # finding/chunk/pattern plus gap restatements (task 034 S3). Theme and
 # reasoning stay out. Intersected with the run's available claim types.
 KEY_FINDINGS_CLAIM_TYPES = {"finding", "chunk", "pattern", "gap"}
+
+# Case studies (task 034 S4): programme-grain cards after key findings.
+CASE_STUDIES_TITLE = "Case studies"
+CASE_STUDIES_CLAIM_TYPES = {"finding", "chunk", "reasoning"}
+CASE_STUDIES_MIN_CARDS = 2
+CASE_STUDIES_MAX_CARDS = 4
+MRS_NOTE_MAX = 3
 
 
 def _conclusions_focus(intent: str) -> str:
@@ -626,9 +642,19 @@ def generation_budget_max() -> int:
     proposed section (``SECTION_CAP``) plus the code-injected conclusions
     section — which rides above ``SECTION_CAP`` by construction (ADR 0015 §8) —
     each lane being its turns plus judge/repair/rejudge, plus the final
-    key-findings pass (one emission plus judge/repair/rejudge).
+    key-findings pass (one emission plus judge/repair/rejudge), plus the
+    case-studies pass (one emission plus up to ``CASE_STUDIES_MAX_CARDS``
+    judge-only card lanes — failing cards are dropped, never repaired), plus up
+    to ``MRS_NOTE_MAX`` most-relevant-source note calls.
     """
-    return 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + (1 + 3)
+    return (
+        2
+        + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3)
+        + (1 + 3)
+        + (1 + CASE_STUDIES_MAX_CARDS)
+        + MRS_NOTE_MAX
+        + 1
+    )
 
 
 def build_ledger(claims: Sequence[ClaimDraft]) -> list[dict[str, Any]]:
@@ -4590,6 +4616,635 @@ def _key_findings_pass(
     }
 
 
+def _build_doc_meta(
+    conn: Connection,
+    project_id: uuid.UUID,
+    substrate: SubstrateView,
+) -> dict[str, dict[str, Any]]:
+    """Build metadata keyed by finding_id from substrate + DB appraisal/classification.
+
+    Args:
+        conn: Open database connection.
+        project_id: Owning project.
+        substrate: In-memory substrate with findings and chunk data.
+
+    Returns:
+        Mapping from finding_id to {appraisal_label, evidence_type, year}.
+    """
+    all_findings = substrate.all_finding_by_id
+    if not all_findings:
+        return {}
+
+    pss_ids = {f.pss_id for f in all_findings.values()}
+
+    appraisal_rows = conn.execute(
+        sa_select(
+            source_appraisal_result.c.project_source_snapshot_id,
+            source_appraisal_result.c.quality_score,
+        ).where(
+            source_appraisal_result.c.project_id == project_id,
+            source_appraisal_result.c.project_source_snapshot_id.in_(
+                [uuid.UUID(p) for p in pss_ids]
+            ),
+        )
+    ).fetchall()
+    appraisal_by_pss: dict[str, int] = {}
+    for row in appraisal_rows:
+        key = str(row.project_source_snapshot_id)
+        appraisal_by_pss[key] = row.quality_score
+
+    classification_rows = conn.execute(
+        sa_select(
+            source_classification_result.c.project_source_snapshot_id,
+            source_classification_result.c.primary_evidence_type,
+        ).where(
+            source_classification_result.c.project_id == project_id,
+            source_classification_result.c.project_source_snapshot_id.in_(
+                [uuid.UUID(p) for p in pss_ids]
+            ),
+        )
+    ).fetchall()
+    classification_by_pss: dict[str, str] = {}
+    for row in classification_rows:
+        key = str(row.project_source_snapshot_id)
+        classification_by_pss[key] = row.primary_evidence_type
+
+    snapshot_ids = {f.source_snapshot_id for f in all_findings.values()}
+    metadata_rows = conn.execute(
+        sa_select(
+            source_snapshot.c.source_snapshot_id,
+            source_snapshot.c.metadata,
+        ).where(
+            source_snapshot.c.source_snapshot_id.in_(
+                [uuid.UUID(s) for s in snapshot_ids]
+            ),
+        )
+    ).fetchall()
+    metadata_by_snapshot: dict[str, dict[str, Any]] = {}
+    for row in metadata_rows:
+        key = str(row.source_snapshot_id)
+        metadata_by_snapshot[key] = row.metadata if isinstance(row.metadata, dict) else {}
+
+    result: dict[str, dict[str, Any]] = {}
+    for finding_id, info in all_findings.items():
+        score = appraisal_by_pss.get(info.pss_id)
+        label = SCORE_LABELS.get(score) if score is not None else None
+        evidence_type = classification_by_pss.get(info.pss_id)
+        meta = metadata_by_snapshot.get(info.source_snapshot_id, {})
+        year_val = meta.get("publication_year", meta.get("year"))
+        year = year_val if isinstance(year_val, int) and not isinstance(year_val, bool) else None
+        result[finding_id] = {
+            "appraisal_label": label,
+            "evidence_type": evidence_type,
+            "year": year,
+            "pss_id": info.pss_id,
+            "title": meta.get("title"),
+        }
+    return result
+
+
+def _case_studies_seed(
+    intent: str,
+    section_claim_groups: Sequence[tuple[SectionSpec, Sequence[ClaimDraft]]],
+    run_chunk_content: dict[str, str],
+    doc_meta: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Build the case-studies seed from verified claims and cited document meta.
+
+    Args:
+        intent: The evidence-scope intent.
+        section_claim_groups: Surviving claims grouped by section.
+        run_chunk_content: Chunk id → content map for the run.
+        doc_meta: Source id → {appraisal_label, evidence_type, year} from DB.
+
+    Returns:
+        Seed dict for the case-studies prompt.
+    """
+    ledger = _key_findings_ledger(section_claim_groups)
+    citable_chunk_ids = {
+        cited_id
+        for _, claims in section_claim_groups
+        for claim in claims
+        if claim.claim_type == "chunk"
+        for cited_id in claim.cited_ids
+    }
+    return {
+        "intent": intent,
+        "ledger": ledger,
+        "chunk_content_by_id": {
+            cid: content
+            for cid, content in run_chunk_content.items()
+            if cid in citable_chunk_ids
+        },
+        "doc_meta": doc_meta,
+    }
+
+
+def _validate_case_study_cards(
+    raw: CaseStudyWire,
+) -> tuple[list[CaseStudyCardWire], str | None]:
+    """Validate cards and drop failing ones.
+
+    Returns:
+        Tuple of (surviving cards, absence reason or None).
+    """
+    seen_titles: set[str] = set()
+    survivors: list[CaseStudyCardWire] = []
+    for card in raw.cards:
+        title_key = card.title.strip().lower()
+        if title_key in seen_titles:
+            log.warning("synthesis.case_study.duplicate_title", title=card.title)
+            continue
+        if card.result_ordinal < 0 or card.result_ordinal >= len(card.claims):
+            log.warning(
+                "synthesis.case_study.bad_result_ordinal",
+                title=card.title,
+                ordinal=card.result_ordinal,
+                claim_count=len(card.claims),
+            )
+            continue
+        if not card.prose.strip():
+            log.warning("synthesis.case_study.empty_prose", title=card.title)
+            continue
+        seen_titles.add(title_key)
+        survivors.append(card)
+    if len(survivors) > CASE_STUDIES_MAX_CARDS:
+        survivors = survivors[:CASE_STUDIES_MAX_CARDS]
+    if len(survivors) < CASE_STUDIES_MIN_CARDS:
+        reason = (
+            "insufficient_programmes"
+            if len(raw.cards) < CASE_STUDIES_MIN_CARDS
+            else "cards_failed_validation"
+        )
+        return [], reason
+    return survivors, None
+
+
+def _ground_case_study_card(
+    *,
+    card: CaseStudyCardWire,
+    section_index: int,
+    claim_index_start: int,
+    substrate: SubstrateView,
+    citable_finding_ids: set[str],
+    citable_chunk_ids: set[str],
+    available_claim_types: set[str],
+    grounding_judge_backend: GroundingJudgeBackend,
+    intent: str,
+    accounting: SectionAccounting,
+) -> tuple[list[ClaimDraft], dict[str, int], dict[str, int]] | None:
+    """Validate and judge one case-study card without repair.
+
+    Failing cards are dropped whole (task 034 plan Phase B): any span-bind,
+    structural, or judge failure returns ``None``.
+
+    Args:
+        card: One surviving card from the case-studies emission.
+        section_index: Section index for claim-id minting.
+        claim_index_start: Starting claim index across the combined block.
+        substrate: In-memory substrate view.
+        citable_finding_ids: Finding ids citable in this pass.
+        citable_chunk_ids: Chunk ids citable in this pass.
+        available_claim_types: Claim types allowed for case studies.
+        grounding_judge_backend: Grounding judge backend.
+        intent: Evidence-scope intent.
+        accounting: Mutable accounting for rejections on dropped cards.
+
+    Returns:
+        Minted claims plus per-card judge call counts and usage, or ``None``
+        when the card fails validation or grounding.
+    """
+    card_text = f"**{card.title}**\n{card.prose}"
+    wire_claims = [
+        ClaimWire(
+            claim_type=claim.claim_type,
+            text=claim.text,
+            cited_finding_ids=claim.cited_finding_ids,
+            citations=claim.citations,
+        )
+        for claim in card.claims
+    ]
+    if not wire_claims:
+        return None
+
+    claim_indices = list(
+        range(claim_index_start, claim_index_start + len(wire_claims))
+    )
+    spans = bind_spans(card_text, [claim.text for claim in wire_claims])
+    if any(span is None for span in spans):
+        return None
+
+    initial = validate_claims(
+        wire_claims,
+        substrate=substrate,
+        section_index=section_index,
+        section_group_ids=set(),
+        citable_finding_ids=citable_finding_ids,
+        citable_chunk_ids=citable_chunk_ids,
+        spans=spans,
+        claim_indices=claim_indices,
+        available_claim_types=available_claim_types,
+    )
+    if initial.rejected:
+        for rejection in initial.rejected:
+            _count_exclusion(rejection, accounting=accounting)
+        return None
+
+    call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
+    usage_totals = UsageAccumulator()
+    judge_calls, judge_usage, _unspanned = _judge_claims(
+        claims=initial.drafts,
+        substrate=substrate,
+        grounding_judge_backend=grounding_judge_backend,
+        section_prose=card_text,
+        intent=intent,
+        section_focus="case studies",
+    )
+    call_counts["judge"] = judge_calls
+    usage_totals.add_payload(judge_usage)
+
+    failing = _failing_records(initial.rejected, initial.drafts, prose=card_text)
+    if failing or len(initial.drafts) != len(wire_claims):
+        for rejection in initial.rejected:
+            _count_exclusion(rejection, accounting=accounting)
+        for draft in initial.drafts:
+            if draft.verdict == "unsupported_mis_cited":
+                accounting.claims_rejected_structural += 1
+        return None
+
+    return initial.drafts, call_counts, usage_totals.payload()
+
+
+def _case_studies_pass(
+    conn: Connection,
+    *,
+    artefact_id: uuid.UUID,
+    intent: str,
+    section_claim_groups: Sequence[tuple[SectionSpec, Sequence[ClaimDraft]]],
+    all_claims: Sequence[ClaimDraft],
+    substrate: "SubstrateView",
+    synthesis_backend: SynthesisBackend,
+    grounding_judge_backend: GroundingJudgeBackend,
+    run_chunk_content: dict[str, str],
+    available_claim_types: set[str],
+    cs_section_index: int,
+    created_at: datetime,
+    doc_meta: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Run the case-studies pass.
+
+    Returns a result dict: ``present`` plus, when present, the minted
+    ``block_id``, its ``claims``, ``block_rollup`` and the ``call_counts``/
+    ``usage`` of the pass; when absent, ``reason``.
+    """
+    cs_available = CASE_STUDIES_CLAIM_TYPES & available_claim_types
+    seed = _case_studies_seed(
+        intent, section_claim_groups, run_chunk_content, doc_meta,
+    )
+    usage_totals = UsageAccumulator()
+    raw_wire, cs_usage = synthesis_backend.write_case_studies(seed)
+    usage_totals.add(cs_usage)
+
+    survivors, absence_reason = _validate_case_study_cards(raw_wire)
+    if absence_reason is not None:
+        return {
+            "present": False,
+            "reason": absence_reason,
+            "emission_calls": 1,
+            "usage": usage_totals.payload(),
+        }
+
+    citable_finding_ids = {
+        cited_id
+        for claim in all_claims
+        if claim.claim_type == "finding"
+        for cited_id in claim.cited_ids
+    }
+    citable_chunk_ids = {
+        cited_id
+        for claim in all_claims
+        if claim.claim_type == "chunk"
+        for cited_id in claim.cited_ids
+    }
+
+    accounting = SectionAccounting(
+        tool_call_counts={},
+        tool_call_count=0,
+        gathered_id_hash=_gathered_hash({"finding_ids": set(), "chunk_ids": set()}),
+        turns_used=0,
+        turn_cap_hit=False,
+    )
+    call_counts = {"judge": 0, "repair": 0, "rejudge": 0}
+    grounded_cards: list[tuple[CaseStudyCardWire, list[ClaimDraft]]] = []
+    claim_index = 0
+    for card in survivors:
+        grounded = _ground_case_study_card(
+            card=card,
+            section_index=cs_section_index,
+            claim_index_start=claim_index,
+            substrate=substrate,
+            citable_finding_ids=citable_finding_ids,
+            citable_chunk_ids=citable_chunk_ids,
+            available_claim_types=cs_available,
+            grounding_judge_backend=grounding_judge_backend,
+            intent=intent,
+            accounting=accounting,
+        )
+        if grounded is None:
+            log.info("synthesis.case_study.card_dropped", title=card.title)
+            continue
+        card_claims, card_call_counts, card_usage = grounded
+        for phase, count in card_call_counts.items():
+            call_counts[phase] += count
+        usage_totals.add_payload(card_usage)
+        grounded_cards.append((card, card_claims))
+        claim_index += len(card_claims)
+
+    if len(grounded_cards) < CASE_STUDIES_MIN_CARDS:
+        reason = (
+            "insufficient_programmes"
+            if len(survivors) < CASE_STUDIES_MIN_CARDS
+            else "cards_failed_validation"
+        )
+        return {
+            "present": False,
+            "reason": reason,
+            "emission_calls": 1,
+            "usage": usage_totals.payload(),
+        }
+
+    combined_prose_parts: list[str] = []
+    card_payloads: list[dict[str, Any]] = []
+    claims: list[ClaimDraft] = []
+    prose_offset = 0
+    for card, card_claims in grounded_cards:
+        card_header = f"**{card.title}**\n"
+        card_text = card_header + card.prose
+        combined_prose_parts.append(card_text)
+        for claim in card_claims:
+            if claim.span is not None:
+                start, end = claim.span
+                claim.span = (prose_offset + start, prose_offset + end)
+            claims.append(claim)
+        card_payloads.append({
+            "title": card.title,
+            "prose": card.prose,
+            "result_ordinal": card.result_ordinal,
+            "claim_count": len(card_claims),
+        })
+        prose_offset += len(card_text) + 2
+
+    final_prose = "\n\n".join(combined_prose_parts)
+    section_spec = SectionSpec(
+        title=CASE_STUDIES_TITLE, focus="Programme-grain case studies.", role="case_studies"
+    )
+
+    block_id = _write_section(
+        conn,
+        artefact_id=artefact_id,
+        prose=final_prose,
+        claims=claims,
+        unspanned=[],
+        substrate=substrate,
+        created_at=created_at,
+    )
+
+    # Resolve result_ordinal → claim_id for each card, and re-anchor claim
+    # spans into card.prose so the public shape doesn't depend on combined
+    # block offsets.
+    claim_offset = 0
+    cards_out: list[dict[str, Any]] = []
+    for card_payload, (card_wire, _) in zip(card_payloads, grounded_cards):
+        card_claim_count = card_payload["claim_count"]
+        result_claim_id: str | None = None
+        ordinal = card_payload["result_ordinal"]
+        card_claims_slice = claims[claim_offset:claim_offset + card_claim_count]
+        if 0 <= ordinal < len(card_claims_slice):
+            result_claim_id = card_claims_slice[ordinal].claim_id
+
+        # Extract metadata from doc_meta where possible
+        strength: str | None = None
+        design: str | None = None
+        since_year: int | None = None
+        for claim in card_wire.claims:
+            for fid in claim.cited_finding_ids:
+                meta = doc_meta.get(fid)
+                if isinstance(meta, dict):
+                    strength = strength or meta.get("appraisal_label")
+                    design = design or meta.get("evidence_type")
+                    yr = meta.get("year")
+                    if isinstance(yr, int):
+                        since_year = since_year or yr
+
+        card_prose = card_wire.prose
+        card_claim_ids: list[str] = []
+        card_claim_spans: list[dict[str, Any]] = []
+        for minted in card_claims_slice:
+            card_claim_ids.append(minted.claim_id)
+            pos = card_prose.find(minted.text)
+            span: tuple[int, int] | None = (pos, pos + len(minted.text)) if pos >= 0 else None
+            card_claim_spans.append({"claim_id": minted.claim_id, "span": span})
+
+        cards_out.append({
+            "card_id": str(uuid.uuid4()),
+            "title": card_payload["title"],
+            "prose": card_prose,
+            "result_ordinal": ordinal,
+            "result_claim_id": result_claim_id,
+            "strength": strength,
+            "design": design,
+            "since_year": since_year,
+            "claim_ids": card_claim_ids,
+            "claim_spans": card_claim_spans,
+        })
+        claim_offset += card_claim_count
+
+    block_rollup = _blocks_rollup(
+        section=section_spec,
+        block_id=block_id,
+        claims=claims,
+        accounting=accounting,
+    )
+    block_rollup["cards"] = cards_out
+
+    return {
+        "present": True,
+        "block_id": block_id,
+        "claims": claims,
+        "block_rollup": block_rollup,
+        "accounting": accounting,
+        "emission_calls": 1,
+        "call_counts": call_counts,
+        "usage": usage_totals.payload(),
+    }
+
+
+def _ranked_top_sources(
+    all_claims: Sequence[ClaimDraft],
+    substrate: SubstrateView,
+    doc_meta: dict[str, dict[str, Any]],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Rank the top sources by citation count, mirroring the frontend ranking.
+
+    Maps citation_rows' chunk_ids to pss_ids via the substrate, then counts
+    unique sources per claim.  Tie-break: appraisal rank (strongest first),
+    then title.
+
+    Args:
+        all_claims: All surviving claims from the artefact.
+        substrate: In-memory substrate for chunk→pss mapping.
+        doc_meta: Finding-id keyed metadata from ``_build_doc_meta``.
+        limit: Number of top sources to return.
+
+    Returns:
+        List of dicts with source_id + metadata for note generation.
+    """
+    appraisal_order = {"Very strong": 0, "Strong": 1, "Moderate": 2, "Limited": 3, "Weak": 4}
+
+    source_counts: dict[str, int] = {}
+    source_claim_texts: dict[str, list[str]] = {}
+    source_quotes: dict[str, list[str]] = {}
+    # Collect pss_id → first-seen metadata for enrichment.
+    source_meta: dict[str, dict[str, Any]] = {}
+
+    for claim in all_claims:
+        seen_in_claim: set[str] = set()
+        # finding-type claims: map cited finding_ids to their pss_id
+        for fid in claim.cited_ids:
+            finding = substrate.all_finding_by_id.get(fid)
+            if finding is not None and finding.pss_id not in seen_in_claim:
+                pss_id = finding.pss_id
+                seen_in_claim.add(pss_id)
+                source_counts[pss_id] = source_counts.get(pss_id, 0) + 1
+                source_claim_texts.setdefault(pss_id, []).append(claim.text)
+                if pss_id not in source_meta:
+                    meta = doc_meta.get(fid, {})
+                    source_meta[pss_id] = meta
+        # chunk-type claims: map citation_rows' chunk_ids to pss_ids
+        for citation_row in claim.citation_rows:
+            chunk_info = substrate.chunk_by_id.get(citation_row.chunk_id)
+            if chunk_info is None:
+                continue
+            pss_id = chunk_info.pss_id
+            if pss_id not in seen_in_claim:
+                seen_in_claim.add(pss_id)
+                source_counts[pss_id] = source_counts.get(pss_id, 0) + 1
+                source_claim_texts.setdefault(pss_id, []).append(claim.text)
+            source_quotes.setdefault(pss_id, []).append(citation_row.quote)
+
+    if not source_counts:
+        return []
+
+    def _sort_key(item: tuple[str, int]) -> tuple[int, int, str]:
+        sid, count = item
+        meta = source_meta.get(sid, {})
+        rank = appraisal_order.get(meta.get("appraisal_label", ""), 5)
+        title = meta.get("title") or ""
+        return (-count, rank, title)
+
+    ranked = sorted(source_counts.items(), key=_sort_key)[:limit]
+    return [
+        {
+            "source_id": sid,
+            "citation_count": count,
+            "title": source_meta.get(sid, {}).get("title", ""),
+            "appraisal_label": source_meta.get(sid, {}).get("appraisal_label"),
+            "evidence_type": source_meta.get(sid, {}).get("evidence_type"),
+            "claim_texts": source_claim_texts.get(sid, []),
+            "quotes": source_quotes.get(sid, []),
+        }
+        for sid, count in ranked
+    ]
+
+
+def _write_mrs_notes(
+    top_sources: list[dict[str, Any]],
+    synthesis_backend: SynthesisBackend,
+) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
+    """Write grounded notes for the top cited sources.
+
+    Fail-soft: a failing note is omitted, never fails the run.
+
+    Args:
+        top_sources: Ranked source dicts with claim_texts/quotes.
+        synthesis_backend: The synthesis backend for note generation.
+
+    Returns:
+        Tuple of note dicts, generation call count, and usage totals payload.
+    """
+    notes: list[dict[str, Any]] = []
+    usage_totals = UsageAccumulator()
+    note_calls = 0
+    for source in top_sources:
+        seed = {
+            "title": source.get("title", ""),
+            "appraisal": source.get("appraisal_label"),
+            "evidence_type": source.get("evidence_type"),
+            "claim_texts": source.get("claim_texts", [])[:10],
+            "quotes": source.get("quotes", [])[:5],
+        }
+        try:
+            note_wire, note_usage = synthesis_backend.write_source_note(seed)
+            note_calls += 1
+            usage_totals.add(note_usage)
+            if note_wire.note.strip():
+                notes.append({
+                    "source_id": source["source_id"],
+                    "note": note_wire.note.strip(),
+                })
+        except Exception:  # noqa: BLE001 - fail-soft
+            log.warning(
+                "synthesis.mrs_note.failed",
+                source_id=source.get("source_id"),
+            )
+    return notes, note_calls, usage_totals.payload()
+
+
+def _write_full_report_intro(
+    *,
+    intent: str,
+    sections: Sequence[SectionSpec],
+    synthesis_backend: SynthesisBackend,
+) -> tuple[str | None, int, dict[str, int]]:
+    """Write a short introduction to the full-report body sections.
+
+    Fail-soft: a failing intro is omitted, never fails the run.
+
+    Args:
+        intent: The evidence-scope intent.
+        sections: Proposed section specs in report order.
+        synthesis_backend: The synthesis backend for intro generation.
+
+    Returns:
+        Tuple of intro text (or None), generation call count, and usage payload.
+    """
+    body_sections = [section for section in sections if section.role in {"standard", "conclusions"}]
+    if not body_sections:
+        return None, 0, UsageAccumulator().payload()
+    seed = {
+        "intent": intent,
+        "sections": [
+            {
+                "title": section.title,
+                "nav_label": section.nav_label,
+                "role": section.role,
+                "focus": section.focus,
+            }
+            for section in body_sections
+        ],
+    }
+    try:
+        intro_wire, intro_usage = synthesis_backend.write_full_report_intro(seed)
+        intro_text = intro_wire.intro.strip()
+        usage_totals = UsageAccumulator()
+        usage_totals.add(intro_usage)
+        return (intro_text or None), 1, usage_totals.payload()
+    except Exception:  # noqa: BLE001 - fail-soft
+        log.warning("synthesis.full_report_intro.failed", exc_info=True)
+        return None, 0, UsageAccumulator().payload()
+
+
 def synthesise_scope(
     conn: Connection,
     *,
@@ -4652,6 +5307,13 @@ def synthesise_scope(
         "key_findings_judge": 0,
         "key_findings_repair": 0,
         "key_findings_rejudge": 0,
+        # Case studies pass (task 034 S4).
+        "case_studies": 0,
+        "case_studies_judge": 0,
+        "case_studies_repair": 0,
+        "case_studies_rejudge": 0,
+        "mrs_notes": 0,
+        "full_report_intro": 0,
     }
     usage_totals = UsageAccumulator()
     refs = _resolve_references(conn, project_id=project_id, context=context)
@@ -5109,6 +5771,82 @@ def synthesise_scope(
         if progress_emitter is not None:
             progress_emitter.key_findings_completed(prose="")
 
+    # --- Case studies pass (task 034 S4) ---
+    doc_meta = _build_doc_meta(conn, project_id, substrate)
+    case_studies_rollup: dict[str, Any]
+    try:
+        case_studies_result = _case_studies_pass(
+            conn,
+            artefact_id=artefact_id,
+            intent=context.intent,
+            section_claim_groups=section_claim_groups,
+            all_claims=all_claims,
+            substrate=substrate,
+            synthesis_backend=synthesis_backend,
+            grounding_judge_backend=grounding_judge_backend,
+            run_chunk_content=run_chunk_content,
+            available_claim_types=available_claim_types,
+            cs_section_index=len(sections) + 1,
+            created_at=created_at,
+            doc_meta=doc_meta,
+        )
+    except Exception:  # noqa: BLE001 - case studies fail-soft
+        log.warning("synthesis.case_studies.failed", exc_info=True)
+        case_studies_result = {
+            "present": False,
+            "reason": "backend_error",
+            "emission_calls": 0,
+            "usage": UsageAccumulator().payload(),
+        }
+    call_counts["case_studies"] += int(case_studies_result.get("emission_calls", 0))
+    usage_totals.add_payload(case_studies_result.get("usage", UsageAccumulator().payload()))
+    if case_studies_result["present"]:
+        cs_call_counts = case_studies_result.get("call_counts", {})
+        call_counts["case_studies_judge"] += cs_call_counts.get("judge", 0)
+        call_counts["case_studies_repair"] += cs_call_counts.get("repair", 0)
+        call_counts["case_studies_rejudge"] += cs_call_counts.get("rejudge", 0)
+        cs_accounting: SectionAccounting = case_studies_result["accounting"]
+        cs_claims: list[ClaimDraft] = list(case_studies_result["claims"])
+        # Insert after key_findings (index 0 if kf present, else index 0)
+        kf_insert = 1 if key_findings_result["present"] else 0
+        section_rollups.insert(kf_insert, case_studies_result["block_rollup"])
+        blocks_written.append(case_studies_result["block_id"])
+        total_chunk_rejections += cs_accounting.chunk_claims_rejected
+        total_structural_rejections += cs_accounting.claims_rejected_structural
+        repair_path_taken = repair_path_taken or cs_accounting.repair_taken
+        all_claims.extend(cs_claims)
+        case_studies_rollup = {"present": True}
+    else:
+        case_studies_rollup = {
+            "present": False,
+            "reason": case_studies_result.get("reason", "unknown"),
+        }
+
+    # --- Most-relevant-source notes (task 034 S5) ---
+    mrs_notes: list[dict[str, Any]] = []
+    try:
+        mrs_notes, mrs_note_calls, mrs_note_usage = _write_mrs_notes(
+            _ranked_top_sources(all_claims, substrate, doc_meta),
+            synthesis_backend,
+        )
+        call_counts["mrs_notes"] += mrs_note_calls
+        usage_totals.add_payload(mrs_note_usage)
+    except Exception:  # noqa: BLE001 - MRS notes fail-soft
+        log.warning("synthesis.mrs_notes.failed", exc_info=True)
+
+    full_report_intro: str | None = None
+    try:
+        intro_text, intro_calls, intro_usage = _write_full_report_intro(
+            intent=context.intent,
+            sections=sections,
+            synthesis_backend=synthesis_backend,
+        )
+        call_counts["full_report_intro"] += intro_calls
+        usage_totals.add_payload(intro_usage)
+        full_report_intro = intro_text
+    except Exception:  # noqa: BLE001 - full-report intro fail-soft
+        log.warning("synthesis.full_report_intro.failed", exc_info=True)
+
     retrieval_provenance = retriever.provenance() if retriever is not None else {}
     retrieval_scope_payload = {
         "screened_doc_count": corpus.screened_docs,
@@ -5133,13 +5871,22 @@ def synthesise_scope(
             "sections": SECTIONS_PROMPT_VERSION,
             "section": SECTION_PROMPT_VERSION,
             "key_findings": KEY_FINDINGS_PROMPT_VERSION,
+            "case_studies": CASE_STUDIES_PROMPT_VERSION,
+            "mrs_note": MOST_RELEVANT_NOTE_PROMPT_VERSION,
+            "full_report_intro": FULL_REPORT_INTRO_PROMPT_VERSION,
             "judge": JUDGE_PROMPT_VERSION,
             "tool_schemas": {
                 "version_note": "versioned with section prompt",
                 "schema_count": len(SECTION_TOOL_SCHEMAS),
             },
         },
-        "models": {"synthesis": SYNTHESIS_MODEL, "judge": JUDGE_MODEL},
+        "models": {
+            "synthesis": SYNTHESIS_MODEL,
+            "case_studies": CASE_STUDIES_MODEL,
+            "judge": JUDGE_MODEL,
+            "mrs_note": MRS_NOTE_MODEL,
+            "full_report_intro": FULL_REPORT_INTRO_MODEL,
+        },
         "envelope_policy_version": ENVELOPE_VERSION,
         "backend_modes": {
             "synthesis": synthesis_backend.mode,
@@ -5201,6 +5948,11 @@ def synthesise_scope(
     # Conditional-required key-findings marker (ADR 0015 §8): present iff a
     # block was minted; the absence path records why nothing was forced.
     counts["key_findings"] = key_findings_rollup
+    counts["case_studies"] = case_studies_rollup
+    if mrs_notes:
+        counts["most_relevant_notes"] = mrs_notes
+    if full_report_intro:
+        counts["full_report_intro"] = full_report_intro
     flags = _rollup_flags(
         groups_unsectioned=groups_unsectioned,
         all_claims=all_claims,

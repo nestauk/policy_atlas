@@ -39,12 +39,14 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     parse_synthesis_directive,
 )
 from policy_atlas.evidence_base.synthesis.synthesise import (
+    CASE_STUDIES_MAX_CARDS,
     CONCLUSIONS_TITLE,
     ChunkInfo,
     ClaimDraft,
     CorpusProfile,
     CoverageRecord,
     FindingInfo,
+    MRS_NOTE_MAX,
     SectionAccounting,
     SectionSpec,
     SpliceItem,
@@ -55,6 +57,7 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
     _judge_claims,
     _key_findings_ledger,
     _section_claims,
+    _validate_case_study_cards,
     _validate_sections,
     bind_spans,
     build_ledger,
@@ -244,8 +247,17 @@ def test_artefact_title_strips_control_chars_and_truncates() -> None:
 
 def test_budget_formula_and_ledger_marker() -> None:
     # +1 conclusions section (rides above SECTION_CAP) + the key-findings pass
-    # (emission + judge/repair/rejudge) — ADR 0015 §8.
-    assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
+    # (emission + judge/repair/rejudge) + case-studies (emission + per-card judge)
+    # + up to MRS_NOTE_MAX note calls.
+    assert (
+        generation_budget_max()
+        == 2
+        + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3)
+        + 4
+        + (1 + CASE_STUDIES_MAX_CARDS)
+        + MRS_NOTE_MAX
+        + 1
+    )
 
     # 022 rider 18 (F0 § DTO spec): the prompt-facing ledger record slims to
     # claim id/type/text — cited_ids/flags/a repeated non-citable note are
@@ -1665,3 +1677,35 @@ def test_key_findings_gap_restatement_caps_at_two() -> None:
     )
     assert len(batch.drafts) == KEY_FINDINGS_GAP_MAX
     assert [item.reason for item in batch.rejected] == ["gap_restatement_cap"]
+
+
+# --- _validate_case_study_cards (task 034 S4) ---
+
+
+def test_validate_case_study_cards_drops_bad_ordinal() -> None:
+    """A card with result_ordinal out of range is dropped."""
+    from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+        CaseStudyCardWire,
+        CaseStudyClaimWire,
+        CaseStudyWire,
+    )
+
+    wire = CaseStudyWire(cards=[
+        CaseStudyCardWire(
+            title="Good card",
+            prose="A sentence about evidence.",
+            claims=[CaseStudyClaimWire(claim_type="finding", text="Evidence (stub).", cited_finding_ids=["f-1"])],
+            result_ordinal=0,
+        ),
+        CaseStudyCardWire(
+            title="Bad ordinal card",
+            prose="Another sentence.",
+            claims=[CaseStudyClaimWire(claim_type="finding", text="More evidence.", cited_finding_ids=["f-2"])],
+            result_ordinal=5,
+        ),
+    ])
+    survivors, reason = _validate_case_study_cards(wire)
+    # Bad ordinal card is dropped; only 1 survivor is below the minimum so
+    # the whole pass degrades.
+    assert reason is not None
+    assert len(survivors) == 0

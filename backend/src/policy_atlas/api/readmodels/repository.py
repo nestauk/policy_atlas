@@ -15,6 +15,7 @@ from policy_atlas.api.contract import (
     EVIDENCE_STATUS_INCLUDED,
     ArtefactOut,
     BlockOut,
+    CaseStudyCardOut,
     ChunkContextOut,
     CitationOut,
     CitedInOut,
@@ -35,6 +36,7 @@ from policy_atlas.api.contract import (
     IofFindingOut,
     IofStatisticsOut,
     LandscapeOut,
+    MostRelevantNoteOut,
     Page,
     PageMeta,
     ReferenceOut,
@@ -1340,10 +1342,14 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     refs: dict[uuid.UUID, int] = {}
     reference_order: list[uuid.UUID] = []
     claims_by_block: dict[uuid.UUID, list[ClaimOut]] = {block_id: [] for block_id in ids}
+    claims_alias_by_block: dict[uuid.UUID, dict[str, ClaimOut]] = {
+        block_id: {} for block_id in ids
+    }
     for row in annotations:
         locator = row.locator if isinstance(row.locator, Mapping) else {}
         start, end = locator.get("start"), locator.get("end")
         span = (start, end) if isinstance(start, int) and isinstance(end, int) else None
+        row_payload = row.payload if isinstance(row.payload, Mapping) else {}
         claim_citations: list[CitationOut] = []
         for cited in citations_by_annotation.get(row.annotation_id, []):
             snapshot_id = cited.source_snapshot_id
@@ -1356,7 +1362,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
             score_row = appraisal.get(pss_id) if pss_id is not None else None
-            payload = row.payload if isinstance(row.payload, Mapping) else {}
+            payload = row_payload
             claim_citations.append(
                 CitationOut(
                     citation_id=cited.citation_id,
@@ -1387,8 +1393,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
             in {"citation", "gap", "reasoning", "pattern", "theme", "unspanned_assertion"}
             else "reasoning"
         )
-        claims_by_block[row.block_id].append(
-            ClaimOut(
+        claim_out = ClaimOut(
                 claim_id=row.unit_id,
                 claim_type=cast(Any, claim_type),
                 text=row.content,
@@ -1398,13 +1403,16 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 gap=_gap_out(row.payload),
                 theme=_theme_out(row.payload, characterisation_themes, grouping_themes),
             )
-        )
+        claims_by_block[row.block_id].append(claim_out)
+        synthesis_claim_id = row_payload.get("claim_id")
+        if isinstance(synthesis_claim_id, str):
+            claims_alias_by_block[row.block_id][synthesis_claim_id] = claim_out
     section_entries: dict[tuple[str, str, str | None, str | None], list[uuid.UUID]] = {}
     for spec, block_id in parsed_specs:
         role: str = cast(
             str,
             spec.get("role")
-            if spec.get("role") in {"key_findings", "standard", "conclusions"}
+            if spec.get("role") in {"key_findings", "case_studies", "standard", "conclusions"}
             else "standard",
         )
         title = cast(str, spec.get("title") or "")
@@ -1417,9 +1425,60 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
             else None
         )
         section_entries.setdefault((title, role, focus, nav_label), []).append(block_id)
+    # Build a lookup from block_id → rollup spec for card projection.
+    spec_by_block_id: dict[uuid.UUID, Mapping[str, Any]] = {}
+    for spec_item, bid in parsed_specs:
+        spec_by_block_id[bid] = spec_item
+
     sections: list[SectionOut] = []
     for (title, role, focus, nav_label), section_block_ids in section_entries.items():
         single_block = block_rows.get(section_block_ids[0]) if len(section_block_ids) == 1 else None
+        # Project case-study cards from the block rollup when role is case_studies.
+        cards: list[CaseStudyCardOut] = []
+        if role == "case_studies":
+            for bid in section_block_ids:
+                rollup_spec = spec_by_block_id.get(bid, {})
+                raw_cards = rollup_spec.get("cards", [])
+                if isinstance(raw_cards, list):
+                    block_claims = claims_by_block.get(bid, [])
+                    block_claim_by_id = {str(c.claim_id): c for c in block_claims}
+                    block_claim_by_id.update(claims_alias_by_block.get(bid, {}))
+                    claim_id_map = {str(c.claim_id): c.claim_id for c in block_claims}
+                    for alias_id, claim in claims_alias_by_block.get(bid, {}).items():
+                        claim_id_map.setdefault(alias_id, claim.claim_id)
+                    for raw_card in raw_cards:
+                        if not isinstance(raw_card, dict):
+                            continue
+                        result_claim_str = raw_card.get("result_claim_id")
+                        result_claim_uuid = (
+                            claim_id_map.get(result_claim_str)
+                            if isinstance(result_claim_str, str)
+                            else None
+                        )
+                        card_id_str = raw_card.get("card_id")
+                        try:
+                            card_uuid = uuid.UUID(card_id_str) if isinstance(card_id_str, str) else uuid.uuid4()
+                        except ValueError:
+                            card_uuid = uuid.uuid4()
+                        # Project per-card claims from stored claim_ids/spans
+                        card_claims = _project_card_claims(
+                            raw_card, block_claim_by_id,
+                        )
+                        strength, design, since_year = _card_evidence_fields(
+                            raw_card, card_claims,
+                        )
+                        cards.append(
+                            CaseStudyCardOut(
+                                card_id=card_uuid,
+                                title=raw_card.get("title", ""),
+                                prose=raw_card.get("prose", ""),
+                                claims=card_claims,
+                                result_claim_id=result_claim_uuid,
+                                strength=strength,
+                                design=design,
+                                since_year=since_year,
+                            )
+                        )
         sections.append(
             SectionOut(
                 title=title,
@@ -1434,6 +1493,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                     )
                     for block_id in section_block_ids
                 ],
+                cards=cards,
                 summary=single_block.summary if single_block is not None else None,
                 summary_status=(
                     cast(Any, single_block.summary_status) if single_block is not None else None
@@ -1483,6 +1543,29 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     )
     reference_years = [reference.year for reference in refs_out if reference.year is not None]
     year_range = (min(reference_years), max(reference_years)) if reference_years else None
+    # Project most_relevant_notes from counts JSONB (task 034 S5).
+    raw_counts = synthesis.get("counts")
+    raw_mrs_notes = (
+        raw_counts.get("most_relevant_notes", [])
+        if isinstance(raw_counts, Mapping)
+        else []
+    )
+    mrs_notes_out = [
+        MostRelevantNoteOut(source_id=str(note["source_id"]), note=str(note["note"]))
+        for note in (raw_mrs_notes if isinstance(raw_mrs_notes, list) else [])
+        if isinstance(note, dict) and isinstance(note.get("source_id"), str) and isinstance(note.get("note"), str)
+    ]
+    raw_full_report_intro = (
+        raw_counts.get("full_report_intro")
+        if isinstance(raw_counts, Mapping)
+        else None
+    )
+    full_report_intro_out = (
+        raw_full_report_intro.strip()
+        if isinstance(raw_full_report_intro, str) and raw_full_report_intro.strip() != ""
+        else None
+    )
+
     return ArtefactOut(
         artefact_id=artefact_row["artefact_id"],
         title=artefact_row["title"],
@@ -1498,7 +1581,103 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         ),
         sections=sections,
         references=refs_out,
+        most_relevant_notes=mrs_notes_out,
+        full_report_intro=full_report_intro_out,
     )
+
+
+def _card_evidence_fields(
+    raw_card: dict[str, Any],
+    card_claims: list[ClaimOut],
+) -> tuple[str | None, str | None, int | None]:
+    """Strength, design and year for a case-study card.
+
+    Rollup JSONB may omit metadata when finding-level lookup missed; fill
+    from the card claims' citation rows when present.
+
+    Args:
+        raw_card: One card dict from the rollup JSONB.
+        card_claims: Projected claims for the card.
+
+    Returns:
+        Tuple of (strength, design, since_year).
+    """
+    strength = raw_card.get("strength") if isinstance(raw_card.get("strength"), str) else None
+    design = raw_card.get("design") if isinstance(raw_card.get("design"), str) else None
+    since_year = raw_card.get("since_year") if isinstance(raw_card.get("since_year"), int) else None
+    for claim in card_claims:
+        for citation in claim.citations:
+            strength = strength or citation.appraisal_label
+            design = design or citation.evidence_type
+    return strength, design, since_year
+
+
+def _project_card_claims(
+    raw_card: dict[str, Any],
+    block_claim_by_id: dict[str, ClaimOut],
+) -> list[ClaimOut]:
+    """Project per-card claims with spans re-anchored into card prose.
+
+    Uses stored ``claim_ids`` and ``claim_spans`` from the rollup when
+    available; falls back to substring matching for rollups written before
+    per-card claim storage.
+
+    Args:
+        raw_card: One card dict from the rollup JSONB.
+        block_claim_by_id: Block-level ClaimOut objects keyed by claim_id str.
+
+    Returns:
+        ClaimOut list with spans relative to card.prose.
+    """
+    card_prose = raw_card.get("prose", "")
+    stored_ids = raw_card.get("claim_ids")
+    stored_spans = raw_card.get("claim_spans")
+
+    if isinstance(stored_ids, list) and stored_ids:
+        span_by_id: dict[str, tuple[int, int] | None] = {}
+        if isinstance(stored_spans, list):
+            for entry in stored_spans:
+                if isinstance(entry, dict):
+                    cid = entry.get("claim_id")
+                    sp = entry.get("span")
+                    if isinstance(cid, str) and isinstance(sp, (list, tuple)) and len(sp) == 2:
+                        span_by_id[cid] = (int(sp[0]), int(sp[1]))
+        result: list[ClaimOut] = []
+        for cid in stored_ids:
+            if not isinstance(cid, str):
+                continue
+            block_claim = block_claim_by_id.get(cid)
+            if block_claim is None:
+                continue
+            span = span_by_id.get(cid, None)
+            result.append(ClaimOut(
+                claim_id=block_claim.claim_id,
+                claim_type=block_claim.claim_type,
+                text=block_claim.text,
+                span=span,
+                citations=block_claim.citations,
+                weakly_grounded=block_claim.weakly_grounded,
+                gap=block_claim.gap,
+                theme=block_claim.theme,
+            ))
+        return result
+
+    # Fallback: match block claims whose text is a substring of card prose
+    result = []
+    for claim in block_claim_by_id.values():
+        pos = card_prose.find(claim.text)
+        if pos >= 0:
+            result.append(ClaimOut(
+                claim_id=claim.claim_id,
+                claim_type=claim.claim_type,
+                text=claim.text,
+                span=(pos, pos + len(claim.text)),
+                citations=claim.citations,
+                weakly_grounded=claim.weakly_grounded,
+                gap=claim.gap,
+                theme=claim.theme,
+            ))
+    return result
 
 
 def _weakly_grounded(payload: Any) -> bool | None:

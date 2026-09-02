@@ -2,7 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { ContentsSidebar, SectionDisclosure, sectionSummary } from "./ArtefactOutline";
+import { ContentsSidebar, FullReportExpandAllButton, FullReportExpandProvider, SectionDisclosure, sectionSummary, useScrollWhenNavigated } from "./ArtefactOutline";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 import { AnnotatedProse } from "./ArtefactView";
 
@@ -169,6 +169,81 @@ describe("SectionDisclosure", () => {
     await user.click(screen.getByRole("link", { name: section.title }));
     expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
     history.replaceState(null, "", window.location.pathname);
+  });
+
+  it("scrolls always-visible sections such as case studies and most relevant sources", async () => {
+    const user = userEvent.setup();
+    const scrollIntoView = vi.fn();
+    const scrollTo = vi.fn();
+    HTMLElement.prototype.scrollIntoView = scrollIntoView;
+    HTMLElement.prototype.scrollTo = scrollTo;
+
+    function AlwaysVisibleSection({ id, label }: { id: string; label: string }) {
+      useScrollWhenNavigated(id);
+      return (
+        <section id={id}>
+          <h2>{label}</h2>
+        </section>
+      );
+    }
+
+    render(
+      <>
+        <ContentsSidebar
+          entries={[
+            { id: "case-studies", title: "Case studies" },
+            { id: "sources", title: "Most relevant sources" },
+          ]}
+        />
+        <AlwaysVisibleSection id="case-studies" label="Case studies" />
+        <AlwaysVisibleSection id="sources" label="Most relevant sources" />
+      </>,
+    );
+
+    await user.click(screen.getByRole("link", { name: "Case studies" }));
+    expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    scrollIntoView.mockClear();
+    scrollTo.mockClear();
+
+    await user.click(screen.getByRole("link", { name: "Most relevant sources" }));
+    expect(scrollIntoView.mock.calls.length + scrollTo.mock.calls.length).toBeGreaterThan(0);
+    history.replaceState(null, "", window.location.pathname);
+  });
+
+  it("expands every collapsible full-report section when Expand all is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <FullReportExpandProvider>
+        <FullReportExpandAllButton />
+        <SectionDisclosure id="s1" section={section} collapsible defaultOpen={false}>
+          <p>First section prose.</p>
+        </SectionDisclosure>
+        <SectionDisclosure id="s2" section={{ ...section, title: "Second" }} collapsible defaultOpen={false}>
+          <p>Second section prose.</p>
+        </SectionDisclosure>
+      </FullReportExpandProvider>,
+    );
+    expect(screen.queryByText("First section prose.")).toBeNull();
+    expect(screen.queryByText("Second section prose.")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByText("First section prose.")).toBeInTheDocument();
+    expect(screen.getByText("Second section prose.")).toBeInTheDocument();
+  });
+
+  it("collapses every collapsible full-report section when Collapse all is clicked", async () => {
+    const user = userEvent.setup();
+    render(
+      <FullReportExpandProvider>
+        <FullReportExpandAllButton />
+        <SectionDisclosure id="s1" section={section} collapsible defaultOpen>
+          <p>First section prose.</p>
+        </SectionDisclosure>
+      </FullReportExpandProvider>,
+    );
+    expect(screen.getByText("First section prose.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Expand all" }));
+    await user.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(screen.queryByText("First section prose.")).toBeNull();
   });
 });
 

@@ -287,6 +287,7 @@ export function AppShell() {
   // matching `useActiveConversation`'s own non-empty check — otherwise a
   // bare `?chat=` opens a panel bound to conversation id "".
   const chatOpen = showChatPanel && Boolean(new URLSearchParams(location.search).get("chat"));
+  const footerInScrollPane = base !== null && !inWorkspace;
 
   // Pending check-in visibility outside the workspace (contract strand 14):
   // poll cheaply for a pending check-in only while the user isn't already on
@@ -410,17 +411,20 @@ export function AppShell() {
                 </ErrorBoundary>
               )}
               <div
+                data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
                 className={cn(
                   "min-h-0 min-w-0 flex-1",
                   inWorkspace ? "overflow-hidden" : "overflow-y-auto",
+                  footerInScrollPane && "flex flex-col",
                 )}
               >
                 <ErrorBoundary key={location.pathname}>
                   <Outlet />
                 </ErrorBoundary>
+                {footerInScrollPane && <AppFooter />}
               </div>
             </div>
-            <AppFooter />
+            {!footerInScrollPane && <AppFooter />}
           </div>
         </TitleMarkerProvider>
       </TooltipProvider>

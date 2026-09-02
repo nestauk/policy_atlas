@@ -155,6 +155,12 @@ def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
         _cleanup(engine, project_id)
 
 
+def test_progress_emitter_has_no_case_studies_stream_surface() -> None:
+    """Contract F6: case studies are post-run only and never streamed."""
+    assert not hasattr(ProgressEmitter, "case_studies_started")
+    assert not hasattr(ProgressEmitter, "case_studies_completed")
+
+
 def test_progress_emitter_failure_degrades_without_raising(engine: Engine) -> None:
     """ADR 0027 decision 5: a presentation append can never fail the walk."""
     project_id: uuid.UUID | None = None

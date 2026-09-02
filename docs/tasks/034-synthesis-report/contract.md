@@ -7,9 +7,16 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > Contract approved (before planning): **2026-08-26 · owner** (go-ahead to
 > plan; forks A–C settled the same day) ·
 > Plan approved (before implementation): **2026-08-26 · owner** ·
-> ADR: 0033 expected (case-studies pass — a new grounded content form
-> produced late, shown early; and the S6 reversal of 028's overview lead
-> section).
+> ADR: **0034** (case-studies pass — a new grounded content form produced
+> late, shown early; S6 reversal of 028's overview lead; two-level report
+> hierarchy; grounded cheap MRS note). Note: ADR 0033 is organisations
+> tenancy — 034's number moved.
+>
+> **Owner iterate pins (2026-09-01):** case studies implement now; MRS
+> grounded one-liner **in** on `gpt-5.4-mini` (reverses the facts-only
+> ruling for that narrow surface); paper authors **parked** with
+> placeholders; KF double-cite is a display fix; Executive summary / Full
+> report chrome + deterministic roadmap + optional section bridges.
 >
 > **Branching:** `task/034-synthesis-report` from `task/033-ux-snags`
 > (stacked — 033's build is complete on its branch, review/PR pending). The
@@ -66,14 +73,14 @@ One PR on `task/034-synthesis-report` that:
 
 | Term | Meaning |
 |---|---|
-| **Front matter** | The report's executive block, in page order: answer callout · metadata strip · Key findings · Case studies · Most relevant sources. Shown before any body section. |
-| **Body** | The ordinary (`standard`) synthesis sections plus Conclusions, each collapsed on its one-line summary. |
-| **Back matter** | References and Method (today's "How the evidence was gathered", relabelled). |
+| **Front matter** | Inside **Executive summary**: In brief · Key findings · Case studies · Most relevant sources. Preceded by the Headline (H1 + stats strip). |
+| **Body** | Inside **Full report**: ordinary (`standard`) sections plus Conclusions, each collapsed on its one-line summary. Prefaced by a deterministic roadmap sentence from body titles. |
+| **Back matter** | References and Method (today's "How the evidence was gathered", relabelled), still under Full report. |
 | **Answer callout** | The existing verified artefact summary (`ArtefactOut.summary`), rendered as the labelled callout. Citation-free navigation per [capability.md](../../specs/capabilities/evidence-base/capability.md) § Output structure — the label must not crown it the evidential headline (owner ruling: not "The answer"). |
 | **Lead-colon form** | A key-findings bullet shaped `Lead phrase: warrant.` The lead is a 4–8-word claim (not a topic label); the renderer bolds everything before the first `: `. |
 | **Gap bullet** | A key-findings bullet carrying a gap-typed claim with its coverage base, rendered with a distinct marker. New in this slice (the pass today re-states only finding/chunk/pattern claims). |
 | **Case study** | One named programme a policy reader can point at (place — instrument), carried as a card: title, short mechanism prose, one bolded result claim, citations, honest strength/design metadata. Grain = programmes, never papers (papers are S5's job) and never raw finding rows. |
-| **Most relevant sources** | Today's deterministic top-3-by-citation-count block (`mostRelevantSources`). Ranking and facts-only rule unchanged in this slice. |
+| **Most relevant sources** | Deterministic top-3-by-citation-count block (`mostRelevantSources`), full-width cards. Ranking unchanged. May carry a **grounded** one-liner (`most_relevant_note_v1`) restating only that source's cited claims/quotes. Free-form importance prose stays out. Paper authors are placeholders only this slice. |
 | **Corpus-touring** | Prose about the act of reading the corpus ("a high-level reading of the documents", "in the material read here", "this body of work", "Inference:") instead of about programmes, populations and outcomes. Banned by P2. |
 | **P1–P10** | The language principles (§ Language principles). Prompt surfaces cite them by number. |
 | **S1–S9** | Defect ids. Goal, deliverable, scope, invariants, plan phases and rubric items all cite these. |
@@ -227,15 +234,19 @@ superseded by this contract.
 
 ### S5 — Most relevant sources
 
-- Moves above the body (after Case studies) and restyles as cards using
-  **only the fields the projection already has** (adversarial F5): title,
-  appraisal chip, evidence type, citation count, cited-in sections. Venue
-  and year are **not** added — that would widen the public projection
-  beyond this contract's gates, and joining references by title is
-  non-deterministic.
-- Ranking (citation count, appraisal tie-break) and the facts-only rule are
-  **unchanged** — no "why this study matters" sentence (that seam stays in
-  `docs/deferred.md`).
+- Moves into Executive summary (after Case studies) and restyles as
+  **full-width** cards: title, appraisal chip (with hover), evidence type,
+  citation count. Cited-in section lists are **removed** from the card.
+  Venue and year are **not** added. Paper authors: API/UI placeholder only
+  (null/omitted until a later acquire/projection slice).
+- Ranking (citation count, appraisal tie-break) is **unchanged**.
+- **Grounded cheap note (owner 2026-09-01):** after the artefact is written,
+  a mini pass (`most_relevant_note_v1` on `gpt-5.4-mini`, env-overridable)
+  may emit one sentence per top source, seeded only from that source's
+  cited claim texts and quotes. Fail-soft (omit note). Stored under
+  `synthesis_result.counts["most_relevant_notes"]` and exposed as additive
+  `ArtefactOut.most_relevant_notes`. Free-form “why this source matters”
+  remains out — the deferred seam narrows to ungated importance theatre.
 
 ### S6 — Short section titles
 
@@ -266,7 +277,7 @@ each refine-replay-evidenced per prompting doctrine:
 
 | Surface | Bump | Changes |
 |---|---|---|
-| `synthesise_section_v8` → **v9** | body + conclusions writer | P1–P4, P6–P8, P10; the banned-vocabulary list gains corpus-touring phrases; the no-bullets/no-headers-inside-a-section rule stays |
+| `synthesise_section_v8` → **v9** → **v10** | body + conclusions writer | v9: P1–P4, P6–P8, P10 + corpus-touring ban. v10 (2026-09-01): optional one bridging sentence when not the first body section; still takeaway-first after the bridge; no mid-section headers |
 | `synthesise_key_findings_v2` → **v3** | S3's home | P3, P5, P10; gap bullets |
 | `synthesise_sections_v4` → **v5** | S6's home | P9 |
 | `summariser_v1` → **v2** | the answer callout's source | P1–P2, P10; still citation-free, still faithfulness-judged, still no confidence language |
@@ -331,13 +342,14 @@ behaviour rule; spec flow-back (`web-api.md` read models); deferred.md
 discharge/narrowing; the ADR; `verification.md`; env-overridable
 `SYNTHESIS_MODEL` (default unchanged).
 
-**Out:** Authors; confidence ratings; "why this source matters" prose;
-mobile/narrow-viewport work; the full briefing page; the eval harness;
-a Langfuse cost/clarity autopsy; shipping a new default writer; gather/writer
-model split; re-synthesising or backfilling old artefacts; reference
-formatting; chat behaviour; any other capability; schema migrations (the
-pass rides `synthesis_result.blocks`); new dependencies; any new runtime
-egress.
+**Out:** Paper-author acquire/projection (placeholders only); confidence
+ratings; **ungated** "why this source matters" prose (grounded mini-note
+is In); mobile/narrow-viewport work; the full briefing page; the eval
+harness; a Langfuse cost/clarity autopsy; shipping a new default writer;
+gather/writer model split; re-synthesising or backfilling old artefacts;
+reference formatting; chat behaviour; any other capability; schema
+migrations (the pass rides `synthesis_result.blocks`); new dependencies;
+any new runtime egress.
 
 ## Constraints & approval gates
 
@@ -346,9 +358,9 @@ here for the combined contract gate:
 
 | Gate | What changes | Why gated |
 |---|---|---|
-| **Prompt surface** | `synthesise_section_v8→v9` · `synthesise_key_findings_v2→v3` (+ `"gap"` claim type) · `synthesise_sections_v4→v5` · `summariser_v1→v2` · **new** `synthesise_case_studies_v1` | Prompt-bearing work — lead-authored only, never delegated |
-| **Public interface** | `SectionRole` gains `"case_studies"` (additive); the case-study card payload on that section; OpenAPI regenerated | Public API surface |
-| **Runtime config (additive)** | `POLICY_ATLAS_SYNTHESIS_MODEL` env override; **default `gpt-5.6-terra`** (owner 2026-08-26 — cheaper live experiments); pin `gpt-5.5` via the env var | Same pattern as planner/chat |
+| **Prompt surface** | `synthesise_section_v9→v10` · `synthesise_key_findings_v3` · `synthesise_sections_v5` · `summariser_v2` · **new** `synthesise_case_studies_v1` · **new** `most_relevant_note_v1` | Prompt-bearing work — lead-authored only, never delegated |
+| **Public interface** | `SectionRole` gains `"case_studies"`; `SectionOut.cards` / `CaseStudyCardOut`; `ArtefactOut.most_relevant_notes`; OpenAPI regenerated | Public API surface |
+| **Runtime config (additive)** | `POLICY_ATLAS_SYNTHESIS_MODEL` (default `gpt-5.6-terra`); optional `POLICY_ATLAS_MRS_NOTE_MODEL` (default `gpt-5.4-mini`) | Same pattern as planner/chat |
 
 Further constraints:
 

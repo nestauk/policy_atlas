@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { mockArtefact } from "../mock/fixtures";
-import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, splitLeadColon } from "./artefactPresentation";
+import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, reportRoadmap, fullReportIntro, splitLeadColon, cardEvidenceChipLabels } from "./artefactPresentation";
 
 describe("mostRelevantSources", () => {
   it("ranks by how many claims cite each source, not how many citation rows", () => {
@@ -188,15 +188,16 @@ describe("artefactMarkdown", () => {
     references: [{ n: 1, title: "A study", year: 2022, venue: "BMJ Open" }],
   };
 
-  it("writes title, labelled In brief, sections in report order, citation markers, and references", () => {
+  it("writes title, part labels, sections in report order, citation markers, and references", () => {
     const markdown = artefactMarkdown(artefact);
     expect(markdown).toContain("# Policy options for healthier childhoods");
-    expect(markdown).toContain("**In brief**");
-    expect(markdown).toContain("Universal provision helps.");
-    expect(markdown.indexOf("**In brief**")).toBeLessThan(markdown.indexOf("## What appears to help"));
-    expect(markdown.indexOf("## What appears to help")).toBeLessThan(markdown.indexOf("## Implications"));
+    expect(markdown).toContain("## Executive summary");
+    expect(markdown).not.toContain("**In brief**");
+    expect(markdown.indexOf("### What appears to help")).toBeLessThan(markdown.indexOf("### Implications"));
     expect(markdown).toContain("Universal breakfast helps[1] children eat.");
-    expect(markdown).toContain("## References");
+    expect(markdown).toContain("## Full report");
+    expect(markdown).not.toContain("group the evidence by theme");
+    expect(markdown).toContain("### References");
     expect(markdown).toContain("1. A study (2022, BMJ Open)");
   });
 
@@ -208,7 +209,7 @@ describe("artefactMarkdown", () => {
   it("puts citation numbers back into mock artefact prose and keeps the reference list", () => {
     const markdown = artefactMarkdown(mockArtefact);
     expect(markdown).toContain("support more consistent breakfast consumption[1]");
-    expect(markdown).toContain("## References");
+    expect(markdown).toContain("### References");
     expect(markdown).toMatch(/^1\. /m);
   });
 
@@ -254,9 +255,48 @@ describe("artefactMarkdown", () => {
     });
     expect(markdown).toContain("- **Universal breakfast helped:** eleven of fifteen evaluations reported higher uptake.");
     expect(markdown).toContain("- No colon on this line.");
-    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("## Key findings"));
-    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("## What works"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeGreaterThan(markdown.indexOf("### Key findings"));
+    expect(markdown.indexOf("### Most relevant sources")).toBeLessThan(markdown.indexOf("### What works"));
     expect(markdown).toContain("**A breakfast study**");
+  });
+});
+
+describe("fullReportIntro", () => {
+  it("returns null for zero sections", () => {
+    expect(fullReportIntro(0)).toBeNull();
+  });
+
+  it("returns the generated intro when supplied", () => {
+    expect(fullReportIntro(3, "Custom intro text.")).toBe("Custom intro text.");
+  });
+
+  it("returns null when no generated intro is available", () => {
+    expect(fullReportIntro(3)).toBeNull();
+  });
+});
+
+describe("reportRoadmap", () => {
+  it("delegates to fullReportIntro", () => {
+    expect(reportRoadmap([])).toBeNull();
+    expect(reportRoadmap(["A", "B", "C"])).toBeNull();
+  });
+});
+
+describe("cardEvidenceMeta", () => {
+  it("falls back to claim citations when rollup metadata is absent", () => {
+    expect(
+      cardEvidenceChipLabels({
+        strength: null,
+        design: null,
+        claims: [
+          {
+            citations: [
+              { appraisal_label: "Strong", evidence_type: "RCTs and Quasi-Experimental Studies" },
+            ],
+          },
+        ],
+      }),
+    ).toEqual(["Strong", "RCTs and Quasi-Experimental Studies"]);
   });
 });
 
@@ -268,6 +308,155 @@ describe("splitLeadColon", () => {
     });
     expect(splitLeadColon("No colon here.")).toBeNull();
     expect(splitLeadColon(": leading colon is not a lead")).toBeNull();
+  });
+});
+
+describe("artefactMarkdown case studies", () => {
+  it("renders case study cards in the executive summary as markdown", () => {
+    const markdown = artefactMarkdown({
+      title: "Report",
+      sections: [
+        {
+          title: "Case studies",
+          role: "case_studies",
+          blocks: [],
+          cards: [
+            { title: "Finland — School meals", prose: "Universal provision since 1948.", strength: "high", design: "Trial", since_year: 1948 },
+            { title: "Sweden — Free lunches", prose: "Nutritional gains observed.", strength: null, design: null, since_year: null },
+          ],
+        },
+      ],
+    });
+    expect(markdown).toContain("### Case studies");
+    expect(markdown).toContain("**Finland — School meals**");
+    expect(markdown).toContain("Universal provision since 1948.");
+    expect(markdown).toContain("high · Trial · Since 1948");
+    expect(markdown).toContain("**Sweden — Free lunches**");
+  });
+
+  it("omits case studies section when no cards", () => {
+    const markdown = artefactMarkdown({
+      title: "Report",
+      sections: [
+        { title: "Case studies", role: "case_studies", blocks: [], cards: [] },
+      ],
+    });
+    expect(markdown).toContain("### Case studies");
+    expect(markdown).not.toContain("**Finland");
+  });
+
+  it("includes grounded most-relevant notes in the markdown download", () => {
+    const markdown = artefactMarkdown({
+      title: "Report",
+      summary_status: "verified",
+      sections: [
+        {
+          title: "Findings",
+          role: "key_findings",
+          blocks: [
+            {
+              prose: "A cited claim.",
+              claims: [
+                {
+                  claim_type: "citation",
+                  span: [0, 13],
+                  citations: [
+                    {
+                      n: 1,
+                      source_id: "src-1",
+                      source_title: "Landmark trial",
+                      appraisal_label: "high",
+                      evidence_type: "Trial",
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      most_relevant_notes: [{ source_id: "src-1", note: "A grounded note about the trial." }],
+    });
+    expect(markdown).toContain("A grounded note about the trial.");
+  });
+
+  it("bolds case-study results before inserting citation markers", () => {
+    const markdown = artefactMarkdown({
+      title: "Report",
+      sections: [
+        {
+          title: "Case studies",
+          role: "case_studies",
+          blocks: [],
+          cards: [
+            {
+              title: "Finland",
+              prose: "Lead sentence. Result sentence here.",
+              result_claim_id: "result-1",
+              claims: [
+                {
+                  claim_id: "lead-1",
+                  claim_type: "citation",
+                  span: [0, 14],
+                  citations: [{ n: 1, source_id: "a", source_title: "Source A" }],
+                },
+                {
+                  claim_id: "result-1",
+                  claim_type: "citation",
+                  span: [15, 36],
+                  citations: [{ n: 2, source_id: "b", source_title: "Source B" }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(markdown).toContain("Lead sentence.[1] **Result sentence here.**");
+  });
+});
+
+describe("mostRelevantSources with notes", () => {
+  it("passes through the note field untouched", () => {
+    const sections = [
+      {
+        title: "Findings",
+        blocks: [{ claims: [{ citations: [{ source_id: "a", source_title: "Source A" }] }] }],
+      },
+    ];
+    const result = mostRelevantSources(sections);
+    expect(result[0].note).toBeUndefined();
+  });
+});
+
+describe("mostRelevantSources case-study cards", () => {
+  it("counts citations from case-study card claims", () => {
+    const sections = [
+      {
+        title: "Case studies",
+        role: "case_studies",
+        blocks: [],
+        cards: [
+          {
+            title: "Finland",
+            claims: [
+              {
+                citations: [
+                  { source_id: "card-source", source_title: "Card Source", appraisal_label: "Strong" },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        title: "Findings",
+        blocks: [{ claims: [{ citations: [{ source_id: "block-source", source_title: "Block Source" }] }] }],
+      },
+    ];
+    const result = mostRelevantSources(sections);
+    expect(result).toHaveLength(2);
+    expect(result.map((source) => source.sourceId).sort()).toEqual(["block-source", "card-source"]);
   });
 });
 

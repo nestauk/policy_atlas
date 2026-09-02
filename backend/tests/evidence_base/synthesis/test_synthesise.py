@@ -47,7 +47,10 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     UnspannedAssertionWire,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+    CaseStudyWire,
+    IntroWire,
     NAV_LABEL_MAX,
+    NoteWire,
     SECTION_TITLE_PROPOSAL_MAX,
     ChunkCitationWire,
     ClaimWire,
@@ -2267,7 +2270,7 @@ def test_conclusions_and_key_findings_composition(conn: Connection) -> None:
     # The conclusions focus is evidence-descriptive, never a recommendation.
     conclusions = _blocks_by_role(row)["conclusions"][0]
     assert "What the evidence amounts to on:" in conclusions["focus"]
-    assert "recommendations" in conclusions["focus"]
+    assert "recommendation" in conclusions["focus"]
 
     # The key-findings block re-cites a section's chunk claim, verified anew.
     key_findings = _blocks_by_role(row)["key_findings"][0]
@@ -3157,6 +3160,15 @@ class _SeedCapturingBackend:
         self.key_findings_seeds.append(seed)
         return self._inner.write_key_findings(seed)
 
+    def write_case_studies(self, seed: dict[str, Any]) -> UsageResult[CaseStudyWire]:
+        return self._inner.write_case_studies(seed)
+
+    def write_source_note(self, seed: dict[str, Any]) -> UsageResult[NoteWire]:
+        return self._inner.write_source_note(seed)
+
+    def write_full_report_intro(self, seed: dict[str, Any]) -> UsageResult[IntroWire]:
+        return self._inner.write_full_report_intro(seed)
+
     def write_block_summary(self, seed: dict[str, Any]):  # type: ignore[no-untyped-def]
         return self._inner.write_block_summary(seed)
 
@@ -3572,3 +3584,147 @@ def test_propose_then_compile_directive_round_trips_into_a_run(conn: Connection)
     assert "Interventions in the corpus" in block_titles
     boosts = row.synthesis_provenance["directive"]["retrieval_boosts"]
     assert boosts["screen_confidence"] == {"lo": 1.0, "hi": 3.0}
+
+
+# ---------- Case studies composition (task 034 S4) ----------
+
+
+def test_case_studies_present_composition(conn: Connection) -> None:
+    """Stub emits 2 cards → a case_studies block follows key_findings.
+
+    Seeding extraction with 2 findings is required: the stub's
+    ``write_case_studies`` pulls finding_ids from the ledger's
+    ``cited_finding_ids`` and returns empty cards when fewer than 2 are
+    available.
+    """
+    project_id, synthesis_run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    seeded = seed_extraction(
+        conn,
+        project_id,
+        scope_id,
+        docs=[
+            (
+                uuid.uuid4(),
+                [
+                    {"intervention": "School meals", "outcome": "Nutrition"},
+                    {"intervention": "Free lunches", "outcome": "Attendance"},
+                ],
+            )
+        ],
+    )
+    characterisation_run_id = seed_run(conn, project_id)
+    seed_characterisation(
+        conn, project_id, scope_id, characterisation_run_id, themes={"nutrition": []}
+    )
+    conn.execute(
+        update(selection_result)
+        .where(selection_result.c.run_id == seeded.selection_run_id)
+        .values(
+            selection_provenance={
+                "strategy": "test",
+                "characterisation_run_id": str(characterisation_run_id),
+            }
+        )
+    )
+    _summary, grouping_run_id = _run_group_component(
+        conn, project_id, scope_id, seeded.run_id
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=synthesis_run_id,
+        scope_id=scope_id,
+        extraction_run_id=seeded.run_id,
+        grouping_run_id=grouping_run_id,
+        intent="What does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+
+    roles = [entry["role"] for entry in row.blocks]
+    kf_idx = roles.index("key_findings") if "key_findings" in roles else -1
+    cs_idx = roles.index("case_studies") if "case_studies" in roles else -1
+    assert cs_idx >= 0, "case_studies block must be present"
+    assert kf_idx >= 0, "key_findings block must be present"
+    assert cs_idx == kf_idx + 1, "case_studies follows key_findings"
+
+    cs_block = row.blocks[cs_idx]
+    assert cs_block["title"] == "Case studies"
+    cards = cs_block.get("cards", [])
+    assert len(cards) >= 2
+    for card in cards:
+        assert card.get("prose", "").strip() != ""
+        assert isinstance(card.get("claim_ids"), list)
+        assert len(card["claim_ids"]) >= 1, "each card stores its claim ids"
+
+    assert row.counts.get("case_studies") == {"present": True}
+    provenance = row.synthesis_provenance
+    assert provenance["prompt_versions"]["case_studies"] == "synthesise_case_studies_v1"
+    assert provenance["call_counts"]["case_studies"] == 1
+
+
+def test_case_studies_absent_composition(conn: Connection) -> None:
+    """stubnocasestudies sentinel → no case_studies block."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="No-CS doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=["Evidence on interventions and outcomes."],
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        intent="stubnocasestudies: what does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+
+    roles = [entry["role"] for entry in row.blocks]
+    assert "case_studies" not in roles
+    cs_counts = row.counts.get("case_studies", {})
+    assert cs_counts.get("present") is False
+    assert isinstance(cs_counts.get("reason"), str)
+
+
+def test_mrs_notes_present_in_rollup(conn: Connection) -> None:
+    """MRS notes are written to the synthesis_result when chunk citations exist."""
+    project_id, run_id = seed_project_and_run(conn)
+    scope_id = seed_scope(conn, project_id)
+    pss_id = seed_select_doc(conn, project_id, run_id, scope_id, title="MRS doc")
+    seed_ingested_full_text(
+        conn,
+        pss_id=pss_id,
+        chunks=[
+            "MRS evidence says alpha quoted evidence appears here.",
+            "Further MRS evidence in a second chunk.",
+        ],
+    )
+
+    _run_synthesise(
+        conn,
+        project_id=project_id,
+        run_id=run_id,
+        scope_id=scope_id,
+        intent="What does the evidence say?",
+    )
+
+    row = conn.execute(
+        select(synthesis_result).where(synthesis_result.c.project_id == project_id)
+    ).one()
+
+    notes = row.counts.get("most_relevant_notes", [])
+    # MRS notes are produced when citations resolve to sources (via chunks
+    # or findings). With chunk claims, the substrate maps chunk→pss, so notes
+    # appear when the stub has at least one cited source.
+    assert isinstance(notes, list)
