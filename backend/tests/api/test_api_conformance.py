@@ -29,7 +29,9 @@ from tests.api.resource_support import api_client, create_project
 
 # Routes that intentionally sit outside the bearer-token boundary: process
 # liveness/readiness probes, checked before any orchestration or auth I/O.
-_UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz"})
+# `/api/v1/waitlist` is the splash-page Request-access intake — the first
+# intentional public write. Health probes sit outside `/api/v1`.
+_UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz", "/api/v1/waitlist"})
 
 # --- Pagination conformance --------------------------------------------------
 

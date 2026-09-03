@@ -177,6 +177,7 @@ let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
 // that need the enrolled/org-scoped journeys call `setMockMe(mockMeEnrolled)`.
 let currentMe: MeOut = { ...mockMeUnenrolled };
 let mockPortfolios: PortfolioOut[] = [{ ...mockPortfolio }];
+const mockWaitlistEmails = new Set<string>();
 
 /** Test helper: switch the mock's `/me` identity (e.g. to `mockMeEnrolled`). */
 export function setMockMe(me: MeOut) {
@@ -211,6 +212,29 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
   const url = new URL(request?.url ?? input.toString(), globalThis.location?.origin ?? "http://localhost");
   const method = init?.method ?? request?.method ?? "GET";
   const path = url.pathname;
+
+  if (method === "POST" && path.endsWith("/api/v1/waitlist")) {
+    const body = await requestBody(request, init);
+    if (!isRecord(body) || typeof body.email !== "string" || typeof body.name !== "string") {
+      return json({ error: { code: "validation_error", message: "Invalid waitlist body" } }, 422);
+    }
+    const email = String(body.email).trim().toLowerCase();
+    if (mockWaitlistEmails.has(email)) {
+      return json(
+        { error: { code: "already_registered", message: "This email is already on the waitlist." } },
+        409,
+      );
+    }
+    mockWaitlistEmails.add(email);
+    return json(
+      {
+        entry_id: crypto.randomUUID(),
+        email,
+        created_at: new Date().toISOString(),
+      },
+      201,
+    );
+  }
 
   if (method === "GET" && path.endsWith(`/api/v1/projects/${MOCK_PROJECT_ID}/events`)) {
     return new Response(createMockEventStream(currentMockScenario(url)), {

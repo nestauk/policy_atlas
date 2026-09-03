@@ -42,6 +42,8 @@ vi.mock("../api/queries", () => ({
       : undefined,
   }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
+  // The nav logo checks all projects for an active run outside a task.
+  useProjects: () => ({ data: { data: [] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace project routes.
   useConversations: () => ({ data: { data: [] } }),
   useArtefact: () => ({ data: undefined }),

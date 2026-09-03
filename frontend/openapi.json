@@ -5671,6 +5671,88 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WaitlistSignup": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/waitlist`.\n\nArgs:\n    email: Contact address. Unique on the waitlist table.\n    name: Display name of the requester.\n    organisation: Optional organisation or employer.\n    role_or_reason: Free-text role and/or why they want access.\n    website: Leave this field empty.",
+        "properties": {
+          "email": {
+            "maxLength": 320,
+            "minLength": 3,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "organisation": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation"
+          },
+          "role_or_reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Role Or Reason",
+            "type": "string"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Leave this field empty.",
+            "title": "Website"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "role_or_reason"
+        ],
+        "title": "WaitlistSignup",
+        "type": "object"
+      },
+      "WaitlistSignupOut": {
+        "description": "Minimal acknowledgement of a waitlist signup.\n\nOmits organisation and role/reason so response logs do not amplify PII.\n\nArgs:\n    entry_id: New waitlist row id.\n    email: Echo of the accepted email.\n    created_at: Insert timestamp (UTC).",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "entry_id": {
+            "format": "uuid",
+            "title": "Entry Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_id",
+          "email",
+          "created_at"
+        ],
+        "title": "WaitlistSignupOut",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -8463,6 +8545,48 @@
         "summary": "Source Dossier",
         "tags": [
           "read-models"
+        ]
+      }
+    },
+    "/api/v1/waitlist": {
+      "post": {
+        "description": "Record a Request-access signup on the waitlist.\n\nArgs:\n    payload: Validated signup body.\n    conn: Open database connection.\n\nReturns:\n    Minimal acknowledgement of the new row.\n\nRaises:\n    ApiConflict: When the email is already on the waitlist.",
+        "operationId": "signup_api_v1_waitlist_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaitlistSignup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistSignupOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Signup",
+        "tags": [
+          "waitlist"
         ]
       }
     },

@@ -16,11 +16,11 @@ import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { PrivacyView } from "./views/legal/PrivacyView";
 import { TermsView } from "./views/legal/TermsView";
+import { SplashView } from "./views/splash/SplashView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
+import { RequireAuth } from "./routes/RequireAuth";
+import { StashAndSplashRedirect } from "./routes/StashAndSplashRedirect";
 
-// Lazy: `recharts` is a substantial dependency only the landscape route
-// needs — keeping it out of the main chunk means every other route (and
-// the initial page load) doesn't pay for it.
 const LandscapeView = lazy(() =>
   import("./views/LandscapeView").then((module) => ({ default: module.LandscapeView })),
 );
@@ -33,80 +33,90 @@ function LandscapeFallback() {
   );
 }
 
-/** UI state that names a thing is URL-addressable: views are routes, the
- * dossier and filters are search params — deep-linkable and refresh-safe. */
-export const router = createBrowserRouter([
-  {
-    element: <AppShell />,
-    children: [
-      { path: "/", element: <TasksListView /> },
-      { path: "/new", element: <NewTaskView /> },
-      { path: "/portfolios", element: <PortfoliosView /> },
-      { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
-      { path: "/privacy", element: <PrivacyView /> },
-      { path: "/terms", element: <TermsView /> },
+/** Logged-out marketing + legal routes (no AppShell). */
+export const publicRouter = createBrowserRouter([
+  { path: "/", element: <SplashView /> },
+  { path: "/privacy", element: <PrivacyView /> },
+  { path: "/terms", element: <TermsView /> },
+  { path: "*", element: <StashAndSplashRedirect /> },
+]);
 
-      // The task lifecycle: Plan · Results · Sources · Share · History.
-      // Every stage past Plan is gated on run state, so a locked stage is
-      // unreachable by URL as well as by click.
-      { path: "/projects/:projectId", element: <WorkspaceView /> },
+/** Authenticated app routes behind RequireAuth + AppShell. */
+export const authenticatedRouter = createBrowserRouter([
+  {
+    element: <RequireAuth />,
+    children: [
       {
-        path: "/projects/:projectId/results",
-        element: (
-          <LifecycleRoute tab="results">
-            <ArtefactView />
-          </LifecycleRoute>
-        ),
-      },
-      {
-        path: "/projects/:projectId/sources",
-        element: (
-          <LifecycleRoute tab="sources">
-            <SourcesLayout />
-          </LifecycleRoute>
-        ),
+        element: <AppShell />,
         children: [
-          { index: true, element: <ThemesView /> },
+          { path: "/", element: <TasksListView /> },
+          { path: "/new", element: <NewTaskView /> },
+          { path: "/portfolios", element: <PortfoliosView /> },
+          { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
+          { path: "/privacy", element: <PrivacyView /> },
+          { path: "/terms", element: <TermsView /> },
+
+          { path: "/projects/:projectId", element: <WorkspaceView /> },
           {
-            path: "landscape",
+            path: "/projects/:projectId/results",
             element: (
-              <Suspense fallback={<LandscapeFallback />}>
-                <LandscapeView />
-              </Suspense>
+              <LifecycleRoute tab="results">
+                <ArtefactView />
+              </LifecycleRoute>
             ),
           },
-          { path: "all", element: <SourcesView /> },
-          { path: "findings", element: <FindingsView /> },
+          {
+            path: "/projects/:projectId/sources",
+            element: (
+              <LifecycleRoute tab="sources">
+                <SourcesLayout />
+              </LifecycleRoute>
+            ),
+            children: [
+              { index: true, element: <ThemesView /> },
+              {
+                path: "landscape",
+                element: (
+                  <Suspense fallback={<LandscapeFallback />}>
+                    <LandscapeView />
+                  </Suspense>
+                ),
+              },
+              { path: "all", element: <SourcesView /> },
+              { path: "findings", element: <FindingsView /> },
+            ],
+          },
+          {
+            path: "/projects/:projectId/share",
+            element: (
+              <LifecycleRoute tab="share">
+                <ShareView />
+              </LifecycleRoute>
+            ),
+          },
+          {
+            path: "/projects/:projectId/history",
+            element: (
+              <LifecycleRoute tab="history">
+                <HistoryView />
+              </LifecycleRoute>
+            ),
+          },
+
+          { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
+          {
+            path: "/projects/:projectId/findings",
+            element: <RedirectToPath suffix="/sources/findings" />,
+          },
+          {
+            path: "/projects/:projectId/landscape",
+            element: <RedirectToPath suffix="/sources/landscape" />,
+          },
+          { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
+
+          { path: "*", element: <NotFoundView /> },
         ],
       },
-      {
-        path: "/projects/:projectId/share",
-        element: (
-          <LifecycleRoute tab="share">
-            <ShareView />
-          </LifecycleRoute>
-        ),
-      },
-      {
-        path: "/projects/:projectId/history",
-        element: (
-          <LifecycleRoute tab="history">
-            <HistoryView />
-          </LifecycleRoute>
-        ),
-      },
-
-      // Retired paths. Every URL that was bookmarkable before the reshape
-      // still resolves — a reorganisation is not a reason to break someone's
-      // saved link.
-      { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
-      { path: "/projects/:projectId/findings", element: <RedirectToPath suffix="/sources/findings" /> },
-      { path: "/projects/:projectId/landscape", element: <RedirectToPath suffix="/sources/landscape" /> },
-      { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
-
-      // Catch-all: an unknown URL still gets the app chrome and an honest
-      // "nothing here" view rather than a router error page.
-      { path: "*", element: <NotFoundView /> },
     ],
   },
 ]);

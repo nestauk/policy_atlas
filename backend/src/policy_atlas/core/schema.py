@@ -1,4 +1,4 @@
-"""SQLAlchemy Core table metadata — thirty-six tables plus one read view.
+"""SQLAlchemy Core table metadata — thirty-seven tables plus one read view.
 
 No deferred columns (no same_content_as or lineage key).
 """
@@ -49,6 +49,20 @@ app_user = Table(
     Column("email", Text, nullable=True),  # ops- and admin-facing only
     Column("is_admin", Boolean, nullable=False, server_default=text("false")),
     Column("created_at", DateTime(timezone=True), nullable=False),
+)
+
+# Splash-page Request-access intake. No FK to app_user — ops enrolment is the
+# Cognito on-ramp; this table is a queue for humans, not an identity store.
+waitlist_entry = Table(
+    "waitlist_entry",
+    metadata,
+    Column("entry_id", UUID(as_uuid=True), primary_key=True),
+    Column("email", Text, nullable=False),
+    Column("name", Text, nullable=False),
+    Column("organisation", Text, nullable=True),
+    Column("role_or_reason", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("email", name="uq_waitlist_entry_email"),
 )
 
 portfolio = Table(

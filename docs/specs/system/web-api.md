@@ -28,11 +28,15 @@ here — never a parallel version.
 OIDC/JWT bearer verification on every data route (`Authorization: Bearer`);
 `user_id` = token `sub`, the **only** claim any request path reads.
 RS256 against the issuer JWKS (Cognito-shaped; dev issuer = local keypair,
-visibly non-production). Unauthenticated: `/healthz` (liveness,
-process-only) and `/readyz` only. 401 carries `WWW-Authenticate: Bearer`.
+prod = Cognito, visibly non-production). Unauthenticated requests get a
+uniform `401 unauthenticated` envelope with `WWW-Authenticate: Bearer`.
 No cookies; no CSRF machinery by construction. **Tokens never appear in
 query strings** — SSE clients authenticate via fetch-stream with the bearer
 header.
+
+**Public write exception:** `POST /api/v1/waitlist` is intentionally
+unauthenticated (splash-page Request access). Health probes
+(`GET /healthz`, `GET /readyz`) also sit outside the bearer boundary.
 
 **Tenancy (task 033, ADR 0033).** Users belong to at most one organisation
 (`app_user.org_id`, ops-assigned). Access resolves through one graded
@@ -91,7 +95,8 @@ Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 `planning_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
 `no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
 project's visibility while it is in a portfolio — change the portfolio's
-visibility, or leave the project out of it) · 422 `validation_error`
+visibility, or leave the project out of it) | **`already_registered`**
+(waitlist email already present) · 422 `validation_error`
 (Pydantic detail list under `details`, assert on `loc`/`type` not `msg`;
 also the code for a non-admin passing `owner_email` and for a PATCH body
 carrying both `visibility` and `portfolio_ids` — not a third semantic) ·
@@ -110,6 +115,19 @@ breaking reshape). Bounded structural reads (plan, funnel, landscape,
 artefact, groups) are whole-object.
 
 ## Resources
+
+### Waitlist
+
+Splash-page **Request access** intake. Public — no bearer token.
+
+- `POST /api/v1/waitlist` `{email, name, organisation?, role_or_reason,
+  website?}` → 201 `{entry_id, email, created_at}`. Email is lower-cased and
+  unique (`409 already_registered` on conflict). Organisation is optional;
+  blank becomes null. Response omits organisation and role/reason. `website`
+  is a honeypot (hidden on the form): any non-empty value gets a fake 201
+  and stores nothing. No admin list/export in v1 — ops query the
+  `waitlist_entry` table directly. Enrolment into Cognito remains the ops
+  CLI path (task 033), not an auto-promote from this table.
 
 ### Projects
 
