@@ -1407,8 +1407,12 @@ export function ArtefactView() {
   }
 
   const snapshot = data.coverage_snapshot;
-  // Years count the CITED set (the live cited-scope landscape), not the
-  // whole included corpus. Study types live under Method, not this strip.
+  // Study types and years count the CITED set (the live cited-scope
+  // landscape), not the whole included corpus.
+  const citedTypes = Object.entries(citedLandscape.data?.evidence_types ?? {}).sort(
+    ([, a], [, b]) => b - a,
+  );
+  const shownTypes = citedTypes.slice(0, 3);
   const citedYears = Object.keys(citedLandscape.data?.years ?? {})
     .map(Number)
     .filter(Number.isInteger);
@@ -1439,6 +1443,14 @@ export function ArtefactView() {
       "Sources",
       `${snapshot.source_count} cited out of ${snapshot.included} included`,
       `/projects/${projectId}/sources/all?cited=true`,
+    ]);
+  }
+  if (shownTypes.length > 0) {
+    snapshotCells.push([
+      "Study types",
+      shownTypes.map(([key, count]) => `${count} ${key.toLowerCase()}`).join(" · ") +
+        (citedTypes.length > 3 ? ` · +${citedTypes.length - 3} more` : ""),
+      null,
     ]);
   }
   if (citedYears.length > 0) {
@@ -1499,7 +1511,7 @@ export function ArtefactView() {
           <ArtefactDownload artefact={data} />
         </div>
         {snapshotCells.length > 0 && (
-          <div className="mt-4 grid grid-cols-3 border border-line">
+          <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value, href]) => {
               const content = (
                 <>

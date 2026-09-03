@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { Link } from "react-router";
 
 import { useFunnel, useLandscape } from "../api/queries";
-import { Link } from "react-router";
 import { scrub } from "../lib/scrub";
 import { REPORT_SECTION_HEADING_CLASS } from "./artefactPresentation";
 
@@ -173,10 +174,16 @@ export function useScrollWhenNavigated(id: string): void {
 }
 
 /** Open a collapsed section when the browser is about to print, so the PDF
- *  contains the full report rather than the on-screen collapsed summaries. */
+ *  contains the full report rather than the on-screen collapsed summaries.
+ *  `flushSync` is required: without it, `window.print()` can capture the
+ *  still-collapsed DOM before React commits the expand. */
 export function useExpandForPrint(setOpen: (open: boolean) => void): void {
   useEffect(() => {
-    const expand = () => setOpen(true);
+    const expand = () => {
+      flushSync(() => {
+        setOpen(true);
+      });
+    };
     window.addEventListener("beforeprint", expand);
     return () => window.removeEventListener("beforeprint", expand);
   }, [setOpen]);
