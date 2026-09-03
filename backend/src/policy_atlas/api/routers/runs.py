@@ -28,6 +28,7 @@ from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
+from policy_atlas.core import tracing
 from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
 from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
@@ -63,20 +64,26 @@ def _dispatch_run(
     project_id: uuid.UUID,
     plan_row: dict[str, object],
     backends: RunnerBackends,
+    session_id: uuid.UUID,
+    user_id: str,
 ) -> None:
     """Run one approved walk on an executor worker and release its reservation."""
     try:
-        run_plan(
-            engine,
-            project_id=project_id,
-            evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
-            plan=OrchestrationPlan.model_validate(plan_row["payload"]),
-            plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
-            plan_version=plan_row["version"],  # type: ignore[arg-type]
-            plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
-            backends=backends,
-            io=ParkIO(),
-        )
+        # Opened inside the executor worker: contextvars do not cross a plain
+        # executor.submit. run_plan opens its own session scope per component.
+        with tracing.trace_scope(user_id=user_id):
+            run_plan(
+                engine,
+                project_id=project_id,
+                evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
+                plan=OrchestrationPlan.model_validate(plan_row["payload"]),
+                plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
+                plan_version=plan_row["version"],  # type: ignore[arg-type]
+                plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
+                backends=backends,
+                io=ParkIO(),
+                session_id=session_id,
+            )
     except Exception:
         log.exception("api.run_dispatch_failed", project_id=str(project_id))
     finally:
@@ -176,12 +183,17 @@ def create_run(
                 )
             }
             _dispatching_projects.add(project_id)
+        # Minted here the way the CLI mints its conversation id: one Langfuse
+        # session groups every component trace of this walk.
+        session_id = uuid.uuid4()
         executor.submit(
             _dispatch_run,
             engine,
             project_id=project_id,
             plan_row=dict(plan_row),
             backends=backends,
+            session_id=session_id,
+            user_id=user.user_id,
         )
     created = _await_new_run(engine, project_id=project_id, existing_ids=existing_ids)
     # Once the runtime row exists, the database's ``running`` count owns

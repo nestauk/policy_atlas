@@ -44,6 +44,28 @@ def _read_context() -> str:
     return _WORKER_CONTEXT.get()
 
 
+def test_trace_scope_propagates_user_id_and_nested_session_keeps_it() -> None:
+    """Exercises the REAL ``propagate_attributes``: a user-only scope sets the
+    user id in the OTel context, and a nested session-only scope adds the
+    session id WITHOUT dropping the outer user id — the property slice 1's
+    entry-point wrapping relies on."""
+    from opentelemetry import context as otel_context_api
+
+    user_key = "langfuse.propagated.user_id"
+    session_key = "langfuse.propagated.session_id"
+    session_id = uuid.uuid4()
+    assert otel_context_api.get_value(user_key) is None
+
+    with tracing.trace_scope(user_id="cognito-sub-123"):
+        assert otel_context_api.get_value(user_key) == "cognito-sub-123"
+        with tracing.trace_scope(session_id=session_id):
+            assert otel_context_api.get_value(session_key) == str(session_id)
+            assert otel_context_api.get_value(user_key) == "cognito-sub-123"
+
+    assert otel_context_api.get_value(user_key) is None
+    assert otel_context_api.get_value(session_key) is None
+
+
 def test_submit_with_context_propagates_contextvar_into_worker() -> None:
     token = _WORKER_CONTEXT.set("parent-value")
     try:
@@ -108,6 +130,114 @@ class _ScoreClient:
     ) -> None:
         assert data_type == "NUMERIC"
         self.scores[name] = value
+
+
+def test_grouping_score_summary_reads_facet_counts_shape() -> None:
+    """Feeds the shape group.py's ``_build_group_counts`` returns per facet."""
+    client = _ScoreClient()
+
+    tracing.grouping_score_summary(
+        cast("Any", client),
+        {
+            "facets": ["population"],
+            "counts": {
+                "population": {
+                    "eligible_base": 10,
+                    "findings_total": 10,
+                    "grouped": 7,
+                    "ungrouped": 2,
+                    "no_value": 1,
+                    "distinct_values": 4,
+                    "groups": 3,
+                },
+            },
+        },
+    )
+
+    assert client.scores == {
+        "partition_valid": 1.0,
+        "ungrouped_share": 0.2,
+        "no_value_share": 0.1,
+        "group_count": 3.0,
+    }
+
+
+def test_synthesis_score_summary_reads_counts_shape() -> None:
+    """Feeds the shape synthesise.py's counts block returns."""
+    client = _ScoreClient()
+
+    tracing.synthesis_score_summary(
+        cast("Any", client),
+        {
+            "artefact_id": "artefact",
+            "counts": {
+                "claims_total": {"finding": 5, "chunk": 2},
+                "claims_by_verdict_lane": {"unsupported_mis_cited": 1},
+                "anchors_verified": 8,
+                "anchors_unverified": 2,
+                "chunk_claims_rejected": 1,
+            },
+        },
+    )
+
+    assert client.scores == {
+        "claims_valid_share": 6 / 7,
+        "unsupported_share": 1 / 7,
+        "citation_verified_share": 0.8,
+        "chunk_rejection_share": 1 / 3,
+    }
+
+
+def test_screening_score_summary_reads_both_stage_shapes() -> None:
+    """Stage-1 and stage-2 screen summaries emit their stage-specific scores."""
+    stage1 = _ScoreClient()
+    tracing.screening_score_summary(
+        cast("Any", stage1),
+        {
+            "relevant": 6,
+            "not_relevant": 3,
+            "failed": 1,
+            "non_unanimous": 2,
+            "tie_broken": 1,
+        },
+    )
+    assert stage1.scores == {
+        "screen_failure_count": 1.0,
+        "non_unanimous_share": 2 / 9,
+        "tie_broken_count": 1.0,
+    }
+
+    stage2 = _ScoreClient()
+    tracing.screening_score_summary(
+        cast("Any", stage2),
+        {"failed": 0, "stage2_screened": 5, "demoted": 2},
+    )
+    assert stage2.scores == {
+        "screen_failure_count": 0.0,
+        "stage2_demoted_share": 0.4,
+        "stage2_failure_count": 0.0,
+    }
+
+
+def test_classification_score_summary_reads_counts_shape() -> None:
+    """Feeds the shape classify.py's summary returns."""
+    client = _ScoreClient()
+
+    tracing.classification_score_summary(
+        cast("Any", client),
+        {
+            "classified": 4,
+            "failed": 0,
+            "by_type": {"Unknown / Insufficient information": 1},
+            "tags_rejected": 2,
+        },
+    )
+
+    assert client.scores == {
+        "classify_failure_count": 0.0,
+        "unknown_share": 0.25,
+        "tags_rejected_count": 2.0,
+    }
 
 
 def test_extraction_score_summary_reads_profile_shape() -> None:

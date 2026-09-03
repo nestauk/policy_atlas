@@ -47,3 +47,6 @@ docs/tasks/*/evidence/
 
 # Claude worktrees
 .claude/worktrees
+
+# Data generally
+*.csv

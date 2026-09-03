@@ -24,6 +24,7 @@ from policy_atlas.api import continuation
 from policy_atlas.api.auth import JwtAuthenticator
 from policy_atlas.api.contract import ErrorBody, ErrorEnvelope
 from policy_atlas.api.settings import Settings, load_settings
+from policy_atlas.core import tracing
 from policy_atlas.core.logging import configure_logging
 
 log = structlog.get_logger()
@@ -280,6 +281,10 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
             thread_name_prefix="policy-atlas-walk",
         )
         http_client = httpx.Client(timeout=httpx.Timeout(5.0), follow_redirects=False)
+        # Built once at boot so a bad Langfuse configuration fails the start,
+        # not the first traced request. Per-request get_langfuse() calls return
+        # this same client (the SDK keeps one client per public key).
+        langfuse_client = tracing.get_langfuse()
         app.state.engine = engine
         app.state.run_executor = executor
         app.state.http_client = http_client
@@ -311,6 +316,11 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
         finally:
             http_client.close()
             executor.shutdown(wait=True)
+            if langfuse_client is not None:
+                # Drains the span queue inside the ECS 10 s stop window.
+                # ponytail: a detached chat thread mid-turn at shutdown can
+                # still lose its tail spans; accepted.
+                langfuse_client.shutdown()
             engine.dispose()
 
     return lifespan
