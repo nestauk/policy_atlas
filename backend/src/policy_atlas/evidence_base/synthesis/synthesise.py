@@ -1833,12 +1833,13 @@ def _validate_sections(
                     "non-empty string with no control characters, or omitted"
                 )
             elif len(nav_label) > NAV_LABEL_MAX:
-                # Rejected, not clamped: unlike an overlong title this is a
-                # navigation label, and a mid-word stub is worse to scan than
-                # the shortened title the client would otherwise fall back to.
-                reasons.append(
-                    f"sections[{index}].nav_label_too_long: nav_label must be "
-                    f"at most {NAV_LABEL_MAX} characters"
+                # Truncate with an ellipsis rather than failing the whole run
+                # over a display-only label.  The client falls back to a
+                # shortened title anyway, so a clean truncation is never worse.
+                nav_label = nav_label[: NAV_LABEL_MAX - 1] + "…"
+                normalisations.append(
+                    f"sections[{index}].nav_label_truncated: nav_label exceeded "
+                    f"{NAV_LABEL_MAX} characters and was truncated"
                 )
         group_ids = list(section.group_ids)
         if grouping_group_ids is None and group_ids:
