@@ -750,21 +750,25 @@ async def create_chat_turn_stream(
         """Complete persistence independently of a consumer disconnect."""
         completed_result: ChatTurnResult | None = None
         try:
-            result = run_chat_turn(
-                engine,
-                project_id=project_id,
-                conversation_id=conversation_id,
-                user_id=user.user_id,
-                message=body.message,
-                client_turn_id=body.client_turn_id,
-                chat_backend=chat_backend,
-                embedding_backend=embedding_backend,
-                langfuse_client=tracing.get_langfuse(),
-                on_progress=lambda label: events.put(ProgressEvent(label=label)),
-                on_delta=lambda text: events.put(DeltaEvent(text=text)),
-                cancel_event=cancel_event,
-                reserved_turn_id=turn_id,
-            )
+            # Opened inside the worker thread: contextvars do not cross a
+            # thread start. The session scope inside run_chat_turn nests under
+            # this user scope.
+            with tracing.trace_scope(user_id=user.user_id):
+                result = run_chat_turn(
+                    engine,
+                    project_id=project_id,
+                    conversation_id=conversation_id,
+                    user_id=user.user_id,
+                    message=body.message,
+                    client_turn_id=body.client_turn_id,
+                    chat_backend=chat_backend,
+                    embedding_backend=embedding_backend,
+                    langfuse_client=tracing.get_langfuse(),
+                    on_progress=lambda label: events.put(ProgressEvent(label=label)),
+                    on_delta=lambda text: events.put(DeltaEvent(text=text)),
+                    cancel_event=cancel_event,
+                    reserved_turn_id=turn_id,
+                )
             if result.status == "cancelled":
                 events.put(CancelledEvent(turn=_turn_out(result)))
             else:
@@ -811,15 +815,23 @@ async def create_chat_turn_stream(
                 and isinstance(enrichment, dict)
                 and enrichment.get("status") == "pending"
             ):
+                enrichment_turn_id = completed_result.id
+
+                def _enrich() -> None:
+                    """Attach the judge's traces to the conversation session/user."""
+                    with tracing.trace_scope(
+                        session_id=conversation_id, user_id=user.user_id
+                    ):
+                        enrich_chat_turn(
+                            engine=engine,
+                            turn_id=enrichment_turn_id,
+                            judge_backend=judge_backend,
+                            langfuse_client=tracing.get_langfuse(),
+                        )
+
                 try:
                     threading.Thread(
-                        target=enrich_chat_turn,
-                        kwargs={
-                            "engine": engine,
-                            "turn_id": completed_result.id,
-                            "judge_backend": judge_backend,
-                            "langfuse_client": tracing.get_langfuse(),
-                        },
+                        target=_enrich,
                         name=f"policy-atlas-chat-enrichment-{completed_result.id}",
                         daemon=True,
                     ).start()

@@ -34,6 +34,7 @@ from policy_atlas.api.contract import (
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
 from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
+from policy_atlas.core import tracing
 from policy_atlas.core.schema import (
     capability_run,
     conversation,
@@ -416,7 +417,9 @@ def create_planning_turn(
             turns, previous_draft = _planner_inputs(conn, project_id, conversation_id)
         turns.append({"role": "user", "text": payload.message})
         try:
-            turn = planner.plan_turn(turns, previous_draft, session_id=conversation_id)
+            # The planner's own session scope nests under this user scope.
+            with tracing.trace_scope(user_id=user.user_id):
+                turn = planner.plan_turn(turns, previous_draft, session_id=conversation_id)
         except Exception:
             with engine.begin() as conn:
                 conn.execute(

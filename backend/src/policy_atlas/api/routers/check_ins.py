@@ -28,7 +28,7 @@ from policy_atlas.api.deps import (
 )
 from policy_atlas.api.routers._access import accessible_project
 from policy_atlas.api.run_io import ParkIO
-from policy_atlas.core import events
+from policy_atlas.core import events, tracing
 from policy_atlas.core.schema import capability_run
 from policy_atlas.runtime.orchestrator_backend import OrchestratorBackend
 from policy_atlas.runtime.runner import RunnerBackends
@@ -137,17 +137,22 @@ def _execute_claimed(
     capability_run_id: uuid.UUID,
     backends: RunnerBackends,
     orchestrator: OrchestratorBackend,
+    user_id: str,
 ) -> None:
     """Execute one already-claimed continuation on the walk executor."""
     try:
-        continuation.execute_continuation(
-            engine,
-            project_id=project_id,
-            capability_run_id=capability_run_id,
-            backends=backends,
-            io=ParkIO(),
-            orchestrator=orchestrator,
-        )
+        # The check-in responder drives everything after the resume, so the
+        # remaining components trace under their user id. The session id comes
+        # from the persisted continuation state inside run_plan.
+        with tracing.trace_scope(user_id=user_id):
+            continuation.execute_continuation(
+                engine,
+                project_id=project_id,
+                capability_run_id=capability_run_id,
+                backends=backends,
+                io=ParkIO(),
+                orchestrator=orchestrator,
+            )
     except Exception:
         log.exception(
             "api.continuation_dispatch_failed",
@@ -231,5 +236,6 @@ def respond_to_check_in(
                 capability_run_id=claim.capability_run_id,
                 backends=backends,
                 orchestrator=orchestrator,
+                user_id=user.user_id,
             )
     return Response(status_code=204)
