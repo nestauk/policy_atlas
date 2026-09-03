@@ -2064,21 +2064,17 @@ above tasks (contract `docs/tasks/032-task-lifecycle-ia/contract.md`; ADR 0031 f
 the portfolio layer). What follows is what it deliberately left out — seams, not
 omissions.
 
-- **Case studies** — parked by the owner, 2026-08-17: producing them needs a new
-  synthesis pass, and the slice's rule was that where the prototype shows an output
-  the backend does not have, no new backend process is built for it. The parked
-  design, so it is recoverable: a **deterministic IOF shortlist** (pick candidate
-  studies by the finding layer's own fields — effect basis, evidence type, appraisal
-  tier — with no model call), followed by **one prose pass modelled on the
-  key-findings pass** (same shape: a bounded emission, spans bound to the source,
-  claims verified against quoted chunks). It is a second synthesis surface with its
-  own prompt version and its own cost, which is exactly why it is its own slice.
-- **The prose "why this source matters"** — Most cited sources states only facts the
-  data asserts (citation count, appraisal tier, evidence type, which sections cite
-  it). The prototype shows a sentence explaining a study's importance; nothing in
-  the system has made that judgement, so writing one would be the report inventing
-  authority. It needs either a scored relevance model or a synthesis pass, both of
-  which are new surfaces.
+- **Case studies** — **discharged in 034** (ADR 0034,
+  `synthesise_case_studies_v1`): a new synthesis pass emits programme-grain
+  case-study cards with cited claims, result-claim bolding, and per-card
+  appraisal/design/year metadata from the substrate. The 032 parked seam
+  is resolved.
+- **Ungated "why this source matters" prose** — **narrowed in 034** (2026-09-01):
+  Most relevant sources may carry a **grounded** one-liner
+  (`most_relevant_note_v1` on mini) restating only that source's cited claims/
+  quotes. Free-form importance theatre (the report inventing authority without
+  a seed) stays out. Paper authors on those cards also stay out until acquire
+  projects them (UI/API placeholder only in 034).
 - **Mobile and narrow-viewport navigation** — owner: later. Existing responsive
   behaviour was preserved and not regressed, but the lifecycle bar, the tasks list
   and the Sources tab strip have no narrow-viewport treatment of their own.

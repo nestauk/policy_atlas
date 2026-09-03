@@ -970,6 +970,8 @@ export interface components {
          *         coverage_snapshot: Embedded coverage snapshot.
          *         sections: Artefact sections, in final page order.
          *         references: Numbered reference list.
+         *         most_relevant_notes: Grounded notes for top cited sources.
+         *         full_report_intro: Generated introduction to the full-report body, when present.
          *         summary: Artefact-level summary, if produced.
          *         summary_status: Artefact-level summary production state.
          */
@@ -980,6 +982,10 @@ export interface components {
              */
             artefact_id: string;
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
+            /** Full Report Intro */
+            full_report_intro?: string | null;
+            /** Most Relevant Notes */
+            most_relevant_notes?: components["schemas"]["MostRelevantNoteOut"][];
             /** Question */
             question: string;
             /** References */
@@ -1116,6 +1122,42 @@ export interface components {
              * @constant
              */
             type: "cancelled";
+        };
+        /**
+         * CaseStudyCardOut
+         * @description One case-study programme card within the case-studies section.
+         *
+         *     Args:
+         *         card_id: Stable card identity.
+         *         title: Programme name (place — instrument).
+         *         prose: Short mechanism prose.
+         *         claims: Span-anchored claim annotations within `prose`.
+         *         result_claim_id: The claim carrying the programme's primary result,
+         *             or ``None`` when the binding degrades.
+         *         strength: Appraisal label of the cited evidence, when known.
+         *         design: Evidence type / study design, when known.
+         *         since_year: Earliest cited publication year, when known.
+         */
+        CaseStudyCardOut: {
+            /**
+             * Card Id
+             * Format: uuid
+             */
+            card_id: string;
+            /** Claims */
+            claims?: components["schemas"]["ClaimOut"][];
+            /** Design */
+            design?: string | null;
+            /** Prose */
+            prose: string;
+            /** Result Claim Id */
+            result_claim_id?: string | null;
+            /** Since Year */
+            since_year?: number | null;
+            /** Strength */
+            strength?: string | null;
+            /** Title */
+            title: string;
         };
         /**
          * ChatTurnCreate
@@ -2310,6 +2352,20 @@ export interface components {
             user_id: string;
         };
         /**
+         * MostRelevantNoteOut
+         * @description A grounded one-liner note for a top cited source.
+         *
+         *     Args:
+         *         source_id: The project source identity.
+         *         note: One-sentence note restating only supplied evidence.
+         */
+        MostRelevantNoteOut: {
+            /** Note */
+            note: string;
+            /** Source Id */
+            source_id: string;
+        };
+        /**
          * OptionResponse
          * @description Response picking a canonical or authored option.
          *
@@ -3249,12 +3305,15 @@ export interface components {
          *             an artefact produced before the label existed. Absence is a normal
          *             state: the client falls back to a shortened title.
          *         blocks: The section's prose blocks, in order.
+         *         cards: Case-study cards (populated only for ``case_studies`` sections).
          *         summary: Verified summary for a single-block section, if available.
          *         summary_status: Summary production state for a single-block section.
          */
         SectionOut: {
             /** Blocks */
             blocks?: components["schemas"]["BlockOut"][];
+            /** Cards */
+            cards?: components["schemas"]["CaseStudyCardOut"][];
             /** Focus */
             focus?: string | null;
             /** Nav Label */
@@ -3263,7 +3322,7 @@ export interface components {
              * Role
              * @enum {string}
              */
-            role: "key_findings" | "standard" | "conclusions";
+            role: "key_findings" | "case_studies" | "standard" | "conclusions";
             /** Summary */
             summary?: string | null;
             /** Summary Status */

@@ -6,17 +6,35 @@
  * nothing and costs a cast at every call site. They need a title, a nav
  * label and some citations — that is all they ask for.
  */
+
+/** Typography shared across the report body (034 presentation). */
+export const REPORT_PART_HEADING_CLASS =
+  "text-[28px] font-extrabold uppercase tracking-[0.06em] leading-[1.2] text-navy";
+export const REPORT_SECTION_HEADING_CLASS = "text-heading font-bold text-navy";
+export const REPORT_BODY_CLASS = "text-lead text-ink";
+
+/** Contents-sidebar anchors for report part headings. */
+export const EXECUTIVE_SUMMARY_ANCHOR = "executive-summary";
+export const FULL_REPORT_ANCHOR = "full-report";
 type CitationLike = {
   source_id?: string | null;
-  source_title: string;
+  source_title?: string;
   appraisal_label?: string | null;
   evidence_type?: string | null;
 };
 
+type ClaimSourceLike = {
+  claim_id?: string;
+  citations?: CitationLike[] | null;
+};
+
+type ClaimBearerLike = { claims?: ClaimSourceLike[] | null };
+
 type SectionLike = {
   title: string;
   nav_label?: string | null;
-  blocks?: { claims?: { citations?: CitationLike[] }[] }[];
+  blocks?: ClaimBearerLike[] | null;
+  cards?: ClaimBearerLike[] | null;
 };
 
 /** One source the report leans on, with only facts about it. */
@@ -31,6 +49,10 @@ export type TopSource = {
   evidenceType: string | null;
   /** Titles of the sections that cite it, in page order. */
   citedInSections: string[];
+  /** Author names, when the data carries them. */
+  authors?: string[] | null;
+  /** A short contextual note to render under the title. */
+  note?: string | null;
 };
 
 /**
@@ -63,9 +85,20 @@ export function mostRelevantSources(
   limit = 3,
 ): TopSource[] {
   const bySource = new Map<string, TopSource>();
+  // Case-study cards carry re-projections of their section block's claims
+  // (same claim_id), so a claim seen under both must count once.
+  const seenClaimIds = new Set<string>();
   for (const section of sections ?? []) {
-    for (const block of section.blocks ?? []) {
+    const claimSources: ClaimBearerLike[] = [
+      ...(section.blocks ?? []),
+      ...(section.cards ?? []),
+    ];
+    for (const block of claimSources) {
       for (const claim of block.claims ?? []) {
+        if (claim.claim_id != null) {
+          if (seenClaimIds.has(claim.claim_id)) continue;
+          seenClaimIds.add(claim.claim_id);
+        }
         // One claim citing the same source twice counts once for that claim:
         // the ranking is "how many claims lean on this", not "how many
         // citation rows exist".
@@ -79,7 +112,7 @@ export function mostRelevantSources(
           if (existing === undefined) {
             bySource.set(sourceId, {
               sourceId,
-              title: citation.source_title,
+              title: citation.source_title ?? "",
               citationCount: 1,
               appraisalLabel: citation.appraisal_label ?? null,
               evidenceType: citation.evidence_type ?? null,
@@ -126,17 +159,175 @@ export function sectionNavLabel(section: SectionLike, max = 28): string {
   return `${(lastSpace > max / 2 ? clipped.slice(0, lastSpace) : clipped).trimEnd()}…`;
 }
 
+/**
+ * Split a key-findings bullet on the first `: ` (task 034 S3).
+ *
+ * Display-only: stored prose is unchanged. No colon, or a colon with no
+ * following space, returns null so the renderer leaves the line unbolded.
+ */
+export function splitLeadColon(text: string): { lead: string; rest: string } | null {
+  const index = text.indexOf(": ");
+  if (index <= 0) return null;
+  return { lead: text.slice(0, index), rest: text.slice(index + 2) };
+}
+
+/**
+ * The full-report roadmap line: the synthesised intro when one was produced,
+ * otherwise nothing (absence is a normal state, never a fabricated line).
+ */
+export function fullReportIntro(
+  sectionCount: number,
+  generatedIntro?: string | null,
+): string | null {
+  if (sectionCount <= 0) return null;
+  if (generatedIntro != null && generatedIntro.trim() !== "") return generatedIntro.trim();
+  return null;
+}
+
+/** Why case-study cards appear (matches the case-studies synthesis pass). */
+export const CASE_STUDIES_INTRO = "Relevant examples from the cited evidence.";
+
+/** Why these sources rank as most relevant (matches {@link mostRelevantSources}). */
+export const MOST_RELEVANT_SOURCES_INTRO = "Sources cited most often in this report.";
+
+type CardEvidenceInput = {
+  strength?: string | null;
+  design?: string | null;
+  since_year?: number | null;
+  claims?: ClaimSourceLike[] | null;
+};
+
+/**
+ * Strength, design and year for a case-study card.
+ *
+ * Rollup metadata is filled at synthesis from finding-level appraisal; when
+ * that lookup misses, fall back to the card claims' citation rows.
+ */
+export function cardEvidenceMeta(card: CardEvidenceInput): {
+  strength: string | null;
+  design: string | null;
+  sinceYear: number | null;
+} {
+  let strength = card.strength ?? null;
+  let design = card.design ?? null;
+  for (const claim of card.claims ?? []) {
+    for (const citation of claim.citations ?? []) {
+      if (strength == null && citation.appraisal_label != null && citation.appraisal_label !== "") {
+        strength = citation.appraisal_label;
+      }
+      if (design == null && citation.evidence_type != null && citation.evidence_type !== "") {
+        design = citation.evidence_type;
+      }
+    }
+  }
+  const sinceYear = card.since_year ?? null;
+  return { strength, design, sinceYear };
+}
+
+/** Chip labels for a case-study card's evidence row (strength · design · since). */
+export function cardEvidenceChipLabels(card: CardEvidenceInput): string[] {
+  const { strength, design, sinceYear } = cardEvidenceMeta(card);
+  return [
+    strength,
+    design,
+    sinceYear != null ? `Since ${sinceYear}` : null,
+  ].filter((part): part is string => part != null && part !== "");
+}
+
+function markdownKeyFindingsLine(line: string): string {
+  const stripped = line.replace(/^\s*- /, "");
+  const split = splitLeadColon(stripped);
+  if (split === null) return `- ${stripped}`;
+  return `- **${split.lead}:** ${split.rest}`;
+}
+
+function markdownKeyFindingsProse(prose: string): string {
+  const lines = prose.split("\n").filter((line) => line.trim() !== "");
+  const isBulleted = lines.length > 0 && lines.every((line) => line.trimStart().startsWith("- "));
+  if (!isBulleted) return prose;
+  return lines.map(markdownKeyFindingsLine).join("\n");
+}
+
+function markdownMostRelevantSources(sources: TopSource[]): string[] {
+  if (sources.length === 0) return [];
+  const lines: string[] = ["### Most relevant sources", "", MOST_RELEVANT_SOURCES_INTRO, ""];
+  for (const source of sources) {
+    const facts = [
+      source.citationCount === 1 ? "cited by 1 claim" : `cited by ${source.citationCount} claims`,
+      source.appraisalLabel,
+      source.evidenceType,
+    ].filter((part): part is string => part != null && part !== "");
+    lines.push(`- **${source.title}** — ${facts.join(" · ")}.`);
+    if (source.note != null && source.note !== "") lines.push(`  ${source.note}`);
+  }
+  lines.push("");
+  return lines;
+}
+
 type MarkdownClaim = {
+  claim_id?: string;
   claim_type?: string;
   span?: number[] | null;
-  citations?: Array<{ n: number }>;
+  citations?: Array<{
+    n?: number;
+    source_id?: string | null;
+    source_title?: string;
+    appraisal_label?: string | null;
+    evidence_type?: string | null;
+  }>;
+};
+
+type MarkdownCard = {
+  title: string;
+  prose: string;
+  claims?: MarkdownClaim[] | null;
+  result_claim_id?: string | null;
+  strength?: string | null;
+  design?: string | null;
+  since_year?: number | null;
 };
 
 type MarkdownSection = {
   title: string;
-  role: "key_findings" | "standard" | "conclusions";
+  role: "key_findings" | "case_studies" | "standard" | "conclusions";
   blocks?: Array<{ prose: string; claims?: MarkdownClaim[] | null }> | null;
+  cards?: MarkdownCard[] | null;
 };
+
+function markdownCaseStudyCardProse(card: MarkdownCard): string {
+  const claims = card.claims ?? [];
+  const marked = proseWithCitationMarkers(card.prose, claims);
+  const resultClaim = claims.find(
+    (claim) => claim.claim_id != null && claim.claim_id === card.result_claim_id,
+  );
+  if (resultClaim?.span != null && resultClaim.span.length === 2) {
+    const [start, end] = resultClaim.span;
+    const resultText = Array.from(card.prose).slice(start, end).join("");
+    if (resultText !== "") {
+      const idx = marked.indexOf(resultText);
+      if (idx >= 0) {
+        return `${marked.slice(0, idx)}**${resultText}**${marked.slice(idx + resultText.length)}`;
+      }
+    }
+  }
+  return marked;
+}
+
+/** Attach grounded one-liner notes to their ranked sources (034 S5). */
+export function mergeMostRelevantNotes(
+  sources: TopSource[],
+  notes?: Array<{ source_id: string; note: string }> | null,
+): TopSource[] {
+  if (notes == null || notes.length === 0) return sources;
+  const notesBySourceId = new Map<string, string>();
+  for (const entry of notes) {
+    if (entry.source_id && entry.note) notesBySourceId.set(entry.source_id, entry.note);
+  }
+  return sources.map((source) => ({
+    ...source,
+    note: notesBySourceId.get(source.sourceId) ?? source.note ?? null,
+  }));
+}
 
 type MarkdownArtefact = {
   title: string;
@@ -144,10 +335,18 @@ type MarkdownArtefact = {
   summary_status?: "pending" | "verified" | "failed" | null;
   sections?: MarkdownSection[];
   references?: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  most_relevant_notes?: Array<{ source_id: string; note: string }> | null;
+  full_report_intro?: string | null;
 };
 
 function citationMarker(claim: MarkdownClaim): string {
-  const numbers = [...new Set((claim.citations ?? []).map((citation) => citation.n))];
+  const numbers = [
+    ...new Set(
+      (claim.citations ?? [])
+        .map((citation) => citation.n)
+        .filter((n): n is number => typeof n === "number"),
+    ),
+  ];
   return numbers.length > 0 ? `[${numbers.join(",")}]` : "";
 }
 
@@ -190,26 +389,68 @@ function proseWithCitationMarkers(prose: string, claims: MarkdownClaim[]): strin
 }
 
 function sectionsInReportOrder(sections: MarkdownSection[]): MarkdownSection[] {
-  const keyFindings = sections.filter((section) => section.role === "key_findings");
-  const middle = sections.filter(
-    (section) => section.role !== "key_findings" && section.role !== "conclusions",
-  );
-  const conclusions = sections.filter((section) => section.role === "conclusions");
-  return [...keyFindings, ...middle, ...conclusions];
+  const keyFindings = sections.filter((s) => s.role === "key_findings");
+  const caseStudies = sections.filter((s) => s.role === "case_studies");
+  const middle = sections.filter((s) => s.role === "standard");
+  const conclusions = sections.filter((s) => s.role === "conclusions");
+  return [...keyFindings, ...caseStudies, ...middle, ...conclusions];
 }
 
 /**
- * The report as a markdown file: title, verified summary, section prose,
- * numbered references. Unverified summaries are omitted (same honesty as
- * the on-screen callout).
+ * The report as a markdown file: title, executive summary (In brief + KF +
+ * case studies + MRS), full report (roadmap + body sections + references).
+ * Unverified summaries are omitted (same honesty as the on-screen callout).
  */
 export function artefactMarkdown(artefact: MarkdownArtefact): string {
   const lines: string[] = [`# ${artefact.title}`, ""];
-  if (artefact.summary_status === "verified" && artefact.summary != null && artefact.summary !== "") {
-    lines.push(artefact.summary, "");
+  const ordered = sectionsInReportOrder(artefact.sections ?? []);
+  const execSections = ordered.filter(
+    (s) => s.role === "key_findings" || s.role === "case_studies",
+  );
+  const fullReportSections = ordered.filter(
+    (s) => s.role === "standard" || s.role === "conclusions",
+  );
+
+  lines.push("## Executive summary", "");
+  for (const section of execSections) {
+    if (section.role === "case_studies") {
+      // Parity with the page: a case-studies section with no cards renders
+      // nothing (absence is normal, never an empty heading).
+      const cards = section.cards ?? [];
+      if (cards.length === 0) continue;
+      lines.push(`### ${section.title}`, "", CASE_STUDIES_INTRO, "");
+      for (const card of cards) {
+        lines.push(`**${card.title}**`, "");
+        if (card.prose) {
+          lines.push(markdownCaseStudyCardProse(card), "");
+        }
+        const facts = cardEvidenceChipLabels(card);
+        if (facts.length > 0) lines.push(`_${facts.join(" · ")}_`, "");
+      }
+    } else {
+      lines.push(`### ${section.title}`, "");
+      for (const block of section.blocks ?? []) {
+        const prose = proseWithCitationMarkers(block.prose, block.claims ?? []).trim();
+        if (prose !== "") lines.push(markdownKeyFindingsProse(prose), "");
+      }
+    }
   }
-  for (const section of sectionsInReportOrder(artefact.sections ?? [])) {
-    lines.push(`## ${section.title}`, "");
+  lines.push(
+    ...markdownMostRelevantSources(
+      mergeMostRelevantNotes(
+        mostRelevantSources(artefact.sections),
+        artefact.most_relevant_notes,
+      ),
+    ),
+  );
+
+  if (fullReportSections.length > 0) {
+    lines.push("## Full report", "");
+    const intro = fullReportIntro(fullReportSections.length, artefact.full_report_intro);
+    if (intro !== null) lines.push(intro, "");
+  }
+  for (const section of fullReportSections) {
+    lines.push(`### ${section.title}`, "");
     for (const block of section.blocks ?? []) {
       const prose = proseWithCitationMarkers(block.prose, block.claims ?? []).trim();
       if (prose !== "") lines.push(prose, "");
@@ -217,7 +458,7 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
   }
   const references = [...(artefact.references ?? [])].sort((left, right) => left.n - right.n);
   if (references.length > 0) {
-    lines.push("## References", "");
+    lines.push("### References", "");
     for (const reference of references) {
       const extra = [
         reference.year != null ? String(reference.year) : null,

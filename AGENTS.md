@@ -22,6 +22,38 @@
 - Touch only what the task requires.
 
 # Current phase
+Design — task `034-synthesis-report` **CONTRACT + PLAN APPROVED 2026-08-26 ·
+owner**; build not yet opened — **the Codex CLI is installed this slice;
+no adversarial waiver**
+(branch `task/034-synthesis-report`, stacked on
+`task/033-ux-snags`; the PR re-targets `dev` once 033 merges): improve the
+synthesis report's language and presentation — nine numbered defects S1–S9
+(front-matter page order · heading hierarchy · key-findings lead-colon
+bullets with gap bullets · a new case-studies synthesis pass discharging the
+032 parked seam · most-relevant-sources restyle · short section titles ·
+plainer voice per principles P1–P10 · result-span bolding · download parity).
+**Tier 3** — four prompt bumps (`synthesise_section_v8→v9`,
+`synthesise_key_findings_v2→v3` + gap claim type, `synthesise_sections_v4→v5`,
+`summariser_v1→v2`) + one new prompt surface (`synthesise_case_studies_v1`) +
+an additive public `SectionRole` value; env-overridable `SYNTHESIS_MODEL`
+(default `gpt-5.6-terra`). No schema migration; no new runtime
+egress. Contract, rubric and design inputs: `docs/tasks/034-synthesis-report/`;
+frozen prototype: `docs/specs/sources/synthesis-report-ux/`. **Owner fork
+rulings 2026-08-26** recorded in the contract: softer answer-callout label
+(spec stands), 031 count wording stays, gap bullets in key findings, no
+Authors/confidence, Most relevant sources restyle-only. **Build
+pre-requisite:** a working model route — staging quota is exhausted (below);
+confirm top-up before the build conversation opens.
+
+Task `033-ux-snags` build is **complete on its branch** (`task/033-ux-snags`;
+contract + plan approved 2026-08-24; step-6 exit `make verify` green
+2026-08-24; round-2 owner steers 2026-08-25 shipped `planner_v10`): ten UX
+snags on the 032 surfaces. Screen word **Task** = `project` row; screen word
+**Project** = `portfolio` row (ADR 0031); membership many-to-many (ADR 0032).
+Tier 3 — join table + public read/write shape (`portfolio_ids`, Included
+`source_count`, additive `FindingOut.chunk_id`) + `planner_v10`. Adversarial
+review waived (owner, 2026-08-24; 032 precedent — `codex` not on PATH);
+`verification.md` and the PR must say so. **Review stack + PR pending.**
 **BUILD COMPLETE (steps 5–6, 2026-08-25) — task `033-organisations` is ready
 for the review stack.** All sixteen phases implemented and committed on
 `task/033-organisations`; exit gate green (`make verify` 2327 backend + 460

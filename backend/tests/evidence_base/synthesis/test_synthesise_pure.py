@@ -15,6 +15,7 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     build_judge_messages,
 )
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+    KEY_FINDINGS_GAP_MAX,
     ClaimWire,
     GapPayloadWire,
     PatternPayloadWire,
@@ -38,7 +39,9 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     parse_synthesis_directive,
 )
 from policy_atlas.evidence_base.synthesis.synthesise import (
+    CASE_STUDIES_MAX_CARDS,
     CONCLUSIONS_TITLE,
+    MRS_NOTE_MAX,
     ChunkInfo,
     ClaimDraft,
     CorpusProfile,
@@ -52,7 +55,9 @@ from policy_atlas.evidence_base.synthesis.synthesise import (
     _bind_unspanned,
     _conclusions_focus,
     _judge_claims,
+    _key_findings_ledger,
     _section_claims,
+    _validate_case_study_cards,
     _validate_sections,
     bind_spans,
     build_ledger,
@@ -242,8 +247,17 @@ def test_artefact_title_strips_control_chars_and_truncates() -> None:
 
 def test_budget_formula_and_ledger_marker() -> None:
     # +1 conclusions section (rides above SECTION_CAP) + the key-findings pass
-    # (emission + judge/repair/rejudge) — ADR 0015 §8.
-    assert generation_budget_max() == 2 + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3) + 4
+    # (emission + judge/repair/rejudge) + case-studies (emission + per-card judge)
+    # + up to MRS_NOTE_MAX note calls.
+    assert (
+        generation_budget_max()
+        == 2
+        + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3)
+        + 4
+        + (1 + CASE_STUDIES_MAX_CARDS)
+        + MRS_NOTE_MAX
+        + 1
+    )
 
     # 022 rider 18 (F0 § DTO spec): the prompt-facing ledger record slims to
     # claim id/type/text — cited_ids/flags/a repeated non-citable note are
@@ -1149,7 +1163,7 @@ def test_proposed_conclusion_title_rejected_but_injected_title_is_exempt() -> No
     assert injected.title == "Conclusions"
     assert injected.role == "conclusions"
     assert "What works?" in injected.focus
-    assert "recommendations" in injected.focus
+    assert "recommendation" in injected.focus
 
 
 # --- Review-stack fixes (018 step 7): empty gate + unspanned-lane honesty ---
@@ -1552,3 +1566,154 @@ def test_judge_extra_verdicts_for_span_only_ids_are_dropped_not_fatal() -> None:
     # The judged claim carries its verdict; the pattern claim never gains one.
     assert reasoning_claim.verdict is not None
     assert pattern_claim.verdict is None
+
+
+def _gap_draft(*, text: str = "No rural trials.") -> ClaimDraft:
+    return ClaimDraft(
+        claim_id="s0c0",
+        claim_index=0,
+        claim_type="gap",
+        text=text,
+        annotation_type="gap",
+        payload={
+            "gap": {
+                "grade": "inferred",
+                "coverage_base": "screened",
+                "coverage_record_id": None,
+                "sparsity": None,
+            }
+        },
+        verdict="tier_1",
+    )
+
+
+def test_key_findings_ledger_carries_gap_payload() -> None:
+    section = SectionSpec(title="Coverage", focus="Where the evidence runs out.")
+    ledger = _key_findings_ledger([(section, [_gap_draft()])])
+    assert ledger[0]["claims"][0]["gap"] == {
+        "grade": "inferred",
+        "coverage_base": "screened",
+        "coverage_record_id": None,
+        "sparsity": None,
+    }
+
+
+def test_key_findings_gap_restatement_accepts_matching_grade_and_base() -> None:
+    text = "No rural trials."
+    claim = ClaimWire(
+        claim_type="gap",
+        text=text,
+        gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+    )
+    batch = validate_claims(
+        [claim],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, len(text))],
+        available_claim_types={"gap"},
+        gap_restatement_seeds=[
+            {"grade": "inferred", "coverage_base": "screened", "coverage_record_id": "cov-1"}
+        ],
+    )
+    assert batch.rejected == []
+    assert len(batch.drafts) == 1
+    assert batch.drafts[0].payload["gap"]["coverage_record_id"] == "cov-1"
+
+
+def test_key_findings_gap_restatement_rejects_forged_grade() -> None:
+    text = "Nothing found in the search."
+    claim = ClaimWire(
+        claim_type="gap",
+        text=text,
+        gap=GapPayloadWire(
+            grade="corpus_absence",
+            coverage_base="screened",
+            coverage_record_id="forged",
+        ),
+    )
+    batch = validate_claims(
+        [claim],
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=[(0, len(text))],
+        available_claim_types={"gap"},
+        gap_restatement_seeds=[{"grade": "inferred", "coverage_base": "screened"}],
+    )
+    assert [item.reason for item in batch.rejected] == ["gap_not_restated"]
+
+
+def test_key_findings_gap_restatement_caps_at_two() -> None:
+    texts = [
+        "No rural trials.",
+        "No cost evidence.",
+        "No long-term follow-up.",
+    ]
+    claims = [
+        ClaimWire(
+            claim_type="gap",
+            text=text,
+            gap=GapPayloadWire(grade="inferred", coverage_base="screened"),
+        )
+        for text in texts
+    ]
+    prose = "\n".join(f"- {text}" for text in texts)
+    spans = bind_spans(prose, texts)
+    batch = validate_claims(
+        claims,
+        substrate=_substrate(),
+        section_index=0,
+        section_group_ids=set(),
+        citable_finding_ids=set(),
+        citable_chunk_ids=set(),
+        spans=spans,
+        available_claim_types={"gap"},
+        gap_restatement_seeds=[{"grade": "inferred", "coverage_base": "screened"}],
+    )
+    assert len(batch.drafts) == KEY_FINDINGS_GAP_MAX
+    assert [item.reason for item in batch.rejected] == ["gap_restatement_cap"]
+
+
+# --- _validate_case_study_cards (task 034 S4) ---
+
+
+def test_validate_case_study_cards_drops_bad_ordinal() -> None:
+    """A card with result_ordinal out of range is dropped."""
+    from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+        CaseStudyCardWire,
+        CaseStudyClaimWire,
+        CaseStudyWire,
+    )
+
+    wire = CaseStudyWire(cards=[
+        CaseStudyCardWire(
+            title="Good card",
+            prose="A sentence about evidence.",
+            claims=[
+                CaseStudyClaimWire(
+                    claim_type="finding", text="Evidence (stub).", cited_finding_ids=["f-1"]
+                )
+            ],
+            result_ordinal=0,
+        ),
+        CaseStudyCardWire(
+            title="Bad ordinal card",
+            prose="Another sentence.",
+            claims=[
+                CaseStudyClaimWire(
+                    claim_type="finding", text="More evidence.", cited_finding_ids=["f-2"]
+                )
+            ],
+            result_ordinal=5,
+        ),
+    ])
+    survivors, reason = _validate_case_study_cards(wire)
+    # Bad ordinal card is dropped; only 1 survivor is below the minimum so
+    # the whole pass degrades.
+    assert reason is not None
+    assert len(survivors) == 0

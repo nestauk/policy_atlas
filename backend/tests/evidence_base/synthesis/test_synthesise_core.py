@@ -363,7 +363,7 @@ def test_characterisation_only_stub_writes_substrate_and_rollup(conn: Connection
     row = conn.execute(
         select(synthesis_result).where(synthesis_result.c.project_id == project_id)
     ).one()
-    assert row.synthesis_provenance["prompt_versions"]["sections"] == "synthesise_sections_v4"
+    assert row.synthesis_provenance["prompt_versions"]["sections"] == "synthesise_sections_v5"
     assert row.synthesis_provenance["section_set"]["source"] == "proposal"
     claim_types = {
         claim_type

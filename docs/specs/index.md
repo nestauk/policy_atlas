@@ -21,6 +21,7 @@ When two of them disagree on such an area, the lower number wins (ratified from 
 5. [evidence-base-wireframes.html](sources/evidence-base-ux/evidence-base-wireframes.html) — static UX reference; product intent only, never a schema/contract source.
 6. [nesta-brand-tokens.md](sources/evidence-base-ux/nesta-brand-tokens.md) + [hifi.css](sources/evidence-base-ux/hifi.css) — visual language / token cues.
 7. [task-lifecycle-ux/](sources/task-lifecycle-ux/README.md) — the 2026-08-17 clickable prototype for the task-lifecycle IA (workspace level + the five task stages). Product intent only, never a schema/contract source; it contains outputs the backend deliberately does not produce. Read its README for how to unpack it.
+8. [synthesis-report-ux/](sources/synthesis-report-ux/README.md) — the 2026-08-26 clickable prototype for the report's Results tab (front matter, key-findings bullets, case-study cards). Product intent only, never a schema/contract source; task 034's contract records its deliberate departures. Read its README for how to unpack it.
 
 Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7).
 

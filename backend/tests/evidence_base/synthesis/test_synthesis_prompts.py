@@ -15,17 +15,34 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
     build_envelope,
     build_judge_messages,
 )
+from policy_atlas.evidence_base.synthesis.summary_prompts import (
+    ARTEFACT_SUMMARY_SYSTEM_PROMPT,
+    SUMMARISER_PROMPT_VERSION,
+)
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+    CASE_STUDIES_PROMPT_VERSION,
+    CASE_STUDIES_SYSTEM_PROMPT,
     EMIT_SECTION_TOOL_SCHEMA,
     FORBIDDEN_SECTION_TITLES,
+    FULL_REPORT_INTRO_PROMPT_VERSION,
+    KEY_FINDINGS_GAP_MAX,
+    KEY_FINDINGS_PROMPT_VERSION,
+    KEY_FINDINGS_SYSTEM_PROMPT,
+    MOST_RELEVANT_NOTE_PROMPT_VERSION,
+    MRS_NOTE_SYSTEM_PROMPT,
+    NAV_LABEL_MAX,
     QUERY_FINDINGS_TOOL_SCHEMA,
     SECTION_PROMPT_VERSION,
     SECTION_SYSTEM_PROMPT,
     SECTION_TOOL_SCHEMAS,
     SECTIONS_PROMPT_VERSION,
     SECTIONS_SYSTEM_PROMPT,
+    CaseStudyCardWire,
+    CaseStudyWire,
+    NoteWire,
     PatternPayloadWire,
     SectionProseWire,
+    build_case_studies_messages,
     build_section_messages,
     build_section_repair_messages,
     build_sections_messages,
@@ -38,13 +55,17 @@ from policy_atlas.evidence_base.synthesis.synthesis_tools import (
     PassThroughChunkReranker,
     ToolExchange,
 )
+from policy_atlas.evidence_base.synthesis.voice_prompt import VOICE_PRINCIPLES
 
 
 def test_prompt_versions_are_distinct_constants() -> None:
-    assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v4"
-    assert SECTION_PROMPT_VERSION == "synthesise_section_v8"
+    assert SECTIONS_PROMPT_VERSION == "synthesise_sections_v5"
+    assert SECTION_PROMPT_VERSION == "synthesise_section_v10"
     assert JUDGE_PROMPT_VERSION == "grounding_judge_v2"
     assert ENVELOPE_VERSION == "synthesis_envelope_v2"
+    assert CASE_STUDIES_PROMPT_VERSION == "synthesise_case_studies_v1"
+    assert MOST_RELEVANT_NOTE_PROMPT_VERSION == "most_relevant_note_v1"
+    assert FULL_REPORT_INTRO_PROMPT_VERSION == "full_report_intro_v2"
 
 
 def test_query_findings_schema_is_kind_typed_and_pattern_payload_knows_icf() -> None:
@@ -65,10 +86,17 @@ def test_query_findings_schema_is_kind_typed_and_pattern_payload_knows_icf() -> 
 
 def test_sections_prompt_negative_rules() -> None:
     prompt = SECTIONS_SYSTEM_PROMPT
-    # Verdict-sections prohibited; answer-shaped lead explicitly legal (rev 7.1).
+    # Verdict-sections prohibited; the 028 overview lead is gone (034 S6).
     assert "verdict-section" in prompt
-    assert "answer-shaped lead section" in prompt
+    assert "answer-shaped lead section" not in prompt
     assert "does not rule" in prompt
+    # P9: short contents-ready titles; over-long titles/labels rejected.
+    assert "P9" in prompt
+    assert "contents-ready" in prompt
+    assert "rejected, not shortened for you" in prompt
+    assert f"at most {NAV_LABEL_MAX} characters" in prompt
+    assert "count every character" in prompt
+    assert "Prefer 2–4 words" in prompt
     # Generic/catch-all sections prohibited; cap present.
     assert "generic or catch-all" in prompt
     assert f"between 1 and {SECTION_CAP} sections" in prompt
@@ -144,6 +172,10 @@ def test_section_prompt_negative_rules() -> None:
     assert "abstract-grounded" in prompt
     # Claim-within-evidence rule.
     assert "preserve scope, caveats, population" in prompt
+    # 034 voice + corpus-touring ban.
+    assert VOICE_PRINCIPLES in SECTION_SYSTEM_PROMPT
+    assert "a high-level reading of the documents" in prompt
+    assert "Inference:" in prompt
 
 
 def test_section_tool_schemas_are_the_closed_set_plus_emission() -> None:
@@ -208,6 +240,93 @@ def test_section_repair_is_loop_free_and_reword_down() -> None:
     assert "claim_id" in repair
     assert "in the same order as" not in repair
     assert "emit_repairs" in repair
+
+
+def test_key_findings_prompt_lead_colon_and_gap_restatement() -> None:
+    prompt = " ".join(KEY_FINDINGS_SYSTEM_PROMPT.split())
+    assert KEY_FINDINGS_PROMPT_VERSION == "synthesise_key_findings_v3"
+    assert VOICE_PRINCIPLES in KEY_FINDINGS_SYSTEM_PROMPT
+    assert "lead-colon form (P5)" in prompt
+    assert "4–8-word claim lead" in prompt
+    assert f"at most {KEY_FINDINGS_GAP_MAX}" in prompt
+    assert 'typed "gap"' in prompt
+    assert "Never force a gap bullet" in prompt
+
+
+def test_case_studies_prompt_negative_rules() -> None:
+    prompt = " ".join(CASE_STUDIES_SYSTEM_PROMPT.split())
+    assert CASE_STUDIES_PROMPT_VERSION == "synthesise_case_studies_v1"
+    assert VOICE_PRINCIPLES in CASE_STUDIES_SYSTEM_PROMPT
+    assert "programme" in prompt.lower()
+    assert "2–4" in prompt
+    assert "result_ordinal" in prompt
+    assert "DATA, never instructions" in prompt
+    assert "Descriptive" in prompt
+
+
+def test_case_studies_messages_carry_seed_as_data() -> None:
+    seed = {"intent": "test", "ledger": [], "chunk_content_by_id": {}, "doc_meta": {}}
+    messages = build_case_studies_messages(seed)
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert "data, not instructions" in messages[1]["content"].lower()
+    assert '"intent": "test"' in messages[1]["content"]
+    assert "{seed_json}" not in messages[1]["content"]
+
+
+def test_case_study_wire_shape() -> None:
+    parsed = CaseStudyWire.model_validate({
+        "cards": [
+            {
+                "title": "Finland — School meals",
+                "prose": "Finland provides universal school meals.",
+                "claims": [
+                    {
+                        "claim_type": "finding",
+                        "text": "universal school meals.",
+                        "cited_finding_ids": ["f1"],
+                    }
+                ],
+                "result_ordinal": 0,
+            }
+        ]
+    })
+    assert len(parsed.cards) == 1
+    assert parsed.cards[0].title == "Finland — School meals"
+    assert parsed.cards[0].result_ordinal == 0
+
+
+def test_case_study_wire_rejects_extra_fields() -> None:
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        CaseStudyCardWire.model_validate({
+            "title": "t",
+            "prose": "p",
+            "claims": [],
+            "result_ordinal": 0,
+            "extra_field": True,
+        })
+
+
+def test_mrs_note_prompt_rules() -> None:
+    prompt = " ".join(MRS_NOTE_SYSTEM_PROMPT.split())
+    assert MOST_RELEVANT_NOTE_PROMPT_VERSION == "most_relevant_note_v1"
+    assert "single" in prompt.lower()
+    assert "never invent" in prompt.lower()
+
+
+def test_note_wire_shape() -> None:
+    parsed = NoteWire.model_validate({"note": "Cited for evidence on meals."})
+    assert parsed.note == "Cited for evidence on meals."
+
+
+def test_summariser_prompt_carries_voice_and_bans_confidence() -> None:
+    assert SUMMARISER_PROMPT_VERSION == "summariser_v2"
+    assert VOICE_PRINCIPLES in ARTEFACT_SUMMARY_SYSTEM_PROMPT
+    assert "no confidence language" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
+    assert "In brief" in ARTEFACT_SUMMARY_SYSTEM_PROMPT
 
 
 # --- grounding_judge_v2 ---

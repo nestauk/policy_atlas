@@ -20,6 +20,7 @@ from policy_atlas.evidence_base.synthesis.grounding_judge import (
 from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     CLAIM_TEXT_MAX,
     EMISSION_CLAIMS_MAX,
+    SYNTHESIS_MODEL,
     ClaimWire,
     GapPayloadWire,
     OpenAISynthesisBackend,
@@ -294,6 +295,12 @@ def test_live_section_turn_parses_two_read_tool_calls_in_order() -> None:
     [kwargs] = cast("Any", backend)._client.chat.completions.calls
     assert kwargs["parallel_tool_calls"] is True
     assert kwargs["tool_choice"] == "required"
+    assert kwargs["model"] == SYNTHESIS_MODEL
+    # Pin regression: gpt-5.6-terra 400s on function tools without this (029).
+    if SYNTHESIS_MODEL == "gpt-5.6-terra":
+        assert kwargs["reasoning_effort"] == "none"
+    else:
+        assert "reasoning_effort" not in kwargs
 
 
 def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
@@ -311,6 +318,21 @@ def test_live_section_turn_drops_emit_section_alongside_reads() -> None:
         {"tool": "search_chunks", "arguments": {"query": "housing"}},
     ]
     assert any(entry["event"] == "synthesis.emit_with_reads_deferred" for entry in logs)
+
+
+def test_synthesis_openai_kwargs_omit_effort_on_gpt_55(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """gpt-5.5 keeps the provider default; do not force terra's effort pin."""
+    from policy_atlas.evidence_base.synthesis import synthesis_backend as sb
+
+    monkeypatch.setattr(sb, "SYNTHESIS_MODEL", "gpt-5.5")
+    assert sb._synthesis_openai_kwargs() == {"model": "gpt-5.5"}
+    monkeypatch.setattr(sb, "SYNTHESIS_MODEL", "gpt-5.6-terra")
+    assert sb._synthesis_openai_kwargs() == {
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "none",
+    }
 
 
 def test_scripted_turns_drive_real_loop_and_cap_forcing_falls_through() -> None:

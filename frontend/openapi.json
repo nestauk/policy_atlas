@@ -18,7 +18,7 @@
         "type": "object"
       },
       "ArtefactOut": {
-        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    artefact_id: The artefact's durable identity \u2014 the id a chat's\n        entry-context chip binds to (029 strand 6).\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.\n    summary: Artefact-level summary, if produced.\n    summary_status: Artefact-level summary production state.",
+        "description": "The `artefact` read model \u2014 the synthesised evidence base.\n\nArgs:\n    artefact_id: The artefact's durable identity \u2014 the id a chat's\n        entry-context chip binds to (029 strand 6).\n    title: Artefact title.\n    question: The evidence question the artefact answers.\n    coverage_snapshot: Embedded coverage snapshot.\n    sections: Artefact sections, in final page order.\n    references: Numbered reference list.\n    most_relevant_notes: Grounded notes for top cited sources.\n    full_report_intro: Generated introduction to the full-report body, when present.\n    summary: Artefact-level summary, if produced.\n    summary_status: Artefact-level summary production state.",
         "properties": {
           "artefact_id": {
             "format": "uuid",
@@ -27,6 +27,24 @@
           },
           "coverage_snapshot": {
             "$ref": "#/components/schemas/CoverageSnapshotOut"
+          },
+          "full_report_intro": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Report Intro"
+          },
+          "most_relevant_notes": {
+            "items": {
+              "$ref": "#/components/schemas/MostRelevantNoteOut"
+            },
+            "title": "Most Relevant Notes",
+            "type": "array"
           },
           "question": {
             "title": "Question",
@@ -288,6 +306,83 @@
           "turn"
         ],
         "title": "CancelledEvent",
+        "type": "object"
+      },
+      "CaseStudyCardOut": {
+        "description": "One case-study programme card within the case-studies section.\n\nArgs:\n    card_id: Stable card identity.\n    title: Programme name (place \u2014 instrument).\n    prose: Short mechanism prose.\n    claims: Span-anchored claim annotations within `prose`.\n    result_claim_id: The claim carrying the programme's primary result,\n        or ``None`` when the binding degrades.\n    strength: Appraisal label of the cited evidence, when known.\n    design: Evidence type / study design, when known.\n    since_year: Earliest cited publication year, when known.",
+        "properties": {
+          "card_id": {
+            "format": "uuid",
+            "title": "Card Id",
+            "type": "string"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimOut"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "design": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design"
+          },
+          "prose": {
+            "title": "Prose",
+            "type": "string"
+          },
+          "result_claim_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Claim Id"
+          },
+          "since_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since Year"
+          },
+          "strength": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strength"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "title",
+          "prose"
+        ],
+        "title": "CaseStudyCardOut",
         "type": "object"
       },
       "ChatTurnCreate": {
@@ -2879,6 +2974,25 @@
         "title": "MeOut",
         "type": "object"
       },
+      "MostRelevantNoteOut": {
+        "description": "A grounded one-liner note for a top cited source.\n\nArgs:\n    source_id: The project source identity.\n    note: One-sentence note restating only supplied evidence.",
+        "properties": {
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "note"
+        ],
+        "title": "MostRelevantNoteOut",
+        "type": "object"
+      },
       "OptionResponse": {
         "additionalProperties": false,
         "description": "Response picking a canonical or authored option.\n\nArgs:\n    kind: Discriminator.\n    option_id: The picked option's id.\n    params: Fill-in for `requires_user_input` options. The spec does\n        not name per-option param shapes, so this stays a constrained\n        free-form mapping rather than a per-option union.",
@@ -4657,13 +4771,20 @@
         "type": "object"
       },
       "SectionOut": {
-        "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    nav_label: Short scannable name for the contents list, or `None` for\n        an artefact produced before the label existed. Absence is a normal\n        state: the client falls back to a shortened title.\n    blocks: The section's prose blocks, in order.\n    summary: Verified summary for a single-block section, if available.\n    summary_status: Summary production state for a single-block section.",
+        "description": "One artefact section.\n\nArgs:\n    title: Section title.\n    role: Section role (determines page position).\n    nav_label: Short scannable name for the contents list, or `None` for\n        an artefact produced before the label existed. Absence is a normal\n        state: the client falls back to a shortened title.\n    blocks: The section's prose blocks, in order.\n    cards: Case-study cards (populated only for ``case_studies`` sections).\n    summary: Verified summary for a single-block section, if available.\n    summary_status: Summary production state for a single-block section.",
         "properties": {
           "blocks": {
             "items": {
               "$ref": "#/components/schemas/BlockOut"
             },
             "title": "Blocks",
+            "type": "array"
+          },
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/CaseStudyCardOut"
+            },
+            "title": "Cards",
             "type": "array"
           },
           "focus": {
@@ -4691,6 +4812,7 @@
           "role": {
             "enum": [
               "key_findings",
+              "case_studies",
               "standard",
               "conclusions"
             ],

@@ -52,6 +52,16 @@ describe("orderSections", () => {
     ]);
     expect(ordered.map((section) => section.title)).toEqual(["First", "Middle", "End"]);
   });
+
+  it("places case_studies after key_findings and before standard", () => {
+    const ordered = orderSections([
+      { title: "Body", role: "standard" as const },
+      { title: "Cases", role: "case_studies" as const },
+      { title: "KF", role: "key_findings" as const },
+      { title: "End", role: "conclusions" as const },
+    ]);
+    expect(ordered.map((section) => section.title)).toEqual(["KF", "Cases", "Body", "End"]);
+  });
 });
 
 function streamWith(
@@ -198,6 +208,52 @@ describe("AnnotatedProse", () => {
     expect(spans[0]).toHaveTextContent("Plain");
     // The prose renders complete despite the dropped spans.
     expect(screen.getByText(/stays whole/)).toBeInTheDocument();
+  });
+});
+
+describe("renderLeadColonBullet double-citation suppression", () => {
+  it("shows exactly one [n] marker when a citation span crosses the colon", () => {
+    // "- Universal breakfast: helped eleven evaluations." — the claim covers
+    // the entire text; it spans the colon, so both the lead half (before `:`)
+    // and the rest half (after `: `) would independently try to render [n].
+    // The fix suppresses [n] on the lead half so it appears exactly once.
+    const prose = "- Universal breakfast: helped eleven evaluations.";
+    const blockText = "Universal breakfast: helped eleven evaluations.";
+    const spanStart = prose.indexOf("Universal");
+    const block = {
+      block_id: "b-cross",
+      prose,
+      claims: [
+        {
+          claim_id: "c-cross",
+          claim_type: "citation" as const,
+          text: blockText,
+          span: [spanStart, spanStart + blockText.length] as [number, number],
+          citations: [
+            {
+              citation_id: "cit-1",
+              n: 7,
+              source_title: "A study",
+              quote: "",
+              grounding_tier: null,
+              appraisal_label: null,
+              source_id: null,
+              grounding_rationale: null,
+              evidence_type: null,
+            },
+          ],
+        },
+      ],
+    };
+    render(
+      <TooltipProvider>
+        <AnnotatedProse block={block} onOpenClaim={() => undefined} />
+      </TooltipProvider>,
+    );
+    const markerButtons = screen
+      .getAllByRole("button")
+      .filter((btn) => /\[7\]/.test(btn.textContent ?? ""));
+    expect(markerButtons).toHaveLength(1);
   });
 });
 

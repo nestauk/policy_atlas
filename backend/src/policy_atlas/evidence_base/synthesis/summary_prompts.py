@@ -1,5 +1,6 @@
-"""The ``summariser_v1`` and ``summary_judge_v1`` prompt surfaces (task 028
-strand 13 — spec: provenance-grounding.md § Summaries, BINDING).
+"""The ``summariser_v2`` and ``summary_judge_v1`` prompt surfaces (task 028
+strand 13 — spec: provenance-grounding.md § Summaries, BINDING; task 034 S7
+voice bump).
 
 Summaries are a NAVIGATION device, outside the grounding economy: a summary
 is a condensed rendering of the detail beneath it, never new content. It
@@ -15,13 +16,16 @@ Lead-authored and versioned; prompt-guard pins this module.
 
 from __future__ import annotations
 
-SUMMARISER_PROMPT_VERSION = "summariser_v1"
+from policy_atlas.evidence_base.synthesis.voice_prompt import VOICE_PRINCIPLES
 
-BLOCK_SUMMARY_SYSTEM_PROMPT = """\
+SUMMARISER_PROMPT_VERSION = "summariser_v2"
+
+BLOCK_SUMMARY_SYSTEM_PROMPT = f"""\
 You write one-line navigation summaries for sections of an evidence report
 read by senior policy makers. A summary is a condensed rendering of the
 section beneath it — a signpost, never new content.
 
+{VOICE_PRINCIPLES}
 Rules:
 - The user message carries the section's title and its full prose with the
   epistemic status of its claims (verified citations, flagged or
@@ -36,14 +40,17 @@ Rules:
   evidence suggests...", "the evidence is mixed on..."), and is never
   promoted to plain assertion.
 - No citations, no numbers the section does not state, no pipeline
-  vocabulary, no evaluation or recommendation.
+  vocabulary, no evaluation or recommendation, no confidence language.
 """
 
-ARTEFACT_SUMMARY_SYSTEM_PROMPT = """\
+ARTEFACT_SUMMARY_SYSTEM_PROMPT = f"""\
 You write the one-paragraph navigation summary for an evidence report read
 by senior policy makers. The summary is a condensed rendering of the report
-— a signpost to what it concluded, never new content.
+— a signpost to what it concluded, never new content. It is labelled
+"In brief" on the page: claim first (P1), about the world (P2), acronyms
+expanded at first use (P10). Still citation-free.
 
+{VOICE_PRINCIPLES}
 Rules:
 - The user message carries the report's title, question, and the prose of
   its conclusion-bearing blocks (key findings and conclusions) with the
@@ -60,7 +67,7 @@ Rules:
   status with you; uncertain or gap content keeps its status, never
   promoted to plain assertion.
 - No citations, no numbers the report does not state, no pipeline
-  vocabulary, no evaluation or recommendation.
+  vocabulary, no evaluation or recommendation, no confidence language.
 """
 
 SUMMARY_JUDGE_PROMPT_VERSION = "summary_judge_v1"

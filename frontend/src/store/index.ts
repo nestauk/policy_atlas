@@ -16,7 +16,11 @@ export {
   useChatConversation,
   useComposerDraft,
 } from "./conversations";
-export { useRunStream } from "./useRunStream";
+export {
+  RunStreamProvider,
+  RUN_STREAM_INVALIDATE_DEBOUNCE_MS,
+  useRunStream,
+} from "./useRunStream";
 export {
   createInitialRunStreamState,
   GLOBAL_LIVENESS_KEY,

@@ -13,10 +13,12 @@ no framework, a plain reducer:
   outline; empty completed prose removes that slot rather than faking it.
   `tick` frames are the one exception — no `sequence`, they only update the
   transient `liveness` slice.
-- `useRunStream.ts` — the React binding: opens `src/api/sse.ts`'s
-  connection for one project, folds every frame through the reducer, and
-  invalidates the project's read-model queries on `stage.completed` /
-  `run.status`.
+- `useRunStream.tsx` — `RunStreamProvider` owns one SSE connection per open
+  task (mounted from `AppShell`); `useRunStream(projectId)` reads that
+  shared reducer state. Read-model invalidations on `stage.completed` /
+  `run.status` are trailing-debounced so a cold full-history replay does
+  not storm refetches. Leaf tabs (Plan / Results / Sources) must not open
+  their own connections.
 
 See `src/store/reducer.test.ts` for the replay-idempotence, pending→resolved,
 and tick-transience proofs. `transcript.ts` owns the durable planning-turn
