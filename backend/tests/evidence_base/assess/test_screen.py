@@ -67,10 +67,8 @@ from tests.helpers import (
 
 def test_screen_table_count(conn: Connection) -> None:
     # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
-    # entity hierarchy) and ADR 0032 adds `portfolio_membership`; no
-    # evidence-base table changed.
-    # 36 -> 37: task 036 adds `waitlist_entry` (splash-page access requests);
-    # the count was not bumped when 036 landed - fixed with task 037.
+    # entity hierarchy) and ADR 0032 adds `portfolio_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-base table changed.
     assert len(metadata.tables) == 37
 
 
