@@ -13,7 +13,10 @@ nothing to scope.
 > 13 folded here (§ Plan-review folds P1–P13). Awaiting the owner's plan 🛑.
 
 Executor marks per AGENTS.md § Agent-side model routing; every `lead` mark
-carries its reason. Verify gates: **full `make verify`** at Phase 0, Phase 3
+carries its reason. **Owner ruling 2026-09-04:** judgment-bearing phases go
+to `deep-reasoner`, not `codex` — a second model family's view is not needed
+to *build* any of them, and the family flip still happens at step 7 when
+Codex reviews the diff. No phase in this plan is marked `codex`. Verify gates: **full `make verify`** at Phase 0, Phase 3
 (schema class), Phase 4 (public interface; `drift-check`) and Phase 9
 (step-6 exit). Phases that touch only the backend close on
 `make verify-fast`; phases that touch the frontend close on
@@ -191,7 +194,7 @@ A14); `http_budget` → `call_budget` in `evidence_base/sourcing/search_loop.py`
 Gate: `make verify-fast` + `make frontend-verify` + `pnpm e2e`. Commit —
 review commit (g). (V12 items moved to Phase 8 — P5.)
 
-## Phase 2 — The sweep tool — `codex`
+## Phase 2 — The sweep tool — `deep-reasoner`
 
 Judgment-bearing (tokenisation, case forms, exclusions), machine-verifiable
 done. Brief: write `scripts/rename_038.py` implementing D1–D4 with `--scan`
@@ -221,7 +224,7 @@ is committed until `make verify` is green at the end.
 → `agent_backend.py`, `orchestrate.py` → `agent.py`, `orchestration_plan.py` →
 `task_plan.py`; re-path the keys of `scripts/prompt_hashes.json`.
 
-3.2 **Migration and readers — `codex`.** Brief with a machine-verifiable
+3.2 **Migration and readers — `deep-reasoner`.** Brief with a machine-verifiable
 done:
 1. Alembic revision on head `b2f6a9d4c1e7`, generated from the manifest:
    step-1 renames, step-2 renames (tables, columns, every PK/FK/UNIQUE/CHECK/
@@ -297,7 +300,7 @@ holds, the I6 grep is empty and `pnpm e2e` is green.
 
 Gate: `make frontend-verify` + `pnpm e2e`. Commit.
 
-## Phase 5b — Task Agent (V8) — `codex`
+## Phase 5b — Task Agent (V8) — `deep-reasoner`
 
 Judgment-bearing with a test list: overlay `aria-label="Agent"` and FAB copy;
 `showChatPanel` true on the Agent tab with the no-double-planning-pane rule;
@@ -322,7 +325,7 @@ chat turn all emit `session_id == task_id`; the chat turn carries
 
 Gate: `make verify-fast`. Commit — review commit (e).
 
-## Phase 7 — Post-sign-in landing (V11) — `codex`
+## Phase 7 — Post-sign-in landing (V11) — `deep-reasoner`
 
 D7 as pinned, auth-adjacent, small: the `App.tsx` change and the three tests;
 `OidcAuthProvider.onSigninCallback` and `StashAndSplashRedirect` untouched.
