@@ -61,6 +61,7 @@ function fullPlan(): PlanDraft {
       published_after: "2015-01-01",
       published_before: "2024-01-01",
       publisher_country: "GB",
+      publisher_source: null,
     },
     search_effort: "standard",
     analysis_depth: "standard",
