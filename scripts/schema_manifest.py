@@ -70,7 +70,8 @@ def main() -> None:
 
     out.append("\n## Constraints and indexes\n\n| Kind | Table (today) | Name today | Name after |\n|---|---|---|---|")
     for t in tables:
-        for con in sorted(t.constraints, key=lambda c: (type(c).__name__, c.name or "")):
+        rows: list[tuple[str, str, str]] = []
+        for con in t.constraints:
             if isinstance(con, PrimaryKeyConstraint):
                 name = con.name or f"{t.name}_pkey"
                 kind = "PK"
@@ -87,7 +88,11 @@ def main() -> None:
             else:
                 continue
             if TOKEN.search(name) or TOKEN.search(t.name):
-                out.append(_row(kind, t.name, name))
+                rows.append((kind, t.name, name))
+        # Sort on the *resolved* name: auto-named FKs have `con.name is None`, so
+        # sorting on the raw attribute made their order depend on set iteration.
+        for kind, tname, name in sorted(rows, key=lambda r: (r[0], r[2])):
+            out.append(_row(kind, tname, name))
         for ix in sorted(t.indexes, key=lambda i: i.name or ""):
             if ix.name and (TOKEN.search(ix.name) or TOKEN.search(t.name)):
                 out.append(_row("INDEX", t.name, ix.name))
