@@ -2270,9 +2270,25 @@ omissions.
   slice must cover `policy_atlas.ops` and its operator-facing strings.
 - **APO test mod (038) removal path** — `publisher_source: "apo"` is a test-mod
   constraint (Overton `source=apo`; OpenAlex dropped via the pre-existing
-  `grey_lit_only`). It is optional and additive everywhere. On removal: delete
-  the field, the geography-token branch in `_geography_constraints`, the two
-  fold-list entries, the allowlist keys and the `scopeChips` label — and either
-  tolerate or re-save stored plans that carry the field, or old approved plan
-  rows fail validation. The planning chat never learned the token
-  (`planner_v10` untouched); a product version would be a new slice.
+  `grey_lit_only`). It is optional and additive everywhere. On removal, delete
+  (inventory completed by the 038 review stack): the `ScopeConstraints` /
+  `ScopeConstraintsDraft` fields, their mutual-exclusivity clause, the
+  `OrchestrationPlan` grey-lit-only guard and the `to_filters` branch
+  (`orchestration_plan.py`); the `PlanDraftWire` field + its coercion
+  validator (`planner_prompt.py`, needs a `prompt_hashes.json` re-bump); the
+  two fold-list entries (`orchestrate.build_plan`,
+  `planning._draft_from_wire`); the geography-token branch, the
+  `_GEO_CONSTRAINT_RESET` key and the `_drop_scope_incompatible_geo` clause
+  (`routers/planning.py`); the steering carry-over in `_apply_acquire_delta`
+  (`steering.py`); `OVERTON_PUBLISHER_SOURCES`, the `_OVERTON_FILTER_KEYS`
+  key, the validator branch and the wire mapping (`search_loop.py`); the
+  `source` wire key (`search_live.py` — the next-page filter-survival guard
+  is generic, keep it); the CLI render branch (`orchestrate.py`); the
+  `scopeChips` label (`planVocabulary.ts`) and the frontend fixtures'
+  `publisher_source: null` lines (regenerate types via `make openapi-sync`).
+  Then either tolerate or re-save stored plans that carry the field, or old
+  approved plan rows fail validation. The `"apo"` *value* allowlist lives
+  only in `_validate_overton_block` — a graduation slice adding another
+  caller of `overton_wire_params` must keep that single choke point in mind.
+  The planning chat never learned the token (`planner_v10` untouched); a
+  product version would be a new slice.

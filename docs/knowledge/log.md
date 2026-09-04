@@ -1,5 +1,21 @@
 # Knowledge update log
 
+## 2026-09-04 (task 038 step 8)
+* **Creation**: Added
+  [wire-models-in-prompt-modules-are-model-facing](wire-models-in-prompt-modules-are-model-facing.md)
+  — merged build candidate (prompt-hash fires on schema-only edits) with the
+  stack's sharper finding (the wire model IS the `response_format` schema;
+  junk emissions crashed the turn pre-fix).
+* **Creation**: Added
+  [new-model-field-sweeps-every-rebuild-site](new-model-field-sweeps-every-rebuild-site.md)
+  — corrects the build's "four places" candidate to the full seven-site
+  inventory (steering rebuild + CLI render + reset dict found by the stack);
+  the openapi-typescript fixture-churn candidate folded in as a watch-out.
+* **Creation**: Added
+  [continuation-urls-preserve-wire-constraints](continuation-urls-preserve-wire-constraints.md)
+  — the pagination R2 hole (Codex adversarial blocker) and the fail-closed
+  guard that now enforces it.
+
 ## 2026-09-04 (task 037 step 8)
 * **Creation**: Added
   [auth-boundary-widening-needs-both-caller-sweeps](auth-boundary-widening-needs-both-caller-sweeps.md)

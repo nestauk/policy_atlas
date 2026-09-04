@@ -8,6 +8,14 @@ One implementation slice. Boundaries: [AGENTS.md](../../../AGENTS.md).
 > **Owner ruling on the Tier-3 ❓ (2026-09-04):** adversarial review runs, but
 > as **one light combined pass** over contract + plan (not full lanes), before
 > the build. Owner also approved building in this conversation.
+> **Scope amendment (step 7, 2026-09-04):** the approved plan's adversarial
+> findings 2–3 authorized two files beyond § Scope's list —
+> `runtime/orchestrate.py` (fold list; § Scope's "orchestrator" exclusion
+> meant the runner logic, which stays untouched) and
+> `api/contract/planning.py` (API mirror). The review stack additionally
+> touched `runtime/steering.py`, `sourcing/search_live.py` (pagination
+> guard), `runtime/orchestrate.py` (CLI render) and two small frontend
+> error-surfacing spots — all recorded in verification.md § Review findings.
 
 ## Goal
 
