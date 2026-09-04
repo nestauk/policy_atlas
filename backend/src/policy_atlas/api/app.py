@@ -44,6 +44,8 @@ _CONFLICT_CODES = {
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
+    # Splash waitlist: the email is already on waitlist_entry.
+    "already_registered",
 }
 
 _CAPACITY_CODES = {"chat_capacity"}
@@ -211,6 +213,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     from policy_atlas.api.routers.read_models import router as read_models_router
     from policy_atlas.api.routers.runs import router as runs_router
     from policy_atlas.api.routers.sse import router as sse_router
+    from policy_atlas.api.routers.waitlist import router as waitlist_router
 
     for router in (
         me_router,
@@ -223,6 +226,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         conversations_router,
         sse_router,
         read_models_router,
+        waitlist_router,
         *routers,
     ):
         app.include_router(router)

@@ -2,7 +2,7 @@ import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
 import { useArchiveProject, useUpdateProject } from "../api/mutations";
-import { useCheckIns, useMe, useProject } from "../api/queries";
+import { useCheckIns, useMe, useProject, useProjects } from "../api/queries";
 import { useAuth } from "../auth";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
@@ -278,6 +278,15 @@ export function AppShell() {
   // polling covers a reconnect gap so lifecycle locking stays honest.
   const project = useProject(projectId ?? "", { pollWhileRunning: true });
   const base = projectId === undefined ? null : `/projects/${projectId}`;
+  // Outside a task, check all projects so the nav logo animates even when the
+  // user has navigated away. Cost: one list fetch when the shell mounts (once
+  // per session — AppShell is the layout route), plus useProjects's own 15s
+  // poll while any run is active; the query is shared with TasksListView.
+  const allProjects = useProjects();
+  const anyRunning =
+    base !== null
+      ? project.data?.latest_run?.status === "running"
+      : (allProjects.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
   const showChatPanel = base !== null && !inWorkspace;
   // With a chat open beside the view, the two columns scroll independently —
@@ -328,7 +337,7 @@ export function AppShell() {
       )}
     >
       <NavBar aria-label="App" className="shrink-0">
-        <NavHomeLink />
+        <NavHomeLink running={anyRunning} />
         <div className="flex items-center gap-5">
           <NavItem to="/new" end>
             {COPY.navNew}
@@ -414,7 +423,7 @@ export function AppShell() {
           data-testid={footerInScrollPane ? "task-scroll-pane" : undefined}
           className={cn(
             "min-h-0 min-w-0 flex-1",
-            inWorkspace ? "overflow-hidden" : "overflow-y-auto",
+            inWorkspace ? "overflow-hidden" : "overflow-y-auto [scrollbar-gutter:stable]",
             // The pane is a flex column only to pin the footer with
             // `mt-auto`; children must never flex-shrink, or a view
             // root with an explicit min-height (Sources' `min-h-full`)

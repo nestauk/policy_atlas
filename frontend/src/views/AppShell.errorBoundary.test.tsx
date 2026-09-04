@@ -13,6 +13,8 @@ vi.mock("../api/queries", () => ({
     data: { project_id: PROJECT_ID, name: "Acme project", visibility: "org", is_owner: true },
   }),
   useCheckIns: () => ({ data: { data: [] } }),
+  // The nav logo checks all projects for an active run outside a task.
+  useProjects: () => ({ data: { data: [] } }),
   // The header's project-settings popover wires rename/archive mutations,
   // which resolve their client through this hook.
   useApiClient: () => ({}),
