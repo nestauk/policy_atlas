@@ -24,8 +24,9 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are
 > the only consumers."*
 >
-> **Amendments 2026-09-04** (owner + colleague, frozen as the
-> [addendum](../../specs/sources/vocabulary/policy-atlas-definitions-addendum-2026-09-04.md)):
+> **Amendments 2026-09-04** (owner + colleague, folded into the
+> [definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) — the owner
+> keeps that file current):
 > the Agent tab hosts all of a Task's chats in a sidebar; chats stay **chats**;
 > the primary (planning) chat is the **Task Agent**, pinned first and visually
 > distinct. The mode labels are withdrawn. V5 and V8 are rewritten to this.
@@ -75,19 +76,19 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Agent** | The screen name for the planning/steering/Q&A surface. Backend name today `orchestrator`. See fork F2 for how far the code follows. |
 | **Agent overlay** | The chat sidebar (`ChatSidePanel.tsx`), today `aria-label="Project chat"`, shown on every tab but Plan. After the slice: shown on every tab including Agent. |
 | **Task Agent** | The primary chat of a Task — today the planning conversation (`kind = planning`, one active per Task, tab label "Planning"). After the slice: named "Task Agent", pinned first in the chat list, visually distinct. |
-| **Chat** | Any other conversation with the Agent (`kind = chat`). The word stays "chat" on screen (addendum). |
-| **Modes** | Withdrawn by the addendum. Planning / running / Q&A remain internal states (conversation `kind` + run status), never shown as words. |
+| **Chat** | Any other conversation with the Agent (`kind = chat`). The word stays "chat" on screen. |
+| **Modes** | Withdrawn by the 2026-09-04 amendment. Planning / running / Q&A remain internal states (conversation `kind` + run status), never shown as words. |
 | **Artefact** | Something a Task generates. Unchanged word; British spelling stays. |
 | **Screen word / code word** | The split ADR 0031 decision 2 made deliberate; this slice ends it. After the slice the screen word and the code word are the same word. |
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
-| **Frozen** | `docs/specs/sources/**` — never edited (ADR 0002). The sweep excludes it. |
+| **Frozen** | `docs/specs/sources/**` — not rewritten by the sweep (ADR 0002). The one exception is the owner-maintained definitions file, which the owner edits directly. |
 | **Historical** | Merged task docs (`docs/tasks/001–034`), ADRs 0001–0034, `docs/verification/`. Not rewritten (012 precedent). |
 | **V1–V8** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
 | **F1–F5** | Owner forks at this gate. |
 
 ## Read first
 
-- [Frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) and the [addendum](../../specs/sources/vocabulary/policy-atlas-definitions-addendum-2026-09-04.md) (wins on conflict) — the source of every target word.
+- [Definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) (owner-maintained; amended 2026-09-04) — the source of every target word.
 - [ADR 0031](../../adr/0031-portfolio-layer-above-the-project.md) decision 2 — the split this slice retires, and why it was made (cost of the rename).
 - [ADR 0032](../../adr/0032-portfolio-membership-many-to-many.md), [ADR 0033](../../adr/0033-organisation-tenancy-and-global-admin-read.md) — the membership and tenancy rows the rename carries.
 - [ADR 0035](../../adr/0035-public-task-read-access.md) and [037-public-projects/contract.md](../037-public-projects/contract.md) — `project.is_public`, the 11-route public read leg and the public share link (`/projects/{id}/results`), all renamed here.
@@ -306,7 +307,7 @@ words only.
 
 Today the chat sidebar is hidden on the Plan tab, the planning conversation is
 labelled "Planning", and nothing marks it as the Task's primary chat. The
-addendum fixes all three. Lead-owned copy, binding once approved (fork F4):
+2026-09-04 amendment fixes all three. Lead-owned copy, binding once approved (fork F4):
 
 | Surface | Today | After |
 |---|---|---|
@@ -359,7 +360,7 @@ pane instead of opening a second copy).
   steer-point id. Rewriting `event_log` rows. A mode enum. Historical docs,
   frozen sources, `docs/knowledge/` filenames. The workspace-cluster re-parenting
   (still deferred; unaffected). Metabase saved questions (owner-operated; see
-  § Constraints). **Future direction from the addendum, recorded as seams in
+  § Constraints). **Future direction from the definitions § Future direction, recorded as seams in
   `deferred.md` § Vocabulary, not built:** re-running a Task or part of it from
   any chat; active chats reachable app-wide from the round Agent icon; any
   Tasks or Projects as chat context (meta-analysis); "chat more functional" as
