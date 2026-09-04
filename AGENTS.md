@@ -22,8 +22,12 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `037-public-projects` **CONTRACT + RUBRIC + PLAN DRAFTED
-2026-09-04; awaiting owner approval** (branch `task/037-public-projects`):
+Design — task `037-public-projects` **CONTRACT + PLAN APPROVED 2026-09-04
+· owner; adversarial review (one combined short pass, owner's call) ran
+2026-09-04 — five findings, all folded in (public view mode in reused
+views · cache flush on identity change · `access` read field for
+signed-in outsiders · header-keyed optional auth · `is_public` null =
+422); build not yet opened** (branch `task/037-public-projects`):
 public sharing of one Task from the Share tab. A new `project.is_public`
 boolean (orthogonal to `visibility` — the 033 portfolio invariant is
 untouched, decision D1); an 11-route public read surface (`GET
@@ -34,8 +38,7 @@ gains the task Results/Sources routes). **Tier 3** — schema (one additive
 column), auth boundary (conditionally-public conformance class), additive
 public interface. One ❓ for the owner: the two verbatim-excerpt routes
 (citation/chunk context) default to public. Artefacts:
-`docs/tasks/037-public-projects/`. Contract-stage adversarial review runs
-after owner approval; ADR 0034 written then.
+`docs/tasks/037-public-projects/`. ADR 0035.
 
 Task `034-synthesis-report` (previous pointer): Design —  **CONTRACT + PLAN APPROVED 2026-08-26 ·
 owner**; build not yet opened — **the Codex CLI is installed this slice;

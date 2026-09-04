@@ -30,5 +30,8 @@ in [contract.md](contract.md); this file does not restate them.
        401s without a token; anonymous 404 bodies for private, archived and
        unknown Tasks are byte-identical; listings, the portfolio
        invariant (i.1–i.6) and the admin trace are untouched by the flag.
-10. [ ] The redacted shape (D5) holds on every public-leg read, and a
-       present-but-invalid token still 401s (D2).
+10. [ ] The redacted shape with `access = "public"` (D5) holds on every
+       public-leg read; any present `Authorization` header that does not
+       authenticate — bad token, expired, wrong scheme, malformed — still
+       401s (D2); and the public view issues only public-surface requests
+       (no conversations, SSE or decisions calls from the two tabs).

@@ -1,10 +1,24 @@
 # Task contract: 037-public-projects
 
-> **Status:** drafted. Contract approved (before planning): _pending · owner_ ·
-> Plan approved (before implementation): _pending · owner_ · ADR: 0034 (to be
-> written when the contract is approved — the public read leg is a design
-> decision). Tier 3 — the contract-stage adversarial review runs after the
-> owner approves this draft and before the build opens.
+> **Status:** approved. Contract approved: 2026-09-04 · owner ·
+> Plan approved: 2026-09-04 · owner (both in one review; the owner asked to
+> keep the adversarial review short — one combined pass over contract +
+> rubric + plan instead of two staged passes) · ADR: 0035. The ❓ excerpt
+> default (§ Public / private boundary) stands — the owner did not rule
+> against it.
+>
+> **Adversarial review ran 2026-09-04** (one combined Codex pass, per the
+> owner). Five findings, all adjudicated valid and folded in: (1) the
+> reused Results view calls chat/stream hooks — the plan now specifies a
+> public view mode and a network assertion; (2) the shared query cache
+> could show stale private data across sign-out — the cache is now cleared
+> on identity change; (3) signed-in outsiders reached the full shell — the
+> read shape gains an `access` field (see D5) and both routers render the
+> slim view for public-leg reads; (4) a wrong-scheme or malformed
+> `Authorization` header would have passed as anonymous — D2 now keys on
+> the raw header; (5) `is_public: null` would 500 — it joins the
+> explicit-null 422 rule. Item 3 adds one additive read-only field beyond
+> the first draft — flagged to the owner with this revision.
 
 ## Goal
 
@@ -41,7 +55,7 @@ One PR containing:
 | **anonymous visitor** | A browser session with no signed-in user. Its API requests carry no `Authorization` header. |
 | **public read surface** | The exact list of GET endpoints an anonymous visitor may call (§ Public read surface). Nothing outside this list changes. |
 | **read grade** | The task-033 access rule for signed-in users: owner ∪ same-org colleague ∪ admin (`web-api.md` § Tenancy). This slice does not change it. |
-| **redacted shape** | The project response as served through the public leg: `owner_display = null`, `portfolio_ids = []`, `is_owner = false`. All other fields unchanged. |
+| **redacted shape** | The project response as served through the public leg: `owner_display = null`, `portfolio_ids = []`, `is_owner = false`, `access = "public"`. All other fields unchanged. Graded reads carry `access = "full"`. |
 | **conformance allowlist** | `backend/tests/api/test_api_conformance.py` — the frozen list of routes that may answer without a token. This slice widens it deliberately. |
 
 ## Read first
@@ -88,20 +102,26 @@ plan.
   can still be shared publicly. Public sharing and organisation sharing are
   independent facts about a row.
 - **D2 — Optional authentication on the public surface only.** The public
-  endpoints accept a missing `Authorization` header and treat the caller as
-  anonymous. A header that is present but invalid still gets 401, exactly
-  as today (the signed-in refresh flow depends on this). No other route
-  accepts a missing header.
+  endpoints treat a request as anonymous only when the **raw
+  `Authorization` header is absent**. Any present header — bad token,
+  expired token, wrong scheme (`Basic …`), malformed value — still gets
+  401, exactly as today (the signed-in refresh flow depends on this; and
+  `HTTPBearer(auto_error=False)` alone cannot make this distinction, so
+  the dependency checks the header, not the parsed credentials). No other
+  route accepts a missing header.
 - **D3 — Link-only.** `is_public` grants access to direct reads of that one
   Task. It plays no part in listings, search, portfolio reads, or the
   colleague and admin legs. There is no public index of public Tasks.
 - **D4 — Signed-in callers get the public leg too.** Public means public: a
   signed-in user who is not the owner, not a colleague and not an admin can
   read a public Task the same way an anonymous visitor can, in the redacted
-  shape. The graded legs are checked first, so entitled readers see what
-  they see today.
-- **D5 — Redaction.** Reads served by the public leg return the redacted
-  shape (§ Terms). The admin trace is not involved: a public-leg read is
+  shape — and sees the same slim two-tab view, not the full app shell (the
+  frontend switches on `access = "public"`). The graded legs are checked
+  first, so entitled readers see what they see today.
+- **D5 — Redaction, and the view switch.** Reads served by the public leg
+  return the redacted shape (§ Terms), including `access = "public"` — the
+  one bit the frontend needs to render the public view for signed-in
+  outsiders (D4). The admin trace is not involved: a public-leg read is
   not an admin read.
 - **D6 — Revocation is a row check.** Every public-leg request checks
   `is_public` and `status` on the row at request time. There is no token,
@@ -150,8 +170,10 @@ Three gated changes need the owner's approval with this contract:
   "always 401 without a token" to "404 unless the row is public". The
   conformance test gains a third class — *conditionally public* — so the
   boundary stays pinned by tests, not by convention.
-- **Public interface:** `is_public` is an additive field on the project
-  read and update shapes. No existing field or route changes shape.
+- **Public interface:** two additive fields on the project read shape
+  (`is_public`, `access`) and one on the update shape (`is_public`). No
+  existing field or route changes shape. (`access` was added by the
+  adversarial-review adjudication — finding 3.)
 
 No new dependencies. No new egress. No inference.
 
@@ -198,10 +220,13 @@ budget is spent. Report the blocker; don't push through.
 - `make verify` green (backend + frontend tests, typecheck, lint, build).
 - Backend tests, by requirement:
   - **R1:** `PATCH {is_public}` — owner 200; colleague 403; anonymous 401;
+    explicit `{is_public: null}` → 422 (the NOT-NULL rule, never a 500);
     audit event written on each flip; `is_public` on `ProjectOut`.
   - **R2/R4:** every public-surface route — anonymous 200 on a public
     active Task; anonymous 404 on a private, archived and unknown Task with
-    byte-identical bodies; a present-but-invalid token 401; `decisions`,
+    byte-identical bodies; any present `Authorization` header that does
+    not authenticate → 401 (bad token, expired, `Basic` scheme, malformed
+    value — the D2 matrix); `decisions`,
     listings, SSE, chat, planning stay 401 for anonymous; listings for
     other signed-in users unchanged by the flag; the redacted shape holds
     (D5); a signed-in outsider reads a public Task (D4).
@@ -212,7 +237,12 @@ budget is spent. Report the blocker; don't push through.
   - Schema round-trip test updated for the new column.
 - Frontend tests: Share tab control (owner-only, copy link); anonymous tab
   set is Results + Sources only; Plan path redirects to Results when
-  anonymous; private Task keeps the stash-and-splash behaviour.
+  anonymous; private Task keeps the stash-and-splash behaviour; the public
+  view issues **only** public-surface GETs (no conversations, no SSE, no
+  decisions — asserted on the request log of the test client); the query
+  cache is cleared on sign-in/sign-out, so a just-signed-out owner never
+  sees cached private data on a public or revoked URL; a signed-in
+  outsider (`access = "public"`) gets the slim two-tab view.
 - Manual (live-check pin, ~5 minutes, no full-chain e2e): in a signed-out
   browser open a public Task link → Results and Sources render; flip
   sharing off as the owner → the link now lands on the splash page; a
