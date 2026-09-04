@@ -46,8 +46,9 @@ Today three vocabularies coexist: the screen says Task/Project/Evidence search, 
 code and database say `project`/`portfolio`/`evidence_base`, and the chat surface
 has no name at all. Nine numbered defects, V1–V9. **No product behaviour change**:
 every row, route and screen does after the slice what it did before, under a new
-name. V9 (traces group by Task) and V10 (two riders from `deferred.md`) are the
-non-rename items, each folded in by the owner on 2026-09-04.
+name. V9 (traces group by Task), V10 (two riders from `deferred.md`) and V11
+(the post-sign-in landing fix) are the non-rename items, each folded in by the
+owner on 2026-09-04.
 
 ## Deliverable
 
@@ -65,6 +66,7 @@ One PR on `task/038-vocabulary-alignment` that:
 - Shows a Task's chats in the Agent tab with the **Task Agent** pinned first (V8).
 - Groups every Langfuse trace of a Task under one session id, the task id (V9).
 - Renames the search loop's `http_budget` to `call_budget` and deletes the dead `RunPane`/`JourneyPane` views (V10).
+- Makes the app land on the stashed deep link after a sign-in round trip (V11).
 
 Shipped = `make verify` green (which includes `drift-check` and `prompt-guard`),
 the migration applied to staging, and one live smoke of the renamed chain
@@ -93,7 +95,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
 | **Frozen** | `docs/specs/sources/**` — not rewritten by the sweep (ADR 0002). The one exception is the owner-maintained definitions file, which the owner edits directly. |
 | **Historical** | Merged task docs (`docs/tasks/001–034`), ADRs 0001–0034, `docs/verification/`. Not rewritten (012 precedent). |
-| **V1–V10** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
+| **V1–V11** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
 | **Session** | Langfuse's grouping of traces. Set by passing `session_id` into the tracing helpers (`core/tracing.py` `_session_scope`). Today: the conversation id for planning and chat turns, nothing for runs. |
 | **F1–F5** | Owner forks at this gate. |
 
@@ -418,6 +420,36 @@ run does.
   weakened beyond the deleted files' own tests (rubric 5 justification: dead
   code).
 
+### V11 — After a sign-in round trip the app shows the deep link but renders the landing route
+
+Deferred entry "Post-re-auth return-to renders the landing route" (026 live
+check, 2026-07-28; owner folded in 2026-09-04). Mechanism, from the code:
+`OidcAuthProvider.onSigninCallback` restores the stashed path with
+`window.history.replaceState`, which react-router does not observe. `App.tsx`
+then swaps from `publicRouter` to `authenticatedRouter` (`key={status}`), but
+both routers are module-level singletons created at import time, so the
+freshly mounted authenticated router starts from the location its history
+captured before the redirect, not from the rewritten URL. A reload recovers.
+
+- Fix shape: after the swap, navigate the mounted authenticated router to the
+  stashed path (`router.navigate(returnTo, { replace: true })`) instead of, or
+  after, the `replaceState`. The plan decides where that call lives — the
+  provider cannot import the routers without a cycle (`StashAndSplashRedirect`
+  imports the provider), so the likely home is `App.tsx` at the moment status
+  becomes `authenticated`. 036's stash-and-splash path (`StashAndSplashRedirect`
+  writes the same `AUTH_RETURN_TO_KEY`) must keep working: a signed-out visitor
+  hitting a deep link, signing in, lands on it.
+- Auth-adjacent, so it is reviewed as such: the step-7 security lane reads V11
+  explicitly, and the live check includes one real sign-in round trip on
+  staging.
+- Behaviour change, deliberately: the only one in the slice that a user can
+  see. Recorded here so the "no product behaviour change" rule has exactly one
+  named exception.
+- Invariant I11: a unit test mounts the app with a stashed return path, flips
+  auth status to `authenticated`, and asserts the authenticated router's
+  location equals the stashed path; the staging live check confirms it from a
+  task deep link (`/tasks/{id}/sources`) through Cognito and back.
+
 ## Forks — ruled 2026-09-04 (owner, by interview)
 
 | # | Question | Options | **Ruling** and why |
@@ -518,9 +550,10 @@ one-to-one swap is a stop condition.
 
 - **Don't flatten status.** settled · 🟡 leaning · ❓ open · ⏸ deferred stay as-is.
 - **Model only what behaves** — no new column, flag or mode enum.
-- **No product behaviour change** — every test that fails after the sweep fails
-  on a name, or the slice has done more than rename. Prompt diffs are words
-  only. V9 changes trace grouping and nothing the user sees.
+- **No product behaviour change, one named exception** — every test that
+  fails after the sweep fails on a name, or the slice has done more than
+  rename. Prompt diffs are words only. V9 changes trace grouping and nothing
+  the user sees. V11 is the one user-visible fix, reviewed as auth code.
 - Leave deferred seams as seams in [docs/deferred.md](../../deferred.md).
 
 ## Stop conditions
@@ -546,8 +579,9 @@ open PR's merge order makes the branch unrebasable; or the budget is spent.
 - **Live check, scoped:** on staging after the migration, one existing Task
   opens on `/tasks/{id}` with its report, sources and history intact; its
   Project lists it on `/projects/{id}`; one public Task opens signed-out on
-  `/tasks/{id}/result` from a freshly copied link (F3: no redirects); the ops
-  CLI `rows assign --task` dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
+  `/tasks/{id}/result` from a freshly copied link (F3: no redirects); one
+  sign-in round trip from a task deep link lands on that deep link (V11); the
+  ops CLI `rows assign --task` dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
 - `pip-audit`/deps unchanged: `uv.lock` and `pnpm-lock.yaml` diff empty.
 
 ## Verification evidence expected

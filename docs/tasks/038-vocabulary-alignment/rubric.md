@@ -2,7 +2,7 @@
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is in
 progress, not done. Terms and defect ids V1–V9 are defined in [contract.md](contract.md);
-this file does not restate them. Defect ids run V1–V10.
+this file does not restate them. Defect ids run V1–V11.
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes (including `drift-check`, `prompt-guard`, `okf-validate`);
@@ -62,5 +62,8 @@ Slice-specific:
 20. [ ] **V10 / I10** — `call_budget` replaces `http_budget`; `RunPane`/`JourneyPane` and their
         orphans are deleted with the justification recorded; six `deferred.md` entries marked
         discharged or corrected as V7 lists.
-21. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
+21. [ ] **V11 / I11** — the post-sign-in navigation test passes; the staging sign-in round
+        trip from a task deep link lands on it; 036's signed-out deep-link stash still works;
+        the security lane's findings on V11 are in [verification.md](verification.md).
+22. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
         ops CLI dry-run, `make fe-api-smoke`) and the Metabase follow-up is named in the PR.
