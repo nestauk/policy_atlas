@@ -1,0 +1,108 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>
+  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:1320px; height:1320px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Sense-check: youth guarantee</span><span class="badge blue">Options scoping</span><span class="badge soft">Rapid</span></div>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Plan</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Results</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav><nav aria-label="Results" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Longlist</span><span style="padding:12px 0; ">Shortlist</span></nav>
+  <div class="main"><div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">The minister wants a youth guarantee for every 16 to 24 year old who becomes NEET. Sense-check it.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">I will treat the youth guarantee as a working set of one and look at what sits next to it, at rapid depth: quick grounding, suggestions labelled. Plan assumed from your sentence; correct anything.</div></div><div class="sys"><span class="tick"></span><span>Plan assumed · target unit: 16–24 year olds who are NEET · geography: UK · outcome: NEET rate</span></div><div class="sys"><span class="tick"></span><span>Quick grounding · 6 evaluations · 3 grey-literature reviews</span></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble"><strong>Verdict strip:</strong> NEET rate reductions of one to three points are reported across six country evaluations, concentrated where local delivery was funded. Evidence on <em>sustained</em> employment is thin, not negative. Transferability is conditional: Italy's rollout stalled on provider capacity, which is the one assumption to test first.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble"><strong>Next to it:</strong> three neighbours the evidence base groups with a guarantee. One has stronger evidence, one is cheaper to start, and one reaches the same young people through employers. Want the standard longlist instead?</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask a follow-up or widen to a full longlist…</div><span class="btn blue">Send</span></div></div><div class="rail">
+    <div class="head"><span style="text-transform:none; letter-spacing:0; font-weight:400; color:#646363;">1 named + 3 neighbours</span><span style="color:#0000ff">rapid</span></div>
+    <div class="sec open" style="border:0;"><div class="body" style="padding:16px 20px;"><div class="list">
+        <div class="row"><span class="t"><strong>Youth guarantee</strong><br><span class="m">named by you · Regulation · structural</span></span><span class="badge blue">focus</span></div>
+        <div class="theme">Sits next to it</div>
+        <div class="row"><span class="t">Intensive one-to-one caseworker support<br><span class="m">same re-engagement mechanism · strongest evidence</span></span><span class="badge soft">evidence</span></div>
+        <div class="row"><span class="t">Youth Hubs, co-located services<br><span class="m">same front door, no entitlement</span></span><span class="badge">suggested</span></div>
+        <div class="row"><span class="t">Wage subsidies for employers hiring young people<br><span class="m">same outcome, employer route</span></span><span class="badge soft">evidence</span></div>
+      </div></div></div>
+  </div></div>
+</div>
+</x-dc>
+</body>
+</html>

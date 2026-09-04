@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>
+  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:1800px; height:1800px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Plan</span><span style="padding:12px 0; ">Results</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav>
+  <div class="main"><div class="thread" style="width:560px;"><div class="scroll"><div class="turn user"><span class="who">You</span><div class="bubble">Which interventions, programmes or policies are effective in reducing the number of 16 to 24 year olds who are not in education, employment or training?</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Before I search, here is the plan I would work to. I filled three parts from your question and assumed the rest. Change anything by replying, or edit the plan on the right.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Two things I want to check: <strong>who should change</strong> — every 16 to 24 year old who is NEET, or the long-term group who are economically inactive rather than unemployed? And are there constraints I should treat as hard screens, such as "no benefit sanctions"?</div></div><div class="turn user"><span class="who">You</span><div class="bubble">All of them, but flag anything that only reaches the job-ready. Add: nothing that cuts or sanctions a young person's benefits. Only evidence from OECD countries. And prefer low-cost options.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Updated. Two constraints can be checked on the longlist and will act as hard screens; every option I exclude will show the one it broke. Low cost cannot be checked until the assessment, so until then each option carries my labelled guess, never a drop. Ready at <strong>standard</strong> depth. First I will build the baseline, so we both see what doing nothing looks like, and pause there: you confirm the plan against it before I generate any options.</div></div></div><div class="composer"><div class="input">Reply, add an option, or change the plan…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#0f294a; color:#ffffff; padding:32px 40px; overflow:hidden;">
+      <div style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;">
+        <h2 style="font-size:24px; font-weight:800; color:#ffffff; margin:0;">Scoping plan</h2>
+        <p style="margin:4px 0 0; color:#97a8bc;">Agreed in the conversation. Nothing runs until you start it, and the run pauses after the baseline.</p>
+      </div>
+      <section style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;"><div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;"><h3 style="font-size:19px; font-weight:700; color:#ffffff; margin:0;">Question</h3><a href="#" style="color:#ffffff; font-weight:600; text-decoration:underline;">Edit</a></div><div style="margin-top:10px;"><p style="margin:0; font-size:19px; color:#ffffff;">Which interventions, programmes or policies are effective in reducing the number of 16 to 24 year olds who are not in education, employment or training?</p></div></section>
+      <section style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;"><div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;"><h3 style="font-size:19px; font-weight:700; color:#ffffff; margin:0;">What we are trying to change</h3><a href="#" style="color:#ffffff; font-weight:600; text-decoration:underline;">Edit</a></div><div style="margin-top:10px;"><p style="margin:0; font-size:19px; color:#ffffff;">Reduce the number of 16 to 24 year olds not in education, employment or training</p><p style="margin:2px 0 0; color:#c5d0dc;">From your question.</p></div></section>
+      <section style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;"><div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;"><h3 style="font-size:19px; font-weight:700; color:#ffffff; margin:0;">Settings</h3><a href="#" style="color:#ffffff; font-weight:600; text-decoration:underline;">Edit</a></div><div style="margin-top:10px;"><div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px 24px;"><div><p style="margin:0; color:#c5d0dc;">Who or what should change</p><p style="margin:0; font-size:19px; color:#ffffff;">Young people aged 16 to 24 who are NEET, all of them</p><p style="margin:2px 0 0; color:#c5d0dc;">Flag options that reach only the job-ready. Your call.</p></div><div><p style="margin:0; color:#c5d0dc;">Where</p><p style="margin:0; font-size:19px; color:#ffffff;">United Kingdom, national policy</p><p style="margin:2px 0 0; color:#c5d0dc;">Assumed. Change if the question is for one nation or place.</p></div><div><p style="margin:0; color:#c5d0dc;">Outcomes</p><p style="margin:0; font-size:19px; color:#ffffff;">NEET rate · sustained education or employment at 12 months · time spent NEET</p><p style="margin:2px 0 0; color:#c5d0dc;">The three the evidence will be read against.</p></div><div><p style="margin:0; color:#c5d0dc;">Depth</p><p style="margin:0; font-size:19px; color:#ffffff;">Standard</p><p style="margin:2px 0 0; color:#c5d0dc;">Longlist from the evidence base and suggestions; the shortlist is assessed. Rapid is quicker and lighter.</p></div></div></div></section>
+      <section style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;"><div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;"><h3 style="font-size:19px; font-weight:700; color:#ffffff; margin:0;">Constraints</h3><a href="#" style="color:#ffffff; font-weight:600; text-decoration:underline;">Edit</a></div><div style="margin-top:10px;"><p style="margin:0; font-size:19px; color:#ffffff;">No benefit cuts or sanctions · OECD evidence only</p><p style="margin:2px 0 0; color:#c5d0dc;">Checked on the longlist. An option that breaks one is excluded, with the reason shown, and can be included again.</p><div style="height:12px"></div><p style="margin:0; font-size:19px; color:#ffffff;">Low cost per participant</p><p style="margin:2px 0 0; color:#c5d0dc;">Checked after the assessment. Until then each option carries a labelled guess, never an exclusion.</p></div></section>
+      <section style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;"><div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;"><h3 style="font-size:19px; font-weight:700; color:#ffffff; margin:0;">Plan steps</h3><a href="#" style="color:#ffffff; font-weight:600; text-decoration:underline;">Edit</a></div><div style="margin-top:10px;"><ol style="list-style:none; margin:0; padding:0 0 0 4px; display:flex; flex-direction:column; gap:10px; font-size:19px; color:#e8edf2;">
+        <li style="display:flex; gap:8px;"><span style="width:20px; flex-shrink:0;">1.</span><div>Build the baseline<span style="display:block; font-size:16px; color:#c5d0dc;">What doing nothing looks like, from official statistics and grey literature. The run pauses here for you to confirm the plan.</span></div></li>
+        <li style="display:flex; gap:8px;"><span style="width:20px; flex-shrink:0;">2.</span><div>Build the longlist<span style="display:block; font-size:16px; color:#c5d0dc;">Retrieve and screen the evidence base, cluster it into options by theme, add suggestions and yours, and apply the constraints.</span></div></li>
+        <li style="display:flex; gap:8px;"><span style="width:20px; flex-shrink:0;">3.</span><div>Assess the shortlist<span style="display:block; font-size:16px; color:#c5d0dc;">Policy Atlas proposes a coverage set; you add or remove; the assessment runs when you say so.</span></div></li>
+        <li style="display:flex; gap:8px;"><span style="width:20px; flex-shrink:0;">4.</span><div>Write the brief<span style="display:block; font-size:16px; color:#c5d0dc;">An editable first version, with the option profiles attached and what was searched stated.</span></div></li>
+      </ol></div></section>
+      <section style="border-bottom:1px solid rgba(255,255,255,0.15); padding-bottom:22px; margin-bottom:22px;"><div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px;"><h3 style="font-size:19px; font-weight:700; color:#ffffff; margin:0;">Check-ins</h3><a href="#" style="color:#ffffff; font-weight:600; text-decoration:underline;">Edit</a></div><div style="margin-top:10px;"><p style="margin:0; font-size:19px; color:#ffffff;">After the baseline, before any option is generated. Before the assessment runs.</p><p style="margin:2px 0 0; color:#c5d0dc;">You can change the plan at either point; re-runs apply the change, not a restart.</p></div></section>
+      <div style="padding-top:8px; display:flex; align-items:center; gap:16px;"><span class="btn blue">Start: build the baseline</span><span style="color:#97a8bc;">About two minutes.</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

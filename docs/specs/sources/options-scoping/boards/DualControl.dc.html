@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap">
+  <style>body{margin:0;background:#f4f4f5;} a{color:#0000ff;} a:hover{color:#0f294a;} .sk { width:1100px; height:640px; background:#ffffff; border:1px solid #d4d4d8; display:flex; flex-direction:column; font-family:"Manrope",system-ui,sans-serif; }
+  .sk .bar { height:40px; border-bottom:1px solid #d4d4d8; display:flex; align-items:center; padding:0 20px; gap:16px; color:#646363; font-size:13px; font-weight:700; }
+  .sk .box { border:1px dashed #a1a1aa; color:#646363; font-size:13px; padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .sk .box strong { color:#0f294a; }
+  .sk .msg { border:1px solid #d4d4d8; padding:8px 10px; font-size:13px; }
+  .sk .msg.u { background:#ececff; border-color:#0000ff; align-self:flex-end; }
+  .sk .card { border:1px solid #0f294a; padding:8px 10px; font-size:13px; background:#ffffff; }
+  .sk .card strong { color:#0000ff; }</style>
+</helmet>
+<div class="sk" style="height:520px;">
+  <div class="bar"><span>Behaviour · one state, two controls</span></div>
+  <div style="flex:1; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; padding:20px;">
+    <div class="box"><strong>Say it in the chat</strong><div class="msg u">Add caseworker support and the youth guarantee to the shortlist.</div><span>Working copy updates; the chip animates.</span><span>Agent confirms in one line with the new reason.</span></div>
+    <div class="box"><strong>Do it in the working copy</strong><span>click Add to shortlist · click Exclude · click Include again</span><span>Chat logs it as your turn: <em>“You added Intensive caseworker support to the shortlist”</em>.</span><span>Agent replies only if a consequence follows, such as a theme losing coverage.</span></div>
+    <div class="box"><strong>Re-runs apply deltas</strong><span>Change a constraint and only the affected options re-screen.</span><span>what you added survives · exclusions keep their reasons</span><span>every version stays in History with who changed what</span></div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

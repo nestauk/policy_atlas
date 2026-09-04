@@ -1,0 +1,197 @@
+{
+  "pages": [
+    {
+      "id": "journey",
+      "name": "Journey · chat + working copy"
+    },
+    {
+      "id": "alts",
+      "name": "Structural alternatives"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Ask.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "1 · Ask",
+      "page": "journey"
+    },
+    {
+      "file": "Frame.dc.html",
+      "x": 1540,
+      "y": 0,
+      "w": 1440,
+      "h": 1800,
+      "title": "2 · Plan, agreed in dialogue, styled like the evidence-base plan",
+      "page": "journey"
+    },
+    {
+      "file": "Baseline.dc.html",
+      "x": 3080,
+      "y": 0,
+      "w": 1440,
+      "h": 1540,
+      "title": "3 · Baseline, the run pauses for plan confirmation",
+      "page": "journey"
+    },
+    {
+      "file": "Longlist.dc.html",
+      "x": 4620,
+      "y": 0,
+      "w": 1440,
+      "h": 1740,
+      "title": "4 · Longlist, list view",
+      "page": "journey"
+    },
+    {
+      "file": "OptionCard.dc.html",
+      "x": 3080,
+      "y": 1920,
+      "w": 1440,
+      "h": 1040,
+      "title": "4b · An option before assessment, opened from the longlist",
+      "page": "journey"
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 1920,
+      "w": 1440,
+      "h": 1380,
+      "title": "5 · Longlist, grid view",
+      "page": "journey"
+    },
+    {
+      "file": "ShortlistView.dc.html",
+      "x": 4620,
+      "y": 1920,
+      "w": 1440,
+      "h": 900,
+      "title": "5b · Shortlist, before assessment",
+      "page": "journey"
+    },
+    {
+      "file": "SourcesTab.dc.html",
+      "x": 4620,
+      "y": 3700,
+      "w": 1440,
+      "h": 960,
+      "title": "6b · Sources, what was searched",
+      "page": "journey"
+    },
+    {
+      "file": "Assessment.dc.html",
+      "x": 1540,
+      "y": 1920,
+      "w": 1440,
+      "h": 1660,
+      "title": "6 · Shortlist, assessed, with the summary above the table",
+      "page": "journey"
+    },
+    {
+      "file": "Profile.dc.html",
+      "x": 0,
+      "y": 3700,
+      "w": 1440,
+      "h": 3700,
+      "title": "7 · Option profile, every section open",
+      "page": "journey"
+    },
+    {
+      "file": "SenseCheck.dc.html",
+      "x": 3080,
+      "y": 3700,
+      "w": 1440,
+      "h": 1320,
+      "title": "8 · Sense-check one option, rapid",
+      "page": "journey"
+    },
+    {
+      "file": "ProfileFullRun.dc.html",
+      "x": 1540,
+      "y": 3700,
+      "w": 1440,
+      "h": 2140,
+      "title": "7b · Option profile after a full evidence search, sections collapsed",
+      "page": "journey"
+    },
+    {
+      "file": "Report.dc.html",
+      "x": 3080,
+      "y": 5140,
+      "w": 1440,
+      "h": 1060,
+      "title": "7c · The full report, an evidence-base task with the profile structure",
+      "page": "journey"
+    },
+    {
+      "file": "TasksList.dc.html",
+      "x": 3080,
+      "y": 6320,
+      "w": 1440,
+      "h": 900,
+      "title": "7d · Tasks list, report linked under its parent",
+      "page": "journey"
+    },
+    {
+      "file": "AltInline.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1100,
+      "h": 640,
+      "title": "Alt A · Everything inline, no rail",
+      "page": "alts"
+    },
+    {
+      "file": "AltStages.dc.html",
+      "x": 1200,
+      "y": 0,
+      "w": 1100,
+      "h": 640,
+      "title": "Alt B · Stage rail, one chat per stage",
+      "page": "alts"
+    },
+    {
+      "file": "DualControl.dc.html",
+      "x": 0,
+      "y": 780,
+      "w": 1100,
+      "h": 520,
+      "title": "Behaviour · dual control",
+      "page": "alts"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note-journey",
+      "x": -400,
+      "y": 0,
+      "w": 320,
+      "page": "journey",
+      "text": "Fresh set, drawn from concept.md only.\n\nLeading direction: the scoping task is ONE chat. Navigation follows the evidence-base task: Plan · Results · Sources · Share · History, with Results split into subtabs Baseline · Longlist · Shortlist. The longlist has List and Grid views; the shortlist tab shows the places with reasons before assessment and the assessed table, with a summary above it, after. There is no brief: Export bundles the assessed shortlist, the profiles, the baseline and what was searched. The longlist has a list view and a grid view; the shortlist is a state on its options, not a separate list. Screening is a pipeline stage, not a user step: it runs as each option's search finishes and shows as excluded options shown in place on the longlist. The baseline is built first and the run PAUSES: the user confirms the plan against it before any option is generated (owner ruling). Collapsed headers carry the takeaway, so the closed rail is the summary. One section opens at a time; the longlist, the grid and the profiles open wide, with the chat always on the left.\n\nBelow the brief and the sense-check: the option profile after a full run, the report task, and the tasks list. A full evidence search mints its own evidence-base task (7c, 7d); the scoping profile then reads from that report (7b). Design language follows the evidence-base report: one body size, grey for secondary text, states as words not chips, outputs as linear text.\n\nSample question: reducing the number of 16 to 24 year olds not in education, employment or training. All figures, quotes and sources are placeholders."
+    },
+    {
+      "id": "note-rules",
+      "x": -400,
+      "y": 520,
+      "w": 320,
+      "page": "journey",
+      "text": "Rulings made visible:\n· every option says what it is and which stated outcome it serves (4)\n· baseline before longlist and the run pauses for plan confirmation (3)\n· three depths: longlist carries metadata only (4); assessment = mini evidence search on the shortlist, user-triggered, labelled scoping pass, no full-text screening (5, 6); full evidence search per option confirms documents and mints the report (7c, 7d)\n· do nothing is a reference wherever options appear (4, 5, 6)\n· two kinds of constraint: checked at longlist, or after assessment with a labelled guess until then; guesses flag and sort, never drop (2, 4, 5, 6)\n· every exclusion cites its constraint (4)\n· thin evidence flags, never drops (4)\n· add to shortlist / exclude / include again: adding keeps a place, never hides a screen finding (4, 5)\n· the shortlist is a state on the longlist: the grid view shows coverage, each place proposed by Policy Atlas or added by you with one named reason (5)\n· effect cell reports, never computes (6); a row opens the profile, no second layer in the table\n· transferability shows its working, verdict capped (7)\n· empty cells say why they are empty (6)\n· Sources says what was searched; Export bundles the outputs (6b)"
+    },
+    {
+      "id": "note-alts",
+      "x": -400,
+      "y": 0,
+      "w": 320,
+      "page": "alts",
+      "text": "Two structural alternatives to the leading direction, both conversation-first.\n\nA · Everything inline: living cards sit in the chat; superseded versions collapse to a stub. Trade-off: long scroll, the current state is never all in view.\n\nB · Stage rail: each stage has its own chat and artifact. Trade-off: cleaner per stage, but breaks the single dialogue the owner asked for.\n\nBelow: how chat commands and direct manipulation write the same state."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "journey"
+  }
+}

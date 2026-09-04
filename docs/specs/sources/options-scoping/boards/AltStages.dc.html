@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap">
+  <style>body{margin:0;background:#f4f4f5;} a{color:#0000ff;} a:hover{color:#0f294a;} .sk { width:1100px; height:640px; background:#ffffff; border:1px solid #d4d4d8; display:flex; flex-direction:column; font-family:"Manrope",system-ui,sans-serif; }
+  .sk .bar { height:40px; border-bottom:1px solid #d4d4d8; display:flex; align-items:center; padding:0 20px; gap:16px; color:#646363; font-size:13px; font-weight:700; }
+  .sk .box { border:1px dashed #a1a1aa; color:#646363; font-size:13px; padding:10px; display:flex; flex-direction:column; gap:6px; }
+  .sk .box strong { color:#0f294a; }
+  .sk .msg { border:1px solid #d4d4d8; padding:8px 10px; font-size:13px; }
+  .sk .msg.u { background:#ececff; border-color:#0000ff; align-self:flex-end; }
+  .sk .card { border:1px solid #0f294a; padding:8px 10px; font-size:13px; background:#ffffff; }
+  .sk .card strong { color:#0000ff; }</style>
+</helmet>
+<div class="sk">
+  <div class="bar"><span>Policy Atlas</span><span>Young people NEET, 16–24 — options</span></div>
+  <div style="flex:1; display:flex; min-height:0;">
+    <div style="width:200px; border-right:1px solid #d4d4d8; padding:16px; display:flex; flex-direction:column; gap:8px; font-size:13px;">
+      <span style="color:#646363;">Plan — done</span><span style="color:#646363;">Longlist — done</span><span style="color:#646363;">Screening — done</span><span style="color:#0000ff; font-weight:700;">Shortlist — here</span><span style="color:#9a9aa0;">Assessment</span><span style="color:#9a9aa0;">Brief</span>
+      <span class="box" style="margin-top:auto;">each stage keeps its own chat and artifact</span>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; padding:20px; gap:10px; min-height:0;">
+      <div class="card"><strong>Shortlist</strong> · 5 places + do nothing<div class="box" style="margin-top:6px; height:200px;">places with single-axis reasons · add / remove</div></div>
+      <div style="flex:1; display:flex; flex-direction:column; gap:8px; border-top:1px solid #d4d4d8; padding-top:10px;">
+        <div class="msg">A coverage set, not a top five. Each place says why…</div>
+        <div class="msg u">Add the youth guarantee to the shortlist.</div>
+        <div class="box" style="margin-top:auto;">composer, scoped to this stage</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

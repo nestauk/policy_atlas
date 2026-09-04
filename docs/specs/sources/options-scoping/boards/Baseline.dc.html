@@ -1,0 +1,139 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>
+  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:1540px; height:1540px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Plan</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Results</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav><nav aria-label="Results" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Baseline</span><span style="padding:12px 0; ">Longlist</span><span style="padding:12px 0; ">Shortlist</span></nav>
+  <div class="main">
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">Confirmed. Build the baseline.</div></div><div class="sys"><span class="tick"></span><span>Baseline · 9 sources · official statistics and grey literature</span></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Baseline first. About one in eight 16 to 24 year olds is NEET and the number has risen since 2022. The whole rise is in the inactive group, about half with a health condition; unemployment is flat. One tension with your plan: you target all NEET young people, but the rise is in one group. Read the baseline on the right, change the plan if you want, and confirm it. I will not generate options until you do.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Keep all NEET as the target, but note the inactive group and flag anything that only reaches the job-ready.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Noted in the plan. The problem slot is confirmed from the baseline and the target unit carries your note. Confirm the plan and I will generate the longlist.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Confirmed.</div></div><div class="sys"><span class="dot"></span><span>Generating the longlist</span></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask about the baseline…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden; display:flex; gap:24px; align-items:flex-start;">
+    <nav aria-label="Contents" style="width:224px; flex-shrink:0; padding-right:16px;"><p class="eyebrow" style="margin:0;">Contents</p><ul style="list-style:none; margin:8px 0 0; padding:0; border-left:1px solid #e4e4e7; display:flex; flex-direction:column; gap:4px;"><li><a href="#" style="display:block; border-left:2px solid #0000ff; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#0f294a; font-weight:600;">What is in place</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Trend if nothing changes</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Who is affected</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What is already changing</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Cost of inaction</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Sources</a></li></ul></nav>
+    <div class="prose" style="flex:1; min-width:0;">
+      <p class="m" style="margin-bottom:8px;">Baseline · the reference every option is compared against · the run pauses here</p>
+      <h2 style="font-size:24px; margin-bottom:4px;">Do nothing</h2>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0 4px;"><span class="btn blue sm">Confirm plan and generate longlist</span><span class="btn ghost sm">Change the plan</span><span class="btn ghost sm">Search further</span></div>
+      <p>About one in eight 16 to 24 year olds is not in education, employment or training, and the number has risen since 2022. The rise is in economic inactivity rather than unemployment, and the current offer is built for the unemployed.</p>
+      <h3>At a glance</h3>
+      <ul>
+        <li><strong>Now:</strong> 12.5%, about 950,000 young people, in the latest quarter <span class="m">(ONS 2026)</span>.</li>
+        <li><strong>Direction:</strong> rising since 2022, up about 1.5 points in three years. The unemployed share is flat.</li>
+        <li><strong>Driver, as reported:</strong> inactivity, mostly ill-health. Mental ill-health is the largest single reported reason.</li>
+        <li><strong>Key assumption:</strong> the current offer does not reach the inactive group driving the rise. This is reasoning, not a reported finding.</li>
+      </ul>
+      <section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What is in place</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">The Jobcentre Youth Offer, levy-funded apprenticeships, and no entitlement for young people who are inactive.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Trend if nothing changes</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p>The NEET rate rose from about 11% in 2022 to about 12.5%. The unemployed share is flat, so the inactive share accounts for the whole rise <span class="m">(ONS 2026)</span>. Long-term NEET, over twelve months, is a growing share of the total <span class="m">(Youth Futures 2025)</span>.</p>
+      <p><strong>Not found.</strong> No published projection of the NEET rate beyond the current year. No reported estimate of how many of the inactive group are in contact with any service. The tool does not forecast.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Who is affected</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">About half of the inactive group report a health condition; mostly 18 to 24; lower prior attainment; highest in the North East and Midlands.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What is already changing</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Youth Guarantee trailblazers in eight areas, Jobcentre reforms from 2026, Kickstart ended in 2022.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Cost of inaction</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">£50,000 to £60,000 lifetime public-finance cost per long-term NEET young person, as reported.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Sources</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Nine sources: official statistics and grey literature, none academic.</p>
+    </section>
+    </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

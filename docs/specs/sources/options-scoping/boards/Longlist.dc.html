@@ -1,0 +1,179 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>
+  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:1740px; height:1740px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Plan</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Results</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav><nav aria-label="Results" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Longlist</span><span style="padding:12px 0; ">Shortlist</span></nav>
+  <div class="main">
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="sys"><span class="tick"></span><span>Plan confirmed against the baseline</span></div><div class="sys"><span class="tick"></span><span>Retrieved 1,240 candidates · 412 passed the title-and-abstract screen</span></div><div class="sys"><span class="tick"></span><span>Clustered into 10 options, 6 themes · 3 suggested, 1 added by you</span></div><div class="sys"><span class="tick"></span><span>Screens · 14 of 14 · no option assessed yet</span></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">The longlist is on the right, by theme. Each option says what it is and which of your outcomes it is for; open one for what the evidence base holds on it so far.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Add the youth guarantee to the shortlist. It has to be there.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Added. It keeps its shortlist place whatever the screens say; any screen finding shows next to it.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Screens done: <strong>12 included, 2 excluded</strong>, both in Financial incentives, each with the constraint it broke. Nothing was dropped for thin evidence. Low cost cannot be checked yet, so each option carries my guess until the assessment. The youth guarantee you added breaks "no benefit cuts or sanctions" because most implementations attach a sanction to the offer; it stays on the shortlist, with the finding on it.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Keep it. The offer is the point, not the sanction; assess it without sanctions.</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Noted on the option. Ready to assemble a shortlist when you are.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Add an option, or exclude one…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden;">
+      <div class="prose" style="max-width:none;">
+        <div style="display:flex; align-items:baseline; gap:16px;"><p class="m" style="margin:0 0 8px; flex:1;">Longlist · 14 options in 6 themes · 12 included, 2 excluded · 1 on the shortlist · none assessed yet</p><span class="m" style="white-space:nowrap;">View: <span style="color:#0f294a; font-weight:600;">List</span> · <a href="#">Grid</a></span></div>
+        <h2 style="font-size:24px; margin-bottom:12px;">Longlist</h2>
+        <p style="max-width:none;">Fourteen options for reducing the number of 16 to 24 year olds who are NEET, from the evidence base, the option types, and you. Each is read against <a href="#">doing nothing</a>: the Jobcentre Youth Offer and current apprenticeship funding, with NEET about 1 in 8 and rising. Two options are excluded by your constraints and stay in their theme with the reason. On each row: add to the shortlist, exclude, or include again. <a href="#">Show excluded only</a>.</p>
+        <section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Financial incentives and welfare</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+<p class="m" style="margin-bottom:0;">Changes the price of hiring, or of staying NEET. Three options: one included, two excluded.</p>
+<div style="display:flex; gap:20px; align-items:flex-start; padding:12px 12px; margin:0 -12px; border-top:1px solid #e4e4e7; ">
+  <div style="flex:1; min-width:0;">
+    <p style="margin:0;"><a href="#" style="font-weight:700; color:#0f294a;">Wage subsidies for employers hiring young people</a></p>
+    <p style="margin:2px 0 0; color:#1c1c1e;">Government pays part of the wage for six months when an employer hires a 16 to 24 year old who is NEET.</p>
+    <p class="m" style="margin:2px 0 0;">For NEET rate and sustained education or employment.</p>
+  </div>
+  <div style="flex-shrink:0; display:flex; gap:10px; padding-top:2px;"><a href="#" title="Add to shortlist" aria-label="Add to shortlist"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#646363" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M11 7v8M7 11h8"></path></svg></a><a href="#" title="Exclude" aria-label="Exclude"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#646363" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M7.5 7.5l7 7M14.5 7.5l-7 7"></path></svg></a></div>
+</div>
+<div style="display:flex; gap:20px; align-items:flex-start; padding:12px 12px; margin:0 -12px; border-top:1px solid #e4e4e7; ">
+  <div style="flex:1; min-width:0;">
+    <p style="margin:0;"><a href="#" style="font-weight:700; color:#646363;">Sanctions for under-25s who miss Jobcentre appointments</a></p>
+    <p style="margin:2px 0 0; color:#9a9aa0;">Work-coach engagement from week one of a claim, with sanctions for non-attendance.</p>
+    <p class="m" style="margin:2px 0 0;">Excluded: breaks "No benefit cuts or sanctions".</p>
+  </div>
+  <div style="flex-shrink:0; display:flex; gap:10px; padding-top:2px;"><a href="#" title="Include again" aria-label="Include again"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#0000ff" stroke-width="1.6"><path d="M8 5L4 9l4 4"></path><path d="M4 9h8.5a5 5 0 0 1 0 10H9"></path></svg></a></div>
+</div>
+<div style="display:flex; gap:20px; align-items:flex-start; padding:12px 12px; margin:0 -12px; border-top:1px solid #e4e4e7; ">
+  <div style="flex:1; min-width:0;">
+    <p style="margin:0;"><a href="#" style="font-weight:700; color:#646363;">Conditional cash transfers for training attendance</a></p>
+    <p style="margin:2px 0 0; color:#9a9aa0;">Cash to young people conditional on attending training, on the Jóvenes model.</p>
+    <p class="m" style="margin:2px 0 0;">Excluded: breaks "OECD evidence only".</p>
+  </div>
+  <div style="flex-shrink:0; display:flex; gap:10px; padding-top:2px;"><a href="#" title="Include again" aria-label="Include again"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#0000ff" stroke-width="1.6"><path d="M8 5L4 9l4 4"></path><path d="M4 9h8.5a5 5 0 0 1 0 10H9"></path></svg></a></div>
+</div>
+</div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Regulation and entitlements</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+<p class="m" style="margin-bottom:0;">Creates a duty or a right. Three options.</p>
+<div style="display:flex; gap:20px; align-items:flex-start; padding:12px 12px; margin:0 -12px; border-top:1px solid #e4e4e7; ">
+  <div style="flex:1; min-width:0;">
+    <p style="margin:0;"><a href="#" style="font-weight:700; color:#0f294a;">Youth guarantee</a> <span class="m">· on the shortlist</span></p>
+    <p style="margin:2px 0 0; color:#1c1c1e;">A guaranteed offer of a job, apprenticeship, training or education within four months of becoming NEET.</p>
+    <p class="m" style="margin:2px 0 0;">For NEET rate and time spent NEET. Breaks "No benefit cuts or sanctions" but stays because you added it; to be assessed without sanctions.</p>
+  </div>
+  <div style="flex-shrink:0; display:flex; gap:10px; padding-top:2px;"><a href="#" title="Remove from shortlist" aria-label="Remove from shortlist"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#646363" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M7 11h8"></path></svg></a></div>
+</div>
+<div style="display:flex; gap:20px; align-items:flex-start; padding:12px 12px; margin:0 -12px; border-top:1px solid #e4e4e7; background:#ececff; outline:1px solid #0000ff;">
+  <div style="flex:1; min-width:0;">
+    <p style="margin:0;"><a href="#" style="font-weight:700; color:#0f294a;">Enforce the raising-of-participation-age duty</a></p>
+    <p style="margin:2px 0 0; color:#1c1c1e;">Use existing powers so every 16 and 17 year old is tracked and in some form of education or training.</p>
+    <p class="m" style="margin:2px 0 0;">For NEET rate.</p>
+  </div>
+  <div style="flex-shrink:0; display:flex; gap:10px; padding-top:2px;"><a href="#" title="Add to shortlist" aria-label="Add to shortlist"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#0000ff" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M11 7v8M7 11h8"></path></svg></a><a href="#" title="Exclude" aria-label="Exclude"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#0000ff" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M7.5 7.5l7 7M14.5 7.5l-7 7"></path></svg></a></div>
+</div>
+<div style="display:flex; gap:20px; align-items:flex-start; padding:12px 12px; margin:0 -12px; border-top:1px solid #e4e4e7; ">
+  <div style="flex:1; min-width:0;">
+    <p style="margin:0;"><a href="#" style="font-weight:700; color:#0f294a;">Ring-fenced apprenticeship levy for under-25s</a></p>
+    <p style="margin:2px 0 0; color:#1c1c1e;">Reserve a share of levy funds for apprenticeships started by 16 to 24 year olds.</p>
+    <p class="m" style="margin:2px 0 0;">For sustained education or employment. Suggested by Policy Atlas.</p>
+  </div>
+  <div style="flex-shrink:0; display:flex; gap:10px; padding-top:2px;"><a href="#" title="Add to shortlist" aria-label="Add to shortlist"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#646363" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M11 7v8M7 11h8"></path></svg></a><a href="#" title="Exclude" aria-label="Exclude"><svg class="ico" style="width:22px; height:22px;" viewBox="0 0 22 22" fill="none" stroke="#646363" stroke-width="1.6"><circle cx="11" cy="11" r="8.5"></circle><path d="M7.5 7.5l7 7M14.5 7.5l-7 7"></path></svg></a></div>
+</div>
+</div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Programmes and services</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Works directly with the young person. Four options, including Youth Hubs, which you added.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Information and nudge</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Gives information, or a prompt to act. One option.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Market and employer</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Pays employers to create places. One option.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Organisational and delivery</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Changes who runs the system and how. Two options, both suggested.</p>
+    </section>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

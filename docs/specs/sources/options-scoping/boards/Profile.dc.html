@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>
+  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:3700px; height:3700px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Plan</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Results</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav><nav aria-label="Results" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; ">Longlist</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Shortlist</span></nav>
+  <div class="main">
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">Why is transferability only conditional?</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Two of the five support factors are unknown for the UK because the plan does not say. If you tell me whether local delivery would be funded, the cap lifts or the verdict falls.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask about this option…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden; display:flex; gap:24px; align-items:flex-start;">
+    <nav aria-label="Contents" style="width:224px; flex-shrink:0; padding-right:16px;"><p class="eyebrow" style="margin:0;">Contents</p><ul style="list-style:none; margin:8px 0 0; padding:0; border-left:1px solid #e4e4e7; display:flex; flex-direction:column; gap:4px;"><li><a href="#" style="display:block; border-left:2px solid #0000ff; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#0f294a; font-weight:600;">How it works</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What it is made of</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Evidence for and against</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">How it varies in practice</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Case studies</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Transferability working</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Assumptions</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What it would take</a></li></ul></nav>
+    <div class="prose" style="flex:1; min-width:0;">
+      <p class="m" style="margin-bottom:8px;"><a href="#">Shortlist</a> / Youth guarantee · Regulation, structural · scoping pass · added to the shortlist by you</p>
+      <h2 style="font-size:24px; margin-bottom:4px;">Youth guarantee</h2>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0 4px;"><span class="btn blue sm">Run a full evidence search</span><span class="btn ghost sm">Start a theory of change</span><span class="btn ghost sm">Swap on shortlist</span></div>
+      <p>Every 16 to 24 year old who leaves education or work gets a guaranteed offer of a job, apprenticeship, training or continued education within four months. It creates an entitlement, and puts the burden of supplying offers on local providers.</p>
+      <h3>At a glance</h3>
+      <ul>
+        <li><strong>How big, as reported:</strong> six of nine country evaluations found NEET rate reductions of one to three points. Effects on sustained employment are rarely measured.</li>
+        <li><strong>How sure:</strong> moderate. Nine studies, none randomised.</li>
+        <li><strong>Where tried:</strong> EU-wide since 2013; Finland, Austria, Portugal, Italy, France, Spain and Sweden evaluated.</li>
+        <li><strong>Transferability:</strong> conditional. Two of the five support factors are unknown for the UK because the plan does not say.</li>
+        <li><strong>Key assumption, test first:</strong> local providers can supply enough quality offers within four months. Load-bearing, and the evidence for it is weak.</li>
+      </ul>
+      <section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">How it works</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p>Registering as NEET starts a clock. Within four months the local service must make a concrete offer. That forces early contact, and it puts a supply obligation on providers rather than a search obligation on the young person. <span class="m">(inference from 6 sources)</span></p>
+      <p><strong>Main failure mode.</strong> Providers meet the deadline with low-quality offers. The young person returns to NEET within months, the headline rate improves, and time spent NEET does not. <span class="m">(observed in Italy and Spain)</span></p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What it is made of</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <ul>
+        <li>A single registration point for NEET young people <span class="m">(7 documents)</span></li>
+        <li>An offer deadline of four months from registration <span class="m">(9 documents)</span></li>
+        <li>Ring-fenced funding to local providers per registered young person <span class="m">(5 documents)</span></li>
+        <li>Follow-up contact at three and six months after an offer is taken <span class="m">(2 documents, thin)</span></li>
+      </ul>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Evidence for and against</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p>Six of nine evaluations found reductions in the NEET rate. Three found none. No evaluation measures employment beyond twelve months after an offer.</p>
+      <p><strong>Strongest for.</strong> Finland: the NEET rate fell 2.8 points over four years where registration reach passed 80% <span class="m">(Eurofound 2021, quasi-experimental)</span>. Austria: 1.9 points, the only state with a quality floor on offers <span class="m">(Escudero and Mourelo 2017, panel)</span>. Across countries, reductions of one to three points in six of nine states within three years, "concentrated where implementation was funded" <span class="m">(Eurofound 2021)</span>.</p>
+      <p><strong>Strongest against.</strong> Italy: no measurable change in five years; offers were mostly short training courses <span class="m">(Pastore 2019, difference-in-differences)</span>. Spain: the rate fell with the labour market, not with the guarantee <span class="m">(Cabases 2020, panel)</span>. No study follows employment past twelve months.</p>
+      <p><strong>Common criticisms.</strong> It displaces existing youth services rather than adding capacity. The headline rate can be met with low-quality offers. Reach is lowest among the inactive, the group driving the UK rise.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">How it varies in practice</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <ul>
+        <li><strong>Deadline.</strong> Four months in most states; six in Italy and Spain, where results were weakest.</li>
+        <li><strong>Age range.</strong> 15 to 24 originally; extended to 29 in 2020 by most states.</li>
+        <li><strong>Offer quality.</strong> Only Austria and Finland set a minimum duration and pay for offers.</li>
+        <li><strong>Funding route.</strong> Per-registration grants to municipalities in Finland; national tenders in Italy.</li>
+      </ul>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Case studies</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p><strong>Finland, Ohjaamo one-stop centres.</strong> From 2015, municipalities ran walk-in centres combining employment, health and housing advice, with registration within days of leaving education. Reach passed 80% and the NEET rate fell 2.8 points in four years. It worked because funding followed each registration and existing youth workers were redeployed rather than new staff hired. Effects were smaller in rural municipalities without a centre. <span class="m">(academic: Eurofound 2021, Savolainen 2020)</span></p>
+      <p><strong>Austria, AusBildung bis 18.</strong> From 2016 the guarantee was paired with a training duty to age 18 and a quality floor: offers must be paid or lead to a qualification. The NEET rate fell 1.9 points and early leaving from training fell by a third. The quality floor and existing coaching services made the difference. It relies on a duty on the young person, which your plan excludes. <span class="m">(grey literature: Escudero and Mourelo 2017, BMAW 2022)</span></p>
+      <p><strong>Italy, Garanzia Giovani.</strong> From 2014 to 2020, online registration with providers paid per placement through national tenders. Take-up was low and the NEET rate did not measurably change in five years. The deadline was six months, offers were mostly short courses, there was no quality standard, and regions with weak services delivered least. This is the pattern the UK would repeat without funded local capacity. <span class="m">(academic: Pastore 2019)</span></p>
+      <p><strong>Portugal, Garantia Jovem.</strong> Registration through employment offices, with offers weighted toward traineeships. The source is an implementation account only and reports no outcomes, so it does not count toward evidence strength. <span class="m">(web, verified link: IEFP programme page)</span></p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Transferability working</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p>The option worked elsewhere and would play the same causal role here. Of the five support factors the evidence names, two are present in your context, one is absent, and two are unknown because the plan does not say. Only facts you stated count as your context, and the verdict is capped accordingly.</p>
+      <table>
+        <tr><th>Factor</th><th>Evidence says</th><th>Your context</th><th>Basis</th></tr>
+        <tr><td>Funded local delivery capacity</td><td>"Effects concentrated where implementation was funded" <span class="m">(Eurofound 2021)</span></td><td>Unknown</td><td class="m">not stated in the plan</td></tr>
+        <tr><td>Single point of registration</td><td>Registration reach is the binding constraint <span class="m">(Escudero and Mourelo 2017, author hypothesis)</span></td><td>Unknown</td><td class="m">not stated in the plan</td></tr>
+        <tr><td>Offer quality standards</td><td>"Low-quality offers produce churn, not re-engagement" <span class="m">(ILO 2020)</span></td><td>Absent</td><td class="m">plan: the Youth Offer sets no standard</td></tr>
+        <tr><td>Existing employment service for young people</td><td>Every evaluated guarantee was built on one</td><td>Present</td><td class="m">plan: Jobcentre Youth Offer</td></tr>
+        <tr><td>Age band matches</td><td>Evaluated for 15 to 24 and 15 to 29</td><td>Present</td><td class="m">plan: target unit 16 to 24</td></tr>
+      </table>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Assumptions</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <ul>
+        <li><strong>Local providers can supply enough quality offers within four months.</strong> Load-bearing; evidence weak. This is the one to test first.</li>
+        <li><strong>Young people who are inactive will register.</strong> Load-bearing; evidence weak.</li>
+        <li><strong>An offer taken up leads to sustained education or employment.</strong> Not load-bearing; evidence moderate.</li>
+        <li><strong>The guarantee can run without a sanction element.</strong> Not load-bearing; untested. Your note: assess without sanctions.</li>
+      </ul>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What it would take</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <ul>
+        <li><strong>Implementation.</strong> A statutory entitlement or a published policy commitment, a registration route, and commissioning of local providers <span class="m">(Eurofound 2021)</span></li>
+        <li><strong>Reported costs.</strong> €500 to €1,500 per participant-year across evaluated states <span class="m">(Eurofound 2021)</span></li>
+        <li><strong>Time to impact.</strong> Twelve to eighteen months to first offers; rate effects reported from year two <span class="m">(Eurofound 2021)</span></li>
+        <li><strong>Distributional notes.</strong> Reach was lowest among the inactive and those with health conditions in every evaluation that reported it <span class="m">(ILO 2020)</span></li>
+      </ul>
+      <p class="m">Reported facts with their sources. Nothing here is a score.</p>
+</div>
+    </section>
+    </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,5 +1,13 @@
 # Spec update log
 
+## 2026-09-04
+* **Creation**: Distilled the Options Scoping capability spec ([capability](capabilities/options-scoping/capability.md)
+  · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md))
+  from the owner-agreed concept and its wireframe-round rulings; froze the concept and the wireframe
+  canvas as sources #8 and #9 under [sources/options-scoping/](sources/options-scoping/README.md);
+  added the OS routing row to the [index](index.md). The concept moved here from the (uncontracted)
+  task 035 folder; task contracts consume the spec.
+
 ## 2026-07-12
 * **Update**: [system/data-model.md § The findings layer](system/data-model.md) — the
   `intervention_outcome_finding` base-field list gains `effect_basis` (`observed` |
