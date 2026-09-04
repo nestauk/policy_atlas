@@ -40,8 +40,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Product / output
 
-- **Export & sharing** — share CTAs, read-only/public links, version-pinned external deep links
+- **Export & sharing** — share CTAs, version-pinned external deep links
   back into the body (handoff §7.3). The primary surface is the tool itself.
+  **Read-only/public links DISCHARGED (task 037):** a Task's owner shares it
+  publicly from the Share tab (`project.is_public`, ADR 0035) — same URL,
+  Results + Sources only. Still deferred from that slice: portfolio-level
+  public sharing; a public index/gallery of public Tasks; a public mode for
+  the frontend mock API (`src/mock/api.ts` still serves only the signed-in
+  world, so public-view e2e journeys have no mock to run against).
 - **Cross-boundary traceability** — statement-to-statement cross-artefact tracing; chain-strength
   composition; chain display; version-pinned cross-artefact staleness (behind the
   addressable-span seam).
