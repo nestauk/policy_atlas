@@ -2268,3 +2268,11 @@ omissions.
   Either re-wire or delete in a later slice.
 - **The ops CLI reports in code words** (`project`/`portfolio`) — the post-033 rename
   slice must cover `policy_atlas.ops` and its operator-facing strings.
+- **APO test mod (038) removal path** — `publisher_source: "apo"` is a test-mod
+  constraint (Overton `source=apo`; OpenAlex dropped via the pre-existing
+  `grey_lit_only`). It is optional and additive everywhere. On removal: delete
+  the field, the geography-token branch in `_geography_constraints`, the two
+  fold-list entries, the allowlist keys and the `scopeChips` label — and either
+  tolerate or re-save stored plans that carry the field, or old approved plan
+  rows fail validation. The planning chat never learned the token
+  (`planner_v10` untouched); a product version would be a new slice.
