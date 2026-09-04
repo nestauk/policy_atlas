@@ -43,7 +43,9 @@ Slice-specific:
         Accepted with rollback commands; `deferred.md` entries discharged; frozen sources
         and historical docs untouched (`git diff --stat -- docs/specs/sources docs/tasks/0[0-3]*`
         is empty except this task's folder).
-16. [ ] **V8 / I8** — the overlay copy table applied; no "chat" noun for Questions mode.
+16. [ ] **V8 / I8** — the overlay copy table applied; the chat list shows on the Agent tab
+        with "Task Agent" pinned first and marked; no chat is labelled "Planning"; chats are
+        still called chats.
 17. [ ] **Collision audit** ran before the sweep and every listed collision has a recorded
         resolution; the sweep script is committed under `scripts/` and re-runnable.
 18. [ ] **No behaviour change** — no test assertion changed in meaning; no prompt text

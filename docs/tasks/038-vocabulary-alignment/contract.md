@@ -24,6 +24,12 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are
 > the only consumers."*
 >
+> **Amendments 2026-09-04** (owner + colleague, frozen as the
+> [addendum](../../specs/sources/vocabulary/policy-atlas-definitions-addendum-2026-09-04.md)):
+> the Agent tab hosts all of a Task's chats in a sidebar; chats stay **chats**;
+> the primary (planning) chat is the **Task Agent**, pinned first and visually
+> distinct. The mode labels are withdrawn. V5 and V8 are rewritten to this.
+>
 > **Owner forks F1–F5** (§ Forks) need a ruling at this gate. Each has a
 > recommended default; the contract is written to the defaults.
 
@@ -49,7 +55,7 @@ One PR on `task/038-vocabulary-alignment` that:
 - Relabels the lifecycle tabs Agent · Result · Sources · Share · History (V5).
 - Routes the leaked hard-coded Task/Project literals through the copy module (V6).
 - Updates the living docs, writes the glossary spec, amends ADR 0031 (V7).
-- Gives the Agent overlay its three mode labels (V8).
+- Shows a Task's chats in the Agent tab with the **Task Agent** pinned first (V8).
 
 Shipped = `make verify` green (which includes `drift-check` and `prompt-guard`),
 the migration applied to staging, and one live smoke of the renamed chain
@@ -67,8 +73,10 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Capability** | A type of analysis. One exists: **Evidence search**, code key today `evidence_base`, after this slice `evidence_search`. |
 | **Component** | A backend processing step of a capability (search, screen, extract, …). Unchanged. |
 | **Agent** | The screen name for the planning/steering/Q&A surface. Backend name today `orchestrator`. See fork F2 for how far the code follows. |
-| **Agent overlay** | The chat sidebar (`ChatSidePanel.tsx`), today `aria-label="Project chat"`. |
-| **Modes** | Planning · Agent (running) · Questions — the three states of the overlay (definitions doc). Today: conversation `kind ∈ planning \| chat` plus run status. |
+| **Agent overlay** | The chat sidebar (`ChatSidePanel.tsx`), today `aria-label="Project chat"`, shown on every tab but Plan. After the slice: shown on every tab including Agent. |
+| **Task Agent** | The primary chat of a Task — today the planning conversation (`kind = planning`, one active per Task, tab label "Planning"). After the slice: named "Task Agent", pinned first in the chat list, visually distinct. |
+| **Chat** | Any other conversation with the Agent (`kind = chat`). The word stays "chat" on screen (addendum). |
+| **Modes** | Withdrawn by the addendum. Planning / running / Q&A remain internal states (conversation `kind` + run status), never shown as words. |
 | **Artefact** | Something a Task generates. Unchanged word; British spelling stays. |
 | **Screen word / code word** | The split ADR 0031 decision 2 made deliberate; this slice ends it. After the slice the screen word and the code word are the same word. |
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
@@ -79,7 +87,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 
 ## Read first
 
-- [Frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) — the source of every target word.
+- [Frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) and the [addendum](../../specs/sources/vocabulary/policy-atlas-definitions-addendum-2026-09-04.md) (wins on conflict) — the source of every target word.
 - [ADR 0031](../../adr/0031-portfolio-layer-above-the-project.md) decision 2 — the split this slice retires, and why it was made (cost of the rename).
 - [ADR 0032](../../adr/0032-portfolio-membership-many-to-many.md), [ADR 0033](../../adr/0033-organisation-tenancy-and-global-admin-read.md) — the membership and tenancy rows the rename carries.
 - [ADR 0035](../../adr/0035-public-task-read-access.md) and [037-public-projects/contract.md](../037-public-projects/contract.md) — `project.is_public`, the 11-route public read leg and the public share link (`/projects/{id}/results`), all renamed here.
@@ -115,7 +123,7 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 | `vocabulary.ts` | `TASK`/`PROJECT` objects + the split docstring | same exports; docstring says the words now match; `LIFECYCLE_LABELS.plan → agent: "Agent"`, `results → result: "Result"` | one file |
 | User-visible "evidence base" copy | 17 production sites + `evidence-base.md` filename | per § V3 copy table | lead-owned |
 | Leaked literals | 18 hard-coded Task/Project strings (§ V6 list) | routed through `vocabulary.ts` | |
-| Agent overlay | `aria-label="Project chat"`, FAB "Open chat"/"Chat", tabs "Planning" + chats, library "Chats" | § V8 copy table | `ChatSidePanel`, `ConversationTabs`, `ChatsLibrary` |
+| Agent overlay | `aria-label="Project chat"`, FAB "Open chat"/"Chat", tabs "Planning" + chats, library "Chats"; hidden on the Plan tab (`AppShell` `showChatPanel = … && !inWorkspace`) | § V8 copy table; shown on the Agent tab too, "Task Agent" pinned first and marked | `ChatSidePanel`, `ConversationTabs`, `ChatsLibrary`, `AppShell`, `WorkspaceView` |
 | e2e | `/projects/`, "Results", "Read the evidence base", "evidence base" ×22 | new words | 6 specs |
 | Living docs | `specs/capabilities/evidence-base/`, `data-model.md`, `web-api.md`, `index.md`, `deferred.md`, `knowledge/` | § V7 | |
 | **Do not change** | `waitlist_entry` (036) · `is_public` column name and the `access` read field (037; only their table moves) · `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · `evidence_base_coverage` stored steer-point id · every prompt's text · `orchestration_plan` table · `orchestrator_*` backend modules, env vars, span names (F2 default) · `docs/specs/sources/**` · historical docs | | |
@@ -222,7 +230,7 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 
 - Screen: the overlay is the **Agent** (`aria-label="Agent"`, FAB "Open the
   Agent"/"Agent"); the check-in attribution reads "The Agent decided"; the
-  planning composer label "Message the Agent".
+  planning composer label "Message the Task Agent".
 - Wire: `decided_by`/`authored_by` literal `"orchestrator"` → `"agent"` in
   `steering_events.py` (`DecidedBy`), the OpenAPI literal and `store/types.ts`.
   New writes store `agent`; the read path that projects check-ins and steering
@@ -247,6 +255,8 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
   segment — no `/agent` segment); Result's segment `/results` → `/result`.
   `taskDestination()`, `LifecycleRoute`, `LifecycleBar`'s `end` match and
   `RUN_FINISHED_MESSAGE` ("…in the Result tab") follow.
+- The Agent tab keeps today's layout (planning pane + plan document rail) and
+  additionally shows the chat list (§ V8); it is where the Task Agent lives.
 - Invariant I5: the lifecycle bar reads Agent · Result · Sources · Share ·
   History in that order; tab locking by run status is unchanged.
 
@@ -292,26 +302,34 @@ words only.
   mapping note (frozen `project`/`Evidence Base`/`orchestrator` → living
   `task`/`Evidence search`/`Agent`) so a cold reader can read a source.
 
-### V8 — The Agent overlay's modes have no labels
+### V8 — The Agent tab does not show the Task's chats, and the primary chat has no name
 
-Lead-owned copy, binding once approved (fork F4 lets the owner change words):
+Today the chat sidebar is hidden on the Plan tab, the planning conversation is
+labelled "Planning", and nothing marks it as the Task's primary chat. The
+addendum fixes all three. Lead-owned copy, binding once approved (fork F4):
 
 | Surface | Today | After |
 |---|---|---|
-| Overlay region | "Project chat" | "Agent" |
+| Overlay region (`ChatSidePanel`) | "Project chat" | "Agent" |
 | Closed-state button | "Open chat" / "Chat" | "Open the Agent" / "Agent" |
-| Planning tab / chip | "Planning" | "Planning" (unchanged) |
-| Running state eyebrow (`runProgress`) | "RUNNING" | "AGENT" — the Agent mode marker; title "Analysis running…" unchanged |
-| Chat tabs, library, new button | "Chats" / "New chat" / "Chat" section | "Questions" / "New question" / "Questions" |
-| Composer placeholder (chat) | "Ask about the evidence" | unchanged |
+| Overlay on the Agent tab | hidden (`!inWorkspace`) | shown — the tab's chat list; the planning pane stays the main column |
+| Primary chat tab and library chip | "Planning" | "Task Agent", pinned first, with a distinct marker (icon + tone; the plan picks the exact treatment from the brand layer) |
+| Other chats — tabs, library, new button | "Chats" / "New chat" | unchanged: chats are chats |
+| Planning composer label | "Message the planner" | "Message the Task Agent" |
+| Running state eyebrow (`runProgress`) | "RUNNING" | unchanged |
 | History category | "Planning" / "Question" | unchanged |
 
-No new mode state is built: the three modes map onto what exists (planning
-conversation · run status · chat conversation). A single mode enum is a
-refactor with no user-visible gain and stays out.
+No new state is built: the Task Agent is the existing `kind = planning`
+conversation; pinning is a sort rule in `ConversationTabs`/`ChatsLibrary`
+(planning first, then chats by recency — today's order already places it first).
+Showing the overlay on the Agent tab is one condition in `AppShell` plus the
+layout check that the planning pane and the sidebar do not both render the
+planning conversation at once (the sidebar's Task Agent entry focuses the main
+pane instead of opening a second copy).
 
-- Invariant I8: the overlay never shows the word "chat" as a noun for the
-  Questions mode.
+- Invariant I8: on the Agent tab the chat list is visible with "Task Agent"
+  first and marked; no user-visible chat is named "Planning"; the word "chat"
+  is unchanged everywhere else.
 
 ## Forks (owner rulings needed at this gate)
 
@@ -320,7 +338,7 @@ refactor with no user-visible gain and stays out.
 | **F1** | Rename the DB and code at all, or only the API + screen? | (a) full rename, schema included (this contract) · (b) API + frontend only, `vocabulary.ts` stays the mapping | **(a)** — the owner's 2026-08-24 ruling and this ask both say schema; (b) leaves the split ADR 0031 made and keeps every new reader learning it. |
 | **F2** | How far does `orchestrator` → `agent` reach in the backend? | (a) screen + wire only (default) · (b) also modules, classes, log/span names · (c) also env vars + `orchestration_plan` table | **(a)** — (b) is 468 occurrences for no user gain and breaks Langfuse history; (c) is a production-config change. Upgrade later if the word keeps hurting. |
 | **F3** | Old URLs: `/projects/:id` now means a Project; a bookmarked Task URL with the same shape lands on "not found". **Since 037, `/projects/{id}/results` is also the public share link people copy and send outside the app.** | (a) no redirect logic; users re-share · (b) legacy redirects: `/projects/:id/(results\|sources/*\|share\|history)` → `/tasks/:id/…` in both routers (these paths have no Project counterpart, so the redirect is unambiguous), and bare `/projects/:id` retries the id as a Task on a Project 404 | **(b)** — changed from (a) after 037 merged: a public link is outward-facing and may already be in someone's email. About 20 lines; recorded in ADR 0036 with a removal date. |
-| **F4** | Mode copy (V8): "Questions" for chats? "AGENT" as the running eyebrow? "Report" for the artefact page (V3 table)? | approve the tables · edit words in place | approve — copy-text principle: labels over explainers. |
+| **F4** | Copy tables: "Task Agent" as the pinned primary chat and its marker (V8), "Report" for the artefact page (V3), "Message the Task Agent" (V4). | approve the tables · edit words in place | approve — copy-text principle: labels over explainers. |
 | **F5** | Open PRs #62 (Langfuse sessions, 7 src files) and #52 (in-app feedback, 19) will conflict with the sweep. (#61 merged 2026-09-04 and is now inside this branch.) | (a) merge them first, then re-merge `dev` here · (b) land 038 first; they rebase with the sweep script re-run | **(a)** if they are days away; otherwise (b) — the plan ships the sweep as a re-runnable script exactly so a rebase is one command. |
 
 ## Scope / Out of scope
@@ -341,7 +359,11 @@ refactor with no user-visible gain and stays out.
   steer-point id. Rewriting `event_log` rows. A mode enum. Historical docs,
   frozen sources, `docs/knowledge/` filenames. The workspace-cluster re-parenting
   (still deferred; unaffected). Metabase saved questions (owner-operated; see
-  § Constraints).
+  § Constraints). **Future direction from the addendum, recorded as seams in
+  `deferred.md` § Vocabulary, not built:** re-running a Task or part of it from
+  any chat; active chats reachable app-wide from the round Agent icon; any
+  Tasks or Projects as chat context (meta-analysis); "chat more functional" as
+  its own task.
 
 ## Constraints & approval gates
 
