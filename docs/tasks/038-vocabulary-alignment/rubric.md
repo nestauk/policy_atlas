@@ -2,7 +2,7 @@
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is in
 progress, not done. Terms and defect ids V1–V9 are defined in [contract.md](contract.md);
-this file does not restate them. Defect ids run V1–V9.
+this file does not restate them. Defect ids run V1–V10.
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes (including `drift-check`, `prompt-guard`, `okf-validate`);
@@ -59,5 +59,8 @@ Slice-specific:
 19. [ ] **V9 / I9** — planning turn, run start, steering continuation and chat turn share
         `session_id` = task id (stub-client test); chat metadata carries `conversation_id`;
         one staging Task shows as one Langfuse session.
-20. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
+20. [ ] **V10 / I10** — `call_budget` replaces `http_budget`; `RunPane`/`JourneyPane` and their
+        orphans are deleted with the justification recorded; six `deferred.md` entries marked
+        discharged or corrected as V7 lists.
+21. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
         ops CLI dry-run, `make fe-api-smoke`) and the Metabase follow-up is named in the PR.

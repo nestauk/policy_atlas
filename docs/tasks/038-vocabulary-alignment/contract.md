@@ -46,7 +46,8 @@ Today three vocabularies coexist: the screen says Task/Project/Evidence search, 
 code and database say `project`/`portfolio`/`evidence_base`, and the chat surface
 has no name at all. Nine numbered defects, V1–V9. **No product behaviour change**:
 every row, route and screen does after the slice what it did before, under a new
-name. V9 is the one non-rename item (owner, 2026-09-04): traces group by Task.
+name. V9 (traces group by Task) and V10 (two riders from `deferred.md`) are the
+non-rename items, each folded in by the owner on 2026-09-04.
 
 ## Deliverable
 
@@ -63,6 +64,7 @@ One PR on `task/038-vocabulary-alignment` that:
 - Updates the living docs, writes the glossary spec, amends ADR 0031 (V7).
 - Shows a Task's chats in the Agent tab with the **Task Agent** pinned first (V8).
 - Groups every Langfuse trace of a Task under one session id, the task id (V9).
+- Renames the search loop's `http_budget` to `call_budget` and deletes the dead `RunPane`/`JourneyPane` views (V10).
 
 Shipped = `make verify` green (which includes `drift-check` and `prompt-guard`),
 the migration applied to staging, and one live smoke of the renamed chain
@@ -91,7 +93,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
 | **Frozen** | `docs/specs/sources/**` — not rewritten by the sweep (ADR 0002). The one exception is the owner-maintained definitions file, which the owner edits directly. |
 | **Historical** | Merged task docs (`docs/tasks/001–034`), ADRs 0001–0034, `docs/verification/`. Not rewritten (012 precedent). |
-| **V1–V9** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
+| **V1–V10** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
 | **Session** | Langfuse's grouping of traces. Set by passing `session_id` into the tracing helpers (`core/tracing.py` `_session_scope`). Today: the conversation id for planning and chat turns, nothing for runs. |
 | **F1–F5** | Owner forks at this gate. |
 
@@ -322,9 +324,16 @@ words only.
   gains the 038 entry), `execution-orchestration.md` and `plan-as-object.md`
   where they name the row, `index.md`, `AGENTS.md`, `docs/agentic-ops/harness.md`
   where it names routes.
-- `docs/deferred.md`: the rename entry and the ops-CLI entry marked discharged;
-  new § Vocabulary holding the accepted residue (V3 kept ids, F2 internals,
-  bookmarks per F3).
+- `docs/deferred.md`: six entries marked discharged or corrected — the
+  code-word/screen-word split (V1/V2) · the ops CLI reports in code words
+  (V1/V2) · Langfuse trace grouping, second half: "accept the session view" (V9;
+  turn-span consolidation stays open) · `capability_run.session_id` now filled
+  from the API path (V9) · the workspace-cluster wording that says the cluster
+  slice resolves the split (038 does, without re-parenting) · "rename/archive
+  controls — no view exposes them yet" (stale since 032) · `http_budget` naming
+  (V10) · `RunPane`/`JourneyPane` dead code (V10). New § Vocabulary holds the
+  accepted residue (`eb_*` fingerprint ids, regenerated public links, Metabase
+  and Langfuse filters, the Task Agent phase model).
 - ADR 0031: decision 2 marked **superseded by ADR 0036**; ADR 0036 written at
   step 4.
 - `docs/knowledge/`: bodies that describe current code are updated in words;
@@ -386,6 +395,28 @@ the task id is available to every trace from the start.
 - Invariant I9: with a stub Langfuse client, one task's planning turn, run
   start, steering continuation and chat turn all emit `session_id` equal to the
   task id, and the chat turn's metadata carries its `conversation_id`.
+
+### V10 — Two riders from `deferred.md` (owner, 2026-09-04)
+
+Both are naming or deletion only; neither changes what a user sees or what a
+run does.
+
+- **`http_budget` → `call_budget`** (`evidence_base/sourcing/search_loop.py`,
+  the per-depth constants dict and its one reader; deferred entry "counts
+  logical calls, not HTTP requests — OPEN 2026-08-04"). The entry's own fix:
+  "rename the budget to say what it counts". Not stored, not in a prompt; the
+  unread `_TransportMixin.http_calls` counter is left as it is.
+- **Delete `RunPane.tsx` and `journey/JourneyPane.tsx`** (deferred entry "dead
+  code — imported by no route; re-wire or delete"). Nothing imports either
+  except their own tests, which go with them. Whatever they alone import
+  (`journey/presentation.ts` if it has no other reader) goes too; the plan's
+  collision audit lists the orphans. Owner chose delete over re-wire, so the
+  journey cards are not coming back in this shape. Removes four of V3's copy
+  sites before the sweep.
+- Invariant I10: `grep -rn http_budget backend` is empty; `RunPane` and
+  `JourneyPane` do not exist; `make verify` frontend lane green with no test
+  weakened beyond the deleted files' own tests (rubric 5 justification: dead
+  code).
 
 ## Forks — ruled 2026-09-04 (owner, by interview)
 
