@@ -22,7 +22,26 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `034-synthesis-report` **CONTRACT + PLAN APPROVED 2026-08-26 ·
+Design — task `037-vocabulary-alignment` **CONTRACT DRAFTED 2026-09-04 — awaiting
+owner approval** (branch `task/037-vocabulary-alignment` from `dev`): align the
+code, schema, API and screen words with the team's definitions (frozen source
+`docs/specs/sources/vocabulary/policy-atlas-definitions.md`). Code/DB `project`
+→ `task`; `portfolio` → `project`; `evidence_base` → `evidence_search`; the
+screen says **Agent** for the orchestrator surface; tabs Agent · Result ·
+Sources · Share · History. **Tier 4** — table renames + a public-API path
+change (`/api/v1/tasks`, `/api/v1/projects`) + ADR + rollback plan. Discharges
+the owner ruling of 2026-08-24 (`docs/deferred.md` § Task lifecycle IA) and
+retires ADR 0031 decision 2 (the screen/code split). Eight numbered defects
+V1–V8 and the owner forks F1–F5 are in
+`docs/tasks/037-vocabulary-alignment/contract.md`. **Open PRs #61, #62, #52
+touch files this rename sweeps — merge order is an owner call (fork F5).**
+
+Task `034-synthesis-report` is **merged to `dev`** (PR #59, `07df67e3`) and
+task `033-organisations` is **merged to `dev`** (PR #58). Their design records
+stay under `docs/tasks/`.
+
+Earlier record of 034 (kept for the reader who needs the prompt lineage):
+task `034-synthesis-report` **CONTRACT + PLAN APPROVED 2026-08-26 ·
 owner**; build not yet opened — **the Codex CLI is installed this slice;
 no adversarial waiver**
 (branch `task/034-synthesis-report`, stacked on
