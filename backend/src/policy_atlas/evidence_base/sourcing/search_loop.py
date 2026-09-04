@@ -108,8 +108,8 @@ class DepthConstants(TypedDict):
     #
     # Sized against provider page boundaries, not "as much as possible"
     # (Overton page 50 / OpenAlex page 200): each value stays within two
-    # Overton pages, so one logical call is 1-2 real HTTP requests and
-    # `http_budget` below keeps meaning roughly what its name says. Overton
+    # Overton pages, so one logical call is 1-2 real HTTP requests, and
+    # `call_budget` below counts those logical backend calls. Overton
     # enforces a 1.2s gap per request, so per-call targets far above a page
     # turn the fan-out into mostly enforced sleep.
     #
@@ -129,7 +129,7 @@ class DepthConstants(TypedDict):
     # for revising these once rounds + arms are live.
     record_cap_per_backend: int
     round_cap: int
-    http_budget: dict[str, int]
+    call_budget: dict[str, int]
     # Deep-round-loop arm selection (017, contract rev 2.9): which of the
     # four deep-round arms run at this depth. Not applicable to "rapid" —
     # rapid's single round_cap never reaches the deep-round loop — so its
@@ -142,21 +142,21 @@ DEPTH_CONSTANTS: dict[SearchDepth, DepthConstants] = {
         "result_cap_per_backend": 50,
         "record_cap_per_backend": 50,
         "round_cap": 1,
-        "http_budget": {"openalex": 20, "overton": 5},
+        "call_budget": {"openalex": 20, "overton": 5},
         "arms": frozenset(),
     },
     "standard": {
         "result_cap_per_backend": 75,
         "record_cap_per_backend": 100,
         "round_cap": 2,
-        "http_budget": {"openalex": 30, "overton": 8},
+        "call_budget": {"openalex": 30, "overton": 8},
         "arms": frozenset({"reformulate", "diversity"}),
     },
     "deep": {
         "result_cap_per_backend": 100,
         "record_cap_per_backend": 200,
         "round_cap": ROUND_CAP,
-        "http_budget": {"openalex": 50, "overton": 15},
+        "call_budget": {"openalex": 50, "overton": 15},
         "arms": frozenset({"reformulate", "snowball", "suggest", "diversity"}),
     },
 }
@@ -1319,7 +1319,7 @@ def run_search(
         max_records: int | None = None,
         arm: ArmName | None = None,
     ) -> ExecutedCall | None:
-        backend_budget = constants["http_budget"].get(backend.name, 0)
+        backend_budget = constants["call_budget"].get(backend.name, 0)
         if http_calls_by_backend[backend.name] >= backend_budget:
             return None
         request_size = (
