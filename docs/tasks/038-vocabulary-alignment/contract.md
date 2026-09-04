@@ -32,6 +32,14 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > the primary (planning) chat is the **Task Agent**, pinned first and visually
 > distinct. The mode labels are withdrawn. V5 and V8 are rewritten to this.
 >
+> **Contract-stage adversarial review (Codex, read-only) ran 2026-09-04** at
+> `85931f3e`: 15 findings, verdict "material change needed". All 15 accepted and
+> folded (§ Adversarial findings). Material folds — one more table in the
+> migration (A1), a reversible-values rollback (A2), plan-deserialisation
+> canonicalisation (A3), the public-sharing events (A4), V8 scoped to the
+> owner with one Task Agent (A9, A10), the V11 seam pinned (A11), the live
+> relevance annotator kept (A12) — **reopen the 🛑 for owner re-approval.**
+>
 > **Owner forks F1–F5** are ruled (§ Forks). Two rulings bind the whole slice:
 > **(R1)** like-for-like word swaps in prompt text need **no** version bump and
 > **no** replay loop — the prompt hash guard is updated and the diff reviewed as
@@ -44,7 +52,7 @@ Make the words in the code, the schema, the API and the screen the same words th
 team uses ([frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md)).
 Today three vocabularies coexist: the screen says Task/Project/Evidence search, the
 code and database say `project`/`portfolio`/`evidence_base`, and the chat surface
-has no name at all. Nine numbered defects, V1–V9. **No product behaviour change**:
+has no name at all. Twelve numbered defects, V1–V12. **No product behaviour change**:
 every row, route and screen does after the slice what it did before, under a new
 name. V9 (traces group by Task), V10 (two riders from `deferred.md`), V11
 (the post-sign-in landing fix) and V12 (repo hygiene) are the non-rename items,
@@ -137,9 +145,9 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 | Ops CLI + Makefile | `rows assign --project/--portfolio`; `PROJECT`/`PORTFOLIO` vars; "moved N project(s), M portfolio(s)" | `--task/--project`; `TASK`/`PROJECT`; "moved N task(s), M project(s)" | `ops/cli.py`, `ops/commands.py`, `Makefile:42,72` |
 | Log / trace field | `project_id=` kwarg (454 sites); Langfuse metadata `project_id` | `task_id` | breaks saved Langfuse filters (§ Constraints) |
 | Langfuse session id (V9) | planning turns → planning conversation id (`routers/planning.py:419`); chat turns → chat conversation id (`chat_turns.py:927`); run start → none (`routers/runs.py` `run_plan(...)` omits `session_id`) | all three → the task id; the conversation id moves to trace metadata `conversation_id` | 3 call sites + 1 metadata key; the runner already threads `session_id` through steering, watch and continuation state |
-| Frontend routes (app router) | `/projects/:projectId[/results\|/sources\|/share\|/history]` · `/portfolios[/:portfolioId]` · 4 retired redirects | `/tasks/:taskId[/result\|/sources\|/share\|/history]` · `/projects[/:projectId]` · retired redirects dropped; legacy Task URLs per F3 | `routes.tsx`, `lifecycle.ts`, `LifecycleRoute.tsx`, 30 link sites |
-| Frontend routes (public router, 037) | `/projects/:projectId[/results\|/sources/*]` in `PublicTaskShell`; `PUBLIC_TABS = [results, sources]` | `/tasks/:taskId[/result\|/sources/*]`; `PUBLIC_TABS = [result, sources]`; legacy `/projects/:id/results` redirects (F3) | `routes.tsx` `publicRouter`, `PublicTaskShell.tsx`, `publicView.tsx`, `StashAndSplashRedirect.tsx` |
-| Public share link (037, **outward-facing**) | `ShareView.tsx:120` builds `${origin}/projects/${id}/results` | `${origin}/tasks/${id}/result` | links already copied by users break unless F3(b) |
+| Frontend routes (app router) | `/projects/:projectId[/results\|/sources\|/share\|/history]` · `/portfolios[/:portfolioId]` · 4 retired redirects | `/tasks/:taskId[/result\|/sources\|/share\|/history]` · `/projects[/:projectId]` · retired redirects dropped; no legacy redirects (F3) | `routes.tsx`, `lifecycle.ts`, `LifecycleRoute.tsx`, 30 link sites |
+| Frontend routes (public router, 037) | `/projects/:projectId[/results\|/sources/*]` in `PublicTaskShell`; `PUBLIC_TABS = [results, sources]` | `/tasks/:taskId[/result\|/sources/*]`; `PUBLIC_TABS = [result, sources]`; old public URLs stop resolving (F3) | `routes.tsx` `publicRouter`, `PublicTaskShell.tsx`, `publicView.tsx`, `StashAndSplashRedirect.tsx` |
+| Public share link (037, **outward-facing**) | `ShareView.tsx:120` builds `${origin}/projects/${id}/results` | `${origin}/tasks/${id}/result` | links copied before the deploy stop working; staging-only today, users copy a new link (F3) |
 | Frontend identifiers | `project*` 2,082 occ / 116 files · `portfolio*` 615 / 26 (incl. 037's `PublicTaskShell`, `publicView`, `publicAccess`, `PUBLIC_SHARE`) | `task*` · `project*` | collision audit first (§ Constraints) |
 | `vocabulary.ts` | `TASK`/`PROJECT` objects + the split docstring | same exports; docstring says the words now match; `LIFECYCLE_LABELS.plan → agent: "Agent"`, `results → result: "Result"` | one file |
 | User-visible "evidence base" copy | 17 production sites + `evidence-base.md` filename | per § V3 copy table | lead-owned |
@@ -153,22 +161,35 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 
 ### V1 — The Task entity is called `project` in code and schema
 
-- Schema: `project` → `task`; every `project_id` column → `task_id`; every
-  constraint and index name carrying `project` → `task` (the plan lists them all,
-  generated from `schema.py`, not typed). Composite FK guards (`fk_*_scope_project`
-  → `fk_*_scope_task`) keep their shape. The view `finding_reference_union` is
-  recreated with the new column name.
+- Schema: `project` → `task`; every `project_id` column → `task_id` (24);
+  **`project_source_snapshot` → `task_source_snapshot`** with its six
+  `project_source_snapshot_id` columns → `task_source_snapshot_id` and the
+  `uq_pss_*`/`fk_*_pss_*`/`uq_project_source_snapshot` names (A1); every
+  constraint and index name carrying `project` → `task`. The plan checks in a
+  **catalog-derived manifest** (`schema-manifest.md`, generated from
+  `schema.py` by script, not typed) listing every table, column, constraint,
+  index and view the migration touches; the migration and the round-trip test
+  are written from it. Composite FK guards (`fk_*_scope_project` →
+  `fk_*_scope_task`) keep their shape. The view `finding_reference_union` is
+  recreated with the new column name. UUID keys: no sequences;
+  `alembic_version` untouched.
 - Code: `core/schema.py`, every reader and writer, tests that match constraint
   names literally (`pytest.raises(IntegrityError, match="fk_grr_scope_project")`).
 - API: `/api/v1/projects/**` → `/api/v1/tasks/**` on all eight routers,
   including 037's `public_read_router` (the conditionally-public leg keeps its
-  auth semantics — ADR 0035 unchanged in behaviour); `ProjectCreate/Update/Out`
+  auth semantics; ADR 0036 amends ADR 0035's concrete `/projects/{id}/…` paths
+  and keeps only its relational invariant — signed-in and public viewers share
+  the *new* URL, A7); `ProjectCreate/Update/Out`
   → `TaskCreate/Update/Out`; `project_id` → `task_id` in every schema;
   `Page_TaskOut_`; `is_public` and `access` keep their names.
-- Events: new writes emit `task.renamed`/`task.archived`; SSE frame `task.updated`.
-  Readers (`readmodels/repository.py` `_EVENT_KINDS`, `routers/sse.py`) accept
-  the old kinds too, because `event_log` is append-only and existing rows keep
-  their words. Human text "Renamed the task." / "Archived the task.".
+- Events: new writes emit `task.renamed`, `task.archived`,
+  **`task.shared_publicly`, `task.unshared`** (037's public-sharing PATCH,
+  `routers/projects.py`; A4); SSE frame `task.updated`. Readers
+  (`readmodels/repository.py` `_EVENT_KINDS` and its human text,
+  `routers/sse.py`) accept both generations of all four kinds, because
+  `event_log` is append-only and existing rows keep their words. The
+  round-trip fixture seeds all four old kinds. Human text "Renamed the task." /
+  "Archived the task." / the sharing lines likewise.
 - Frontend: routes `/tasks/:taskId/**` in **both** routers (app and 037's
   public); the public share link builder (`ShareView.tsx:120`) emits
   `/tasks/{id}/result`; `useProject → useTask`, `ProjectOut →
@@ -219,8 +240,14 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
   Recorded in `deferred.md` as accepted residue with the reason.
 - **Steer-point id** `evidence_base_coverage` → `evidence_search_coverage` in
   code and in the planner prompt (R1). Stored plan payloads and pause records
-  are not rewritten; the two readers (`continuation.py`, `checkin_read.py`)
-  accept both ids, the same rule as `decided_by`.
+  are not rewritten. **Canonicalisation happens at deserialisation, not in
+  two readers** (A3): `OrchestrationPlan.model_validate` runs at ten sites
+  (run start, planning, SSE, continuation state, steering) and
+  `validate_steer_point` rejects anything outside `STEER_POINTS`, so an old
+  payload would fail before any reader saw it. Fix: a `mode="before"`
+  validator on the steer-point field maps the old id to the new one, and the
+  pause-record reader does the same through one shared helper. The round-trip
+  test seeds an old `steer_point_defaults` payload and exercises run start.
 - User-visible copy. "Evidence base" is used in three senses today. **Owner
   ruling 2026-09-04: the phrase stays for the collection of documents.** So:
   the **collection** keeps "evidence base"; the **report page** says "report";
@@ -261,9 +288,14 @@ everywhere (owner ruling F2, all three layers).
   planning composer label "Message the Task Agent".
 - Wire: `decided_by`/`authored_by` literal `"orchestrator"` → `"agent"` in
   `steering_events.py` (`DecidedBy`), the OpenAPI literal and `store/types.ts`.
-  New writes store `agent`; the read path that projects check-ins and steering
-  history normalises `orchestrator` → `agent` (one mapping, one place), because
-  `event_log` payloads are not rewritten.
+  New writes store `agent`. **One typed helper** `canonical_actor()` in
+  `steering_events.py` maps `orchestrator` → `agent` on read, and every
+  projection of a stored `decided_by`/`authored_by` goes through it: the SSE
+  steering frame (`routers/sse.py:486`), the decisions read model
+  (`readmodels/repository.py:1176`), `checkin_read.py` and `continuation.py`
+  (A5 — the first two were missing from the earlier list; both today
+  filter on a literal set that would drop `agent`). Tested through SSE and
+  REST with both values. `event_log` payloads are not rewritten.
 - Backend: modules, classes, log event names and Langfuse span names per the
   surface map (`orchestrator_*` → `agent_*`; `OrchestrationPlan` → `TaskPlan`;
   `orchestration_plan.py` → `task_plan.py`; `orchestrate.py` → `agent.py`).
@@ -337,6 +369,12 @@ words only.
   (V10) · `RunPane`/`JourneyPane` dead code (V10). New § Vocabulary holds the
   accepted residue (`eb_*` fingerprint ids, regenerated public links, Metabase
   and Langfuse filters, the Task Agent phase model).
+- ADR 0036 must record (A6, A7, A8): the narrow supersession of `prompting.md`
+  rule 12 for the enumerated word substitutions of this slice, with the hash
+  changes and the semantic-equivalence check, and that it sets no general
+  words-only precedent; the amendment of ADR 0035's concrete paths and of
+  `web-api.md`'s additive-only rule for this one break; and the narrow ADR 0002
+  exception for the owner-maintained definitions file.
 - ADR 0031: decision 2 marked **superseded by ADR 0036**; ADR 0036 written at
   step 4.
 - `docs/knowledge/`: bodies that describe current code are updated in words;
@@ -368,16 +406,24 @@ labelled "Planning", and nothing marks it as the Task's primary chat. The
 No new state is built: the Task Agent is the existing `kind = planning`
 conversation — the active one, else the most recently closed (§ Terms);
 pinning is a sort rule in `ConversationTabs`/`ChatsLibrary` (that row first,
-then chats by recency — today's order already places it first). Older closed
-planning conversations stay listed as chats are, labelled "Task Agent (closed)".
+then chats by recency — today's order already places it first). **Exactly one
+row carries the label "Task Agent"** (A10). Older closed planning lineages
+stay in the library where they are today, with the chip "Earlier plan" (copy
+under F4) and no pin. **No authorization change** (A9): the conversation
+listing is owner-relative (`web-api.md` § Conversations — each caller sees the
+conversations they created, plus legacy NULL rows if they own the Task), so a
+colleague or admin sees what they see today, under the new labels.
 Showing the overlay on the Agent tab is one condition in `AppShell` plus the
 layout check that the planning pane and the sidebar do not both render the
 planning conversation at once (the sidebar's Task Agent entry focuses the main
 pane instead of opening a second copy).
 
-- Invariant I8: on the Agent tab the chat list is visible with "Task Agent"
-  first; no user-visible chat is named "Planning"; the word "chat" is
-  unchanged everywhere else.
+- Invariant I8: for the **owner**, on the Agent tab the chat list is visible
+  with exactly one "Task Agent" pinned first (active planning row, else the
+  newest closed; a Task with several closed lineages is a test case); no
+  user-visible chat is named "Planning"; the word "chat" is unchanged
+  everywhere else. For a **non-owner** a test asserts the listed rows equal
+  today's (only labels differ).
 
 ### V9 — A Task's traces are split across sessions
 
@@ -411,9 +457,9 @@ run does.
   unread `_TransportMixin.http_calls` counter is left as it is.
 - **Delete `RunPane.tsx` and `journey/JourneyPane.tsx`** (deferred entry "dead
   code — imported by no route; re-wire or delete"). Nothing imports either
-  except their own tests, which go with them. Whatever they alone import
-  (`journey/presentation.ts` if it has no other reader) goes too; the plan's
-  collision audit lists the orphans. Owner chose delete over re-wire, so the
+  except their own tests, which go with them. `journey/presentation.ts` and
+  its tests **stay** — `runProgress.ts` imports it (A14); the plan's collision
+  audit lists any other orphan. Owner chose delete over re-wire, so the
   journey cards are not coming back in this shape. Removes four of V3's copy
   sites before the sweep.
 - Invariant I10: `grep -rn http_budget backend` is empty; `RunPane` and
@@ -432,14 +478,17 @@ both routers are module-level singletons created at import time, so the
 freshly mounted authenticated router starts from the location its history
 captured before the redirect, not from the rewritten URL. A reload recovers.
 
-- Fix shape: after the swap, navigate the mounted authenticated router to the
-  stashed path (`router.navigate(returnTo, { replace: true })`) instead of, or
-  after, the `replaceState`. The plan decides where that call lives — the
-  provider cannot import the routers without a cycle (`StashAndSplashRedirect`
-  imports the provider), so the likely home is `App.tsx` at the moment status
-  becomes `authenticated`. 036's stash-and-splash path (`StashAndSplashRedirect`
-  writes the same `AUTH_RETURN_TO_KEY`) must keep working: a signed-out visitor
-  hitting a deep link, signing in, lands on it.
+- **Seam, pinned (A11):** the callback stays the single consumer of the
+  stash — it already removes the key and rewrites the address bar with
+  `replaceState`, so by the time auth status flips the browser URL *is* the
+  stashed path. `App.tsx`, at the moment status becomes `authenticated`,
+  calls `authenticatedRouter.navigate(window.location.pathname + search +
+  hash, { replace: true })` once. No second reader of the stash, no import
+  cycle (`App.tsx` already imports both routers), and the destination is
+  same-origin by construction because it comes from `window.location`, not
+  from storage. 036's stash-and-splash path (`StashAndSplashRedirect` writes
+  the same key) keeps working unchanged: a signed-out visitor hitting a deep
+  link, signing in, lands on it.
 - Auth-adjacent, so it is reviewed as such: the step-7 security lane reads V11
   explicitly, and the live check includes one real sign-in round trip on
   staging.
@@ -475,14 +524,21 @@ and are not part of the diff.
   `journey.spec.ts`.
 - **Unused frontend exports and types** per `pnpm dlx knip@5` on `dev`
   `8626594f`: 23 exports (incl. the dead `useCreateProject` hook and the
-  duplicate `App` export), 22 exported types. Un-exported or deleted; knip is
-  re-run at the end and its output goes in `verification.md`.
+  duplicate `App` export), 22 exported types. **The plan enumerates every
+  candidate with a disposition** (un-export · delete · keep, with the
+  reference search that justifies it — tests, e2e and the dynamic imports in
+  `routes.tsx`/`main.tsx` count as consumers), pins the exact knip version
+  used (no new dependency: `pnpm dlx` and the version recorded in
+  `verification.md`), and re-runs knip, the build and `pnpm e2e` afterwards
+  (A13).
 - **Dead backend functions** (vulture ≥ 60 %, reference-checked against
-  `src` and `tests`): `chat_floor._sentence_around`,
-  `steering.resolve_unattended`, `relevance_annotator.OpenAIRelevanceAnnotatorBackend`
-  (never wired; the stub is the only backend in use). Deleted. Everything else
-  vulture flagged is either a FastAPI/pydantic false positive or production code
-  that only tests call — those go to the separate hygiene pass (§ Out of scope).
+  `src` and `tests`): `chat_floor._sentence_around` and
+  `steering.resolve_unattended`. Deleted. **`OpenAIRelevanceAnnotatorBackend`
+  stays** (A12): it is the deliberate live B2′ implementation of the
+  relevance-annotator seam (ADR 0023), unwired but documented, so it is a
+  "seam on purpose?" question for the separate hygiene pass, not debris.
+  Everything else vulture flagged is either a FastAPI/pydantic false positive
+  or production code that only tests call — also the separate pass.
 - **`scripts/scratchpad/`** (five tracked files: README, a standalone HTML
   mock, `run_live_deep.py`, two notebooks) deleted — scratch state is ignored,
   not committed (manual § 6.4). Git keeps them.
@@ -542,12 +598,21 @@ and are not part of the diff.
 
 **Gated changes this contract asks approval for** (Tier 4):
 
-1. **Schema** — one migration: `rename_table` ×4 (`project`→`task`,
-   `portfolio`→`project`, `portfolio_membership`→`project_membership`,
-   `orchestration_plan`→`plan`), column renames ×27, constraint and index
-   renames (listed in the plan), one `UPDATE capability_run SET
-   capability='evidence_search'` with the CHECK swapped, the union view
-   recreated. No shape change, no row lost. Downgrade reverses every step.
+1. **Schema** — one migration: `rename_table` ×5 (`project`→`task`,
+   `project_source_snapshot`→`task_source_snapshot`, `portfolio`→`project`,
+   `portfolio_membership`→`project_membership`, `orchestration_plan`→`plan`),
+   column renames ×32 (24 `project_id`, 6 `project_source_snapshot_id`, 2
+   `portfolio_id`), constraint and index renames (from the checked-in
+   manifest), one `UPDATE capability_run SET capability='evidence_search'`
+   with the CHECK swapped, the union view recreated. No shape change, no row
+   lost. **The downgrade reverses every step *and* every stored value the new
+   image can write in the window** (A2): `capability` back to
+   `evidence_base`; `event_type` `task.*` → `project.*`; payload
+   `decided_by`/`authored_by` `agent` → `orchestrator`; steer-point id
+   `evidence_search_coverage` → `evidence_base_coverage` in plan payloads and
+   pause records. Every value is losslessly reversible, so there is no point
+   of no return in the data; the only irreversible artefact is a public link
+   copied in the window, which is regenerated (F3).
 2. **Public interface** — `/api/v1` paths and schema names change without a
    deprecation window. `web-api.md` § Deprecations records the break by ADR
    0036; the only consumers are this repo's frontend and e2e (deferred.md).
@@ -561,8 +626,12 @@ and are not part of the diff.
 4. **Deploy posture** — the migration task runs before the new backend image;
    between the two the old image errors on renamed tables. Accepted brief
    outage on staging then production, in that order; no dual-name window.
-   Rollback = deploy the previous image and `alembic downgrade -1` (ADR 0036
-   § Rollback names the exact commands).
+   Rollback (ADR 0036 § Rollback names the exact commands): quiesce — scale
+   the API to zero so no run or turn is in flight; verify with the manifest
+   queries; `alembic downgrade -1` (which also reverses the stored values,
+   above); deploy the previous image; re-run the verification queries. Any
+   public link copied in the window is dead after rollback too and is
+   regenerated.
 
 **Mechanics the plan must honour:**
 
@@ -659,4 +728,31 @@ Review focus: a missed rename that still compiles (a `project_id` that now
 means the Project but reads a Task — the two-step order makes this possible);
 tenancy predicates renamed but not re-read (ADR 0033 tests are the guard);
 readers of stored vocabulary that do not accept the old value; a prompt edit
-that changed more than a word; anything that changed behaviour, not just a name.
+that changed more than a word; anything that changed behaviour beyond the
+enumerated deltas (routes and URLs · labels · trace grouping · sign-in landing).
+
+**Review load (A15).** Twelve items in one Tier 4 slice are reviewable only if
+the plan isolates them. The plan must give each of these its own phase and
+commit, so a reviewer can read one concern at a time: (a) ADR 0036 + the
+schema manifest · (b) the migration + the compatibility readers (A3, A4, A5) ·
+(c) the API, generated client and frontend rename · (d) V8 · (e) V9 · (f) V11 ·
+(g) V10 · (h) V12. The security lane reads (b)'s tenancy predicates and public
+read leg, and (f), as small diffs on their own. The reviewer recommended moving
+V12 to its own slice; the owner folded it, so it ships as the last, separable
+phase and can be dropped from the PR without touching the rest.
+
+## Adversarial findings (2026-09-04, Codex, contract stage)
+
+All fifteen accepted. A1 schema manifest incomplete (`project_source_snapshot`)
+· A2 rollback insufficient · A3 steer-point canonicalisation must sit at plan
+deserialisation · A4 `project.shared_publicly`/`unshared` events missing · A5
+two `decided_by` projections missing · A6 ADR 0036 must narrowly supersede
+`prompting.md` rule 12 and note that no stored value carries the
+`orchestrator_v1` family id (checked: `prompt_version` rows are component
+prompts only) · A7 contradictory redirect rows + ADR 0035 paths + `web-api.md`
+additive-only rule · A8 ADR 0002 exception for the owner-maintained definitions
+file must be recorded in ADR 0036 · A9 V8 scoped to owner, no authorization
+change · A10 exactly one Task Agent · A11 V11 seam pinned · A12 keep the live
+relevance annotator · A13 knip candidates enumerated with dispositions · A14
+keep `journey/presentation.ts` · A15 defect count, rubric 3/5/18 wording,
+phase isolation. Each is folded where it lands; this list is the index.

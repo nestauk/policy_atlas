@@ -7,13 +7,15 @@ this file does not restate them. Defect ids run V1–V12.
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes (including `drift-check`, `prompt-guard`, `okf-validate`);
        declared manual/eval checks pass.
-3. [ ] No approval-gated change snuck in unapproved — the schema migration, the `/api/v1`
-       path change and the Makefile variable names are the only gated changes, each
-       approved at the contract gate.
+3. [ ] No approval-gated change snuck in unapproved — the gated changes are the schema
+       migration (five tables), the `/api/v1` path change, the Makefile variable names, the
+       two env var names, the prompt word swaps under R1, and the auth-adjacent V11; each
+       approved at the contract gate and nothing beyond them.
 4. [ ] No generated files or secrets edited by hand (`openapi.json`, `gen/types.ts` via
        `make openapi-sync` only).
 5. [ ] No tests deleted, skipped or weakened without written justification. Every test
-       change is a renamed identifier, path or string — the diff proves it.
+       change is a renamed identifier, path or string, except the new tests V8, V9 and V11
+       add and the deletions V10/V12 justify (dead code, stale live specs) — the diff proves it.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)).
 7. [ ] Known gaps and deferred seams listed (the `eb_*` fingerprint ids, regenerated public
        links, Metabase and Langfuse filters, the phase model for the Task Agent thread →
@@ -24,9 +26,12 @@ this file does not restate them. Defect ids run V1–V12.
 
 Slice-specific:
 
-9. [ ] **V1 / I1** — the migration renames `project`→`task` with every column, constraint,
-       index and the union view; the round-trip test (upgrade → downgrade → upgrade)
-       passes; a pre-migration row reads identically under `/api/v1/tasks/{id}`.
+9. [ ] **V1 / I1** — the migration renames `project`→`task` and
+       `project_source_snapshot`→`task_source_snapshot` with every column, constraint, index
+       and the union view, from the checked-in manifest; the round-trip test (upgrade →
+       downgrade → upgrade, seeded with all four old event kinds, an old steer-point payload
+       and an `orchestrator` decision) passes and the downgrade reverses stored values; a
+       pre-migration row reads identically under `/api/v1/tasks/{id}`.
 10. [ ] **V2 / I2** — `portfolio`→`project` lands second in the same migration; the 033
         tenancy and membership tests pass with renamed identifiers only.
 11. [ ] **V3 / I3** — package `evidence_search`; `capability_run.capability` updated with
@@ -48,14 +53,16 @@ Slice-specific:
         and historical docs untouched (`git diff --stat -- docs/specs/sources docs/tasks/0[0-3]*`
         is empty except this task's folder).
 16. [ ] **V8 / I8** — the overlay copy table applied; the chat list shows on the Agent tab
-        with "Task Agent" pinned first, marked by its label only; the active planning
-        conversation is the one pinned; no chat is labelled "Planning"; chats are still
-        called chats.
+        with exactly one "Task Agent" pinned first, marked by its label only (active planning
+        row, else newest closed; older lineages read "Earlier plan"); no chat is labelled
+        "Planning"; chats are still called chats; a non-owner's list is unchanged but for
+        labels.
 17. [ ] **Collision audit** ran before the sweep and every listed collision has a recorded
         resolution; the sweep script is committed under `scripts/` and re-runnable.
-18. [ ] **No behaviour change** — no test assertion changed in meaning; the prompt diff is
-        one-to-one word swaps only (R1) and `prompt_hashes.json` is re-pinned in the same
-        commit; `uv.lock` and `pnpm-lock.yaml` unchanged.
+18. [ ] **No behaviour change beyond the enumerated deltas** (routes and URLs · labels ·
+        trace grouping · sign-in landing) — no test assertion changed in meaning; the prompt
+        diff is one-to-one word swaps only (R1) and `prompt_hashes.json` is re-pinned in the
+        same commit; `uv.lock` and `pnpm-lock.yaml` unchanged.
 19. [ ] **V9 / I9** — planning turn, run start, steering continuation and chat turn share
         `session_id` = task id (stub-client test); chat metadata carries `conversation_id`;
         one staging Task shows as one Langfuse session.
