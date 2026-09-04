@@ -55,8 +55,11 @@ export function WorkspaceView() {
     />
   );
 
-  const errorCode = (project.error as { error?: { code?: string } } | null)?.error?.code;
-  if (project.isError && errorCode === "not_found") {
+  // useProject (task 037 review fix) now throws a plain Error carrying
+  // `status`, not the API's `{error:{code}}` envelope — read the status
+  // directly rather than a `code` field that no longer exists.
+  const projectErrorStatus = (project.error as { status?: number } | null)?.status;
+  if (project.isError && projectErrorStatus === 404) {
     return <NotFoundView />;
   }
 

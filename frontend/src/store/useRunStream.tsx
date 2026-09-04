@@ -36,16 +36,23 @@ const RunStreamContext = createContext<RunStreamContextValue | null>(null);
  * Args:
  *   projectId: The open task. Changing it resets the reducer and opens a
  *     fresh connection for the new project.
+ *   connect: Whether to open the SSE connection at all. `false` for the
+ *     public task view (task 037): the events route is not on the public
+ *     read surface, so the provider stays mounted (the views' `useRunStream`
+ *     calls keep working) but holds the idle initial state and never
+ *     issues a request.
  *   children: Shell chrome and the routed task view.
  */
 export function RunStreamProvider({
   projectId,
+  connect = true,
   children,
 }: {
   projectId: string;
+  connect?: boolean;
   children: ReactNode;
 }) {
-  const state = useRunStreamConnection(projectId);
+  const state = useRunStreamConnection(projectId, connect);
   return (
     <RunStreamContext.Provider value={{ projectId, state }}>
       {children}
@@ -84,7 +91,7 @@ export function useRunStream(projectId: string): RunStreamState {
  * fresh mount/reconnect always starts from `cursor=0` — the reducer's replay
  * idempotence is what makes that safe.
  */
-function useRunStreamConnection(projectId: string): RunStreamState {
+function useRunStreamConnection(projectId: string, connect: boolean): RunStreamState {
   const auth = useAuth();
   const queryClient = useQueryClient();
 
@@ -101,6 +108,7 @@ function useRunStreamConnection(projectId: string): RunStreamState {
   }
 
   useEffect(() => {
+    if (!connect) return undefined;
     // Guards against a frame from THIS effect's connection landing after
     // its cleanup has run but before the closure is torn down — without
     // this, such a frame would fold into the next project's already-reset
@@ -150,7 +158,7 @@ function useRunStreamConnection(projectId: string): RunStreamState {
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
       connection.close();
     };
-  }, [projectId, auth, queryClient]);
+  }, [projectId, auth, queryClient, connect]);
 
   return state;
 }

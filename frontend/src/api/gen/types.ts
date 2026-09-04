@@ -375,7 +375,7 @@ export interface paths {
         };
         /**
          * Get Project
-         * @description Return one active project readable by the caller (owner or same-org colleague).
+         * @description Return one active project through its graded or redacted public leg.
          */
         get: operations["get_project_api_v1_projects__project_id__get"];
         put?: never;
@@ -894,6 +894,36 @@ export interface paths {
         get: operations["source_dossier_api_v1_projects__project_id__sources__source_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/waitlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signup
+         * @description Record a Request-access signup on the waitlist.
+         *
+         *     Args:
+         *         payload: Validated signup body.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         Minimal acknowledgement of the new row.
+         *
+         *     Raises:
+         *         ApiConflict: When the email is already on the waitlist.
+         */
+        post: operations["signup_api_v1_waitlist_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3044,8 +3074,20 @@ export interface components {
          *             identity row yet. **Never an email** (contract § 3b). `None` when
          *             the row has no owner at all (the CLI-created rows), leaving the
          *             placeholder glyph to the frontend.
+         *         is_public: Whether the owner has turned public sharing on for this
+         *             row (task 037). A property of the row, not the caller.
+         *         access: **Caller-relative**, not a property of the row: `"public"`
+         *             means this read was served by the public leg and the shape is
+         *             redacted (`owner_display = None`, `portfolio_ids = []`,
+         *             `is_owner = False`); a graded read (owner, colleague or admin)
+         *             always says `"full"`.
          */
         ProjectOut: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "full" | "public";
             /** Archived At */
             archived_at?: string | null;
             /**
@@ -3055,6 +3097,8 @@ export interface components {
             created_at: string;
             /** Is Owner */
             is_owner: boolean;
+            /** Is Public */
+            is_public: boolean;
             latest_run?: components["schemas"]["LatestRun"] | null;
             /** Name */
             name: string;
@@ -3102,15 +3146,20 @@ export interface components {
          *             leave unchanged; an explicit `null` is refused 422. Cannot be
          *             combined with `portfolio_ids` in one body — see
          *             :meth:`reject_visibility_with_portfolio`.
+         *         is_public: Owner-only public-sharing flag (task 037). Omit to leave
+         *             unchanged; an explicit `null` is refused 422 — see
+         *             :meth:`reject_nulls_without_meaning`.
          *
          *     Note:
-         *         `name` and `visibility` back NOT NULL columns, so an explicit `null`
-         *         on either is refused rather than treated as "unchanged" — see
-         *         :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`
-         *         are not: null clears the question, and null on `portfolio_ids` is
-         *         read as `[]` (unassign every portfolio).
+         *         `name`, `visibility` and `is_public` back NOT NULL columns, so an
+         *         explicit `null` on any of them is refused rather than treated as
+         *         "unchanged" — see :meth:`reject_nulls_without_meaning`. `question`
+         *         and `portfolio_ids` are not: null clears the question, and null on
+         *         `portfolio_ids` is read as `[]` (unassign every portfolio).
          */
         ProjectUpdate: {
+            /** Is Public */
+            is_public?: boolean | null;
             /** Name */
             name?: string | null;
             /** Portfolio Ids */
@@ -3631,6 +3680,57 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WaitlistSignup
+         * @description Inbound body for `POST /api/v1/waitlist`.
+         *
+         *     Args:
+         *         email: Contact address. Unique on the waitlist table.
+         *         name: Display name of the requester.
+         *         organisation: Optional organisation or employer.
+         *         role_or_reason: Free-text role and/or why they want access.
+         *         website: Leave this field empty.
+         */
+        WaitlistSignup: {
+            /** Email */
+            email: string;
+            /** Name */
+            name: string;
+            /** Organisation */
+            organisation?: string | null;
+            /** Role Or Reason */
+            role_or_reason: string;
+            /**
+             * Website
+             * @description Leave this field empty.
+             */
+            website?: string | null;
+        };
+        /**
+         * WaitlistSignupOut
+         * @description Minimal acknowledgement of a waitlist signup.
+         *
+         *     Omits organisation and role/reason so response logs do not amplify PII.
+         *
+         *     Args:
+         *         entry_id: New waitlist row id.
+         *         email: Echo of the accepted email.
+         *         created_at: Insert timestamp (UTC).
+         */
+        WaitlistSignupOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email: string;
+            /**
+             * Entry Id
+             * Format: uuid
+             */
+            entry_id: string;
         };
     };
     responses: never;
@@ -4959,6 +5059,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceDossierOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    signup_api_v1_waitlist_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WaitlistSignup"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WaitlistSignupOut"];
                 };
             };
             /** @description Validation Error */

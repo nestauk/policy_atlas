@@ -40,8 +40,17 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Product / output
 
-- **Export & sharing** — share CTAs, read-only/public links, version-pinned external deep links
+- **Export & sharing** — share CTAs, version-pinned external deep links
   back into the body (handoff §7.3). The primary surface is the tool itself.
+  **Read-only/public links DISCHARGED (task 037):** a Task's owner shares it
+  publicly from the Share tab (`project.is_public`, ADR 0035) — same URL,
+  Results + Sources only. Still deferred from that slice: portfolio-level
+  public sharing; a public index/gallery of public Tasks; a public mode for
+  the frontend mock API (`src/mock/api.ts` still serves only the signed-in
+  world, so public-view e2e journeys have no mock to run against); a shared
+  TaskNavBar — `PublicTaskShell` and `AppShell`'s public branch each build
+  the two-tab chrome by hand today (037 review finding), so chrome tweaks
+  must land twice until it is extracted.
 - **Cross-boundary traceability** — statement-to-statement cross-artefact tracing; chain-strength
   composition; chain display; version-pinned cross-artefact staleness (behind the
   addressable-span seam).
@@ -2237,6 +2246,23 @@ omissions.
   after any downgrade/re-upgrade cycle, which resets visibility), re-confirm row
   visibility with the owner — `user enrol`'s re-run re-privatises. A DB-enforced
   serialization (trigger) is the upgrade path if enrolment ever becomes frequent.
+- **Re-run: plan locked at review step** — when a re-run produces a new plan and
+  surfaces it for user review, the plan editor remains locked (same locked state as
+  during an active run). The plan should be unlocked for editing once the lifecycle
+  reaches the review/approval step, matching the initial-run behaviour. Observed
+  2026-09-03 on project `65f4e460`.
+- **Re-run: previous succeeded artefact inaccessible after later run fails** —
+  after a re-run fails (e.g. at the Writing/synthesise stage), the Results tab for
+  the earlier succeeded run becomes unreachable from the UI. The previous artefact
+  is intact in the DB but the frontend surfaces only the latest run's terminal
+  state. The read-model and Results route need to surface the last-succeeded
+  artefact when the latest run is terminal-failed. Observed 2026-09-03 on project
+  `65f4e460` (first run `99b80f91` succeeded; second run `6f0e353c` failed).
+- **Waitlist spam: WAF rate rule is the upgrade path** — the public
+  `POST /api/v1/waitlist` (task 036) is protected by field caps, one row per
+  email, and a `website` honeypot only. If real spam appears, add a
+  CloudFront/WAF rate-based rule on that path — an infra change, no app
+  code. Decided 2026-09-03 (036 review): no CAPTCHA, no in-app rate limiter.
 - **`RunPane`/`JourneyPane` are dead code** — imported by no route; 033 Phase 10c
   gated and tested them anyway, so re-wiring them inherits the affordance matrix.
   Either re-wire or delete in a later slice.

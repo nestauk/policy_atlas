@@ -85,6 +85,7 @@
   /* Nesta core palette */
   --color-blue: #0000ff; /* hero — one hero colour per layout */
   --color-navy: #0f294a; /* structural text */
+  --color-navy-muted: #c8d6e6; /* body on navy (splash) */
   --color-grey: #646363; /* secondary text (AAA on white) */
   --color-ink: #1c1c1e;
   --color-line: #e4e4e7;
@@ -98,7 +99,7 @@
   --color-orange: #ff6e47;
   --color-yellow: #fdb633;
   --color-purple: #9a1bbe;
-  --color-aqua: #97d9e3;
+  --color-aqua: #b6e3e8; /* splash / navy accent (prototype) */
   --color-violet: #a59bee;
   --color-pink: #f6a4b7;
   --color-sand: #d2c9c0;
@@ -277,14 +278,6 @@
 @layer base {
   html {
     background: var(--color-ground);
-    /* Reserve a scrollbar lane on document-scrolling pages (Tasks, Projects)
-       so the layout does not jump when the bar appears. Task views lock
-       `html` to `overflow-hidden` (AppShell); leaving the gutter on then
-       paints a dead ground strip down the right of the nav and every pane. */
-    scrollbar-gutter: stable;
-  }
-  html.overflow-hidden {
-    scrollbar-gutter: auto;
   }
   body,
   #root {

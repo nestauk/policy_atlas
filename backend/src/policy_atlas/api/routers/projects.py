@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
@@ -21,7 +22,7 @@ from policy_atlas.api.contract import (
     ProjectOut,
     ProjectUpdate,
 )
-from policy_atlas.api.deps import get_conn, get_current_user
+from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
 from policy_atlas.api.identity import owner_display_for
 from policy_atlas.api.lifecycle import archive_project, rename_project
 from policy_atlas.api.routers._access import (
@@ -31,9 +32,11 @@ from policy_atlas.api.routers._access import (
     creator_org_id,
     listing_scope,
     owner_email_filter,
+    readable_or_public_project,
     trace_admin_listing,
 )
 from policy_atlas.api.routers._common import memberships_for_projects, project_out
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     app_user,
     capability_run,
@@ -42,11 +45,15 @@ from policy_atlas.core.schema import (
     project,
 )
 
+log = structlog.get_logger()
+
 router = APIRouter(
     prefix="/api/v1/projects",
     tags=["projects"],
     dependencies=[Depends(get_current_user)],
 )
+
+public_read_router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
 
 
 @router.get("", response_model=Page[ProjectOut])
@@ -183,15 +190,21 @@ def create_project(
     return project_out(conn, row, user_id=user.user_id)
 
 
-@router.get("/{project_id}", response_model=ProjectOut)
+@public_read_router.get("/{project_id}", response_model=ProjectOut)
 def get_project(
     project_id: uuid.UUID,
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    user: Annotated[AuthenticatedUser | None, Depends(get_optional_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ProjectOut:
-    """Return one active project readable by the caller (owner or same-org colleague)."""
-    access = accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
-    return project_out(conn, access.row, user_id=user.user_id)
+    """Return one active project through its graded or redacted public leg."""
+    access = readable_or_public_project(
+        conn, project_id=project_id, user_id=None if user is None else user.user_id
+    )
+    if access.via_public:
+        return project_out(
+            conn, access.row, user_id=user.user_id if user else "", access="public"
+        )
+    return project_out(conn, access.row, user_id=user.user_id if user else "")
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -237,7 +250,7 @@ def update_project(
         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
             project that belongs to a portfolio.
     """
-    accessible_project(
+    access = accessible_project(
         conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
     )
     changes = payload.model_dump(exclude_unset=True)
@@ -264,6 +277,25 @@ def update_project(
             .where(project.c.project_id == project_id)
             .values(visibility=changes["visibility"], updated_at=datetime.now(UTC))
         )
+    # Orthogonal to visibility/portfolio membership (D1, contract § Design
+    # decisions) — no interaction with the 409/422 rules above. Only a real
+    # flip writes anything: a no-op PATCH (same value) writes neither the
+    # column nor the audit event.
+    if "is_public" in changes and bool(access.row["is_public"]) != changes["is_public"]:
+        conn.execute(
+            update(project)
+            .where(project.c.project_id == project_id)
+            .values(is_public=changes["is_public"], updated_at=datetime.now(UTC))
+        )
+        event_type = "project.shared_publicly" if changes["is_public"] else "project.unshared"
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=None,
+            event_type=event_type,
+            payload={"actor": user.user_id},
+        )
+        log.info(event_type, project_id=str(project_id), actor=user.user_id)
     if "name" in changes:
         rename_project(conn, project_id, changes.pop("name"), user.user_id)
     if "question" in changes:

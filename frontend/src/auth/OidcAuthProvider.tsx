@@ -8,13 +8,17 @@ import {
 import { AuthContext } from "./AuthContext";
 import type { AuthApi, AuthStatus } from "./types";
 
-const AUTH_RETURN_TO_KEY = "policy-atlas.auth-return-to";
+/** sessionStorage key for the path to restore after Cognito returns. */
+export const AUTH_RETURN_TO_KEY = "policy-atlas.auth-return-to";
 
 /**
  * Active when `VITE_OIDC_AUTHORITY` is set. Wraps `react-oidc-context`
  * (authorization code flow + silent refresh) behind the same `AuthApi`
  * shape as the dev-token seam — swapping in AWS Cognito later is a
  * `VITE_OIDC_*` config change, not a code change.
+ *
+ * Unauthenticated cold visits render the splash page (children). Explicit
+ * `signIn()` / mid-session `onUnauthenticated()` still redirect to Cognito.
  */
 export function OidcAuthProvider({ children }: { children: ReactNode }) {
   const authority = import.meta.env.VITE_OIDC_AUTHORITY;
@@ -39,13 +43,23 @@ export function OidcAuthProvider({ children }: { children: ReactNode }) {
         window.history.replaceState({}, document.title, returnTo ?? window.location.pathname);
       }}
     >
-      <OidcAuthAdapter>{children}</OidcAuthAdapter>
+      <OidcAuthAdapter clientId={clientId} redirectUri={redirectUri}>
+        {children}
+      </OidcAuthAdapter>
     </OidcLibProvider>
   );
 }
 
 /** Adapts `react-oidc-context`'s richer surface down to our `AuthApi` shape. */
-function OidcAuthAdapter({ children }: { children: ReactNode }) {
+function OidcAuthAdapter({
+  children,
+  clientId,
+  redirectUri,
+}: {
+  children: ReactNode;
+  clientId: string;
+  redirectUri: string;
+}) {
   const oidc = useOidcLibAuth();
 
   // `react-oidc-context`'s `oidc` object gets a new identity on every
@@ -76,8 +90,17 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
-    void oidcRef.current.signoutRedirect();
-  }, []);
+    // Cognito's /logout is not OIDC RP-Initiated Logout: it requires
+    // client_id + logout_uri. oidc-client-ts sends id_token_hint (and
+    // optionally post_logout_redirect_uri) and omits client_id, which
+    // Cognito surfaces as "Client does not exist".
+    void oidcRef.current.signoutRedirect({
+      extraQueryParams: {
+        client_id: clientId,
+        logout_uri: redirectUri,
+      },
+    });
+  }, [clientId, redirectUri]);
 
   const onUnauthenticated = useCallback(() => {
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -106,21 +129,6 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
       : "unauthenticated";
   const sub = oidc.user?.profile.sub;
 
-  // Cold-visit gating (026 live-check finding, 2026-07-28): a first
-  // unauthenticated entry previously rendered the app shell, whose queries
-  // 401'd forever with no path to sign-in — only mid-session expiry (the
-  // ReauthRedirect views) ever reached `signinRedirect`. Mirror the
-  // dev-token provider's own behaviour: the PROVIDER gates, sending cold
-  // visits straight to the hosted UI with the route preserved.
-  const shouldRedirect =
-    !oidc.isLoading && !oidc.isAuthenticated && !oidc.activeNavigator && !oidc.error;
-  useEffect(() => {
-    if (!shouldRedirect) return;
-    const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    sessionStorage.setItem(AUTH_RETURN_TO_KEY, returnTo);
-    void oidcRef.current.signinRedirect();
-  }, [shouldRedirect]);
-
   const value: AuthApi = useMemo(
     () => ({
       getAccessToken,
@@ -135,9 +143,7 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
 
   // A persistent OIDC error (e.g. a stale sign-in callback) must not mount
   // the shell tokenless — every query 401s with no visible path back to
-  // sign-in (026 live incident; the redirect gate above deliberately stands
-  // down on error to avoid a redirect loop). Surface the failure with a
-  // manual retry instead.
+  // sign-in. Surface the failure with a manual retry instead.
   if (!oidc.isAuthenticated && oidc.error) {
     return (
       <div role="alert" className="text-meta text-grey">
@@ -153,12 +159,12 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
     );
   }
 
-  // While signing in (loading, redirecting, or about to redirect) the app
-  // shell must not mount — its queries would fire tokenless and 401.
-  if (!oidc.isAuthenticated) {
+  // Initial load / code exchange / outbound redirect — keep queries from
+  // firing tokenless. Once idle and unauthenticated, children (splash) mount.
+  if (oidc.isLoading || oidc.activeNavigator) {
     return (
       <p role="status" className="text-meta text-grey">
-        Taking you to sign in…
+        {oidc.activeNavigator ? "Taking you to sign in…" : "Loading…"}
       </p>
     );
   }

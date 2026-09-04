@@ -14,13 +14,14 @@ function LocationProbe() {
   return <div data-testid="path">{location.pathname}</div>;
 }
 
-function mockProject(status: string | null, { pending = false } = {}) {
+function mockProject(status: string | null, { pending = false, access = "full" } = {}) {
   vi.mocked(queries.useProject).mockReturnValue({
     isPending: pending,
     data: pending
       ? undefined
       : {
           project_id: PROJECT_ID,
+          access,
           latest_run: status === null ? null : { status },
         },
   } as unknown as ReturnType<typeof queries.useProject>);
@@ -31,7 +32,14 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <LocationProbe />
       <Routes>
-        <Route path="/projects/:projectId" element={<div>Plan page</div>} />
+        <Route
+          path="/projects/:projectId"
+          element={
+            <LifecycleRoute tab="plan">
+              <div>Plan page</div>
+            </LifecycleRoute>
+          }
+        />
         <Route
           path="/projects/:projectId/results"
           element={
@@ -48,12 +56,27 @@ function renderAt(path: string) {
             </LifecycleRoute>
           }
         />
+        <Route
+          path="/projects/:projectId/share"
+          element={
+            <LifecycleRoute tab="share">
+              <div>Share page</div>
+            </LifecycleRoute>
+          }
+        />
         <Route path="/projects/:projectId/evidence-base" element={<RedirectToPath suffix="/results" />} />
         <Route
           path="/projects/:projectId/decisions"
           element={<RedirectToPath suffix="/history" />}
         />
-        <Route path="/projects/:projectId/history" element={<div>History page</div>} />
+        <Route
+          path="/projects/:projectId/history"
+          element={
+            <LifecycleRoute tab="history">
+              <div>History page</div>
+            </LifecycleRoute>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -103,6 +126,52 @@ describe("LifecycleRoute — a locked stage is unreachable by URL", () => {
     renderAt(`/projects/${PROJECT_ID}/results`);
     expect(screen.getByTestId("path")).toHaveTextContent(`/projects/${PROJECT_ID}/results`);
     expect(screen.queryByText("Plan page")).not.toBeInTheDocument();
+  });
+});
+
+describe("LifecycleRoute — public-leg access shows Results and Sources only (task 037)", () => {
+  it("sends a public-leg reader's Share URL to Results", () => {
+    mockProject("succeeded", { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}/share`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByText("Share page")).not.toBeInTheDocument();
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("keeps Results and Sources reachable on the public leg", () => {
+    mockProject("succeeded", { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}/sources`);
+    expect(screen.getByText("Sources page")).toBeInTheDocument();
+  });
+
+  it("opens Results on the public leg even when the run state would lock it", () => {
+    // The backend's public leg is the gate; run-state locks are an
+    // owner-side affordance and never apply to the public view.
+    mockProject(null, { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}/results`);
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("sends a public-leg reader's Plan URL to Results", () => {
+    mockProject("succeeded", { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByText("Plan page")).not.toBeInTheDocument();
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("sends a public-leg reader's History URL to Results", () => {
+    mockProject("succeeded", { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}/history`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByText("History page")).not.toBeInTheDocument();
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("does not change graded readers — Share still renders on access 'full'", () => {
+    mockProject("succeeded");
+    renderAt(`/projects/${PROJECT_ID}/share`);
+    expect(screen.getByText("Share page")).toBeInTheDocument();
   });
 });
 

@@ -908,9 +908,9 @@ def test_section_validation_accepts_a_nav_label_at_the_max_boundary() -> None:
     assert sections[0].nav_label == nav_label
 
 
-def test_section_validation_rejects_an_over_long_nav_label_without_truncating() -> None:
-    """rev 8 M5: nav_label is rejected at the boundary, never clamped."""
-    nav_label = "a" * (NAV_LABEL_MAX + 1)
+def test_section_validation_truncates_an_over_long_nav_label() -> None:
+    """Over-long nav_label is truncated with ellipsis rather than failing the run."""
+    nav_label = "a" * (NAV_LABEL_MAX + 5)
     proposal = SectionProposalWire(
         sections=[
             SectionWire(
@@ -920,10 +920,13 @@ def test_section_validation_rejects_an_over_long_nav_label_without_truncating() 
             )
         ]
     )
-    _sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
-    assert len(reasons) == 1
-    assert "nav_label_too_long" in reasons[0]
-    assert normalisations == []
+    sections, reasons, normalisations = _validate_sections(proposal, grouping_group_ids=None)
+    assert reasons == []
+    assert len(normalisations) == 1
+    assert "nav_label_truncated" in normalisations[0]
+    assert sections[0].nav_label is not None
+    assert len(sections[0].nav_label) == NAV_LABEL_MAX
+    assert sections[0].nav_label.endswith("…")
 
 
 def test_section_validation_allows_an_omitted_nav_label() -> None:

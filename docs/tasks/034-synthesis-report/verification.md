@@ -191,6 +191,14 @@ is still owed — see rubric 15). **Fixed in this pass:**
   tie-break mostly falls through to title order; the backend note ranking
   uses the real labels. Tie-break only; ranking by count agrees. Predates
   034 and S5 pins ranking as unchanged — left for a later slice.
+- **D-8 (post-build, 2026-09-03, landed on the 036 branch) — over-long
+  `nav_label` is now truncated, not rejected.** Rev 8 M5 said "rejected at
+  the boundary, never clamped"; live runs showed a display-only label
+  failing whole synthesis runs, so `_validate_sections` now truncates to
+  `NAV_LABEL_MAX` with an ellipsis and records a normalisation instead of a
+  reason. The M5 test is updated to match. Owner accepted 2026-09-03
+  (036 review discussion); rides in the 036 working tree because 034 was
+  already stacked under it.
 - **Formal review lanes** (contract verifier, `/code-review`,
   `/security-review`, adversarial/Codex, `/simplify`): **not run in this
   conversation** — Tier 3 requires the step-7 stack in a fresh conversation.

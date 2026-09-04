@@ -116,6 +116,11 @@ OWNER_EMAIL_MAX = 254
 #: enough that no present or future column can collide with it.
 _OWN_LEG = "own_leg_matched"
 
+#: Label for :func:`admin_read_leg` selected beside the row, where a query
+#: must classify which leg served it (the public-leg helper needs owner vs
+#: admin vs public — contract 037 D4 orders the graded legs first).
+_ADMIN_LEG = "admin_leg_matched"
+
 
 class Access(NamedTuple):
     """A row the caller may reach, plus the grade that reached it.
@@ -131,11 +136,14 @@ class Access(NamedTuple):
             construct unchanged. :func:`_resolve` has already emitted the
             trace line when this is true; the field exists so a caller can
             reason about the grade, not so each route can remember to log.
+        via_public: Whether the public leg reached this project. Public-leg
+            responses are redacted and never emit an admin-read trace.
     """
 
     row: RowMapping
     is_owner: bool
     via_admin: bool = False
+    via_public: bool = False
 
 
 class ReadCheck(NamedTuple):
@@ -906,6 +914,68 @@ def accessible_project(
     return _resolve(
         conn, table=project, base=base, user_id=user_id, write=write, for_update=for_update
     )
+
+
+def readable_or_public_project(
+    conn: Connection, *, project_id: uuid.UUID, user_id: str | None
+) -> Access:
+    """Resolve an active project through its read grade or the public leg.
+
+    This is the only public-leg helper. Its callers are exclusively task
+    037's eleven conditionally-public read routes; listings, cascades and all
+    other access grades deliberately do not consult ``is_public``.
+
+    Args:
+        conn: Open database connection.
+        project_id: Requested project identity.
+        user_id: The authenticated subject, or ``None`` for an anonymous
+            request with no Authorization header.
+
+    Returns:
+        The active project row, its owner status and the leg that served it.
+
+    Raises:
+        HTTPException: 404 when the row is absent, archived or unreadable.
+    """
+    base = select(project).where(
+        project.c.project_id == project_id, project.c.status == "active"
+    )
+    if user_id is None:
+        row = (
+            conn.execute(base.where(project.c.is_public.is_(true())))
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
+        return Access(row=row, is_owner=False, via_public=True)
+
+    row = (
+        conn.execute(
+            base.add_columns(
+                _own_leg_column(project, user_id),
+                admin_read_leg(user_id).label(_ADMIN_LEG),
+            ).where(
+                or_(
+                    own_estate(project, user_id),
+                    admin_read_leg(user_id),
+                    project.c.is_public.is_(true()),
+                )
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
+    if row[_OWN_LEG]:
+        return Access(row=row, is_owner=row["owner_user_id"] == user_id)
+    # Graded legs first (contract D4): an entitled admin keeps today's full
+    # read — and its trace — even when the row happens to be public.
+    if row[_ADMIN_LEG]:
+        trace_admin_read(kind="project", row_id=str(project_id), user_id=user_id)
+        return Access(row=row, is_owner=False, via_admin=True)
+    return Access(row=row, is_owner=False, via_public=True)
 
 
 def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -> Access:

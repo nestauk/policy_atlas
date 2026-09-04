@@ -1,4 +1,4 @@
-# Task contract: 037-vocabulary-alignment
+# Task contract: 038-vocabulary-alignment
 
 One implementation slice. Keep it reviewable. Boundaries are in
 [AGENTS.md](../../../AGENTS.md). Specs are in [docs/specs/](../../specs/index.md).
@@ -6,11 +6,16 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > **Status:** drafted 2026-09-04 — **awaiting owner approval**.
 > Contract approved (before planning): _pending_ ·
 > Plan approved (before implementation): _pending_ ·
-> ADR: **0035** (to be written at step 4 — retires ADR 0031 decision 2; records the
+> ADR: **0036** (to be written at step 4 — retires ADR 0031 decision 2; records the
 > `/api/v1` path break and the rollback plan).
 >
-> **Branching:** `task/037-vocabulary-alignment` from `dev` (`07df67e3`, after
-> PR #59). Not stacked.
+> **Branching:** `task/038-vocabulary-alignment` from `dev`; `origin/dev`
+> merged in at `8626594f` (2026-09-04, after PRs #61 and #64). Not stacked.
+>
+> **Renumbered 2026-09-04:** drafted as 037 / ADR 0035; the colleague's
+> `037-public-projects` (ADR 0035) merged first, so this slice is **038 / ADR
+> 0036**. That merge added a public read leg and a public share link on the
+> `project` row — both now inside this rename (§ Surface map, F3).
 >
 > **Prior ruling this slice discharges:** owner, 2026-08-24
 > ([deferred.md § Task lifecycle IA](../../deferred.md)): *"this gets its own
@@ -33,7 +38,7 @@ row, route and screen does after the slice what it did before, under a new name.
 
 ## Deliverable
 
-One PR on `task/037-vocabulary-alignment` that:
+One PR on `task/038-vocabulary-alignment` that:
 
 - Renames the `project` entity to `task` in the schema, the code, the API and the
   frontend (V1).
@@ -77,6 +82,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 - [Frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) — the source of every target word.
 - [ADR 0031](../../adr/0031-portfolio-layer-above-the-project.md) decision 2 — the split this slice retires, and why it was made (cost of the rename).
 - [ADR 0032](../../adr/0032-portfolio-membership-many-to-many.md), [ADR 0033](../../adr/0033-organisation-tenancy-and-global-admin-read.md) — the membership and tenancy rows the rename carries.
+- [ADR 0035](../../adr/0035-public-task-read-access.md) and [037-public-projects/contract.md](../037-public-projects/contract.md) — `project.is_public`, the 11-route public read leg and the public share link (`/projects/{id}/results`), all renamed here.
 - [data-model.md](../../specs/system/data-model.md) § Entity hierarchy — the paragraph that must read `task`/`project` after the slice.
 - [web-api.md](../../specs/system/web-api.md) — every route; § Deprecations, whose additive-only rule this slice breaks by ADR.
 - [prompting.md](../../specs/system/prompting.md) — why prompt text is out (§ Out of scope).
@@ -86,31 +92,33 @@ Two meanings of "task" meet in this repo. The table fixes them.
 
 ## Surface map
 
-What the slice touches, with the size measured on `dev` at `07df67e3`.
+What the slice touches, with the size measured on `dev` at `8626594f`.
 
 | Surface | Today | After | Size |
 |---|---|---|---|
-| DB table `project` (+24 `project_id` columns on 23 tables and 1 view; 5 CHECK · 11 UNIQUE · ~35 FK · 4 index names) | `project`, `project_id`, `*_project` | `task`, `task_id`, `*_task` | 1 migration; constraint names listed in the plan |
+| DB table `project` (columns incl. 037's `is_public`; +24 `project_id` columns on 23 tables and 1 view; 5 CHECK · 11 UNIQUE · ~35 FK · 4 index names) | `project`, `project_id`, `*_project` | `task`, `task_id`, `*_task` | 1 migration revising head `b2f6a9d4c1e7`; constraint names listed in the plan |
 | DB table `portfolio`, `portfolio_membership` (`portfolio_id` ×2) | | `project`, `project_membership`, `project_id` | same migration, second step |
 | `capability_run.capability` value + `ck_capr_capability` | `'evidence_base'` | `'evidence_search'` | UPDATE + CHECK swap |
 | `event_log.event_type` values | `project.renamed`, `project.archived` | `task.renamed`, `task.archived` on new writes; readers accept both | 2 writers, 3 readers |
 | JSONB payload values `decided_by`/`authored_by` | `'orchestrator'` | `'agent'` on new writes; readers normalise | `steering_events.py`, `runner.py`, `continuation.py` |
-| API paths | `/api/v1/projects/**` (22 paths) · `/api/v1/portfolios/**` (2) | `/api/v1/tasks/**` · `/api/v1/projects/**` | 7 router prefixes; `openapi.json` + `gen/types.ts` regenerated |
+| API paths | `/api/v1/projects/**` (22 paths, 11 of them with 037's conditionally-public leg) · `/api/v1/portfolios/**` (2) · `/api/v1/waitlist` (unchanged) | `/api/v1/tasks/**` · `/api/v1/projects/**` | 8 router prefixes (incl. `public_read_router`); `openapi.json` + `gen/types.ts` regenerated |
 | API schemas | `Project*` (4) · `Portfolio*` (3) · fields `project_id`, `portfolio_id`, `portfolio_ids`, `from_project_id` | `Task*` · `Project*` · `task_id`, `project_id`, `project_ids`, `from_task_id` | `task_count` stays (already right) |
 | SSE frame | `project.updated` / `ProjectUpdatedFrame` | `task.updated` / `TaskUpdatedFrame` | `contract/sse.py`, `routers/sse.py`, `sseFrame.ts` |
 | Backend package | `policy_atlas.evidence_base` (+ `tests/evidence_base`) | `policy_atlas.evidence_search` | `git mv` + import rewrite; `prompt_hashes.json` keys re-pathed, values unchanged |
-| Backend identifiers | `project*` 3,809 occ / 72 files · `portfolio*` 474 / 15 · tests 9,359 / 107 + 689 / 23 | | mechanical sweep |
+| Backend identifiers | `project*` 3,847 occ / 72 files · `portfolio*` 479 / 15 · tests ~9,400 / 110 + 689 / 23 (incl. 037's `test_public_access.py`, `test_public_flag.py`) | | mechanical sweep |
 | Ops CLI + Makefile | `rows assign --project/--portfolio`; `PROJECT`/`PORTFOLIO` vars; "moved N project(s), M portfolio(s)" | `--task/--project`; `TASK`/`PROJECT`; "moved N task(s), M project(s)" | `ops/cli.py`, `ops/commands.py`, `Makefile:42,72` |
 | Log / trace field | `project_id=` kwarg (454 sites); Langfuse metadata `project_id` | `task_id` | breaks saved Langfuse filters (§ Constraints) |
-| Frontend routes | `/projects/:projectId[/results\|/sources\|/share\|/history]` · `/portfolios[/:portfolioId]` · 4 retired redirects | `/tasks/:taskId[/result\|/sources\|/share\|/history]` · `/projects[/:projectId]` · retired redirects dropped | `routes.tsx`, `lifecycle.ts`, `LifecycleRoute.tsx`, 30 link sites |
-| Frontend identifiers | `project*` 1,870 occ / 109 files · `portfolio*` 609 / 24 | `task*` · `project*` | collision audit first (§ Constraints) |
+| Frontend routes (app router) | `/projects/:projectId[/results\|/sources\|/share\|/history]` · `/portfolios[/:portfolioId]` · 4 retired redirects | `/tasks/:taskId[/result\|/sources\|/share\|/history]` · `/projects[/:projectId]` · retired redirects dropped; legacy Task URLs per F3 | `routes.tsx`, `lifecycle.ts`, `LifecycleRoute.tsx`, 30 link sites |
+| Frontend routes (public router, 037) | `/projects/:projectId[/results\|/sources/*]` in `PublicTaskShell`; `PUBLIC_TABS = [results, sources]` | `/tasks/:taskId[/result\|/sources/*]`; `PUBLIC_TABS = [result, sources]`; legacy `/projects/:id/results` redirects (F3) | `routes.tsx` `publicRouter`, `PublicTaskShell.tsx`, `publicView.tsx`, `StashAndSplashRedirect.tsx` |
+| Public share link (037, **outward-facing**) | `ShareView.tsx:120` builds `${origin}/projects/${id}/results` | `${origin}/tasks/${id}/result` | links already copied by users break unless F3(b) |
+| Frontend identifiers | `project*` 2,082 occ / 116 files · `portfolio*` 615 / 26 (incl. 037's `PublicTaskShell`, `publicView`, `publicAccess`, `PUBLIC_SHARE`) | `task*` · `project*` | collision audit first (§ Constraints) |
 | `vocabulary.ts` | `TASK`/`PROJECT` objects + the split docstring | same exports; docstring says the words now match; `LIFECYCLE_LABELS.plan → agent: "Agent"`, `results → result: "Result"` | one file |
 | User-visible "evidence base" copy | 17 production sites + `evidence-base.md` filename | per § V3 copy table | lead-owned |
 | Leaked literals | 18 hard-coded Task/Project strings (§ V6 list) | routed through `vocabulary.ts` | |
 | Agent overlay | `aria-label="Project chat"`, FAB "Open chat"/"Chat", tabs "Planning" + chats, library "Chats" | § V8 copy table | `ChatSidePanel`, `ConversationTabs`, `ChatsLibrary` |
 | e2e | `/projects/`, "Results", "Read the evidence base", "evidence base" ×22 | new words | 6 specs |
 | Living docs | `specs/capabilities/evidence-base/`, `data-model.md`, `web-api.md`, `index.md`, `deferred.md`, `knowledge/` | § V7 | |
-| **Do not change** | `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · `evidence_base_coverage` stored steer-point id · every prompt's text · `orchestration_plan` table · `orchestrator_*` backend modules, env vars, span names (F2 default) · `docs/specs/sources/**` · historical docs | | |
+| **Do not change** | `waitlist_entry` (036) · `is_public` column name and the `access` read field (037; only their table moves) · `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · `evidence_base_coverage` stored steer-point id · every prompt's text · `orchestration_plan` table · `orchestrator_*` backend modules, env vars, span names (F2 default) · `docs/specs/sources/**` · historical docs | | |
 
 ## Defects
 
@@ -123,13 +131,18 @@ What the slice touches, with the size measured on `dev` at `07df67e3`.
   recreated with the new column name.
 - Code: `core/schema.py`, every reader and writer, tests that match constraint
   names literally (`pytest.raises(IntegrityError, match="fk_grr_scope_project")`).
-- API: `/api/v1/projects/**` → `/api/v1/tasks/**`; `ProjectCreate/Update/Out` →
-  `TaskCreate/Update/Out`; `project_id` → `task_id` in every schema; `Page_TaskOut_`.
+- API: `/api/v1/projects/**` → `/api/v1/tasks/**` on all eight routers,
+  including 037's `public_read_router` (the conditionally-public leg keeps its
+  auth semantics — ADR 0035 unchanged in behaviour); `ProjectCreate/Update/Out`
+  → `TaskCreate/Update/Out`; `project_id` → `task_id` in every schema;
+  `Page_TaskOut_`; `is_public` and `access` keep their names.
 - Events: new writes emit `task.renamed`/`task.archived`; SSE frame `task.updated`.
   Readers (`readmodels/repository.py` `_EVENT_KINDS`, `routers/sse.py`) accept
   the old kinds too, because `event_log` is append-only and existing rows keep
   their words. Human text "Renamed the task." / "Archived the task.".
-- Frontend: routes `/tasks/:taskId/**`; `useProject → useTask`, `ProjectOut →
+- Frontend: routes `/tasks/:taskId/**` in **both** routers (app and 037's
+  public); the public share link builder (`ShareView.tsx:120`) emits
+  `/tasks/{id}/result`; `useProject → useTask`, `ProjectOut →
   TaskOut`, `mockProject → mockTask`, `ProjectSettingsMenu → TaskSettingsMenu`,
   and so on; query-key prefix `"projects"` → `"tasks"`.
 - Ops CLI and Makefile: `--task`, `TASK`.
@@ -245,7 +258,10 @@ bypasses the one place copy is maintained. Route each through `TASK`/`PROJECT`
 or a named `COPY` key: `NotFoundView:10`, `AppShell:70,88,89,113,128,165,176,
 186,349`, `ShareView:44`, `VisibilityControl:14`, `errors.ts:19,26,32`,
 `historyPresentation:46,47`, `PlanningPane:98`, `ChatSidePanel:132`,
-`decisionsPresentation:9`, `WorkspaceView:24` (tab title), `runProgress:280`.
+`decisionsPresentation:9`, `WorkspaceView:24` (tab title), `runProgress:280`,
+and 037's `PUBLIC_SHARE.warning` ("this Task's results…" → `TASK.one`,
+"results" → "result and sources" in prose) plus `AppShell`'s public-branch
+`NavBar aria-label="Task"`.
 Fixture prose (`mock/fixtures.ts:43,111`, `mock/api.ts:247`) is updated in
 words only.
 
@@ -259,13 +275,13 @@ words only.
   (entity → table → route → TS type) and the two-senses-of-task rule. Listed in
   `index.md` and its routing table.
 - `data-model.md` § Entity hierarchy, `web-api.md` (every path, § Deprecations
-  gains the 037 entry), `execution-orchestration.md` and `plan-as-object.md`
+  gains the 038 entry), `execution-orchestration.md` and `plan-as-object.md`
   where they name the row, `index.md`, `AGENTS.md`, `docs/agentic-ops/harness.md`
   where it names routes.
 - `docs/deferred.md`: the rename entry and the ops-CLI entry marked discharged;
   new § Vocabulary holding the accepted residue (V3 kept ids, F2 internals,
   bookmarks per F3).
-- ADR 0031: decision 2 marked **superseded by ADR 0035**; ADR 0035 written at
+- ADR 0031: decision 2 marked **superseded by ADR 0036**; ADR 0036 written at
   step 4.
 - `docs/knowledge/`: bodies that describe current code are updated in words;
   **filenames are OKF ids and do not change** (`coverage-base-project-pool-wide.md`,
@@ -303,16 +319,16 @@ refactor with no user-visible gain and stays out.
 |---|---|---|---|
 | **F1** | Rename the DB and code at all, or only the API + screen? | (a) full rename, schema included (this contract) · (b) API + frontend only, `vocabulary.ts` stays the mapping | **(a)** — the owner's 2026-08-24 ruling and this ask both say schema; (b) leaves the split ADR 0031 made and keeps every new reader learning it. |
 | **F2** | How far does `orchestrator` → `agent` reach in the backend? | (a) screen + wire only (default) · (b) also modules, classes, log/span names · (c) also env vars + `orchestration_plan` table | **(a)** — (b) is 468 occurrences for no user gain and breaks Langfuse history; (c) is a production-config change. Upgrade later if the word keeps hurting. |
-| **F3** | Old URLs: `/projects/:id` now means a Project; a bookmarked Task URL with the same shape lands on "not found". | (a) no redirect logic; beta users re-bookmark (default) · (b) `ProjectDetailView` on 404 retries the id as a task and redirects | **(a)** — the owner's ruling already accepted the break; (b) is ~15 lines and cheap if wanted. |
+| **F3** | Old URLs: `/projects/:id` now means a Project; a bookmarked Task URL with the same shape lands on "not found". **Since 037, `/projects/{id}/results` is also the public share link people copy and send outside the app.** | (a) no redirect logic; users re-share · (b) legacy redirects: `/projects/:id/(results\|sources/*\|share\|history)` → `/tasks/:id/…` in both routers (these paths have no Project counterpart, so the redirect is unambiguous), and bare `/projects/:id` retries the id as a Task on a Project 404 | **(b)** — changed from (a) after 037 merged: a public link is outward-facing and may already be in someone's email. About 20 lines; recorded in ADR 0036 with a removal date. |
 | **F4** | Mode copy (V8): "Questions" for chats? "AGENT" as the running eyebrow? "Report" for the artefact page (V3 table)? | approve the tables · edit words in place | approve — copy-text principle: labels over explainers. |
-| **F5** | Open PRs #61 (splash page, 33 src files), #62 (Langfuse sessions, 7), #52 (in-app feedback, 19) will conflict with the sweep. | (a) merge them first, then branch 037 from the result · (b) land 037 first; they rebase with the sweep script re-run | **(a)** for #61 and #62 if they are days away; otherwise (b) — the plan ships the sweep as a re-runnable script exactly so a rebase is one command. |
+| **F5** | Open PRs #62 (Langfuse sessions, 7 src files) and #52 (in-app feedback, 19) will conflict with the sweep. (#61 merged 2026-09-04 and is now inside this branch.) | (a) merge them first, then re-merge `dev` here · (b) land 038 first; they rebase with the sweep script re-run | **(a)** if they are days away; otherwise (b) — the plan ships the sweep as a re-runnable script exactly so a rebase is one command. |
 
 ## Scope / Out of scope
 
 - **In:** everything in § Surface map; one alembic revision (pure rename + one
   UPDATE); `make openapi-sync`; the sweep script committed under `scripts/`
   (re-runnable, so open branches can rebase); tests renamed in lockstep; e2e
-  specs; `frontend/src/mock/*`; ops CLI; Makefile vars; living docs; ADR 0035.
+  specs; `frontend/src/mock/*`; ops CLI; Makefile vars; living docs; ADR 0036.
 - **Out:** **Links** and **Context** as data-model concepts (the definitions name
   them; nothing implements them — the chat's single `entry_artefact_id` is not a
   set; building either is a feature slice). Any new tab content (Share stays as
@@ -337,13 +353,14 @@ refactor with no user-visible gain and stays out.
    No shape change, no row lost. Downgrade reverses every step.
 2. **Public interface** — `/api/v1` paths and schema names change without a
    deprecation window. `web-api.md` § Deprecations records the break by ADR
-   0035; the only consumers are this repo's frontend and e2e (deferred.md).
+   0036; the only consumers are this repo's frontend and e2e (deferred.md).
 3. **Production config** — none under F2(a). `Makefile` variable names for the
    ops CLI change (`PROJECT`→`TASK`, `PORTFOLIO`→`PROJECT`).
-4. **Deploy posture** — the migration task runs before the new backend image;
+4. **Deploy posture** — public share links minted on production before this
+   deploy change shape (F3). The migration task runs before the new backend image;
    between the two the old image errors on renamed tables. Accepted brief
    outage on staging then production, in that order; no dual-name window.
-   Rollback = deploy the previous image and `alembic downgrade -1` (ADR 0035
+   Rollback = deploy the previous image and `alembic downgrade -1` (ADR 0036
    § Rollback names the exact commands).
 
 **Mechanics the plan must honour:**
@@ -398,7 +415,8 @@ open PR's merge order makes the branch unrebasable; or the budget is spent.
 - `make verify` green — includes `okf-validate`, backend tests, `drift-check`,
   `prompt-guard`, `audit-paths`, frontend typecheck/lint/test/build.
 - Migration round-trip test: `upgrade` → `downgrade` → `upgrade` on the test DB
-  against a seeded pre-migration fixture (a task in a project, one
+  against a seeded pre-migration fixture (a task in a project, one of them
+  `is_public`, one
   `capability_run` with `'evidence_base'`, one `project.renamed` event, one
   check-in decided by `orchestrator`); after upgrade the read models return the
   same content under the new names (I1, I2, I4).
@@ -406,8 +424,9 @@ open PR's merge order makes the branch unrebasable; or the budget is spent.
 - `pnpm e2e` (mock-mode journey) green with the new words and routes (I5, I8).
 - **Live check, scoped:** on staging after the migration, one existing Task
   opens on `/tasks/{id}` with its report, sources and history intact; its
-  Project lists it on `/projects/{id}`; the ops CLI `rows assign --task`
-  dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
+  Project lists it on `/projects/{id}`; one public Task opens signed-out on
+  `/tasks/{id}/result` and its pre-rename link `/projects/{id}/results`
+  redirects there (F3); the ops CLI `rows assign --task` dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
 - `pip-audit`/deps unchanged: `uv.lock` and `pnpm-lock.yaml` diff empty.
 
 ## Verification evidence expected

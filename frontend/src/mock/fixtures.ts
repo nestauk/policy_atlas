@@ -29,6 +29,10 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
+  // Task 037 public sharing: the mock's task starts unshared, read at the
+  // full grade — mock mode signs in as the owner.
+  is_public: false,
+  access: "full",
   // Assigned to `mockPortfolio` below so `GET /projects?portfolio_id=` has a
   // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
   portfolio_ids: [MOCK_PORTFOLIO_ID],

@@ -33,6 +33,7 @@ import { Chip, type ChipProps } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { LIFECYCLE_PAGE_CLASS, READING_COLUMN_MAX_W } from "./listPageChrome";
+import { usePublicView } from "./publicView";
 import {
   ContentsSidebar,
   FullReportExpandAllButton,
@@ -1299,9 +1300,16 @@ function MostRelevantSources({
  *  while synthesis writes. */
 export function ArtefactView() {
   const { projectId = "" } = useParams();
+  const isPublicView = usePublicView();
   const project = useProject(projectId);
   const artefact = useArtefact(projectId);
-  const chats = useConversations(projectId, { kind: "chat", status: "active" });
+  // The public view (task 037) must issue only public-surface requests:
+  // conversations stay unfetched and the chat affordance below is hidden.
+  const chats = useConversations(
+    projectId,
+    { kind: "chat", status: "active" },
+    { enabled: !isPublicView },
+  );
   const { create } = useConversationMutations(projectId);
   // Cited-scoped distributions for the facts strip: study types and years
   // count what the report CITES, not the whole included corpus (owner,
@@ -1535,13 +1543,15 @@ export function ArtefactView() {
             })}
           </div>
         )}
-        <button
-          type="button"
-          onClick={() => void askAboutAnalysis()}
-          className="print-hide mt-3 text-caption font-bold text-blue hover:underline"
-        >
-          Ask about this analysis
-        </button>
+        {!isPublicView && (
+          <button
+            type="button"
+            onClick={() => void askAboutAnalysis()}
+            className="print-hide mt-3 text-caption font-bold text-blue hover:underline"
+          >
+            Ask about this analysis
+          </button>
+        )}
         {/* Coverage banner removed (owner, 2026-07-29): the adequacy verdict
             surfaces where it matters — inside each gap claim's detail. */}
       </header>

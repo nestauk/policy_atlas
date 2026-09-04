@@ -1,4 +1,4 @@
-# Rubric: 037-vocabulary-alignment
+# Rubric: 038-vocabulary-alignment
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is in
 progress, not done. Terms and defect ids V1–V8 are defined in [contract.md](contract.md);
@@ -15,7 +15,7 @@ this file does not restate them.
 5. [ ] No tests deleted, skipped or weakened without written justification. Every test
        change is a renamed identifier, path or string — the diff proves it.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)).
-7. [ ] Known gaps and deferred seams listed (the V3 kept ids, F2 internals, F3 bookmarks,
+7. [ ] Known gaps and deferred seams listed (the V3 kept ids, F2 internals, F3 legacy redirects,
        Metabase → [docs/deferred.md](../../deferred.md) § Vocabulary).
 8. [ ] Required review stack ran for Tier 4 (contract verifier · code/security review ·
        adversarial at contract, plan and code · simplification) — findings in
@@ -39,7 +39,7 @@ Slice-specific:
 14. [ ] **V6 / I6** — the eighteen leaked literals route through `vocabulary.ts`; the
         literal grep is clean.
 15. [ ] **V7 / I7** — `docs/specs/system/vocabulary.md` exists and is indexed; data-model
-        and web-api specs updated; ADR 0031 decision 2 marked superseded; ADR 0035
+        and web-api specs updated; ADR 0031 decision 2 marked superseded; ADR 0036
         Accepted with rollback commands; `deferred.md` entries discharged; frozen sources
         and historical docs untouched (`git diff --stat -- docs/specs/sources docs/tasks/0[0-3]*`
         is empty except this task's folder).

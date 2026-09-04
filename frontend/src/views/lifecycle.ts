@@ -64,6 +64,27 @@ export function lifecycleTabs(base: string, status: RunStatus | null | undefined
 }
 
 /**
+ * The two tabs the public (link-shared) task view exposes — task 037.
+ * One list, shared with `LifecycleRoute`'s public gate so the nav and the
+ * gate cannot drift apart.
+ */
+export const PUBLIC_TABS: readonly LifecycleTab[] = ["results", "sources"];
+
+/**
+ * The public tab set as nav items. Both stay open regardless of run state:
+ * the backend's public read leg is the gate, and an empty Results page
+ * renders its shaped absence.
+ */
+export function publicLifecycleTabs(base: string) {
+  return PUBLIC_TABS.map((tab) => ({
+    tab,
+    label: LIFECYCLE_LABELS[tab],
+    to: `${base}${TAB_PATHS[tab]}`,
+    locked: false,
+  }));
+}
+
+/**
  * Where a task row in the tasks list should land.
  *
  * One destination per state, never a generic detail page: a finished task

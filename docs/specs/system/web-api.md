@@ -3,7 +3,7 @@ type: System contract
 title: Web API
 description: The /api/v1 surface — resources, error envelope, pagination, SSE event vocabulary, auth boundary. One schema generates both ends; additive-only evolution.
 tags: [system, api, sse, auth, contract]
-timestamp: 2026-08-25
+timestamp: 2026-09-04
 ---
 
 # System contract — Web API (`/api/v1`)
@@ -28,11 +28,34 @@ here — never a parallel version.
 OIDC/JWT bearer verification on every data route (`Authorization: Bearer`);
 `user_id` = token `sub`, the **only** claim any request path reads.
 RS256 against the issuer JWKS (Cognito-shaped; dev issuer = local keypair,
-visibly non-production). Unauthenticated: `/healthz` (liveness,
-process-only) and `/readyz` only. 401 carries `WWW-Authenticate: Bearer`.
+prod = Cognito, visibly non-production). Unauthenticated requests get a
+uniform `401 unauthenticated` envelope with `WWW-Authenticate: Bearer`.
 No cookies; no CSRF machinery by construction. **Tokens never appear in
 query strings** — SSE clients authenticate via fetch-stream with the bearer
 header.
+
+**Public write exception:** `POST /api/v1/waitlist` is intentionally
+unauthenticated (splash-page Request access). Health probes
+(`GET /healthz`, `GET /readyz`) also sit outside the bearer boundary.
+
+**Conditionally-public reads (task 037, ADR 0035).** Exactly eleven GET
+routes accept a request with **no `Authorization` header**:
+`GET /projects/{id}` plus the read-model routes `funnel` · `landscape` ·
+`groups` · `evidence` · `findings` · `sources/{source_id}` · `artefact` ·
+`coverage` · `citations/{citation_key}/context` ·
+`chunks/{chunk_id}/context`. Anonymous means the raw header is absent —
+a present header that does not authenticate (bad token, wrong scheme,
+malformed value) is still 401. The anonymous read succeeds only when the
+project has `is_public = true` and `status = 'active'`; anything else is
+the standard indistinguishable 404. Signed-in callers keep the graded
+read first and fall back to the same public check, so a public row is
+readable by any authenticated user too — in the **redacted shape**
+(`access = "public"`, see § Projects). `is_public` plays no part in
+listings, portfolio reads, or the colleague and admin legs; a read
+served by the public check is not an admin read and is never traced as
+one. `decisions` (History) stays behind the bearer token. The
+conformance suite pins this three-class boundary (always-401 ·
+conditionally-public · public write).
 
 **Tenancy (task 033, ADR 0033).** Users belong to at most one organisation
 (`app_user.org_id`, ops-assigned). Access resolves through one graded
@@ -91,7 +114,8 @@ Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 `planning_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
 `no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
 project's visibility while it is in a portfolio — change the portfolio's
-visibility, or leave the project out of it) · 422 `validation_error`
+visibility, or leave the project out of it) | **`already_registered`**
+(waitlist email already present) · 422 `validation_error`
 (Pydantic detail list under `details`, assert on `loc`/`type` not `msg`;
 also the code for a non-admin passing `owner_email` and for a PATCH body
 carrying both `visibility` and `portfolio_ids` — not a third semantic) ·
@@ -111,6 +135,19 @@ artefact, groups) are whole-object.
 
 ## Resources
 
+### Waitlist
+
+Splash-page **Request access** intake. Public — no bearer token.
+
+- `POST /api/v1/waitlist` `{email, name, organisation?, role_or_reason,
+  website?}` → 201 `{entry_id, email, created_at}`. Email is lower-cased and
+  unique (`409 already_registered` on conflict). Organisation is optional;
+  blank becomes null. Response omits organisation and role/reason. `website`
+  is a honeypot (hidden on the form): any non-empty value gets a fake 201
+  and stores nothing. No admin list/export in v1 — ops query the
+  `waitlist_entry` table directly. Enrolment into Cognito remains the ops
+  CLI path (task 033), not an auto-promote from this table.
+
 ### Projects
 
 - `GET /api/v1/projects` — paginated, tenancy-scoped (`scope=all|mine`,
@@ -125,15 +162,24 @@ artefact, groups) are whole-object.
   the creator's `org_id` (NULL for an unenrolled creator) and
   `visibility='private'` (the column default — new work is unshared until
   its owner shares it; owner amendment 2026-08-26).
-- `GET /api/v1/projects/{id}` → project (read grade).
-- `PATCH /api/v1/projects/{id}` `{name?, question?, visibility?}` —
-  partial, owner-only; rename emits a transactional `project.renamed`
-  audit event. `visibility` on a project in a portfolio is 409
-  `visibility_conflict`; a body carrying both `visibility` and
+- `GET /api/v1/projects/{id}` → project (read grade, or the public leg —
+  § Auth boundary). A public-leg read returns the **redacted shape**:
+  `access = "public"`, `is_owner = false`, `owner_display = null`,
+  `portfolio_ids = []`; graded reads carry `access = "full"`.
+- `PATCH /api/v1/projects/{id}` `{name?, question?, visibility?,
+  is_public?}` — partial, owner-only; rename emits a transactional
+  `project.renamed` audit event. `visibility` on a project in a portfolio
+  is 409 `visibility_conflict`; a body carrying both `visibility` and
   `portfolio_ids` is 422 (the two orderings differ). An explicit
-  `null` on a NOT NULL column (`name`, `visibility` — here and on
-  `PATCH /portfolios/{id}`) is 422 rather than a 500; nulls that mean
-  something (`question`, `description`, `portfolio_ids`) still work.
+  `null` on a NOT NULL column (`name`, `visibility`, `is_public` — here
+  and on `PATCH /portfolios/{id}`) is 422 rather than a 500; nulls that
+  mean something (`question`, `description`, `portfolio_ids`) still work.
+  `is_public` (task 037) is orthogonal to `visibility` and to portfolio
+  membership — no cascade, no conflict rule; a real flip emits
+  `project.shared_publicly` / `project.unshared` in the same
+  transaction, and a same-value PATCH emits nothing. Turning it off (or
+  archiving) revokes anonymous access on the next request — the public
+  leg is a row check, not a token.
 - `POST /api/v1/projects/{id}/archive` → idempotent archive (soft-delete:
   hidden from default listings, rows retained; `project.archived` audit
   event on first archive only). 409 `run_active` while a run is executing
@@ -152,7 +198,11 @@ when no run exists. `null` and `0` differ: `null` means the question has not
 been asked, `0` means a run asked and none are Included), and — task 033 —
 `visibility` (`org|private`), `is_owner` (caller-relative), and
 `owner_display` (the owner's `display_name`, else a `sub` rendering,
-**never the email**; `null` for ownerless rows).
+**never the email**; `null` for ownerless rows). Task 037 adds
+`is_public` (the public-sharing flag) and `access` (`full|public`,
+caller-relative): `"public"` marks a read served by the public leg and
+therefore redacted — it is the one bit the frontend uses to render the
+two-tab public view instead of the full shell.
 
 ### Portfolios
 
