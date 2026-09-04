@@ -461,10 +461,11 @@ the impeccable state directory, the `c4-demo` worktree and `demo-live-run`
 branch, the private `docs/verification/`) are removed by the owner outside git
 and are not part of the diff.
 
-- **AGENTS.md** rewritten at the design phase (this commit): the protocol as it
-  was, a landmine list where every line names its source, and a three-line
-  current-phase pointer. The 266-line slice history is deleted; git and
-  `docs/tasks/` hold it. Kept under 60 lines.
+- **AGENTS.md** rewritten at the design phase (done, `d3d7a47e`): the protocol
+  as it was and a landmine list where every line names its source. The
+  § Current phase section is gone with its 266-line slice history: the branch
+  name and this file's Status line are the pointer, and git and `docs/tasks/`
+  hold the history. 51 lines.
 - **Stale live e2e** — `frontend/e2e/live-027.spec.ts`, `live-027b.spec.ts`,
   `live-028.spec.ts` and `playwright.live-027.config.ts`,
   `playwright.live-028.config.ts` deleted (1,439 lines; slice-specific live
@@ -493,7 +494,7 @@ and are not part of the diff.
   (`infra/DEPLOYMENT.md`, three task docs) are updated.
 - **`.gitignore`** gains `.cursor/hooks.json`, `.github/hooks/`, `.impeccable/`
   (a local plugin's runtime state; it must not be committed).
-- Invariant I12: AGENTS.md ≤ 60 lines; knip reports no unused files, exports or
+- Invariant I12: AGENTS.md ≤ 60 lines with no phase state; knip reports no unused files, exports or
   types outside `src/api/gen/`; vulture at 80 % reports only the known
   pydantic/`cls` false positives; `git ls-files scripts/scratchpad
   docs/tasks/029-search-volume-cap docs/tasks/030-multi-round-search JUMPBOX.md`
