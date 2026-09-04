@@ -251,6 +251,23 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
             "backend_scope": "grey_lit_only",
             "scope_constraints": {"author_affiliation_countries": ["GB"]},
         },
+        # 038 APO test mod: publisher_source is mutually exclusive with
+        # geography constraints and requires the grey-lit-only backend.
+        {
+            "scope_constraints": {
+                "publisher_country": "UK",
+                "publisher_source": "apo",
+            }
+        },
+        {
+            "backend_scope": "academic_only",
+            "scope_constraints": {"publisher_source": "apo"},
+        },
+        {
+            "backend_scope": "both",
+            "scope_constraints": {"publisher_source": "apo"},
+        },
+        {"scope_constraints": {"publisher_source": "xyz"}},
     ],
 )
 def test_fail_closed_validation(overrides: dict[str, Any]) -> None:
@@ -655,6 +672,17 @@ def test_author_affiliation_countries_flow_to_openalex_wire_filter_string() -> N
     wire = openalex_wire_params(validated.get("openalex"))
 
     assert wire == {"filter": "authorships.countries:GB|US"}
+
+
+def test_publisher_source_compiles_to_overton_filter_block() -> None:
+    """038 APO test mod: publisher_source="apo" compiles to a bare overton
+    block, and the plan validates with backend_scope grey_lit_only."""
+    plan = _plan(
+        backend_scope="grey_lit_only",
+        scope_constraints={"publisher_source": "apo"},
+    )
+
+    assert plan.scope_constraints.to_filters() == {"overton": {"publisher_source": "apo"}}
 
 
 def test_empty_scope_constraints_omit_filters_key() -> None:

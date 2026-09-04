@@ -101,6 +101,7 @@ _OVERTON_ALLOWED_WIRE_KEYS = frozenset(
         "source_country",
         "source_region",
         "language",
+        "source",
     }
 )
 _PROTECTED_OVERTON_PARAMS = frozenset({"squery", "min_similarity", "format", "pp", "api_key"})

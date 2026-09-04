@@ -1098,3 +1098,95 @@ def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
             json={"geography": "Not a real country"},
         )
         assert response.status_code == 422
+
+
+@pytest.mark.parametrize("token", ["APO", "Australian Policy Online"])
+def test_patch_plan_apo_geography_token_sets_publisher_source(
+    tmp_path: Path, token: str
+) -> None:
+    """038 APO test mod: the geography box accepts "APO" / "Australian Policy
+    Online" (case-insensitive) when Sources is grey literature only."""
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = _approve_stub_plan(client, owner)
+        patched = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": token},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+
+
+def test_patch_plan_apo_geography_422s_unless_grey_lit_only(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = _approve_stub_plan(client, owner)
+        response = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"geography": "APO"},
+        )
+        assert response.status_code == 422
+
+
+def test_patch_plan_apo_then_country_geography_clears_publisher_source(
+    tmp_path: Path,
+) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = _approve_stub_plan(client, owner)
+        apo = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        assert apo.status_code == 200, apo.text
+        assert apo.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+
+        patched = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"geography": "France"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
+
+
+def test_patch_plan_apo_then_backend_scope_both_clears_publisher_source(
+    tmp_path: Path,
+) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        project_id = _approve_stub_plan(client, owner)
+        apo = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        assert apo.status_code == 200, apo.text
+        assert apo.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+
+        patched = client.patch(
+            f"/api/v1/projects/{project_id}/plan",
+            headers=owner,
+            json={"backend_scope": "both"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None

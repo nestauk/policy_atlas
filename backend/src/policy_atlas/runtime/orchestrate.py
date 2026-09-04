@@ -624,6 +624,7 @@ def build_plan(
         "published_after",
         "published_before",
         "publisher_country",
+        "publisher_source",
         "author_affiliation_countries",
     ):
         if key in data:

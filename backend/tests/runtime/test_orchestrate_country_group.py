@@ -78,3 +78,22 @@ def test_custom_country_group_render_uses_custom_count_and_authorship() -> None:
 
     assert "Country group: Nordic countries (3 countries, planner-proposed)" in render
     assert "NO" not in render
+
+
+def test_publisher_source_survives_the_draft_to_plan_round_trip() -> None:
+    """038 APO test mod: build_plan folds the flat publisher_source draft
+    field into scope_constraints."""
+    draft = PlanDraftWire(
+        title="APO-only review",
+        question="What evidence exists on scoped policy outcomes?",
+        backend_scope="grey_lit_only",
+        publisher_source="apo",
+        search_effort="rapid",
+        analysis_depth="landscape",
+        components=["characterise"],
+        steering_mode="moderate",
+    )
+
+    plan = _build_plan(draft)
+
+    assert plan.scope_constraints.publisher_source == "apo"

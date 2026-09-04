@@ -227,6 +227,10 @@ def test_validate_scope_filters_full_example_both_backends() -> None:
         ({"openalex": {"types": ["article"]}}, ["overton"]),
         # shared sdgs must be single-valued when Overton is in scope
         ({"shared": {"sdgs": [3, 4]}}, ["openalex", "overton"]),
+        # 038 APO test mod: publisher_source is pinned to "apo" only
+        ({"overton": {"publisher_source": "xyz"}}, ["overton"]),
+        # a fully-unknown overton key still raises
+        ({"overton": {"totally_unknown_key": "x"}}, ["overton"]),
     ],
 )
 def test_validate_scope_filters_fail_closed(
@@ -285,6 +289,18 @@ def test_source_country_post_filter_validates_but_never_maps_to_wire() -> None:
 
     assert validated["overton"] == {"source_country_post_filter": ["UK", "France"]}
     assert to_wire_params("overton", validated["overton"]) == {}
+
+
+def test_validate_scope_filters_accepts_publisher_source_apo() -> None:
+    """038 APO test mod: publisher_source="apo" validates and maps to
+    source=apo on the Overton wire."""
+    validated = validate_scope_filters(
+        {"overton": {"publisher_source": "apo"}},
+        backend_names=["overton"],
+    )
+
+    assert validated["overton"] == {"publisher_source": "apo"}
+    assert to_wire_params("overton", validated["overton"]) == {"source": "apo"}
 
 
 def test_openalex_country_filter_variants_split_after_100_codes() -> None:
