@@ -1690,7 +1690,7 @@ def _project_card_claims(
 
 
 def _weakly_grounded(payload: Any) -> bool | None:
-    """Project stored grounding warnings without inventing a verification result."""
+    """Map stored grounding warnings without inventing a verification result."""
     if not isinstance(payload, Mapping):
         return None
     for key in ("weakly_grounded", "quote_unverified"):
@@ -1846,7 +1846,7 @@ def _uuid_members(values: Any) -> list[uuid.UUID]:
 def _resolved_theme_sources(
     member_ids: Any, source_refs: Mapping[uuid.UUID, ThemeSourceOut]
 ) -> list[ThemeSourceOut] | None:
-    """Project resolvable member sources once, preserving stored member order."""
+    """Map resolvable member sources once, preserving stored member order."""
     if not isinstance(member_ids, list):
         return None
     result: list[ThemeSourceOut] = []

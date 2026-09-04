@@ -42,6 +42,43 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   532 tests); `pnpm e2e` 11 passed. Backend `make verify-fast` run by the lead
   before commit (g).
 
+### Phase 2 — sweep tool (`deep-reasoner`)
+
+- `scripts/rename_038.py` (stdlib): word-sequence tokeniser with positional case
+  transfer; step 1 / step 2 as disjoint rule sets; per-file collision check;
+  a per-checkout ledger (`scripts/.rename_038_state.json`, gitignored) for
+  idempotence plus a fresh-clone guard (`--apply` refuses on a tree that already
+  looks swept unless `--force`). Unit test `backend/tests/scripts/test_rename_038.py`.
+- Scan tables committed: `scan-backend.md` (290 files, 219 to change, 17,225
+  replacements, 479 renames, 0 collisions), `scan-frontend.md` (210 files, 113 to
+  change, 2,256 replacements, 75 renames, 2 collisions — below). **Both identifier
+  tables reviewed and approved by the lead before Phase 3.**
+- **Lead rulings on the scan (D1 unmapped list and D4):**
+  - Two frontend collisions, one of them unpredicted by D4: `useCreatePortfolio →
+    useCreateProject` (the dead `useCreateProject` still owns the name — its
+    deletion moves from Phase 8 to a Phase 4 pre-step, so that one V12 item is no
+    longer droppable; flagged deviation from P5) and `PortfoliosView.tsx`'s local
+    `projects` → `tasks` (already declared; hand pre-renamed to `tasksQuery`).
+  - `oplan` infix → `plan` added as a step-1 rule (contract V4 names the targets).
+  - `Orchestration*` prose (64 comment/docstring sites): word table applied
+    post-sweep — "orchestration plan" → "task plan" (matches `TaskPlan`),
+    "orchestration step" → "plan step", "Runtime orchestration layer" → "Runtime
+    layer", generic engineering uses (clustering engine, 3 sites) → "coordination".
+  - Accepted tool divergences from D2's whole-file reading: copy modules and
+    prompt files are exempt at the *string-literal* level (their identifiers and
+    imports must still move or I4 fails and imports break); exact `Task`/`Tasks`/
+    `Project`/`Projects` are never-mapped in the frontend (screen vocabulary in
+    prose, verified 69 sites); a docstring-initial verb "Project a/the/…" guard,
+    with the two determiner-less verb sites in `repository.py` reworded by hand
+    to "Map …".
+  - Prompt files: every string literal (incl. the `orchestrator_v1` family id) is
+    left to the lead's 3.3 pass; the family id becomes `agent_v1` (A6: no stored
+    row carries it).
+  - File renames beyond the plan's six `git mv`s, found by the dry run:
+    `api/contract/{projects,portfolios}.py`, `api/routers/{projects,portfolios}.py`,
+    their router tests, `tests/runtime/test_orchestrat*.py`, `test_orchestration_plan*.py`,
+    `frontend/src/views/PortfoliosView.{tsx,test.tsx}` — done in 3.1 / 4.1.
+
 ## Commands run
 
 | Command | Result | Notes |
