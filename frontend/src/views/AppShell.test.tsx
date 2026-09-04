@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./AppShell";
 import { SITE_DISCLAIMER } from "./AppFooter";
@@ -27,7 +27,7 @@ const meState = vi.hoisted(() => ({
     is_admin: false,
   },
 }));
-const projectState = vi.hoisted(() => ({ isOwner: true }));
+const projectState = vi.hoisted(() => ({ isOwner: true, access: "full" }));
 
 vi.mock("../api/queries", () => ({
   useMe: () => ({ data: meState.data }),
@@ -38,6 +38,7 @@ vi.mock("../api/queries", () => ({
           name: "Acme project",
           visibility: "org",
           is_owner: projectState.isOwner,
+          access: projectState.access,
         }
       : undefined,
   }),
@@ -336,5 +337,40 @@ describe("AppShell — global chrome, continued", () => {
     expect(screen.getByRole("heading", { name: "Privacy notice" })).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Terms of use" }));
     expect(screen.getByRole("heading", { name: "Terms of use" })).toBeInTheDocument();
+  });
+});
+
+describe("AppShell — public-leg access renders the two-tab view (task 037)", () => {
+  beforeEach(() => {
+    projectState.isOwner = false;
+    projectState.access = "public";
+  });
+  afterEach(() => {
+    projectState.isOwner = true;
+    projectState.access = "full";
+  });
+
+  it("shows only Results and Sources in the task nav for a public-leg reader", () => {
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    const links = Array.from(taskNav.querySelectorAll("a")).map((a) => a.textContent);
+    expect(links).toEqual(["Results", "Sources"]);
+  });
+
+  it("does not mount the chat side panel on the public leg", () => {
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByLabelText("Project chat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open chat")).not.toBeInTheDocument();
+  });
+
+  it("keeps the five-tab shell for graded readers", () => {
+    projectState.access = "full";
+    projectState.isOwner = true;
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    const labels = Array.from(taskNav.querySelectorAll("a, [aria-disabled]")).map(
+      (el) => el.textContent,
+    );
+    expect(labels).toHaveLength(5);
   });
 });

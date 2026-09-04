@@ -12,7 +12,8 @@ import { cn } from "../ui/brand/cn";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs } from "./lifecycle";
+import { PublicViewProvider } from "./publicView";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
@@ -278,6 +279,10 @@ export function AppShell() {
   // polling covers a reconnect gap so lifecycle locking stays honest.
   const project = useProject(projectId ?? "", { pollWhileRunning: true });
   const base = projectId === undefined ? null : `/projects/${projectId}`;
+  // Public-leg access (task 037): a signed-in outsider reading a public Task
+  // gets the same two-tab view as an anonymous visitor — no chat, no SSE,
+  // no Plan/Share/History (their URLs redirect in LifecycleRoute).
+  const publicAccess = project.data?.access === "public";
   // Outside a task, check all projects so the nav logo animates even when the
   // user has navigated away. Cost: one list fetch when the shell mounts (once
   // per session — AppShell is the layout route), plus useProjects's own 15s
@@ -288,7 +293,7 @@ export function AppShell() {
       ? project.data?.latest_run?.status === "running"
       : (allProjects.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
-  const showChatPanel = base !== null && !inWorkspace;
+  const showChatPanel = base !== null && !inWorkspace && !publicAccess;
   // With a chat open beside the view, the two columns scroll independently —
   // the workspace's own two-pane behaviour (fixed viewport height, each
   // column owns its scroll). Closed, the page keeps its normal scroll.
@@ -372,7 +377,10 @@ export function AppShell() {
           </div>
           <LifecycleBar
             hint={COPY.lockedHint}
-            items={lifecycleTabs(base, project.data?.latest_run?.status).map((item) =>
+            items={(publicAccess
+              ? publicLifecycleTabs(base)
+              : lifecycleTabs(base, project.data?.latest_run?.status)
+            ).map((item) =>
               item.tab === "plan" && hasPendingCheckIn
                 ? {
                     ...item,
@@ -447,11 +455,18 @@ export function AppShell() {
     <ToastProvider>
       <TooltipProvider delayDuration={200}>
         <TitleMarkerProvider active={hasPendingCheckIn}>
-          {projectId !== undefined ? (
-            <RunStreamProvider projectId={projectId}>{shellChrome}</RunStreamProvider>
-          ) : (
-            shellChrome
-          )}
+          <PublicViewProvider value={publicAccess}>
+            {projectId !== undefined ? (
+              // `connect` flips false once a public-leg read identifies the
+              // Task (the events route is not on the public surface); for
+              // entitled readers it stays true and nothing changes.
+              <RunStreamProvider projectId={projectId} connect={!publicAccess}>
+                {shellChrome}
+              </RunStreamProvider>
+            ) : (
+              shellChrome
+            )}
+          </PublicViewProvider>
         </TitleMarkerProvider>
       </TooltipProvider>
     </ToastProvider>

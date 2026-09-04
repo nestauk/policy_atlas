@@ -21,6 +21,15 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   const project = useProject(projectId ?? "");
 
   if (project.isPending || project.data === undefined) return null;
+  // Public-leg access (task 037): a signed-in outsider reading a public Task
+  // gets Results and Sources only — every other tab's URL lands on Results,
+  // mirroring the anonymous public view. The run-state locks below never
+  // apply on this leg: they are an owner-side affordance, and the public
+  // pages render their own shaped absence when a run has not finished.
+  if (project.data.access === "public") {
+    if (tab === "results" || tab === "sources") return <>{children}</>;
+    return <Navigate to={`/projects/${projectId}/results`} replace />;
+  }
   if (!isTabOpen(tab, project.data.latest_run?.status)) {
     return <Navigate to={`/projects/${projectId}`} replace />;
   }

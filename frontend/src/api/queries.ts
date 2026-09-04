@@ -398,8 +398,13 @@ export function usePlanningTurns(projectId: string, query?: PageQuery) {
 }
 
 /** `GET /api/v1/projects/{project_id}/conversations` — the project chat and
- * planning-conversation library. */
-export function useConversations(projectId: string, query?: ConversationQuery) {
+ * planning-conversation library. `options.enabled` lets the public task view
+ * (task 037) keep the hook mounted without issuing the non-public request. */
+export function useConversations(
+  projectId: string,
+  query?: ConversationQuery,
+  options?: { enabled?: boolean },
+) {
   const client = useApiClient();
   return useQuery({
     queryKey: queryKeys.conversations(projectId, query),
@@ -410,7 +415,7 @@ export function useConversations(projectId: string, query?: ConversationQuery) {
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(projectId) && (options?.enabled ?? true),
   });
 }
 

@@ -16,6 +16,7 @@ import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { PrivacyView } from "./views/legal/PrivacyView";
 import { TermsView } from "./views/legal/TermsView";
+import { PublicTaskShell } from "./views/PublicTaskShell";
 import { SplashView } from "./views/splash/SplashView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
 import { RequireAuth } from "./routes/RequireAuth";
@@ -33,11 +34,41 @@ function LandscapeFallback() {
   );
 }
 
-/** Logged-out marketing + legal routes (no AppShell). */
+/** The Sources sub-tree, shared verbatim by the authenticated app and the
+ *  public task view (task 037) — same paths, same components. */
+const sourcesChildren = [
+  { index: true, element: <ThemesView /> },
+  {
+    path: "landscape",
+    element: (
+      <Suspense fallback={<LandscapeFallback />}>
+        <LandscapeView />
+      </Suspense>
+    ),
+  },
+  { path: "all", element: <SourcesView /> },
+  { path: "findings", element: <FindingsView /> },
+];
+
+/** Logged-out marketing + legal routes (no AppShell), plus the public task
+ *  view (task 037): the same `/projects/…` URLs render Results and Sources
+ *  for a public Task; anything else under the task redirects to Results,
+ *  and a non-public Task falls through to stash-and-splash inside
+ *  `PublicTaskShell`. */
 export const publicRouter = createBrowserRouter([
   { path: "/", element: <SplashView /> },
   { path: "/privacy", element: <PrivacyView /> },
   { path: "/terms", element: <TermsView /> },
+  {
+    path: "/projects/:projectId",
+    element: <PublicTaskShell />,
+    children: [
+      { index: true, element: <RedirectToPath suffix="/results" /> },
+      { path: "results", element: <ArtefactView /> },
+      { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
+      { path: "*", element: <RedirectToPath suffix="/results" /> },
+    ],
+  },
   { path: "*", element: <StashAndSplashRedirect /> },
 ]);
 
@@ -56,7 +87,17 @@ export const authenticatedRouter = createBrowserRouter([
           { path: "/privacy", element: <PrivacyView /> },
           { path: "/terms", element: <TermsView /> },
 
-          { path: "/projects/:projectId", element: <WorkspaceView /> },
+          {
+            path: "/projects/:projectId",
+            element: (
+              // Plan is open at every run state; the wrapper exists for the
+              // public-leg gate (task 037) — a signed-in outsider on a
+              // public Task lands on Results, never the Plan.
+              <LifecycleRoute tab="plan">
+                <WorkspaceView />
+              </LifecycleRoute>
+            ),
+          },
           {
             path: "/projects/:projectId/results",
             element: (
@@ -72,19 +113,7 @@ export const authenticatedRouter = createBrowserRouter([
                 <SourcesLayout />
               </LifecycleRoute>
             ),
-            children: [
-              { index: true, element: <ThemesView /> },
-              {
-                path: "landscape",
-                element: (
-                  <Suspense fallback={<LandscapeFallback />}>
-                    <LandscapeView />
-                  </Suspense>
-                ),
-              },
-              { path: "all", element: <SourcesView /> },
-              { path: "findings", element: <FindingsView /> },
-            ],
+            children: sourcesChildren,
           },
           {
             path: "/projects/:projectId/share",
