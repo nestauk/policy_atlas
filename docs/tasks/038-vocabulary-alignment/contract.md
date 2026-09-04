@@ -704,12 +704,18 @@ open PR's merge order makes the branch unrebasable; or the budget is spent.
   same content under the new names (I1, I2, I4).
 - Invariant greps I3 and I6 run as a script in `verification.md`.
 - `pnpm e2e` (mock-mode journey) green with the new words and routes (I5, I8).
-- **Live check, scoped:** on staging after the migration, one existing Task
-  opens on `/tasks/{id}` with its report, sources and history intact; its
-  Project lists it on `/projects/{id}`; one public Task opens signed-out on
-  `/tasks/{id}/result` from a freshly copied link (F3: no redirects); one
-  sign-in round trip from a task deep link lands on that deep link (V11); the
-  ops CLI `rows assign --task` dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
+- **Live check, scoped, in two parts** (staging deploys only on merge, so
+  the staging half cannot precede the PR — plan-review P11). *Pre-merge,
+  local:* `make dev` + `make fe-api-smoke` against the local API — one Task
+  through Agent → Result → Sources → Share → History, its Project, one
+  signed-out public Task URL, one sign-in round trip from a deep link (V11).
+  *Post-merge, before the production promote, on staging:* one existing Task
+  opens on `/tasks/{id}` with report, sources and history intact; its Project
+  lists it on `/projects/{id}`; one public Task opens signed-out from a
+  freshly copied link (F3: no redirects); one sign-in round trip; the ops CLI
+  `rows assign --task` dry-runs; `make fe-api-smoke` against staging.
+  Recorded as a dated addendum to `verification.md` in a docs-only commit on
+  `dev`. No full live e2e.
 - `pip-audit`/deps unchanged: `uv.lock` and `pnpm-lock.yaml` diff empty.
 
 ## Verification evidence expected

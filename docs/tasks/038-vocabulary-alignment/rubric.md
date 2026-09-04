@@ -51,7 +51,9 @@ Slice-specific:
         and web-api specs updated; ADR 0031 decision 2 marked superseded; ADR 0036
         Accepted with rollback commands; `deferred.md` entries discharged; frozen sources
         and historical docs untouched (`git diff --stat -- docs/specs/sources docs/tasks/0[0-3]*`
-        is empty except this task's folder).
+        is empty except this task's folder and the three `JUMPBOX.md` link edits in
+        `docs/tasks/030-rds-jumpbox/verification.md`, `033-organisations/plan.md` and
+        `033-organisations/verification.md` — V12).
 16. [ ] **V8 / I8** — the overlay copy table applied; the chat list shows on the Agent tab
         with exactly one "Task Agent" pinned first, marked by its label only (active planning
         row, else newest closed; older lineages read "Earlier plan"); no chat is labelled
@@ -75,5 +77,10 @@ Slice-specific:
 22. [ ] **V12 / I12** — AGENTS.md ≤ 60 lines; knip and vulture outputs recorded and clean as
         I12 states; the listed files are gone from `git ls-files`; `infra/JUMPBOX.md` and its
         referrers updated; the ignore entries present.
-23. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
-        ops CLI dry-run, `make fe-api-smoke`) and the Metabase follow-up is named in the PR.
+23. [ ] **Live checks**: pre-merge, the local check (`make dev` + `make fe-api-smoke` against
+        the local API: one Task through its five tabs, its Project, one signed-out public URL,
+        one sign-in round trip) is in `verification.md`; post-merge and before the production
+        promote, the staging check (one existing Task, its Project, one fresh public link, one
+        sign-in round trip, `rows assign --task` dry run, `make fe-api-smoke`) is a dated
+        addendum to `verification.md` on `dev`; the Metabase and Langfuse follow-ups are named
+        in the PR.
