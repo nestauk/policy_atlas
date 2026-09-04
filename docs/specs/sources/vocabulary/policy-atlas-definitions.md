@@ -28,6 +28,8 @@ Presently we are considering the following **Capabilities:**
 * **Meta-analysis** [planned]: free-form synthesis building on existing Tasks and Artefacts, to produce summaries and briefings
 * **Critical review** [planned]: allow user to upload existing policy proposals and scrutinise them, eg check evidence coverage or assumptions
 
+**Evidence base:** the collection of documents collected by an Evidence search. The word stays: "evidence base" names the collected sources, "Evidence search" names the capability, and the synthesised output is the report (owner ruling, 2026-09-04).
+
 **Capability Components (Components):** an internal backend concept. Components carry out specific processing steps of a Capability (eg, search, screening, evidence type classification), can be combined in different ways, and generate Artefacts (such as synthesis reports or screened source lists) that then form a Task's Artefacts. They can modify and enable different gradations/variations of a Capability, such as extractions component only running on Evidence search runs with "Detailed report" enabled.
 
 **Task:** a single use of a Capability, that generates Artefacts (eg, a report, source list) and organises them across "tabs" such as Results and Sources

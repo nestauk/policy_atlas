@@ -72,6 +72,8 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **task NNN** (process) | A numbered engineering slice (`docs/tasks/NNN-*`, "task 033"). Unchanged by this slice. In code comments "(task 022)" means this. The sweep must not touch these. |
 | **Project** (product) | A collection of Tasks. Today the code row `portfolio`; after this slice the code row `project`. |
 | **Capability** | A type of analysis. One exists: **Evidence search**, code key today `evidence_base`, after this slice `evidence_search`. |
+| **Evidence base** | The collection of documents an Evidence search collects. **The phrase stays on screen in that sense** (owner ruling 2026-09-04). It stops being used for the capability and for the report. |
+| **Report** | The synthesised artefact on the Result tab (034's word). Copy that says "evidence base" but means this page changes to "report". |
 | **Component** | A backend processing step of a capability (search, screen, extract, …). Unchanged. |
 | **Agent** | The screen name for the planning/steering/Q&A surface. Backend name today `orchestrator`. See fork F2 for how far the code follows. |
 | **Agent overlay** | The chat sidebar (`ChatSidePanel.tsx`), today `aria-label="Project chat"`, shown on every tab but Plan. After the slice: shown on every tab including Agent. |
@@ -199,33 +201,34 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
   `eb_icf_base_v1`; steer-point id `evidence_base_coverage` (in
   `orchestration_plan.payload`, pause records and the planner's JSON-schema
   description). Recorded in `deferred.md` as accepted residue with the reason.
-- User-visible copy. "Evidence base" is used in two senses today: the
-  **capability** (→ "Evidence search") and the **body of evidence / the report**
-  (→ "report" or "evidence", never "evidence search"). Lead-owned copy table,
-  binding:
+- User-visible copy. "Evidence base" is used in three senses today. **Owner
+  ruling 2026-09-04: the phrase stays for the collection of documents.** So:
+  the **collection** keeps "evidence base"; the **report page** says "report";
+  the **capability / run** says "evidence search". Lead-owned copy table,
+  binding (rows marked *keep* change nothing):
 
 | Site | Today | After |
 |---|---|---|
 | `ArtefactView` heading, tab title, loading/failed copy | "Evidence base" / "Loading the evidence base" / "The evidence base couldn't be loaded." | "Report" / "Loading the report" / "The report couldn't be loaded." |
-| `ArtefactView:148` sparsity note | "The evidence base is thin here — …" | "The evidence is thin here — …" |
+| `ArtefactView:149` sparsity note | "The evidence base is thin here — …" | *keep* (collection) |
 | `ArtefactView:1128` partial banner | "…evidence base. Citations were never attached…" | "…report. Citations were never attached…" |
 | `SourcesView`, `sourcesPresentation`, `journey/presentation:26` | "Cited in the evidence base" | "Cited in the report" |
-| `journey/presentation:48,49`, `runProgress:49` | "The evidence base is ready [with gaps]" | "The report is ready [with gaps]" |
+| `journey/presentation:48,49`, `runProgress:49` | "The evidence base is ready [with gaps]" | *keep* (collection; the run's output as a whole) |
 | `JourneyPane:204`, `runProgress:313` | "Read the evidence base" | "Read the report" |
-| `ContextBar`, `ChatsLibrary` chip | "Evidence base" | "Report" |
-| `ChatMessages:114`, backend `chat_backend.py:97`, `continuation.py:1113` | "The evidence base does not hold this." | "The evidence does not hold this." (same shape for the other two) |
-| backend `stage_vocabulary.py:27` | "Writing the evidence base" | "Writing the report" |
-| backend `steering.py:773` | "The evidence base looks right" | "The evidence looks right" |
-| backend `steering.py:1338` | "this will ADD TO your evidence base" | "this will ADD TO your evidence" |
+| `ContextBar`, `ChatsLibrary` chip (the chat's entry artefact) | "Evidence base" / "Clear evidence base context" | "Report" / "Clear report context" |
+| `ChatMessages:114`, backend `chat_backend.py:97`, `continuation.py:1113` | "The evidence base does not hold this." / "…material on this question." / "theme is not in this evidence base" | *keep* (collection) |
+| backend `stage_vocabulary.py:27` (synthesise stage) | "Writing the evidence base" | "Writing the report" |
+| backend `steering.py:773`, `:1338` | "The evidence base looks right" / "this will ADD TO your evidence base" | *keep* (collection) |
 | backend `repository.py:1128–1138` | "…an evidence-base step." / "Opened an evidence-base run." | "…an evidence-search step." / "Opened an evidence-search run." |
-| `mock/api.ts:751`, `mock/fixtures.ts:418` | "Preparing a decision-ready evidence base" | "Preparing a decision-ready report" |
+| `mock/api.ts:751`, `mock/fixtures.ts:418` | "Preparing a decision-ready evidence base" | *keep* (collection) |
 | `artefactPresentation.ts:485` download fallback | `evidence-base.md` | `report.md` |
 | `routes.tsx:102` retired redirect `/evidence-base` | exists | dropped with the other retired redirects |
 
-- Invariant I3: `grep -ri "evidence base\|evidence_base\|evidence-base"` over
-  `backend/src`, `frontend/src`, `frontend/e2e`, `docs/specs` (excluding
-  `sources/`) returns only the kept ids above and `docs/specs/index.md`'s
-  frozen-source lines.
+- Invariant I3: `grep -r "evidence_base\|evidence-base"` over `backend/src`,
+  `frontend/src`, `frontend/e2e`, `docs/specs` (excluding `sources/`) returns
+  only the kept ids above and `docs/specs/index.md`'s frozen-source lines; and
+  every remaining "evidence base" in user-visible copy is a *keep* row of the
+  table (the build lists them in `verification.md`).
 
 ### V4 — The orchestrator surface has no screen name
 

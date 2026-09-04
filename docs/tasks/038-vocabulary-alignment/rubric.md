@@ -29,8 +29,9 @@ Slice-specific:
 10. [ ] **V2 / I2** — `portfolio`→`project` lands second in the same migration; the 033
         tenancy and membership tests pass with renamed identifiers only.
 11. [ ] **V3 / I3** — package `evidence_search`; `capability_run.capability` updated with
-        the CHECK swapped; the copy table applied verbatim; the invariant grep is clean
-        except the kept ids; `prompt_hashes.json` values unchanged (keys re-pathed).
+        the CHECK swapped; the copy table applied verbatim ("evidence base" kept for the
+        collection, "report" for the page, "evidence search" for the capability); the
+        identifier grep is clean except the kept ids; `prompt_hashes.json` values unchanged (keys re-pathed).
 12. [ ] **V4 / I4** — no user-visible "orchestrator"; wire literal `agent`; a
         pre-migration `orchestrator` decision renders "The Agent decided" (read-side
         normalisation, no `event_log` rewrite).
