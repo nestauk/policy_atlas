@@ -32,12 +32,13 @@ team's definitions (frozen source
 `orchestration_plan` → `plan` table, and the prompt text — **owner ruling R1:
 like-for-like prompt word swaps need no version bump or replay**); tabs
 Agent · Result · Sources · Share · History; the pinned **Task Agent** primary
-chat. **Tier 4** — table renames + a public-API path change (`/api/v1/tasks`,
+chat; **V9** (owner rider): every Langfuse trace of a Task shares one session id
+= the task id. **Tier 4** — table renames + a public-API path change (`/api/v1/tasks`,
 `/api/v1/projects`) + ADR 0036 + rollback plan. No legacy redirects (public
 sharing is staging-only); 038 lands before open PRs #62/#52.
 Discharges the owner ruling of 2026-08-24 (`docs/deferred.md` § Task
-lifecycle IA) and retires ADR 0031 decision 2 (the screen/code split). Eight
-numbered defects V1–V8 and the owner forks F1–F5 are in
+lifecycle IA) and retires ADR 0031 decision 2 (the screen/code split). Nine
+numbered defects V1–V9 and the owner forks F1–F5 are in
 `docs/tasks/038-vocabulary-alignment/contract.md`. **Renumbered from 037 on
 2026-09-04** after `037-public-projects` merged first. The rename now also
 covers 037's public read leg and moves the public share link from

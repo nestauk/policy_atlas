@@ -2,7 +2,7 @@
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is in
 progress, not done. Terms and defect ids V1–V8 are defined in [contract.md](contract.md);
-this file does not restate them.
+this file does not restate them. Defect ids run V1–V9.
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes (including `drift-check`, `prompt-guard`, `okf-validate`);
@@ -56,5 +56,8 @@ Slice-specific:
 18. [ ] **No behaviour change** — no test assertion changed in meaning; the prompt diff is
         one-to-one word swaps only (R1) and `prompt_hashes.json` is re-pinned in the same
         commit; `uv.lock` and `pnpm-lock.yaml` unchanged.
-19. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
+19. [ ] **V9 / I9** — planning turn, run start, steering continuation and chat turn share
+        `session_id` = task id (stub-client test); chat metadata carries `conversation_id`;
+        one staging Task shows as one Langfuse session.
+20. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
         ops CLI dry-run, `make fe-api-smoke`) and the Metabase follow-up is named in the PR.

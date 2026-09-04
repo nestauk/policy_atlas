@@ -44,8 +44,9 @@ Make the words in the code, the schema, the API and the screen the same words th
 team uses ([frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md)).
 Today three vocabularies coexist: the screen says Task/Project/Evidence search, the
 code and database say `project`/`portfolio`/`evidence_base`, and the chat surface
-has no name at all. Eight numbered defects, V1–V8. **No behaviour change**: every
-row, route and screen does after the slice what it did before, under a new name.
+has no name at all. Nine numbered defects, V1–V9. **No product behaviour change**:
+every row, route and screen does after the slice what it did before, under a new
+name. V9 is the one non-rename item (owner, 2026-09-04): traces group by Task.
 
 ## Deliverable
 
@@ -61,6 +62,7 @@ One PR on `task/038-vocabulary-alignment` that:
 - Routes the leaked hard-coded Task/Project literals through the copy module (V6).
 - Updates the living docs, writes the glossary spec, amends ADR 0031 (V7).
 - Shows a Task's chats in the Agent tab with the **Task Agent** pinned first (V8).
+- Groups every Langfuse trace of a Task under one session id, the task id (V9).
 
 Shipped = `make verify` green (which includes `drift-check` and `prompt-guard`),
 the migration applied to staging, and one live smoke of the renamed chain
@@ -89,7 +91,8 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
 | **Frozen** | `docs/specs/sources/**` — not rewritten by the sweep (ADR 0002). The one exception is the owner-maintained definitions file, which the owner edits directly. |
 | **Historical** | Merged task docs (`docs/tasks/001–034`), ADRs 0001–0034, `docs/verification/`. Not rewritten (012 precedent). |
-| **V1–V8** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
+| **V1–V9** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
+| **Session** | Langfuse's grouping of traces. Set by passing `session_id` into the tracing helpers (`core/tracing.py` `_session_scope`). Today: the conversation id for planning and chat turns, nothing for runs. |
 | **F1–F5** | Owner forks at this gate. |
 
 ## Read first
@@ -128,6 +131,7 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 | Backend identifiers | `project*` 3,847 occ / 72 files · `portfolio*` 479 / 15 · tests ~9,400 / 110 + 689 / 23 (incl. 037's `test_public_access.py`, `test_public_flag.py`) | | mechanical sweep |
 | Ops CLI + Makefile | `rows assign --project/--portfolio`; `PROJECT`/`PORTFOLIO` vars; "moved N project(s), M portfolio(s)" | `--task/--project`; `TASK`/`PROJECT`; "moved N task(s), M project(s)" | `ops/cli.py`, `ops/commands.py`, `Makefile:42,72` |
 | Log / trace field | `project_id=` kwarg (454 sites); Langfuse metadata `project_id` | `task_id` | breaks saved Langfuse filters (§ Constraints) |
+| Langfuse session id (V9) | planning turns → planning conversation id (`routers/planning.py:419`); chat turns → chat conversation id (`chat_turns.py:927`); run start → none (`routers/runs.py` `run_plan(...)` omits `session_id`) | all three → the task id; the conversation id moves to trace metadata `conversation_id` | 3 call sites + 1 metadata key; the runner already threads `session_id` through steering, watch and continuation state |
 | Frontend routes (app router) | `/projects/:projectId[/results\|/sources\|/share\|/history]` · `/portfolios[/:portfolioId]` · 4 retired redirects | `/tasks/:taskId[/result\|/sources\|/share\|/history]` · `/projects[/:projectId]` · retired redirects dropped; legacy Task URLs per F3 | `routes.tsx`, `lifecycle.ts`, `LifecycleRoute.tsx`, 30 link sites |
 | Frontend routes (public router, 037) | `/projects/:projectId[/results\|/sources/*]` in `PublicTaskShell`; `PUBLIC_TABS = [results, sources]` | `/tasks/:taskId[/result\|/sources/*]`; `PUBLIC_TABS = [result, sources]`; legacy `/projects/:id/results` redirects (F3) | `routes.tsx` `publicRouter`, `PublicTaskShell.tsx`, `publicView.tsx`, `StashAndSplashRedirect.tsx` |
 | Public share link (037, **outward-facing**) | `ShareView.tsx:120` builds `${origin}/projects/${id}/results` | `${origin}/tasks/${id}/result` | links already copied by users break unless F3(b) |
@@ -363,6 +367,26 @@ pane instead of opening a second copy).
   first; no user-visible chat is named "Planning"; the word "chat" is
   unchanged everywhere else.
 
+### V9 — A Task's traces are split across sessions
+
+Owner observation 2026-09-04: in Langfuse the planning chat is one session and
+everything after it is separate. Cause: the run start never passes a session
+id, and planning and chat turns each pass their own conversation id. The task
+row exists before the first planning turn (`POST /api/v1/tasks` at `/new`), so
+the task id is available to every trace from the start.
+
+- `routers/planning.py` planning turn, `chat_turns.py` chat turn and
+  `routers/runs.py` `run_plan(...)` all pass `session_id=<task id>`. The runner
+  needs no change: it already carries `session_id` into steering, watch and the
+  continuation state (`continuation_state.py` `cap["session_id"]`).
+- The conversation id is kept as trace metadata (`conversation_id`) next to the
+  renamed `task_id`, so one chat can still be filtered.
+- Product behaviour unchanged; observability only. Not a rename — recorded as
+  the slice's one rider, folded in by the owner.
+- Invariant I9: with a stub Langfuse client, one task's planning turn, run
+  start, steering continuation and chat turn all emit `session_id` equal to the
+  task id, and the chat turn's metadata carries its `conversation_id`.
+
 ## Forks — ruled 2026-09-04 (owner, by interview)
 
 | # | Question | Options | **Ruling** and why |
@@ -463,8 +487,9 @@ one-to-one swap is a stop condition.
 
 - **Don't flatten status.** settled · 🟡 leaning · ❓ open · ⏸ deferred stay as-is.
 - **Model only what behaves** — no new column, flag or mode enum.
-- **No behaviour change** — every test that fails after the sweep fails on a
-  name, or the slice has done more than rename. Prompt diffs are words only.
+- **No product behaviour change** — every test that fails after the sweep fails
+  on a name, or the slice has done more than rename. Prompt diffs are words
+  only. V9 changes trace grouping and nothing the user sees.
 - Leave deferred seams as seams in [docs/deferred.md](../../deferred.md).
 
 ## Stop conditions
@@ -496,7 +521,8 @@ open PR's merge order makes the branch unrebasable; or the budget is spent.
 
 ## Verification evidence expected
 
-In [verification.md](verification.md): the `make verify` tail; the migration
+In [verification.md](verification.md): the `make verify` tail; the V9 stub-tracing
+test output; the migration
 round-trip output; the prompt text diff (words only) and the re-pinned
 `prompt_hashes.json`; the collision
 audit output and how each was resolved; the invariant-grep outputs; the e2e
