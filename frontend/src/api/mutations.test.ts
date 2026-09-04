@@ -5,7 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { taskNameFromQuestion, useCreateTask, useUpdatePortfolio, useUpdateProject } from "./mutations";
+import {
+  taskNameFromQuestion,
+  useCreateTask,
+  usePatchPlan,
+  useUpdatePortfolio,
+  useUpdateProject,
+} from "./mutations";
 
 describe("taskNameFromQuestion", () => {
   it("drops a trailing question mark", () => {
@@ -255,5 +261,34 @@ describe("useCreateTask — the portfolio-assignment PATCH result is checked", (
     result.current.mutate({ question: "A question", portfolioId: "portfolio-1" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+});
+
+describe("usePatchPlan — a 422's envelope message survives onto the thrown error", () => {
+  // 038: the APO guard's "pick grey literature first" hint arrives as the
+  // envelope message; planStart shows error.message verbatim for 422s.
+  it("attaches message and status", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "validation_error",
+              message: "the APO restriction needs Sources set to grey literature only",
+            },
+          }),
+          { status: 422, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const { result } = renderHook(() => usePatchPlan("proj-1"), { wrapper: wrapper(queryClient) });
+    result.current.mutate({ geography: "APO" });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const error = result.current.error as { status?: number; message?: string } | null;
+    expect(error?.status).toBe(422);
+    expect(error?.message).toBe("the APO restriction needs Sources set to grey literature only");
   });
 });

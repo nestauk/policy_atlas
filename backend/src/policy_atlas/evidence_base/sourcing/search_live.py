@@ -495,8 +495,9 @@ class OvertonLiveBackend(_TransportMixin):
         if limit == 0:
             return []
 
+        filter_params = _overton_wire_params(wire_params)
         params = {
-            **_overton_wire_params(wire_params),
+            **filter_params,
             "squery": query,
             "min_similarity": "0.3",
             "format": "json",
@@ -545,7 +546,7 @@ class OvertonLiveBackend(_TransportMixin):
             next_page_url = _overton_next_page_url(response)
             if next_page_url is None:
                 break
-            next_url = _validate_overton_next_page_url(next_page_url)
+            next_url = _validate_overton_next_page_url(next_page_url, required=filter_params)
         return records
 
     def fetch_citations(
@@ -846,8 +847,19 @@ def _overton_next_page_url(response: dict[str, Any]) -> str | None:
     return value
 
 
-def _validate_overton_next_page_url(next_page_url: str) -> str:
+def _validate_overton_next_page_url(
+    next_page_url: str, required: dict[str, str] | None = None
+) -> str:
     parsed = urlparse(next_page_url)
     if parsed.scheme != "https" or parsed.hostname != "app.overton.io":
         raise SearchTransportError(status_code=None, host=parsed.hostname or "")
+    # Follow-up pages are fetched verbatim (params={}), so the scope filters
+    # ride entirely on Overton reproducing them in next_page_url. A page that
+    # drops one would be an unfiltered search — fail closed instead (038
+    # review: R2 must hold on every page, e.g. source=apo).
+    if required:
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        missing = [key for key, value in required.items() if query.get(key) != value]
+        if missing:
+            raise SearchTransportError(status_code=None, host=parsed.hostname or "")
     return next_page_url

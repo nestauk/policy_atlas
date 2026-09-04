@@ -689,6 +689,11 @@ def _render_scope_constraints(plan: OrchestrationPlan) -> list[str]:
         lines.append(f"    published_before: {constraints.published_before}")
     if constraints.publisher_country is not None:
         lines.append(f"    publisher_country: {constraints.publisher_country}")
+    if constraints.publisher_source is not None:
+        lines.append(
+            f"    publisher_source: {constraints.publisher_source}"
+            " (Australian Policy Online)"
+        )
     if constraints.author_affiliation_countries is not None:
         lines.append(
             "    author_affiliation_countries: "

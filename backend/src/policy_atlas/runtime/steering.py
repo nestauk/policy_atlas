@@ -2090,7 +2090,16 @@ def _apply_acquire_delta(payload: dict[str, Any], search: Any) -> None:
     if depth is not None:
         payload["search_effort"] = cast(SearchEffort, depth)
     if "filters" in search:
-        payload["scope_constraints"] = _scope_constraints_from_filters(search["filters"])
+        constraints = _scope_constraints_from_filters(search["filters"])
+        # publisher_source (APO test mod, 038) is tester-pinned, not steerable:
+        # a delta can neither set it (the mapper rejects it below) nor silently
+        # drop it via this whole-block replace — carry it over. A delta that
+        # also maps geography then fails the plan's mutual-exclusivity
+        # re-validation, which is the intended fail-closed outcome.
+        existing = payload.get("scope_constraints")
+        if isinstance(existing, dict) and existing.get("publisher_source") is not None:
+            constraints["publisher_source"] = existing["publisher_source"]
+        payload["scope_constraints"] = constraints
 
 
 def _scope_constraints_from_filters(filters: Any) -> dict[str, str]:

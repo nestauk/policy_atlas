@@ -52,11 +52,19 @@ export function usePlanStart({
     patchPlan.mutate(overlayToPlanPatch(overlay), {
       onSuccess: () => beginRun(),
       onError: (error) => {
-        const code = (error as { code?: string }).code;
+        const { code, status, message } = error as {
+          code?: string;
+          status?: number;
+          message?: string;
+        };
+        // A 422's envelope message is the router's user-actionable sentence
+        // (e.g. the APO "pick grey literature first" hint, 038) — show it.
         setStartNotice(
           isConflictCode(code)
             ? conflictSentences[code]
-            : "The plan edits couldn't be applied. Try again, or start without them.",
+            : status === 422 && message
+              ? message
+              : "The plan edits couldn't be applied. Try again, or start without them.",
         );
       },
     });

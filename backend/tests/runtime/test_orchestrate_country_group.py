@@ -1,5 +1,7 @@
 """Pure country-group tests for the orchestrator draft-to-plan seam."""
 
+import pytest
+
 from policy_atlas.runtime.orchestrate import (
     _assign_country_group_authorship,
     _build_plan,
@@ -97,3 +99,30 @@ def test_publisher_source_survives_the_draft_to_plan_round_trip() -> None:
     plan = _build_plan(draft)
 
     assert plan.scope_constraints.publisher_source == "apo"
+
+
+@pytest.mark.parametrize("emitted", ["APO", "Australian Policy Online", "xyz"])
+def test_planner_emitted_junk_publisher_source_is_dropped(emitted: str) -> None:
+    """publisher_source sits in the planner's structured-output schema with no
+    prompt text behind it; a non-"apo" emission must be dropped at the wire
+    model — downstream Literal["apo"] layers would otherwise crash the
+    turn's draft projection (038 review)."""
+    assert PlanDraftWire(publisher_source=emitted).publisher_source is None
+    assert PlanDraftWire(publisher_source="apo").publisher_source == "apo"
+
+
+def test_apo_plan_renders_publisher_source_line() -> None:
+    """038 R3 on the CLI approval surface: the render must not show an APO
+    plan as unrestricted."""
+    draft = PlanDraftWire(
+        title="APO-only review",
+        question="What evidence exists on scoped policy outcomes?",
+        backend_scope="grey_lit_only",
+        publisher_source="apo",
+        search_effort="rapid",
+        analysis_depth="landscape",
+        components=["characterise"],
+        steering_mode="moderate",
+    )
+    render = _render_full_plan(_build_plan(draft))
+    assert "publisher_source: apo (Australian Policy Online)" in render

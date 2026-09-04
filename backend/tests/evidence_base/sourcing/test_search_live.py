@@ -334,7 +334,12 @@ def test_overton_source_country_post_filter_paginates_until_quota(
                     _overton_stub_record("p2", "IGO"),
                     _overton_stub_record("p3", None),
                 ],
-                "next_page_url": "https://app.overton.io/documents.php?page=2",
+                # Live next_page_url echoes the request's params (015
+                # param-pinning §5); the follow now validates the wire
+                # filters survived, so the stub must be realistic.
+                "next_page_url": (
+                    "https://app.overton.io/documents.php?page=2&published_after=2020-01-01"
+                ),
             }
         return {
             "results": [
@@ -571,6 +576,47 @@ def test_next_page_url_valid_followed_verbatim(monkeypatch: pytest.MonkeyPatch) 
 
     assert calls[1][0] == next_url
     assert calls[1][1] == {}
+
+
+def test_next_page_url_missing_wire_filter_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Follow-up pages are fetched verbatim, so a next_page_url that drops a
+    scope filter (e.g. source=apo, 038 R2) would be an unfiltered search —
+    the follow must raise instead."""
+    _sleep_recorder(monkeypatch)
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        return {
+            "results": [{"policy_document_id": "p1", "title": "T1"}],
+            "next_page_url": "https://app.overton.io/documents.php?page=2",
+        }
+
+    backend = OvertonLiveBackend("KEY", fetch=fetch)
+    with pytest.raises(SearchTransportError):
+        backend.search("housing", wire_params={"source": "apo"}, max_results=5)
+
+
+def test_next_page_url_carrying_wire_filter_is_followed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _sleep_recorder(monkeypatch)
+    calls: list[tuple[str, dict[str, str]]] = []
+    next_url = "https://app.overton.io/documents.php?page=2&source=apo"
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls.append((url, dict(params)))
+        if len(calls) == 1:
+            return {
+                "results": [{"policy_document_id": "p1", "title": "T1"}],
+                "next_page_url": next_url,
+            }
+        return {"results": []}
+
+    backend = OvertonLiveBackend("KEY", fetch=fetch)
+    backend.search("housing", wire_params={"source": "apo"}, max_results=5)
+
+    assert calls[1][0] == next_url
 
 
 def test_next_page_url_query_survives_real_httpx_url_building(

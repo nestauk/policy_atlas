@@ -52,6 +52,8 @@ from policy_atlas.runtime.steering import (
     PausePoint,
     SteeringAdjustmentError,
     SteeringResponse,
+    _apply_acquire_delta,
+    _scope_constraints_from_filters,
     _validate_delta_round_trip,
     _validate_directive_delta,
     build_steer_point_options,
@@ -379,6 +381,23 @@ def test_group_granularity_directive_delta_rejects_bogus_value(delta: dict[str, 
 )
 def test_acquire_guidance_directive_delta_validates(delta: dict[str, Any]) -> None:
     _validate_directive_delta("acquire", delta, backend_scope="both")  # does not raise
+
+
+def test_acquire_filters_delta_preserves_publisher_source() -> None:
+    """An acquire filters delta replaces scope_constraints wholesale; the
+    tester-pinned APO restriction (038) must survive the replace or every
+    later Overton call silently loses source=apo (R2)."""
+    payload: dict[str, Any] = {"scope_constraints": {"publisher_source": "apo"}}
+    _apply_acquire_delta(payload, {"filters": {"shared": {"published_after": "2020-01-01"}}})
+    assert payload["scope_constraints"] == {
+        "published_after": "2020-01-01",
+        "publisher_source": "apo",
+    }
+
+
+def test_acquire_filters_delta_cannot_set_publisher_source() -> None:
+    with pytest.raises(SteeringAdjustmentError):
+        _scope_constraints_from_filters({"overton": {"publisher_source": "apo"}})
 
 
 @pytest.mark.parametrize(

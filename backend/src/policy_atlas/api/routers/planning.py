@@ -667,36 +667,35 @@ def _iso_from_geography_token(token: str) -> str | None:
     return iso_name_to_code.get(compact.casefold())
 
 
+# Every return of _geography_constraints starts from this full reset: the
+# caller merges via constraints.update(), so any key a branch omitted would
+# silently survive an unrelated geography edit.
+_GEO_CONSTRAINT_RESET: dict[str, Any] = {
+    "publisher_country": None,
+    "author_affiliation_countries": None,
+    "country_group": None,
+    "publisher_source": None,
+}
+
+
 def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]:
     """Compile a geography overlay string into scope-constraint fields."""
     if geography == "":
-        return {
-            "publisher_country": None,
-            "author_affiliation_countries": None,
-            "country_group": None,
-            "publisher_source": None,
-        }
+        return dict(_GEO_CONSTRAINT_RESET)
     if geography.strip().casefold() in {"apo", "australian policy online"}:
         if backend_scope != "grey_lit_only":
             raise ValueError(
                 "the APO restriction needs Sources set to grey literature only"
             )
-        return {
-            "publisher_country": None,
-            "author_affiliation_countries": None,
-            "country_group": None,
-            "publisher_source": "apo",
-        }
+        return {**_GEO_CONSTRAINT_RESET, "publisher_source": "apo"}
     if geography in TIER1_GROUPS:
         return {
-            "publisher_country": None,
-            "author_affiliation_countries": None,
+            **_GEO_CONSTRAINT_RESET,
             "country_group": {
                 "label": geography,
                 "countries": None,
                 "authorship": "pinned-table",
             },
-            "publisher_source": None,
         }
     tokens = [part.strip() for part in geography.split(",") if part.strip() != ""]
     codes: list[str] = []
@@ -710,12 +709,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
             codes.append(code)
     if not codes:
         raise ValueError("geography must name a country or a known group")
-    constraints: dict[str, Any] = {
-        "publisher_country": None,
-        "author_affiliation_countries": None,
-        "country_group": None,
-        "publisher_source": None,
-    }
+    constraints: dict[str, Any] = dict(_GEO_CONSTRAINT_RESET)
     if len(codes) == 1:
         if backend_scope != "grey_lit_only":
             constraints["author_affiliation_countries"] = codes

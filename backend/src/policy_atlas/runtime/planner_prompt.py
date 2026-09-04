@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
@@ -242,6 +242,16 @@ class PlanDraftWire(BaseModel):
     publisher_country: str | None = None
     publisher_source: str | None = None
     author_affiliation_countries: list[str] | None = None
+
+    @field_validator("publisher_source")
+    @classmethod
+    def _pin_publisher_source(cls, value: str | None) -> str | None:
+        # Not a planner-authored field (no prompt text describes it — APO
+        # test mod, 038). The downstream models pin Literal["apo"], so any
+        # other emission would crash the turn's draft projection; drop it
+        # here instead — the chat doing nothing is the contract's accepted
+        # behaviour.
+        return value if value == "apo" else None
     country_group: CountryGroupDraft | None = None
     search_effort: str | None = None
     analysis_depth: str | None = None

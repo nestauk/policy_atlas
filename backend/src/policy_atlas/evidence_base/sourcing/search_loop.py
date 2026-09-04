@@ -200,6 +200,8 @@ OPENALEX_TYPES: tuple[str, ...] = (
 )
 OA_STATUS_VALUES: tuple[str, ...] = ("diamond", "gold", "green", "hybrid", "bronze", "closed")
 OVERTON_PUBLISHER_TYPES: tuple[str, ...] = ("government", "think tank", "igo", "other")
+# APO test mod (038): the one supported Overton source collection.
+OVERTON_PUBLISHER_SOURCES: tuple[str, ...] = ("apo",)
 OVERTON_REGION_GROUPS: tuple[str, ...] = (
     "OECD members",
     "G7",
@@ -715,12 +717,14 @@ def _validate_overton_block(block: dict[str, Any]) -> dict[str, Any]:
         elif key == "source_country_post_filter":
             out[key] = _overton_post_filter_values(key, value)
         elif key == "publisher_source":
-            source = _single_str_value(
-                key, value, error=SearchDirectiveError, accept_list_of_one=False, strict=True
+            out[key] = _single_enum_value(
+                key,
+                value,
+                OVERTON_PUBLISHER_SOURCES,
+                error=SearchDirectiveError,
+                accept_list_of_one=False,
+                strict=True,
             )
-            if source != "apo":
-                raise SearchDirectiveError(f"{key} contains an unsupported Overton source")
-            out[key] = source
     return out
 
 

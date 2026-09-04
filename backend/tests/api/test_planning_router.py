@@ -1136,10 +1136,21 @@ def test_patch_plan_apo_geography_422s_unless_grey_lit_only(tmp_path: Path) -> N
             json={"geography": "APO"},
         )
         assert response.status_code == 422
+        # The message is the tester's only hint (038 rubric item 6); the
+        # frontend surfaces the envelope message verbatim on Start search.
+        assert (
+            response.json()["error"]["message"]
+            == "the APO restriction needs Sources set to grey literature only"
+        )
 
 
-def test_patch_plan_apo_then_country_geography_clears_publisher_source(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "clearing_patch",
+    [{"geography": "France"}, {"backend_scope": "both"}],
+    ids=["country-geography-edit", "backend-scope-flip"],
+)
+def test_patch_plan_later_edit_clears_publisher_source(
+    tmp_path: Path, clearing_patch: dict[str, str]
 ) -> None:
     _reset_turn_locks()
     with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
@@ -1159,15 +1170,15 @@ def test_patch_plan_apo_then_country_geography_clears_publisher_source(
         patched = client.patch(
             f"/api/v1/projects/{project_id}/plan",
             headers=owner,
-            json={"geography": "France"},
+            json=clearing_patch,
         )
         assert patched.status_code == 200, patched.text
         assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
 
 
-def test_patch_plan_apo_then_backend_scope_both_clears_publisher_source(
-    tmp_path: Path,
-) -> None:
+def test_patch_plan_apo_survives_reload(tmp_path: Path) -> None:
+    """The PATCH response is built from the in-memory plan; the constraint
+    must also survive the stored payload → GET /plan round trip."""
     _reset_turn_locks()
     with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
         client,
@@ -1175,18 +1186,13 @@ def test_patch_plan_apo_then_backend_scope_both_clears_publisher_source(
         _,
     ):
         project_id = _approve_stub_plan(client, owner)
-        apo = client.patch(
+        patched = client.patch(
             f"/api/v1/projects/{project_id}/plan",
             headers=owner,
             json={"backend_scope": "grey_lit_only", "geography": "APO"},
         )
-        assert apo.status_code == 200, apo.text
-        assert apo.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
-
-        patched = client.patch(
-            f"/api/v1/projects/{project_id}/plan",
-            headers=owner,
-            json={"backend_scope": "both"},
-        )
         assert patched.status_code == 200, patched.text
-        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
+
+        reloaded = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        assert reloaded.status_code == 200, reloaded.text
+        assert reloaded.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
