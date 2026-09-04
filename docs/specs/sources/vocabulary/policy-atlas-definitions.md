@@ -1,7 +1,7 @@
 ---
 type: Frozen design source
 title: Policy Atlas definitions (team decision, 2026-09-04)
-description: The team's agreed definitions for Capability, Component, Task, Project, Tabs, Artefact, Agent overlay, Links and Context — the input to the 037 vocabulary-alignment slice.
+description: The team's agreed definitions for Capability, Component, Task, Project, Tabs, Artefact, Agent overlay, Links and Context — the input to the 038 vocabulary-alignment slice.
 tags: [source, vocabulary, frozen]
 timestamp: 2026-09-04
 ---
