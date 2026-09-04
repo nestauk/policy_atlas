@@ -22,9 +22,16 @@
 - Touch only what the task requires.
 
 # Current phase
-Build — task `038-apo-mod` **CONTRACT + PLAN APPROVED 2026-09-04 · owner;
-adversarial review = one light combined pass (owner's call)** (branch
-`task038/apo-mod`): a small test mod for an
+Review — task `038-apo-mod` **BUILD COMPLETE (steps 5–6, 2026-09-04)** on
+`task038/apo-mod`; contract + plan approved 2026-09-04 · owner; adversarial
+review ran pre-build as one light combined pass (owner's call) — 4 findings,
+all folded in. Step-6 exit `make verify` green (2456 backend + 538 frontend);
+live check green (Overton `source=apo` request logged, 5/5 APO records);
+`docs/tasks/038-apo-mod/verification.md` complete, 3 flagged deviations for
+adjudication (prompt-hash bump for a schema-only `PlanDraftWire` line ·
+generated-type fixture sweep · API-route live check instead of a browser
+drive). **Next: a FRESH conversation runs `task-cycle-review` (steps 7–10).**
+The slice: a small test mod for an
 Australian use case — restrict one run's sources to Australian Policy Online
 (APO). R1 (drop OpenAlex) is free via the existing
 `backend_scope="grey_lit_only"`; R2 threads one new scope constraint
