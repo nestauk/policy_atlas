@@ -1357,7 +1357,9 @@ def test_migration_roundtrip_and_checks(conn: Connection) -> None:
     # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
     # entity hierarchy) and ADR 0032 adds `portfolio_membership`; no
     # evidence-base table changed.
-    assert len(metadata.tables) == 36
+    # 36 -> 37: task 036 adds `waitlist_entry` (splash-page access requests);
+    # the count was not bumped when 036 landed - fixed with task 037.
+    assert len(metadata.tables) == 37
     project_id, _ = seed_project_and_run(conn)
     snap_id, pss_id = seed_source(conn, project_id)
 
