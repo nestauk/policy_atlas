@@ -1,8 +1,8 @@
 # ADR 0036 — One vocabulary across code, schema, API and screen
 
-- **Status:** Drafted 2026-09-04 — **Accepted on the 038 plan gate** (owner;
-  date filled at sign-off). The contract it records was approved and
-  re-approved after adversarial review on 2026-09-04.
+- **Status:** **Accepted — 2026-09-04** (owner, with the 038 plan approval).
+  The contract it records was approved and re-approved after adversarial
+  review the same day.
 - **Date:** 2026-09-04
 - **Task:** 038-vocabulary-alignment
 - **Supersedes:** [ADR 0031](0031-portfolio-layer-above-the-project.md)

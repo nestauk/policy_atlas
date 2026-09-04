@@ -10,7 +10,8 @@ nothing to scope.
 
 > **Plan-stage adversarial review (Codex, read-only) ran 2026-09-04** at
 > `ad58e1dd`: 13 findings (3 blockers), verdict "material change needed". All
-> 13 folded here (§ Plan-review folds P1–P13). Awaiting the owner's plan 🛑.
+> 13 folded here (§ Plan-review folds P1–P13). **Plan approved 2026-09-04 ·
+> owner** (with the deep-reasoner routing ruling below).
 
 Executor marks per AGENTS.md § Agent-side model routing; every `lead` mark
 carries its reason. **Owner ruling 2026-09-04:** judgment-bearing phases go
@@ -408,7 +409,7 @@ P12 rubric 15 names the JUMPBOX referrers · P13 lock-timeout precedent is
 ## Out-of-plan reminders
 
 - ADR 0036 (`docs/adr/0036-one-vocabulary-across-code-schema-api-and-screen.md`)
-  is drafted; its status line is set to Accepted with the date at the plan 🛑.
+  is Accepted (2026-09-04, owner).
 - Stop conditions (contract § Stop conditions): a rename that needs a shape
   change; a collision `--scan` did not predict; a prompt edit beyond a word
   swap; an unrebasable conflict with `dev`.

@@ -6,9 +6,9 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > **Status:** **approved 2026-09-04 · owner** (forks F1–F5 ruled in an
 > interview the same day; rulings folded in below).
 > Contract approved (before planning): 2026-09-04 · owner ·
-> Plan approved (before implementation): _pending_ ·
-> ADR: **0036** (to be written at step 4 — retires ADR 0031 decision 2; records the
-> `/api/v1` path break and the rollback plan).
+> Plan approved (before implementation): 2026-09-04 · owner (plan rev 2, deep-reasoner routing) ·
+> ADR: **0036** — Accepted 2026-09-04 (retires ADR 0031 decision 2; records the
+> `/api/v1` path break, ruling R1 and the rollback plan).
 >
 > **Branching:** `task/038-vocabulary-alignment` from `dev`; `origin/dev`
 > merged in at `8626594f` (2026-09-04, after PRs #61 and #64). Not stacked.
