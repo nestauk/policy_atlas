@@ -199,6 +199,10 @@ def test_page_of_project_out_serialises() -> None:
         visibility="org",
         is_owner=True,
         owner_display="Test User",
+        # Task 037: `is_public` is a row property, `access` is caller-relative
+        # (graded reads always say "full") — both required, same reasoning.
+        is_public=False,
+        access="full",
     )
     wrapper = ProjectPage(
         page=Page[ProjectOut](

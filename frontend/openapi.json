@@ -4286,8 +4286,16 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_ids: Portfolios this project belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this project has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same project is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_ids: Portfolios this project belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this project has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same project is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.\n    is_public: Whether the owner has turned public sharing on for this\n        row (task 037). A property of the row, not the caller.\n    access: **Caller-relative**, not a property of the row: `\"public\"`\n        means this read was served by the public leg and the shape is\n        redacted (`owner_display = None`, `portfolio_ids = []`,\n        `is_owner = False`); a graded read (owner, colleague or admin)\n        always says `\"full\"`.",
         "properties": {
+          "access": {
+            "enum": [
+              "full",
+              "public"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
           "archived_at": {
             "anyOf": [
               {
@@ -4307,6 +4315,10 @@
           },
           "is_owner": {
             "title": "Is Owner",
+            "type": "boolean"
+          },
+          "is_public": {
+            "title": "Is Public",
             "type": "boolean"
           },
           "latest_run": {
@@ -4399,15 +4411,28 @@
           "updated_at",
           "visibility",
           "is_owner",
-          "owner_display"
+          "owner_display",
+          "is_public",
+          "access"
         ],
         "title": "ProjectOut",
         "type": "object"
       },
       "ProjectUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_ids: Portfolios to assign this project to. Omit to leave\n        membership unchanged; `[]` unassigns every portfolio; a list\n        replaces the set.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `portfolio_ids` in one body \u2014 see\n        :meth:`reject_visibility_with_portfolio`.\n\nNote:\n    `name` and `visibility` back NOT NULL columns, so an explicit `null`\n    on either is refused rather than treated as \"unchanged\" \u2014 see\n    :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`\n    are not: null clears the question, and null on `portfolio_ids` is\n    read as `[]` (unassign every portfolio).",
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_ids: Portfolios to assign this project to. Omit to leave\n        membership unchanged; `[]` unassigns every portfolio; a list\n        replaces the set.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `portfolio_ids` in one body \u2014 see\n        :meth:`reject_visibility_with_portfolio`.\n    is_public: Owner-only public-sharing flag (task 037). Omit to leave\n        unchanged; an explicit `null` is refused 422 \u2014 see\n        :meth:`reject_nulls_without_meaning`.\n\nNote:\n    `name`, `visibility` and `is_public` back NOT NULL columns, so an\n    explicit `null` on any of them is refused rather than treated as\n    \"unchanged\" \u2014 see :meth:`reject_nulls_without_meaning`. `question`\n    and `portfolio_ids` are not: null clears the question, and null on\n    `portfolio_ids` is read as `[]` (unassign every portfolio).",
         "properties": {
+          "is_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Public"
+          },
           "name": {
             "anyOf": [
               {

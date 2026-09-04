@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
+import structlog
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import Connection
@@ -34,6 +35,7 @@ from policy_atlas.api.routers._access import (
     trace_admin_listing,
 )
 from policy_atlas.api.routers._common import memberships_for_projects, project_out
+from policy_atlas.core import events
 from policy_atlas.core.schema import (
     app_user,
     capability_run,
@@ -41,6 +43,8 @@ from policy_atlas.core.schema import (
     portfolio_membership,
     project,
 )
+
+log = structlog.get_logger()
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -237,7 +241,7 @@ def update_project(
         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
             project that belongs to a portfolio.
     """
-    accessible_project(
+    access = accessible_project(
         conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
     )
     changes = payload.model_dump(exclude_unset=True)
@@ -264,6 +268,25 @@ def update_project(
             .where(project.c.project_id == project_id)
             .values(visibility=changes["visibility"], updated_at=datetime.now(UTC))
         )
+    # Orthogonal to visibility/portfolio membership (D1, contract § Design
+    # decisions) — no interaction with the 409/422 rules above. Only a real
+    # flip writes anything: a no-op PATCH (same value) writes neither the
+    # column nor the audit event.
+    if "is_public" in changes and bool(access.row["is_public"]) != changes["is_public"]:
+        conn.execute(
+            update(project)
+            .where(project.c.project_id == project_id)
+            .values(is_public=changes["is_public"], updated_at=datetime.now(UTC))
+        )
+        event_type = "project.shared_publicly" if changes["is_public"] else "project.unshared"
+        events.append(
+            conn,
+            project_id=project_id,
+            run_id=None,
+            event_type=event_type,
+            payload={"actor": user.user_id},
+        )
+        log.info(event_type, project_id=str(project_id), actor=user.user_id)
     if "name" in changes:
         rename_project(conn, project_id, changes.pop("name"), user.user_id)
     if "question" in changes:

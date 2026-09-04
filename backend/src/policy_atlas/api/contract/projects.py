@@ -54,13 +54,16 @@ class ProjectUpdate(BaseModel):
             leave unchanged; an explicit `null` is refused 422. Cannot be
             combined with `portfolio_ids` in one body — see
             :meth:`reject_visibility_with_portfolio`.
+        is_public: Owner-only public-sharing flag (task 037). Omit to leave
+            unchanged; an explicit `null` is refused 422 — see
+            :meth:`reject_nulls_without_meaning`.
 
     Note:
-        `name` and `visibility` back NOT NULL columns, so an explicit `null`
-        on either is refused rather than treated as "unchanged" — see
-        :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`
-        are not: null clears the question, and null on `portfolio_ids` is
-        read as `[]` (unassign every portfolio).
+        `name`, `visibility` and `is_public` back NOT NULL columns, so an
+        explicit `null` on any of them is refused rather than treated as
+        "unchanged" — see :meth:`reject_nulls_without_meaning`. `question`
+        and `portfolio_ids` are not: null clears the question, and null on
+        `portfolio_ids` is read as `[]` (unassign every portfolio).
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -69,25 +72,26 @@ class ProjectUpdate(BaseModel):
     question: str | None = None
     portfolio_ids: list[uuid.UUID] | None = None
     visibility: Visibility | None = None
+    is_public: bool | None = None
 
     @model_validator(mode="after")
     def reject_nulls_without_meaning(self) -> ProjectUpdate:
-        """Refuse `{"name": null}` and `{"visibility": null}` rather than 500 on them.
+        """Refuse an explicit null on `name`, `visibility` or `is_public` rather than 500.
 
-        Both back NOT NULL columns, and the route dumps with `exclude_unset`,
-        so an explicit null was *included* in the changes and written: `name`
-        reached `rename_project` and `visibility` reached the UPDATE, and each
-        produced a constraint violation rendered as **500 internal**. A
-        malformed body is a 422, and `PortfolioUpdate` already said so about
-        its own `visibility`.
+        All three back NOT NULL columns, and the route dumps with
+        `exclude_unset`, so an explicit null was *included* in the changes
+        and written: `name` reached `rename_project`, `visibility` and
+        `is_public` reached the UPDATE, and each produced a constraint
+        violation rendered as **500 internal**. A malformed body is a 422,
+        and `PortfolioUpdate` already said so about its own `visibility`.
 
         Returns:
             The validated model.
 
         Raises:
-            ValueError: When either field was supplied as null.
+            ValueError: When any of the three fields was supplied as null.
         """
-        reject_explicit_nulls(self, "name", "visibility")
+        reject_explicit_nulls(self, "name", "visibility", "is_public")
         return self
 
     @model_validator(mode="after")
@@ -168,6 +172,13 @@ class ProjectOut(BaseModel):
             identity row yet. **Never an email** (contract § 3b). `None` when
             the row has no owner at all (the CLI-created rows), leaving the
             placeholder glyph to the frontend.
+        is_public: Whether the owner has turned public sharing on for this
+            row (task 037). A property of the row, not the caller.
+        access: **Caller-relative**, not a property of the row: `"public"`
+            means this read was served by the public leg and the shape is
+            redacted (`owner_display = None`, `portfolio_ids = []`,
+            `is_owner = False`); a graded read (owner, colleague or admin)
+            always says `"full"`.
     """
 
     project_id: uuid.UUID
@@ -183,3 +194,5 @@ class ProjectOut(BaseModel):
     visibility: Visibility
     is_owner: bool
     owner_display: str | None
+    is_public: bool
+    access: Literal["full", "public"]

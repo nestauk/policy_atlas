@@ -398,6 +398,12 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
             assert "ix_portfolio_org_visibility" in {
                 ix["name"] for ix in inspector.get_indexes("portfolio")
             }
+            # Task 037: is_public lands on head, additive, orthogonal to
+            # visibility — asserted here rather than a dedicated round-trip
+            # test since it shares this test's downgrade/upgrade bracket.
+            assert "is_public" in {
+                c["name"] for c in inspector.get_columns("project")
+            }
 
             # Existing rows arrive with no organisation. `org_id IS NULL` matches
             # no org leg, so 'org' on them is an inert default — the dark launch.

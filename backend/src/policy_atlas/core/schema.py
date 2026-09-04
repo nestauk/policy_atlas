@@ -111,6 +111,7 @@ project = Table(
     Column("owner_user_id", Text, nullable=True),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
+    Column("is_public", Boolean, nullable=False, server_default=text("false")),
     CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",

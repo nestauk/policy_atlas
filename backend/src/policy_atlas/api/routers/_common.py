@@ -9,7 +9,7 @@ helpers in ``_access`` (task 033). What is left is projection and display.
 from __future__ import annotations
 
 import uuid
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.engine import Connection, RowMapping
@@ -102,6 +102,7 @@ def project_out(
     user_id: str,
     owner_display: str | None | object = _RESOLVE,
     portfolio_ids: list[uuid.UUID] | None = None,
+    access: Literal["full", "public"] = "full",
 ) -> ProjectOut:
     """Project a project row with its derived read models, for one caller.
 
@@ -123,6 +124,11 @@ def project_out(
             already batch-loaded them (listings do). Left unset, this
             resolves them with one lookup — correct for single-row routes,
             an N+1 in a listing.
+        access: ``"public"`` when this read was served by the public leg
+            (task 037) — the returned shape is then redacted
+            (``is_owner=False``, ``owner_display=None``,
+            ``portfolio_ids=[]``), skipping the membership lookup entirely.
+            ``"full"`` (default) leaves behaviour unchanged.
 
     Returns:
         The public project shape.
@@ -147,13 +153,23 @@ def project_out(
         # question has not been asked, which is not the same as a run that
         # found nothing Included.
         source_count = included_source_count(conn, row["project_id"])
-    if portfolio_ids is None:
-        portfolio_ids = memberships_for_projects(conn, [row["project_id"]])[row["project_id"]]
-    display = (
-        resolve_owner_display(conn, row["owner_user_id"])
-        if owner_display is _RESOLVE
-        else cast(str | None, owner_display)
-    )
+    if access == "public":
+        # Redacted shape (D5): no owner display, no portfolio membership —
+        # skip the membership lookup entirely rather than compute and discard.
+        portfolio_ids = []
+        display = None
+        is_owner = False
+    else:
+        if portfolio_ids is None:
+            portfolio_ids = memberships_for_projects(conn, [row["project_id"]])[row["project_id"]]
+        display = (
+            resolve_owner_display(conn, row["owner_user_id"])
+            if owner_display is _RESOLVE
+            else cast(str | None, owner_display)
+        )
+        # Safe in Python: SQL has already decided visibility, and a NULL
+        # ``owner_user_id`` never equals a subject string.
+        is_owner = row["owner_user_id"] == user_id
     return ProjectOut(
         project_id=row["project_id"],
         name=row["name"],
@@ -166,8 +182,8 @@ def project_out(
         portfolio_ids=portfolio_ids,
         source_count=source_count,
         visibility=row["visibility"],
-        # Safe in Python: SQL has already decided visibility, and a NULL
-        # ``owner_user_id`` never equals a subject string.
-        is_owner=row["owner_user_id"] == user_id,
+        is_owner=is_owner,
         owner_display=display,
+        is_public=row["is_public"],
+        access=access,
     )
