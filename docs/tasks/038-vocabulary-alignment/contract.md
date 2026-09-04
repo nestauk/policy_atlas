@@ -3,8 +3,9 @@
 One implementation slice. Keep it reviewable. Boundaries are in
 [AGENTS.md](../../../AGENTS.md). Specs are in [docs/specs/](../../specs/index.md).
 
-> **Status:** drafted 2026-09-04 — **awaiting owner approval**.
-> Contract approved (before planning): _pending_ ·
+> **Status:** **approved 2026-09-04 · owner** (forks F1–F5 ruled in an
+> interview the same day; rulings folded in below).
+> Contract approved (before planning): 2026-09-04 · owner ·
 > Plan approved (before implementation): _pending_ ·
 > ADR: **0036** (to be written at step 4 — retires ADR 0031 decision 2; records the
 > `/api/v1` path break and the rollback plan).
@@ -31,8 +32,11 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > the primary (planning) chat is the **Task Agent**, pinned first and visually
 > distinct. The mode labels are withdrawn. V5 and V8 are rewritten to this.
 >
-> **Owner forks F1–F5** (§ Forks) need a ruling at this gate. Each has a
-> recommended default; the contract is written to the defaults.
+> **Owner forks F1–F5** are ruled (§ Forks). Two rulings bind the whole slice:
+> **(R1)** like-for-like word swaps in prompt text need **no** version bump and
+> **no** replay loop — the prompt hash guard is updated and the diff reviewed as
+> words-only; **(R2)** the persona is renamed `orchestrator` → `agent` at every
+> layer, including env vars, the `orchestration_plan` table and the prompt text.
 
 ## Goal
 
@@ -52,7 +56,7 @@ One PR on `task/038-vocabulary-alignment` that:
 - Renames the `portfolio` entity to `project` in the same places (V2).
 - Renames the Evidence search capability from `evidence_base` in the package, the
   capability key, the stored value and the user-visible copy (V3).
-- Names the orchestrator surface **Agent** on screen and on the wire (V4).
+- Renames the orchestrator persona to **Agent** on screen, on the wire, and throughout the backend, its config and its prompts (V4).
 - Relabels the lifecycle tabs Agent · Result · Sources · Share · History (V5).
 - Routes the leaked hard-coded Task/Project literals through the copy module (V6).
 - Updates the living docs, writes the glossary spec, amends ADR 0031 (V7).
@@ -75,9 +79,9 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Evidence base** | The collection of documents an Evidence search collects. **The phrase stays on screen in that sense** (owner ruling 2026-09-04). It stops being used for the capability and for the report. |
 | **Report** | The synthesised artefact on the Result tab (034's word). Copy that says "evidence base" but means this page changes to "report". |
 | **Component** | A backend processing step of a capability (search, screen, extract, …). Unchanged. |
-| **Agent** | The screen name for the planning/steering/Q&A surface. Backend name today `orchestrator`. See fork F2 for how far the code follows. |
+| **Agent** | The one persona users talk to: on screen, on the wire and in code. Backend name today `orchestrator` — one prompt preamble ("You are the orchestrator of Policy Atlas") serves the planning, steering, watch and chat moments. Renamed at every layer (F2). |
 | **Agent overlay** | The chat sidebar (`ChatSidePanel.tsx`), today `aria-label="Project chat"`, shown on every tab but Plan. After the slice: shown on every tab including Agent. |
-| **Task Agent** | The primary chat of a Task — today the planning conversation (`kind = planning`, one active per Task, tab label "Planning"). After the slice: named "Task Agent", pinned first in the chat list, visually distinct. |
+| **Task Agent** | The primary chat of a Task — today the planning conversation (`kind = planning`, one active per Task, tab label "Planning"). After the slice: labelled "Task Agent", pinned first in the chat list. **Which row:** the active planning conversation; if none is active (the run closed it), the most recently closed one. The stored `kind` value stays `planning`. |
 | **Chat** | Any other conversation with the Agent (`kind = chat`). The word stays "chat" on screen. |
 | **Modes** | Withdrawn by the 2026-09-04 amendment. Planning / running / Q&A remain internal states (conversation `kind` + run status), never shown as words. |
 | **Artefact** | Something a Task generates. Unchanged word; British spelling stays. |
@@ -96,7 +100,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 - [ADR 0035](../../adr/0035-public-task-read-access.md) and [037-public-projects/contract.md](../037-public-projects/contract.md) — `project.is_public`, the 11-route public read leg and the public share link (`/projects/{id}/results`), all renamed here.
 - [data-model.md](../../specs/system/data-model.md) § Entity hierarchy — the paragraph that must read `task`/`project` after the slice.
 - [web-api.md](../../specs/system/web-api.md) — every route; § Deprecations, whose additive-only rule this slice breaks by ADR.
-- [prompting.md](../../specs/system/prompting.md) — why prompt text is out (§ Out of scope).
+- [prompting.md](../../specs/system/prompting.md) — the versioning discipline that ruling R1 sets aside for like-for-like word swaps in this slice only.
 - `docs/deferred.md` § Task lifecycle IA (the rename entry) and § Organisations (the ops CLI entry) — both discharged here.
 - Precedent migration: `backend/alembic/versions/e7b4d2a1c8f3_evidence_scope_rename.py` — a pure rename with explicit constraint renames.
 - Code spine: `core/schema.py` · `api/contract/{projects,portfolios,sse}.py` · `api/routers/*` · `api/lifecycle.py` · `api/readmodels/repository.py` · `runtime/steering_events.py` · `ops/cli.py` · `frontend/src/lib/vocabulary.ts` · `frontend/src/routes.tsx` · `frontend/src/views/lifecycle.ts`.
@@ -112,6 +116,11 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 | `capability_run.capability` value + `ck_capr_capability` | `'evidence_base'` | `'evidence_search'` | UPDATE + CHECK swap |
 | `event_log.event_type` values | `project.renamed`, `project.archived` | `task.renamed`, `task.archived` on new writes; readers accept both | 2 writers, 3 readers |
 | JSONB payload values `decided_by`/`authored_by` | `'orchestrator'` | `'agent'` on new writes; readers normalise | `steering_events.py`, `runner.py`, `continuation.py` |
+| JSONB steer-point id (plan payload, pause records, planner schema description) | `evidence_base_coverage` | `evidence_search_coverage` on new writes and in the planner prompt; readers accept both | `orchestration_plan.py`, `steering.py`, `continuation.py`, `checkin_read.py`, `planner_prompt.py` |
+| DB table `orchestration_plan` | `orchestration_plan` | `plan` (constraints `uq_oplan_*`, `fk_oplan_*` → `uq_plan_*`, `fk_plan_*`) | same migration |
+| Backend persona identifiers | `orchestrator_prompt.py`, `orchestrator_backend.py`, `orchestrate.py`, `orchestration_plan.py`, `OrchestratorBackend`, `OpenAIOrchestratorBackend`, `StubOrchestratorBackend`, `OrchestrationPlan`, log events `orchestrator.*`/`orchestrate.start`, spans `orchestrator:*`, 468 occ / 31 files | `agent_prompt.py`, `agent_backend.py`, `agent.py`, `task_plan.py`, `AgentBackend`, `OpenAIAgentBackend`, `StubAgentBackend`, `TaskPlan` (`Plan` is taken by the wire shape), `agent.*`/`agent.start`, `agent:*` | mechanical sweep; breaks saved Langfuse span filters (§ Constraints) |
+| Env vars (read in code, documented in `infra/DEPLOYMENT.md`; not set by the CDK stack) | `POLICY_ATLAS_ORCHESTRATOR_MODEL`, `POLICY_ATLAS_ORCHESTRATOR_TRIAGE_MODEL` | `POLICY_ATLAS_AGENT_MODEL`, `POLICY_ATLAS_AGENT_TRIAGE_MODEL` | code default + docs; any operator override must be renamed by hand before deploy |
+| Prompt text (model-facing) | "You are the orchestrator of Policy Atlas…", "attributed to the orchestrator", "the orchestrator handles those", "the project's committed evidence", "the project frame", steer-point list incl. `evidence_base_coverage` | same sentences with `agent`, `task`, `evidence_search_coverage`; "evidence base" meaning the collection stays | 13 hash-guarded prompt files + 2 inline prompt strings; `prompt_hashes.json` values updated (R1) |
 | API paths | `/api/v1/projects/**` (22 paths, 11 of them with 037's conditionally-public leg) · `/api/v1/portfolios/**` (2) · `/api/v1/waitlist` (unchanged) | `/api/v1/tasks/**` · `/api/v1/projects/**` | 8 router prefixes (incl. `public_read_router`); `openapi.json` + `gen/types.ts` regenerated |
 | API schemas | `Project*` (4) · `Portfolio*` (3) · fields `project_id`, `portfolio_id`, `portfolio_ids`, `from_project_id` | `Task*` · `Project*` · `task_id`, `project_id`, `project_ids`, `from_task_id` | `task_count` stays (already right) |
 | SSE frame | `project.updated` / `ProjectUpdatedFrame` | `task.updated` / `TaskUpdatedFrame` | `contract/sse.py`, `routers/sse.py`, `sseFrame.ts` |
@@ -129,7 +138,7 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 | Agent overlay | `aria-label="Project chat"`, FAB "Open chat"/"Chat", tabs "Planning" + chats, library "Chats"; hidden on the Plan tab (`AppShell` `showChatPanel = … && !inWorkspace`) | § V8 copy table; shown on the Agent tab too, "Task Agent" pinned first and marked | `ChatSidePanel`, `ConversationTabs`, `ChatsLibrary`, `AppShell`, `WorkspaceView` |
 | e2e | `/projects/`, "Results", "Read the evidence base", "evidence base" ×22 | new words | 6 specs |
 | Living docs | `specs/capabilities/evidence-base/`, `data-model.md`, `web-api.md`, `index.md`, `deferred.md`, `knowledge/` | § V7 | |
-| **Do not change** | `waitlist_entry` (036) · `is_public` column name and the `access` read field (037; only their table moves) · `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · `evidence_base_coverage` stored steer-point id · every prompt's text · `orchestration_plan` table · `orchestrator_*` backend modules, env vars, span names (F2 default) · `docs/specs/sources/**` · historical docs | | |
+| **Do not change** | `waitlist_entry` (036) · `is_public` column name and the `access` read field (037; only their table moves) · `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · the stored `kind = planning` value · prompt *meaning* (only the words in the row above change) · `docs/specs/sources/**` except the owner-maintained definitions · historical docs | | |
 
 ## Defects
 
@@ -197,10 +206,12 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
   `index.md` links follow. The frozen `sources/evidence-base-ux/` and
   `backend-evidence-base-build-spec.md` do **not** move.
 - **Kept, as stored-data vocabulary** (no user sees them; renaming changes
-  fingerprints or model-facing schema): extraction profile ids `eb_iof_base_v1`,
-  `eb_icf_base_v1`; steer-point id `evidence_base_coverage` (in
-  `orchestration_plan.payload`, pause records and the planner's JSON-schema
-  description). Recorded in `deferred.md` as accepted residue with the reason.
+  fingerprints): extraction profile ids `eb_iof_base_v1`, `eb_icf_base_v1`.
+  Recorded in `deferred.md` as accepted residue with the reason.
+- **Steer-point id** `evidence_base_coverage` → `evidence_search_coverage` in
+  code and in the planner prompt (R1). Stored plan payloads and pause records
+  are not rewritten; the two readers (`continuation.py`, `checkin_read.py`)
+  accept both ids, the same rule as `decided_by`.
 - User-visible copy. "Evidence base" is used in three senses today. **Owner
   ruling 2026-09-04: the phrase stays for the collection of documents.** So:
   the **collection** keeps "evidence base"; the **report page** says "report";
@@ -230,7 +241,11 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
   every remaining "evidence base" in user-visible copy is a *keep* row of the
   table (the build lists them in `verification.md`).
 
-### V4 — The orchestrator surface has no screen name
+### V4 — The persona is called `orchestrator` in code and has no screen name
+
+One persona, three names today: nothing on screen, `orchestrator` in the
+backend, and "the orchestrator" in the prompts. After the slice it is **Agent**
+everywhere (owner ruling F2, all three layers).
 
 - Screen: the overlay is the **Agent** (`aria-label="Agent"`, FAB "Open the
   Agent"/"Agent"); the check-in attribution reads "The Agent decided"; the
@@ -240,15 +255,26 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
   New writes store `agent`; the read path that projects check-ins and steering
   history normalises `orchestrator` → `agent` (one mapping, one place), because
   `event_log` payloads are not rewritten.
-- **Default (fork F2): backend internals keep `orchestrator`** — modules
-  `orchestrator_prompt.py`, `orchestrator_backend.py`, class
-  `OpenAIOrchestratorBackend`, log event names `orchestrator.*`, Langfuse spans
-  `orchestrator:*`, env vars `POLICY_ATLAS_ORCHESTRATOR_MODEL` /
-  `_TRIAGE_MODEL`, and the `orchestration_plan` table. Reason: two of those
-  are production config, "agent" is a generic word already used in the specs
-  for any LLM actor, and the definitions doc records the backend name as a note,
-  not a demand. Recorded in `deferred.md` § Vocabulary as an open seam.
-- Invariant I4: no user-visible string says "orchestrator"; a pre-migration
+- Backend: modules, classes, log event names and Langfuse span names per the
+  surface map (`orchestrator_*` → `agent_*`; `OrchestrationPlan` → `TaskPlan`;
+  `orchestration_plan.py` → `task_plan.py`; `orchestrate.py` → `agent.py`).
+  The collision audit confirms `agent`/`Agent` is free in `backend/src` (today
+  it appears only in docstrings) and that `.claude/agents/` is outside the sweep.
+- Schema: table `orchestration_plan` → `plan`, with its constraint and index
+  names (`*_oplan_*` → `*_plan_*`).
+- Config: `POLICY_ATLAS_ORCHESTRATOR_MODEL` → `POLICY_ATLAS_AGENT_MODEL`,
+  `POLICY_ATLAS_ORCHESTRATOR_TRIAGE_MODEL` → `POLICY_ATLAS_AGENT_TRIAGE_MODEL`
+  in code defaults and `infra/DEPLOYMENT.md`. The CDK stack sets neither; the
+  PR tells operators to rename any override in the task definition before
+  deploying.
+- Prompts (R1): "You are the orchestrator of Policy Atlas" → "You are the agent
+  of Policy Atlas" and the other word swaps in the surface map row. No version
+  suffix changes; `scripts/prompt_hash_guard.py --update` re-pins the hashes and
+  the build records the diff. Prompt *meaning* is unchanged: the review checks
+  the diff is words only.
+- Invariant I4: `grep -ri orchestrat` over `backend/src`, `backend/tests`,
+  `frontend/src`, `frontend/e2e`, `infra/DEPLOYMENT.md`, `Makefile`, `scripts`
+  and `docs/specs` (excluding `sources/`) returns nothing; a pre-migration
   check-in decided by the orchestrator renders "The Agent decided".
 
 ### V5 — Tab labels differ from the definitions
@@ -317,33 +343,35 @@ labelled "Planning", and nothing marks it as the Task's primary chat. The
 | Overlay region (`ChatSidePanel`) | "Project chat" | "Agent" |
 | Closed-state button | "Open chat" / "Chat" | "Open the Agent" / "Agent" |
 | Overlay on the Agent tab | hidden (`!inWorkspace`) | shown — the tab's chat list; the planning pane stays the main column |
-| Primary chat tab and library chip | "Planning" | "Task Agent", pinned first, with a distinct marker (icon + tone; the plan picks the exact treatment from the brand layer) |
+| Primary chat tab and library chip | "Planning" | "Task Agent", pinned first; the visible label is the marker — no extra icon (F4) |
 | Other chats — tabs, library, new button | "Chats" / "New chat" | unchanged: chats are chats |
 | Planning composer label | "Message the planner" | "Message the Task Agent" |
 | Running state eyebrow (`runProgress`) | "RUNNING" | unchanged |
 | History category | "Planning" / "Question" | unchanged |
 
 No new state is built: the Task Agent is the existing `kind = planning`
-conversation; pinning is a sort rule in `ConversationTabs`/`ChatsLibrary`
-(planning first, then chats by recency — today's order already places it first).
+conversation — the active one, else the most recently closed (§ Terms);
+pinning is a sort rule in `ConversationTabs`/`ChatsLibrary` (that row first,
+then chats by recency — today's order already places it first). Older closed
+planning conversations stay listed as chats are, labelled "Task Agent (closed)".
 Showing the overlay on the Agent tab is one condition in `AppShell` plus the
 layout check that the planning pane and the sidebar do not both render the
 planning conversation at once (the sidebar's Task Agent entry focuses the main
 pane instead of opening a second copy).
 
 - Invariant I8: on the Agent tab the chat list is visible with "Task Agent"
-  first and marked; no user-visible chat is named "Planning"; the word "chat"
-  is unchanged everywhere else.
+  first; no user-visible chat is named "Planning"; the word "chat" is
+  unchanged everywhere else.
 
-## Forks (owner rulings needed at this gate)
+## Forks — ruled 2026-09-04 (owner, by interview)
 
-| # | Question | Options | Recommended default and why |
+| # | Question | Options | **Ruling** and why |
 |---|---|---|---|
-| **F1** | Rename the DB and code at all, or only the API + screen? | (a) full rename, schema included (this contract) · (b) API + frontend only, `vocabulary.ts` stays the mapping | **(a)** — the owner's 2026-08-24 ruling and this ask both say schema; (b) leaves the split ADR 0031 made and keeps every new reader learning it. |
-| **F2** | How far does `orchestrator` → `agent` reach in the backend? | (a) screen + wire only (default) · (b) also modules, classes, log/span names · (c) also env vars + `orchestration_plan` table | **(a)** — (b) is 468 occurrences for no user gain and breaks Langfuse history; (c) is a production-config change. Upgrade later if the word keeps hurting. |
-| **F3** | Old URLs: `/projects/:id` now means a Project; a bookmarked Task URL with the same shape lands on "not found". **Since 037, `/projects/{id}/results` is also the public share link people copy and send outside the app.** | (a) no redirect logic; users re-share · (b) legacy redirects: `/projects/:id/(results\|sources/*\|share\|history)` → `/tasks/:id/…` in both routers (these paths have no Project counterpart, so the redirect is unambiguous), and bare `/projects/:id` retries the id as a Task on a Project 404 | **(b)** — changed from (a) after 037 merged: a public link is outward-facing and may already be in someone's email. About 20 lines; recorded in ADR 0036 with a removal date. |
-| **F4** | Copy tables: "Task Agent" as the pinned primary chat and its marker (V8), "Report" for the artefact page (V3), "Message the Task Agent" (V4). | approve the tables · edit words in place | approve — copy-text principle: labels over explainers. |
-| **F5** | Open PRs #62 (Langfuse sessions, 7 src files) and #52 (in-app feedback, 19) will conflict with the sweep. (#61 merged 2026-09-04 and is now inside this branch.) | (a) merge them first, then re-merge `dev` here · (b) land 038 first; they rebase with the sweep script re-run | **(a)** if they are days away; otherwise (b) — the plan ships the sweep as a re-runnable script exactly so a rebase is one command. |
+| **F1** | Rename the DB and code at all, or only the API + screen? | (a) full rename, schema included (this contract) · (b) API + frontend only, `vocabulary.ts` stays the mapping | **(a) full rename, schema included.** "The goal of this task is consistency." |
+| **F2** | How far does `orchestrator` → `agent` reach in the backend? | (a) screen + wire only (default) · (b) also modules, classes, log/span names · (c) also env vars + `orchestration_plan` table | **(c), all three layers, prompt text included** — the orchestrator persona *is* the Agent (one preamble serves planning, steering, watch and chat), so one word to one word. Ruling R1: prompt word swaps are like-for-like, no bump, no replay. |
+| **F3** | Old URLs: `/projects/:id` now means a Project; a bookmarked Task URL with the same shape lands on "not found". **Since 037, `/projects/{id}/results` is also the public share link people copy and send outside the app.** | (a) no redirect logic; users re-share · (b) legacy redirects: `/projects/:id/(results\|sources/*\|share\|history)` → `/tasks/:id/…` in both routers (these paths have no Project counterpart, so the redirect is unambiguous), and bare `/projects/:id` retries the id as a Task on a Project 404 | **(a) no redirects.** 037's public sharing is on staging only, not production; links are regenerated. |
+| **F4** | Copy tables: "Task Agent" as the pinned primary chat and its marker (V8), "Report" for the artefact page (V3), "Message the Task Agent" (V4). | approve the tables · edit words in place | **Approved:** "Report", "Message the Task Agent"; the Task Agent is marked by its short visible label only, no icon. |
+| **F5** | Open PRs #62 (Langfuse sessions, 7 src files) and #52 (in-app feedback, 19) will conflict with the sweep. (#61 merged 2026-09-04 and is now inside this branch.) | (a) merge them first, then re-merge `dev` here · (b) land 038 first; they rebase with the sweep script re-run | **(b) 038 lands first.** Both PRs are still being worked on; they rebase with the sweep script. |
 
 ## Scope / Out of scope
 
@@ -355,12 +383,11 @@ pane instead of opening a second copy).
   them; nothing implements them — the chat's single `entry_artefact_id` is not a
   set; building either is a feature slice). Any new tab content (Share stays as
   033 left it). New capabilities and the options-scoping spec (PR #63 — it
-  already uses "Evidence search"; it inherits the glossary). **Prompt text**: no
-  prompt says a different word to the model after this slice (`prompt-guard`
-  hash values identical); "You are the orchestrator of Policy Atlas" waits for a
-  prompt slice with a version bump and the refine-replay loop. Backend
-  `orchestrator` internals (F2 default). `eb_*` fingerprint ids and the stored
-  steer-point id. Rewriting `event_log` rows. A mode enum. Historical docs,
+  already uses "Evidence search"; it inherits the glossary). **Prompt
+  behaviour**: prompts change words only (R1); any edit that is not a
+  one-to-one word swap is out and needs a versioned prompt slice. `eb_*`
+  fingerprint ids. Rewriting `event_log` rows or stored plan payloads. A mode
+  enum or a new conversation kind. Historical docs,
   frozen sources, `docs/knowledge/` filenames. The workspace-cluster re-parenting
   (still deferred; unaffected). Metabase saved questions (owner-operated; see
   § Constraints). **Future direction from the definitions § Future direction, recorded as seams in
@@ -373,17 +400,23 @@ pane instead of opening a second copy).
 
 **Gated changes this contract asks approval for** (Tier 4):
 
-1. **Schema** — one migration: `rename_table` ×3, column renames ×27, constraint
-   and index renames (listed in the plan), one `UPDATE capability_run SET
-   capability='evidence_search'` with the CHECK swapped, the union view recreated.
-   No shape change, no row lost. Downgrade reverses every step.
+1. **Schema** — one migration: `rename_table` ×4 (`project`→`task`,
+   `portfolio`→`project`, `portfolio_membership`→`project_membership`,
+   `orchestration_plan`→`plan`), column renames ×27, constraint and index
+   renames (listed in the plan), one `UPDATE capability_run SET
+   capability='evidence_search'` with the CHECK swapped, the union view
+   recreated. No shape change, no row lost. Downgrade reverses every step.
 2. **Public interface** — `/api/v1` paths and schema names change without a
    deprecation window. `web-api.md` § Deprecations records the break by ADR
    0036; the only consumers are this repo's frontend and e2e (deferred.md).
-3. **Production config** — none under F2(a). `Makefile` variable names for the
-   ops CLI change (`PROJECT`→`TASK`, `PORTFOLIO`→`PROJECT`).
-4. **Deploy posture** — public share links minted on production before this
-   deploy change shape (F3). The migration task runs before the new backend image;
+3. **Production config** — two env var names (`POLICY_ATLAS_AGENT_MODEL`,
+   `POLICY_ATLAS_AGENT_TRIAGE_MODEL`); the stack sets neither, so this is a
+   code-default and docs change plus a PR note for operators. `Makefile`
+   variable names for the ops CLI change (`PROJECT`→`TASK`,
+   `PORTFOLIO`→`PROJECT`).
+5. **Prompt text** — word swaps only, under ruling R1; `prompt_hashes.json`
+   values change and the diff is a review artefact.
+4. **Deploy posture** — the migration task runs before the new backend image;
    between the two the old image errors on renamed tables. Accepted brief
    outage on staging then production, in that order; no dual-name window.
    Rollback = deploy the previous image and `alembic downgrade -1` (ADR 0036
@@ -403,12 +436,13 @@ pane instead of opening a second copy).
   (Makefile), "(task NNN)" comments, `.claude/agents`, or `docs/specs/sources/**`.
 - **Generated files** — `frontend/openapi.json` and `frontend/src/api/gen/types.ts`
   are regenerated by `make openapi-sync`, never edited.
-- **Prompt guard** — `scripts/prompt_hashes.json` keys are re-pathed; the
-  values must not change. The build records the before/after diff of that file
-  as evidence.
-- **Analytics** — the Metabase dashboards on staging Aurora query `project` and
-  `portfolio` by name and will break on migration. Owner action after merge;
-  the PR names it.
+- **Prompt guard** — `scripts/prompt_hashes.json` keys are re-pathed (package
+  move) **and** values change (R1 word swaps). The build records the prompt
+  diff itself, not just the hash file, so the review can confirm words only.
+- **Analytics and traces** — the Metabase dashboards on staging Aurora query
+  `project` and `portfolio` by name and will break on migration; saved Langfuse
+  filters on `orchestrator:*` spans and `project_id` metadata stop matching new
+  traces. Owner action after merge; the PR names both.
 - **No dependency, CI or infra change.** `infra/DEPLOYMENT.md`'s lock-monitoring
   SQL is updated in words.
 
@@ -419,21 +453,26 @@ credentials move. The frozen definitions doc is public-safe (product vocabulary)
 
 ## Model route
 
-`n/a` — no inference-bearing change. Prompt text is out of scope by contract.
+No route change. Prompt text changes are **word swaps only** under owner
+ruling R1 (2026-09-04): `orchestrator`→`agent`, `project`→`task`,
+`evidence_base_coverage`→`evidence_search_coverage`; "evidence base" meaning the
+collection stays. No version suffix moves, no replay loop. Anything beyond a
+one-to-one swap is a stop condition.
 
 ## Disciplines binding this slice
 
 - **Don't flatten status.** settled · 🟡 leaning · ❓ open · ⏸ deferred stay as-is.
 - **Model only what behaves** — no new column, flag or mode enum.
 - **No behaviour change** — every test that fails after the sweep fails on a
-  name, or the slice has done more than rename.
+  name, or the slice has done more than rename. Prompt diffs are words only.
 - Leave deferred seams as seams in [docs/deferred.md](../../deferred.md).
 
 ## Stop conditions
 
 Halt and escalate when: a rename would need a shape change (a column that
 cannot be renamed in place, a value that must be rewritten in `event_log`); a
-collision the audit missed surfaces mid-sweep; a prompt hash value changes; an
+collision the audit missed surfaces mid-sweep; a prompt edit that is not a
+one-to-one word swap; an
 open PR's merge order makes the branch unrebasable; or the budget is spent.
 
 ## Acceptance checks
@@ -451,14 +490,15 @@ open PR's merge order makes the branch unrebasable; or the budget is spent.
 - **Live check, scoped:** on staging after the migration, one existing Task
   opens on `/tasks/{id}` with its report, sources and history intact; its
   Project lists it on `/projects/{id}`; one public Task opens signed-out on
-  `/tasks/{id}/result` and its pre-rename link `/projects/{id}/results`
-  redirects there (F3); the ops CLI `rows assign --task` dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
+  `/tasks/{id}/result` from a freshly copied link (F3: no redirects); the ops
+  CLI `rows assign --task` dry-runs. One cheap full-chain smoke (`make fe-api-smoke`). No full live e2e.
 - `pip-audit`/deps unchanged: `uv.lock` and `pnpm-lock.yaml` diff empty.
 
 ## Verification evidence expected
 
 In [verification.md](verification.md): the `make verify` tail; the migration
-round-trip output; the `prompt_hashes.json` diff (paths only); the collision
+round-trip output; the prompt text diff (words only) and the re-pinned
+`prompt_hashes.json`; the collision
 audit output and how each was resolved; the invariant-grep outputs; the e2e
 summary; the staging live-check notes with the URLs opened; the Metabase note;
 public-safety confirmation; the deferred-residue list.
@@ -472,5 +512,5 @@ human-approved plan. Adversarial review at contract and plan stage via
 Review focus: a missed rename that still compiles (a `project_id` that now
 means the Project but reads a Task — the two-step order makes this possible);
 tenancy predicates renamed but not re-read (ADR 0033 tests are the guard);
-readers of stored vocabulary that do not accept the old value; anything that
-changed behaviour, not just a name.
+readers of stored vocabulary that do not accept the old value; a prompt edit
+that changed more than a word; anything that changed behaviour, not just a name.

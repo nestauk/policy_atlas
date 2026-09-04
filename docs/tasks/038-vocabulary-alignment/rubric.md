@@ -15,8 +15,9 @@ this file does not restate them.
 5. [ ] No tests deleted, skipped or weakened without written justification. Every test
        change is a renamed identifier, path or string — the diff proves it.
 6. [ ] Verification evidence recorded ([verification.md](verification.md)).
-7. [ ] Known gaps and deferred seams listed (the V3 kept ids, F2 internals, F3 legacy redirects,
-       Metabase → [docs/deferred.md](../../deferred.md) § Vocabulary).
+7. [ ] Known gaps and deferred seams listed (the `eb_*` fingerprint ids, regenerated public
+       links, Metabase and Langfuse filters, the phase model for the Task Agent thread →
+       [docs/deferred.md](../../deferred.md) § Vocabulary).
 8. [ ] Required review stack ran for Tier 4 (contract verifier · code/security review ·
        adversarial at contract, plan and code · simplification) — findings in
        [verification.md](verification.md).
@@ -31,10 +32,12 @@ Slice-specific:
 11. [ ] **V3 / I3** — package `evidence_search`; `capability_run.capability` updated with
         the CHECK swapped; the copy table applied verbatim ("evidence base" kept for the
         collection, "report" for the page, "evidence search" for the capability); the
-        identifier grep is clean except the kept ids; `prompt_hashes.json` values unchanged (keys re-pathed).
-12. [ ] **V4 / I4** — no user-visible "orchestrator"; wire literal `agent`; a
-        pre-migration `orchestrator` decision renders "The Agent decided" (read-side
-        normalisation, no `event_log` rewrite).
+        identifier grep is clean except the kept ids; `evidence_search_coverage` written, both
+        ids read.
+12. [ ] **V4 / I4** — no `orchestrat` token remains outside historical docs and frozen
+        sources: modules, classes, log/span names, env vars, the `plan` table and the prompt
+        text all say agent; wire literal `agent`; a pre-migration `orchestrator` decision
+        renders "The Agent decided" (read-side normalisation, no `event_log` rewrite).
 13. [ ] **V5 / I5** — tabs read Agent · Result · Sources · Share · History; the Agent tab is
         the task index route; `/result` segment; tab locking unchanged.
 14. [ ] **V6 / I6** — the eighteen leaked literals route through `vocabulary.ts`; the
@@ -45,11 +48,13 @@ Slice-specific:
         and historical docs untouched (`git diff --stat -- docs/specs/sources docs/tasks/0[0-3]*`
         is empty except this task's folder).
 16. [ ] **V8 / I8** — the overlay copy table applied; the chat list shows on the Agent tab
-        with "Task Agent" pinned first and marked; no chat is labelled "Planning"; chats are
-        still called chats.
+        with "Task Agent" pinned first, marked by its label only; the active planning
+        conversation is the one pinned; no chat is labelled "Planning"; chats are still
+        called chats.
 17. [ ] **Collision audit** ran before the sweep and every listed collision has a recorded
         resolution; the sweep script is committed under `scripts/` and re-runnable.
-18. [ ] **No behaviour change** — no test assertion changed in meaning; no prompt text
-        changed; `uv.lock` and `pnpm-lock.yaml` unchanged.
+18. [ ] **No behaviour change** — no test assertion changed in meaning; the prompt diff is
+        one-to-one word swaps only (R1) and `prompt_hashes.json` is re-pinned in the same
+        commit; `uv.lock` and `pnpm-lock.yaml` unchanged.
 19. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
         ops CLI dry-run, `make fe-api-smoke`) and the Metabase follow-up is named in the PR.

@@ -22,23 +22,26 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `038-vocabulary-alignment` **CONTRACT DRAFTED 2026-09-04 — awaiting
-owner approval** (branch `task/038-vocabulary-alignment` from `dev`, merged
-up to `8626594f`): align the code, schema, API and screen words with the
+Design — task `038-vocabulary-alignment` **CONTRACT APPROVED 2026-09-04 ·
+owner (forks F1–F5 ruled by interview); adversarial review + plan next**
+(branch `task/038-vocabulary-alignment` from `dev`, merged up to `8626594f`): align the code, schema, API and screen words with the
 team's definitions (frozen source
 `docs/specs/sources/vocabulary/policy-atlas-definitions.md`). Code/DB `project`
 → `task`; `portfolio` → `project`; `evidence_base` → `evidence_search`; the
-screen says **Agent** for the orchestrator surface; tabs Agent · Result ·
-Sources · Share · History. **Tier 4** — table renames + a public-API path
-change (`/api/v1/tasks`, `/api/v1/projects`) + ADR 0036 + rollback plan.
+`orchestrator` → `agent` at every layer (modules, env vars, the
+`orchestration_plan` → `plan` table, and the prompt text — **owner ruling R1:
+like-for-like prompt word swaps need no version bump or replay**); tabs
+Agent · Result · Sources · Share · History; the pinned **Task Agent** primary
+chat. **Tier 4** — table renames + a public-API path change (`/api/v1/tasks`,
+`/api/v1/projects`) + ADR 0036 + rollback plan. No legacy redirects (public
+sharing is staging-only); 038 lands before open PRs #62/#52.
 Discharges the owner ruling of 2026-08-24 (`docs/deferred.md` § Task
 lifecycle IA) and retires ADR 0031 decision 2 (the screen/code split). Eight
 numbered defects V1–V8 and the owner forks F1–F5 are in
 `docs/tasks/038-vocabulary-alignment/contract.md`. **Renumbered from 037 on
 2026-09-04** after `037-public-projects` merged first. The rename now also
 covers 037's public read leg and moves the public share link from
-`/projects/{id}/results` to `/tasks/{id}/result` (fork F3). **Open PRs #62
-and #52 touch files this rename sweeps — merge order is an owner call (F5).**
+`/projects/{id}/results` to `/tasks/{id}/result`.
 
 Task `037-public-projects` is **merged to `dev`** (PR #64, `8626594f`,
 2026-09-04): public sharing of one Task from the Share tab
