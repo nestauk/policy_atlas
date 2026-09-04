@@ -375,7 +375,7 @@ export interface paths {
         };
         /**
          * Get Project
-         * @description Return one active project readable by the caller (owner or same-org colleague).
+         * @description Return one active project through its graded or redacted public leg.
          */
         get: operations["get_project_api_v1_projects__project_id__get"];
         put?: never;

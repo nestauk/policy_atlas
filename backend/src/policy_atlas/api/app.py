@@ -209,6 +209,9 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     from policy_atlas.api.routers.me import router as me_router
     from policy_atlas.api.routers.planning import router as planning_router
     from policy_atlas.api.routers.portfolios import router as portfolios_router
+    from policy_atlas.api.routers.projects import (
+        public_read_router as projects_public_read_router,
+    )
     from policy_atlas.api.routers.projects import router as projects_router
     from policy_atlas.api.routers.read_models import router as read_models_router
     from policy_atlas.api.routers.runs import router as runs_router
@@ -218,6 +221,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     for router in (
         me_router,
         projects_router,
+        projects_public_read_router,
         portfolios_router,
         project_conversations_router,
         planning_router,

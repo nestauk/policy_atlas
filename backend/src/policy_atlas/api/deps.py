@@ -11,7 +11,7 @@ import structlog
 from fastapi import Request
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.auth import get_current_user
+from policy_atlas.api.auth import get_current_user, get_optional_user
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import (
@@ -209,6 +209,7 @@ __all__ = [
     "get_chat_backend",
     "get_chat_embedding_backend",
     "get_current_user",
+    "get_optional_user",
     "get_engine",
     "get_executor",
     "get_grounding_judge_backend",

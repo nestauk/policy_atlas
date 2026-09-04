@@ -6628,7 +6628,7 @@
     },
     "/api/v1/projects/{project_id}": {
       "get": {
-        "description": "Return one active project readable by the caller (owner or same-org colleague).",
+        "description": "Return one active project through its graded or redacted public leg.",
         "operationId": "get_project_api_v1_projects__project_id__get",
         "parameters": [
           {

@@ -33,7 +33,12 @@ def test_projects_create_list_get_archive_and_owner_404(engine: Engine, tmp_path
         cross_owner = client.get(f"/api/v1/projects/{project_id}", headers=other)
         assert cross_owner.status_code == absent.status_code == 404
         assert cross_owner.json() == absent.json()
-        assert client.get(f"/api/v1/projects/{project_id}").status_code == 401
+        # Task 037: GET /projects/{id} is conditionally public — a tokenless
+        # read of a non-public row gets the same indistinguishable 404 as an
+        # unknown id, never a 401 that would disclose the row exists.
+        anonymous = client.get(f"/api/v1/projects/{project_id}")
+        assert anonymous.status_code == 404
+        assert anonymous.json() == absent.json()
 
         assert (
             client.post(f"/api/v1/projects/{project_id}/archive", headers=owner).status_code

@@ -33,6 +33,35 @@ from tests.api.resource_support import api_client, create_project
 # intentional public write. Health probes sit outside `/api/v1`.
 _UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz", "/api/v1/waitlist"})
 
+# These GET routes are conditionally public: absent Authorization gets an
+# indistinguishable 404 unless the requested active project has is_public.
+_CONDITIONALLY_PUBLIC_GETS = frozenset(
+    {
+        "/api/v1/projects/{project_id}",
+        "/api/v1/projects/{project_id}/funnel",
+        "/api/v1/projects/{project_id}/landscape",
+        "/api/v1/projects/{project_id}/groups",
+        "/api/v1/projects/{project_id}/evidence",
+        "/api/v1/projects/{project_id}/findings",
+        "/api/v1/projects/{project_id}/sources/{source_id}",
+        "/api/v1/projects/{project_id}/artefact",
+        "/api/v1/projects/{project_id}/coverage",
+        "/api/v1/projects/{project_id}/citations/{citation_key}/context",
+        "/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+    }
+)
+
+_PUBLIC_STRUCTURAL_GETS = frozenset(
+    {
+        "/api/v1/projects/{project_id}",
+        "/api/v1/projects/{project_id}/funnel",
+        "/api/v1/projects/{project_id}/landscape",
+        "/api/v1/projects/{project_id}/groups",
+        "/api/v1/projects/{project_id}/evidence",
+        "/api/v1/projects/{project_id}/findings",
+    }
+)
+
 # --- Pagination conformance --------------------------------------------------
 
 
@@ -126,6 +155,8 @@ def _api_v1_route_cases() -> list[tuple[str, str]]:
             if not route.path.startswith("/api/v1") or route.path in _UNAUTHENTICATED_ALLOWLIST:
                 continue
             for method in sorted((route.methods or set()) - {"HEAD", "OPTIONS"}):
+                if method == "GET" and route.path in _CONDITIONALLY_PUBLIC_GETS:
+                    continue
                 cases.append((method, route.path))
         return cases
 
@@ -150,6 +181,11 @@ def _fill_non_project_path_params(path_template: str) -> str:
 
 
 _UNAUTHENTICATED_CASES = _api_v1_route_cases()
+
+
+def test_unauthenticated_sweep_keeps_non_public_routes() -> None:
+    """The History endpoint remains in the always-401 conformance class."""
+    assert ("GET", "/api/v1/projects/{project_id}/decisions") in _UNAUTHENTICATED_CASES
 
 _PROJECT_SCOPED_GET_CASES = [
     (method, path)
@@ -183,6 +219,33 @@ def test_every_api_v1_route_is_unauthenticated_without_a_token(
         assert set(body) == {"error"}
         assert set(body["error"]) == {"code", "message"}
         assert body["error"]["code"] == "unauthenticated"
+
+
+@pytest.mark.parametrize("path_template", sorted(_CONDITIONALLY_PUBLIC_GETS))
+def test_conditionally_public_gets_hide_private_and_unknown_projects_and_open_public_ones(
+    tmp_path: Path, path_template: str
+) -> None:
+    """Public GETs are tokenless only for active shared projects, never 401."""
+    templated = _fill_non_project_path_params(path_template)
+    if path_template.endswith("/chunks/{chunk_id}/context"):
+        templated = f"{templated}?quote=excerpt"
+    with api_client(tmp_path) as (client, owner, _other):
+        project_id = create_project(client, owner)
+        private = client.get(templated.format(project_id=project_id))
+        unknown = client.get(templated.format(project_id=uuid.uuid4()))
+
+        assert private.status_code == unknown.status_code == 404, path_template
+        assert private.content == unknown.content, path_template
+        assert private.json()["error"]["code"] == "not_found"
+
+        shared = client.patch(
+            f"/api/v1/projects/{project_id}", headers=owner, json={"is_public": True}
+        )
+        assert shared.status_code == 200, shared.text
+        response = client.get(templated.format(project_id=project_id))
+        assert response.status_code in {200, 404}, (path_template, response.text)
+        if path_template in _PUBLIC_STRUCTURAL_GETS:
+            assert response.status_code == 200, (path_template, response.text)
 
 
 @pytest.mark.parametrize(
