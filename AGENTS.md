@@ -49,11 +49,3 @@ command makes it redundant.
   (`docs/agentic-ops/failure-log.md`, 2026-07-07).
 - Parallel test lanes that share one Postgres break migration round-trips
   (`docs/deferred.md` § Codebase health). Run the full gate serially.
-
-# Current phase
-
-Task `038-vocabulary-alignment` — design phase. Contract approved 2026-09-04 (owner);
-plan and ADR 0036 pending. Branch `task/038-vocabulary-alignment` from `dev` (`8626594f`).
-Scope, rulings R1–R2 and defects V1–V12: `docs/tasks/038-vocabulary-alignment/contract.md`.
-`dev` carries tasks 001–037 (records under `docs/tasks/`); the system is live at
-v3.policyatlas.uk.
