@@ -62,7 +62,24 @@ export const COPY = {
   /** A locked tab explains itself rather than showing an empty page. */
   lockedHint: "Available once the analysis has run",
   notDecided: "Not decided yet",
-  shareComingSoon: "More sharing features coming soon",
+} as const;
+
+/**
+ * Task 037 — the Share tab's public-link section (contract § R1, §
+ * Public / private boundary). The warning states exactly what a public link
+ * exposes, before the owner can turn it on.
+ */
+export const PUBLIC_SHARE = {
+  heading: "Public link",
+  statusOn: "Shared publicly — anyone with the link can view.",
+  statusOff: "Not shared publicly.",
+  warning:
+    "Anyone on the internet with the link can see this Task's results and sources — including the source list and quoted excerpts from the underlying documents. They do not need to sign in.",
+  turnOn: "Share publicly",
+  turnOff: "Stop sharing publicly",
+  copyLink: "Copy link",
+  copied: "Link copied",
+  toggleFailed: "Public sharing couldn't be changed. Try again.",
 } as const;
 
 /**

@@ -375,7 +375,7 @@ export interface paths {
         };
         /**
          * Get Project
-         * @description Return one active project readable by the caller (owner or same-org colleague).
+         * @description Return one active project through its graded or redacted public leg.
          */
         get: operations["get_project_api_v1_projects__project_id__get"];
         put?: never;
@@ -3074,8 +3074,20 @@ export interface components {
          *             identity row yet. **Never an email** (contract § 3b). `None` when
          *             the row has no owner at all (the CLI-created rows), leaving the
          *             placeholder glyph to the frontend.
+         *         is_public: Whether the owner has turned public sharing on for this
+         *             row (task 037). A property of the row, not the caller.
+         *         access: **Caller-relative**, not a property of the row: `"public"`
+         *             means this read was served by the public leg and the shape is
+         *             redacted (`owner_display = None`, `portfolio_ids = []`,
+         *             `is_owner = False`); a graded read (owner, colleague or admin)
+         *             always says `"full"`.
          */
         ProjectOut: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "full" | "public";
             /** Archived At */
             archived_at?: string | null;
             /**
@@ -3085,6 +3097,8 @@ export interface components {
             created_at: string;
             /** Is Owner */
             is_owner: boolean;
+            /** Is Public */
+            is_public: boolean;
             latest_run?: components["schemas"]["LatestRun"] | null;
             /** Name */
             name: string;
@@ -3132,15 +3146,20 @@ export interface components {
          *             leave unchanged; an explicit `null` is refused 422. Cannot be
          *             combined with `portfolio_ids` in one body — see
          *             :meth:`reject_visibility_with_portfolio`.
+         *         is_public: Owner-only public-sharing flag (task 037). Omit to leave
+         *             unchanged; an explicit `null` is refused 422 — see
+         *             :meth:`reject_nulls_without_meaning`.
          *
          *     Note:
-         *         `name` and `visibility` back NOT NULL columns, so an explicit `null`
-         *         on either is refused rather than treated as "unchanged" — see
-         *         :meth:`reject_nulls_without_meaning`. `question` and `portfolio_ids`
-         *         are not: null clears the question, and null on `portfolio_ids` is
-         *         read as `[]` (unassign every portfolio).
+         *         `name`, `visibility` and `is_public` back NOT NULL columns, so an
+         *         explicit `null` on any of them is refused rather than treated as
+         *         "unchanged" — see :meth:`reject_nulls_without_meaning`. `question`
+         *         and `portfolio_ids` are not: null clears the question, and null on
+         *         `portfolio_ids` is read as `[]` (unassign every portfolio).
          */
         ProjectUpdate: {
+            /** Is Public */
+            is_public?: boolean | null;
             /** Name */
             name?: string | null;
             /** Portfolio Ids */

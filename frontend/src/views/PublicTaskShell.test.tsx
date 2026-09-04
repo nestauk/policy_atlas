@@ -1,0 +1,106 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import * as queries from "../api/queries";
+import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
+import { PublicTaskShell } from "./PublicTaskShell";
+
+vi.mock("../api/queries", () => ({ useProject: vi.fn() }));
+
+vi.mock("../auth", () => ({
+  useAuth: () => ({
+    user: null,
+    status: "unauthenticated",
+    signIn: vi.fn(),
+    signOut: vi.fn(),
+    onUnauthenticated: vi.fn(),
+    getAccessToken: async () => null,
+  }),
+}));
+
+// The shell mounts RunStreamProvider with connect={false}; stub the SSE
+// client so an accidental connect would still never open a real stream —
+// and assert below that it is never called at all.
+const sseState = vi.hoisted(() => ({ connect: vi.fn(() => ({ close: vi.fn() })) }));
+vi.mock("../api/sse", () => ({
+  connectEventStream: sseState.connect,
+}));
+
+const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+
+function mockProject(
+  data: Record<string, unknown> | undefined,
+  { pending = false } = {},
+) {
+  vi.mocked(queries.useProject).mockReturnValue({
+    isPending: pending,
+    data,
+  } as unknown as ReturnType<typeof queries.useProject>);
+}
+
+const PUBLIC_PROJECT = {
+  project_id: PROJECT_ID,
+  name: "Shared evidence review",
+  access: "public",
+  is_public: true,
+  is_owner: false,
+  owner_display: null,
+  portfolio_ids: [],
+  latest_run: null,
+};
+
+function renderShell(path: string) {
+  const queryClient = new QueryClient();
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/" element={<div>splash probe</div>} />
+          <Route path="/projects/:projectId" element={<PublicTaskShell />}>
+            <Route path="results" element={<div>results probe</div>} />
+            <Route path="sources" element={<div>sources probe</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+beforeEach(() => {
+  sessionStorage.clear();
+  sseState.connect.mockClear();
+});
+
+describe("PublicTaskShell — the public task view (task 037)", () => {
+  it("shows a loading state while the tokenless project read is pending", () => {
+    mockProject(undefined, { pending: true });
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading…");
+  });
+
+  it("keeps stash-and-splash for a Task that is not public — same as before the slice", () => {
+    mockProject(undefined);
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    expect(screen.getByText("splash probe")).toBeInTheDocument();
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/projects/${PROJECT_ID}/results`);
+  });
+
+  it("renders the two-tab shell around a public Task's Results", () => {
+    mockProject(PUBLIC_PROJECT);
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    expect(screen.getByText("Shared evidence review")).toBeInTheDocument();
+    expect(screen.getByText("results probe")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    const links = Array.from(taskNav.querySelectorAll("a")).map((a) => a.textContent);
+    expect(links).toEqual(["Results", "Sources"]);
+  });
+
+  it("never opens the run event stream — the events route is not public", () => {
+    mockProject(PUBLIC_PROJECT);
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    expect(sseState.connect).not.toHaveBeenCalled();
+  });
+});

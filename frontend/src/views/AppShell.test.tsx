@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./AppShell";
 import { SITE_DISCLAIMER } from "./AppFooter";
@@ -27,17 +27,25 @@ const meState = vi.hoisted(() => ({
     is_admin: false,
   },
 }));
-const projectState = vi.hoisted(() => ({ isOwner: true }));
+const projectState = vi.hoisted(() => ({ isOwner: true, access: "full", pending: false }));
+
+// Both mocked as spies (task 037 review fix) so a describe block below can
+// assert neither is invoked while the project query is pending — a real
+// conversations fetch or a real SSE connect would mean access was assumed
+// before it was known.
+const useConversationsState = vi.hoisted(() => ({ mock: vi.fn(() => ({ data: { data: [] } })) }));
+const sseState = vi.hoisted(() => ({ connect: vi.fn(() => ({ close: vi.fn() })) }));
 
 vi.mock("../api/queries", () => ({
   useMe: () => ({ data: meState.data }),
   useProject: (projectId: string) => ({
-    data: projectId
+    data: projectId && !projectState.pending
       ? {
           project_id: PROJECT_ID,
           name: "Acme project",
           visibility: "org",
           is_owner: projectState.isOwner,
+          access: projectState.access,
         }
       : undefined,
   }),
@@ -45,7 +53,7 @@ vi.mock("../api/queries", () => ({
   // The nav logo checks all projects for an active run outside a task.
   useProjects: () => ({ data: { data: [] } }),
   // The chat side panel (029 rev 3.4) mounts on non-workspace project routes.
-  useConversations: () => ({ data: { data: [] } }),
+  useConversations: useConversationsState.mock,
   useArtefact: () => ({ data: undefined }),
   // The header's project-settings popover (028 F.5) wires the rename/archive
   // mutations, which resolve their API client through this hook — a bare
@@ -72,7 +80,7 @@ vi.mock("../auth", () => ({
 // AppShell owns RunStreamProvider on task routes — stub the SSE client so
 // tests never open a real fetch-stream.
 vi.mock("../api/sse", () => ({
-  connectEventStream: () => ({ close: vi.fn() }),
+  connectEventStream: sseState.connect,
 }));
 
 function renderShell(initialPath: string) {
@@ -336,5 +344,63 @@ describe("AppShell — global chrome, continued", () => {
     expect(screen.getByRole("heading", { name: "Privacy notice" })).toBeInTheDocument();
     await user.click(screen.getByRole("link", { name: "Terms of use" }));
     expect(screen.getByRole("heading", { name: "Terms of use" })).toBeInTheDocument();
+  });
+});
+
+describe("AppShell — public-leg access renders the two-tab view (task 037)", () => {
+  beforeEach(() => {
+    projectState.isOwner = false;
+    projectState.access = "public";
+  });
+  afterEach(() => {
+    projectState.isOwner = true;
+    projectState.access = "full";
+  });
+
+  it("shows only Results and Sources in the task nav for a public-leg reader", () => {
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    const links = Array.from(taskNav.querySelectorAll("a")).map((a) => a.textContent);
+    expect(links).toEqual(["Results", "Sources"]);
+  });
+
+  it("does not mount the chat side panel on the public leg", () => {
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByLabelText("Project chat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open chat")).not.toBeInTheDocument();
+  });
+
+  it("keeps the five-tab shell for graded readers", () => {
+    projectState.access = "full";
+    projectState.isOwner = true;
+    renderShell(`/projects/${PROJECT_ID}/results`);
+    const taskNav = screen.getByRole("navigation", { name: "Task" });
+    const labels = Array.from(taskNav.querySelectorAll("a, [aria-disabled]")).map(
+      (el) => el.textContent,
+    );
+    expect(labels).toHaveLength(5);
+  });
+});
+
+describe("AppShell — gates the run stream and chat panel until access is known (task 037 review fix)", () => {
+  beforeEach(() => {
+    sseState.connect.mockClear();
+    useConversationsState.mock.mockClear();
+    projectState.pending = true;
+  });
+  afterEach(() => {
+    projectState.pending = false;
+  });
+
+  it("does not connect the run stream while the project query is pending", () => {
+    renderShell(`/projects/${PROJECT_ID}/sources`);
+    expect(sseState.connect).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch conversations or show the chat panel while the project query is pending", () => {
+    renderShell(`/projects/${PROJECT_ID}/sources`);
+    expect(useConversationsState.mock).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Project chat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open chat")).not.toBeInTheDocument();
   });
 });

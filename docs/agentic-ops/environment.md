@@ -1,7 +1,10 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–033; 030–032 change no env; 033 adds the `ops` dependency
+stands (tasks 001–037; 030–032 change no env; 034 changes no env; 036 adds the
+`waitlist_entry` table and 037 adds `project.is_public` — both additive
+migrations, so run `alembic upgrade head` against the dev DB after pulling;
+neither adds env vars; 033 adds the `ops` dependency
 group to `[tool.uv] default-groups` — synced automatically by `uv run`, excluded
 from the image — plus the organisation schema, so run `alembic upgrade head`
 against the dev DB after pulling it; the ops CLI (`python -m policy_atlas.ops`)

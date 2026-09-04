@@ -5,7 +5,7 @@ import { useUpdateProject } from "../api/mutations";
 import { useMe, usePortfolios, useProject } from "../api/queries";
 import { conflictSentences, isConflictCode } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
-import { COPY, LIFECYCLE_LABELS, PROJECT, TASK } from "../lib/vocabulary";
+import { LIFECYCLE_LABELS, PROJECT, PUBLIC_SHARE, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
 import { Card } from "../ui/brand/Card";
 import { useToast } from "../ui/radix/Toast";
@@ -13,6 +13,45 @@ import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { VisibilityControl, visibilityOutcomeLine } from "./VisibilityControl";
 
 type Visibility = components["schemas"]["ProjectOut"]["visibility"];
+
+/**
+ * Public link (task 037, contract § R1) — owner-only, mirrors the
+ * `VisibilityControl` `isOwner` guard: the caller renders this only when
+ * `project.data.is_owner`.
+ */
+function PublicLinkSection({
+  isPublic,
+  pending,
+  onToggle,
+  onCopyLink,
+}: {
+  isPublic: boolean;
+  pending: boolean;
+  onToggle: (next: boolean) => void;
+  onCopyLink: () => void;
+}) {
+  return (
+    <section aria-labelledby="public-link-heading" className="mt-8">
+      <h2 id="public-link-heading" className="text-lead font-semibold text-navy">
+        {PUBLIC_SHARE.heading}
+      </h2>
+      <p className="mt-2 text-body text-grey">
+        {isPublic ? PUBLIC_SHARE.statusOn : PUBLIC_SHARE.statusOff}
+      </p>
+      <p className="mt-2 text-body text-grey">{PUBLIC_SHARE.warning}</p>
+      <div className="mt-4 flex flex-wrap gap-3">
+        <Button type="button" variant="ghost" disabled={pending} onClick={() => onToggle(!isPublic)}>
+          {isPublic ? PUBLIC_SHARE.turnOff : PUBLIC_SHARE.turnOn}
+        </Button>
+        {isPublic && (
+          <Button type="button" variant="ghost" onClick={onCopyLink}>
+            {PUBLIC_SHARE.copyLink}
+          </Button>
+        )}
+      </div>
+    </section>
+  );
+}
 
 /**
  * Share: assignment lives here from task creation. Real sharing/export is
@@ -59,6 +98,30 @@ export function ShareView() {
 
   const setMembership = (portfolioIds: string[]) => {
     update.mutate({ portfolio_ids: portfolioIds });
+  };
+
+  // Public link (task 037, contract § R1): owner-only, mirrors the
+  // VisibilityControl `isOwner` guard below.
+  const toggleIsPublic = (next: boolean) => {
+    update.mutate(
+      { is_public: next },
+      {
+        onSuccess: () =>
+          toast.toast({
+            title: next ? PUBLIC_SHARE.statusOn : PUBLIC_SHARE.statusOff,
+            tone: "default",
+          }),
+        onError: () => toast.toast({ title: PUBLIC_SHARE.toggleFailed, tone: "error" }),
+      },
+    );
+  };
+
+  const copyPublicLink = () => {
+    const url = `${window.location.origin}/projects/${projectId}/results`;
+    navigator.clipboard.writeText(url).then(
+      () => toast.toast({ title: PUBLIC_SHARE.copied, tone: "default" }),
+      () => toast.toast({ title: PUBLIC_SHARE.copyLink, description: url, tone: "error" }),
+    );
   };
 
   return (
@@ -140,7 +203,14 @@ export function ShareView() {
             />
           </section>
         )}
-        <p className="mt-8 text-body text-grey">{COPY.shareComingSoon}</p>
+        {project.data !== undefined && project.data.is_owner && (
+          <PublicLinkSection
+            isPublic={project.data.is_public}
+            pending={update.isPending}
+            onToggle={toggleIsPublic}
+            onCopyLink={copyPublicLink}
+          />
+        )}
       </Card>
     </main>
   );
