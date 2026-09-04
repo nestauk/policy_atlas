@@ -1,7 +1,7 @@
 # Rubric: 038-vocabulary-alignment
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is in
-progress, not done. Terms and defect ids V1–V8 are defined in [contract.md](contract.md);
+progress, not done. Terms and defect ids V1–V9 are defined in [contract.md](contract.md);
 this file does not restate them. Defect ids run V1–V9.
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
