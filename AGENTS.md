@@ -22,7 +22,19 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `037-public-projects` **CONTRACT + PLAN APPROVED 2026-09-04
+Design — task `038-apo-mod` **CONTRACT + PLAN DRAFTED 2026-09-04 · awaiting
+owner approval** (branch `task038/apo-mod`): a small test mod for an
+Australian use case — restrict one run's sources to Australian Policy Online
+(APO). R1 (drop OpenAlex) is free via the existing
+`backend_scope="grey_lit_only"`; R2 threads one new scope constraint
+(`publisher_source` → Overton wire param `source=apo`) through the fail-closed
+filter chain; R3 shows it on the plan document. Entry point: the tester edits
+the approved plan (Sources dropdown + "APO" in the Source geography box) — the
+planner prompt (`planner_v10`) and orchestrator are untouched. **Tier 3**
+(egress param + one additive public field) with an ❓ owner call on waiving the
+adversarial lanes for a test mod. Artefacts: `docs/tasks/038-apo-mod/`.
+
+Task `037-public-projects` (previous pointer): **CONTRACT + PLAN APPROVED 2026-09-04
 · owner; adversarial review (one combined short pass, owner's call) ran
 2026-09-04 — five findings, all folded in (public view mode in reused
 views · cache flush on identity change · `access` read field for
