@@ -25,9 +25,9 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > `/api/v1/projects/*` and every bookmarked URL; the frontend and the e2e specs are
 > the only consumers."*
 >
-> **Amendments 2026-09-04** (owner + colleague, folded into the
-> [definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) — the owner
-> keeps that file current):
+> **Amendments 2026-09-04** (owner + colleague, folded into the living
+> [vocabulary.md](../../specs/vocabulary.md); the same-day snapshot is frozen under
+> `sources/vocabulary/`):
 > the Agent tab hosts all of a Task's chats in a sidebar; chats stay **chats**;
 > the primary (planning) chat is the **Task Agent**, pinned first and visually
 > distinct. The mode labels are withdrawn. V5 and V8 are rewritten to this.
@@ -49,7 +49,7 @@ One implementation slice. Keep it reviewable. Boundaries are in
 ## Goal
 
 Make the words in the code, the schema, the API and the screen the same words the
-team uses ([frozen definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md)).
+team uses ([vocabulary.md](../../specs/vocabulary.md)).
 Today three vocabularies coexist: the screen says Task/Project/Evidence search, the
 code and database say `project`/`portfolio`/`evidence_base`, and the chat surface
 has no name at all. Twelve numbered defects, V1–V12. **No product behaviour change**:
@@ -102,7 +102,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Artefact** | Something a Task generates. Unchanged word; British spelling stays. |
 | **Screen word / code word** | The split ADR 0031 decision 2 made deliberate; this slice ends it. After the slice the screen word and the code word are the same word. |
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
-| **Frozen** | `docs/specs/sources/**` — not rewritten by the sweep (ADR 0002). The one exception is the owner-maintained definitions file, which the owner edits directly. |
+| **Frozen** | `docs/specs/sources/**` — never edited, not rewritten by the sweep (ADR 0002). The definitions snapshot there is frozen; the living vocabulary is `docs/specs/vocabulary.md`. |
 | **Historical** | Merged task docs (`docs/tasks/001–034`), ADRs 0001–0034, `docs/verification/`. Not rewritten (012 precedent). |
 | **V1–V12** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
 | **Session** | Langfuse's grouping of traces. Set by passing `session_id` into the tracing helpers (`core/tracing.py` `_session_scope`). Today: the conversation id for planning and chat turns, nothing for runs. |
@@ -110,7 +110,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 
 ## Read first
 
-- [Definitions](../../specs/sources/vocabulary/policy-atlas-definitions.md) (owner-maintained; amended 2026-09-04) — the source of every target word.
+- [vocabulary.md](../../specs/vocabulary.md) (living, owner-maintained; the 2026-09-04 snapshot is frozen under `sources/vocabulary/`) — the source of every target word.
 - [ADR 0031](../../adr/0031-portfolio-layer-above-the-project.md) decision 2 — the split this slice retires, and why it was made (cost of the rename).
 - [ADR 0032](../../adr/0032-portfolio-membership-many-to-many.md), [ADR 0033](../../adr/0033-organisation-tenancy-and-global-admin-read.md) — the membership and tenancy rows the rename carries.
 - [ADR 0035](../../adr/0035-public-task-read-access.md) and [037-public-projects/contract.md](../037-public-projects/contract.md) — `project.is_public`, the 11-route public read leg and the public share link (`/projects/{id}/results`), all renamed here.
@@ -155,7 +155,7 @@ What the slice touches, with the size measured on `dev` at `8626594f`.
 | Agent overlay | `aria-label="Project chat"`, FAB "Open chat"/"Chat", tabs "Planning" + chats, library "Chats"; hidden on the Plan tab (`AppShell` `showChatPanel = … && !inWorkspace`) | § V8 copy table; shown on the Agent tab too, "Task Agent" pinned first and marked | `ChatSidePanel`, `ConversationTabs`, `ChatsLibrary`, `AppShell`, `WorkspaceView` |
 | e2e | `/projects/`, "Results", "Read the evidence base", "evidence base" ×22 | new words | 6 specs |
 | Living docs | `specs/capabilities/evidence-base/`, `data-model.md`, `web-api.md`, `index.md`, `deferred.md`, `knowledge/` | § V7 | |
-| **Do not change** | `waitlist_entry` (036) · `is_public` column name and the `access` read field (037; only their table moves) · `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · the stored `kind = planning` value · prompt *meaning* (only the words in the row above change) · `docs/specs/sources/**` except the owner-maintained definitions · historical docs | | |
+| **Do not change** | `waitlist_entry` (036) · `is_public` column name and the `access` read field (037; only their table moves) · `evidence_scope` (already right) · `scope=all\|mine` listing param · `task_count` · `eb_iof_base_v1`/`eb_icf_base_v1` fingerprint ids · the stored `kind = planning` value · prompt *meaning* (only the words in the row above change) · `docs/specs/sources/**` · historical docs | | |
 
 ## Defects
 
@@ -351,10 +351,11 @@ words only.
 
 ### V7 — The living docs say the old words
 
-- New spec `docs/specs/system/vocabulary.md` (type: System contract): the
-  glossary distilled from the frozen definitions, plus the code-word table
-  (entity → table → route → TS type) and the two-senses-of-task rule. Listed in
-  `index.md` and its routing table.
+- `docs/specs/vocabulary.md` (type: Product spec; created at the design
+  phase, A8 option 2): the owner's living definitions plus § Code words. The
+  build fills § Code words with the as-built table (entity → table → route →
+  TS type) and keeps the two-senses-of-task rule. Listed in `index.md`; add it
+  to the routing table.
 - `data-model.md` § Entity hierarchy, `web-api.md` (every path, § Deprecations
   gains the 038 entry), `execution-orchestration.md` and `plan-as-object.md`
   where they name the row, `index.md`, `AGENTS.md`, `docs/agentic-ops/harness.md`
@@ -373,8 +374,8 @@ words only.
   rule 12 for the enumerated word substitutions of this slice, with the hash
   changes and the semantic-equivalence check, and that it sets no general
   words-only precedent; the amendment of ADR 0035's concrete paths and of
-  `web-api.md`'s additive-only rule for this one break; and the narrow ADR 0002
-  exception for the owner-maintained definitions file.
+  `web-api.md`'s additive-only rule for this one break. (A8 needs no ADR
+  exception: the living vocabulary moved out of `sources/`, owner option 2.)
 - ADR 0031: decision 2 marked **superseded by ADR 0036**; ADR 0036 written at
   step 4.
 - `docs/knowledge/`: bodies that describe current code are updated in words;
@@ -750,8 +751,9 @@ two `decided_by` projections missing · A6 ADR 0036 must narrowly supersede
 `prompting.md` rule 12 and note that no stored value carries the
 `orchestrator_v1` family id (checked: `prompt_version` rows are component
 prompts only) · A7 contradictory redirect rows + ADR 0035 paths + `web-api.md`
-additive-only rule · A8 ADR 0002 exception for the owner-maintained definitions
-file must be recorded in ADR 0036 · A9 V8 scoped to owner, no authorization
+additive-only rule · A8 ADR 0002 vs an owner-edited source — resolved by moving
+the living definitions to `docs/specs/vocabulary.md` and freezing the snapshot
+(owner option 2) · A9 V8 scoped to owner, no authorization
 change · A10 exactly one Task Agent · A11 V11 seam pinned · A12 keep the live
 relevance annotator · A13 knip candidates enumerated with dispositions · A14
 keep `journey/presentation.ts` · A15 defect count, rubric 3/5/18 wording,

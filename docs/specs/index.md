@@ -22,7 +22,7 @@ When two of them disagree on such an area, the lower number wins (ratified from 
 6. [nesta-brand-tokens.md](sources/evidence-base-ux/nesta-brand-tokens.md) + [hifi.css](sources/evidence-base-ux/hifi.css) — visual language / token cues.
 7. [task-lifecycle-ux/](sources/task-lifecycle-ux/README.md) — the 2026-08-17 clickable prototype for the task-lifecycle IA (workspace level + the five task stages). Product intent only, never a schema/contract source; it contains outputs the backend deliberately does not produce. Read its README for how to unpack it.
 8. [synthesis-report-ux/](sources/synthesis-report-ux/README.md) — the 2026-08-26 clickable prototype for the report's Results tab (front matter, key-findings bullets, case-study cards). Product intent only, never a schema/contract source; task 034's contract records its deliberate departures. Read its README for how to unpack it.
-9. [vocabulary/policy-atlas-definitions.md](sources/vocabulary/policy-atlas-definitions.md) — the team's agreed definitions (2026-09-04): Capability · Component · Task · Project · Tabs · Artefact · Agent overlay · Links · Context. Input to task 038; the living glossary is `system/vocabulary.md`. Owner-maintained: amended 2026-09-04 (the Agent tab, chats stay chats, the pinned **Task Agent** primary chat).
+9. [vocabulary/policy-atlas-definitions.md](sources/vocabulary/policy-atlas-definitions.md) — the team's definitions as agreed on 2026-09-04 (Capability · Component · Task · Project · Tabs · Artefact · Agent · Task Agent · Chats · Links · Context). Frozen snapshot; the living version is [vocabulary.md](vocabulary.md).
 
 Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7).
 
@@ -34,6 +34,8 @@ where a spec covers a topic it is authoritative, not the frozen source. They are
 implementation lands — see the flow-back in [README](README).
 
 - [product.md](product.md) — product boundary and shared mental model.
+- [vocabulary.md](vocabulary.md) — the living product vocabulary (owner-maintained
+  definitions + the code-word table task 038 keeps in step).
 - System contracts (the cross-cutting framework every capability + the orchestrator honours):
   - [system/data-model.md](system/data-model.md)
   - [system/provenance-grounding.md](system/provenance-grounding.md)

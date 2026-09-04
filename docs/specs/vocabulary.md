@@ -1,18 +1,20 @@
 ---
-type: Frozen design source
-title: Policy Atlas definitions (team decision, 2026-09-04)
-description: The team's agreed definitions for Capability, Component, Task, Project, Tabs, Artefact, Agent overlay, Links and Context — the input to the 038 vocabulary-alignment slice.
-tags: [source, vocabulary, frozen]
+type: Product spec
+title: Vocabulary — Policy Atlas definitions
+description: The team's living definitions for Capability, Component, Task, Project, Tabs, Artefact, Agent, Task Agent, Chats, Links and Context, plus the code-word table the build keeps in step with them.
+tags: [product, vocabulary, glossary]
 timestamp: 2026-09-04
 ---
 
-# Definitions for Policy Atlas
+# Vocabulary — Policy Atlas definitions
 
-> **Frozen source (ADR 0002) — never edited.** Point-in-time snapshot of the owner's
-> "Policy Atlas: Definitions" as it stood at the end of 2026-09-04, after that day's
-> amendments (the Agent tab, chats stay chats, the pinned "Task Agent", the "evidence base"
-> ruling). **The living version is [docs/specs/vocabulary.md](../../vocabulary.md)** — edit
-> that, not this. The bracketed status words are the team's.
+**Living, owner-maintained.** This is the canonical product vocabulary. The owner edits
+§ Definitions; task 038 (and any later rename) keeps § Code words in step with it. The
+point-in-time original is frozen at
+[sources/vocabulary/policy-atlas-definitions.md](sources/vocabulary/policy-atlas-definitions.md)
+(ADR 0002: sources are never edited — this file is where the vocabulary evolves).
+
+## Definitions
 
 This document helps us align and use the same definitions for the different concepts of the app.
 
@@ -69,3 +71,20 @@ Each Task should (more or less) feature similar "Lifecycle Tabs" (**Tabs**):
 - A user may want to re-run some aspect of a Task, or the whole Task, from a new chat rather than only from the Task Agent. Iterative re-running of Tasks is not bottomed out and can be its own feature.
 - Active (not archived) chats become reachable anywhere in the app, including outside a Task, from the round chat/Agent icon. Users should eventually ask questions with any Tasks or Projects as context — possibly adjusted when the meta-analysis capability arrives.
 - Making chat more functional is a separate task, alongside iteration, meta-analysis and artefact editing.
+
+## Code words
+
+Filled by task 038 (V7). Until it lands, the screen word and the code word differ per
+[ADR 0031](../adr/0031-portfolio-layer-above-the-project.md) decision 2:
+
+| Product word | Code row / key today | After task 038 |
+|---|---|---|
+| Task | `project` | `task` |
+| Project | `portfolio` | `project` |
+| Evidence search (capability) | `evidence_base` | `evidence_search` |
+| Agent | `orchestrator` | `agent` |
+| Task Agent | conversation `kind = planning` | unchanged (screen label only) |
+| Chat | conversation `kind = chat` | unchanged |
+
+**Two senses of "task".** The product Task above; and "task NNN", an engineering slice
+under `docs/tasks/`. Code comments that say "(task 022)" mean the slice.
