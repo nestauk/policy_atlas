@@ -48,4 +48,5 @@ docs/tasks/*/evidence/
 # Claude worktrees
 .claude/worktrees
 
+# Cursor plans
 .cursor/plans

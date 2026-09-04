@@ -43,13 +43,23 @@ export function OidcAuthProvider({ children }: { children: ReactNode }) {
         window.history.replaceState({}, document.title, returnTo ?? window.location.pathname);
       }}
     >
-      <OidcAuthAdapter>{children}</OidcAuthAdapter>
+      <OidcAuthAdapter clientId={clientId} redirectUri={redirectUri}>
+        {children}
+      </OidcAuthAdapter>
     </OidcLibProvider>
   );
 }
 
 /** Adapts `react-oidc-context`'s richer surface down to our `AuthApi` shape. */
-function OidcAuthAdapter({ children }: { children: ReactNode }) {
+function OidcAuthAdapter({
+  children,
+  clientId,
+  redirectUri,
+}: {
+  children: ReactNode;
+  clientId: string;
+  redirectUri: string;
+}) {
   const oidc = useOidcLibAuth();
 
   // `react-oidc-context`'s `oidc` object gets a new identity on every
@@ -80,8 +90,17 @@ function OidcAuthAdapter({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
-    void oidcRef.current.signoutRedirect();
-  }, []);
+    // Cognito's /logout is not OIDC RP-Initiated Logout: it requires
+    // client_id + logout_uri. oidc-client-ts sends id_token_hint (and
+    // optionally post_logout_redirect_uri) and omits client_id, which
+    // Cognito surfaces as "Client does not exist".
+    void oidcRef.current.signoutRedirect({
+      extraQueryParams: {
+        client_id: clientId,
+        logout_uri: redirectUri,
+      },
+    });
+  }, [clientId, redirectUri]);
 
   const onUnauthenticated = useCallback(() => {
     const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;

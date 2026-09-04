@@ -2,14 +2,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AUTH_RETURN_TO_KEY, OidcAuthProvider } from "./OidcAuthProvider";
+import { useAuth } from "./AuthContext";
 
 // The adapter's contract with react-oidc-context, exercised per auth state.
 const signinRedirect = vi.fn();
+const signoutRedirect = vi.fn();
 let oidcState: Record<string, unknown>;
 
 vi.mock("react-oidc-context", () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useAuth: () => ({ signinRedirect, ...oidcState }),
+  useAuth: () => ({ signinRedirect, signoutRedirect, ...oidcState }),
 }));
 
 vi.stubEnv("VITE_OIDC_AUTHORITY", "https://issuer.test");
@@ -18,6 +20,7 @@ vi.stubEnv("VITE_OIDC_CLIENT_ID", "client-test");
 describe("OidcAuthProvider splash gating", () => {
   beforeEach(() => {
     signinRedirect.mockReset();
+    signoutRedirect.mockReset();
     sessionStorage.clear();
     window.history.replaceState({}, "", "/");
   });
@@ -97,5 +100,36 @@ describe("OidcAuthProvider splash gating", () => {
     render(<OidcAuthProvider>app</OidcAuthProvider>);
     await waitFor(() => expect(screen.getByText("app")).toBeInTheDocument());
     expect(signinRedirect).not.toHaveBeenCalled();
+  });
+
+  it("signs out through Cognito's logout_uri params, not OIDC RP-initiated logout", () => {
+    oidcState = {
+      isLoading: false,
+      isAuthenticated: true,
+      activeNavigator: undefined,
+      error: undefined,
+      user: { access_token: "t", profile: { sub: "user-1" } },
+    };
+    function SignOutControl() {
+      const auth = useAuth();
+      return (
+        <button type="button" onClick={() => auth.signOut()}>
+          Sign out
+        </button>
+      );
+    }
+    render(
+      <OidcAuthProvider>
+        <SignOutControl />
+      </OidcAuthProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    expect(signoutRedirect).toHaveBeenCalledOnce();
+    expect(signoutRedirect).toHaveBeenCalledWith({
+      extraQueryParams: {
+        client_id: "client-test",
+        logout_uri: window.location.origin,
+      },
+    });
   });
 });
