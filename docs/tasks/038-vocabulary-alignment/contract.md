@@ -38,7 +38,9 @@ One implementation slice. Keep it reviewable. Boundaries are in
 > migration (A1), a reversible-values rollback (A2), plan-deserialisation
 > canonicalisation (A3), the public-sharing events (A4), V8 scoped to the
 > owner with one Task Agent (A9, A10), the V11 seam pinned (A11), the live
-> relevance annotator kept (A12) — **reopen the 🛑 for owner re-approval.**
+> relevance annotator kept (A12) — reopened the 🛑; **re-approved as folded
+> 2026-09-04 · owner** (A8 taken as option 2: the living vocabulary moved to
+> `docs/specs/vocabulary.md`).
 >
 > **Owner forks F1–F5** are ruled (§ Forks). Two rulings bind the whole slice:
 > **(R1)** like-for-like word swaps in prompt text need **no** version bump and
