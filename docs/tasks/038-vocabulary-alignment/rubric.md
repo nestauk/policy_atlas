@@ -2,7 +2,7 @@
 
 Core completion criteria. The task is **done only if every box holds** — otherwise it is in
 progress, not done. Terms and defect ids V1–V9 are defined in [contract.md](contract.md);
-this file does not restate them. Defect ids run V1–V11.
+this file does not restate them. Defect ids run V1–V12.
 
 1. [ ] Implementation satisfies [contract.md](contract.md).
 2. [ ] `make verify` passes (including `drift-check`, `prompt-guard`, `okf-validate`);
@@ -65,5 +65,8 @@ Slice-specific:
 21. [ ] **V11 / I11** — the post-sign-in navigation test passes; the staging sign-in round
         trip from a task deep link lands on it; 036's signed-out deep-link stash still works;
         the security lane's findings on V11 are in [verification.md](verification.md).
-22. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
+22. [ ] **V12 / I12** — AGENTS.md ≤ 60 lines; knip and vulture outputs recorded and clean as
+        I12 states; the listed files are gone from `git ls-files`; `infra/JUMPBOX.md` and its
+        referrers updated; the ignore entries present.
+23. [ ] **Staging live check** ran as scoped in the contract (one Task, its Project, the
         ops CLI dry-run, `make fe-api-smoke`) and the Metabase follow-up is named in the PR.

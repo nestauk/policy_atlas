@@ -46,9 +46,9 @@ Today three vocabularies coexist: the screen says Task/Project/Evidence search, 
 code and database say `project`/`portfolio`/`evidence_base`, and the chat surface
 has no name at all. Nine numbered defects, V1–V9. **No product behaviour change**:
 every row, route and screen does after the slice what it did before, under a new
-name. V9 (traces group by Task), V10 (two riders from `deferred.md`) and V11
-(the post-sign-in landing fix) are the non-rename items, each folded in by the
-owner on 2026-09-04.
+name. V9 (traces group by Task), V10 (two riders from `deferred.md`), V11
+(the post-sign-in landing fix) and V12 (repo hygiene) are the non-rename items,
+each folded in by the owner on 2026-09-04.
 
 ## Deliverable
 
@@ -67,6 +67,7 @@ One PR on `task/038-vocabulary-alignment` that:
 - Groups every Langfuse trace of a Task under one session id, the task id (V9).
 - Renames the search loop's `http_budget` to `call_budget` and deletes the dead `RunPane`/`JourneyPane` views (V10).
 - Makes the app land on the stashed deep link after a sign-in round trip (V11).
+- Trims AGENTS.md to protocol, landmines and a phase pointer, and deletes the dead files and exports the tools found (V12).
 
 Shipped = `make verify` green (which includes `drift-check` and `prompt-guard`),
 the migration applied to staging, and one live smoke of the renamed chain
@@ -95,7 +96,7 @@ Two meanings of "task" meet in this repo. The table fixes them.
 | **Stored-data vocabulary** | String values that live in rows (`capability_run.capability`, `event_log.event_type`, JSONB payload values). Renamed only where § V-rules say so. |
 | **Frozen** | `docs/specs/sources/**` — not rewritten by the sweep (ADR 0002). The one exception is the owner-maintained definitions file, which the owner edits directly. |
 | **Historical** | Merged task docs (`docs/tasks/001–034`), ADRs 0001–0034, `docs/verification/`. Not rewritten (012 precedent). |
-| **V1–V11** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
+| **V1–V12** | Defect ids. Goal, scope, invariants, plan phases and rubric items cite these. |
 | **Session** | Langfuse's grouping of traces. Set by passing `session_id` into the tracing helpers (`core/tracing.py` `_session_scope`). Today: the conversation id for planning and chat turns, nothing for runs. |
 | **F1–F5** | Owner forks at this gate. |
 
@@ -450,6 +451,54 @@ captured before the redirect, not from the rewritten URL. A reload recovers.
   location equals the stashed path; the staging live check confirms it from a
   task deep link (`/tasks/{id}/sources`) through Cognito and back.
 
+### V12 — Repo hygiene (owner, 2026-09-04)
+
+The manual (`docs/agentic-ops/references/advanced-agentic-engineering-manual.md`
+§ 4.1) says AGENTS.md is a protocol and landmine list, not a diary; and dead
+files make the sweep larger than it needs to be. Everything here is mechanical
+and verified by the existing gates. Local, ignored leftovers (`demo/`, `dist/`,
+the impeccable state directory, the `c4-demo` worktree and `demo-live-run`
+branch, the private `docs/verification/`) are removed by the owner outside git
+and are not part of the diff.
+
+- **AGENTS.md** rewritten at the design phase (this commit): the protocol as it
+  was, a landmine list where every line names its source, and a three-line
+  current-phase pointer. The 266-line slice history is deleted; git and
+  `docs/tasks/` hold it. Kept under 60 lines.
+- **Stale live e2e** — `frontend/e2e/live-027.spec.ts`, `live-027b.spec.ts`,
+  `live-028.spec.ts` and `playwright.live-027.config.ts`,
+  `playwright.live-028.config.ts` deleted (1,439 lines; slice-specific live
+  checks for merged work, referenced by nothing). `playwright.fe-api-smoke.config.ts`
+  stays: `scripts/fe_api_smoke.sh` runs it. Rubric 5 justification: the specs
+  test 027/028's build, not the product, and their invariants live in
+  `journey.spec.ts`.
+- **Unused frontend exports and types** per `pnpm dlx knip@5` on `dev`
+  `8626594f`: 23 exports (incl. the dead `useCreateProject` hook and the
+  duplicate `App` export), 22 exported types. Un-exported or deleted; knip is
+  re-run at the end and its output goes in `verification.md`.
+- **Dead backend functions** (vulture ≥ 60 %, reference-checked against
+  `src` and `tests`): `chat_floor._sentence_around`,
+  `steering.resolve_unattended`, `relevance_annotator.OpenAIRelevanceAnnotatorBackend`
+  (never wired; the stub is the only backend in use). Deleted. Everything else
+  vulture flagged is either a FastAPI/pydantic false positive or production code
+  that only tests call — those go to the separate hygiene pass (§ Out of scope).
+- **`scripts/scratchpad/`** (five tracked files: README, a standalone HTML
+  mock, `run_live_deep.py`, two notebooks) deleted — scratch state is ignored,
+  not committed (manual § 6.4). Git keeps them.
+- **`docs/tasks/029-search-volume-cap/`** and **`030-multi-round-search/`**
+  (plan-only leftovers that never went through the cycle and collide by name
+  with real slices) deleted; the AGENTS.md paragraph that explained them goes
+  with them.
+- **`JUMPBOX.md`** moves to `infra/JUMPBOX.md`; its four referrers
+  (`infra/DEPLOYMENT.md`, three task docs) are updated.
+- **`.gitignore`** gains `.cursor/hooks.json`, `.github/hooks/`, `.impeccable/`
+  (a local plugin's runtime state; it must not be committed).
+- Invariant I12: AGENTS.md ≤ 60 lines; knip reports no unused files, exports or
+  types outside `src/api/gen/`; vulture at 80 % reports only the known
+  pydantic/`cls` false positives; `git ls-files scripts/scratchpad
+  docs/tasks/029-search-volume-cap docs/tasks/030-multi-round-search JUMPBOX.md`
+  is empty; `make verify` green.
+
 ## Forks — ruled 2026-09-04 (owner, by interview)
 
 | # | Question | Options | **Ruling** and why |
@@ -474,7 +523,12 @@ captured before the redirect, not from the rewritten URL. A reload recovers.
   behaviour**: prompts change words only (R1); any edit that is not a
   one-to-one word swap is out and needs a versioned prompt slice. `eb_*`
   fingerprint ids. Rewriting `event_log` rows or stored plan payloads. A mode
-  enum or a new conversation kind. Historical docs,
+  enum or a new conversation kind. **The judgment-bearing hygiene items** —
+  production code only tests call (`select_document_fetcher`,
+  `compile_synthesis_directive`, `validate_themes`, `apply_reselect`, the six
+  `*_score_summary` renderers), the `run_harness(provider=…)` seam — go to a
+  separate Tier 1 pass after 038 (`/ponytail-audit`), each with its own
+  "seam on purpose?" ruling. Historical docs,
   frozen sources, `docs/knowledge/` filenames. The workspace-cluster re-parenting
   (still deferred; unaffected). Metabase saved questions (owner-operated; see
   § Constraints). **Future direction from the definitions § Future direction, recorded as seams in

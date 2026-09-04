@@ -50,3 +50,8 @@ docs/tasks/*/evidence/
 
 # Cursor plans
 .cursor/plans
+
+# Local plugin runtime state (impeccable): never committed
+.cursor/hooks.json
+.github/hooks/
+.impeccable/
