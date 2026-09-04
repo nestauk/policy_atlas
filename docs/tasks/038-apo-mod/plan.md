@@ -4,6 +4,19 @@ Contract: [contract.md](contract.md). Terms and requirement ids (R1–R3) live
 there. R1 is free (existing `backend_scope="grey_lit_only"`); this plan builds
 R2 and R3.
 
+> **Adversarial review (one light combined pass, Codex, 2026-09-04) — four
+> findings, all accepted and folded into the phases below:**
+> (1) `publisher_source` must require `backend_scope="grey_lit_only"` and be
+> cleared on *every* other scope — rejecting only `academic_only` would let a
+> later "Sources = All" edit keep the constraint while OpenAlex runs,
+> violating R1. (2) The API projection model `ScopeConstraintsDraft`
+> (`api/contract/planning.py`) also needs the field, or `PlanOut` drops it and
+> R3 cannot render. (3) The two flat↔nested fold lists (`orchestrate.py`
+> `build_plan`, `planning.py` `_draft_from_wire`) must carry the key or the
+> round trip silently loses it. (4) The value is pinned to the literal
+> `"apo"` everywhere (`Literal["apo"]` in the models, an allowlist in the
+> directive validator) — never an arbitrary passthrough string.
+
 The shape of the change: thread one new key, `publisher_source`, through the
 existing fail-closed filter chain, and let the Source geography box set it.
 Every gate below currently rejects unknown keys, so each one needs its single
@@ -20,13 +33,17 @@ One precise sweep; every touch point is known:
 
 | # | File | Change |
 |---|---|---|
-| 1 | `runtime/orchestration_plan.py` | `ScopeConstraints.publisher_source: str \| None = None`; emit `{"publisher_source": ...}` into the `overton` block in `to_filters()` (mirror `publisher_country` at ~L546); cross-field validator rejects it under `backend_scope="academic_only"` (mirror the existing guard at ~L873). |
-| 2 | `runtime/planner_prompt.py` | `PlanDraftWire` gains the optional field so stored plans round-trip through the draft↔plan projections. **No prompt text change** — `planner_v10` stays. |
-| 3 | `sourcing/search_loop.py` | Add `publisher_source` to `_OVERTON_FILTER_KEYS` (~L244); accept it in `_validate_overton_block` (value must be a non-empty string, ~L681); map it in `overton_wire_params` → `params["source"] = value` (~L526). |
-| 4 | `sourcing/search_live.py` | Add `"source"` to `_OVERTON_ALLOWED_WIRE_KEYS` (~L95). |
+| 1 | `runtime/orchestration_plan.py` | `ScopeConstraints.publisher_source: Literal["apo"] \| None = None`; mutually exclusive with `publisher_country`, `author_affiliation_countries` and `country_group` (extend the existing exclusivity validator — the APO token replaces geography, and `to_filters()` early-returns on `country_group`); `to_filters()` emits `filters["overton"] = {"publisher_source": self.publisher_source}` when set; `OrchestrationPlan` cross-field validator **requires `backend_scope == "grey_lit_only"`** when the field is set (finding 1). |
+| 2 | `runtime/planner_prompt.py` + fold lists | `PlanDraftWire` gains the optional field (**no prompt text change** — `planner_v10` stays); add `"publisher_source"` to the flat→nested fold in `orchestrate.py build_plan` (~L622) and to the fold list in `api/routers/planning.py _draft_from_wire` (~L120) (finding 3). |
+| 3 | `api/contract/planning.py` | `ScopeConstraintsDraft.publisher_source: Literal["apo"] \| None = None` so `PlanOut` carries it to the frontend (finding 2). |
+| 4 | `sourcing/search_loop.py` | Add `publisher_source` to `_OVERTON_FILTER_KEYS`; accept it in `_validate_overton_block` with the value allowlisted to `"apo"` only (finding 4); map it in `overton_wire_params` → `params["source"] = value`. |
+| 5 | `sourcing/search_live.py` | Add `"source"` to `_OVERTON_ALLOWED_WIRE_KEYS`. |
 
 Tests (same commit): `to_filters` emits the overton block; wire params contain
-`source=apo`; the academic-only guard raises; an unknown wire key still raises.
+`source=apo`; the grey-lit-only guard raises for `academic_only` **and**
+`both`; the exclusivity guard raises; `_validate_overton_block` rejects any
+value other than `"apo"`; an unknown wire key still raises; a
+draft→plan→draft round trip keeps the field.
 
 Gate: `make verify-fast`. **Executor: fast-worker** — mechanical transcription
 of an exact spec; every file, line and guard shape is named above.
@@ -41,8 +58,12 @@ of an exact spec; every file, line and guard shape is named above.
   "APO restriction needs Sources set to grey literature only" (the route
   already converts `ValueError` to 422); on success return constraints with
   `publisher_source="apo"` and the three geography fields cleared.
-- `_drop_scope_incompatible_geo`: clear `publisher_source` when
-  `backend_scope == "academic_only"`.
+- `_drop_scope_incompatible_geo`: clear `publisher_source` whenever
+  `backend_scope != "grey_lit_only"` (finding 1 — a later "Sources = All" edit
+  silently drops the APO restriction, same as the existing incompatible-geo
+  behaviour).
+- Every non-APO return path of `_geography_constraints` includes
+  `"publisher_source": None`, so editing geography to a country clears APO.
 - `_apply_plan_patch`: confirm a later plain-geography edit (for example
   "France") clears `publisher_source` — the token branch returns a full
   constraints dict, so this should already hold; add the test.

@@ -22,8 +22,9 @@
 - Touch only what the task requires.
 
 # Current phase
-Design — task `038-apo-mod` **CONTRACT + PLAN DRAFTED 2026-09-04 · awaiting
-owner approval** (branch `task038/apo-mod`): a small test mod for an
+Build — task `038-apo-mod` **CONTRACT + PLAN APPROVED 2026-09-04 · owner;
+adversarial review = one light combined pass (owner's call)** (branch
+`task038/apo-mod`): a small test mod for an
 Australian use case — restrict one run's sources to Australian Policy Online
 (APO). R1 (drop OpenAlex) is free via the existing
 `backend_scope="grey_lit_only"`; R2 threads one new scope constraint

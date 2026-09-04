@@ -2,9 +2,12 @@
 
 One implementation slice. Boundaries: [AGENTS.md](../../../AGENTS.md).
 
-> **Status:** drafted. Contract approved (before planning): _pending · owner_ ·
-> Plan approved (before implementation): _pending · owner_ · ADR: none (test
-> mod; write one only if the owner promotes it to a product feature).
+> **Status:** approved. Contract approved: 2026-09-04 · owner ·
+> Plan approved: 2026-09-04 · owner · ADR: none (test mod; write one only if
+> the owner promotes it to a product feature).
+> **Owner ruling on the Tier-3 ❓ (2026-09-04):** adversarial review runs, but
+> as **one light combined pass** over contract + plan (not full lanes), before
+> the build. Owner also approved building in this conversation.
 
 ## Goal
 
