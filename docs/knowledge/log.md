@@ -1,5 +1,31 @@
 # Knowledge update log
 
+## 2026-09-04 (task 037 step 8)
+* **Creation**: Added
+  [auth-boundary-widening-needs-both-caller-sweeps](auth-boundary-widening-needs-both-caller-sweeps.md)
+  — the `decisions` public-leg leak (masked by the route's own 401 for
+  anonymous callers) and the silently-shrunk derived cross-owner sweep,
+  both from the 037 review stack.
+* **Creation**: Added
+  [optional-auth-keys-on-raw-header](optional-auth-keys-on-raw-header.md) —
+  the `HTTPBearer(auto_error=False)` anonymity trap and the raw-header rule
+  (037 D2, adversarial finding 4).
+* **Creation**: Added
+  [query-cache-clears-on-identity-change](query-cache-clears-on-identity-change.md)
+  — resource-keyed query caches leak across auth identities; whole-cache
+  clear at render time, not in a passive effect (037).
+* **Creation**: Added
+  [new-table-bumps-count-asserts](new-table-bumps-count-asserts.md) — the
+  table-count asserts fail the *next* slice's baseline (036 → 037).
+* **Update**: [testing-database](testing-database.md) — third recurrence of
+  the shared-test-DB race recorded: a step-7 background `make verify`
+  raced a review lane's own pytest run (72 `UndefinedTable` failures).
+* **Declined as duplicates** (037 build candidates): Codex-sandbox-no-
+  Postgres and the delegation fence — both already in
+  [delegated-executor-practices](delegated-executor-practices.md) /
+  [testing-database](testing-database.md); the 037 events are
+  confirmations, not new knowledge.
+
 ## 2026-08-25 (task 033 step 8)
 * **Creation**: Added
   [tenancy-predicates-in-sql](tenancy-predicates-in-sql.md) — four ways a

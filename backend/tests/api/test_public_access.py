@@ -30,15 +30,18 @@ def _share(client: TestClient, project_id: str, owner: dict[str, str]) -> None:
      {"Authorization": "Bearer"}, {"Authorization": "Token x"}],
     ids=["absent", "garbage-bearer", "basic", "bare-bearer", "wrong-scheme"],
 )
+# Two routes because they live on two routers: the bare project read sits on
+# the tokenless `public_read_router`, funnel on the read-models router.
+@pytest.mark.parametrize("suffix", ["", "/funnel"], ids=["project", "funnel"])
 def test_optional_auth_uses_the_raw_authorization_header(
-    tmp_path: Path, headers: dict[str, str] | None
+    tmp_path: Path, suffix: str, headers: dict[str, str] | None
 ) -> None:
     """Only a missing header is anonymous; every malformed present one is 401."""
     with api_client(tmp_path) as (client, owner, _other):
         project_id = create_project(client, owner)
         _share(client, project_id, owner)
 
-        response = client.get(f"/api/v1/projects/{project_id}/funnel", headers=headers)
+        response = client.get(f"/api/v1/projects/{project_id}{suffix}", headers=headers)
         assert response.status_code == (200 if headers is None else 401), response.text
 
 
@@ -67,8 +70,12 @@ def test_archiving_a_public_project_revokes_all_anonymous_reads(tmp_path: Path) 
         archived = client.post(f"/api/v1/projects/{project_id}/archive", headers=owner)
         assert archived.status_code == 200, archived.text
 
-        assert client.get(f"/api/v1/projects/{project_id}").status_code == 404
-        assert client.get(f"/api/v1/projects/{project_id}/funnel").status_code == 404
+        unknown = client.get(f"/api/v1/projects/{uuid.uuid4()}")
+        for path in (f"/api/v1/projects/{project_id}", f"/api/v1/projects/{project_id}/funnel"):
+            denied = client.get(path)
+            assert denied.status_code == 404, path
+            # Archived is byte-identical to unknown (rubric 9).
+            assert denied.content == unknown.content, path
 
 
 def test_public_project_response_is_redacted_for_anonymous_and_outside_users(
@@ -106,10 +113,15 @@ def test_public_projects_do_not_widen_listings(tmp_path: Path) -> None:
         assert project_id not in {row["project_id"] for row in listed.json()["data"]}
 
 
-def test_admin_read_of_a_public_project_emits_no_admin_trace(
+def test_admin_read_of_a_public_project_keeps_the_graded_leg_and_trace(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """A public-leg read is not served by the administrator privilege leg."""
+    """The graded legs win before the public leg (contract D4).
+
+    An entitled admin keeps today's full read — and its audit trace — even
+    when the row happens to be public. Review-stack ruling on the 037 build's
+    leg order, which served admins the redacted public shape.
+    """
     with tenancy_client(tmp_path, count=2) as (client, (owner, admin)):
         with seeded(engine) as conn:
             owner_org = make_org(conn, name="Owner Org")
@@ -129,5 +141,45 @@ def test_admin_read_of_a_public_project_emits_no_admin_trace(
             response = client.get(f"/api/v1/projects/{project_id}", headers=admin.headers)
 
         assert response.status_code == 200, response.text
-        assert response.json()["access"] == "public"
-        assert not [line for line in captured if line.get("event") == "admin_read"]
+        body = response.json()
+        assert body["access"] == "full"
+        assert body["is_owner"] is False
+        assert [line for line in captured if line.get("event") == "admin_read"]
+
+
+def test_decisions_stay_hidden_from_a_signed_in_outsider_on_a_public_project(
+    tmp_path: Path,
+) -> None:
+    """`decisions` is outside the public surface for every non-graded caller.
+
+    Review-stack regression pin: the built public leg briefly covered
+    `decisions` for signed-in callers. A signed-in outsider must get the
+    byte-identical 404 on a public row, exactly as on a private or unknown one.
+    """
+    with api_client(tmp_path) as (client, owner, other):
+        project_id = create_project(client, owner)
+        _share(client, project_id, owner)
+
+        denied = client.get(f"/api/v1/projects/{project_id}/decisions", headers=other)
+        unknown = client.get(f"/api/v1/projects/{uuid.uuid4()}/decisions", headers=other)
+        assert denied.status_code == unknown.status_code == 404
+        assert denied.content == unknown.content
+
+
+def test_only_the_owner_may_flip_is_public(engine: Engine, tmp_path: Path) -> None:
+    """A same-org colleague's `PATCH {is_public}` is 403, not a silent flip (R1)."""
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org = make_org(conn, name="Shared Org")
+            ops_enrol(conn, user_id=owner.user_id, org_id=org, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org, display_name="Colleague")
+            project_id = make_project(
+                conn, owner_user_id=owner.user_id, org_id=org, visibility="org"
+            )
+
+        response = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=colleague.headers,
+            json={"is_public": True},
+        )
+        assert response.status_code == 403, response.text

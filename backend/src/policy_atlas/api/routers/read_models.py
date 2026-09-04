@@ -28,7 +28,7 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
 from policy_atlas.api.readmodels import repository
-from policy_atlas.api.routers._access import readable_or_public_project
+from policy_atlas.api.routers._access import accessible_project, readable_or_public_project
 
 router = APIRouter(prefix="/api/v1/projects", tags=["read-models"])
 
@@ -176,8 +176,10 @@ def decisions(
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[DecisionOut]:
     """Return the allowlisted audit and steering decision history."""
-    # Decisions are outside the conditionally-public read surface.
-    _readable(conn, project_id, user)
+    # Decisions sit outside the conditionally-public read surface: the graded
+    # read (owner / same-org / admin) applies, never the public leg — a
+    # signed-in outsider gets the indistinguishable 404 even on a public row.
+    accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
     return repository.decisions_page(conn, project_id, page, page_size)
 
 

@@ -66,7 +66,12 @@ export const publicRouter = createBrowserRouter([
       { index: true, element: <RedirectToPath suffix="/results" /> },
       { path: "results", element: <ArtefactView /> },
       { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
-      { path: "*", element: <RedirectToPath suffix="/results" /> },
+      // `preserveOriginal` (task 037 review fix): this can fire on a
+      // read that was public when it resolved but is unshared before a
+      // stashed refetch settles — carry the original deep link so
+      // `StashAndSplashRedirect` never stashes the rewritten `/results`
+      // path instead of it.
+      { path: "*", element: <RedirectToPath suffix="/results" preserveOriginal /> },
     ],
   },
   { path: "*", element: <StashAndSplashRedirect /> },

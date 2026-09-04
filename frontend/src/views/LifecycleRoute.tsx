@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
 
 import { useProject } from "../api/queries";
-import { isTabOpen } from "./lifecycle";
+import { PUBLIC_TABS, isTabOpen } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
 
 /**
@@ -27,7 +27,7 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   // apply on this leg: they are an owner-side affordance, and the public
   // pages render their own shaped absence when a run has not finished.
   if (project.data.access === "public") {
-    if (tab === "results" || tab === "sources") return <>{children}</>;
+    if (PUBLIC_TABS.includes(tab)) return <>{children}</>;
     return <Navigate to={`/projects/${projectId}/results`} replace />;
   }
   if (!isTabOpen(tab, project.data.latest_run?.status)) {
@@ -44,8 +44,34 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
  * nothing 404s — while quietly landing the reader on an unfiltered view. That
  * is a worse failure than a broken link, because nothing announces it.
  */
-export function RedirectToPath({ suffix }: { suffix: string }) {
+export function RedirectToPath({
+  suffix,
+  preserveOriginal = false,
+}: {
+  suffix: string;
+  /**
+   * Carry the pre-redirect location as router state under `from` (task
+   * 037's public wildcard leg). This redirect can fire on project data that
+   * was public when read but has since been unshared before a stashed
+   * `useProject` refetch settles; when `PublicTaskShell` then discovers the
+   * Task isn't public after all, `StashAndSplashRedirect` prefers this over
+   * the already-rewritten URL, so a signed-out visitor's original deep link
+   * (e.g. `/share`) still survives to be restored after sign-in.
+   */
+  preserveOriginal?: boolean;
+}) {
   const { projectId } = useParams();
-  const { search } = useLocation();
-  return <Navigate to={`/projects/${projectId}${suffix}${search}`} replace />;
+  const location = useLocation();
+  const { search } = location;
+  return (
+    <Navigate
+      to={`/projects/${projectId}${suffix}${search}`}
+      replace
+      state={
+        preserveOriginal
+          ? { from: `${location.pathname}${location.search}${location.hash}` }
+          : undefined
+      }
+    />
+  );
 }

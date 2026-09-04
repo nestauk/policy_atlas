@@ -47,7 +47,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   Results + Sources only. Still deferred from that slice: portfolio-level
   public sharing; a public index/gallery of public Tasks; a public mode for
   the frontend mock API (`src/mock/api.ts` still serves only the signed-in
-  world, so public-view e2e journeys have no mock to run against).
+  world, so public-view e2e journeys have no mock to run against); a shared
+  TaskNavBar — `PublicTaskShell` and `AppShell`'s public branch each build
+  the two-tab chrome by hand today (037 review finding), so chrome tweaks
+  must land twice until it is extracted.
 - **Cross-boundary traceability** — statement-to-statement cross-artefact tracing; chain-strength
   composition; chain display; version-pinned cross-artefact staleness (behind the
   addressable-span seam).

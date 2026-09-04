@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns, useMe } from "./queries";
+import { useChatTurns, useMe, useProject } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -164,5 +164,24 @@ describe("useMe", () => {
     await waitFor(() => expect(second.result.current.data).toBeDefined());
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useProject", () => {
+  it("does not retry a 404 (task 037: an anonymous read must fail fast, not after ~7s of retries)", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: { code: "not_found", message: "not found" } }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useProject(conversationId), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((result.current.error as Error & { status?: number }).status).toBe(404);
   });
 });

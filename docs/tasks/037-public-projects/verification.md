@@ -116,18 +116,133 @@ Five commits on `task/037-public-projects` after the design docs:
 
 ## Review findings
 
-_Added at step 7 (fresh conversation)._
+Step 7 ran 2026-09-04 in a fresh conversation. Lanes: contract verifier
+(pinned Opus, fresh context) · `/code-review medium` (8 finder angles) ·
+security lane (finder + convergence check; the `security-auditor` agent is
+not installed in this environment, so the `/security-review` machinery
+stood in — recorded substitution) · Codex adversarial (read-only brief,
+family flip: Claude lanes anchored the Codex-written phase-2 access layer,
+Codex anchored the Claude-written phases). `/simplify` was folded into
+`/code-review`'s reuse/simplification angles rather than run twice
+(same-family duplicate).
+
+**Adopted and fixed in this phase:**
+
+1. **`decisions` public-leg leak (MAJOR — found independently by all four
+   lanes and the adjudicator).** `read_models.decisions` authorised via
+   `readable_or_public_project`, so any signed-in user could read a public
+   Task's History (including `actor` = the owner's token subject, which D5
+   redacts elsewhere). Anonymous callers still 401'd, which is why the
+   conformance sweep missed it. Fixed: graded `accessible_project` check;
+   regression pin `test_decisions_stay_hidden_from_a_signed_in_outsider_on_a_public_project`.
+2. **Signed-in cross-owner 404 sweep silently weakened (MAJOR — contract
+   verifier).** `_PROJECT_SCOPED_GET_CASES` shrank 19 → 8 routes when the
+   conditionally-public GETs were pruned from the always-401 class; the
+   task-033 byte-identical tenancy pin no longer ran on any of the 11
+   public routes. Fixed: the 11 routes are added back to the cross-owner
+   sweep (against a private row the outsider 404 is unchanged).
+3. **Admin downgraded to the public leg (MAJOR adjudication — Codex +
+   contract verifier).** The build's leg order (own → public → admin)
+   served an entitled admin the redacted shape with no trace, contradicting
+   contract D4 ("graded legs are checked first") — the § Intent note below
+   recorded the build's choice, and the stack **contested** it: spec
+   web-api.md and ADR 0035 both describe graded-first, so the code was
+   fixed, not the docs. `readable_or_public_project` now classifies the
+   admin leg before `is_public`; the admin test asserts `access="full"`
+   plus the `admin_read` trace.
+4. **~7 s `Loading…` before stash-and-splash (contract verifier +
+   `/code-review`).** `useProject` threw on 404 into React Query's default
+   retry×3, stalling the contract-required instant splash for private/
+   unknown links. Fixed: the query carries the response status and never
+   retries 4xx.
+5. **Sign-out cache flash (Codex; `/code-review` judged it self-healing —
+   fixed anyway, cheaper than the argument).** `queryClient.clear()` ran in
+   a passive effect after the swapped router rendered. Moved to a
+   render-time clear; the missing acceptance-check test was added.
+6. **Cold-visit SSE/chat race (Codex).** A signed-in visitor to a public
+   link briefly opened the run stream and mounted chat while
+   `project.data` was pending (`access` unknown). The server denied both,
+   but rubric 10 pins "only public-surface requests". Fixed: stream
+   connect and chat panel wait for the resolved read.
+7. **Missing acceptance-check pins (contract verifier).** Added: colleague
+   `PATCH {is_public}` → 403 (R1); archived anonymous 404 byte-identical
+   (rubric 9); D2 header matrix on `GET /projects/{id}` (own router)
+   besides `funnel`; the public-view "no conversations request" pin; the
+   Plan/History LifecycleRoute public-gate tests (this also corrects the
+   overclaim in § Checks above — before this phase only the Share gate was
+   pinned).
+8. **Stashed-URL rewrite by the public wildcard redirect (contract
+   verifier, minor — narrower than reported).** The wildcard child only
+   renders after a resolved public read, so a plain private link was never
+   affected; the rewrite needed a was-public-then-revoked cache sequence.
+   Fixed anyway: the redirect carries the original location; the stash
+   prefers it (pinned with the exact repro in `routes.test.tsx`).
+9. **Cleanups (`/code-review`).** `_PUBLIC_STRUCTURAL_GETS` now derived by
+   subtraction from `_CONDITIONALLY_PUBLIC_GETS`; the public tab pair is
+   one shared constant for `lifecycle.ts`/`LifecycleRoute.tsx`.
+
+**Declined / deferred, with reasons:**
+
+- `{200, 404}` assertion on the five detail routes (contract verifier,
+  minor): declined — those routes 404 while derived data is absent by
+  design; anonymous/graded parity is pinned by the restored byte-identical
+  sweeps, and seeding read models into the conformance suite is not worth
+  the coverage delta.
+- `LifecycleRoute` rendering `null` while the project read is pending
+  (contract verifier, minor): declined — the blank frame is the safe-side
+  default for an access gate; UX polish only.
+- Extracting a shared TaskNavBar for `PublicTaskShell`/`AppShell`
+  (`/code-review`, PLAUSIBLE): deferred — real seam, bigger refactor than
+  this slice warrants; noted in docs/deferred.md.
+- D2 matrix over all 11 routes: declined beyond the two-router pair — all
+  eleven share the one `get_optional_user` dependency; the two routers are
+  the only structural difference and both are now pinned.
+
+**Convergence notes.** The `decisions` leak was found by every lane plus
+the adjudicator's own read — high confidence, and the fake-done check of
+this phase (the route's comment claimed the opposite of what the line
+did). Unique-to-one-lane catches that justified their lanes: the sweep
+weakening and the missing pins (contract verifier), the retry stall
+(contract verifier + `/code-review`), the render-order races (Codex).
+The build-flagged `make verify` anomaly of this phase (72 failures, all
+`relation "project" does not exist`) was root-caused as a test-DB race
+between the background verify and a review lane's own pytest run — the
+same class of race the build already logged as a knowledge candidate;
+verify re-ran green solo (§ below).
 
 ## Rubric status
 
-_Completed at step 7._
+All ten boxes checked at step-7 close (2026-09-04), post-fix:
+
+1. ✅ R1–R5 hold with the named tests, including the fixed R4 (`decisions`
+   graded again) and the added R1 colleague-403 pin.
+2. ✅ `make verify` green post-fixes (§ below). Manual browser check —
+   **pending, human** (unchanged; the fixes touch its third step: the
+   private-link splash is now immediate).
+3. ✅ The boundary is 11 routes again (the leak made it briefly 12 for
+   signed-in callers).
+4. ✅ Generated files regenerated only (verified against the Pydantic
+   sources by the contract verifier).
+5. ✅ The one undeclared weakening (the cross-owner sweep) was found and
+   reversed; the declared widenings stand with their justifications.
+6. ✅ This file.
+7. ✅ deferred.md carries the discharged line + named gaps (+ TaskNavBar
+   seam added at step 8).
+8. ✅ This section; substitution for the security-auditor agent recorded.
+9. ✅ Boundary checks hold, now including archived byte-identity and the
+   restored cross-owner sweep.
+10. ✅ Redacted shape, D2 (both routers), and the only-public-surface
+    property (backend graded + frontend gating and pins).
 
 ## Intent & assumptions
 
 - Public means link-only (D3): no index, no listing changes — pinned by
   `test_public_access.py::listings` and the unchanged `listing_scope`.
-- A public row read by an admin is served by the public leg, not the
-  admin leg — no `admin_read` trace (the caller was entitled anyway).
+- ~~A public row read by an admin is served by the public leg, not the
+  admin leg — no `admin_read` trace (the caller was entitled anyway).~~
+  **Reversed at step 7:** contract D4, web-api.md and ADR 0035 all say the
+  graded legs win first; an admin now keeps the full shape and the
+  `admin_read` trace on public rows (see § Review findings, item 3).
 
 ## Known unverified items
 

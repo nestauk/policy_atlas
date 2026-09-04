@@ -51,14 +51,16 @@ _CONDITIONALLY_PUBLIC_GETS = frozenset(
     }
 )
 
-_PUBLIC_STRUCTURAL_GETS = frozenset(
+# The public routes that must 200 on an empty public project. Derived by
+# subtracting the detail routes that legitimately 404 while their derived
+# data is absent, so a route added to the surface lands here by default.
+_PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
     {
-        "/api/v1/projects/{project_id}",
-        "/api/v1/projects/{project_id}/funnel",
-        "/api/v1/projects/{project_id}/landscape",
-        "/api/v1/projects/{project_id}/groups",
-        "/api/v1/projects/{project_id}/evidence",
-        "/api/v1/projects/{project_id}/findings",
+        "/api/v1/projects/{project_id}/sources/{source_id}",
+        "/api/v1/projects/{project_id}/artefact",
+        "/api/v1/projects/{project_id}/coverage",
+        "/api/v1/projects/{project_id}/citations/{citation_key}/context",
+        "/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
     }
 )
 
@@ -187,11 +189,16 @@ def test_unauthenticated_sweep_keeps_non_public_routes() -> None:
     """The History endpoint remains in the always-401 conformance class."""
     assert ("GET", "/api/v1/projects/{project_id}/decisions") in _UNAUTHENTICATED_CASES
 
+# The signed-in cross-owner sweep must cover the conditionally-public GETs
+# too: against a *private* project, a signed-in outsider still gets the
+# byte-identical 404 (task 033's tenancy pin — the 037 public leg must not
+# have weakened it). `_UNAUTHENTICATED_CASES` excludes them by design, so
+# they are added back here explicitly.
 _PROJECT_SCOPED_GET_CASES = [
     (method, path)
     for method, path in _UNAUTHENTICATED_CASES
     if method == "GET" and "{project_id}" in path
-]
+] + [("GET", path) for path in sorted(_CONDITIONALLY_PUBLIC_GETS)]
 
 
 @pytest.mark.parametrize(

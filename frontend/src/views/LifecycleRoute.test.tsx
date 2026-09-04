@@ -32,7 +32,14 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <LocationProbe />
       <Routes>
-        <Route path="/projects/:projectId" element={<div>Plan page</div>} />
+        <Route
+          path="/projects/:projectId"
+          element={
+            <LifecycleRoute tab="plan">
+              <div>Plan page</div>
+            </LifecycleRoute>
+          }
+        />
         <Route
           path="/projects/:projectId/results"
           element={
@@ -62,7 +69,14 @@ function renderAt(path: string) {
           path="/projects/:projectId/decisions"
           element={<RedirectToPath suffix="/history" />}
         />
-        <Route path="/projects/:projectId/history" element={<div>History page</div>} />
+        <Route
+          path="/projects/:projectId/history"
+          element={
+            <LifecycleRoute tab="history">
+              <div>History page</div>
+            </LifecycleRoute>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -135,6 +149,22 @@ describe("LifecycleRoute — public-leg access shows Results and Sources only (t
     // owner-side affordance and never apply to the public view.
     mockProject(null, { access: "public" });
     renderAt(`/projects/${PROJECT_ID}/results`);
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("sends a public-leg reader's Plan URL to Results", () => {
+    mockProject("succeeded", { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByText("Plan page")).not.toBeInTheDocument();
+    expect(screen.getByText("Results page")).toBeInTheDocument();
+  });
+
+  it("sends a public-leg reader's History URL to Results", () => {
+    mockProject("succeeded", { access: "public" });
+    renderAt(`/projects/${PROJECT_ID}/history`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/projects/${PROJECT_ID}/results`);
+    expect(screen.queryByText("History page")).not.toBeInTheDocument();
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });
 

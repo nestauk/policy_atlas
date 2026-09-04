@@ -116,6 +116,11 @@ OWNER_EMAIL_MAX = 254
 #: enough that no present or future column can collide with it.
 _OWN_LEG = "own_leg_matched"
 
+#: Label for :func:`admin_read_leg` selected beside the row, where a query
+#: must classify which leg served it (the public-leg helper needs owner vs
+#: admin vs public — contract 037 D4 orders the graded legs first).
+_ADMIN_LEG = "admin_leg_matched"
+
 
 class Access(NamedTuple):
     """A row the caller may reach, plus the grade that reached it.
@@ -947,7 +952,10 @@ def readable_or_public_project(
 
     row = (
         conn.execute(
-            base.add_columns(_own_leg_column(project, user_id)).where(
+            base.add_columns(
+                _own_leg_column(project, user_id),
+                admin_read_leg(user_id).label(_ADMIN_LEG),
+            ).where(
                 or_(
                     own_estate(project, user_id),
                     admin_read_leg(user_id),
@@ -962,10 +970,12 @@ def readable_or_public_project(
         raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
     if row[_OWN_LEG]:
         return Access(row=row, is_owner=row["owner_user_id"] == user_id)
-    if row["is_public"]:
-        return Access(row=row, is_owner=False, via_public=True)
-    trace_admin_read(kind="project", row_id=str(project_id), user_id=user_id)
-    return Access(row=row, is_owner=False, via_admin=True)
+    # Graded legs first (contract D4): an entitled admin keeps today's full
+    # read — and its trace — even when the row happens to be public.
+    if row[_ADMIN_LEG]:
+        trace_admin_read(kind="project", row_id=str(project_id), user_id=user_id)
+        return Access(row=row, is_owner=False, via_admin=True)
+    return Access(row=row, is_owner=False, via_public=True)
 
 
 def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -> Access:

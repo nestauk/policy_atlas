@@ -222,13 +222,24 @@ export function useProject(projectId: string, options?: { pollWhileRunning?: boo
   return useQuery({
     queryKey: queryKeys.project(projectId),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}", {
+      const { data, error, response } = await client.GET("/api/v1/projects/{project_id}", {
         params: { path: { project_id: projectId } },
       });
-      if (error) throw error;
+      if (error) throw Object.assign(new Error("Failed to load project"), { status: response.status });
       return data;
     },
     enabled: Boolean(projectId),
+    // A 4xx (an anonymous 404 on a private/unknown Task, task 037) means the
+    // same thing on every attempt — retrying it just holds the caller
+    // (PublicTaskShell's stash-and-splash fallback) for ~7s across the
+    // default 3 retries before landing where it was always going to land.
+    // Retry only a network failure (no `status`) or a server error, up to
+    // the default cap.
+    retry: (failureCount, error) => {
+      const status = (error as { status?: number }).status;
+      if (status !== undefined && status < 500) return false;
+      return failureCount < 3;
+    },
     refetchInterval: (activeQuery) => {
       if (options?.pollWhileRunning !== true) return false;
       const status = activeQuery.state.data?.latest_run?.status;

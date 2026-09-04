@@ -61,6 +61,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 ## Testing rules
 
+* [Widening an auth boundary needs sweeps for both caller classes](auth-boundary-widening-needs-both-caller-sweeps.md) - a route's 401 dependency masks a widened row grade for signed-in callers, and derived conformance case lists shrink silently when a class is pruned from their shared source (037 review stack: the `decisions` leak + the 19→8 sweep).
+* [A slice that adds a table bumps the metadata table-count asserts in the same PR](new-table-bumps-count-asserts.md) - six `len(metadata.tables) == N` tests; skipping the bump fails the *next* slice's baseline, not your own (036 → 037).
 * [Audit sanitized fixtures against the raw recording](sanitized-fixtures-audit-against-raw.md) - key-based sanitizers miss list-inherited keys and rare fields; substring-audit raw vs fixture, with a neutral fake lexicon.
 * [A getattr-guarded SDK call silently no-ops across upgrades — and a stub shaped to it proves nothing](silent-sdk-guards-and-stub-shaped-tests.md) - langfuse 4.x removed `update_current_trace`; the guard skipped session attachment for every conversation while the stub tests passed; import optional SDK APIs loud, test the real mechanism (029 review, live-trace lane — sessionId null on every live trace).
 * [Assert contract-required keys on the written row, not the component summary](assert-on-row-not-summary.md) - summary and row are built separately and drift; downstream readers consume rows — anchor evidence there (task 012 review stack).
@@ -80,6 +82,8 @@ code that shipped, so it can't drift from it. `/okf validate` and `/okf viz` are
 
 ## Invariants (verified)
 
+* [Optional auth keys anonymity on the raw Authorization header](optional-auth-keys-on-raw-header.md) - `HTTPBearer(auto_error=False)` returns None for wrong-scheme/malformed headers too; only a truly absent header is anonymous, every present header follows the strict 401 path (037 D2).
+* [The React Query cache clears on every settled auth-identity change, at render time](query-cache-clears-on-identity-change.md) - query keys carry resource ids, not the caller; a passive-effect clear runs after the swapped router has already rendered a frame of the previous identity's data (037).
 * [A tenancy predicate lives or dies in its compiled SQL](tenancy-predicates-in-sql.md) - missing `.correlate` renders a cross join; an un-coalesced boolean leg is SQL NULL read as denial; bare `with_for_update` on a join locks the joined row; a per-user invariant needs a per-user lock, taken before the cross-row sweep; a grade widening ships with its row filter (033, all four hit).
 * [A guard keyed on accumulated state is weakest on day zero](state-keyed-guards-day-zero.md) - the 033 env guard's unprovable state IS the fresh-deploy state; a wrong write self-certifies the wrong pairing forever; the honest degradation is an unliftable interactive confirmation, never a flag (Codex lane; assume-yes deleted).
 * [Frontend state fed by a stream needs the same ownership gate as its readers](stream-fed-state-needs-ownership-gates.md) - SSE-fed store fields are ownership-blind; widening read access converts implicit owner-only assumptions into rendered steering surfaces (033 `stream.pendingCheckIn`).
