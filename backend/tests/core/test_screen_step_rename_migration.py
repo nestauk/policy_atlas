@@ -3,7 +3,8 @@
 Runs against the real Alembic migration chain, on the same test database as
 the ``conn`` fixture (task 018 rider A5 precedent, mirrored from
 test_effect_direction_migration.py). Downgrades to the pre-rename revision,
-seeds an orchestration_plan row and event_log rows shaped the way pre-019
+seeds a plan row (table ``orchestration_plan`` down there) and event_log rows
+shaped the way pre-019
 code wrote them, upgrades to head, and proves the seeded rows were rewritten
 in place — then downgrades again and proves the rewrite reverses.
 
@@ -21,21 +22,23 @@ from alembic import command
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.core.schema import event_log, orchestration_plan
+from policy_atlas.core.schema import event_log, task_plan
 from tests.conftest import _alembic_cfg
-from tests.helpers import delete_project_data, now, seed_project_and_run
+from tests.core.legacy_catalog import legacy_table, seed_legacy_task_and_run
+from tests.helpers import delete_task_data, now
 
 # The revision below b7f3d9a2c5e1 (the screen step-name rename) — the
 # pre-rename vocabulary state this test exercises.
 PRE_RENAME_REVISION = "921d3a781f3f"
 
 
-def _seed_plan(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
+def _seed_plan(conn: Connection, task_id: uuid.UUID) -> uuid.UUID:
+    """Insert the pre-rename plan row below the 038 revision (plan D9)."""
     plan_id = uuid.uuid4()
     conn.execute(
-        orchestration_plan.insert().values(
+        legacy_table(conn, "orchestration_plan").insert().values(
             plan_id=plan_id,
-            project_id=project_id,
+            project_id=task_id,
             evidence_scope_id=None,
             version=1,
             status="approved",
@@ -60,7 +63,9 @@ def _seed_plan(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
     return plan_id
 
 
-def _seed_events(conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID) -> None:
+def _seed_events(conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID) -> None:
+    """Insert the pre-rename event rows below the 038 revision (plan D9)."""
+    events = legacy_table(conn, "event_log")
     for sequence, (event_type, component) in enumerate(
         [
             ("run.started", "screen"),
@@ -76,10 +81,10 @@ def _seed_events(conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID) 
         ]
     ):
         conn.execute(
-            event_log.insert().values(
+            events.insert().values(
                 event_id=uuid.uuid4(),
                 run_id=run_id,
-                project_id=project_id,
+                project_id=task_id,
                 sequence=sequence,
                 event_type=event_type,
                 occurred_at=now(),
@@ -88,23 +93,26 @@ def _seed_events(conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID) 
         )
 
 
-def _read_plan_payload(conn: Connection, plan_id: uuid.UUID) -> dict[str, Any]:
+def _read_plan_payload(conn: Connection, plan_id: uuid.UUID, *, legacy: bool) -> dict[str, Any]:
+    """Read the plan payload from whichever catalog generation is live (plan D9)."""
+    plans = legacy_table(conn, "orchestration_plan") if legacy else task_plan
     return cast(
         "dict[str, Any]",
-        conn.execute(
-            select(orchestration_plan.c.payload).where(orchestration_plan.c.plan_id == plan_id)
-        ).scalar_one(),
+        conn.execute(select(plans.c.payload).where(plans.c.plan_id == plan_id)).scalar_one(),
     )
 
 
 def _read_event_components(
-    conn: Connection, *, project_id: uuid.UUID, run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, run_id: uuid.UUID, legacy: bool
 ) -> list[tuple[str, str]]:
+    """Read the run's event components from whichever catalog generation is live."""
+    events = legacy_table(conn, "event_log") if legacy else event_log
+    task_column = events.c.project_id if legacy else events.c.task_id
     rows = conn.execute(
-        select(event_log.c.event_type, event_log.c.payload)
-        .where(event_log.c.project_id == project_id)
-        .where(event_log.c.run_id == run_id)
-        .order_by(event_log.c.sequence)
+        select(events.c.event_type, events.c.payload)
+        .where(task_column == task_id)
+        .where(events.c.run_id == run_id)
+        .order_by(events.c.sequence)
     ).fetchall()
     return [(row.event_type, row.payload["component"]) for row in rows]
 
@@ -116,9 +124,9 @@ def test_screen_step_rename_migration_rewrites_existing_data(engine: Engine) -> 
 
     connection = engine.connect()
     trans = connection.begin()
-    project_id, run_id = seed_project_and_run(connection)
-    plan_id = _seed_plan(connection, project_id)
-    _seed_events(connection, project_id=project_id, run_id=run_id)
+    task_id, run_id = seed_legacy_task_and_run(connection)
+    plan_id = _seed_plan(connection, task_id)
+    _seed_events(connection, task_id=task_id, run_id=run_id)
     trans.commit()
     connection.close()
 
@@ -128,14 +136,16 @@ def test_screen_step_rename_migration_rewrites_existing_data(engine: Engine) -> 
         connection = engine.connect()
         trans = connection.begin()
         try:
-            payload = _read_plan_payload(connection, plan_id)
+            payload = _read_plan_payload(connection, plan_id, legacy=False)
             assert payload["components"] == ["screen_full", "characterise"]
             assert payload["component_rationale"] == {
                 "screen_full": "Full-text confirmation improves precision.",
                 "characterise": "Maps the corpus landscape.",
             }
 
-            events = _read_event_components(connection, project_id=project_id, run_id=run_id)
+            events = _read_event_components(
+                connection, task_id=task_id, run_id=run_id, legacy=False
+            )
             assert events == [
                 ("run.started", "screen_abstract"),
                 ("plan.compiled", "screen_abstract"),
@@ -156,14 +166,16 @@ def test_screen_step_rename_migration_rewrites_existing_data(engine: Engine) -> 
         connection = engine.connect()
         trans = connection.begin()
         try:
-            payload = _read_plan_payload(connection, plan_id)
+            payload = _read_plan_payload(connection, plan_id, legacy=True)
             assert payload["components"] == ["screen_stage2", "characterise"]
             assert payload["component_rationale"] == {
                 "screen_stage2": "Full-text confirmation improves precision.",
                 "characterise": "Maps the corpus landscape.",
             }
 
-            events = _read_event_components(connection, project_id=project_id, run_id=run_id)
+            events = _read_event_components(
+                connection, task_id=task_id, run_id=run_id, legacy=True
+            )
             assert events == [
                 ("run.started", "screen"),
                 ("plan.compiled", "screen"),
@@ -185,9 +197,9 @@ def test_screen_step_rename_migration_rewrites_existing_data(engine: Engine) -> 
         try:
             conn_delete = connection
             conn_delete.execute(
-                orchestration_plan.delete().where(orchestration_plan.c.project_id == project_id)
+                task_plan.delete().where(task_plan.c.task_id == task_id)
             )
-            delete_project_data(conn_delete, project_id)
+            delete_task_data(conn_delete, task_id)
             trans.commit()
         finally:
             connection.close()

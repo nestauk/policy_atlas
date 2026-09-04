@@ -25,7 +25,6 @@ from __future__ import annotations
 import argparse
 import sys
 import time
-import uuid
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -44,18 +43,18 @@ from policy_atlas.core import events, tracing  # noqa: E402
 from policy_atlas.core.db import get_engine  # noqa: E402
 from policy_atlas.core.logging import configure_logging  # noqa: E402
 from policy_atlas.core.schema import search_coverage_record  # noqa: E402
-from policy_atlas.evidence_base.assess.screen_prompt import SCREEN_REPS  # noqa: E402
-from policy_atlas.evidence_base.sourcing.search_loop import (  # noqa: E402
+from policy_atlas.evidence_search.assess.screen_prompt import SCREEN_REPS  # noqa: E402
+from policy_atlas.evidence_search.sourcing.search_loop import (  # noqa: E402
     DEPTH_CONSTANTS,
     confident_relevant_count,
     new_confident_relevant_for_run,
 )
-from policy_atlas.runtime.orchestrate import (  # noqa: E402
+from policy_atlas.runtime.agent import (  # noqa: E402
     _write_plan_row,
     live_planner_and_backends,
 )
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan  # noqa: E402
 from policy_atlas.runtime.runner import NullIO, run_plan  # noqa: E402
+from policy_atlas.runtime.task_plan import TaskPlan  # noqa: E402
 
 DEFAULT_INTENT = (
     "interventions to reduce consumption of high fat, sugar, and salt (HFSS) foods"
@@ -75,8 +74,8 @@ ARM_LABELS = {
 }
 
 
-def _plan(intent: str, depth: str) -> OrchestrationPlan:
-    return OrchestrationPlan.model_validate(
+def _plan(intent: str, depth: str) -> TaskPlan:
+    return TaskPlan.model_validate(
         {
             "title": f"live-check-029 {depth}",
             "question": intent,
@@ -131,13 +130,13 @@ def main() -> int:
     langfuse = tracing.get_langfuse()
     _planner, backends = live_planner_and_backends(langfuse)
     plan = _plan(args.intent, args.depth)
-    project_id, scope_id, plan_id = _write_plan_row(engine, plan=plan)
-    print(f"\nproject_id = {project_id}\nscope_id   = {scope_id}\nrunning …\n")
+    task_id, scope_id, plan_id = _write_plan_row(engine, plan=plan)
+    print(f"\ntask_id = {task_id}\nscope_id   = {scope_id}\nrunning …\n")
 
     started = time.monotonic()
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -153,12 +152,12 @@ def main() -> int:
         coverage = list(
             conn.execute(
                 select(search_coverage_record)
-                .where(search_coverage_record.c.project_id == project_id)
+                .where(search_coverage_record.c.task_id == task_id)
                 .order_by(search_coverage_record.c.created_at)
             )
         )
         confident = confident_relevant_count(
-            conn, project_id=project_id, scope_id=scope_id
+            conn, task_id=task_id, scope_id=scope_id
         )
         screen_runs = [
             step.run_id
@@ -167,14 +166,14 @@ def main() -> int:
         ]
         per_round_confident = [
             new_confident_relevant_for_run(
-                conn, project_id=project_id, scope_id=scope_id, run_id=run_id
+                conn, task_id=task_id, scope_id=scope_id, run_id=run_id
             )
             for run_id in screen_runs
             if run_id is not None
         ]
         arms: dict[int, dict[str, dict[str, int]]] = defaultdict(dict)
         for round_index, row in enumerate(coverage, start=1):
-            entries = events.read_for_run(conn, project_id, row.acquired_by_run_id)
+            entries = events.read_for_run(conn, task_id, row.acquired_by_run_id)
             for entry in entries:
                 if entry["event_type"] != "search.executed":
                     continue
@@ -213,7 +212,7 @@ def main() -> int:
         note = "yes" if needed in arm_verbs_seen else "NO (needs confident OpenAlex seeds / groundable suggestions)"
         if args.depth == "deep":
             print(f"  {needed:21s}: {note}")
-    print(f"\nLangfuse traces (if configured): project {project_id}")
+    print(f"\nLangfuse traces (if configured): task {task_id}")
     return 0
 
 

@@ -130,7 +130,7 @@ def test_cli_enrols_through_the_real_entrypoint(engine: Engine) -> None:
         stubber.assert_no_pending_responses()
 
     assert status == 0
-    assert any("moved 0 project(s), 0 portfolio(s), all private" in line for line in lines)
+    assert any("moved 0 task(s), 0 project(s), all private" in line for line in lines)
     with seeded(engine) as conn:
         assert (
             conn.execute(

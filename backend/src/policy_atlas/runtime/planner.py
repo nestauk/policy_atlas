@@ -1,4 +1,4 @@
-"""Planner backend seam for the ``planner_v1`` orchestration-planning call.
+"""Planner backend seam for the ``planner_v1`` planning call.
 
 Mirrors the ``screening_backend.py`` / ``classification_backend.py`` pattern:
 a live OpenAI structured-output backend with tracing inside the backend, and a
@@ -21,7 +21,7 @@ from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
 from policy_atlas.core.prompt_fields import scrub_nul
 from policy_atlas.core.usage import UsageResult, usage_metadata
-from policy_atlas.evidence_base.extract.extract import _scrub_nul
+from policy_atlas.evidence_search.extract.extract import _scrub_nul
 from policy_atlas.runtime.planner_prompt import (
     PLANNER_MAX_OUTPUT_TOKENS,
     PLANNER_PROMPT_VERSION,
@@ -310,7 +310,7 @@ class StubPlannerBackend:
                 # 018 regrade: select/extract/group are deep-only now, so this
                 # full-chain stub draft (it requests all five discretionary
                 # components, with grouping) must be depth "deep", not
-                # "standard", to stay a valid OrchestrationPlan.
+                # "standard", to stay a valid TaskPlan.
                 analysis_depth="deep",
                 components=components,
                 component_rationale={

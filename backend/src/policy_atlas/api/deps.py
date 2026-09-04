@@ -19,19 +19,19 @@ from policy_atlas.core.embeddings import (
     OpenAIEmbeddingBackend,
     StubEmbeddingBackend,
 )
-from policy_atlas.evidence_base.synthesis.grounding_judge import (
+from policy_atlas.evidence_search.synthesis.grounding_judge import (
     GroundingJudgeBackend,
     OpenAIGroundingJudgeBackend,
     StubGroundingJudgeBackend,
 )
+from policy_atlas.runtime.agent import live_planner_and_backends
+from policy_atlas.runtime.agent_backend import (
+    AgentBackend,
+    OpenAIAgentBackend,
+    StubAgentBackend,
+)
 from policy_atlas.runtime.chat_backend import ChatBackend, StubChatBackend
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend
-from policy_atlas.runtime.orchestrate import live_planner_and_backends
-from policy_atlas.runtime.orchestrator_backend import (
-    OpenAIOrchestratorBackend,
-    OrchestratorBackend,
-    StubOrchestratorBackend,
-)
 from policy_atlas.runtime.planner import PlannerBackend, StubPlannerBackend
 from policy_atlas.runtime.runner import RunnerBackends
 
@@ -51,7 +51,7 @@ def _live() -> bool:
     2026-07-21): ``live`` demands the core key and fails loud without it,
     ``stub`` pins stubs even on a keyed box (demos, load tests, scans),
     and the default ``auto`` preserves the key-presence switch that
-    ``orchestrate`` uses.
+    ``agent`` uses.
     """
     mode = os.environ.get("PA_BACKEND_MODE", "auto").strip().lower()
     if mode == "stub":
@@ -137,7 +137,7 @@ def get_executor(request: Request) -> ThreadPoolExecutor:
 
 
 def get_planner_backend() -> PlannerBackend:
-    """Build the planner backend, key-driven exactly like `orchestrate`.
+    """Build the planner backend, key-driven exactly like `agent`.
 
     Returns:
         The live OpenAI planner (Langfuse-traced) when `OPENAI_API_KEY` is
@@ -151,7 +151,7 @@ def get_planner_backend() -> PlannerBackend:
 
 
 def get_runner_backends() -> RunnerBackends:
-    """Build the runner backend bundle, key-driven exactly like `orchestrate`.
+    """Build the runner backend bundle, key-driven exactly like `agent`.
 
     Returns:
         The full live backend set (search transports, OpenAI components,
@@ -165,17 +165,17 @@ def get_runner_backends() -> RunnerBackends:
     return RunnerBackends()
 
 
-def get_orchestrator_backend() -> OrchestratorBackend:
-    """Return the steering-router/watch backend, key-driven like `orchestrate`.
+def get_agent_backend() -> AgentBackend:
+    """Return the steering-router/watch backend, key-driven like `agent`.
 
     Returns:
-        The live OpenAI orchestrator (the 024 router/watch — free-text
+        The live OpenAI agent (the 024 router/watch — free-text
         compilation must go through the real router in live deployments) when
         `OPENAI_API_KEY` is configured, else the deterministic stub.
     """
     if _live():
-        return OpenAIOrchestratorBackend(langfuse_client=tracing.get_langfuse())
-    return StubOrchestratorBackend()
+        return OpenAIAgentBackend(langfuse_client=tracing.get_langfuse())
+    return StubAgentBackend()
 
 
 def get_chat_backend() -> ChatBackend:
@@ -213,7 +213,7 @@ __all__ = [
     "get_engine",
     "get_executor",
     "get_grounding_judge_backend",
-    "get_orchestrator_backend",
+    "get_agent_backend",
     "get_planner_backend",
     "get_runner_backends",
     "get_settings",

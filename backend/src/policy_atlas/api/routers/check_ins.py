@@ -20,45 +20,45 @@ from policy_atlas.api.checkin_read import _check_in
 from policy_atlas.api.contract import CheckInOut, CheckInResponse, FreeTextCompileOut
 from policy_atlas.api.contract.common import PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX, Page, PageMeta
 from policy_atlas.api.deps import (
+    get_agent_backend,
     get_current_user,
     get_engine,
     get_executor,
-    get_orchestrator_backend,
     get_runner_backends,
 )
-from policy_atlas.api.routers._access import accessible_project
+from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run
-from policy_atlas.runtime.orchestrator_backend import OrchestratorBackend
+from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.steering_history import steering_history
 
 log = structlog.get_logger()
 
 router = APIRouter(
-    prefix="/api/v1/projects",
+    prefix="/api/v1/tasks",
     tags=["check-ins"],
     dependencies=[Depends(get_current_user)],
 )
 
 
-def _walk_pause_rows(conn: Connection, project_id: uuid.UUID) -> list[dict[str, Any]]:
+def _walk_pause_rows(conn: Connection, task_id: uuid.UUID) -> list[dict[str, Any]]:
     """Read pauses through the steering-history projection with event identities attached."""
-    history = steering_history(conn, project_id)
+    history = steering_history(conn, task_id)
     walk_ids = {str(story["capability_run_id"]) for story in history}
     return [
         event
-        for event in events.read(conn, project_id)
+        for event in events.read(conn, task_id)
         if event["event_type"] == "steering.pause"
         and isinstance(event["payload"], dict)
         and event["payload"].get("capability_run_id") in walk_ids
     ]
 
 
-@router.get("/{project_id}/check-ins", response_model=Page[CheckInOut])
+@router.get("/{task_id}/check-ins", response_model=Page[CheckInOut])
 def list_check_ins(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     status_filter: Annotated[Literal["pending", "all"], Query(alias="status")] = "pending",
@@ -67,17 +67,17 @@ def list_check_ins(
 ) -> Page[CheckInOut]:
     """Return a latest pending card or the durable steering history projection.
 
-    Paginated (rubric item 17 — check-ins accumulate over a project's life);
+    Paginated (rubric item 17 — check-ins accumulate over a task's life);
     the pending view is at most one card by construction.
     """
     with engine.connect() as connection:
-        accessible_project(connection, project_id=project_id, user_id=user.user_id, write=False)
-        pauses = _walk_pause_rows(connection, project_id)
-        all_events = events.read(connection, project_id)
+        accessible_task(connection, task_id=task_id, user_id=user.user_id, write=False)
+        pauses = _walk_pause_rows(connection, task_id)
+        all_events = events.read(connection, task_id)
         latest_walk = next(
             (
                 story["capability_run_id"]
-                for story in reversed(steering_history(connection, project_id))
+                for story in reversed(steering_history(connection, task_id))
             ),
             None,
         )
@@ -89,7 +89,7 @@ def list_check_ins(
         latest_walk_paused = latest_walk is not None and (
             connection.execute(
                 select(capability_run.c.status)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .where(capability_run.c.capability_run_id == latest_walk)
             ).scalar_one_or_none()
             == "paused"
@@ -133,55 +133,55 @@ def list_check_ins(
 def _execute_claimed(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     backends: RunnerBackends,
-    orchestrator: OrchestratorBackend,
+    agent: AgentBackend,
 ) -> None:
     """Execute one already-claimed continuation on the walk executor."""
     try:
         continuation.execute_continuation(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             backends=backends,
             io=ParkIO(),
-            orchestrator=orchestrator,
+            agent=agent,
         )
     except Exception:
         log.exception(
             "api.continuation_dispatch_failed",
-            project_id=str(project_id),
+            task_id=str(task_id),
             capability_run_id=str(capability_run_id),
         )
         # Without this the walk stays `running` forever with no thread attached
         # (review finding I1/codex-7, 2026-07-21): the user sees a permanently
         # running run and every new dispatch 409s until the next restart's sweep.
         continuation.mark_interrupted_best_effort(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         )
 
 
-@router.post("/{project_id}/check-ins/{check_in_id}/response", response_model=FreeTextCompileOut)
+@router.post("/{task_id}/check-ins/{check_in_id}/response", response_model=FreeTextCompileOut)
 def respond_to_check_in(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     check_in_id: uuid.UUID,
     response: CheckInResponse,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
     backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
-    orchestrator: Annotated[OrchestratorBackend, Depends(get_orchestrator_backend)],
+    agent: Annotated[AgentBackend, Depends(get_agent_backend)],
 ) -> FreeTextCompileOut | Response:
     """Compile or durably answer one check-in, dispatching continuations after commit."""
     with engine.connect() as conn:
-        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=True)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
     try:
         if response.kind == "free_text":
             compiled = continuation.compile_free_text(
                 engine,
-                orchestrator,
-                project_id=project_id,
+                agent,
+                task_id=task_id,
                 check_in_id=check_in_id,
                 text=response.text,
             )
@@ -190,7 +190,7 @@ def respond_to_check_in(
         if response.kind == "free_text_confirm":
             result = continuation.confirm_free_text(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=check_in_id,
                 confirm_token=response.confirm_token,
                 apply=response.apply,
@@ -201,7 +201,7 @@ def respond_to_check_in(
         else:
             result = continuation.answer_check_in(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=check_in_id,
                 response=response,
                 actor=user.user_id,
@@ -220,16 +220,16 @@ def respond_to_check_in(
     if result.continuation_requested:
         claim = continuation.claim_continuation(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=result.capability_run_id,
         )
         if claim is not None:
             executor.submit(
                 _execute_claimed,
                 engine,
-                project_id=claim.project_id,
+                task_id=claim.task_id,
                 capability_run_id=claim.capability_run_id,
                 backends=backends,
-                orchestrator=orchestrator,
+                agent=agent,
             )
     return Response(status_code=204)

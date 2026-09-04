@@ -3,7 +3,7 @@
 Contract § 8. Every case drives a real route through the real application, so
 what is asserted is what a caller observes — not what a helper returns.
 
-`GET /projects/{id}` and `GET /portfolios/{id}` moved onto the graded
+`GET /tasks/{id}` and `GET /projects/{id}` moved onto the graded
 accessor in phase 4 along with the rest of the call-site cutover; a
 colleague who can see a row in their listing can now also open it. Route-
 level coverage for the graded read/write split across every cut-over route
@@ -20,13 +20,13 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.identity import sub_display
-from policy_atlas.core.schema import portfolio as portfolio_table
-from policy_atlas.core.schema import portfolio_membership as membership_table
 from policy_atlas.core.schema import project as project_table
+from policy_atlas.core.schema import project_membership as membership_table
+from policy_atlas.core.schema import task as task_table
 from tests.api.org_support import (
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     ops_enrol,
     ops_set_admin,
     seeded,
@@ -43,7 +43,7 @@ def _ids(body: dict[str, Any], key: str) -> set[str]:
 # --- scope (contract § 8) -----------------------------------------------------
 
 
-def test_projects_scope_defaults_to_all(engine: Engine, tmp_path: Path) -> None:
+def test_tasks_scope_defaults_to_all(engine: Engine, tmp_path: Path) -> None:
     """The default is `all`, not `mine`.
 
     Stated in the plan because a cautious implementer picks `mine` and the
@@ -56,20 +56,20 @@ def test_projects_scope_defaults_to_all(engine: Engine, tmp_path: Path) -> None:
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            shared = make_project(
+            shared = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
-        default_page = client.get("/api/v1/projects", headers=colleague.headers).json()
+        default_page = client.get("/api/v1/tasks", headers=colleague.headers).json()
         explicit = client.get(
-            "/api/v1/projects?scope=all", headers=colleague.headers
+            "/api/v1/tasks?scope=all", headers=colleague.headers
         ).json()
 
-        assert str(shared) in _ids(default_page, "project_id")
+        assert str(shared) in _ids(default_page, "task_id")
         assert default_page["data"] == explicit["data"]
 
 
-def test_projects_scope_mine_excludes_the_organisations_rows(
+def test_tasks_scope_mine_excludes_the_organisations_rows(
     engine: Engine, tmp_path: Path
 ) -> None:
     """`scope=mine` is the pre-033 owner-only listing, unchanged."""
@@ -80,17 +80,17 @@ def test_projects_scope_mine_excludes_the_organisations_rows(
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            theirs = make_project(
+            theirs = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            mine = make_project(
+            mine = make_task(
                 conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="org"
             )
 
-        body = client.get("/api/v1/projects?scope=mine", headers=colleague.headers).json()
+        body = client.get("/api/v1/tasks?scope=mine", headers=colleague.headers).json()
 
-        assert _ids(body, "project_id") == {str(mine)}
-        assert str(theirs) not in _ids(body, "project_id")
+        assert _ids(body, "task_id") == {str(mine)}
+        assert str(theirs) not in _ids(body, "task_id")
         assert body["pagination"]["total_items"] == 1
 
 
@@ -115,28 +115,28 @@ def test_colleague_sees_org_rows_and_never_private_ones(
                 org_id=other_org,
                 display_name="Outsider",
             )
-            shared = make_project(
+            shared = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            secret = make_project(
+            secret = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
-        seen = _ids(client.get("/api/v1/projects", headers=colleague.headers).json(), "project_id")
+        seen = _ids(client.get("/api/v1/tasks", headers=colleague.headers).json(), "task_id")
         assert str(shared) in seen
         assert str(secret) not in seen
 
         outside = _ids(
-            client.get("/api/v1/projects", headers=outsider.headers).json(), "project_id"
+            client.get("/api/v1/tasks", headers=outsider.headers).json(), "task_id"
         )
         assert str(shared) not in outside
         assert str(secret) not in outside
 
 
-def test_portfolios_scope_all_and_mine_match_the_project_listing(
+def test_projects_scope_all_and_mine_match_the_task_listing(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """`GET /portfolios` carries the same scope semantics as `GET /projects`."""
+    """`GET /projects` carries the same scope semantics as `GET /tasks`."""
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
@@ -144,20 +144,20 @@ def test_portfolios_scope_all_and_mine_match_the_project_listing(
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            shared = make_portfolio(
+            shared = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            secret = make_portfolio(
+            secret = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
         wide = _ids(
-            client.get("/api/v1/portfolios", headers=colleague.headers).json(),
-            "portfolio_id",
+            client.get("/api/v1/projects", headers=colleague.headers).json(),
+            "project_id",
         )
         narrow = _ids(
-            client.get("/api/v1/portfolios?scope=mine", headers=colleague.headers).json(),
-            "portfolio_id",
+            client.get("/api/v1/projects?scope=mine", headers=colleague.headers).json(),
+            "project_id",
         )
 
         assert str(shared) in wide
@@ -176,21 +176,21 @@ def test_unenrolled_callers_never_see_each_others_rows_through_a_listing(
     """
     with tenancy_client(tmp_path, count=2) as (client, (first, second)):
         with seeded(engine) as conn:
-            theirs = make_project(conn, owner_user_id=first.user_id, org_id=None)
+            theirs = make_task(conn, owner_user_id=first.user_id, org_id=None)
 
-        body = client.get("/api/v1/projects", headers=second.headers).json()
-        assert str(theirs) not in _ids(body, "project_id")
-
-
-# --- portfolio_id filter (contract § 8) ---------------------------------------
+        body = client.get("/api/v1/tasks", headers=second.headers).json()
+        assert str(theirs) not in _ids(body, "task_id")
 
 
-def test_projects_portfolio_id_filter_narrows_the_page(
+# --- project_id filter (contract § 8) ---------------------------------------
+
+
+def test_tasks_project_id_filter_narrows_the_page(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """`portfolio_id` filters server-side.
+    """`project_id` filters server-side.
 
-    `PortfolioDetailView` filtered the default 50-row global page client-side
+    `ProjectDetailView` filtered the default 50-row global page client-side
     and would silently under-report a Project's Tasks once the visible estate
     spans an organisation.
     """
@@ -198,18 +198,18 @@ def test_projects_portfolio_id_filter_narrows_the_page(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            group = make_portfolio(conn, owner_user_id=owner.user_id, org_id=org_id)
-            member = make_project(
-                conn, owner_user_id=owner.user_id, org_id=org_id, portfolio_id=group
+            group = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
+            member = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, project_id=group
             )
-            loose = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
+            loose = make_task(conn, owner_user_id=owner.user_id, org_id=org_id)
 
         body = client.get(
-            f"/api/v1/projects?portfolio_id={group}", headers=owner.headers
+            f"/api/v1/tasks?project_id={group}", headers=owner.headers
         ).json()
 
-        assert _ids(body, "project_id") == {str(member)}
-        assert str(loose) not in _ids(body, "project_id")
+        assert _ids(body, "task_id") == {str(member)}
+        assert str(loose) not in _ids(body, "task_id")
         assert body["pagination"]["total_items"] == 1
 
 
@@ -235,8 +235,8 @@ def test_owner_email_is_422_for_a_non_admin_caller(engine: Engine, tmp_path: Pat
             )
 
         for path in (
+            "/api/v1/tasks?owner_email=someone@example.test",
             "/api/v1/projects?owner_email=someone@example.test",
-            "/api/v1/portfolios?owner_email=someone@example.test",
         ):
             response = client.get(path, headers=caller.headers)
             assert response.status_code == 422, path
@@ -248,7 +248,7 @@ def test_owner_email_is_422_for_an_unenrolled_caller(engine: Engine, tmp_path: P
     del engine
     with tenancy_client(tmp_path, count=1) as (client, (caller,)):
         response = client.get(
-            "/api/v1/projects?owner_email=someone@example.test", headers=caller.headers
+            "/api/v1/tasks?owner_email=someone@example.test", headers=caller.headers
         )
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
@@ -280,17 +280,17 @@ def test_owner_email_filters_an_admins_visible_set(engine: Engine, tmp_path: Pat
                 display_name="Colleague",
                 email=target_email,
             )
-            theirs = make_project(
+            theirs = make_task(
                 conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="org"
             )
-            mine = make_project(conn, owner_user_id=admin.user_id, org_id=org_id)
+            mine = make_task(conn, owner_user_id=admin.user_id, org_id=org_id)
 
         body = client.get(
-            f"/api/v1/projects?owner_email={target_email}", headers=admin.headers
+            f"/api/v1/tasks?owner_email={target_email}", headers=admin.headers
         ).json()
 
-        assert _ids(body, "project_id") == {str(theirs)}
-        assert str(mine) not in _ids(body, "project_id")
+        assert _ids(body, "task_id") == {str(theirs)}
+        assert str(mine) not in _ids(body, "task_id")
 
 
 def test_owner_email_matching_nobody_returns_an_empty_page_not_an_error(
@@ -315,7 +315,7 @@ def test_owner_email_matching_nobody_returns_an_empty_page_not_an_error(
             )
 
         response = client.get(
-            f"/api/v1/projects?owner_email={unique_email('nobody')}", headers=admin.headers
+            f"/api/v1/tasks?owner_email={unique_email('nobody')}", headers=admin.headers
         )
 
         assert response.status_code == 200
@@ -341,33 +341,33 @@ def test_task_count_excludes_members_the_caller_cannot_read(
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            make_project(
+            make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
-            make_project(
+            make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="private",
-                portfolio_id=group,
+                project_id=group,
             )
 
         colleague_card = next(
             row
-            for row in client.get("/api/v1/portfolios", headers=colleague.headers).json()["data"]
-            if row["portfolio_id"] == str(group)
+            for row in client.get("/api/v1/projects", headers=colleague.headers).json()["data"]
+            if row["project_id"] == str(group)
         )
         owner_card = next(
             row
-            for row in client.get("/api/v1/portfolios", headers=owner.headers).json()["data"]
-            if row["portfolio_id"] == str(group)
+            for row in client.get("/api/v1/projects", headers=owner.headers).json()["data"]
+            if row["project_id"] == str(group)
         )
 
         assert colleague_card["task_count"] == 1
@@ -391,28 +391,28 @@ def test_task_count_excludes_members_outside_the_callers_organisation(
             ops_enrol(
                 conn, user_id=stranger.user_id, org_id=elsewhere, display_name="Stranger"
             )
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            make_project(
+            make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
-            make_project(
+            make_task(
                 conn,
                 owner_user_id=stranger.user_id,
                 org_id=elsewhere,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
 
         card = next(
             row
-            for row in client.get("/api/v1/portfolios", headers=owner.headers).json()["data"]
-            if row["portfolio_id"] == str(group)
+            for row in client.get("/api/v1/projects", headers=owner.headers).json()["data"]
+            if row["project_id"] == str(group)
         )
 
         assert card["task_count"] == 1
@@ -429,11 +429,11 @@ def test_listing_totals_track_the_scope_they_were_asked_for(
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            make_project(conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org")
-            make_project(conn, owner_user_id=colleague.user_id, org_id=org_id)
+            make_task(conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org")
+            make_task(conn, owner_user_id=colleague.user_id, org_id=org_id)
 
-        wide = client.get("/api/v1/projects", headers=colleague.headers).json()
-        narrow = client.get("/api/v1/projects?scope=mine", headers=colleague.headers).json()
+        wide = client.get("/api/v1/tasks", headers=colleague.headers).json()
+        narrow = client.get("/api/v1/tasks?scope=mine", headers=colleague.headers).json()
 
         assert wide["pagination"]["total_items"] == 2
         assert narrow["pagination"]["total_items"] == 1
@@ -442,10 +442,43 @@ def test_listing_totals_track_the_scope_they_were_asked_for(
 # --- the three new read fields (contract § 8, § 3b) ---------------------------
 
 
-def test_project_rows_carry_visibility_is_owner_and_owner_display(
+def test_task_rows_carry_visibility_is_owner_and_owner_display(
     engine: Engine, tmp_path: Path
 ) -> None:
     """`is_owner` is per-caller, and `owner_display` names the row's owner."""
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Ada Owner")
+            ops_enrol(
+                conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
+            )
+            shared = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+
+        as_owner = next(
+            row
+            for row in client.get("/api/v1/tasks", headers=owner.headers).json()["data"]
+            if row["task_id"] == str(shared)
+        )
+        as_colleague = next(
+            row
+            for row in client.get("/api/v1/tasks", headers=colleague.headers).json()["data"]
+            if row["task_id"] == str(shared)
+        )
+
+        assert as_owner["visibility"] == "org"
+        assert as_owner["is_owner"] is True
+        assert as_owner["owner_display"] == "Ada Owner"
+        assert as_colleague["is_owner"] is False
+        assert as_colleague["owner_display"] == "Ada Owner"
+
+
+def test_project_rows_carry_visibility_is_owner_and_owner_display(
+    engine: Engine, tmp_path: Path
+) -> None:
+    """The same three fields on the project shape."""
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
@@ -457,43 +490,10 @@ def test_project_rows_carry_visibility_is_owner_and_owner_display(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
-        as_owner = next(
-            row
-            for row in client.get("/api/v1/projects", headers=owner.headers).json()["data"]
-            if row["project_id"] == str(shared)
-        )
         as_colleague = next(
             row
             for row in client.get("/api/v1/projects", headers=colleague.headers).json()["data"]
             if row["project_id"] == str(shared)
-        )
-
-        assert as_owner["visibility"] == "org"
-        assert as_owner["is_owner"] is True
-        assert as_owner["owner_display"] == "Ada Owner"
-        assert as_colleague["is_owner"] is False
-        assert as_colleague["owner_display"] == "Ada Owner"
-
-
-def test_portfolio_rows_carry_visibility_is_owner_and_owner_display(
-    engine: Engine, tmp_path: Path
-) -> None:
-    """The same three fields on the portfolio shape."""
-    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
-        with seeded(engine) as conn:
-            org_id = make_org(conn)
-            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Ada Owner")
-            ops_enrol(
-                conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
-            )
-            shared = make_portfolio(
-                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
-            )
-
-        as_colleague = next(
-            row
-            for row in client.get("/api/v1/portfolios", headers=colleague.headers).json()["data"]
-            if row["portfolio_id"] == str(shared)
         )
 
         assert as_colleague["visibility"] == "org"
@@ -528,32 +528,32 @@ def test_owner_display_is_never_the_email(engine: Engine, tmp_path: Path) -> Non
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            enrolled_row = make_project(
+            enrolled_row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             # An owner with no `app_user` row: `org_id` is stamped by ops, the
             # identity row simply does not exist yet.
-            ghost_row = make_project(
+            ghost_row = make_task(
                 conn, owner_user_id=ghost.user_id, org_id=org_id, visibility="org"
             )
-            # An ownerless row — what `runtime/orchestrate.py` leaves behind.
-            orphan_row = make_project(conn, owner_user_id=None, org_id=org_id)
+            # An ownerless row — what `runtime/agent.py` leaves behind.
+            orphan_row = make_task(conn, owner_user_id=None, org_id=org_id)
 
-        body = client.get("/api/v1/projects", headers=colleague.headers).json()
-        rows = {row["project_id"]: row for row in body["data"]}
+        body = client.get("/api/v1/tasks", headers=colleague.headers).json()
+        rows = {row["task_id"]: row for row in body["data"]}
 
         assert rows[str(enrolled_row)]["owner_display"] == "Ada Owner"
         assert rows[str(ghost_row)]["owner_display"] == sub_display(ghost.user_id)
         assert rows[str(orphan_row)]["owner_display"] is None
         assert ada_email not in client.get(
-            "/api/v1/projects", headers=colleague.headers
+            "/api/v1/tasks", headers=colleague.headers
         ).text
 
 
 # --- PATCH visibility (contract § 6, § 8) -------------------------------------
 
 
-def test_patch_with_both_visibility_and_portfolio_id_is_422(
+def test_patch_with_both_visibility_and_project_id_is_422(
     engine: Engine, tmp_path: Path
 ) -> None:
     """The two orderings give different results, so the combination is refused."""
@@ -561,20 +561,20 @@ def test_patch_with_both_visibility_and_portfolio_id_is_422(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            row = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
-            group = make_portfolio(conn, owner_user_id=owner.user_id, org_id=org_id)
+            row = make_task(conn, owner_user_id=owner.user_id, org_id=org_id)
+            group = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
 
         response = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=owner.headers,
-            json={"visibility": "private", "portfolio_ids": [str(group)]},
+            json={"visibility": "private", "project_ids": [str(group)]},
         )
 
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
 
 
-def test_patch_with_visibility_and_an_explicit_null_portfolio_is_also_422(
+def test_patch_with_visibility_and_an_explicit_null_project_is_also_422(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Unassign-and-set is the ambiguous case, so `None` cannot be the test."""
@@ -582,62 +582,62 @@ def test_patch_with_visibility_and_an_explicit_null_portfolio_is_also_422(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            row = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
+            row = make_task(conn, owner_user_id=owner.user_id, org_id=org_id)
 
         response = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=owner.headers,
-            json={"visibility": "private", "portfolio_ids": None},
+            json={"visibility": "private", "project_ids": None},
         )
 
         assert response.status_code == 422
 
 
-def test_owner_can_set_a_loose_projects_visibility(engine: Engine, tmp_path: Path) -> None:
-    """A project in no portfolio is unconstrained, so the write lands."""
+def test_owner_can_set_a_loose_tasks_visibility(engine: Engine, tmp_path: Path) -> None:
+    """A task in no project is unconstrained, so the write lands."""
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"visibility": "private"}
         )
 
         assert response.status_code == 200, response.text
         assert response.json()["visibility"] == "private"
         with seeded(engine) as conn:
             stored = conn.execute(
-                select(project_table.c.visibility).where(project_table.c.project_id == row)
+                select(task_table.c.visibility).where(task_table.c.task_id == row)
             ).scalar_one()
         assert stored == "private"
 
 
-def test_setting_visibility_on_a_project_in_a_portfolio_is_409(
+def test_setting_visibility_on_a_task_in_a_project_is_409(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """i.5: the row follows its portfolio, so there is no honest write here."""
+    """i.5: the row follows its project, so there is no honest write here."""
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            group = make_portfolio(conn, owner_user_id=owner.user_id, org_id=org_id)
-            row = make_project(
-                conn, owner_user_id=owner.user_id, org_id=org_id, portfolio_id=group
+            group = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
+            row = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, project_id=group
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"visibility": "private"}
         )
 
         assert response.status_code == 409
         assert response.json()["error"]["code"] == "visibility_conflict"
         with seeded(engine) as conn:
             stored = conn.execute(
-                select(project_table.c.visibility).where(project_table.c.project_id == row)
+                select(task_table.c.visibility).where(task_table.c.task_id == row)
             ).scalar_one()
         assert stored == "org"
 
@@ -656,15 +656,15 @@ def test_a_colleague_cannot_write_a_row_they_can_read(engine: Engine, tmp_path: 
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         assert str(row) in _ids(
-            client.get("/api/v1/projects", headers=colleague.headers).json(), "project_id"
+            client.get("/api/v1/tasks", headers=colleague.headers).json(), "task_id"
         )
         response = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=colleague.headers,
             json={"visibility": "private"},
         )
@@ -679,10 +679,10 @@ def test_an_outsider_still_gets_404_on_patch(engine: Engine, tmp_path: Path) -> 
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            row = make_project(conn, owner_user_id=owner.user_id, org_id=org_id)
+            row = make_task(conn, owner_user_id=owner.user_id, org_id=org_id)
 
         response = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=outsider.headers,
             json={"visibility": "private"},
         )
@@ -691,13 +691,13 @@ def test_an_outsider_still_gets_404_on_patch(engine: Engine, tmp_path: Path) -> 
         assert response.json()["error"]["code"] == "not_found"
 
 
-def test_portfolio_patch_accepts_visibility_only_as_the_cascade(
+def test_project_patch_accepts_visibility_only_as_the_cascade(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """`PortfolioUpdate` gained `visibility` **together with** the cascade.
+    """`ProjectUpdate` gained `visibility` **together with** the cascade.
 
     This case asserted 422 while the field was absent, and its docstring said
-    what would change it: "`PATCH /portfolios/{id}` gains it together with the
+    what would change it: "`PATCH /projects/{id}` gains it together with the
     cascade that makes it honest." The cascade landed, so the refusal did too
     — deliberately, not by weakening a check. What the phase-3 assertion
     protected still holds and is asserted here: the field never reaches the
@@ -710,59 +710,59 @@ def test_portfolio_patch_accepts_visibility_only_as_the_cascade(
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            member = make_project(
+            member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
 
         response = client.patch(
-            f"/api/v1/portfolios/{group}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/projects/{group}", headers=owner.headers, json={"visibility": "private"}
         )
 
         assert response.status_code == 200, response.text
         with seeded(engine) as conn:
             stored = conn.execute(
-                select(portfolio_table.c.visibility).where(
-                    portfolio_table.c.portfolio_id == group
+                select(project_table.c.visibility).where(
+                    project_table.c.project_id == group
                 )
             ).scalar_one()
             stored_member = conn.execute(
-                select(project_table.c.visibility).where(project_table.c.project_id == member)
+                select(task_table.c.visibility).where(task_table.c.task_id == member)
             ).scalar_one()
         assert stored == "private"
         assert stored_member == "private"
 
 
-# --- POST /portfolios {from_project_id} (contract § 6, i.1) -------------------
+# --- POST /projects {from_task_id} (contract § 6, i.1) -------------------
 
 
-def test_from_project_id_inherits_visibility_and_organisation_and_takes_the_member(
+def test_from_task_id_inherits_visibility_and_organisation_and_takes_the_member(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """i.1: the new portfolio matches its first member on both fields.
+    """i.1: the new project matches its first member on both fields.
 
-    Rev 2.0 covered `visibility` only, which let an operator assign a project
-    to org A and its portfolio to org B and have org B's members read and
+    Rev 2.0 covered `visibility` only, which let an operator assign a task
+    to org A and its project to org B and have org B's members read and
     count a row belonging to org A.
     """
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            source = make_project(
+            source = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
         response = client.post(
-            "/api/v1/portfolios",
+            "/api/v1/projects",
             headers=owner.headers,
-            json={"name": "Seeded project", "from_project_id": str(source)},
+            json={"name": "Seeded task", "from_task_id": str(source)},
         )
 
         assert response.status_code == 201, response.text
@@ -771,33 +771,33 @@ def test_from_project_id_inherits_visibility_and_organisation_and_takes_the_memb
         assert body["task_count"] == 1
         with seeded(engine) as conn:
             created = conn.execute(
-                select(portfolio_table).where(
-                    portfolio_table.c.portfolio_id == uuid.UUID(body["portfolio_id"])
+                select(project_table).where(
+                    project_table.c.project_id == uuid.UUID(body["project_id"])
                 )
             ).mappings().one()
             member = conn.execute(
-                select(project_table).where(project_table.c.project_id == source)
+                select(task_table).where(task_table.c.task_id == source)
             ).mappings().one()
         assert created["org_id"] == org_id
         assert created["visibility"] == "private"
         with seeded(engine) as conn:
             memberships = conn.execute(
-                select(membership_table.c.portfolio_id).where(
-                    membership_table.c.project_id == source
+                select(membership_table.c.project_id).where(
+                    membership_table.c.task_id == source
                 )
             ).scalars().all()
-        assert memberships == [uuid.UUID(body["portfolio_id"])]
+        assert memberships == [uuid.UUID(body["project_id"])]
         assert member["visibility"] == created["visibility"]
         assert member["org_id"] == created["org_id"]
 
 
-def test_from_project_id_resolves_under_the_write_grade(
+def test_from_task_id_resolves_under_the_write_grade(
     engine: Engine, tmp_path: Path
 ) -> None:
     """A colleague gets 403 and an outsider 404 — neither creates anything.
 
     Under a read grade a colleague (or, once the admin leg lands, an
-    administrator) could pull a row they do not own into a portfolio and
+    administrator) could pull a row they do not own into a project and
     change its visibility. That is the concrete admin-write escape.
     """
     with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
@@ -807,19 +807,19 @@ def test_from_project_id_resolves_under_the_write_grade(
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            source = make_project(
+            source = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         forbidden = client.post(
-            "/api/v1/portfolios",
+            "/api/v1/projects",
             headers=colleague.headers,
-            json={"name": "Not yours", "from_project_id": str(source)},
+            json={"name": "Not yours", "from_task_id": str(source)},
         )
         missing = client.post(
-            "/api/v1/portfolios",
+            "/api/v1/projects",
             headers=outsider.headers,
-            json={"name": "Not yours", "from_project_id": str(source)},
+            json={"name": "Not yours", "from_task_id": str(source)},
         )
 
         assert forbidden.status_code == 403
@@ -828,8 +828,8 @@ def test_from_project_id_resolves_under_the_write_grade(
         assert missing.json()["error"]["code"] == "not_found"
         with seeded(engine) as conn:
             still_loose = conn.execute(
-                select(membership_table.c.portfolio_id).where(
-                    membership_table.c.project_id == source
+                select(membership_table.c.project_id).where(
+                    membership_table.c.task_id == source
                 )
             ).scalars().all()
         assert still_loose == []
@@ -847,26 +847,26 @@ def test_create_stamps_the_creators_organisation_onto_both_row_kinds(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
 
+        task_id = client.post(
+            "/api/v1/tasks", headers=owner.headers, json={"name": "Fresh"}
+        ).json()["task_id"]
         project_id = client.post(
             "/api/v1/projects", headers=owner.headers, json={"name": "Fresh"}
         ).json()["project_id"]
-        portfolio_id = client.post(
-            "/api/v1/portfolios", headers=owner.headers, json={"name": "Fresh"}
-        ).json()["portfolio_id"]
 
         with seeded(engine) as conn:
+            stamped_task = conn.execute(
+                select(task_table.c.org_id).where(
+                    task_table.c.task_id == uuid.UUID(task_id)
+                )
+            ).scalar_one()
             stamped_project = conn.execute(
                 select(project_table.c.org_id).where(
                     project_table.c.project_id == uuid.UUID(project_id)
                 )
             ).scalar_one()
-            stamped_portfolio = conn.execute(
-                select(portfolio_table.c.org_id).where(
-                    portfolio_table.c.portfolio_id == uuid.UUID(portfolio_id)
-                )
-            ).scalar_one()
+        assert stamped_task == org_id
         assert stamped_project == org_id
-        assert stamped_portfolio == org_id
 
 
 def test_a_new_row_is_private_until_its_owner_shares_it(
@@ -875,7 +875,7 @@ def test_a_new_row_is_private_until_its_owner_shares_it(
     """Owner amendment 2026-08-26 (staging canary): the column default is `private`.
 
     The create paths deliberately write no `visibility`, so this pins the
-    DATABASE default — an enrolled creator's fresh project and portfolio are
+    DATABASE default — an enrolled creator's fresh task and project are
     invisible to a same-org colleague until the owner deliberately shares.
     """
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
@@ -886,47 +886,47 @@ def test_a_new_row_is_private_until_its_owner_shares_it(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
 
+        task_id = client.post(
+            "/api/v1/tasks", headers=owner.headers, json={"name": "Fresh"}
+        ).json()["task_id"]
         project_id = client.post(
             "/api/v1/projects", headers=owner.headers, json={"name": "Fresh"}
         ).json()["project_id"]
-        portfolio_id = client.post(
-            "/api/v1/portfolios", headers=owner.headers, json={"name": "Fresh"}
-        ).json()["portfolio_id"]
 
         with seeded(engine) as conn:
             stored = {
                 conn.execute(
-                    select(project_table.c.visibility).where(
-                        project_table.c.project_id == uuid.UUID(project_id)
+                    select(task_table.c.visibility).where(
+                        task_table.c.task_id == uuid.UUID(task_id)
                     )
                 ).scalar_one(),
                 conn.execute(
-                    select(portfolio_table.c.visibility).where(
-                        portfolio_table.c.portfolio_id == uuid.UUID(portfolio_id)
+                    select(project_table.c.visibility).where(
+                        project_table.c.project_id == uuid.UUID(project_id)
                     )
                 ).scalar_one(),
             }
         assert stored == {"private"}
 
         assert (
-            client.get(f"/api/v1/projects/{project_id}", headers=colleague.headers).status_code
+            client.get(f"/api/v1/tasks/{task_id}", headers=colleague.headers).status_code
             == 404
         )
-        assert uuid.UUID(portfolio_id) not in {
+        assert uuid.UUID(project_id) not in {
             uuid.UUID(row) for row in _ids(
-                client.get("/api/v1/portfolios", headers=colleague.headers).json(),
-                "portfolio_id",
+                client.get("/api/v1/projects", headers=colleague.headers).json(),
+                "project_id",
             )
         }
 
         shared = client.patch(
-            f"/api/v1/projects/{project_id}",
+            f"/api/v1/tasks/{task_id}",
             headers=owner.headers,
             json={"visibility": "org"},
         )
         assert shared.status_code == 200
         assert (
-            client.get(f"/api/v1/projects/{project_id}", headers=colleague.headers).status_code
+            client.get(f"/api/v1/tasks/{task_id}", headers=colleague.headers).status_code
             == 200
         )
 
@@ -936,35 +936,35 @@ def test_create_leaves_an_unenrolled_creators_rows_without_an_organisation(
 ) -> None:
     """NULL `org_id` is the dark launch: reachable by its owner and nobody else."""
     with tenancy_client(tmp_path, count=2) as (client, (creator, stranger)):
-        project_id = client.post(
-            "/api/v1/projects", headers=creator.headers, json={"name": "Unenrolled"}
-        ).json()["project_id"]
+        task_id = client.post(
+            "/api/v1/tasks", headers=creator.headers, json={"name": "Unenrolled"}
+        ).json()["task_id"]
 
         with seeded(engine) as conn:
             stamped = conn.execute(
-                select(project_table.c.org_id).where(
-                    project_table.c.project_id == uuid.UUID(project_id)
+                select(task_table.c.org_id).where(
+                    task_table.c.task_id == uuid.UUID(task_id)
                 )
             ).scalar_one()
         assert stamped is None
 
-        mine = client.get("/api/v1/projects", headers=creator.headers).json()
-        theirs = client.get("/api/v1/projects", headers=stranger.headers).json()
-        assert project_id in _ids(mine, "project_id")
-        assert project_id not in _ids(theirs, "project_id")
+        mine = client.get("/api/v1/tasks", headers=creator.headers).json()
+        theirs = client.get("/api/v1/tasks", headers=stranger.headers).json()
+        assert task_id in _ids(mine, "task_id")
+        assert task_id not in _ids(theirs, "task_id")
 
 
 # --- colleague assignment (owner ruling 2026-08-27) ---------------------------
 
 
-def test_colleague_can_add_their_task_to_an_org_visible_portfolio(
+def test_colleague_can_add_their_task_to_an_org_visible_project(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """A same-org colleague may join an org-visible portfolio they did not create.
+    """A same-org colleague may join an org-visible project they did not create.
 
     The target resolves under the colleague-mutation grade, so the old 403
-    is gone; the task inherits the derived visibility (org — the portfolio
-    is org-visible) and the portfolio's organisation, and the portfolio
+    is gone; the task inherits the derived visibility (org — the project
+    is org-visible) and the project's organisation, and the project
     owner sees it counted.
     """
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
@@ -972,32 +972,32 @@ def test_colleague_can_add_their_task_to_an_org_visible_portfolio(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="private"
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=colleague.headers,
-            json={"portfolio_ids": [str(group)]},
+            json={"project_ids": [str(group)]},
         )
 
         assert response.status_code == 200, response.text
-        assert response.json()["portfolio_ids"] == [str(group)]
+        assert response.json()["project_ids"] == [str(group)]
         assert response.json()["visibility"] == "org"
 
         owners_card = next(
             card
-            for card in client.get("/api/v1/portfolios", headers=owner.headers).json()["data"]
-            if card["portfolio_id"] == str(group)
+            for card in client.get("/api/v1/projects", headers=owner.headers).json()["data"]
+            if card["project_id"] == str(group)
         )
         assert owners_card["task_count"] == 1
 
 
-def test_colleague_cannot_join_a_private_or_cross_org_portfolio(
+def test_colleague_cannot_join_a_private_or_cross_org_project(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Outside the caller's estate the target stays an indistinguishable 404."""
@@ -1008,30 +1008,30 @@ def test_colleague_cannot_join_a_private_or_cross_org_portfolio(
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
             ops_enrol(conn, user_id=outsider.user_id, org_id=elsewhere, display_name="Outsider")
-            hidden = make_portfolio(
+            hidden = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
-            foreign = make_portfolio(
+            foreign = make_project(
                 conn, owner_user_id=outsider.user_id, org_id=elsewhere, visibility="org"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="private"
             )
 
         for target in (hidden, foreign):
             response = client.patch(
-                f"/api/v1/projects/{row}",
+                f"/api/v1/tasks/{row}",
                 headers=colleague.headers,
-                json={"portfolio_ids": [str(target)]},
+                json={"project_ids": [str(target)]},
             )
             assert response.status_code == 404, (target, response.text)
 
-        untouched = client.get(f"/api/v1/projects/{row}", headers=colleague.headers)
-        assert untouched.json()["portfolio_ids"] == []
+        untouched = client.get(f"/api/v1/tasks/{row}", headers=colleague.headers)
+        assert untouched.json()["project_ids"] == []
 
 
 def test_the_admin_leg_never_grants_assignment(engine: Engine, tmp_path: Path) -> None:
-    """An out-of-organisation administrator can read the portfolio but not join it.
+    """An out-of-organisation administrator can read the project but not join it.
 
     The colleague-mutation grade resolves through `own_estate`, which has no
     admin leg — the same structural guarantee the chat mutations rely on. The
@@ -1045,32 +1045,32 @@ def test_the_admin_leg_never_grants_assignment(engine: Engine, tmp_path: Path) -
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=admin.user_id, org_id=elsewhere, display_name="Admin")
             ops_set_admin(conn, user_id=admin.user_id, is_admin=True)
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=admin.user_id, org_id=elsewhere, visibility="private"
             )
 
-        readable = client.get(f"/api/v1/portfolios/{group}", headers=admin.headers)
+        readable = client.get(f"/api/v1/projects/{group}", headers=admin.headers)
         assert readable.status_code == 200
 
         refused = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=admin.headers,
-            json={"portfolio_ids": [str(group)]},
+            json={"project_ids": [str(group)]},
         )
         assert refused.status_code == 404
 
 
-def test_a_kept_membership_survives_the_portfolio_going_private(
+def test_a_kept_membership_survives_the_project_going_private(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Replace-all never locks an owner out of a set they are already in.
 
-    The colleague joins an org-visible portfolio; its owner then cascades it
+    The colleague joins an org-visible project; its owner then cascades it
     private, which takes the colleague's task private with it (derived) and
-    makes the portfolio unreadable to the colleague. Re-sending the same set
+    makes the project unreadable to the colleague. Re-sending the same set
     still succeeds — ids the task already belongs to are kept without
     re-resolving the grade — and `[]` still removes.
     """
@@ -1079,35 +1079,35 @@ def test_a_kept_membership_survives_the_portfolio_going_private(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=colleague.user_id, org_id=org_id, visibility="private"
             )
 
         joined = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=colleague.headers,
-            json={"portfolio_ids": [str(group)]},
+            json={"project_ids": [str(group)]},
         )
         assert joined.status_code == 200, joined.text
 
         cascaded = client.patch(
-            f"/api/v1/portfolios/{group}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/projects/{group}", headers=owner.headers, json={"visibility": "private"}
         )
         assert cascaded.status_code == 200, cascaded.text
 
         resent = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=colleague.headers,
-            json={"portfolio_ids": [str(group)]},
+            json={"project_ids": [str(group)]},
         )
         assert resent.status_code == 200, resent.text
         assert resent.json()["visibility"] == "private"
 
         removed = client.patch(
-            f"/api/v1/projects/{row}", headers=colleague.headers, json={"portfolio_ids": []}
+            f"/api/v1/tasks/{row}", headers=colleague.headers, json={"project_ids": []}
         )
         assert removed.status_code == 200, removed.text
-        assert removed.json()["portfolio_ids"] == []
+        assert removed.json()["project_ids"] == []

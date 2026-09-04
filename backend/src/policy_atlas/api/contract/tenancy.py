@@ -3,7 +3,7 @@
 Task 033 puts an organisation above the entity hierarchy. Two shapes are
 shared across resources and so live here rather than on one of them:
 
-- :data:`Visibility`, carried identically by `project` and `portfolio`.
+- :data:`Visibility`, carried identically by `task` and `project`.
 - :class:`MeOut`, the single place the caller learns their own identity,
   organisation and administrator state.
 
@@ -20,7 +20,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-#: How widely a `project` or `portfolio` row is shared. `org` means every
+#: How widely a `task` or `project` row is shared. `org` means every
 #: enrolled member of the row's organisation may read it; `private` means its
 #: owner only. A row whose `org_id` is NULL is its owner's alone whatever this
 #: says — "org" is an inert default where there is no organisation

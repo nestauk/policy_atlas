@@ -350,7 +350,7 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
   is recovered cleanly: the boot sweep marks interrupted runs `interrupted` on
   the next boot; this is not a data-loss condition.
 - **Blocker preflight before the 033 migration.** The 033 migration takes
-  `ACCESS EXCLUSIVE` on `project`, `portfolio` and `conversation` with
+  `ACCESS EXCLUSIVE` on `task`, `project` and `conversation` with
   `lock_timeout = '5s'`, so any held lock aborts the migration rather than
   queueing behind it (safe to re-run). With the API at zero, the only
   realistic blocker is an idle-in-transaction jumpbox session. Run this over
@@ -359,7 +359,7 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
   ```sql
   SELECT a.pid, a.usename, a.state, a.query_start, l.relation::regclass, l.mode
   FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
-  WHERE l.relation IN ('project'::regclass, 'portfolio'::regclass,
+  WHERE l.relation IN ('task'::regclass, 'project'::regclass,
                        'conversation'::regclass)
     AND a.pid <> pg_backend_pid();
   ```
@@ -388,7 +388,7 @@ bash scripts/deploy.sh update        # migrate → scale → publish on the fres
 
 Generated from `settings.py`'s required/optional calls plus the direct
 `os.environ` readers (`api/deps.py`, `core/tracing.py`,
-`evidence_base/sourcing/search_live.py`). `LANGFUSE_HOST` is what the provisioned
+`evidence_search/sourcing/search_live.py`). `LANGFUSE_HOST` is what the provisioned
 secret carries (v2's key name); tracing accepts it natively, so deployment injects it
 instead. `POLICY_ATLAS_*` tuning and the fixture corpus are intentionally
 omitted from the deployed task.
@@ -409,19 +409,19 @@ omitted from the deployed task.
 | `OIDC_JWKS_CACHE_TTL_SECONDS` | omitted (application default: 300) | `api/settings.py` |
 | `OIDC_JWKS_PATH` | omitted (development issuer only; mutually exclusive with JWKS URL) | `api/settings.py` |
 | `OIDC_JWKS_URL` | config value: Cognito JWKS URL | `api/settings.py` |
-| `OPENAI_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENAI_API_KEY` | `api/deps.py`, `core/openai_client.py`, `runtime/orchestrate.py` |
-| `OPENALEX_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_API_KEY` | `api/deps.py`, `evidence_base/sourcing/search_live.py` |
-| `OPENALEX_EMAIL` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_EMAIL` | `evidence_base/sourcing/search_live.py` |
-| `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_base/sourcing/search_live.py` |
+| `OPENAI_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENAI_API_KEY` | `api/deps.py`, `core/openai_client.py`, `runtime/agent.py` |
+| `OPENALEX_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
+| `OPENALEX_EMAIL` | Secrets Manager field: `policy_atlas_v3/app` `OPENALEX_EMAIL` | `evidence_search/sourcing/search_live.py` |
+| `OVERTON_API_KEY` | Secrets Manager field: `policy_atlas_v3/app` `OVERTON_API_KEY` | `api/deps.py`, `evidence_search/sourcing/search_live.py` |
 | `PA_BACKEND_MODE` | config value: `live` | `api/deps.py` |
 | `POLICY_ATLAS_CHAT_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `runtime/chat_prompt.py` |
-| `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_base/sourcing/ingest_full_text.py` |
-| `POLICY_ATLAS_ORCHESTRATOR_MODEL` | omitted (development tuning; application default) | `runtime/orchestrator_backend.py` |
-| `POLICY_ATLAS_ORCHESTRATOR_TRIAGE_MODEL` | omitted (development tuning; application default) | `runtime/orchestrator_backend.py` |
+| `POLICY_ATLAS_FIXTURE_CORPUS` | omitted (development/test fixture override) | `evidence_search/sourcing/ingest_full_text.py` |
+| `POLICY_ATLAS_AGENT_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
+| `POLICY_ATLAS_AGENT_TRIAGE_MODEL` | omitted (development tuning; application default) | `runtime/agent_backend.py` |
 | `POLICY_ATLAS_PLANNER_MODEL` | omitted (development tuning; application default) | `runtime/planner.py` |
-| `POLICY_ATLAS_RELEVANCE_MODEL` | omitted (development tuning; application default) | `evidence_base/extract/relevance_annotator.py` |
-| `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_base/sourcing/search_live.py` |
-| `POLICY_ATLAS_SYNTHESIS_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `evidence_base/synthesis/synthesis_backend.py` |
+| `POLICY_ATLAS_RELEVANCE_MODEL` | omitted (development tuning; application default) | `evidence_search/extract/relevance_annotator.py` |
+| `POLICY_ATLAS_SEARCH_CACHE_TTL_S` | omitted (development tuning; application default) | `evidence_search/sourcing/search_live.py` |
+| `POLICY_ATLAS_SYNTHESIS_MODEL` | omitted (development tuning; application default `gpt-5.6-terra`) | `evidence_search/synthesis/synthesis_backend.py` |
 | `RUN_EXECUTOR_MAX` | config value: `backend.run_executor_max` | `api/settings.py` |
 | `SSE_HEARTBEAT_SECONDS` | omitted (application default: 15) | `api/settings.py` |
 | `SSE_POLL_INTERVAL_SECONDS` | omitted (application default: 0.4) | `api/settings.py` |
@@ -518,9 +518,9 @@ in committable form — CI's font-guard stays green.
 - **Task 033 (organisations): roll forward, not back.** The 033 migration's
   downgrade is schema-reversible but **data-destructive and chat-exposing**:
   it drops `conversation.created_by`, so every colleague's chat authorship
-  is lost and pre-033 code lists *all* conversations on a project to its
+  is lost and pre-033 code lists *all* conversations on a task to its
   owner — a rollback after adoption exposes colleagues' private chats to
-  the project owner (evidenced by
+  the task owner (evidenced by
   `test_downgrade_erases_chat_authorship_exposing_colleague_chats`, which
   also proves a re-upgrade misattributes the rows rather than undoing the
   exposure). It also drops both `visibility` columns, so a later re-upgrade
@@ -552,7 +552,7 @@ in committable form — CI's font-guard stays green.
   bucket). `PaV3CertStack` / `PaV3NetworkStack` destroy cleanly.
 - **Cognito pool:** `RemovalPolicy.RETAIN` — deletion is owner-sign-off-only,
   never automatic, since recreating the pool mints new `sub`s and silently
-  orphans owner-scoped projects. NB `RETAIN` protects the *pool and its
+  orphans owner-scoped tasks. NB `RETAIN` protects the *pool and its
   users* from stack deletion, **not** identity continuity across a
   destroy/redeploy: a redeployed stack creates a *new* pool (new issuer, new
   `sub`s) and the retained pool is orphaned outside CloudFormation. To keep

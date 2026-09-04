@@ -15,7 +15,7 @@ emitted, *how many*, and *what they carry*.
 Three shapes exist, and the difference between them is the whole of § 3a's
 "one line per read is meaningless for a listing":
 
-- `admin_read` — one per row the admin leg resolved (project, portfolio or
+- `admin_read` — one per row the admin leg resolved (task, project or
   conversation), including the row an SSE subscribe resolves.
 - `admin_listing` — one per listing or search **request** served across
   organisations, carrying the filter, the page and the row count. A zero-result
@@ -50,8 +50,8 @@ from policy_atlas.core.schema import app_user
 from tests.api.org_support import (
     make_conversation,
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     ops_enrol,
     seeded,
     tenancy_client,
@@ -82,8 +82,8 @@ def test_administrator_reads_org_visible_and_private_rows_in_a_foreign_organisat
     """The contract's headline admin case, plus its per-row trace grain.
 
     An administrator enrolled in organisation B reads, in organisation A: an
-    org-visible project, a **private** project, an org-visible portfolio, a
-    private portfolio, and — through the conversation-id router (§ 4) — a chat
+    org-visible task, a **private** task, an org-visible project, a
+    private project, and — through the conversation-id router (§ 4) — a chat
     they did not create, both as `GET /{id}` and as `GET /{id}/turns`.
 
     Six requests, six `admin_read` lines: one per row read, each naming the
@@ -102,28 +102,28 @@ def test_administrator_reads_org_visible_and_private_rows_in_a_foreign_organisat
                 display_name="Support",
                 is_admin=True,
             )
-            shared = make_project(
+            shared = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="org"
             )
-            secret = make_project(
+            secret = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="private"
             )
-            shared_group = make_portfolio(
+            shared_group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="org"
             )
-            secret_group = make_portfolio(
+            secret_group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="private"
             )
             chat = make_conversation(
-                conn, project_id=secret, kind="chat", created_by=owner.user_id
+                conn, task_id=secret, kind="chat", created_by=owner.user_id
             )
 
         with capture_logs() as captured:
             responses = [
-                client.get(f"/api/v1/projects/{shared}", headers=admin.headers),
-                client.get(f"/api/v1/projects/{secret}", headers=admin.headers),
-                client.get(f"/api/v1/portfolios/{shared_group}", headers=admin.headers),
-                client.get(f"/api/v1/portfolios/{secret_group}", headers=admin.headers),
+                client.get(f"/api/v1/tasks/{shared}", headers=admin.headers),
+                client.get(f"/api/v1/tasks/{secret}", headers=admin.headers),
+                client.get(f"/api/v1/projects/{shared_group}", headers=admin.headers),
+                client.get(f"/api/v1/projects/{secret_group}", headers=admin.headers),
                 client.get(f"/api/v1/conversations/{chat}", headers=admin.headers),
                 client.get(f"/api/v1/conversations/{chat}/turns", headers=admin.headers),
             ]
@@ -133,10 +133,10 @@ def test_administrator_reads_org_visible_and_private_rows_in_a_foreign_organisat
         assert responses[1].json()["visibility"] == "private"
         assert responses[3].json()["visibility"] == "private"
         assert _reads(captured) == [
-            ("project", str(shared)),
-            ("project", str(secret)),
-            ("portfolio", str(shared_group)),
-            ("portfolio", str(secret_group)),
+            ("task", str(shared)),
+            ("task", str(secret)),
+            ("project", str(shared_group)),
+            ("project", str(secret_group)),
             ("conversation", str(chat)),
             ("conversation", str(chat)),
         ]
@@ -151,7 +151,7 @@ def test_administrator_reads_a_null_organisation_row_and_an_ownerless_one(
     """Contract § 11: the wider list includes rows with no owning organisation.
 
     Two shapes nobody else can reach — an unenrolled person's row (`org_id
-    IS NULL`, its `visibility='org'` inert) and a `runtime/orchestrate.py` row
+    IS NULL`, its `visibility='org'` inert) and a `runtime/agent.py` row
     with no owner at all. The latter amends the deferred "pre-025 rows are
     unreachable" posture, so it is pinned rather than assumed.
     """
@@ -166,22 +166,22 @@ def test_administrator_reads_a_null_organisation_row_and_an_ownerless_one(
                 display_name="Support",
                 is_admin=True,
             )
-            unenrolled = make_project(conn, owner_user_id=loner.user_id, org_id=None)
-            ownerless = make_project(conn, owner_user_id=None, org_id=None)
+            unenrolled = make_task(conn, owner_user_id=loner.user_id, org_id=None)
+            ownerless = make_task(conn, owner_user_id=None, org_id=None)
 
         with capture_logs() as captured:
             reachable = client.get(
-                f"/api/v1/projects/{unenrolled}", headers=admin.headers
+                f"/api/v1/tasks/{unenrolled}", headers=admin.headers
             )
-            cli_row = client.get(f"/api/v1/projects/{ownerless}", headers=admin.headers)
+            cli_row = client.get(f"/api/v1/tasks/{ownerless}", headers=admin.headers)
 
         assert reachable.status_code == 200
         assert cli_row.status_code == 200
         assert reachable.json()["is_owner"] is False
         assert cli_row.json()["owner_display"] is None
         assert _reads(captured) == [
-            ("project", str(unenrolled)),
-            ("project", str(ownerless)),
+            ("task", str(unenrolled)),
+            ("task", str(ownerless)),
         ]
 
 
@@ -211,19 +211,19 @@ def test_reads_the_caller_was_already_entitled_to_emit_no_trace_line(
                 display_name="Support",
                 is_admin=True,
             )
-            theirs = make_project(
+            theirs = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            admins_own = make_project(
+            admins_own = make_task(
                 conn, owner_user_id=admin.user_id, org_id=org_id, visibility="private"
             )
 
         with capture_logs() as captured:
             statuses = [
-                client.get(f"/api/v1/projects/{theirs}", headers=owner.headers),
-                client.get(f"/api/v1/projects/{theirs}", headers=colleague.headers),
-                client.get(f"/api/v1/projects/{admins_own}", headers=admin.headers),
-                client.get(f"/api/v1/projects/{theirs}", headers=admin.headers),
+                client.get(f"/api/v1/tasks/{theirs}", headers=owner.headers),
+                client.get(f"/api/v1/tasks/{theirs}", headers=colleague.headers),
+                client.get(f"/api/v1/tasks/{admins_own}", headers=admin.headers),
+                client.get(f"/api/v1/tasks/{theirs}", headers=admin.headers),
             ]
 
         assert [response.status_code for response in statuses] == [200] * 4
@@ -244,7 +244,7 @@ def test_an_administrator_is_refused_every_mutation(
     reading "an admin is refused every mutation" will want to know what a
     refusal looks like:
 
-    - **403 `forbidden`** on the project/portfolio write grade. The admin leg
+    - **403 `forbidden`** on the task/project write grade. The admin leg
       is a read leg: it reaches the row, and then the owner-only write check
       refuses. The 403 is honest — the leg already disclosed the row.
     - **404** on every chat path. Those resolve through `own_estate` /
@@ -268,44 +268,44 @@ def test_an_administrator_is_refused_every_mutation(
                 display_name="Support",
                 is_admin=True,
             )
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="org"
             )
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="org"
             )
             chat = make_conversation(
-                conn, project_id=project_id, kind="chat", created_by=owner.user_id
+                conn, task_id=task_id, kind="chat", created_by=owner.user_id
             )
 
         with capture_logs() as captured:
             forbidden = {
-                "patch project": client.patch(
-                    f"/api/v1/projects/{project_id}",
+                "patch task": client.patch(
+                    f"/api/v1/tasks/{task_id}",
                     headers=admin.headers,
                     json={"name": "Renamed by support"},
                 ),
-                "archive project": client.post(
-                    f"/api/v1/projects/{project_id}/archive", headers=admin.headers
+                "archive task": client.post(
+                    f"/api/v1/tasks/{task_id}/archive", headers=admin.headers
                 ),
-                "cascade portfolio": client.patch(
-                    f"/api/v1/portfolios/{group}",
+                "cascade project": client.patch(
+                    f"/api/v1/projects/{group}",
                     headers=admin.headers,
                     json={"visibility": "private"},
                 ),
                 "respond to check-in": client.post(
-                    f"/api/v1/projects/{project_id}/check-ins/{uuid.uuid4()}/response",
+                    f"/api/v1/tasks/{task_id}/check-ins/{uuid.uuid4()}/response",
                     headers=admin.headers,
                     json={"kind": "abort"},
                 ),
                 "patch plan": client.patch(
-                    f"/api/v1/projects/{project_id}/plan", headers=admin.headers, json={}
+                    f"/api/v1/tasks/{task_id}/plan", headers=admin.headers, json={}
                 ),
                 "create run": client.post(
-                    f"/api/v1/projects/{project_id}/runs", headers=admin.headers, json={}
+                    f"/api/v1/tasks/{task_id}/runs", headers=admin.headers, json={}
                 ),
                 "planning turn": client.post(
-                    f"/api/v1/projects/{project_id}/planning-turns",
+                    f"/api/v1/tasks/{task_id}/planning-turns",
                     headers=admin.headers,
                     json={"message": "Hello", "client_turn_id": str(uuid.uuid4())},
                 ),
@@ -313,7 +313,7 @@ def test_an_administrator_is_refused_every_mutation(
             forbidden_reads = len(_reads(captured))
             untold = {
                 "create conversation": client.post(
-                    f"/api/v1/projects/{project_id}/conversations",
+                    f"/api/v1/tasks/{task_id}/conversations",
                     headers=admin.headers,
                     json={},
                 ),
@@ -353,9 +353,9 @@ def test_an_administrator_is_refused_every_mutation(
         assert len(_reads(captured)) == len(forbidden)
 
         # Nothing was written by any of it, read back through the owner.
-        row = client.get(f"/api/v1/projects/{project_id}", headers=owner.headers).json()
+        row = client.get(f"/api/v1/tasks/{task_id}", headers=owner.headers).json()
         group_row = client.get(
-            f"/api/v1/portfolios/{group}", headers=owner.headers
+            f"/api/v1/projects/{group}", headers=owner.headers
         ).json()
         assert row["name"] != "Renamed by support"
         assert row["status"] == "active"
@@ -386,14 +386,14 @@ def test_an_administrator_cannot_write_through_the_conversation_id_router(
                 display_name="Support",
                 is_admin=True,
             )
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="private"
             )
             chat = make_conversation(
-                conn, project_id=project_id, kind="chat", created_by=owner.user_id
+                conn, task_id=task_id, kind="chat", created_by=owner.user_id
             )
             planning = make_conversation(
-                conn, project_id=project_id, kind="planning", created_by=None
+                conn, task_id=task_id, kind="planning", created_by=None
             )
 
         with capture_logs() as captured:
@@ -475,22 +475,22 @@ def test_administrator_listing_spans_organisations_and_emits_one_line_per_reques
                 email=unique_email("support"),
                 is_admin=True,
             )
-            shared = make_project(
+            shared = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="org"
             )
-            secret = make_project(
+            secret = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="private"
             )
-            unenrolled = make_project(conn, owner_user_id=loner.user_id, org_id=None)
+            unenrolled = make_task(conn, owner_user_id=loner.user_id, org_id=None)
 
         with capture_logs() as captured:
             response = client.get(
-                f"/api/v1/projects?owner_email={address}", headers=admin.headers
+                f"/api/v1/tasks?owner_email={address}", headers=admin.headers
             )
 
         assert response.status_code == 200
         body = response.json()
-        assert {row["project_id"] for row in body["data"]} == {
+        assert {row["task_id"] for row in body["data"]} == {
             str(shared),
             str(secret),
             str(unenrolled),
@@ -500,7 +500,7 @@ def test_administrator_listing_spans_organisations_and_emits_one_line_per_reques
                 "event": "admin_listing",
                 "log_level": "info",
                 "user_id": admin.user_id,
-                "kind": "project",
+                "kind": "task",
                 "scope": "all",
                 "owner_email": address,
                 "page": 1,
@@ -523,7 +523,7 @@ def test_scope_mine_is_not_the_admin_leg_and_emits_nothing(
     the same breath *does* widen and *does* emit, which is what stops this
     passing merely because the trace was broken.
 
-    The `scope=all` half is narrowed by `portfolio_id` so it asserts an exact
+    The `scope=all` half is narrowed by `project_id` so it asserts an exact
     set: the test database is shared across the suite **and across runs**, so
     an unfiltered global page is not this test's to predict. The `scope=mine`
     half needs no such care — it asserts an *absence*, and no amount of paging
@@ -541,32 +541,32 @@ def test_scope_mine_is_not_the_admin_leg_and_emits_nothing(
                 display_name="Support",
                 is_admin=True,
             )
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_a, visibility="private"
             )
-            theirs = make_project(
+            theirs = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_a,
                 visibility="private",
-                portfolio_id=group,
+                project_id=group,
             )
 
         with capture_logs() as mine_captured:
             narrow = client.get(
-                f"/api/v1/projects?scope=mine&portfolio_id={group}",
+                f"/api/v1/tasks?scope=mine&project_id={group}",
                 headers=admin.headers,
             )
         with capture_logs() as all_captured:
             wide = client.get(
-                f"/api/v1/projects?scope=all&portfolio_id={group}",
+                f"/api/v1/tasks?scope=all&project_id={group}",
                 headers=admin.headers,
             )
 
         assert narrow.json()["data"] == []
         assert _lines(mine_captured, "admin_listing") == []
 
-        assert {row["project_id"] for row in wide.json()["data"]} == {str(theirs)}
+        assert {row["task_id"] for row in wide.json()["data"]} == {str(theirs)}
         assert len(_lines(all_captured, "admin_listing")) == 1
         assert _lines(all_captured, "admin_listing")[0]["scope"] == "all"
         assert _lines(all_captured, "admin_listing")[0]["owner_email"] is None
@@ -597,21 +597,21 @@ def test_a_zero_result_administrator_search_still_emits_its_line(
             )
 
         with capture_logs() as captured:
+            tasks = client.get(
+                f"/api/v1/tasks?owner_email={nobody}", headers=admin.headers
+            )
             projects = client.get(
                 f"/api/v1/projects?owner_email={nobody}", headers=admin.headers
             )
-            portfolios = client.get(
-                f"/api/v1/portfolios?owner_email={nobody}", headers=admin.headers
-            )
 
+        assert tasks.status_code == 200
         assert projects.status_code == 200
-        assert portfolios.status_code == 200
+        assert tasks.json()["data"] == []
         assert projects.json()["data"] == []
-        assert portfolios.json()["data"] == []
         emitted = _lines(captured, "admin_listing")
         assert [(entry["kind"], entry["row_count"], entry["total_items"]) for entry in emitted] == [
+            ("task", 0, 0),
             ("project", 0, 0),
-            ("portfolio", 0, 0),
         ]
         assert {entry["owner_email"] for entry in emitted} == {nobody}
 
@@ -622,7 +622,7 @@ def test_an_admin_read_line_says_which_request_produced_it(
     """Two reads of the same row are two different actions, and the line must say which.
 
     `admin_read` carried a `kind` and a `row_id` and nothing else, so opening a
-    project card and reading a colleague's whole chat transcript looked
+    task card and reading a colleague's whole chat transcript looked
     identical in the trail — and the trail is the admin leg's only control
     while the privacy notice stands unedited (contract § 12). A request-scoped
     `structlog` context supplies the missing half.
@@ -649,17 +649,17 @@ def test_an_admin_read_line_says_which_request_produced_it(
                 display_name="Support",
                 is_admin=True,
             )
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=None, visibility="private"
             )
             chat_id = make_conversation(
-                conn, project_id=project_id, created_by=owner.user_id
+                conn, task_id=task_id, created_by=owner.user_id
             )
 
         with capture_logs(
             processors=[structlog.contextvars.merge_contextvars]
         ) as captured:
-            card = client.get(f"/api/v1/projects/{project_id}", headers=admin.headers)
+            card = client.get(f"/api/v1/tasks/{task_id}", headers=admin.headers)
             transcript = client.get(
                 f"/api/v1/conversations/{chat_id}/turns", headers=admin.headers
             )
@@ -668,7 +668,7 @@ def test_an_admin_read_line_says_which_request_produced_it(
         assert transcript.status_code == 200
         lines = _lines(captured, "admin_read")
         assert [(entry["kind"], entry["route"]) for entry in lines] == [
-            ("project", "/api/v1/projects/{project_id}"),
+            ("task", "/api/v1/tasks/{task_id}"),
             ("conversation", "/api/v1/conversations/{conversation_id}/turns"),
         ]
         assert {entry["http_method"] for entry in lines} == {"GET"}
@@ -708,13 +708,13 @@ def test_an_unbounded_or_shapeless_owner_email_never_reaches_the_audit_line(
         too_long = f"{'a' * 250}@example.test"
         with capture_logs() as captured:
             over = client.get(
-                f"/api/v1/projects?owner_email={too_long}", headers=admin.headers
+                f"/api/v1/tasks?owner_email={too_long}", headers=admin.headers
             )
             shapeless = client.get(
-                "/api/v1/portfolios?owner_email=not-an-address", headers=admin.headers
+                "/api/v1/projects?owner_email=not-an-address", headers=admin.headers
             )
             at_the_bound = client.get(
-                f"/api/v1/projects?owner_email={'a' * 241}@example.test",
+                f"/api/v1/tasks?owner_email={'a' * 241}@example.test",
                 headers=admin.headers,
             )
 
@@ -742,13 +742,13 @@ def test_a_non_administrators_listing_is_never_traced(
             ops_enrol(
                 conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
             )
-            make_project(
+            make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         with capture_logs() as captured:
+            client.get("/api/v1/tasks", headers=colleague.headers)
             client.get("/api/v1/projects", headers=colleague.headers)
-            client.get("/api/v1/portfolios", headers=colleague.headers)
 
         assert _lines(captured, "admin_listing") == []
         assert _reads(captured) == []

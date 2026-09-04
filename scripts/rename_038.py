@@ -164,8 +164,10 @@ NEVER_MAPPED: dict[str, frozenset[int]] = {
 # Text spans that are prose or tooling, never a product identifier. Any
 # identifier match overlapping one of these is skipped.
 NEVER_MAPPED_CONTEXTS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("uv run --project", re.compile(r"--project\b")),
-    ("pyproject [project] table", re.compile(r"\[project\]")),
+    # Only the uv flag: a bare `--project` elsewhere (the ops CLI's `rows assign
+    # --project`) is the Task flag and must rename (found mid-sweep in ops/cli.py).
+    ("uv run --project", re.compile(r"(?<=uv run )--project\b")),
+    ("pyproject [project] table", re.compile(r"^\[project\]", re.MULTILINE)),
     ("nesta 'project page' link", re.compile(r"\bproject page\b")),
     ("Langfuse project", re.compile(r"\bLangfuse project\b")),
     # The phrase for the collection of documents stays (owner ruling).

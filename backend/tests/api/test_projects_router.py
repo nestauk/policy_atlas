@@ -1,224 +1,301 @@
-"""HTTP coverage for owner-scoped project lifecycle routes."""
+"""HTTP coverage for owner-scoped project routes and task assignment."""
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy.engine import Engine
-
-from policy_atlas.core.schema import capability_run, evidence_scope
-from tests.api.resource_support import api_client, create_project
-from tests.helpers import seed_run, seed_screening_result, seed_source
+from tests.api.resource_support import api_client, create_task
 
 
-def test_projects_create_list_get_archive_and_owner_404(engine: Engine, tmp_path: Path) -> None:
-    """Exercise lifecycle reads, pagination, archive idempotence, and BOLA opacity."""
+def test_create_project_returns_created_fields(tmp_path: Path) -> None:
+    """Creating a project echoes its fields and starts with no tasks."""
+    with api_client(tmp_path) as (client, owner, _):
+        response = client.post(
+            "/api/v1/projects",
+            headers=owner,
+            json={"name": "Housing", "description": "Housing policy work"},
+        )
+        assert response.status_code == 201, response.text
+        body = response.json()
+        assert body["name"] == "Housing"
+        assert body["description"] == "Housing policy work"
+        assert body["project_id"]
+        assert body["created_at"]
+        assert body["task_count"] == 0
+
+
+def test_create_project_without_description_reads_back_none(tmp_path: Path) -> None:
+    """An omitted description reads back as None, not a missing key."""
+    with api_client(tmp_path) as (client, owner, _):
+        response = client.post("/api/v1/projects", headers=owner, json={"name": "Housing"})
+        assert response.status_code == 201, response.text
+        assert response.json()["description"] is None
+
+
+def test_list_projects_derives_task_counts(tmp_path: Path) -> None:
+    """Listing projects reports each one's derived, live task count."""
+    with api_client(tmp_path) as (client, owner, _):
+        first_response = client.post("/api/v1/projects", headers=owner, json={"name": "First"})
+        second_response = client.post("/api/v1/projects", headers=owner, json={"name": "Second"})
+        first = first_response.json()["project_id"]
+        second = second_response.json()["project_id"]
+        task_ids = [create_task(client, owner) for _ in range(3)]
+        for task_id in task_ids[:2]:
+            patched = client.patch(
+                f"/api/v1/tasks/{task_id}",
+                headers=owner,
+                json={"project_ids": [first]},
+            )
+            assert patched.status_code == 200, patched.text
+        patched = client.patch(
+            f"/api/v1/tasks/{task_ids[2]}",
+            headers=owner,
+            json={"project_ids": [second]},
+        )
+        assert patched.status_code == 200, patched.text
+
+        listed = client.get("/api/v1/projects", headers=owner)
+        assert listed.status_code == 200
+        body = listed.json()
+        assert body["pagination"]["total_items"] == 2
+        counts = {row["project_id"]: row["task_count"] for row in body["data"]}
+        assert counts == {first: 2, second: 1}
+
+
+def test_list_projects_is_owner_scoped(tmp_path: Path) -> None:
+    """A project created by another owner does not leak into this list."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = create_project(client, owner)
-        listed = client.get("/api/v1/projects?page=1&page_size=1", headers=owner)
-        assert listed.status_code == 200
-        assert listed.json()["pagination"] == {"page": 1, "page_size": 1, "total_items": 1}
-        assert listed.json()["data"][0]["project_id"] == project_id
-        assert client.get(f"/api/v1/projects/{project_id}", headers=owner).status_code == 200
-
-        renamed = client.patch(
-            f"/api/v1/projects/{project_id}", headers=owner, json={"name": "Renamed"}
-        )
-        assert renamed.status_code == 200
-        assert renamed.json()["name"] == "Renamed"
-
-        absent = client.get(f"/api/v1/projects/{uuid.uuid4()}", headers=other)
-        cross_owner = client.get(f"/api/v1/projects/{project_id}", headers=other)
-        assert cross_owner.status_code == absent.status_code == 404
-        assert cross_owner.json() == absent.json()
-        # Task 037: GET /projects/{id} is conditionally public — a tokenless
-        # read of a non-public row gets the same indistinguishable 404 as an
-        # unknown id, never a 401 that would disclose the row exists.
-        anonymous = client.get(f"/api/v1/projects/{project_id}")
-        assert anonymous.status_code == 404
-        assert anonymous.json() == absent.json()
-
-        assert (
-            client.post(f"/api/v1/projects/{project_id}/archive", headers=owner).status_code
-            == 200
-        )
-        assert (
-            client.post(f"/api/v1/projects/{project_id}/archive", headers=owner).status_code
-            == 200
-        )
-        assert client.get("/api/v1/projects", headers=owner).json()["data"] == []
-        assert client.get("/api/v1/projects?status=archived", headers=owner).status_code == 200
-
-
-def test_projects_reject_page_sizes_over_contract_cap(engine: Engine, tmp_path: Path) -> None:
-    """Keep the server pagination cap at the documented contract boundary."""
-    with api_client(tmp_path) as (client, owner, _):
-        response = client.get("/api/v1/projects?page_size=201", headers=owner)
-        assert response.status_code == 422
-        assert response.json()["error"]["code"] == "validation_error"
-
-
-def test_project_with_no_run_reports_source_count_as_none(engine: Engine, tmp_path: Path) -> None:
-    """No capability_run at all: `source_count` is `None`, not `0` — the question is unasked."""
-    with api_client(tmp_path) as (client, owner, _other):
-        project_id = create_project(client, owner)
-
-        detail = client.get(f"/api/v1/projects/{project_id}", headers=owner)
-        assert detail.status_code == 200
-        assert detail.json()["source_count"] is None
-
+        response = client.post("/api/v1/projects", headers=other, json={"name": "Not yours"})
+        assert response.status_code == 201, response.text
         listed = client.get("/api/v1/projects", headers=owner)
         assert listed.status_code == 200
-        assert listed.json()["data"][0]["source_count"] is None
+        assert listed.json()["data"] == []
 
 
-def test_project_with_a_run_reports_source_count_as_included_screens(
-    engine: Engine, tmp_path: Path
-) -> None:
-    """A capability_run makes `source_count` real: Included screens, not snapshots."""
-    with api_client(tmp_path) as (client, owner, _other):
-        project_id = create_project(client, owner)
-        pid = uuid.UUID(project_id)
-        with engine.begin() as conn:
-            scope_id = uuid.uuid4()
-            conn.execute(
-                evidence_scope.insert().values(
-                    evidence_scope_id=scope_id,
-                    project_id=pid,
-                    intent="source count coverage",
-                    context={},
-                    created_at=datetime.now(UTC),
-                )
-            )
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=uuid.uuid4(),
-                    project_id=pid,
-                    evidence_scope_id=scope_id,
-                    capability="evidence_base",
-                    plan_id=uuid.uuid4(),
-                    plan_version=1,
-                    status="succeeded",
-                    session_id=None,
-                    started_at=datetime.now(UTC),
-                    ended_at=datetime.now(UTC),
-                )
-            )
-            run_id = seed_run(conn, pid)
-
-        zero_included = client.get(f"/api/v1/projects/{project_id}", headers=owner)
-        assert zero_included.status_code == 200
-        assert zero_included.json()["source_count"] == 0
-
-        with engine.begin() as conn:
-            _, included_a = seed_source(conn, pid)
-            _, included_b = seed_source(conn, pid)
-            _, excluded = seed_source(conn, pid)
-            seed_screening_result(conn, pid, run_id, scope_id, included_a, status="relevant")
-            seed_screening_result(conn, pid, run_id, scope_id, included_b, status="relevant")
-            seed_screening_result(conn, pid, run_id, scope_id, excluded, status="not_relevant")
-
-        two_included = client.get(f"/api/v1/projects/{project_id}", headers=owner)
-        assert two_included.status_code == 200
-        assert two_included.json()["source_count"] == 2
-
-        listed = client.get("/api/v1/projects", headers=owner)
-        assert listed.status_code == 200
-        assert listed.json()["data"][0]["source_count"] == 2
-
-
-def test_a_patch_body_of_explicit_nulls_is_refused_rather_than_written(
-    tmp_path: Path,
-) -> None:
-    """A malformed body is the caller's error, not an internal one.
-
-    Both fields back NOT NULL columns and the route dumps with
-    `exclude_unset`, so an explicit null was *in* the changes: `visibility`
-    went to the UPDATE and `name` went to `rename_project`, and each request
-    ended as **500 internal** on a constraint violation. `visibility` needed a
-    project with no portfolio to get that far — with one it is refused 409
-    first (i.5), which is why the crash was reachable only on the plainer row.
-
-    The row is unchanged afterwards, which is the half that says the refusal
-    happened before the write rather than in the middle of it.
-    """
+def test_get_project_returns_derived_task_count(tmp_path: Path) -> None:
+    """Fetching a single project reflects its currently assigned tasks."""
     with api_client(tmp_path) as (client, owner, _):
-        project_id = create_project(client, owner)
-
-        for body in ({"visibility": None}, {"name": None}):
-            response = client.patch(
-                f"/api/v1/projects/{project_id}", headers=owner, json=body
-            )
-            assert response.status_code == 422, (body, response.text)
-            assert response.json()["error"]["code"] == "validation_error"
-
-        # `question: null` is not the same thing — the column is nullable, so
-        # clearing the question is a real instruction and still works.
-        cleared = client.patch(
-            f"/api/v1/projects/{project_id}", headers=owner, json={"question": None}
-        )
-        assert cleared.status_code == 200
-        assert cleared.json()["question"] is None
-        # untouched: the column default ('private', owner amendment 2026-08-26)
-        assert cleared.json()["visibility"] == "private"
-        assert cleared.json()["name"] == "Test project"
-
-
-def test_rename_and_membership_while_run_is_active_leave_the_run_running(
-    engine: Engine, tmp_path: Path
-) -> None:
-    """PATCH name and portfolio_ids during a running walk return 200 and stay running."""
-    with api_client(tmp_path) as (client, owner, _):
-        project_id = create_project(client, owner)
-        pid = uuid.UUID(project_id)
-        housing = client.post("/api/v1/portfolios", headers=owner, json={"name": "Housing"})
-        portfolio_id = housing.json()["portfolio_id"]
-        with engine.begin() as conn:
-            scope_id = uuid.uuid4()
-            conn.execute(
-                evidence_scope.insert().values(
-                    evidence_scope_id=scope_id,
-                    project_id=pid,
-                    intent="running walk lock",
-                    context={},
-                    created_at=datetime.now(UTC),
-                )
-            )
-            conn.execute(
-                capability_run.insert().values(
-                    capability_run_id=uuid.uuid4(),
-                    project_id=pid,
-                    evidence_scope_id=scope_id,
-                    capability="evidence_base",
-                    plan_id=uuid.uuid4(),
-                    plan_version=1,
-                    status="running",
-                    session_id=None,
-                    started_at=datetime.now(UTC),
-                    ended_at=None,
-                )
-            )
-
-        renamed = client.patch(
-            f"/api/v1/projects/{project_id}",
+        created = client.post("/api/v1/projects", headers=owner, json={"name": "Housing"})
+        project_id = created.json()["project_id"]
+        task_id = create_task(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}",
             headers=owner,
-            json={"name": "Still walking"},
+            json={"project_ids": [project_id]},
         )
-        assert renamed.status_code == 200, renamed.text
-        assert renamed.json()["name"] == "Still walking"
-        assert renamed.json()["latest_run"]["status"] == "running"
-
-        assigned = client.patch(
-            f"/api/v1/projects/{project_id}",
-            headers=owner,
-            json={"portfolio_ids": [portfolio_id]},
-        )
-        assert assigned.status_code == 200, assigned.text
-        assert assigned.json()["portfolio_ids"] == [portfolio_id]
-        assert assigned.json()["latest_run"]["status"] == "running"
+        assert patched.status_code == 200, patched.text
 
         fetched = client.get(f"/api/v1/projects/{project_id}", headers=owner)
         assert fetched.status_code == 200
-        assert fetched.json()["latest_run"]["status"] == "running"
+        assert fetched.json()["task_count"] == 1
+
+
+def test_patch_project_partial_update_leaves_omitted_fields(tmp_path: Path) -> None:
+    """A PATCH with only name leaves description untouched (exclude_unset)."""
+    with api_client(tmp_path) as (client, owner, _):
+        created = client.post(
+            "/api/v1/projects",
+            headers=owner,
+            json={"name": "Housing", "description": "Original"},
+        )
+        project_id = created.json()["project_id"]
+
+        both = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=owner,
+            json={"name": "Renamed", "description": "Updated"},
+        )
+        assert both.status_code == 200, both.text
+        assert both.json()["name"] == "Renamed"
+        assert both.json()["description"] == "Updated"
+
+        name_only = client.patch(
+            f"/api/v1/projects/{project_id}",
+            headers=owner,
+            json={"name": "Renamed again"},
+        )
+        assert name_only.status_code == 200, name_only.text
+        assert name_only.json()["name"] == "Renamed again"
+        assert name_only.json()["description"] == "Updated"
+
+
+def test_assign_task_to_project(tmp_path: Path) -> None:
+    """Assigning a project to a task persists and is readable back."""
+    with api_client(tmp_path) as (client, owner, _):
+        created = client.post("/api/v1/projects", headers=owner, json={"name": "Housing"})
+        project_id = created.json()["project_id"]
+        task_id = create_task(client, owner)
+
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": [project_id]},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["project_ids"] == [project_id]
+
+        fetched = client.get(f"/api/v1/tasks/{task_id}", headers=owner)
+        assert fetched.status_code == 200
+        assert fetched.json()["project_ids"] == [project_id]
+
+
+def test_unassign_task_from_project_drops_task_count(tmp_path: Path) -> None:
+    """Setting project_ids to [] clears membership and shrinks the count."""
+    with api_client(tmp_path) as (client, owner, _):
+        created = client.post("/api/v1/projects", headers=owner, json={"name": "Housing"})
+        project_id = created.json()["project_id"]
+        task_id = create_task(client, owner)
+        assigned = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": [project_id]},
+        )
+        assert assigned.status_code == 200, assigned.text
+
+        unassigned = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": []},
+        )
+        assert unassigned.status_code == 200, unassigned.text
+        assert unassigned.json()["project_ids"] == []
+
+        fetched = client.get(f"/api/v1/projects/{project_id}", headers=owner)
+        assert fetched.status_code == 200
+        assert fetched.json()["task_count"] == 0
+
+
+def test_unknown_and_cross_owner_project_404s_are_indistinguishable(tmp_path: Path) -> None:
+    """An unknown project and someone else's yield identical 404 bodies."""
+    with api_client(tmp_path) as (client, owner, other):
+        other_created = client.post("/api/v1/projects", headers=other, json={"name": "Not yours"})
+        other_project_id = other_created.json()["project_id"]
+
+        absent = client.get(f"/api/v1/projects/{uuid.uuid4()}", headers=owner)
+        cross_owner = client.get(f"/api/v1/projects/{other_project_id}", headers=owner)
+        assert cross_owner.status_code == absent.status_code == 404
+        assert cross_owner.json() == absent.json()
+
+        absent_patch = client.patch(
+            f"/api/v1/projects/{uuid.uuid4()}", headers=owner, json={"name": "X"}
+        )
+        cross_owner_patch = client.patch(
+            f"/api/v1/projects/{other_project_id}", headers=owner, json={"name": "X"}
+        )
+        assert cross_owner_patch.status_code == absent_patch.status_code == 404
+        assert cross_owner_patch.json() == absent_patch.json()
+
+
+def test_assign_task_to_unowned_project_is_404_and_does_not_write(tmp_path: Path) -> None:
+    """Assigning someone else's project 404s and leaves the task untouched."""
+    with api_client(tmp_path) as (client, owner, other):
+        other_created = client.post("/api/v1/projects", headers=other, json={"name": "Not yours"})
+        other_project_id = other_created.json()["project_id"]
+        task_id = create_task(client, owner)
+
+        response = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": [other_project_id]},
+        )
+        assert response.status_code == 404
+
+        fetched = client.get(f"/api/v1/tasks/{task_id}", headers=owner)
+        assert fetched.status_code == 200
+        assert fetched.json()["project_ids"] == []
+
+
+def test_task_with_no_project_is_unaffected(tmp_path: Path) -> None:
+    """A freshly created task reports no project in both get and list."""
+    with api_client(tmp_path) as (client, owner, _):
+        task_id = create_task(client, owner)
+
+        fetched = client.get(f"/api/v1/tasks/{task_id}", headers=owner)
+        assert fetched.status_code == 200
+        assert fetched.json()["project_ids"] == []
+
+        listed = client.get("/api/v1/tasks", headers=owner)
+        assert listed.status_code == 200
+        row = next(row for row in listed.json()["data"] if row["task_id"] == task_id)
+        assert row["project_ids"] == []
+
+
+def test_a_project_patch_body_of_explicit_null_name_is_refused(tmp_path: Path) -> None:
+    """`{"name": null}` was written by the allow-list splat and 500d.
+
+    `ProjectUpdate` already refused an explicit null `visibility`, and `name`
+    needed the same guard for the same reason: the route's splat takes whatever
+    the `exclude_unset` dump contains, so a null went to a NOT NULL column.
+    `description` is different and stays different — that column is nullable,
+    so a null clears it.
+    """
+    with api_client(tmp_path) as (client, owner, _):
+        created = client.post(
+            "/api/v1/projects",
+            headers=owner,
+            json={"name": "Housing", "description": "Housing policy work"},
+        )
+        assert created.status_code == 201, created.text
+        project_id = created.json()["project_id"]
+
+        refused = client.patch(
+            f"/api/v1/projects/{project_id}", headers=owner, json={"name": None}
+        )
+        assert refused.status_code == 422, refused.text
+        assert refused.json()["error"]["code"] == "validation_error"
+
+        cleared = client.patch(
+            f"/api/v1/projects/{project_id}", headers=owner, json={"description": None}
+        )
+        assert cleared.status_code == 200, cleared.text
+        assert cleared.json()["description"] is None
+        assert cleared.json()["name"] == "Housing"
+
+
+def test_task_can_belong_to_many_projects(tmp_path: Path) -> None:
+    """One task in two tasks counts in both task_counts and lists both ids."""
+    with api_client(tmp_path) as (client, owner, _):
+        first = client.post("/api/v1/projects", headers=owner, json={"name": "First"}).json()[
+            "project_id"
+        ]
+        second = client.post("/api/v1/projects", headers=owner, json={"name": "Second"}).json()[
+            "project_id"
+        ]
+        task_id = create_task(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": [first, second, first]},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["project_ids"] == [first, second]
+
+        listed = client.get("/api/v1/projects", headers=owner)
+        counts = {row["project_id"]: row["task_count"] for row in listed.json()["data"]}
+        assert counts[first] == 1
+        assert counts[second] == 1
+
+
+def test_omitting_project_ids_leaves_membership_unchanged(tmp_path: Path) -> None:
+    """A name-only PATCH does not drop existing memberships."""
+    with api_client(tmp_path) as (client, owner, _):
+        project_id = client.post(
+            "/api/v1/projects", headers=owner, json={"name": "Housing"}
+        ).json()["project_id"]
+        task_id = create_task(client, owner)
+        assigned = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"project_ids": [project_id]},
+        )
+        assert assigned.status_code == 200, assigned.text
+
+        renamed = client.patch(
+            f"/api/v1/tasks/{task_id}",
+            headers=owner,
+            json={"name": "Renamed only"},
+        )
+        assert renamed.status_code == 200, renamed.text
+        assert renamed.json()["name"] == "Renamed only"
+        assert renamed.json()["project_ids"] == [project_id]

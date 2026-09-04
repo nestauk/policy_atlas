@@ -29,7 +29,7 @@ def has_control_character(value: str) -> bool:
 def insert_source_tags(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     now: datetime,
     assertions: list[tuple[uuid.UUID, str, str]],
@@ -40,10 +40,10 @@ def insert_source_tags(
 
     Args:
         conn: Open database connection; inserts use its active transaction.
-        project_id: Owning project.
+        task_id: Owning task.
         run_id: Run recorded as the assertion's creator.
         now: Timestamp for ``created_at``.
-        assertions: ``(project_source_snapshot_id, tag, asserted_by)`` triples.
+        assertions: ``(task_source_snapshot_id, tag, asserted_by)`` triples.
         tag_type: The tag-assignment type; defaults to ``topic_theme`` so
             existing callers are untouched.
         theme_id: Optional durable identity for a characterisation theme.
@@ -51,8 +51,8 @@ def insert_source_tags(
     rows = [
         {
             "source_tag_id": uuid.uuid4(),
-            "project_id": project_id,
-            "project_source_snapshot_id": pss_id,
+            "task_id": task_id,
+            "task_source_snapshot_id": tss_id,
             "tag": tag,
             "tag_type": tag_type,
             "asserted_by": asserted_by,
@@ -60,7 +60,7 @@ def insert_source_tags(
             "created_at": now,
             "theme_id": theme_id,
         }
-        for pss_id, tag, asserted_by in assertions
+        for tss_id, tag, asserted_by in assertions
     ]
     if rows:
         insert = pg_insert(source_tag).values(rows)

@@ -29,21 +29,21 @@ from policy_atlas.core.schema import (
 from policy_atlas.core.schema import (
     chunk_embedding,
     metadata,
-    project_source_snapshot,
+    task_source_snapshot,
 )
-from policy_atlas.evidence_base.sourcing.acquire import (
+from policy_atlas.evidence_search.sourcing.acquire import (
     AcquireContext,
     SearchBackend,
     acquire_sources,
 )
-from policy_atlas.evidence_base.sourcing.ingest_upload import ingest_upload
+from policy_atlas.evidence_search.sourcing.ingest_upload import ingest_upload
 from tests.helpers import (
-    delete_project_data,
+    delete_task_data,
     executed_calls_for,
     now,
-    seed_project_and_run,
     seed_scope,
     seed_source,
+    seed_task_and_run,
 )
 from tests.provider_fixtures import OpenAlexFixtureBackend, OvertonFixtureBackend
 
@@ -72,14 +72,14 @@ def _insert_chunk(
 
 def test_table_count(conn: Connection) -> None:
     # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
-    # entity hierarchy) and ADR 0032 adds `portfolio_membership`; 36 -> 37:
-    # task 036 adds `waitlist_entry`; no evidence-base table changed.
+    # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
+    # task 036 adds `waitlist_entry`; no evidence-search table changed.
     assert len(metadata.tables) == 37
 
 
 def test_uq_chunk_embedding_unit_rejects_duplicate(conn: Connection) -> None:
-    pid, _rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, _rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     chunk_id = _insert_chunk(conn, snap_id, 1, "A single canonical chunk.")
     vector = StubEmbeddingBackend().embed_texts(["A single canonical chunk."])[0]
 
@@ -199,14 +199,14 @@ def test_derive_units_oversized_multi_sentence_splits_with_overlap() -> None:
 
 
 def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     chunk_ids = [
         _insert_chunk(conn, snap_id, i, f"Chunk body number {i}.") for i in range(1, 4)
     ]
 
     first = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
     )
     assert first["embedded"] == 3
     assert first["already_embedded"] == 0
@@ -228,7 +228,7 @@ def test_embed_pending_chunks_idempotent_and_stamps_every_row(conn: Connection) 
         assert stored == f"Chunk body number {i}."
 
     second = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
     )
     assert second["embedded"] == 0
     assert second["already_embedded"] == 3
@@ -245,11 +245,11 @@ class _RaisingEmbedder:
 
 
 def test_embed_pending_chunks_failure_isolation_and_retry(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     chunk_id = _insert_chunk(conn, snap_id, 1, "This chunk will fail to embed.")
 
-    result = embed_pending_chunks(conn, embedder=_RaisingEmbedder(), project_id=pid, run_id=rid)
+    result = embed_pending_chunks(conn, embedder=_RaisingEmbedder(), task_id=pid, run_id=rid)
     assert result["failed"] == 1
     assert result["embedded"] == 0
 
@@ -261,7 +261,7 @@ def test_embed_pending_chunks_failure_isolation_and_retry(conn: Connection) -> N
     assert rows == 0
 
     retry = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
     )
     assert retry["embedded"] == 1
     assert retry["failed"] == 0
@@ -313,15 +313,15 @@ class _RaisingIfCalledEmbedder:
 
 
 def test_embed_pending_chunks_budget_guard_stops_before_any_call(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     _insert_chunk(conn, snap_id, 1, "Chunk A.")
     _insert_chunk(conn, snap_id, 2, "Chunk B.")
 
     result = embed_pending_chunks(
         conn,
         embedder=_RaisingIfCalledEmbedder(),
-        project_id=pid,
+        task_id=pid,
         run_id=rid,
         max_chunks=1,
     )
@@ -329,7 +329,7 @@ def test_embed_pending_chunks_budget_guard_stops_before_any_call(conn: Connectio
     assert result["embedded"] == 0
 
 
-# --- Project scoping ---
+# --- Task scoping ---
 
 
 class _CountingEmbedder:
@@ -343,18 +343,18 @@ class _CountingEmbedder:
         return StubEmbeddingBackend().embed_texts(texts)
 
 
-def test_embed_pending_chunks_project_scoped(conn: Connection) -> None:
-    pid_a, rid_a = seed_project_and_run(conn)
-    pid_b, _rid_b = seed_project_and_run(conn)
-    snap_a, _pss_a = seed_source(conn, pid_a)
-    snap_b, _pss_b = seed_source(conn, pid_b)
-    _insert_chunk(conn, snap_a, 1, "Project A content.")
-    b_chunk_id = _insert_chunk(conn, snap_b, 1, "Project B content.")
+def test_embed_pending_chunks_task_scoped(conn: Connection) -> None:
+    pid_a, rid_a = seed_task_and_run(conn)
+    pid_b, _rid_b = seed_task_and_run(conn)
+    snap_a, _tss_a = seed_source(conn, pid_a)
+    snap_b, _tss_b = seed_source(conn, pid_b)
+    _insert_chunk(conn, snap_a, 1, "Task A content.")
+    b_chunk_id = _insert_chunk(conn, snap_b, 1, "Task B content.")
 
     embedder = _CountingEmbedder()
-    embed_pending_chunks(conn, embedder=embedder, project_id=pid_a, run_id=rid_a)
+    embed_pending_chunks(conn, embedder=embedder, task_id=pid_a, run_id=rid_a)
 
-    assert "Project B content." not in embedder.seen_texts
+    assert "Task B content." not in embedder.seen_texts
     rows = conn.execute(
         select(sa.func.count())
         .select_from(chunk_embedding)
@@ -367,12 +367,12 @@ def test_embed_pending_chunks_project_scoped(conn: Connection) -> None:
 
 
 def test_eager_uniform_upload_and_acquire_embed_every_chunk(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
+    pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
 
     ingest_upload(
         conn,
-        project_id=pid,
+        task_id=pid,
         chunks=["Upload chunk one.", "Upload chunk two."],
         source_locator="doc.pdf",
         metadata={},
@@ -383,7 +383,7 @@ def test_eager_uniform_upload_and_acquire_embed_every_chunk(conn: Connection) ->
     backends = [OpenAlexFixtureBackend(), OvertonFixtureBackend()]
     acquire_sources(
         conn,
-        project_id=pid,
+        task_id=pid,
         run_id=rid,
         context=context,
         backends=cast("list[SearchBackend]", backends),
@@ -394,8 +394,8 @@ def test_eager_uniform_upload_and_acquire_embed_every_chunk(conn: Connection) ->
     snapshot_ids = [
         row.source_snapshot_id
         for row in conn.execute(
-            select(project_source_snapshot.c.source_snapshot_id).where(
-                project_source_snapshot.c.project_id == pid
+            select(task_source_snapshot.c.source_snapshot_id).where(
+                task_source_snapshot.c.task_id == pid
             )
         )
     ]
@@ -497,14 +497,14 @@ def test_openai_embedding_backend_rate_limit_exhaustion_fails_loudly(
     assert len(fake_client.embeddings.calls) == 4
 
 
-# --- delete_project_data ---
+# --- delete_task_data ---
 
 
-def test_delete_project_data_removes_chunk_embedding(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+def test_delete_task_data_removes_chunk_embedding(conn: Connection) -> None:
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     chunk_id = _insert_chunk(conn, snap_id, 1, "Content to embed and later delete.")
-    embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid)
+    embed_pending_chunks(conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid)
 
     count_before = conn.execute(
         select(sa.func.count())
@@ -514,7 +514,7 @@ def test_delete_project_data_removes_chunk_embedding(conn: Connection) -> None:
     assert count_before >= 1
 
     conn.commit()
-    delete_project_data(conn, pid)
+    delete_task_data(conn, pid)
     conn.commit()
 
     count_after = conn.execute(
@@ -550,8 +550,8 @@ def test_judgment_derive_units_deterministic_and_gap_free() -> None:
 
 
 def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     sentence = "This long chunk should split into several embedding units. "
     chunk_content = sentence * 90
     chunk_id = _insert_chunk(conn, snap_id, 1, chunk_content)
@@ -561,7 +561,7 @@ def test_judgment_one_vector_per_unit_no_mean_pooling_path(conn: Connection) -> 
     result = embed_pending_chunks(
         conn,
         embedder=StubEmbeddingBackend(),
-        project_id=pid,
+        task_id=pid,
         run_id=rid,
     )
 
@@ -602,13 +602,13 @@ def test_derive_units_drops_whitespace_only_units_and_renumbers() -> None:
 
 
 def test_embed_pending_chunks_whitespace_chunk_skipped_not_failed(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     _insert_chunk(conn, snap_id, 1, "\n\n\t  \n")
     _insert_chunk(conn, snap_id, 2, "A real chunk body.")
 
     result = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
     )
     assert result["embedded"] == 1
     assert result["failed"] == 0
@@ -616,7 +616,7 @@ def test_embed_pending_chunks_whitespace_chunk_skipped_not_failed(conn: Connecti
 
     # The unitless chunk stays pending and stays out of the failed count on re-runs.
     second = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
     )
     assert second["embedded"] == 0
     assert second["failed"] == 0
@@ -624,16 +624,16 @@ def test_embed_pending_chunks_whitespace_chunk_skipped_not_failed(conn: Connecti
 
 
 def test_embed_pending_chunks_budget_path_returns_uniform_shape(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
-    snap_id, _pss_id = seed_source(conn, pid)
+    pid, rid = seed_task_and_run(conn)
+    snap_id, _tss_id = seed_source(conn, pid)
     _insert_chunk(conn, snap_id, 1, "One chunk over a zero budget.")
 
     result = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid, max_chunks=0
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid, max_chunks=0
     )
     assert result["budget_exceeded"] == 1
     ok = embed_pending_chunks(
-        conn, embedder=StubEmbeddingBackend(), project_id=pid, run_id=rid
+        conn, embedder=StubEmbeddingBackend(), task_id=pid, run_id=rid
     )
     assert ok["budget_exceeded"] == 0
     assert set(result) == set(ok)

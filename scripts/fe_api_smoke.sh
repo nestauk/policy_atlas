@@ -9,7 +9,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 api_port="${FE_API_SMOKE_API_PORT:-8001}"
 frontend_port="${FE_API_SMOKE_FRONTEND_PORT:-4174}"
 # Own disposable database, never policy_atlas_test: the smoke persists real
-# projects/runs, and the backend suite's migration round-trip tests downgrade
+# tasks/runs, and the backend suite's migration round-trip tests downgrade
 # with existing data present — shared state broke them (build finding,
 # 2026-07-21). Recreated on every run; dropped on teardown.
 smoke_db_name="${FE_API_SMOKE_DB_NAME:-policy_atlas_smoke}"

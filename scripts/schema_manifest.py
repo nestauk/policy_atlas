@@ -36,6 +36,19 @@ STEP2 = [("portfolio", "project")]
 TOKEN = re.compile(r"project|portfolio|pss|oplan|orchestration_plan|evidence_base|capr_capability")
 
 
+
+# Unnamed metadata FKs that an earlier migration created under an explicit
+# name (found by the 038 round-trip test). The catalog holds the explicit name,
+# so the manifest must too; metadata auto-name -> live catalog name.
+EXPLICIT_FK_NAMES = {
+    "evidence_scope_project_id_fkey": "screening_scope_project_id_fkey",
+    "orchestration_plan_conversation_id_fkey": "fk_orchestration_plan_conversation",
+    "project_org_id_fkey": "fk_project_org_id",
+    "portfolio_org_id_fkey": "fk_portfolio_org_id",
+    "portfolio_membership_portfolio_id_fkey": "fk_portfolio_membership_portfolio_id",
+    "portfolio_membership_project_id_fkey": "fk_portfolio_membership_project_id",
+}
+
 def rename(name: str) -> str:
     for old, new in STEP1 + STEP2:
         name = name.replace(old, new)
@@ -77,7 +90,8 @@ def main() -> None:
                 kind = "PK"
             elif isinstance(con, ForeignKeyConstraint):
                 cols = "_".join(col.name for col in con.columns)
-                name = con.name or f"{t.name}_{cols}_fkey"
+                auto = f"{t.name}_{cols}_fkey"
+                name = con.name or EXPLICIT_FK_NAMES.get(auto, auto)
                 kind = "FK"
             elif isinstance(con, UniqueConstraint):
                 name = con.name or f"{t.name}_{'_'.join(col.name for col in con.columns)}_key"

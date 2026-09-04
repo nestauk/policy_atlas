@@ -25,13 +25,19 @@ from sqlalchemy.exc import IntegrityError
 
 from policy_atlas.core.schema import capability_run, runs, source_screening_result
 from tests.conftest import _alembic_cfg
+from tests.core.legacy_catalog import (
+    legacy_table,
+    seed_legacy_scope,
+    seed_legacy_source,
+    seed_legacy_task_and_run,
+)
 from tests.helpers import (
-    delete_project_data,
+    delete_task_data,
     now,
-    seed_project_and_run,
     seed_scope,
     seed_screening_result,
     seed_source,
+    seed_task_and_run,
 )
 
 # The revision below a3c6f9e2b7d4 (the task-024 schema gate) — the
@@ -52,17 +58,21 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
 
     connection = engine.connect()
     trans = connection.begin()
-    project_id, run_id = seed_project_and_run(connection)
-    scope_id = seed_scope(connection, project_id)
-    _, pss_id = seed_source(connection, project_id)
+    # Below the 038 revision the catalog still says `project`/`project_id`
+    # and `project_source_snapshot_id` (plan D9), so the seed reflects the
+    # live shape instead of using core.schema's post-rename metadata.
+    task_id, run_id = seed_legacy_task_and_run(connection)
+    scope_id = seed_legacy_scope(connection, task_id)
+    _, tss_id = seed_legacy_source(connection, task_id)
     # Seed the v1-shaped row inline: the shared seed_screening_result helper now
     # names screen_generation in its INSERT (task 024 generation supersession),
     # which the downgraded table does not have yet.
-    connection.execute(source_screening_result.insert().values(
+    legacy_ssr = legacy_table(connection, "source_screening_result")
+    connection.execute(legacy_ssr.insert().values(
         source_screening_result_id=uuid.uuid4(),
         evidence_scope_id=scope_id,
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
+        project_source_snapshot_id=tss_id,
+        project_id=task_id,
         screened_by_run_id=run_id,
         status="relevant",
         screen_basis="title_abstract",
@@ -90,7 +100,7 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
             # server_default (0) — no backfill.
             generation = connection.execute(
                 select(source_screening_result.c.screen_generation).where(
-                    source_screening_result.c.project_source_snapshot_id == pss_id
+                    source_screening_result.c.task_source_snapshot_id == tss_id
                 )
             ).scalar_one()
             assert generation == 0
@@ -100,7 +110,7 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
             with pytest.raises(IntegrityError, match="ck_ssr_generation_nonneg"):
                 connection.execute(
                     source_screening_result.update()
-                    .where(source_screening_result.c.project_source_snapshot_id == pss_id)
+                    .where(source_screening_result.c.task_source_snapshot_id == tss_id)
                     .values(screen_generation=-1)
                 )
             savepoint.rollback()
@@ -110,9 +120,9 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
             cap_run_id = uuid.uuid4()
             connection.execute(capability_run.insert().values(
                 capability_run_id=cap_run_id,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
-                capability="evidence_base",
+                capability="evidence_search",
                 plan_id=uuid.uuid4(),
                 plan_version=1,
                 status="running",
@@ -153,21 +163,21 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
         # Clean up the committed seed rows (outside any migration's own DDL
         # transaction) then restore head for the rest of the suite. Null the
         # runs->capability_run link and drop capability_run rows first — both
-        # would otherwise block delete_project_data's runs/project deletes
-        # under fk_runs_capability_run_project / fk_capr_scope_project.
+        # would otherwise block delete_task_data's runs/task deletes
+        # under fk_runs_capability_run_task / fk_capr_scope_task.
         command.upgrade(cfg, "head")
         connection = engine.connect()
         trans = connection.begin()
         try:
             connection.execute(
                 runs.update()
-                .where(runs.c.project_id == project_id)
+                .where(runs.c.task_id == task_id)
                 .values(capability_run_id=None)
             )
             connection.execute(
-                capability_run.delete().where(capability_run.c.project_id == project_id)
+                capability_run.delete().where(capability_run.c.task_id == task_id)
             )
-            delete_project_data(connection, project_id)
+            delete_task_data(connection, task_id)
             trans.commit()
         finally:
             connection.close()
@@ -176,7 +186,7 @@ def test_capability_run_and_screen_generation_migration_roundtrip(engine: Engine
 def test_downgrade_blocked_by_superseded_generation(engine: Engine) -> None:
     """Review fix C: downgrade's guard query must raise BEFORE any DDL runs
     when a re-screen (screen_generation > 0) has happened — the narrow
-    (evidence_scope_id, project_source_snapshot_id, screen_stage) unique index
+    (evidence_scope_id, task_source_snapshot_id, screen_stage) unique index
     the downgrade recreates cannot coexist with superseded generations. Assert
     the schema is left completely untouched by the aborted downgrade."""
     cfg = _alembic_cfg()
@@ -184,12 +194,12 @@ def test_downgrade_blocked_by_superseded_generation(engine: Engine) -> None:
 
     connection = engine.connect()
     trans = connection.begin()
-    project_id, run_id = seed_project_and_run(connection)
-    scope_id = seed_scope(connection, project_id)
-    _, pss_id = seed_source(connection, project_id)
+    task_id, run_id = seed_task_and_run(connection)
+    scope_id = seed_scope(connection, task_id)
+    _, tss_id = seed_source(connection, task_id)
     # A generation-1 row: a re-screen has run for this scope/source/stage.
     seed_screening_result(
-        connection, project_id, run_id, scope_id, pss_id, screen_generation=1
+        connection, task_id, run_id, scope_id, tss_id, screen_generation=1
     )
     trans.commit()
     connection.close()
@@ -211,7 +221,7 @@ def test_downgrade_blocked_by_superseded_generation(engine: Engine) -> None:
         connection = engine.connect()
         trans = connection.begin()
         try:
-            delete_project_data(connection, project_id)
+            delete_task_data(connection, task_id)
             trans.commit()
         finally:
             connection.close()

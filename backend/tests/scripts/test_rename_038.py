@@ -273,6 +273,9 @@ def load(project_id: str) -> None:
     path = "/api/v1/projects/{id}/runs"
     key = "evidence_base"
     doc = "evidence-base.md"
+rows = [project]
+[project]
+parser.add_argument("--project")
 '''
 
 
@@ -296,6 +299,11 @@ def test_path_literals_change_and_free_prose_does_not(tmp_path: Path) -> None:
     # Free prose is untouched.
     assert "uv run --project backend" in out
     assert "(task 022)" in out
+    # A list literal `[project]` is code; only a line-initial TOML header is the table.
+    assert "rows = [task]" in out
+    assert "\n[project]\n" in out
+    # Only uv's `--project` is protected; the ops CLI flag is the Task flag.
+    assert 'add_argument("--task")' in out
     assert "the evidence base is thin here" in out
 
 
