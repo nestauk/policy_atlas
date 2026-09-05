@@ -427,8 +427,9 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   overlay header's icon buttons drop the browser `title` for the app's
   Radix tooltip at a 150ms delay (`RAIL_TOOLTIP_DELAY_MS`; a disabled
   button's tooltip carries the reason, its name stays "New chat"; the rail's
-  expand toggle says "Open sidebar"; the overlay's close button is a
-  close-sidebar glyph (`PanelCloseIcon`), named "Close sidebar" — owner).
+  expand toggle says "Open sidebar"; the overlay's close button and the
+  Agent tab's open-sidebar toggle share the close-sidebar glyph
+  (`PanelCloseIcon`) and the "Close sidebar" tooltip — owner).
   The app tooltip itself is restyled
   (`ui/radix/Tooltip.tsx`, every user): caption scale, navy ink, a tight
   paper card with a closer shadow, `collisionPadding` so it never touches

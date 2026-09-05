@@ -2,10 +2,11 @@ import { useState } from "react";
 
 import { COPY } from "../../../lib/vocabulary";
 import { ConversationList, type ConversationRow } from "./ConversationList";
-import { ConversationRail } from "./ConversationRail";
+import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
+import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
 import { useConversations } from "../../../api/queries";
 import { recentChats, taskAgentConversationId } from "./conversationState";
-import { PanelIcon, PlusIcon } from "./icons";
+import { PanelCloseIcon, PlusIcon } from "./icons";
 
 const STORAGE_KEY = "policy-atlas:chats-sidebar";
 
@@ -85,18 +86,24 @@ export function ConversationSidebar({
   };
   const newChatTitle = chatsEnabled ? COPY.newChat : COPY.newChatUnavailable;
 
+  // The open sidebar's toggle: the same close-sidebar glyph and tooltip as
+  // the overlay's close button on the other tabs (owner, 2026-09-05). The
+  // shut state is the shared rail, whose toggle carries the open glyph.
   const toggleButton = (
-    <button
-      type="button"
-      aria-label={open ? "Hide chats" : "Show chats"}
-      aria-expanded={open}
-      aria-controls="chats-sidebar-list"
-      title={open ? "Hide chats" : "Show chats"}
-      onClick={toggle}
-      className="pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
-    >
-      <PanelIcon size={16} />
-    </button>
+    <TooltipProvider delayDuration={RAIL_TOOLTIP_DELAY_MS}>
+      <Tooltip content="Close sidebar" side="right" className={RAIL_TOOLTIP_CLASS}>
+        <button
+          type="button"
+          aria-label="Hide chats"
+          aria-expanded={open}
+          aria-controls="chats-sidebar-list"
+          onClick={toggle}
+          className="pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+        >
+          <PanelCloseIcon size={16} />
+        </button>
+      </Tooltip>
+    </TooltipProvider>
   );
 
   if (!open) {
