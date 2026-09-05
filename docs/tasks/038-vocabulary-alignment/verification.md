@@ -342,6 +342,14 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
     about this analysis"; the overlay's list). Gates: lint 0 errors ·
     typecheck clean · `pnpm test` 74 files / 549 · build OK · `pnpm e2e` 11.
 
+- **List scope default (owner request 2026-09-05):** the Tasks and Projects
+  lists open on **Mine**; the switcher leads with Mine. UI default only — the
+  API's `scope=all` default (033: "a `mine` default would hide the whole
+  feature behind a switcher") is unchanged, and the admin wide-list notice
+  still appears under Organisation. Tests updated in `TasksListView.test.tsx`
+  and `ProjectsView.test.tsx`; gates: typecheck · lint 0 errors · 549 tests ·
+  build · e2e 11.
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and
