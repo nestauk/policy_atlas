@@ -271,6 +271,37 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   action (inherited from the create title); the sidebar is fixed-width where
   the overlay is resizable.
 
+- **Polish pass (owner requests 2026-09-05, lead-built with the impeccable
+  `polish` playbook; refinement, incumbent Nesta world kept):**
+  - Chips gone: the "Task Agent" kind chip, the Open/Closed status chip and the
+    Report chip — rows are a title only, truncated to one line, the Task Agent
+    marked by the brand mark; rename/archive/restore surface on hover or focus
+    (same `aria-label`s, so every test selector held).
+  - Sidebar collapsible: a toggle (`aria-expanded`, "Hide chats"/"Show chats")
+    shrinks it to a 48px rail carrying the toggle, New chat and the Task Agent
+    (current-marked); the choice persists per browser in `localStorage`
+    (try/catch; wide viewports default open, narrow ones shut).
+  - Archived chats behind a native `<details>` disclosure, shut by default,
+    with a count and a rotating chevron.
+  - Footer: `WorkspaceView` now renders `AppFooter` under both columns, so the
+    sidebar never overhangs it; `PlanningPane`'s reveal-on-scroll footer (and
+    its measurement/hysteresis code) is deleted — the overlay's planning
+    duplicate no longer carries a footer inside a 416px panel either.
+  - Consistency: the selected row uses the Result tab contents nav's marker (a
+    2px blue left rule + bold), the tinted `paper-2` surface and caption-scale
+    uppercase group labels; the overlay's `ConversationTabs` strip and
+    `ChatsLibrary` dialog take the same surface, brand mark, icon set and list
+    body (`icons.tsx` replaces the inline SVGs and the `+`/`×` glyphs).
+  - Inspection: before/after screenshots at 1440 and 390 (Agent tab open,
+    chat selected, rail, mobile shut/open; Result tab overlay and library);
+    one round of fixes (rail marker resolved through the Task Agent id).
+  - Tests: `ChatsLibrary` (title-only rows, disclosure opened before the
+    restore), `WorkspaceView` (footer under both columns, collapse round
+    trip), `PlanningPane` footer test retired, `journey.spec.ts` (row order
+    after the two header actions; opens the Archived disclosure). Gates:
+    typecheck clean · lint 0 errors · `pnpm test` 75 files / 550 · build OK ·
+    `pnpm e2e` 11 passed.
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and
