@@ -87,6 +87,16 @@ export function ChatIcon(props: IconProps) {
   );
 }
 
+/** Open in the Agent tab: an arrow leaving the corner of a frame. */
+export function ExpandIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M9 3h4v4M13 3 7.5 8.5" />
+      <path d="M12 9.5V13H3V4h3.5" />
+    </Glyph>
+  );
+}
+
 /** Down to the end of a transcript. */
 export function ArrowDownIcon(props: IconProps) {
   return (

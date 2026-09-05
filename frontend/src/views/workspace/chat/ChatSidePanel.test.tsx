@@ -19,7 +19,15 @@ const state = vi.hoisted(() => ({
   runStatus: undefined as string | undefined,
 }));
 
-vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
+vi.mock("react-router", () => ({
+  useNavigate: () => state.navigate,
+  // The header's name is a Link; render it as the anchor it becomes.
+  Link: ({ to, children, ...rest }: { to: string; children: React.ReactNode } & Record<string, unknown>) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("../../../api/queries", () => ({
   useConversations: () => ({
     data: { data: state.rows },
@@ -178,6 +186,18 @@ describe("ChatSidePanel", () => {
     // The reason is the (quick) tooltip on the disabled button's wrapper.
     await user.hover(newChat.parentElement as HTMLElement);
     expect(await screen.findByRole("tooltip")).toHaveTextContent("available once the task has a result");
+  });
+
+  it("the header's name opens the conversation in the Agent tab — the chat with its id, the Task Agent bare", () => {
+    state.activeConversationId = "c1";
+    const { unmount } = render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByRole("link", { name: /View in Agent tab/ })).toHaveAttribute("href", "/tasks/p1?chat=c1");
+    unmount();
+
+    state.activeConversationId = "plan-1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByRole("link", { name: /View in Agent tab/ })).toHaveAttribute("href", "/tasks/p1");
   });
 
   it("renders the draft pane while the URL names a draft chat", () => {

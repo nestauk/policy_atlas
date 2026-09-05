@@ -799,8 +799,9 @@ step 9.
   each, the title as a quick tooltip); the rail's and overlay header's
   tooltips use the app's tooltip at 150ms rather than the browser's ("Open
   sidebar" on the expand toggle; the overlay closes with a close-sidebar
-  glyph named "Close sidebar"), and the app tooltip is restyled for every
-  user.
+  glyph named "Close sidebar"), the app tooltip is restyled for every user,
+  and the overlay header's conversation name opens that conversation in the
+  Agent tab.
 
 Evidence and gates per change: [verification.md](verification.md) § Phase 4
 follow-ons.

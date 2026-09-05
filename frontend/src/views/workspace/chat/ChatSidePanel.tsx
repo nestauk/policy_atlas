@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import { useArtefact, useConversations, useTask } from "../../../api/queries";
 import { COPY } from "../../../lib/vocabulary";
@@ -21,7 +21,7 @@ import {
   useActiveConversation,
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
-import { PanelCloseIcon, PlusIcon } from "./icons";
+import { ExpandIcon, PanelCloseIcon, PlusIcon } from "./icons";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -182,10 +182,24 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
             <ChatsIcon size={15} />
           </button>
         </Tooltip>
-        <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy">
-          {planningOpen && <FoldMarkIcon size={10} />}
-          <span className="truncate">{currentTitle}</span>
-        </div>
+        {/* The name is the way to the conversation's full-width home (owner,
+            2026-09-05): the Agent tab with this conversation in the main
+            column — an explicit hand-over of `?chat=`, which the tab bar
+            itself never carries there. No fifth control in the header. */}
+        <Tooltip content="View in Agent tab" side="bottom" className={RAIL_TOOLTIP_CLASS}>
+          <Link
+            to={planningOpen ? `/tasks/${taskId}` : `/tasks/${taskId}?chat=${encodeURIComponent(activeConversationId)}`}
+            aria-label={`View in Agent tab: ${currentTitle}`}
+            className="group/name flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+          >
+            {planningOpen && <FoldMarkIcon size={10} />}
+            <span className="truncate">{currentTitle}</span>
+            <ExpandIcon
+              size={13}
+              className="shrink-0 text-grey opacity-0 transition-opacity duration-150 group-hover/name:opacity-100 group-focus-visible/name:opacity-100"
+            />
+          </Link>
+        </Tooltip>
         <Tooltip content={chatsEnabled ? COPY.newChat : COPY.newChatUnavailable} side="bottom" className={RAIL_TOOLTIP_CLASS}>
           <span className="inline-flex">
             <button

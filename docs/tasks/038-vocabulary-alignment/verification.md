@@ -430,6 +430,13 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   expand toggle says "Open sidebar"; the overlay's close button and the
   Agent tab's open-sidebar toggle share the close-sidebar glyph
   (`PanelCloseIcon`) and the "Close sidebar" tooltip — owner).
+  **View in Agent tab (owner request, same session):** the overlay header's
+  conversation name is a link to the Agent tab with that conversation in
+  the main column (`/tasks/{id}?chat=<id>`; the Task Agent goes to the bare
+  Agent tab) — the one explicit hand-over of `?chat=` onto that tab, which
+  the tab bar never carries; an expand glyph appears on hover/focus and the
+  tooltip reads "View in Agent tab". No fifth header control (the header was
+  already full). Test: `ChatSidePanel.test.tsx` (both destinations).
   The app tooltip itself is restyled
   (`ui/radix/Tooltip.tsx`, every user): caption scale, navy ink, a tight
   paper card with a closer shadow, `collisionPadding` so it never touches
