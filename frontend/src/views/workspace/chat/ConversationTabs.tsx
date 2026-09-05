@@ -3,7 +3,9 @@ import { useState } from "react";
 import { useConversations } from "../../../api/queries";
 import { scrub } from "../../../lib/scrub";
 import { COPY } from "../../../lib/vocabulary";
+import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { ChatsIcon } from "./ChatsIcon";
+import { CloseIcon, PlusIcon } from "./icons";
 import {
   addOpenChatTab,
   isPlanningConversation,
@@ -94,27 +96,32 @@ export function ConversationTabs({
   };
 
   return (
-    <nav aria-label="Conversations" className="flex min-w-0 items-stretch border-b border-line">
+    <nav aria-label="Conversations" className="flex min-w-0 items-stretch border-b border-line bg-paper-2">
       {/* The Task Agent is pinned first — its label is the only marker it
-          carries (contract § V8, fork F4). */}
+          carries (contract § V8, fork F4); the brand mark echoes the Agent
+          tab's sidebar row. */}
       <button
         type="button"
         onClick={() => setActiveConversation(taskAgentId)}
-        className={`flex min-w-0 items-center gap-2 px-3 py-2 text-meta font-semibold ${planningActive ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
+        className={`flex min-w-0 items-center gap-2 border-b-2 px-3 py-2 text-meta font-semibold ${planningActive ? "border-blue text-navy" : "border-transparent text-grey hover:bg-blue-tint-2 hover:text-navy"}`}
       >
-        <span aria-hidden="true" className={`h-2 w-2 rounded-full ${planningClosed ? "bg-line-2" : "bg-blue"}`} />
+        <FoldMarkIcon size={10} className={planningClosed ? "opacity-40" : undefined} />
         <span className="truncate">{COPY.taskAgent}</span>
       </button>
       {tabs.map((chat) => (
-        <div key={chat.id} className={`group flex min-w-0 items-center ${activeConversationId === chat.id ? "border-b-2 border-blue" : ""}`}>
-          <button type="button" onClick={() => select(chat.id)} className="min-w-0 px-3 py-2 text-meta font-semibold text-navy hover:bg-ground">
+        <div key={chat.id} className={`group flex min-w-0 items-center border-b-2 ${activeConversationId === chat.id ? "border-blue" : "border-transparent"}`}>
+          <button type="button" onClick={() => select(chat.id)} className={`min-w-0 px-3 py-2 text-meta font-semibold hover:bg-blue-tint-2 ${activeConversationId === chat.id ? "text-navy" : "text-grey hover:text-navy"}`}>
             <span className="block max-w-32 truncate">{scrub(chat.title)}</span>
           </button>
-          <button type="button" aria-label={`Archive ${chat.title}`} onClick={() => void close(chat.id)} className="mr-1 hidden px-1 text-grey hover:text-navy group-hover:block focus:block">×</button>
+          <button type="button" aria-label={`Archive ${chat.title}`} title="Archive" onClick={() => void close(chat.id)} className="mr-1 hidden h-6 w-6 items-center justify-center text-grey hover:text-navy group-hover:flex focus-visible:flex">
+            <CloseIcon size={12} />
+          </button>
         </div>
       ))}
-      <button type="button" aria-label="New chat" onClick={() => void newChat()} className="px-3 text-meta font-bold text-blue hover:bg-blue-tint">+</button>
-      <button type="button" aria-label="Chats" title="Chats" onClick={onOpenLibrary} className="ml-auto px-2.5 text-blue hover:bg-blue-tint">
+      <button type="button" aria-label={COPY.newChat} title={COPY.newChat} onClick={() => void newChat()} className="flex items-center px-2.5 text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue">
+        <PlusIcon size={14} />
+      </button>
+      <button type="button" aria-label="Chats" title="Chats" onClick={onOpenLibrary} className="ml-auto flex items-center px-2.5 text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue">
         <ChatsIcon size={15} />
       </button>
       {onClose !== undefined && (
@@ -123,9 +130,9 @@ export function ConversationTabs({
           aria-label="Close chat panel"
           title="Close"
           onClick={onClose}
-          className="px-2.5 text-grey hover:text-navy"
+          className="flex items-center px-2.5 text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
         >
-          ×
+          <CloseIcon size={14} />
         </button>
       )}
     </nav>

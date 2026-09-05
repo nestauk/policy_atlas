@@ -154,9 +154,31 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     expect(rendered).toEqual(["Task Agent", "Cost barriers", "Earlier plan"]);
     // Exactly one row is the Task Agent (I8 / A10); the older closed
     // lineage is an earlier plan and no chat is called "Planning".
-    expect(within(sidebar()).getAllByText("Task Agent")).toHaveLength(2); // name + chip
-    expect(within(sidebar()).getAllByText("Earlier plan")).toHaveLength(2);
+    expect(within(sidebar()).getAllByText("Task Agent")).toHaveLength(1); // the label is the marker
+    expect(within(sidebar()).getAllByText("Earlier plan")).toHaveLength(1);
     expect(within(sidebar()).queryByText("Planning")).toBeNull();
+  });
+
+  it("runs the site footer under both columns, after the sidebar in document order", () => {
+    renderAtAgentTab();
+    const footer = screen.getByRole("contentinfo");
+    expect(sidebar().compareDocumentPosition(footer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(footer.parentElement).toBe(screen.getByRole("main"));
+  });
+
+  it("collapses the sidebar to a rail and back", async () => {
+    const user = userEvent.setup();
+    const first = renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Hide chats" }));
+    // The rail: no list rows, the Task Agent and New chat as icon buttons.
+    expect(within(sidebar()).queryByRole("button", { name: "Cost barriers" })).toBeNull();
+    expect(within(sidebar()).getByRole("button", { name: "Task Agent" })).toHaveAttribute("aria-current", "true");
+    expect(within(sidebar()).getByRole("button", { name: "New chat" })).toBeInTheDocument();
+    // jsdom exposes no working localStorage here, so persistence is covered
+    // by the component's try/catch fallback; the toggle itself round-trips.
+    void first;
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
+    expect(within(sidebar()).getByRole("button", { name: "Cost barriers" })).toBeInTheDocument();
   });
 
   it("shows the planning pane in the main column by default — no ?chat= is the Task Agent", () => {

@@ -23,7 +23,6 @@ import { Button } from "../../ui/brand/Button";
 import { cn } from "../../ui/brand/cn";
 import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
-import { AppFooter } from "../AppFooter";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
@@ -491,24 +490,12 @@ export function PlanningPane({
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const footerMeasureRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
-  // Site footer sits under the composer and only opens once the transcript
-  // is flush with the bottom (short threads / landing count as already there).
-  // Show/hide uses hysteresis: opening the footer shrinks the chat pane by
-  // roughly the footer's height, which would otherwise push `distance` over
-  // the show threshold and flip it closed again (jitter near the bottom).
-  const [footerVisible, setFooterVisible] = useState(true);
+  // The site footer lives in `WorkspaceView`, under both columns (038 V8);
+  // this pane only tracks whether the reader is pinned to the newest turn.
   const syncScrollPosition = (el: HTMLElement) => {
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottom.current = distance < 120;
-    const footerHeight = footerMeasureRef.current?.offsetHeight ?? 96;
-    const showWithin = 8;
-    const hideBeyond = footerHeight + 24;
-    setFooterVisible((prev) => {
-      const next = prev ? distance <= hideBeyond : distance <= showWithin;
-      return prev === next ? prev : next;
-    });
   };
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -523,13 +510,6 @@ export function PlanningPane({
     observer.observe(content);
     return () => observer.disconnect();
   }, []);
-  // After the footer opens, re-pin so the layout shrink does not leave the
-  // transcript a footer's-height above the true bottom.
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (el === null || !footerVisible || !pinnedToBottom.current) return;
-    el.scrollTop = el.scrollHeight;
-  }, [footerVisible]);
 
   // The plan card sits at its chronological position: right after the last
   // planning turn (approval always comes from a turn; turns are 409-fenced
@@ -802,18 +782,6 @@ export function PlanningPane({
         />
         </div>
       </div>
-      </div>
-      <div
-        className={cn(
-          "shrink-0 overflow-hidden transition-[max-height,opacity] duration-200 ease-out",
-          footerVisible ? "max-h-40 opacity-100" : "pointer-events-none max-h-0 opacity-0",
-        )}
-        aria-hidden={!footerVisible}
-        inert={!footerVisible ? true : undefined}
-      >
-        <div ref={footerMeasureRef}>
-          <AppFooter className="mt-0" />
-        </div>
       </div>
     </section>
   );

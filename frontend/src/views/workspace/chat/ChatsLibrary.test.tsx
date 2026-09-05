@@ -64,11 +64,12 @@ describe("ChatsLibrary", () => {
     archivedRows = defaultArchivedRows();
   });
 
-  it("shows previews, the report chip, and supports inline rename and archive on a chat row", async () => {
+  it("shows title-only rows (no preview, no chips) and supports inline rename and archive on a chat row", async () => {
     const user = userEvent.setup();
     render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
-    expect(screen.getByText("A short answer")).toBeInTheDocument();
-    expect(screen.getByText("Report")).toBeInTheDocument();
+    expect(screen.queryByText("A short answer")).toBeNull();
+    expect(screen.queryByText("Report")).toBeNull();
+    expect(screen.queryByText("Open")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Rename Cost barriers" }));
     await user.clear(screen.getByLabelText("Chat title"));
     await user.type(screen.getByLabelText("Chat title"), "Updated chat{Enter}");
@@ -81,7 +82,10 @@ describe("ChatsLibrary", () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<ChatsLibrary taskId="p1" open onClose={onClose} />);
-    expect(screen.getByRole("heading", { name: "Archived" })).toBeInTheDocument();
+    // Archived rows sit behind a disclosure that starts shut.
+    const archived = screen.getByRole("heading", { name: "Archived" });
+    expect(archived.closest("details")).not.toHaveAttribute("open");
+    await user.click(archived);
     await user.click(screen.getByRole("button", { name: "Old thread" }));
     expect(state.unarchive).toHaveBeenCalledWith("c2");
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c2");
@@ -102,14 +106,14 @@ describe("ChatsLibrary", () => {
 
   it("names exactly one row the Task Agent and every older lineage an earlier plan (I8/A10)", () => {
     render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
-    // Title and chip, as today — one row, one label.
-    expect(screen.getAllByText("Task Agent")).toHaveLength(2);
-    expect(screen.getAllByText("Earlier plan")).toHaveLength(4);
-    expect(screen.queryByText("Planning")).toBeNull();
-    expect(screen.getByText("Open")).toBeInTheDocument();
+    // The label is the only marker (fork F4): one row, one label, no chip.
+    expect(screen.getAllByText("Task Agent")).toHaveLength(1);
     // Several closed planning rows on one task is the expected state
     // (rubric 44) — both render, neither is deduped or dropped.
-    expect(screen.getAllByText("Closed")).toHaveLength(2);
+    expect(screen.getAllByText("Earlier plan")).toHaveLength(2);
+    expect(screen.queryByText("Planning")).toBeNull();
+    expect(screen.queryByText("Open")).toBeNull();
+    expect(screen.queryByText("Closed")).toBeNull();
   });
 
   it("falls back to the most recently closed lineage once the run has closed the open one", () => {
@@ -120,7 +124,7 @@ describe("ChatsLibrary", () => {
       .filter((text): text is string => text === "Task Agent" || text === "Earlier plan");
     // p2 closed 3 minutes ago, p3 four — the newer closure is the Task Agent.
     expect(rendered).toEqual(["Task Agent", "Earlier plan"]);
-    expect(screen.getAllByText("Task Agent")).toHaveLength(2);
+    expect(screen.getAllByText("Task Agent")).toHaveLength(1);
   });
 
   it("a non-owner's list is exactly the rows the API returned, only the labels differ (A9)", () => {

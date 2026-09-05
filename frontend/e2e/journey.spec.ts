@@ -84,7 +84,8 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(chats).toBeVisible();
     await expect(page.getByRole("button", { name: "Open the Agent" })).toHaveCount(0);
     // The Task Agent is pinned first, and it is what the main view shows.
-    await expect(chats.getByRole("button").nth(1)).toHaveAccessibleName("Task Agent");
+    // First row after the sidebar's own two actions (Hide chats, New chat).
+    await expect(chats.getByRole("button").nth(2)).toHaveAccessibleName("Task Agent");
     await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(1);
 
     // (c) Rename/archive now lives in the header's "Task settings"
@@ -514,7 +515,10 @@ test.describe("mock task-lifecycle journey", () => {
 
     await library.getByRole("button", { name: "Archive" }).click();
     await expect(library.getByRole("button", { name: "Archive" })).toHaveCount(0);
+    // Archived chats sit behind a disclosure that starts shut.
     await expect(library.getByRole("heading", { name: "Archived" })).toBeVisible();
+    await expect(library.getByRole("button", { name: "Restore" })).toHaveCount(0);
+    await library.getByRole("heading", { name: "Archived" }).click();
     await expect(library.getByRole("button", { name: "Restore" })).toBeVisible();
   });
 

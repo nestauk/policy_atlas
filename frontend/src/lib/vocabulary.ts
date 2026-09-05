@@ -72,6 +72,7 @@ export const COPY = {
    *  one, else the most recently closed. Exactly one row ever carries this
    *  label (contract § V8, invariant I8 / fold A10). */
   taskAgent: `${TASK.one} Agent`,
+  newChat: "New chat",
   /** An older, closed planning lineage in the chats library — chipped, never
    *  pinned. */
   earlierPlan: "Earlier plan",

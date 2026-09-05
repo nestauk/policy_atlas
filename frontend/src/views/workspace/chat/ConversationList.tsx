@@ -4,8 +4,10 @@ import { useConversations } from "../../../api/queries";
 import type { components } from "../../../api/gen/types";
 import { scrub } from "../../../lib/scrub";
 import { COPY } from "../../../lib/vocabulary";
-import { Chip } from "../../../ui/brand/Chip";
+import { cn } from "../../../ui/brand/cn";
+import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { taskAgentConversationId, useConversationMutations } from "./conversationState";
+import { ArchiveIcon, ChevronIcon, PencilIcon, RestoreIcon } from "./icons";
 
 export type ConversationRow = components["schemas"]["ConversationListItemOut"];
 
@@ -13,7 +15,10 @@ export type ConversationRow = components["schemas"]["ConversationListItemOut"];
  *
  * The list body itself, with no chrome of its own: the Agent tab mounts it
  * as its always-visible sidebar, and the overlay's `ChatsLibrary` mounts the
- * same body inside its dialog (038 V8 — one list, two frames).
+ * same body inside its dialog (038 V8 — one list, two frames). Rows carry a
+ * title and nothing else — the selected row and the pinned Task Agent are
+ * marked the way the Result tab's contents nav marks its place (a 2px blue
+ * rule on the left), and a row's actions surface on hover or focus.
  *
  * Args:
  *   props: The owning task; `onOpen`, called with the row the reader chose
@@ -21,8 +26,8 @@ export type ConversationRow = components["schemas"]["ConversationListItemOut"];
  *     row the caller is currently showing, if it shows one.
  *
  * Returns:
- *   The pinned Task Agent, the remaining conversations by date group, and
- *   the archived group when it has rows.
+ *   The pinned Task Agent, the remaining conversations by date group, and an
+ *   "Archived" disclosure — shut by default — when there are archived rows.
  */
 export function ConversationList({
   taskId,
@@ -61,6 +66,7 @@ export function ConversationList({
   const taskAgentId = taskAgentConversationId(activeRows);
   const pinned = activeRows.find((row) => row.id === taskAgentId) ?? null;
   const rest = pinned === null ? activeRows : activeRows.filter((row) => row.id !== pinned.id);
+  const archivedRows = archived.data?.data ?? [];
   const rowProps = {
     taskAgentId,
     selectedId,
@@ -74,11 +80,20 @@ export function ConversationList({
   };
 
   return (
-    <>
+    <div className="flex flex-col">
       {pinned !== null && <ListRow row={pinned} {...rowProps} />}
       <ListGroups rows={rest} {...rowProps} />
-      {(archived.data?.data.length ?? 0) > 0 && <><h3 className="mt-5 border-b border-line pb-1 text-meta font-bold uppercase tracking-[0.06em] text-grey">Archived</h3><ListGroups rows={archived.data?.data ?? []} {...rowProps} onOpen={openArchivedRow} onArchive={(id) => void unarchive(id)} archived /></>}
-    </>
+      {archivedRows.length > 0 && (
+        <details className="group/archive mt-4">
+          <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 pl-1.5 pr-2 text-caption font-bold uppercase tracking-label text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue [&::-webkit-details-marker]:hidden">
+            <ChevronIcon size={12} className="transition-transform duration-150 ease-out group-open/archive:rotate-90" />
+            <h3 className="font-bold">Archived</h3>
+            <span className="font-medium normal-case tracking-normal">{archivedRows.length}</span>
+          </summary>
+          <ListGroups rows={archivedRows} {...rowProps} onOpen={openArchivedRow} onArchive={(id) => void unarchive(id)} archived />
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -101,22 +116,92 @@ function ListGroups({ rows, ...props }: RowProps & { rows: ConversationRow[] }) 
     const label = dateGroup(row.latest_turn_preview?.at ?? row.created_at);
     groups.set(label, [...(groups.get(label) ?? []), row]);
   }
-  return <>{[...groups].map(([label, grouped]) => <section key={label}><h3 className="mt-3 text-meta font-bold uppercase tracking-[0.06em] text-grey">{label}</h3>{grouped.map((row) => <ListRow key={row.id} row={row} {...props} />)}</section>)}</>;
+  return (
+    <>
+      {[...groups].map(([label, grouped]) => (
+        <section key={label}>
+          {!props.archived && (
+            <h3 className="mt-4 mb-1 pl-3 text-caption font-bold uppercase tracking-label text-grey">{label}</h3>
+          )}
+          {grouped.map((row) => <ListRow key={row.id} row={row} {...props} />)}
+        </section>
+      ))}
+    </>
+  );
 }
 
+const ACTION_CLASS =
+  "flex h-7 w-7 items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue";
+
 function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitle, onRename, onCommit, onArchive, archived = false }: RowProps & { row: ConversationRow }) {
-  const preview = row.latest_turn_preview?.reply_snippet ?? row.latest_turn_preview?.user_message ?? "";
   const isPlanning = row.kind === "planning";
   // A planning row is named by its label, never by the stored title (the
   // runtime writes "Planning" there): exactly one is the Task Agent, and any
   // older lineage reads "Earlier plan" (contract § V8, invariant I8 / A10).
-  const planningLabel = row.id === taskAgentId ? COPY.taskAgent : COPY.earlierPlan;
+  const label = isPlanning ? (row.id === taskAgentId ? COPY.taskAgent : COPY.earlierPlan) : scrub(row.title);
   const selected = row.id === selectedId;
-  return <div className={`grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-b border-line px-2 py-3 focus-within:outline focus-within:outline-2 focus-within:outline-blue ${selected ? "bg-blue-tint-2" : ""}`}>
-    <div>{editing === row.id ? <input aria-label="Chat title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void onCommit(row.id); }} onBlur={() => void onCommit(row.id)} className="w-full border border-line px-2 py-1 text-meta" /> : <button type="button" aria-current={selected ? "true" : undefined} onClick={() => onOpen(row)} className="text-left text-meta font-semibold text-navy hover:underline">{isPlanning ? planningLabel : scrub(row.title)}</button>}{!isPlanning && <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className="ml-2 align-middle text-grey hover:text-blue"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L5 13l-3 1 1-3 8.5-8.5Z" /></svg></button>}<p className="mt-1 line-clamp-2 max-w-[60ch] whitespace-pre-wrap text-body text-grey">{scrub(preview)}</p><div className="mt-1 flex items-center gap-2">{isPlanning && <Chip tone={row.id === taskAgentId ? "blue" : "soft"}>{planningLabel}</Chip>}{isPlanning && <Chip tone={row.closed_at !== null ? "soft" : "green"}>{row.closed_at !== null ? "Closed" : "Open"}</Chip>}{row.entry_artefact_id !== null && <Chip tone="soft">Report</Chip>}<span className="text-caption text-grey">{relativeTime(row.latest_turn_preview?.at ?? row.created_at)}</span></div></div>
-    {!isPlanning && <button type="button" aria-label={archived ? `Restore ${row.title}` : `Archive ${row.title}`} title={archived ? "Restore" : "Archive"} onClick={() => onArchive(row.id)} className="self-center text-grey hover:text-blue">{archived ? <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 8a6 6 0 1 1 1.8 4.3" /><path d="M2 8V4.5M2 8h3.5" /></svg> : <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="3.5" rx="0.5" /><path d="M3.5 6.5V13h9V6.5M6.5 9h3" /></svg>}</button>}
-  </div>;
+
+  if (editing === row.id) {
+    return (
+      <div className="border-l-2 border-l-blue py-1 pl-2.5 pr-2">
+        <input
+          aria-label="Chat title"
+          autoFocus
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void onCommit(row.id);
+            if (event.key === "Escape") void onCommit(row.id);
+          }}
+          onBlur={() => void onCommit(row.id)}
+          className="w-full border border-line bg-paper px-2 py-1 text-meta text-navy focus:border-blue focus:outline-none"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "group/row flex items-center border-l-2 pr-1",
+        selected ? "border-l-blue bg-blue-tint" : "border-l-transparent hover:bg-blue-tint-2",
+      )}
+    >
+      <button
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        onClick={() => onOpen(row)}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2.5 pr-1 text-left text-meta text-navy focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue",
+          selected && "font-semibold",
+        )}
+      >
+        {isPlanning && <FoldMarkIcon size={10} className="text-blue" />}
+        <span className="truncate">{label}</span>
+      </button>
+      {!isPlanning && (
+        <div className="flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+          {!archived && (
+            <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className={ACTION_CLASS}>
+              <PencilIcon size={13} />
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label={archived ? `Restore ${row.title}` : `Archive ${row.title}`}
+            title={archived ? "Restore" : "Archive"}
+            onClick={() => onArchive(row.id)}
+            className={ACTION_CLASS}
+          >
+            {archived ? <RestoreIcon size={13} /> : <ArchiveIcon size={13} />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function dateGroup(value: string) { const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000); return days <= 0 ? "Today" : days < 7 ? "This week" : "Earlier"; }
-function relativeTime(value: string) { const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000)); return minutes < 60 ? `${minutes || 1}m ago` : minutes < 1_440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1_440)}d ago`; }
+function dateGroup(value: string) {
+  const days = Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000);
+  return days <= 0 ? "Today" : days < 7 ? "This week" : "Earlier";
+}

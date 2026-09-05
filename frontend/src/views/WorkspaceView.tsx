@@ -8,6 +8,7 @@ import { useRunStream } from "../store";
 import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
+import { AppFooter } from "./AppFooter";
 import { ChatPane } from "./workspace/chat/ChatPane";
 import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
 import { isPlanningConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
@@ -88,48 +89,53 @@ export function WorkspaceView() {
   const railOpen = chatId === null && planOpen;
 
   return (
-    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-paper lg:flex-row">
-      <ConversationSidebar
-        taskId={taskId}
-        selectedId={onTaskAgent ? taskAgentConversationId(rows) : activeConversationId}
-        onSelect={setActiveConversation}
-      />
-      {/* The plan document's centred placement covers the conversation, not
-          the sidebar — so `relative` sits on this column, not on <main>. */}
-      <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
-        <div
-          className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-          inert={railOpen && planPlacement === "center" ? true : undefined}
-        >
-          {chatId === null ? (
-            <PlanningPane
-              taskId={taskId}
-              runStatus={stream.run?.status}
-              stream={stream}
-              isOwner={isOwner}
-              onReviewPlan={openPlan}
-              planOverlay={planOverlay}
-              onOverlayApplied={() => setPlanOverlay({})}
-            />
-          ) : (
-            // The same reading column the planning pane sets for itself —
-            // this main view is wide, and `ChatPane` was drawn for the
-            // 416px overlay.
-            <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", LIFECYCLE_PAGE_CLASS)}>
-              <ChatPane
+    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-paper">
+      {/* Sidebar and conversation share the row; the site footer runs under
+          both, so neither column ever appears to overhang it. */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <ConversationSidebar
+          taskId={taskId}
+          selectedId={onTaskAgent ? taskAgentConversationId(rows) : activeConversationId}
+          onSelect={setActiveConversation}
+        />
+        {/* The plan document's centred placement covers the conversation, not
+            the sidebar — so `relative` sits on this column, not on <main>. */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            inert={railOpen && planPlacement === "center" ? true : undefined}
+          >
+            {chatId === null ? (
+              <PlanningPane
                 taskId={taskId}
-                conversationId={chatId}
-                sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
-                onOpenPlanning={() => setActiveConversation(null)}
+                runStatus={stream.run?.status}
+                stream={stream}
+                isOwner={isOwner}
+                onReviewPlan={openPlan}
+                planOverlay={planOverlay}
+                onOverlayApplied={() => setPlanOverlay({})}
               />
-            </div>
+            ) : (
+              // The same reading column the planning pane sets for itself —
+              // this main view is wide, and `ChatPane` was drawn for the
+              // 416px overlay.
+              <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", LIFECYCLE_PAGE_CLASS)}>
+                <ChatPane
+                  taskId={taskId}
+                  conversationId={chatId}
+                  sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
+                  onOpenPlanning={() => setActiveConversation(null)}
+                />
+              </div>
+            )}
+          </div>
+          {railOpen && planPlacement === "side" && planDocument}
+          {railOpen && planPlacement === "center" && (
+            <div className="absolute inset-0 z-20 overflow-hidden">{planDocument}</div>
           )}
         </div>
-        {railOpen && planPlacement === "side" && planDocument}
-        {railOpen && planPlacement === "center" && (
-          <div className="absolute inset-0 z-20 overflow-hidden">{planDocument}</div>
-        )}
       </div>
+      <AppFooter className="mt-0" />
     </main>
   );
 }

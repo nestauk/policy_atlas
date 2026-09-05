@@ -11,7 +11,6 @@ import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
 import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
-import { SITE_DISCLAIMER } from "../AppFooter";
 import { Composer, PlanningPane, planningComposerPlaceholder, presentRunDecisions, threadInputs } from "./PlanningPane";
 
 type CheckInOut = components["schemas"]["CheckInOut"];
@@ -307,17 +306,6 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
     expect(textarea).toBeDisabled();
     expect(textarea).toHaveAttribute("placeholder", "Steering is limited to the task owner.");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-  });
-
-  it("puts the site footer under the composer, visible when scrolled to the bottom", () => {
-    renderPane();
-    const footer = screen.getByRole("contentinfo");
-    const composer = screen.getByLabelText("Message the Task Agent");
-    expect(footer).toHaveTextContent(SITE_DISCLAIMER);
-    // Under the composer: composer precedes footer in document order.
-    expect(composer.compareDocumentPosition(footer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    // Short threads start at the bottom, so the reveal wrapper is open.
-    expect(footer.parentElement).not.toHaveAttribute("aria-hidden", "true");
   });
 
   it("hides Start search from the plan-ready card but keeps Review the plan", () => {
