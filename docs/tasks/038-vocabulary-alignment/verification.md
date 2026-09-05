@@ -350,6 +350,23 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   and `ProjectsView.test.tsx`; gates: typecheck · lint 0 errors · 549 tests ·
   build · e2e 11.
 
+- **Motion pass (owner request 2026-09-05, `emil-design-eng` skill, lead):**
+  the codebase was already clean of `transition: all`, `ease-in` and
+  `scale(0)` entrances; hover states are gated by Tailwind v4's `hover:` media
+  query and reduced motion is handled globally. Changes: theme easing tokens
+  `--ease-out-strong` (0.23, 1, 0.32, 1) and `--ease-drawer` (0.32, 0.72, 0, 1);
+  a `pressable` utility (`scale(0.97)` on press at 160ms, colours at 150ms) on
+  `Button` and every icon button in the sidebar, rail, overlay header, list
+  rows and the launcher; Radix popover and tooltip now scale in from their
+  trigger's `--radix-*-transform-origin` (150ms / 125ms) via `starting:`;
+  the sheet's inert `animate-in fade-in` classes (no plugin was installed)
+  replaced by a real 200ms overlay fade and a 260ms slide on the drawer curve;
+  toasts enter from below at 200ms; `anim-rise` 420ms → 300ms. Left as is:
+  `anim-glow` 900ms marks a check-in arriving (rare), `anim-breathe` is a
+  loading pulse. Verified in the built CSS (`ease-out-strong` ×5, `pressable`,
+  `@starting-style` rules present). Gates: lint 0 errors · 549 tests · build ·
+  e2e 11.
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and
