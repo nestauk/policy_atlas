@@ -95,7 +95,7 @@ the **coverage base** grades what it rests on — orthogonal, both required.
   record, an absence degrades to "not found in extracted / selected material," never corpus-level.
 
 The EB instance (and where this rule is most acute) is
-[../capabilities/evidence-base/provenance.md](../capabilities/evidence-base/provenance.md).
+[../capabilities/evidence-search/provenance.md](../capabilities/evidence-search/provenance.md).
 
 ## Patterns — the third assertion type
 

@@ -210,6 +210,53 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   unchanged since Phase 1's green run. After the screen-sense fixes: ruff, mypy
   and the touched test modules re-run green (see Commands run).
 
+### Phase 4 — API paths, generated client, frontend sweep, copy (review commit c)
+
+- **4.1 (lead, inline):** pre-steps for the two predicted collisions — deleted the
+  dead `useCreateProject` (moved forward from Phase 8; the only V12 item no longer
+  droppable) and renamed both `projects` query handles in the two components of
+  `PortfoliosView.tsx` to `tasksQuery`; three comment lines there reworded because
+  the tool's collision check also counts prose occurrences of the source word.
+  `rename_038.py --apply --phase 4 --step all`: 113 files, 2,308 replacements
+  (step 1: project→task 1,775 · evidence-base 13 · evidence_base 12 ·
+  orchestrator→agent 3; step 2: portfolio→project 505). `git mv PortfoliosView.*`
+  → `ProjectsView.*`. `make openapi-sync` regenerated `openapi.json` and
+  `gen/types.ts`. Post-sweep `pnpm typecheck`: 3 errors, all sense errors, not
+  omissions (below).
+- **Screen-sense identifiers (frontend counterpart of the Phase 3 finding):** a
+  few frontend identifiers were *already* named in the screen sense and the
+  code-word sweep inverted them: `ProjectPicker` (picks Projects, ex-portfolios)
+  → wrongly `TaskPicker`; `showProjectPrefix` (shows the Project prefix on a task
+  row) → wrongly `showTaskPrefix`; `COPY.noProject` ("No project") → wrongly
+  `COPY.noTask`. Restored in 4.2. The generic identifiers (`useProject`,
+  `ProjectOut`, `allProjects = useProjects()`, `projectName` …) were all
+  code-word sense and are correct as `task`. `landingPresentation.ts` referenced
+  `"ProjectOut"` inside a string literal (copy-exempt file) → `"TaskOut"` by hand.
+- 4.2 (`fast-worker`): see below.
+
+### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
+
+- `routers/planning.py` planning turn, `chat_turns.py` chat turn and
+  `routers/runs.py` `_dispatch_run` → `run_plan(...)` all pass
+  `session_id=task_id` (the runner already threads it through steering, watch
+  and continuation state). `conversation_id` added to trace metadata:
+  `core/tracing.component_span()` gained a `conversation_id` keyword (chat turn);
+  `runtime/planner.plan_turn()` (Protocol + both backends) gained the same and
+  puts it in the `planner:turn{N}` generation metadata.
+- Test `tests/api/test_trace_sessions_038.py` (3 tests, recording Langfuse fake):
+  planning turn, chat turn, and a run parked at a steering point then resumed —
+  every span on both sides of the park carries `session_id == str(task_id)`; the
+  chat and planning turns carry `conversation_id` (I9).
+- Test-double fallout (rubric 5: signature widening only): three assertions in
+  `test_planning_router.py` encoded the old per-conversation session and now
+  expect the task id; nine `plan_turn` test doubles across
+  `test_planning_router.py` and `test_agent.py` accept the new keyword. The CLI
+  planning loop in `runtime/agent.py` is a fourth `plan_turn` caller outside V9's
+  three sites and is unchanged (default `None`).
+- Gate: ruff + mypy clean; 82 targeted tests green; the backend suite ran again
+  inside Phase 4's full `make verify` (the plan allows consecutive phases to
+  share one full gate).
+
 ## Commands run
 
 | Command | Result | Notes |

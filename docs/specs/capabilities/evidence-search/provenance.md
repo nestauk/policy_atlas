@@ -1,8 +1,8 @@
 ---
 type: Capability spec
-title: Evidence Base — derived-claim provenance
+title: Evidence search — derived-claim provenance
 description: EB's instance of the trust contract — making it structurally impossible for a pipeline artefact to masquerade as a corpus fact.
-tags: [capability, evidence-base, provenance, honest-absence]
+tags: [capability, evidence-search, provenance, honest-absence]
 timestamp: 2026-06-22
 ---
 

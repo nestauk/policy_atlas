@@ -22,7 +22,7 @@ import {
   stageRows,
 } from "./runProgress";
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 function stage(overrides: Partial<StageEntry> & Pick<StageEntry, "stage" | "label" | "status">): StageEntry {
   return overrides;
@@ -167,22 +167,22 @@ describe("runningCard helpers", () => {
   });
 
   it("signposts Sources after acquire and Results when the write-up exists", () => {
-    expect(signpostForStage("acquire", PROJECT_ID, false)).toEqual({
-      href: `/projects/${PROJECT_ID}/sources/all`,
+    expect(signpostForStage("acquire", TASK_ID, false)).toEqual({
+      href: `/tasks/${TASK_ID}/sources/all`,
       label: "Sources are ready",
       message: "Searching has finished.",
     });
-    expect(signpostForStage("extract", PROJECT_ID, false)).toBeNull();
-    expect(signpostForStage("extract", PROJECT_ID, true)?.href).toContain("/findings");
-    expect(signpostForStage("extract", PROJECT_ID, true)?.message).toBe("Findings are ready.");
-    expect(resultsSignpost(PROJECT_ID, "succeeded")?.label).toBe("Read the evidence base");
-    expect(resultsSignpost(PROJECT_ID, "running")).toBeNull();
-    expect(runFinishedSignpost(PROJECT_ID, "succeeded")).toEqual({
-      href: `/projects/${PROJECT_ID}/results`,
+    expect(signpostForStage("extract", TASK_ID, false)).toBeNull();
+    expect(signpostForStage("extract", TASK_ID, true)?.href).toContain("/findings");
+    expect(signpostForStage("extract", TASK_ID, true)?.message).toBe("Findings are ready.");
+    expect(resultsSignpost(TASK_ID, "succeeded")?.label).toBe("Read the report");
+    expect(resultsSignpost(TASK_ID, "running")).toBeNull();
+    expect(runFinishedSignpost(TASK_ID, "succeeded")).toEqual({
+      href: `/tasks/${TASK_ID}/results`,
       label: "Results",
       message: RUN_FINISHED_MESSAGE,
     });
-    expect(runFinishedSignpost(PROJECT_ID, "running")).toBeNull();
+    expect(runFinishedSignpost(TASK_ID, "running")).toBeNull();
   });
 
   it("lists completed signposts in stage order", () => {
@@ -192,11 +192,11 @@ describe("runningCard helpers", () => {
           stage({ stage: "acquire", label: "Searching", status: "completed" }),
           stage({ stage: "characterise", label: "Mapping", status: "completed" }),
         ],
-        PROJECT_ID,
+        TASK_ID,
         false,
       ).map((entry) => entry.label),
     ).toEqual(["Sources are ready", "The landscape is ready"]);
-    expect(signpostForStage("characterise", PROJECT_ID, false)?.message).toBe(
+    expect(signpostForStage("characterise", TASK_ID, false)?.message).toBe(
       "Mapping has finished.",
     );
   });
@@ -239,7 +239,7 @@ describe("RunningCard", () => {
     const { rerender } = render(
       <MemoryRouter>
         <RunningCard
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           status="running"
           stages={[
             stage({
@@ -276,7 +276,7 @@ describe("RunningCard", () => {
     await user.click(screen.getByRole("button", { name: "Searching" }));
     expect(screen.getByRole("link", { name: /Sources are ready/ })).toHaveAttribute(
       "href",
-      `/projects/${PROJECT_ID}/sources/all`,
+      `/tasks/${TASK_ID}/sources/all`,
     );
     expect(screen.getByText("Querying academic and policy databases.")).toBeInTheDocument();
     expect(screen.getByText("12 found")).toBeInTheDocument();
@@ -285,7 +285,7 @@ describe("RunningCard", () => {
     rerender(
       <MemoryRouter>
         <RunningCard
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           status="running"
           stages={[
             stage({
@@ -308,15 +308,15 @@ describe("RunningCard", () => {
     expect(screen.getByRole("button", { name: "Expand" })).toBeInTheDocument();
   });
 
-  it("offers Read the evidence base and See plan when the run has succeeded", async () => {
+  it("offers Read the report and See plan when the run has succeeded", async () => {
     const onSeePlan = vi.fn();
     const user = userEvent.setup();
     render(
       <MemoryRouter>
         <RunningCard
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           status="succeeded"
-          stages={[stage({ stage: "synthesise", label: "Writing the evidence base", status: "completed" })]}
+          stages={[stage({ stage: "synthesise", label: "Writing the report", status: "completed" })]}
           plan={null}
           startedAt="2026-07-21T10:00:00Z"
           endedAt="2026-07-21T10:12:00Z"
@@ -327,8 +327,8 @@ describe("RunningCard", () => {
         />
       </MemoryRouter>,
     );
-    const results = screen.getByRole("link", { name: "Read the evidence base" });
-    expect(results).toHaveAttribute("href", `/projects/${PROJECT_ID}/results`);
+    const results = screen.getByRole("link", { name: "Read the report" });
+    expect(results).toHaveAttribute("href", `/tasks/${TASK_ID}/results`);
     expect(results.className).toContain("px-6");
     expect(results.className).toContain("text-body");
     expect(CHAT_PRIMARY_CTA_CLASS).toContain("px-6 py-3.5 text-body font-bold");
@@ -343,7 +343,7 @@ describe("RunningCard", () => {
     render(
       <MemoryRouter>
         <RunningCard
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           status="running"
           stages={[
             stage({

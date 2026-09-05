@@ -6,28 +6,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as mutations from "../api/mutations";
 import * as queries from "../api/queries";
 import { ToastProvider } from "../ui/radix/Toast";
-import { PortfolioDetailView, PortfoliosView } from "./PortfoliosView";
+import { ProjectDetailView, ProjectsView } from "./ProjectsView";
 
 vi.mock("../api/queries", () => ({
   useMe: vi.fn(),
-  usePortfolio: vi.fn(),
-  usePortfolios: vi.fn(),
+  useProject: vi.fn(),
   useProjects: vi.fn(),
+  useTasks: vi.fn(),
 }));
 
 vi.mock("../api/mutations", () => ({
-  useCreatePortfolio: vi.fn(),
-  useUpdatePortfolio: vi.fn(),
+  useCreateProject: vi.fn(),
+  useUpdateProject: vi.fn(),
 }));
 
-const PORTFOLIO_ID = "portfolio-1";
+const PROJECT_ID = "project-1";
 
-function renderDetail(portfolioId = PORTFOLIO_ID) {
+function renderDetail(projectId = PROJECT_ID) {
   return render(
     <ToastProvider>
-      <MemoryRouter initialEntries={[`/portfolios/${portfolioId}`]}>
+      <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
         <Routes>
-          <Route path="/portfolios/:portfolioId" element={<PortfolioDetailView />} />
+          <Route path="/projects/:projectId" element={<ProjectDetailView />} />
         </Routes>
       </MemoryRouter>
     </ToastProvider>,
@@ -38,7 +38,7 @@ function renderList() {
   return render(
     <ToastProvider>
       <MemoryRouter>
-        <PortfoliosView />
+        <ProjectsView />
       </MemoryRouter>
     </ToastProvider>,
   );
@@ -53,10 +53,10 @@ beforeEach(() => {
       typeof queries.useMe
     >,
   );
-  vi.mocked(queries.usePortfolio).mockReturnValue(
+  vi.mocked(queries.useProject).mockReturnValue(
     {
       data: {
-        portfolio_id: PORTFOLIO_ID,
+        project_id: PROJECT_ID,
         name: "Housing",
         description: null,
         visibility: "org",
@@ -66,46 +66,46 @@ beforeEach(() => {
       },
       isPending: false,
       isError: false,
-    } as unknown as ReturnType<typeof queries.usePortfolio>,
+    } as unknown as ReturnType<typeof queries.useProject>,
   );
-  vi.mocked(queries.useProjects).mockReturnValue(
+  vi.mocked(queries.useTasks).mockReturnValue(
     { data: { data: [] }, isPending: false, isError: false } as unknown as ReturnType<
-      typeof queries.useProjects
+      typeof queries.useTasks
     >,
   );
-  vi.mocked(queries.usePortfolios).mockReturnValue(
-    { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.usePortfolios>,
+  vi.mocked(queries.useProjects).mockReturnValue(
+    { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.useProjects>,
   );
-  vi.mocked(mutations.useUpdatePortfolio).mockReturnValue(
-    { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdatePortfolio>,
+  vi.mocked(mutations.useUpdateProject).mockReturnValue(
+    { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
   );
 });
 
-describe("PortfolioDetailView — the portfolio_id filter (task 033 phase 10a)", () => {
-  it("requests its member tasks with the portfolio_id filter and the 200-row page size, not the unfiltered global page or the 50-row default", () => {
+describe("ProjectDetailView — the project_id filter (task 033 phase 10a)", () => {
+  it("requests its member tasks with the project_id filter and the 200-row page size, not the unfiltered global page or the 50-row default", () => {
     renderDetail();
-    expect(queries.useProjects).toHaveBeenCalledWith({
-      portfolio_id: PORTFOLIO_ID,
+    expect(queries.useTasks).toHaveBeenCalledWith({
+      project_id: PROJECT_ID,
       page_size: 200,
     });
     // Never called with no filter — that would be the pre-10a client-side
     // filter over the global 50-row page, the exact bug this phase fixes.
-    expect(queries.useProjects).not.toHaveBeenCalledWith();
-    expect(queries.useProjects).not.toHaveBeenCalledWith({});
+    expect(queries.useTasks).not.toHaveBeenCalledWith();
+    expect(queries.useTasks).not.toHaveBeenCalledWith({});
     // Never called with the filter alone, either — that would fall back to
-    // the server's 50-row default and silently truncate a 51+-task portfolio.
-    expect(queries.useProjects).not.toHaveBeenCalledWith({ portfolio_id: PORTFOLIO_ID });
+    // the server's 50-row default and silently truncate a 51+-task project.
+    expect(queries.useTasks).not.toHaveBeenCalledWith({ project_id: PROJECT_ID });
   });
 });
 
-describe("PortfoliosView — the projects-overview page size (task 033 phase 10a)", () => {
-  it("raises the global projects page beyond the 50-row default, since PortfolioOut carries no last-task-updated field to use instead", () => {
+describe("ProjectsView — the tasks-overview page size (task 033 phase 10a)", () => {
+  it("raises the global tasks page beyond the 50-row default, since ProjectOut carries no last-task-updated field to use instead", () => {
     renderList();
-    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200 });
+    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200 });
   });
 });
 
-describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)", () => {
+describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)", () => {
   it("rubric 14 dark launch: hides the switcher when /me has no organisation", () => {
     renderList();
     expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
@@ -113,8 +113,8 @@ describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)
     // enrolled or not — it is not part of the dark-launch invariant. What
     // rubric 14 actually pins is that an unenrolled caller's call carries no
     // org affordance at all: no `scope` param, enrolled or not.
-    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200 });
-    expect(queries.useProjects).not.toHaveBeenCalledWith(
+    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200 });
+    expect(queries.useTasks).not.toHaveBeenCalledWith(
       expect.objectContaining({ scope: expect.anything() }),
     );
   });
@@ -132,12 +132,12 @@ describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)
     );
     const user = userEvent.setup();
     renderList();
-    expect(queries.usePortfolios).toHaveBeenCalledWith({ scope: "all" });
-    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200, scope: "all" });
+    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all" });
+    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "all" });
 
     await user.click(screen.getByRole("tab", { name: "Mine" }));
-    expect(queries.usePortfolios).toHaveBeenCalledWith({ scope: "mine" });
-    expect(queries.useProjects).toHaveBeenCalledWith({ page_size: 200, scope: "mine" });
+    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine" });
+    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "mine" });
   });
 
   it("shows the admin wider-list notice only for admin + Organisation scope", () => {
@@ -181,13 +181,13 @@ describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)
         },
       } as unknown as ReturnType<typeof queries.useMe>,
     );
-    vi.mocked(queries.usePortfolios).mockReturnValue(
+    vi.mocked(queries.useProjects).mockReturnValue(
       {
         data: {
           data: [
             {
-              portfolio_id: "orphan-1",
-              name: "Orphan project",
+              project_id: "orphan-1",
+              name: "Orphan task",
               description: null,
               created_at: "2026-01-01T00:00:00Z",
               task_count: 0,
@@ -198,20 +198,20 @@ describe("PortfoliosView — the Organisation/Mine switcher (task 033 phase 10b)
           ],
         },
         isPending: false,
-      } as unknown as ReturnType<typeof queries.usePortfolios>,
+      } as unknown as ReturnType<typeof queries.useProjects>,
     );
     renderList();
     expect(screen.getByText("No organisation")).toBeInTheDocument();
   });
 });
 
-describe("PortfolioDetailView — the visibility-outcome copy (task 033 phase 10b)", () => {
+describe("ProjectDetailView — the visibility-outcome copy (task 033 phase 10b)", () => {
   it("renders the singular cascade line when exactly one Task follows", async () => {
     const mutate = vi.fn((_body, options: { onSuccess: (data: unknown) => void }) => {
       options.onSuccess({ task_count: 1 });
     });
-    vi.mocked(mutations.useUpdatePortfolio).mockReturnValue(
-      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdatePortfolio>,
+    vi.mocked(mutations.useUpdateProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
     );
     const user = userEvent.setup();
     renderDetail();
@@ -223,8 +223,8 @@ describe("PortfolioDetailView — the visibility-outcome copy (task 033 phase 10
     const mutate = vi.fn((_body, options: { onSuccess: (data: unknown) => void }) => {
       options.onSuccess({ task_count: 3 });
     });
-    vi.mocked(mutations.useUpdatePortfolio).mockReturnValue(
-      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdatePortfolio>,
+    vi.mocked(mutations.useUpdateProject).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
     );
     const user = userEvent.setup();
     renderDetail();
@@ -233,10 +233,10 @@ describe("PortfolioDetailView — the visibility-outcome copy (task 033 phase 10
   });
 
   it("hides the visibility control for a non-owner", () => {
-    vi.mocked(queries.usePortfolio).mockReturnValue(
+    vi.mocked(queries.useProject).mockReturnValue(
       {
         data: {
-          portfolio_id: PORTFOLIO_ID,
+          project_id: PROJECT_ID,
           name: "Housing",
           description: null,
           visibility: "org",
@@ -246,7 +246,7 @@ describe("PortfolioDetailView — the visibility-outcome copy (task 033 phase 10
         },
         isPending: false,
         isError: false,
-      } as unknown as ReturnType<typeof queries.usePortfolio>,
+      } as unknown as ReturnType<typeof queries.useProject>,
     );
     renderDetail();
     expect(screen.queryByRole("button", { name: "Make private" })).not.toBeInTheDocument();

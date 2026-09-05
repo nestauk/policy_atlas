@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { Navigate } from "react-router";
 
-import { useMe, usePortfolios, useProjects } from "../api/queries";
+import { useMe, useProjects, useTasks } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
 import { TASK, TENANCY_COPY } from "../lib/vocabulary";
@@ -21,29 +21,29 @@ export function TasksListView() {
   // today, including the query itself — no `scope` param is sent.
   const hasSwitcher = me.data?.organisation != null;
   const [scope, setScope] = useState<Scope>("all");
-  const projects = useProjects(hasSwitcher ? { scope } : undefined);
-  const archived = useProjects(
+  const tasks = useTasks(hasSwitcher ? { scope } : undefined);
+  const archived = useTasks(
     hasSwitcher ? { scope, status: "archived" } : { status: "archived" },
   );
-  const portfolios = usePortfolios(hasSwitcher ? { scope } : undefined);
+  const projects = useProjects(hasSwitcher ? { scope } : undefined);
 
-  const rows = projects.data?.data ?? [];
-  const portfolioName = new Map(
-    (portfolios.data?.data ?? []).map((portfolio) => [portfolio.portfolio_id, portfolio.name]),
+  const rows = tasks.data?.data ?? [];
+  const projectName = new Map(
+    (projects.data?.data ?? []).map((project) => [project.project_id, project.name]),
   );
   const showOwner = showOwnerColumn(hasSwitcher, rows);
   const isAdminWideList = hasSwitcher && me.data?.is_admin === true && scope === "all";
 
-  if (projects.isError && errorCode(projects.error) === "unauthenticated") {
+  if (tasks.isError && errorCode(tasks.error) === "unauthenticated") {
     return <ReauthRedirect />;
   }
 
   const homeIsEmpty =
-    !projects.isPending &&
+    !tasks.isPending &&
     !archived.isPending &&
-    !projects.isError &&
+    !tasks.isError &&
     !archived.isError &&
-    (projects.data?.data ?? []).length === 0 &&
+    (tasks.data?.data ?? []).length === 0 &&
     (archived.data?.data ?? []).length === 0;
   if (homeIsEmpty) {
     return <Navigate to="/new" replace />;
@@ -58,7 +58,7 @@ export function TasksListView() {
             <ScopeSwitcher scope={scope} onChange={setScope} />
             <TaskListActions
               rows={rows}
-              portfolioNames={portfolioName}
+              projectNames={projectName}
               showProjectPrefix
               newTaskHref={newTaskHref()}
             />
@@ -66,7 +66,7 @@ export function TasksListView() {
         ) : (
           <TaskListActions
             rows={rows}
-            portfolioNames={portfolioName}
+            projectNames={projectName}
             showProjectPrefix
             newTaskHref={newTaskHref()}
           />
@@ -81,12 +81,12 @@ export function TasksListView() {
 
       <TaskListPanel
         rows={rows}
-        portfolioNames={portfolioName}
+        projectNames={projectName}
         showProjectPrefix
-        isPending={projects.isPending}
-        isError={projects.isError}
-        onRetry={() => void projects.refetch()}
-        loaded={projects.data !== undefined}
+        isPending={tasks.isPending}
+        isError={tasks.isError}
+        onRetry={() => void tasks.refetch()}
+        loaded={tasks.data !== undefined}
         showOwner={showOwner}
         ownerlessLabel={isAdminWideList ? TENANCY_COPY.noOrganisation : undefined}
       />

@@ -23,7 +23,7 @@ export const FUNNEL_STAGES = [
   ["read_in_full", "Read in full", "Full documents fetched and read."],
   ["selected", "Shortlisted", "The strongest, most varied set chosen for close reading."],
   ["findings", "Findings extracted", "Individual results pulled out with their exact quotes."],
-  ["cited", "Cited in the evidence base", "Sources the write-up rests on."],
+  ["cited", "Cited in the report", "Sources the write-up rests on."],
 ] as const;
 
 /** Map an event summary to its approved, human-readable count fragments. */

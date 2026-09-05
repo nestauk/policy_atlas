@@ -13,7 +13,7 @@ import {
   useConversationMutations,
 } from "./conversationState";
 
-/** Conversation switcher for the project chat overlay.
+/** Conversation switcher for the task chat overlay.
  *
  * Args:
  *   props: Project, planning lifecycle, library-open callback, and an
@@ -23,27 +23,27 @@ import {
  *   A planning tab, session-local chat tabs, and library / new-chat actions.
  */
 export function ConversationTabs({
-  projectId,
+  taskId,
   entryArtefactId = null,
   planningClosed,
   onOpenLibrary,
   onClose,
 }: {
-  projectId: string;
+  taskId: string;
   entryArtefactId?: string | null;
   planningClosed: boolean;
   onOpenLibrary: () => void;
   onClose?: () => void;
 }) {
-  const conversations = useConversations(projectId, { status: "active" });
+  const conversations = useConversations(taskId, { status: "active" });
   const { activeConversationId, setActiveConversation } = useActiveConversation();
-  const { create, archive } = useConversationMutations(projectId);
-  const [tabIds, setTabIds] = useState(() => openChatTabs(projectId));
-  // Derive-state-during-render on a project switch (no effect roundtrip).
-  const [tabsProjectId, setTabsProjectId] = useState(projectId);
-  if (tabsProjectId !== projectId) {
-    setTabsProjectId(projectId);
-    setTabIds(openChatTabs(projectId));
+  const { create, archive } = useConversationMutations(taskId);
+  const [tabIds, setTabIds] = useState(() => openChatTabs(taskId));
+  // Derive-state-during-render on a task switch (no effect roundtrip).
+  const [tabsTaskId, setTabsTaskId] = useState(taskId);
+  if (tabsTaskId !== taskId) {
+    setTabsTaskId(taskId);
+    setTabIds(openChatTabs(taskId));
   }
 
   const rows = conversations.data?.data ?? [];
@@ -58,8 +58,8 @@ export function ConversationTabs({
     !planningActive &&
     !tabIds.includes(activeConversationId)
   ) {
-    addOpenChatTab(projectId, activeConversationId);
-    setTabIds(openChatTabs(projectId));
+    addOpenChatTab(taskId, activeConversationId);
+    setTabIds(openChatTabs(taskId));
   }
   const tabs = tabIds.flatMap((id) => {
     const chat = activeChats.find((candidate) => candidate.id === id);
@@ -71,8 +71,8 @@ export function ConversationTabs({
   });
 
   const select = (id: string) => {
-    addOpenChatTab(projectId, id);
-    setTabIds(openChatTabs(projectId));
+    addOpenChatTab(taskId, id);
+    setTabIds(openChatTabs(taskId));
     setActiveConversation(id);
   };
   const newChat = async () => {
@@ -84,8 +84,8 @@ export function ConversationTabs({
   const close = async (id: string) => {
     const index = tabs.findIndex((chat) => chat.id === id);
     await archive(id);
-    removeOpenChatTab(projectId, id);
-    setTabIds(openChatTabs(projectId));
+    removeOpenChatTab(taskId, id);
+    setTabIds(openChatTabs(taskId));
     if (activeConversationId === id) {
       setActiveConversation(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? planningId);
     }

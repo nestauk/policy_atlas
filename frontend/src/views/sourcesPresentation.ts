@@ -141,7 +141,7 @@ const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   selected: "Shortlisted",
   read_in_full: "Read in full",
   findings_extracted: "Findings extracted",
-  cited: "Cited in the evidence base",
+  cited: "Cited in the report",
   unavailable: "Included — abstract only",
 };
 

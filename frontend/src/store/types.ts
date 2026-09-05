@@ -32,7 +32,7 @@ export interface RunRef {
 export interface ResolvedDecision {
   checkInId: string;
   response: Record<string, unknown>;
-  decidedBy: "user" | "orchestrator" | "standing_default" | null;
+  decidedBy: "user" | "agent" | "standing_default" | null;
   occurredAt: string;
   sequence: number;
 }
@@ -43,11 +43,11 @@ export interface PlanState {
   plan: PlanDraft;
 }
 
-/** Project lifecycle fields as surfaced by `project.updated` audit events.
+/** Project lifecycle fields as surfaced by `task.updated` audit events.
  *  Fields are independently set (a rename touches `name` only, an archive
  *  touches `status` only) — `null` on the wire means "not touched by this
  *  event", not "cleared". */
-export interface ProjectSummary {
+export interface TaskSummary {
   name?: string | null;
   question?: string | null;
   status?: "active" | "archived" | null;
@@ -92,9 +92,9 @@ export interface RunStreamState {
   pendingCheckIn: CheckInOut | null;
   decisions: ResolvedDecision[];
   plan: PlanState | null;
-  project: ProjectSummary;
+  task: TaskSummary;
   /** Presentation-only live artefact sections, keyed by their display
-   * index. They are not the persisted evidence-base artefact. */
+   * index. They are not the persisted evidence-search artefact. */
   liveSections: Record<number, LiveSection>;
   /** Transient: last note per stage. Never sequence-gated, never replayed
    *  (a fresh mount/reconnect starts this slice empty regardless of
@@ -113,7 +113,7 @@ export function createInitialRunStreamState(): RunStreamState {
     pendingCheckIn: null,
     decisions: [],
     plan: null,
-    project: {},
+    task: {},
     liveSections: {},
     liveness: {},
   };

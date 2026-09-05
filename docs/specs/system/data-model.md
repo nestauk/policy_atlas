@@ -265,7 +265,7 @@ historical state.**
   `unclear` · `extraction_failed`. A source that **reports** a null is a **finding**; a source
   that **doesn't mention** an outcome is **coverage**. (Consumed by the gap-provenance rule in
   [provenance-grounding.md](provenance-grounding.md) and the EB
-  [provenance.md](../capabilities/evidence-base/provenance.md).)
+  [provenance.md](../capabilities/evidence-search/provenance.md).)
 - **Hybrid-queryable dimensions**: ⏸ **deferred behind the dimension-promotion gate for ALL
   dimensions, `intervention`/`outcome` included** (owner adjudication at the task-022
   contract gate, 2026-07-14, superseding the earlier committed-for-v3.0 line): no observed

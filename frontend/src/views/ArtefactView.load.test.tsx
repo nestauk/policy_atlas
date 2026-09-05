@@ -10,13 +10,13 @@ import * as queries from "../api/queries";
 import * as store from "../store";
 import * as conversationState from "./workspace/chat/conversationState";
 
-const PROJECT_ID = "02da1b53-7104-4724-9944-f145e165b847";
+const TASK_ID = "02da1b53-7104-4724-9944-f145e165b847";
 
 vi.mock("../api/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof queries>();
   return {
     ...actual,
-    useProject: vi.fn(),
+    useTask: vi.fn(),
     useArtefact: vi.fn(),
     useConversations: vi.fn(),
     useLandscape: vi.fn(),
@@ -98,11 +98,11 @@ function renderResults(initialPending: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   let pending = initialPending;
 
-  vi.mocked(queries.useProject).mockImplementation(
+  vi.mocked(queries.useTask).mockImplementation(
     () =>
       ({
         data: {
-          project_id: PROJECT_ID,
+          task_id: TASK_ID,
           name: "Reducing NEETs",
           latest_run: {
             capability_run_id: "run-1",
@@ -110,7 +110,7 @@ function renderResults(initialPending: boolean) {
             ended_at: "2026-08-01T12:00:00Z",
           },
         },
-      }) as ReturnType<typeof queries.useProject>,
+      }) as ReturnType<typeof queries.useTask>,
   );
   vi.mocked(queries.useArtefact).mockImplementation(
     () =>
@@ -141,9 +141,9 @@ function renderResults(initialPending: boolean) {
   const view = render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/results`]}>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/results`]}>
           <Routes>
-            <Route path="/projects/:projectId/results" element={<ArtefactView />} />
+            <Route path="/tasks/:taskId/results" element={<ArtefactView />} />
           </Routes>
         </MemoryRouter>
       </TooltipProvider>
@@ -156,9 +156,9 @@ function renderResults(initialPending: boolean) {
       view.rerender(
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/results`]}>
+            <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/results`]}>
               <Routes>
-                <Route path="/projects/:projectId/results" element={<ArtefactView />} />
+                <Route path="/tasks/:taskId/results" element={<ArtefactView />} />
               </Routes>
             </MemoryRouter>
           </TooltipProvider>
@@ -175,7 +175,7 @@ describe("ArtefactView load transition", () => {
 
   it("survives pending → loaded without tripping hook order", () => {
     const { rerenderLoaded } = renderResults(true);
-    expect(screen.getByLabelText("Loading the evidence base")).toBeInTheDocument();
+    expect(screen.getByLabelText("Loading the report")).toBeInTheDocument();
     rerenderLoaded();
     expect(screen.getByRole("heading", { name: "Reducing NEETs" })).toBeInTheDocument();
     expect(screen.getByText("Norway — IPS")).toBeInTheDocument();

@@ -12,7 +12,7 @@ export const LIFECYCLE_PAGE_CLASS = `mx-auto w-full px-6 ${READING_COLUMN_MAX_W}
 /** Centered list-page column, reused by Sources. */
 export const WIDE_PAGE_CLASS = `mx-auto w-full px-6 ${PAGE_COLUMN_MAX_W}`;
 
-/** Shared page title on Tasks, Projects and project-detail views. */
+/** Shared page title on Tasks, Projects and task-detail views. */
 export const listPageTitleClass =
   "text-display font-extrabold tracking-[-0.5px] text-navy text-pretty";
 
@@ -58,44 +58,44 @@ export function showOwnerColumn(
   return hasSwitcher || rows.some((row) => row.is_owner === false);
 }
 
-/** New-task URL, optionally scoped to a project. Capability is chosen on that page. */
-export function newTaskHref(portfolioId?: string | null): string {
-  if (portfolioId == null || portfolioId === "") return "/new";
-  return `/new?${new URLSearchParams({ portfolio: portfolioId }).toString()}`;
+/** New-task URL, optionally scoped to a task. Capability is chosen on that page. */
+export function newTaskHref(projectId?: string | null): string {
+  if (projectId == null || projectId === "") return "/new";
+  return `/new?${new URLSearchParams({ project: projectId }).toString()}`;
 }
 
 /**
- * When a portfolio has tasks, its last activity is the newest task `updated_at`;
- * otherwise fall back to when the portfolio row was created.
+ * When a project has tasks, its last activity is the newest task `updated_at`;
+ * otherwise fall back to when the project row was created.
  */
-export function portfolioLastUpdated(
-  portfolio: { portfolio_id: string; created_at: string },
+export function projectLastUpdated(
+  project: { project_id: string; created_at: string },
   taskUpdatedAt: ReadonlyMap<string, string>,
 ): string {
-  return taskUpdatedAt.get(portfolio.portfolio_id) ?? portfolio.created_at;
+  return taskUpdatedAt.get(project.project_id) ?? project.created_at;
 }
 
-/** Newest activity first — the sort order for the projects list. */
-export function sortPortfoliosByLastUpdated<
-  T extends { portfolio_id: string; created_at: string },
+/** Newest activity first — the sort order for the tasks list. */
+export function sortProjectsByLastUpdated<
+  T extends { project_id: string; created_at: string },
 >(rows: readonly T[], taskUpdatedAt: ReadonlyMap<string, string>): T[] {
   return [...rows].sort((left, right) =>
-    portfolioLastUpdated(right, taskUpdatedAt).localeCompare(
-      portfolioLastUpdated(left, taskUpdatedAt),
+    projectLastUpdated(right, taskUpdatedAt).localeCompare(
+      projectLastUpdated(left, taskUpdatedAt),
     ),
   );
 }
 
-/** Build a map of portfolio id → newest assigned task `updated_at`. */
-export function newestTaskUpdateByPortfolio(
-  tasks: ReadonlyArray<{ portfolio_ids?: readonly string[] | null; updated_at: string }>,
+/** Build a map of project id → newest assigned task `updated_at`. */
+export function newestTaskUpdateByProject(
+  tasks: ReadonlyArray<{ project_ids?: readonly string[] | null; updated_at: string }>,
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const task of tasks) {
-    for (const portfolioId of task.portfolio_ids ?? []) {
-      const existing = map.get(portfolioId);
+    for (const projectId of task.project_ids ?? []) {
+      const existing = map.get(projectId);
       if (existing === undefined || task.updated_at > existing) {
-        map.set(portfolioId, task.updated_at);
+        map.set(projectId, task.updated_at);
       }
     }
   }

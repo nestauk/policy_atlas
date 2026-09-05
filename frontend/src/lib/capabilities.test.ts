@@ -9,7 +9,7 @@ describe("capabilityLabel", () => {
   });
 
   it("maps known keys to their list labels", () => {
-    expect(capabilityLabel("evidence_base")).toBe("Evidence search");
+    expect(capabilityLabel("evidence_search")).toBe("Evidence search");
     expect(capabilityLabel("map_stakeholders")).toBe("Mapping stakeholders");
   });
 });

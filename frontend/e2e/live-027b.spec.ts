@@ -25,7 +25,7 @@ function log(message: string) {
 
 async function apiStatus(page: Page): Promise<number> {
   try {
-    const response = await page.request.get(`${API}/api/v1/projects`, {
+    const response = await page.request.get(`${API}/api/v1/tasks`, {
       headers: { Authorization: `Bearer ${process.env.LIVE_TOKEN ?? ""}` },
       timeout: 2_000,
     });
@@ -103,22 +103,22 @@ async function planToReadyAndStart(page: Page, firstMessage: string) {
   log("run started");
 }
 
-let projectUrl = "";
+let taskUrl = "";
 
 test.describe.serial("task 027 live check — part B", () => {
   test("B1 · unattended run: synthesis streams, reload replays, artefact commits", async ({
     page,
   }) => {
     test.setTimeout(45 * 60 * 1000);
-    if (process.env.LIVE_PROJECT) {
+    if (process.env.LIVE_TASK) {
       // Resume mode: the chain run already succeeded on a prior attempt whose
       // terminal ASSERTION was wrong (regex demanded "analysis is complete";
       // the heading says "Analysis complete"). Assert the terminal journey on
-      // the existing project instead of paying for another chain run — the
+      // the existing task instead of paying for another chain run — the
       // streaming/reload legs already passed and are in the log + screenshots.
-      projectUrl = `/projects/${process.env.LIVE_PROJECT}`;
-      await page.goto(projectUrl);
-      projectUrl = page.url();
+      taskUrl = `/tasks/${process.env.LIVE_TASK}`;
+      await page.goto(taskUrl);
+      taskUrl = page.url();
       await expect(page.getByText(/Analysis complete/i).first()).toBeVisible({
         timeout: 60_000,
       });
@@ -133,11 +133,11 @@ test.describe.serial("task 027 live check — part B", () => {
       return;
     }
     await page.goto("/");
-    await page.getByRole("button", { name: "New project" }).first().click();
+    await page.getByRole("button", { name: "New task" }).first().click();
     await page.getByLabel("Project name").fill("027 live check B");
-    await page.getByRole("button", { name: "Create project" }).click();
-    await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-    projectUrl = page.url();
+    await page.getByRole("button", { name: "Create task" }).click();
+    await expect(page).toHaveURL(/\/tasks\/[^/]+$/);
+    taskUrl = page.url();
 
     await planToReadyAndStart(
       page,
@@ -154,7 +154,7 @@ test.describe.serial("task 027 live check — part B", () => {
     });
     log("hygiene: landing card shows the live running state");
     await shot(page, "21-landing-live-status");
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
 
     // Wait for synthesise, then watch the artefact page fill in place.
     await expect(page.getByText("Writing the evidence base").first()).toBeVisible({
@@ -178,7 +178,7 @@ test.describe.serial("task 027 live check — part B", () => {
     await shot(page, "11-live-after-reload");
 
     // Let the run finish; the terminal journey state is the completion signal.
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await expect(
       page.getByText(/Analysis complete|completed with|interrupted|failed/i).first(),
     ).toBeVisible({ timeout: 20 * 60 * 1000 });
@@ -190,7 +190,7 @@ test.describe.serial("task 027 live check — part B", () => {
 
   test("B2 · evidence base, findings both kinds, sources filters", async ({ page }) => {
     test.setTimeout(10 * 60 * 1000);
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await page.getByRole("link", { name: /evidence base/i }).first().click();
     await expect(page.getByText("Evidence base").first()).toBeVisible({ timeout: 60_000 });
     await shot(page, "14-evidence-base");
@@ -209,7 +209,7 @@ test.describe.serial("task 027 live check — part B", () => {
       await shot(page, "15-no-citations");
     }
 
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await page.getByRole("link", { name: /findings/i }).first().click();
     await expect(page.getByRole("button", { name: "All kinds" })).toBeVisible({
       timeout: 30_000,
@@ -238,7 +238,7 @@ test.describe.serial("task 027 live check — part B", () => {
       await shot(page, "18-icf-empty");
     }
 
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await page.getByRole("link", { name: /sources/i }).first().click();
     await expect(page).toHaveURL(/\/sources/);
     await shot(page, "20-sources");
@@ -254,21 +254,21 @@ test.describe.serial("task 027 live check — part B", () => {
     page,
   }) => {
     test.setTimeout(45 * 60 * 1000);
-    if (projectUrl === "" && process.env.LIVE_PROJECT) {
-      projectUrl = `/projects/${process.env.LIVE_PROJECT}`;
+    if (taskUrl === "" && process.env.LIVE_TASK) {
+      taskUrl = `/tasks/${process.env.LIVE_TASK}`;
     }
-    await page.goto(projectUrl);
-    projectUrl = page.url();
+    await page.goto(taskUrl);
+    taskUrl = page.url();
     if (process.env.LIVE_RESUME_INTERRUPTED) {
       // The kill-mid-synthesis already happened on a prior attempt (the run
       // is durably `interrupted` with streamed artefact.* events); assert
       // the honest UI over the replayed stream without another chain run.
-      await page.goto(`${projectUrl}/evidence-base`);
+      await page.goto(`${taskUrl}/evidence-search`);
       await expect(
         page.getByText(/This run ended before the write-up completed/).first(),
       ).toBeVisible({ timeout: 120_000 });
       await shot(page, "23-terminal-partial");
-      await page.goto(projectUrl);
+      await page.goto(taskUrl);
       await expect(page.getByText(/interrupted/i).first()).toBeVisible({ timeout: 120_000 });
       await expect(
         page.getByText(/school-based interventions affect pupil attendance/).first(),
@@ -318,7 +318,7 @@ test.describe.serial("task 027 live check — part B", () => {
     ).toBeVisible({ timeout: 180_000 });
     await shot(page, "23-terminal-partial");
 
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await expect(page.getByText(/interrupted/i).first()).toBeVisible({ timeout: 120_000 });
     await expect(
       page.getByText(/school-based interventions affect pupil attendance/).first(),

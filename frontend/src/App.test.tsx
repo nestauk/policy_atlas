@@ -10,7 +10,7 @@ describe("App", () => {
   });
 
   // The landing heading moved from "Projects" to "Tasks" with the 032
-  // vocabulary split: a backend `project` row is a Task on screen. The
+  // vocabulary split: a backend `task` row is a Task on screen. The
   // assertion reads the word from the shared vocabulary module rather than
   // repeating the literal, so it cannot drift from what the app renders.
   it("renders the tasks landing heading", () => {

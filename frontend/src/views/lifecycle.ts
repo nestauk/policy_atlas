@@ -9,7 +9,7 @@ export const LIFECYCLE_TABS = ["plan", "results", "sources", "share", "history"]
 
 export type LifecycleTab = (typeof LIFECYCLE_TABS)[number];
 
-/** Path suffix for each tab, relative to `/projects/:projectId`. */
+/** Path suffix for each tab, relative to `/tasks/:taskId`. */
 const TAB_PATHS: Record<LifecycleTab, string> = {
   plan: "",
   results: "/results",
@@ -91,7 +91,7 @@ export function publicLifecycleTabs(base: string) {
  * opens what the reader came for, and everything else opens the plan, which
  * is the only stage guaranteed to have something in it.
  */
-export function taskDestination(projectId: string, status: RunStatus | null | undefined): string {
-  const base = `/projects/${projectId}`;
+export function taskDestination(taskId: string, status: RunStatus | null | undefined): string {
+  const base = `/tasks/${taskId}`;
   return status === "succeeded" ? `${base}/results` : base;
 }

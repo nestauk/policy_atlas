@@ -50,19 +50,19 @@ describe("lifecycle tab locking", () => {
 
 describe("lifecycleTabs", () => {
   it("returns all five tabs in order with their paths, whatever the state", () => {
-    const tabs = lifecycleTabs("/projects/p1", null);
+    const tabs = lifecycleTabs("/tasks/p1", null);
     expect(tabs.map((entry) => entry.tab)).toEqual([...LIFECYCLE_TABS]);
     expect(tabs.map((entry) => entry.to)).toEqual([
-      "/projects/p1",
-      "/projects/p1/results",
-      "/projects/p1/sources",
-      "/projects/p1/share",
-      "/projects/p1/history",
+      "/tasks/p1",
+      "/tasks/p1/results",
+      "/tasks/p1/sources",
+      "/tasks/p1/share",
+      "/tasks/p1/history",
     ]);
   });
 
   it("marks the locked ones rather than dropping them", () => {
-    const locked = lifecycleTabs("/projects/p1", "failed")
+    const locked = lifecycleTabs("/tasks/p1", "failed")
       .filter((entry) => entry.locked)
       .map((entry) => entry.tab);
     expect(locked).toEqual(["results"]);
@@ -70,20 +70,20 @@ describe("lifecycleTabs", () => {
 
   it("opens Results while a run is executing", () => {
     expect(
-      lifecycleTabs("/projects/p1", "running").filter((entry) => entry.locked),
+      lifecycleTabs("/tasks/p1", "running").filter((entry) => entry.locked),
     ).toEqual([]);
   });
 });
 
 describe("taskDestination", () => {
   it("opens Results for a succeeded task", () => {
-    expect(taskDestination("p1", "succeeded")).toBe("/projects/p1/results");
+    expect(taskDestination("p1", "succeeded")).toBe("/tasks/p1/results");
   });
 
   it("opens Plan for every other state", () => {
     for (const status of ["running", "paused", "degraded", "failed", "aborted", "interrupted"] as const) {
-      expect(taskDestination("p1", status)).toBe("/projects/p1");
+      expect(taskDestination("p1", status)).toBe("/tasks/p1");
     }
-    expect(taskDestination("p1", null)).toBe("/projects/p1");
+    expect(taskDestination("p1", null)).toBe("/tasks/p1");
   });
 });

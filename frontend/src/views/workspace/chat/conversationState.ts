@@ -11,7 +11,7 @@ type ConversationListPage = components["schemas"]["Page_ConversationListItemOut_
 const OPEN_TABS_PREFIX = "policy-atlas.open-chat-tabs.";
 
 /** URL token for the planning thread in the chat overlay (`?chat=planning`)
- *  when the project has no planning-conversation row yet. */
+ *  when the task has no planning-conversation row yet. */
 export const PLANNING_TAB_ID = "planning";
 
 /** The planning conversation to select in the overlay strip — the newest
@@ -53,18 +53,18 @@ export function useActiveConversation() {
   return { activeConversationId, setActiveConversation };
 }
 
-/** Return the session-local open chat ids for a project.
+/** Return the session-local open chat ids for a task.
  *
  * Args:
- *   projectId: Owning project for the browser-session key.
+ *   taskId: Owning task for the browser-session key.
  *
  * Returns:
  *   Chat ids in tab-strip order.
  */
-export function openChatTabs(projectId: string): string[] {
+export function openChatTabs(taskId: string): string[] {
   if (typeof window === "undefined") return [];
   try {
-    const stored = JSON.parse(window.sessionStorage.getItem(tabKey(projectId)) ?? "[]");
+    const stored = JSON.parse(window.sessionStorage.getItem(tabKey(taskId)) ?? "[]");
     return Array.isArray(stored) ? stored.filter((value): value is string => typeof value === "string") : [];
   } catch {
     return [];
@@ -74,44 +74,44 @@ export function openChatTabs(projectId: string): string[] {
 /** Add one chat to the session-local tab strip.
  *
  * Args:
- *   projectId: Owning project for the browser-session key.
+ *   taskId: Owning task for the browser-session key.
  *   conversationId: Chat to make available in the strip.
  */
-export function addOpenChatTab(projectId: string, conversationId: string) {
-  writeOpenChatTabs(projectId, [...openChatTabs(projectId).filter((id) => id !== conversationId), conversationId]);
+export function addOpenChatTab(taskId: string, conversationId: string) {
+  writeOpenChatTabs(taskId, [...openChatTabs(taskId).filter((id) => id !== conversationId), conversationId]);
 }
 
 /** Remove one chat from the session-local tab strip.
  *
  * Args:
- *   projectId: Owning project for the browser-session key.
+ *   taskId: Owning task for the browser-session key.
  *   conversationId: Chat to remove from the strip.
  */
-export function removeOpenChatTab(projectId: string, conversationId: string) {
-  writeOpenChatTabs(projectId, openChatTabs(projectId).filter((id) => id !== conversationId));
+export function removeOpenChatTab(taskId: string, conversationId: string) {
+  writeOpenChatTabs(taskId, openChatTabs(taskId).filter((id) => id !== conversationId));
 }
 
 /** Small client-side mutations kept outside the read-only G1 stream store.
  *
  * Args:
- *   projectId: Project whose conversation lists need invalidation.
+ *   taskId: Project whose conversation lists need invalidation.
  *
  * Returns:
  *   Create, archive, restore, and update operations.
  */
-export function useConversationMutations(projectId: string) {
+export function useConversationMutations(taskId: string) {
   const client = useApiClient();
   const queryClient = useQueryClient();
   const refresh = useCallback(() => {
-    // The 3-element prefix, not `queryKeys.conversations(projectId)`: that
+    // The 3-element prefix, not `queryKeys.conversations(taskId)`: that
     // filtered key carries explicit `undefined` kind/status, which never
     // partial-matches a consumer's `{ kind: "chat", status: "active" }` key.
-    void queryClient.invalidateQueries({ queryKey: queryKeys.conversationsRoot(projectId) });
-  }, [projectId, queryClient]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.conversationsRoot(taskId) });
+  }, [taskId, queryClient]);
 
   const create = useCallback(async (entryArtefactId: string | null) => {
-    const { data, error } = await client.POST("/api/v1/projects/{project_id}/conversations", {
-      params: { path: { project_id: projectId } },
+    const { data, error } = await client.POST("/api/v1/tasks/{task_id}/conversations", {
+      params: { path: { task_id: taskId } },
       body: entryArtefactId === null ? {} : { entry_artefact_id: entryArtefactId },
     });
     if (data === undefined) throw error;
@@ -119,10 +119,10 @@ export function useConversationMutations(projectId: string) {
     // tab strip filters it out (id in session storage, not yet in `data`)
     // and the composer still sends against a conversation the strip doesn't
     // show.
-    seedCreatedConversation(queryClient, projectId, data);
+    seedCreatedConversation(queryClient, taskId, data);
     refresh();
     return data;
-  }, [client, projectId, queryClient, refresh]);
+  }, [client, taskId, queryClient, refresh]);
 
   const archive = useCallback(async (conversationId: string) => {
     const { data, error } = await client.POST("/api/v1/conversations/{conversation_id}/archive", {
@@ -158,12 +158,12 @@ export function useConversationMutations(projectId: string) {
 
 function seedCreatedConversation(
   queryClient: QueryClient,
-  projectId: string,
+  taskId: string,
   created: ConversationOut,
 ) {
   const item = { ...created, latest_turn_preview: null };
   queryClient.setQueriesData(
-    { queryKey: queryKeys.conversationsRoot(projectId) },
+    { queryKey: queryKeys.conversationsRoot(taskId) },
     (current: ConversationListPage | undefined) => {
       if (current == null || !Array.isArray(current.data)) return current;
       if (current.data.some((row) => row.id === created.id)) return current;
@@ -173,14 +173,14 @@ function seedCreatedConversation(
   queryClient.setQueryData(queryKeys.conversation(created.id), created);
 }
 
-function tabKey(projectId: string) {
-  return `${OPEN_TABS_PREFIX}${projectId}`;
+function tabKey(taskId: string) {
+  return `${OPEN_TABS_PREFIX}${taskId}`;
 }
 
-function writeOpenChatTabs(projectId: string, ids: string[]) {
+function writeOpenChatTabs(taskId: string, ids: string[]) {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(tabKey(projectId), JSON.stringify(ids));
+    window.sessionStorage.setItem(tabKey(taskId), JSON.stringify(ids));
   } catch {
     // Tabs are a session convenience; storage failures are non-fatal.
   }

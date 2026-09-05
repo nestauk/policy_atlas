@@ -79,7 +79,7 @@ export function threadInputs(
 /** Placeholder for the planning composer — planning/replanning, not follow-up Q&A.
  *
  * Args:
- *   runStatus: The project's current run status, or undefined before any run.
+ *   runStatus: The task's current run status, or undefined before any run.
  *   planReady: True once the approved plan is ready to review and start.
  *   isOwner: Steering is owner-only (task 033 phase 10c, contract § 11 /
  *     rubric 37) — a non-owner always sees the same honest line, regardless
@@ -95,7 +95,7 @@ export function planningComposerPlaceholder(
   isOwner = true,
 ): string {
   if (!isOwner) {
-    return "Steering is limited to the project owner.";
+    return "Steering is limited to the task owner.";
   }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";
@@ -348,13 +348,13 @@ function AnsweredCheckIns({
 }
 
 function RunFinishedNotice({
-  projectId,
+  taskId,
   status,
 }: {
-  projectId: string;
+  taskId: string;
   status: RunStatus | undefined;
 }) {
-  const notice = runFinishedSignpost(projectId, status);
+  const notice = runFinishedSignpost(taskId, status);
   if (notice === null) return null;
   return (
     <div className="anim-rise mr-8 border-2 border-[#17A88D] bg-[#DDF2EE] px-4 py-3">
@@ -370,14 +370,14 @@ function RunFinishedNotice({
 }
 
 function RunBlock({
-  projectId,
+  taskId,
   run,
   decisions,
   stages,
   answered,
   checkIns,
 }: {
-  projectId: string;
+  taskId: string;
   run: PlanningThreadRun;
   decisions: PlanningThreadDecision[];
   stages: StageEntry[];
@@ -406,7 +406,7 @@ function RunBlock({
       <AnsweredCheckIns answered={answered} checkIns={checkIns} />
       {/* The chat's own destination once the run lands (owner, 2026-08-05):
           a completed run's last word shouldn't be a quiet stage echo. */}
-      <RunFinishedNotice projectId={projectId} status={run.status} />
+      <RunFinishedNotice taskId={taskId} status={run.status} />
     </div>
   );
 }
@@ -419,7 +419,7 @@ function RunBlock({
  * (planning turns 409 then; check-ins are the sanctioned steering channel).
  */
 export function PlanningPane({
-  projectId,
+  taskId,
   runStatus,
   stream,
   isOwner,
@@ -427,7 +427,7 @@ export function PlanningPane({
   planOverlay,
   onOverlayApplied,
 }: {
-  projectId: string;
+  taskId: string;
   runStatus: RunStatus | undefined;
   stream: RunStreamState;
   /** Steering is owner-only (task 033 phase 10c, contract § 11 / rubric 37):
@@ -440,14 +440,14 @@ export function PlanningPane({
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
 }) {
-  const transcript = usePlanningTranscript(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
-  const planQuery = usePlan(projectId);
+  const transcript = usePlanningTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const planQuery = usePlan(taskId);
   const planReady =
     planQuery.data?.status === "approved" && planQuery.data.plan.ready === true;
-  const runsQuery = useRuns(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
-  const decisionsQuery = useDecisions(projectId, { page_size: TRANSCRIPT_PAGE_SIZE });
-  const checkInsQuery = useCheckIns(projectId, "all");
-  const funnel = useFunnel(projectId);
+  const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
+  const checkInsQuery = useCheckIns(taskId, "all");
+  const funnel = useFunnel(taskId);
   const [message, setMessage] = useState("");
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [runMinimised, setRunMinimised] = useState(false);
@@ -562,7 +562,7 @@ export function PlanningPane({
     stream.run === null ? null : (
       <div key="live-run" ref={cardRef}>
         <RunningCard
-          projectId={projectId}
+          taskId={taskId}
           status={stream.run.status}
           stages={stream.stages}
           plan={stream.plan?.plan}
@@ -575,7 +575,7 @@ export function PlanningPane({
         />
       </div>
     );
-  const signpostBubbles = completedSignposts(stream.stages, projectId, hasFindings).map(
+  const signpostBubbles = completedSignposts(stream.stages, taskId, hasFindings).map(
     (signpost) => (
       <div key={signpost.href} className="anim-rise mr-8">
         <p className="max-w-prose-measure text-lead text-ink">
@@ -663,12 +663,12 @@ export function PlanningPane({
                 {liveCard}
                 <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
                 {signpostBubbles}
-                <RunFinishedNotice projectId={projectId} status={stream.run?.status} />
+                <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
               </div>
             ) : (
               <RunBlock
                 key={`run-${item.run.capability_run_id}`}
-                projectId={projectId}
+                taskId={taskId}
                 run={item.run}
                 decisions={item.decisions}
                 stages={stream.stages}
@@ -679,7 +679,7 @@ export function PlanningPane({
               />
             );
           return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" projectId={projectId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
+            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
             : [rendered];
         })}
 
@@ -750,7 +750,7 @@ export function PlanningPane({
         {stream.pendingCheckIn !== null && (
           <CheckInCard
             key={stream.pendingCheckIn.check_in_id}
-            projectId={projectId}
+            taskId={taskId}
             checkIn={stream.pendingCheckIn}
             stages={stream.stages}
             isOwner={isOwner}
@@ -761,7 +761,7 @@ export function PlanningPane({
             {liveCard}
             <AnsweredCheckIns answered={stream.decisions} checkIns={checkInsQuery.data} />
             {signpostBubbles}
-            <RunFinishedNotice projectId={projectId} status={stream.run?.status} />
+            <RunFinishedNotice taskId={taskId} status={stream.run?.status} />
           </div>
         )}
         </div>

@@ -24,7 +24,7 @@ STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "select": ("Shortlisting", "The strongest, most varied set for close reading."),
     "extract": ("Extracting findings", "Each claim is pulled out with its exact quote."),
     "group": ("Grouping findings", "Findings that answer the same question, together."),
-    "synthesise": ("Writing the evidence base", "Cited, checked, ready to challenge."),
+    "synthesise": ("Writing the report", "Cited, checked, ready to challenge."),
 }
 
 STAGE_BY_REGISTRY: dict[str, StageKey] = {

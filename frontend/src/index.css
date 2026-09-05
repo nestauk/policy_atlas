@@ -225,7 +225,7 @@
   }
 }
 
-/* Print stylesheet (027 strand 14, 032 download): the evidence-base page
+/* Print stylesheet (027 strand 14, 032 download): the report page
    via the browser print dialog (Save as PDF). Chrome outside the paper is
    hidden; the app-shell scroll lock is released so the full report prints. */
 @media print {

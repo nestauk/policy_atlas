@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation, useParams } from "react-router";
 
-import { useProject } from "../api/queries";
+import { useTask } from "../api/queries";
 import { PUBLIC_TABS, isTabOpen } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
 
@@ -12,32 +12,32 @@ import type { LifecycleTab } from "./lifecycle";
  * lock is decoration and the page it guards renders empty. A locked route
  * redirects to Plan, which is open at every state.
  *
- * The redirect waits for the project to load: before the query settles the
+ * The redirect waits for the task to load: before the query settles the
  * run state is unknown, and treating unknown as "no run" would bounce every
  * deep link back to Plan on a cold page load.
  */
 export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children: ReactNode }) {
-  const { projectId } = useParams();
-  const project = useProject(projectId ?? "");
+  const { taskId } = useParams();
+  const task = useTask(taskId ?? "");
 
-  if (project.isPending || project.data === undefined) return null;
+  if (task.isPending || task.data === undefined) return null;
   // Public-leg access (task 037): a signed-in outsider reading a public Task
   // gets Results and Sources only — every other tab's URL lands on Results,
   // mirroring the anonymous public view. The run-state locks below never
   // apply on this leg: they are an owner-side affordance, and the public
   // pages render their own shaped absence when a run has not finished.
-  if (project.data.access === "public") {
+  if (task.data.access === "public") {
     if (PUBLIC_TABS.includes(tab)) return <>{children}</>;
-    return <Navigate to={`/projects/${projectId}/results`} replace />;
+    return <Navigate to={`/tasks/${taskId}/results`} replace />;
   }
-  if (!isTabOpen(tab, project.data.latest_run?.status)) {
-    return <Navigate to={`/projects/${projectId}`} replace />;
+  if (!isTabOpen(tab, task.data.latest_run?.status)) {
+    return <Navigate to={`/tasks/${taskId}`} replace />;
   }
   return <>{children}</>;
 }
 
 /**
- * Send a retired path to its new home, keeping the project AND the query.
+ * Send a retired path to its new home, keeping the task AND the query.
  *
  * The search string carries the filter, the open dossier and the selected
  * theme. Dropping it makes a redirect look like it worked — the page loads,
@@ -51,21 +51,21 @@ export function RedirectToPath({
   suffix: string;
   /**
    * Carry the pre-redirect location as router state under `from` (task
-   * 037's public wildcard leg). This redirect can fire on project data that
+   * 037's public wildcard leg). This redirect can fire on task data that
    * was public when read but has since been unshared before a stashed
-   * `useProject` refetch settles; when `PublicTaskShell` then discovers the
+   * `useTask` refetch settles; when `PublicTaskShell` then discovers the
    * Task isn't public after all, `StashAndSplashRedirect` prefers this over
    * the already-rewritten URL, so a signed-out visitor's original deep link
    * (e.g. `/share`) still survives to be restored after sign-in.
    */
   preserveOriginal?: boolean;
 }) {
-  const { projectId } = useParams();
+  const { taskId } = useParams();
   const location = useLocation();
   const { search } = location;
   return (
     <Navigate
-      to={`/projects/${projectId}${suffix}${search}`}
+      to={`/tasks/${taskId}${suffix}${search}`}
       replace
       state={
         preserveOriginal

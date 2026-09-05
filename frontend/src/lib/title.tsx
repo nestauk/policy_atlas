@@ -20,11 +20,11 @@ export function TitleMarkerProvider({ active, children }: { active: boolean; chi
 
 /**
  * Set `document.title` for the life of the calling view: `parts` join with
- * " · ", empty/absent parts are skipped (e.g. a project name still loading),
+ * " · ", empty/absent parts are skipped (e.g. a task name still loading),
  * and "Policy Atlas" is always the last segment. Landing calls this with
- * just "Projects"; project-scoped views pass the project name and the view
- * name, e.g. `useDocumentTitle(project?.name, "Workspace")` ->
- * "Acme project · Workspace · Policy Atlas".
+ * just "Projects"; task-scoped views pass the task name and the view
+ * name, e.g. `useDocumentTitle(task?.name, "Workspace")` ->
+ * "Acme task · Workspace · Policy Atlas".
  */
 export function useDocumentTitle(...parts: Array<string | null | undefined>): void {
   const markerActive = useContext(TitleMarkerContext);

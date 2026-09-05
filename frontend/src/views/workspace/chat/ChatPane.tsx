@@ -14,7 +14,7 @@ import { ContextBar } from "./ContextBar";
  * Returns:
  *   A transcript, context bar, and composer.
  */
-export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpenPlanning }: { projectId: string; conversationId: string; sectionTitles?: string[]; onOpenPlanning: () => void }) {
+export function ChatPane({ taskId, conversationId, sectionTitles = [], onOpenPlanning }: { taskId: string; conversationId: string; sectionTitles?: string[]; onOpenPlanning: () => void }) {
   const conversation = useConversation(conversationId);
   const chat = useChatConversation(conversationId);
   const starterQuestions = useMemo(
@@ -73,11 +73,11 @@ export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpen
               ))}
           </div>
         ) : (
-          <ChatMessages projectId={projectId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
+          <ChatMessages taskId={taskId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
         )}
       </div>
       <ContextBar
-        projectId={projectId}
+        taskId={taskId}
         conversationId={conversationId}
         entryArtefactId={conversation.data?.entry_artefact_id ?? null}
       />

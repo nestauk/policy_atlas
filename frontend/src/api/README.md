@@ -24,7 +24,7 @@ The generated client is schema-first: `gen/types.ts` and the committed
   exponential backoff with jitter (1s–30s), and a single
   refresh-then-retry on a 401 before surfacing `onUnauthenticated`.
 - `queries.ts` — TanStack Query hooks over the authed client:
-  `useProjects`, `useProject`, `useCheckIns`, plus the read-model hooks
+  `useTasks`, `useTask`, `useCheckIns`, plus the read-model hooks
   named in task 025 §6 (`useFunnel`, `useLandscape`, `useEvidence`,
   `useFindings`, `useDecisions`, `useArtefact`) and the task-027 durable
   transcript/run reads (`usePlanningTurns`, `useRuns`). `groups`/`coverage`

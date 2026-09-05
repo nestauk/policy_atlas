@@ -64,7 +64,7 @@ function usePanelWidth() {
   };
 }
 
-/** Side-by-side chat on project views outside Plan (rev 3.4).
+/** Side-by-side chat on task views outside Plan (rev 3.4).
  *
  * The panel is URL-addressable: it is open exactly when the route carries
  * `?chat=<cid>` — the same deep-link grammar the conversation strip uses.
@@ -72,7 +72,7 @@ function usePanelWidth() {
  * planning plus those chats; selecting planning renders that thread here.
  *
  * Args:
- *   props: The owning project id, and `isOwner` for the planning duplicate's
+ *   props: The owning task id, and `isOwner` for the planning duplicate's
  *     read-only gate (task 033 phase 10c, contract § 11 / rubric 37) — this
  *     is the `ChatSidePanel` duplicate the rubric names alongside the
  *     workspace's own `PlanningPane`.
@@ -80,21 +80,21 @@ function usePanelWidth() {
  * Returns:
  *   The open panel beside the view, or a compact edge toggle when closed.
  */
-export function ChatSidePanel({ projectId, isOwner }: { projectId: string; isOwner: boolean }) {
+export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: boolean }) {
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const [libraryOpen, setLibraryOpen] = useState(false);
   const panel = usePanelWidth();
   const navigate = useNavigate();
-  const conversations = useConversations(projectId, { status: "active" });
+  const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
   const planningId = planningConversationId(rows);
   const planningOpen = isPlanningConversation(activeConversationId, rows);
-  const artefact = useArtefact(projectId);
-  const { create } = useConversationMutations(projectId);
+  const artefact = useArtefact(taskId);
+  const { create } = useConversationMutations(taskId);
 
   const openChat = (conversationId: string) => {
-    addOpenChatTab(projectId, conversationId);
+    addOpenChatTab(taskId, conversationId);
     setActiveConversation(conversationId);
   };
 
@@ -138,7 +138,7 @@ export function ChatSidePanel({ projectId, isOwner }: { projectId: string; isOwn
         className="absolute inset-y-0 -right-1 z-10 hidden w-2 cursor-col-resize hover:bg-blue-tint focus-visible:bg-blue-tint focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue lg:block"
       />
       <ConversationTabs
-        projectId={projectId}
+        taskId={taskId}
         planningClosed={planningClosed}
         onOpenLibrary={() => setLibraryOpen(true)}
         onClose={() => setActiveConversation(null)}
@@ -146,22 +146,22 @@ export function ChatSidePanel({ projectId, isOwner }: { projectId: string; isOwn
       <div className="min-h-0 flex-1">
         {planningOpen ? (
           <PlanningPane
-            projectId={projectId}
+            taskId={taskId}
             runStatus={undefined}
             stream={createInitialRunStreamState()}
             isOwner={isOwner}
-            onReviewPlan={() => void navigate(`/projects/${projectId}`)}
+            onReviewPlan={() => void navigate(`/tasks/${taskId}`)}
           />
         ) : (
           <ChatPane
-            projectId={projectId}
+            taskId={taskId}
             conversationId={activeConversationId}
             sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
             onOpenPlanning={() => setActiveConversation(planningId)}
           />
         )}
       </div>
-      <ChatsLibrary projectId={projectId} open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+      <ChatsLibrary taskId={taskId} open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </aside>
   );
 }

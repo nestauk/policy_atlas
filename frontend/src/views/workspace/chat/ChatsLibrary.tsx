@@ -8,7 +8,7 @@ import { addOpenChatTab, useActiveConversation, useConversationMutations } from 
 
 type LibraryRow = components["schemas"]["ConversationListItemOut"];
 
-/** Overlay listing active and archived project chats.
+/** Overlay listing active and archived task chats.
  *
  * Args:
  *   props: Project identity and overlay visibility controls.
@@ -16,17 +16,17 @@ type LibraryRow = components["schemas"]["ConversationListItemOut"];
  * Returns:
  *   The active and archived conversation library when open.
  */
-export function ChatsLibrary({ projectId, open, onClose }: { projectId: string; open: boolean; onClose: () => void }) {
-  const active = useConversations(projectId, { status: "active" });
-  const archived = useConversations(projectId, { status: "archived" });
+export function ChatsLibrary({ taskId, open, onClose }: { taskId: string; open: boolean; onClose: () => void }) {
+  const active = useConversations(taskId, { status: "active" });
+  const archived = useConversations(taskId, { status: "archived" });
   const { setActiveConversation } = useActiveConversation();
-  const { archive, unarchive, update } = useConversationMutations(projectId);
+  const { archive, unarchive, update } = useConversationMutations(taskId);
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   if (!open) return null;
 
   const openRow = (row: LibraryRow) => {
-    if (row.kind !== "planning") addOpenChatTab(projectId, row.id);
+    if (row.kind !== "planning") addOpenChatTab(taskId, row.id);
     setActiveConversation(row.id);
     onClose();
   };
@@ -67,7 +67,7 @@ function LibraryRow({ row, onOpen, editing, title, setTitle, onRename, onCommit,
   const preview = row.latest_turn_preview?.reply_snippet ?? row.latest_turn_preview?.user_message ?? "";
   const isPlanning = row.kind === "planning";
   return <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-b border-line px-2 py-3 focus-within:outline focus-within:outline-2 focus-within:outline-blue">
-    <div>{editing === row.id ? <input aria-label="Chat title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void onCommit(row.id); }} onBlur={() => void onCommit(row.id)} className="w-full border border-line px-2 py-1 text-meta" /> : <button type="button" onClick={() => onOpen(row)} className="text-left text-meta font-semibold text-navy hover:underline">{scrub(row.title)}</button>}{!isPlanning && <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className="ml-2 align-middle text-grey hover:text-blue"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L5 13l-3 1 1-3 8.5-8.5Z" /></svg></button>}<p className="mt-1 line-clamp-2 max-w-[60ch] whitespace-pre-wrap text-body text-grey">{scrub(preview)}</p><div className="mt-1 flex items-center gap-2">{isPlanning && <Chip tone="blue">Planning</Chip>}{isPlanning && <Chip tone={row.closed_at !== null ? "soft" : "green"}>{row.closed_at !== null ? "Closed" : "Open"}</Chip>}{row.entry_artefact_id !== null && <Chip tone="soft">Evidence base</Chip>}<span className="text-caption text-grey">{relativeTime(row.latest_turn_preview?.at ?? row.created_at)}</span></div></div>
+    <div>{editing === row.id ? <input aria-label="Chat title" autoFocus value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void onCommit(row.id); }} onBlur={() => void onCommit(row.id)} className="w-full border border-line px-2 py-1 text-meta" /> : <button type="button" onClick={() => onOpen(row)} className="text-left text-meta font-semibold text-navy hover:underline">{scrub(row.title)}</button>}{!isPlanning && <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className="ml-2 align-middle text-grey hover:text-blue"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L5 13l-3 1 1-3 8.5-8.5Z" /></svg></button>}<p className="mt-1 line-clamp-2 max-w-[60ch] whitespace-pre-wrap text-body text-grey">{scrub(preview)}</p><div className="mt-1 flex items-center gap-2">{isPlanning && <Chip tone="blue">Planning</Chip>}{isPlanning && <Chip tone={row.closed_at !== null ? "soft" : "green"}>{row.closed_at !== null ? "Closed" : "Open"}</Chip>}{row.entry_artefact_id !== null && <Chip tone="soft">Report</Chip>}<span className="text-caption text-grey">{relativeTime(row.latest_turn_preview?.at ?? row.created_at)}</span></div></div>
     {!isPlanning && <button type="button" aria-label={archived ? `Restore ${row.title}` : `Archive ${row.title}`} title={archived ? "Restore" : "Archive"} onClick={() => onArchive(row.id)} className="self-center text-grey hover:text-blue">{archived ? <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 8a6 6 0 1 1 1.8 4.3" /><path d="M2 8V4.5M2 8h3.5" /></svg> : <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="3.5" rx="0.5" /><path d="M3.5 6.5V13h9V6.5M6.5 9h3" /></svg>}</button>}
   </div>;
 }

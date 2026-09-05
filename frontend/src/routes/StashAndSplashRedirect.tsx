@@ -9,7 +9,7 @@ import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
  * `location.state.from` (task 037 review fix) wins when present: the
  * public router's wildcard redirect can rewrite the URL to `/results`
  * before this component ever sees it — on stale-but-still-public cached
- * project data that a background refetch then reveals isn't public after
+ * task data that a background refetch then reveals isn't public after
  * all — and stashes its own pre-redirect location under `from` for exactly
  * this case, so the original deep link survives instead of `/results`.
  */

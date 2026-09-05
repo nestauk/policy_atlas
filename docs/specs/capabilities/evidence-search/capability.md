@@ -1,8 +1,8 @@
 ---
 type: Capability spec
-title: Evidence Base (EB)
+title: Evidence search (EB)
 description: The declarative EB spec and §5 compile target — EB as an instance of the capability framework.
-tags: [capability, evidence-base, compile-target]
+tags: [capability, evidence-search, compile-target]
 timestamp: 2026-06-22
 ---
 
