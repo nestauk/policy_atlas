@@ -24,8 +24,10 @@ from policy_atlas.evidence_base.sourcing.acquire import (
 from policy_atlas.evidence_base.sourcing.search_live import (
     HTTP_TIMEOUT_S,
     OA_SELECT,
+    OPENALEX_MIN_INTERVAL_S,
     OVERTON_MIN_INTERVAL_S,
     RETRY_BACKOFF_S,
+    RETRY_MAX_ATTEMPTS,
     OpenAlexLiveBackend,
     OvertonLiveBackend,
     SearchTransportError,
@@ -36,8 +38,22 @@ from policy_atlas.evidence_base.sourcing.search_live import (
 
 
 def _sleep_recorder(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """Record every sleep, and advance a fake clock by the time slept.
+
+    The clock matters because the rate limiter and the retry backoff share
+    ``_sleep``. Real time passes while a backoff sleeps, so the next request is
+    already past its pacing gap and the limiter adds nothing. Without a clock
+    that moves, every test would see a spurious pacing sleep after each backoff.
+    """
     calls: list[float] = []
-    monkeypatch.setattr(search_live, "_sleep", calls.append)
+    now = [0.0]
+
+    def fake_sleep(seconds: float) -> None:
+        calls.append(seconds)
+        now[0] += seconds
+
+    monkeypatch.setattr(search_live, "_sleep", fake_sleep)
+    monkeypatch.setattr(search_live, "_monotonic", lambda: now[0])
     return calls
 
 
@@ -196,7 +212,8 @@ def test_search_cache_error_response_not_cached(monkeypatch: pytest.MonkeyPatch)
     def fetch(url: str, params: dict[str, str]) -> Any:
         del url, params
         calls["n"] += 1
-        if calls["n"] <= 2:
+        # Fail every attempt of the first search, so it exhausts its retries.
+        if calls["n"] <= RETRY_MAX_ATTEMPTS:
             raise _status_error(429)
         return {"results": []}
 
@@ -205,7 +222,7 @@ def test_search_cache_error_response_not_cached(monkeypatch: pytest.MonkeyPatch)
         backend.search("policy", max_results=1)
 
     assert backend.search("policy", max_results=1) == []
-    assert calls["n"] == 3
+    assert calls["n"] == RETRY_MAX_ATTEMPTS + 1
 
 
 def test_search_cache_malformed_payload_not_cached() -> None:
@@ -280,7 +297,49 @@ def test_search_cache_key_excludes_credentials_and_sorts_params() -> None:
     )
 
 
-# --- Overton limiter ---
+# --- Rate limiters ---
+
+
+def test_openalex_limiter_paces_pages_within_one_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Paging is where OpenAlex 429s came from: one search, many fast requests.
+
+    A 400-record search is two 200-record pages. The second must be paced, or a
+    2,000-record fetch fires ten requests as fast as the socket allows.
+    """
+    sleeps = _sleep_recorder(monkeypatch)
+    pages = {"n": 0}
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        del url, params
+        pages["n"] += 1
+        return {
+            "results": [
+                _oa_stub_record(f"https://example.org/W{pages['n']}p{i}") for i in range(200)
+            ]
+        }
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    backend.search("policy", max_results=400)
+
+    assert pages["n"] == 2
+    assert len(sleeps) == 1  # first request free, second paced
+    assert 0 < sleeps[0] <= OPENALEX_MIN_INTERVAL_S
+
+
+def test_loggable_params_drops_credentials() -> None:
+    """The api_key travels as a query param, so it must never reach a log."""
+    safe = search_live._loggable_params(
+        {
+            "api_key": "SECRET123",
+            "mailto": "someone@example.org",
+            "select": "id,display_name",
+            "filter": "title_and_abstract.search:loneliness",
+        }
+    )
+    assert safe == {"filter": "title_and_abstract.search:loneliness"}
+    assert "SECRET123" not in str(safe)
 
 
 def test_overton_limiter_sleeps_between_consecutive_search_calls(
@@ -418,10 +477,43 @@ def test_retry_once_then_succeed(
         lambda: _timeout_error(),
     ],
 )
-def test_retry_fails_twice_raises_search_transport_error(
+def test_retry_backoff_doubles_then_succeeds(
     monkeypatch: pytest.MonkeyPatch, make_exc: Callable[[], Exception]
 ) -> None:
-    _sleep_recorder(monkeypatch)
+    """A burst that outlasts the first wait still succeeds, waiting 1s then 2s."""
+    sleeps = _sleep_recorder(monkeypatch)
+    calls = {"n": 0}
+
+    def fetch(url: str, params: dict[str, str]) -> Any:
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise make_exc()
+        return {"results": [_oa_stub_record()]}
+
+    backend = OpenAlexLiveBackend("KEY", fetch=fetch)
+    records = backend.search("policy", max_results=1)
+
+    assert len(records) == 1
+    assert calls["n"] == 3
+    assert sleeps == [RETRY_BACKOFF_S, RETRY_BACKOFF_S * 2]
+
+
+@pytest.mark.parametrize(
+    "make_exc",
+    [
+        lambda: _status_error(429),
+        lambda: _status_error(500),
+        lambda: _status_error(502),
+        lambda: _status_error(503),
+        lambda: _status_error(504),
+        lambda: _timeout_error(),
+    ],
+)
+def test_retry_exhausted_raises_search_transport_error(
+    monkeypatch: pytest.MonkeyPatch, make_exc: Callable[[], Exception]
+) -> None:
+    """Four attempts, three doubling waits, then the failure is recorded."""
+    sleeps = _sleep_recorder(monkeypatch)
     calls = {"n": 0}
 
     def fetch(url: str, params: dict[str, str]) -> Any:
@@ -431,7 +523,8 @@ def test_retry_fails_twice_raises_search_transport_error(
     backend = OpenAlexLiveBackend("KEY", fetch=fetch)
     with pytest.raises(SearchTransportError) as excinfo:
         backend.search("policy", max_results=1)
-    assert calls["n"] == 2
+    assert calls["n"] == RETRY_MAX_ATTEMPTS == 4
+    assert sleeps == [RETRY_BACKOFF_S, RETRY_BACKOFF_S * 2, RETRY_BACKOFF_S * 4]
 
     message = str(excinfo.value)
     assert "api.openalex.org" in message

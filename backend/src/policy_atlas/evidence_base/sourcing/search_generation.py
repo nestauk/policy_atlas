@@ -15,11 +15,15 @@ from pydantic import BaseModel
 
 from policy_atlas.core import tracing
 from policy_atlas.core.openai_client import parse_structured, resolve_openai_client
-from policy_atlas.core.usage import UsageResult, usage_metadata
+from policy_atlas.core.usage import TokenUsage, UsageAccumulator, UsageResult, usage_metadata
 from policy_atlas.evidence_base.sourcing.search_prompts import (
+    MAX_PARAPHRASES,
+    N_QUERIES,
     SEARCH_GEN_MAX_OUTPUT_TOKENS,
     SEARCH_QUERIES_MODEL,
     SEARCH_QUERIES_PROMPT_VERSION,
+    SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION,
+    SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION,
     SEARCH_REFORMULATE_MODEL,
     SEARCH_REFORMULATE_PROMPT_VERSION,
     SEARCH_SUGGEST_MODEL,
@@ -29,9 +33,14 @@ from policy_atlas.evidence_base.sourcing.search_prompts import (
     SearchQueriesWire,
     SearchSuggestWire,
     SuggestPayload,
+    build_v2_openalex_queries_messages,
+    build_v2_openalex_reformulate_messages,
+    build_v2_overton_queries_messages,
+    build_v2_overton_reformulate_messages,
     build_queries_messages,
     build_reformulate_messages,
     build_suggest_messages,
+    validated_queries,
 )
 
 WireT = TypeVar("WireT", bound=BaseModel)
@@ -49,7 +58,7 @@ class SearchGenerationBackend(Protocol):
         """Generate rapid/deep round-1 query fan-out candidates.
 
         Args:
-            payload: Scope intent payload for the ``search_queries_v1`` prompt.
+            payload: Refined research-question payload for the ``search_queries_v1`` prompt.
 
         Returns:
             Parsed query wire output plus token usage.
@@ -179,7 +188,7 @@ class OpenAISearchGenerationBackend:
         """Generate query fan-out candidates through structured OpenAI output.
 
         Args:
-            payload: Scope intent payload for the ``search_queries_v1`` prompt.
+            payload: Refined research-question payload for the ``search_queries_v1`` prompt.
 
         Returns:
             Parsed query wire output plus token usage.
@@ -242,6 +251,156 @@ class OpenAISearchGenerationBackend:
         )
 
 
+class V2SingleQueryWire(BaseModel):
+    """One generated query string from a provider-specific V2 prompt call."""
+
+    query: str
+
+
+class V2SearchGenerationBackend(OpenAISearchGenerationBackend):
+    """Live split-prompt generation backend (OpenAlex and Overton separately).
+
+    This backend preserves the ``SearchGenerationBackend`` protocol and returns
+    the same ``SearchQueriesWire`` shape as V1. The difference is methodology:
+    it runs separate prompt calls for OpenAlex Boolean generation and Overton
+    semantic generation, for both round-1 generation and reformulation.
+    """
+
+    def _combine_usage(self, usages: list[TokenUsage | None]) -> TokenUsage | None:
+        """Aggregate token usage from multiple internal prompt calls."""
+        accumulator = UsageAccumulator()
+        saw_usage = False
+        for usage in usages:
+            if usage is not None:
+                saw_usage = True
+            accumulator.add(usage)
+        if not saw_usage:
+            return None
+        totals = accumulator.payload()
+        return TokenUsage(
+            prompt=totals["prompt"],
+            completion=totals["completion"],
+            total=totals["total"],
+            cached=totals["cached"],
+        )
+
+    @staticmethod
+    def _build_wire(
+        *,
+        queries: list[str],
+        overton_paraphrases: list[str],
+    ) -> SearchQueriesWire:
+        """Normalize provider outputs into the shared wire schema."""
+        cleaned_queries, cleaned_paraphrases = validated_queries(
+            SearchQueriesWire(
+                queries=queries,
+                overton_paraphrases=overton_paraphrases,
+            )
+        )
+        return SearchQueriesWire(
+            queries=cleaned_queries,
+            overton_paraphrases=cleaned_paraphrases,
+        )
+
+    def _generate_many(
+        self,
+        *,
+        messages: list[ChatCompletionMessageParam],
+        count: int,
+        model: str,
+        prompt_version: str,
+        usage_event: str,
+        trace_prefix: str,
+        label: str,
+    ) -> UsageResult[list[str]]:
+        """Run repeated single-query calls and collect outputs plus usage."""
+        queries: list[str] = []
+        usages: list[TokenUsage | None] = []
+        for index in range(count):
+            wire, usage = self._call_wire(
+                messages=messages,
+                model=model,
+                response_format=V2SingleQueryWire,
+                prompt_version=prompt_version,
+                usage_event=usage_event,
+                trace_name=f"{trace_prefix}:{index + 1}",
+                label=label,
+            )
+            queries.append(wire.query)
+            usages.append(usage)
+        return queries, self._combine_usage(usages)
+
+    def generate_queries(self, payload: QueriesPayload) -> UsageResult[SearchQueriesWire]:
+        """Generate round-1 queries via separate OpenAlex and Overton prompts.
+
+        Args:
+            payload: Refined research question and optional search guidance.
+
+        Returns:
+            Shared query wire output plus aggregated token usage.
+        """
+        openalex_queries, openalex_usage = self._generate_many(
+            messages=build_v2_openalex_queries_messages(payload),
+            count=N_QUERIES,
+            model=SEARCH_QUERIES_MODEL,
+            prompt_version=SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION,
+            usage_event="search_generation.v2.openalex.queries.usage",
+            trace_prefix="search_queries_v2_openalex",
+            label="v2 openalex query-generation",
+        )
+        overton_queries, overton_usage = self._generate_many(
+            messages=build_v2_overton_queries_messages(payload),
+            count=MAX_PARAPHRASES,
+            model=SEARCH_QUERIES_MODEL,
+            prompt_version=SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION,
+            usage_event="search_generation.v2.overton.queries.usage",
+            trace_prefix="search_queries_v2_overton",
+            label="v2 overton query-generation",
+        )
+        return (
+            self._build_wire(
+                queries=openalex_queries,
+                overton_paraphrases=overton_queries,
+            ),
+            self._combine_usage([openalex_usage, overton_usage]),
+        )
+
+    def reformulate(self, payload: ReformulatePayload) -> UsageResult[SearchQueriesWire]:
+        """Generate reformulated queries with separate OpenAlex and Overton prompts.
+
+        Args:
+            payload: Research question plus this round's screened exemplars.
+
+        Returns:
+            Shared reformulation wire output plus aggregated token usage.
+        """
+        openalex_queries, openalex_usage = self._generate_many(
+            messages=build_v2_openalex_reformulate_messages(payload),
+            count=N_QUERIES,
+            model=SEARCH_REFORMULATE_MODEL,
+            prompt_version=SEARCH_QUERIES_V2_OPENALEX_PROMPT_VERSION,
+            usage_event="search_generation.v2.openalex.reformulate.usage",
+            trace_prefix=f"search_reformulate_v2_openalex:r{payload.round_index}",
+            label="v2 openalex reformulation",
+        )
+        overton_queries, overton_usage = self._generate_many(
+            messages=build_v2_overton_reformulate_messages(payload),
+            count=MAX_PARAPHRASES,
+            model=SEARCH_REFORMULATE_MODEL,
+            prompt_version=SEARCH_QUERIES_V2_OVERTON_PROMPT_VERSION,
+            usage_event="search_generation.v2.overton.reformulate.usage",
+            trace_prefix=f"search_reformulate_v2_overton:r{payload.round_index}",
+            label="v2 overton reformulation",
+        )
+        return (
+            self._build_wire(
+                queries=openalex_queries,
+                overton_paraphrases=overton_queries,
+            ),
+            self._combine_usage([openalex_usage, overton_usage]),
+        )
+
+
 class StubSearchGenerationBackend:
     """Deterministic zero-egress search-generation backend for tests and local runs."""
 
@@ -251,7 +410,7 @@ class StubSearchGenerationBackend:
         """Return a deterministic query set derived from the intent.
 
         Args:
-            payload: Scope intent payload.
+            payload: Refined research-question payload.
 
         Returns:
             Deterministic query wire output plus no token usage.

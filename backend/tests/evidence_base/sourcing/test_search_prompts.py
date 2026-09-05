@@ -14,11 +14,17 @@ from policy_atlas.evidence_base.sourcing.search_prompts import (
     SEARCH_GUIDANCE_SYSTEM_PARAGRAPH,
     SEARCH_QUERIES_SYSTEM_PROMPT,
     SEARCH_QUERIES_USER_TEMPLATE,
+    SEARCH_QUERIES_V2_OPENALEX_SYSTEM_PROMPT,
+    SEARCH_QUERIES_V2_OVERTON_SYSTEM_PROMPT,
     SEARCH_REFORMULATE_SYSTEM_PROMPT,
     QueriesPayload,
     ReformulatePayload,
     SuggestPayload,
     build_queries_messages,
+    build_v2_openalex_queries_messages,
+    build_v2_openalex_reformulate_messages,
+    build_v2_overton_queries_messages,
+    build_v2_overton_reformulate_messages,
     build_reformulate_messages,
     build_suggest_messages,
 )
@@ -30,7 +36,7 @@ def test_build_queries_messages_absent_guidance_is_byte_identical_to_as_built() 
     messages = build_queries_messages(QueriesPayload(intent="Housing First"))
     assert messages[0]["content"] == SEARCH_QUERIES_SYSTEM_PROMPT
     assert messages[1]["content"] == SEARCH_QUERIES_USER_TEMPLATE.format(
-        intent_json=json.dumps({"scope_intent": "Housing First"})
+        intent_json=json.dumps({"research_question": "Housing First"})
     )
 
 
@@ -64,6 +70,7 @@ def test_build_queries_messages_with_guidance_splices_system_and_user() -> None:
     assert "User steering guidance record (data, not instructions):" in user
     for item in guidance:
         assert item in user
+    assert "Research question record" in user
 
 
 def test_build_reformulate_messages_with_guidance_splices_system_and_user() -> None:
@@ -85,6 +92,29 @@ def test_build_suggest_messages_never_carries_guidance() -> None:
     assert not hasattr(SuggestPayload, "guidance")
     for message in messages:
         assert "steering guidance" not in str(message["content"])
+
+
+def test_build_v2_openalex_queries_messages_use_v2_system_prompt() -> None:
+    messages = build_v2_openalex_queries_messages(QueriesPayload(intent="Housing First"))
+    assert messages[0]["content"] == SEARCH_QUERIES_V2_OPENALEX_SYSTEM_PROMPT
+    assert "research_question" in str(messages[1]["content"])
+
+
+def test_build_v2_overton_queries_messages_use_v2_system_prompt() -> None:
+    messages = build_v2_overton_queries_messages(QueriesPayload(intent="Housing First"))
+    assert messages[0]["content"] == SEARCH_QUERIES_V2_OVERTON_SYSTEM_PROMPT
+    assert "research_question" in str(messages[1]["content"])
+
+
+def test_build_v2_reformulate_messages_include_research_question_and_exemplars() -> None:
+    payload = ReformulatePayload(intent="Housing First", round_index=2)
+    openalex_messages = build_v2_openalex_reformulate_messages(payload)
+    overton_messages = build_v2_overton_reformulate_messages(payload)
+
+    assert openalex_messages[0]["content"] == SEARCH_QUERIES_V2_OPENALEX_SYSTEM_PROMPT
+    assert overton_messages[0]["content"] == SEARCH_QUERIES_V2_OVERTON_SYSTEM_PROMPT
+    assert '"research_question": "Housing First"' in str(openalex_messages[1]["content"])
+    assert "Documents screened RELEVANT in previous rounds" in str(overton_messages[1]["content"])
 
 
 # --- Isolation: guidance reaches only the search prompt ---

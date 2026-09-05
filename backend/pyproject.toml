@@ -57,6 +57,8 @@ dependencies = [
     # >=50: PYSEC-2026-3552/3553/3554 against 48.x (owner-approved bump,
     # 2026-08-05, task 028 PR #41 audit gate)
     "cryptography>=50,<51",
+    "ipykernel>=7.3.0",
+    "pandas>=3.0.5",
 ]
 
 [build-system]
