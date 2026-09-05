@@ -182,7 +182,15 @@ function seedCreatedConversation(
 ) {
   const item = { ...created, latest_turn_preview: null };
   queryClient.setQueriesData(
-    { queryKey: queryKeys.conversationsRoot(taskId) },
+    {
+      queryKey: queryKeys.conversationsRoot(taskId),
+      // The prefix reaches every filtered list — including the ARCHIVED
+      // one, which a brand-new conversation has no business appearing in.
+      // Left unfiltered it flashes under "Archived" for as long as that
+      // list takes to refetch (seen in the library once the Agent tab's
+      // sidebar started keeping the archived list in cache).
+      predicate: (query) => query.queryKey[4] !== "archived",
+    },
     (current: ConversationListPage | undefined) => {
       if (current == null || !Array.isArray(current.data)) return current;
       if (current.data.some((row) => row.id === created.id)) return current;

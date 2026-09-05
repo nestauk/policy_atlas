@@ -165,17 +165,6 @@ describe("ChatsLibrary", () => {
     expect(state.navigate).not.toHaveBeenCalled();
   });
 
-  it("hands a planning row off to its own pane when the caller owns it (the Agent tab)", async () => {
-    const onOpenTaskAgent = vi.fn();
-    const onClose = vi.fn();
-    const user = userEvent.setup();
-    render(<ChatsLibrary taskId="p1" open onClose={onClose} onOpenTaskAgent={onOpenTaskAgent} />);
-    await user.click(screen.getByRole("button", { name: "Task Agent" }));
-    expect(onOpenTaskAgent).toHaveBeenCalledOnce();
-    expect(state.setActiveConversation).not.toHaveBeenCalled();
-    expect(onClose).toHaveBeenCalledOnce();
-  });
-
   it("still opens a chat row in the panel when selected", async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();

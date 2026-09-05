@@ -75,12 +75,16 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
     await expect(page.getByRole("link", { name: mockTask.name })).toBeVisible();
 
-    // (b) Into the workspace (the Agent tab).
+    // (b) Into the workspace (the Agent tab): two columns — the Task's
+    // conversations in a sidebar, the selected one in the main view (038
+    // V8, owner ruling 2026-09-05). No overlay launcher on this tab.
     await page.getByRole("link", { name: mockTask.name }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}`));
-    // The Agent overlay rides this tab too now (038 V8) — the Task Agent's
-    // own pane stays the main column beside it.
-    await expect(page.getByRole("button", { name: "Open the Agent" })).toBeVisible();
+    const chats = page.getByRole("complementary", { name: "Chats" });
+    await expect(chats).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open the Agent" })).toHaveCount(0);
+    // The Task Agent is pinned first, and it is what the main view shows.
+    await expect(chats.getByRole("button").nth(1)).toHaveAccessibleName("Task Agent");
     await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(1);
 
     // (c) Rename/archive now lives in the header's "Task settings"
@@ -108,6 +112,16 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
     await settings.click(); // close the popover
+
+    // A chat opened from the sidebar takes the main view; the Task Agent
+    // brings the planning conversation back and clears the param.
+    await chats.getByRole("button", { name: "New chat" }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}\\?chat=`));
+    await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(0);
+    await chats.getByRole("button", { name: "Task Agent" }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}$`));
+    await expect(page.getByRole("region", { name: "Planning conversation" })).toBeVisible();
 
     // (d) The lifecycle bar shows all five stages from the first moment —
     // with no run yet, Plan and Share are open; Results/Sources/History

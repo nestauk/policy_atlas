@@ -347,13 +347,13 @@ describe("AppShell — global chrome, continued", () => {
   });
 });
 
-describe("AppShell — the Agent overlay rides every task tab (038 V8)", () => {
-  it("mounts the overlay on the Agent tab, which used to hide it", () => {
+describe("AppShell — the Agent overlay rides every task tab but Agent (038 V8)", () => {
+  it("never mounts the overlay on the Agent tab — that tab has its own sidebar", () => {
     renderShell(`/tasks/${TASK_ID}`);
-    expect(screen.getByRole("button", { name: "Open the Agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open the Agent" })).not.toBeInTheDocument();
   });
 
-  it("keeps mounting it on the other task tabs", () => {
+  it("mounts it on the other task tabs", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     expect(screen.getByRole("button", { name: "Open the Agent" })).toBeInTheDocument();
   });

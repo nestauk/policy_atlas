@@ -77,22 +77,6 @@ describe("ConversationTabs", () => {
     expect(state.setActiveConversation).toHaveBeenCalledWith("p1");
   });
 
-  it("hands the Task Agent off to its own pane when the caller owns it (the Agent tab)", async () => {
-    const onSelectTaskAgent = vi.fn();
-    const user = userEvent.setup();
-    render(
-      <ConversationTabs
-        taskId="p1"
-        planningClosed={false}
-        onOpenLibrary={vi.fn()}
-        onSelectTaskAgent={onSelectTaskAgent}
-      />,
-    );
-    await user.click(screen.getByRole("button", { name: "Task Agent" }));
-    expect(onSelectTaskAgent).toHaveBeenCalledOnce();
-    expect(state.setActiveConversation).not.toHaveBeenCalled();
-  });
-
   it("shows a New chat tab for an active follow-up that is not yet in the list", () => {
     state.activeConversationId = "c-new";
     state.tabIds = [];

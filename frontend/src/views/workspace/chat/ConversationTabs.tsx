@@ -17,10 +17,8 @@ import {
 /** Conversation switcher for the task's Agent overlay.
  *
  * Args:
- *   props: Task, planning lifecycle, library-open callback, an optional
- *     close control used when the strip sits in the side panel, and
- *     `onSelectTaskAgent` — supplied on the Agent tab, where the Task Agent
- *     already owns the main column and must not be opened here as well.
+ *   props: Task, planning lifecycle, library-open callback, and an optional
+ *     close control used when the strip sits in the side panel.
  *
  * Returns:
  *   The pinned Task Agent tab, session-local chat tabs, and library /
@@ -32,14 +30,12 @@ export function ConversationTabs({
   planningClosed,
   onOpenLibrary,
   onClose,
-  onSelectTaskAgent,
 }: {
   taskId: string;
   entryArtefactId?: string | null;
   planningClosed: boolean;
   onOpenLibrary: () => void;
   onClose?: () => void;
-  onSelectTaskAgent?: () => void;
 }) {
   const conversations = useConversations(taskId, { status: "active" });
   const { activeConversationId, setActiveConversation } = useActiveConversation();
@@ -76,9 +72,6 @@ export function ConversationTabs({
     return [];
   });
 
-  // On the Agent tab the Task Agent is the main column, so selecting it here
-  // hands off to that pane instead of binding `?chat=` to a second copy.
-  const selectTaskAgent = onSelectTaskAgent ?? (() => setActiveConversation(taskAgentId));
   const select = (id: string) => {
     addOpenChatTab(taskId, id);
     setTabIds(openChatTabs(taskId));
@@ -96,9 +89,7 @@ export function ConversationTabs({
     removeOpenChatTab(taskId, id);
     setTabIds(openChatTabs(taskId));
     if (activeConversationId === id) {
-      const next = tabs[index + 1]?.id ?? tabs[index - 1]?.id;
-      if (next === undefined) selectTaskAgent();
-      else setActiveConversation(next);
+      setActiveConversation(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? taskAgentId);
     }
   };
 
@@ -108,7 +99,7 @@ export function ConversationTabs({
           carries (contract § V8, fork F4). */}
       <button
         type="button"
-        onClick={() => selectTaskAgent()}
+        onClick={() => setActiveConversation(taskAgentId)}
         className={`flex min-w-0 items-center gap-2 px-3 py-2 text-meta font-semibold ${planningActive ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
       >
         <span aria-hidden="true" className={`h-2 w-2 rounded-full ${planningClosed ? "bg-line-2" : "bg-blue"}`} />

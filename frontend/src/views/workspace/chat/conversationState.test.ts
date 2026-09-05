@@ -56,6 +56,10 @@ describe("useConversationMutations", () => {
     // cache entry — the bug invalidated a 5-element key with explicit
     // `undefined`s that never partial-matches this filtered key.
     queryClient.setQueryData(queryKeys.conversations("p1", { kind: "chat", status: "active" }), { data: [] });
+    // The archived list shares that prefix. A conversation minted active has
+    // no business in it — seeded there, it flashes under "Archived" until
+    // that list refetches (the Agent tab's sidebar keeps it in cache).
+    queryClient.setQueryData(queryKeys.conversations("p1", { status: "archived" }), { data: [] });
     function Wrapper({ children }: { children: ReactNode }) {
       return createElement(QueryClientProvider, { client: queryClient }, children);
     }
@@ -69,6 +73,7 @@ describe("useConversationMutations", () => {
       queryClient.getQueryData(queryKeys.conversations("p1", { kind: "chat", status: "active" })),
     ).toEqual({ data: [{ id: "c-new", latest_turn_preview: null }] });
     expect(queryClient.getQueryData(queryKeys.conversation("c-new"))).toEqual({ id: "c-new" });
+    expect(queryClient.getQueryData(queryKeys.conversations("p1", { status: "archived" }))).toEqual({ data: [] });
     expect(
       queryClient.getQueryState(queryKeys.conversations("p1", { kind: "chat", status: "active" }))?.isInvalidated,
     ).toBe(true);

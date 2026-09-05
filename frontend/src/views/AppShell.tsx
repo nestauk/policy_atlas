@@ -298,10 +298,10 @@ export function AppShell() {
       ? task.data?.latest_run?.status === "running"
       : (allTasks.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
-  // The Agent overlay rides every task tab, the Agent tab included (038 V8).
-  // There it renders beside the Task Agent's own pane, which is why
-  // `ChatSidePanel` is told the planning conversation is already on screen.
-  const showChatPanel = base !== null && taskResolved && !publicAccess;
+  // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
+  // tab lists the same conversations in its own sidebar and shows the
+  // selected one in its main column, so the overlay would be a second copy.
+  const showChatPanel = base !== null && !inWorkspace && taskResolved && !publicAccess;
   // With a chat open beside the view, the two columns scroll independently —
   // the workspace's own two-pane behaviour (fixed viewport height, each
   // column owns its scroll). Closed, the page keeps its normal scroll.
@@ -417,9 +417,9 @@ export function AppShell() {
           </NavItem>
         </div>
       )}
-      {/* The Agent overlay beside every task view (038 V8): the Agent tab
-          keeps the Task Agent as its main column and gains the chat list
-          here; every other tab is unchanged. */}
+      {/* The Agent overlay beside every task view outside the Agent tab
+          (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
+          and the conversation itself, so the panel mounts everywhere else. */}
       <div
         className={cn(
           "flex min-w-0 flex-1",
@@ -432,7 +432,7 @@ export function AppShell() {
             out the rest of the shell (nav, the routed view). */}
         {showChatPanel && (
           <ErrorBoundary key={taskId}>
-            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} planningInMainPane={inWorkspace} />
+            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
           </ErrorBoundary>
         )}
         <div
