@@ -25,6 +25,7 @@ import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
+import { useFooterReveal } from "./chat/useFooterReveal";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
@@ -40,11 +41,6 @@ import {
 } from "./runProgress";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
-/** Footer reveal thresholds (px from the transcript's end): show when flush, hide once
- *  the reader has scrolled up past roughly one footer height. */
-const FOOTER_SHOW_WITHIN = 8;
-const FOOTER_HIDE_BEYOND = 120;
-
 const TRANSCRIPT_PAGE_SIZE = 200;
 
 /**
@@ -454,10 +450,9 @@ export function PlanningPane({
   onReviewPlan?: () => void;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
-  /** Reports whether the transcript is scrolled flush with its end, with
-   *  hysteresis (038 V8): the Agent tab reveals the site footer under both
-   *  columns only then, the way the other tabs reveal it at the end of
-   *  their scroll. */
+  /** Reports when the reader asks for the site footer (a deliberate scroll
+   *  past the transcript's end) and when they scroll back up (038 V8); the
+   *  Agent tab reveals the footer under both columns accordingly. */
   onAtBottomChange?: (atBottom: boolean) => void;
 }) {
   const transcript = usePlanningTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
@@ -503,25 +498,10 @@ export function PlanningPane({
   const cardRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
   // The site footer lives in `WorkspaceView`, under both columns (038 V8),
-  // and opens only when the transcript is flush with its end. Hysteresis:
-  // opening it shrinks this pane by roughly the footer's height, which would
-  // otherwise push `distance` past the show threshold and flip it shut
-  // again (jitter near the bottom).
-  const atBottom = useRef(true);
-  // Read through a ref so the scroll sync (and the layout effect that calls
-  // it) never closes over a fresh prop identity.
-  const onAtBottomChangeRef = useRef(onAtBottomChange);
-  useEffect(() => {
-    onAtBottomChangeRef.current = onAtBottomChange;
-  }, [onAtBottomChange]);
+  // and opens only on a deliberate nudge past the transcript's end.
+  const footer = useFooterReveal(onAtBottomChange);
   const syncScrollPosition = (el: HTMLElement) => {
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinnedToBottom.current = distance < 120;
-    const next = atBottom.current ? distance <= FOOTER_HIDE_BEYOND : distance <= FOOTER_SHOW_WITHIN;
-    if (next !== atBottom.current) {
-      atBottom.current = next;
-      onAtBottomChangeRef.current?.(next);
-    }
+    pinnedToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -534,6 +514,9 @@ export function PlanningPane({
     pin();
     const observer = new ResizeObserver(pin);
     observer.observe(content);
+    // The footer opening shrinks this pane; re-pin so the newest turn stays
+    // in view rather than a footer's height above the true bottom.
+    observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
@@ -628,7 +611,9 @@ export function PlanningPane({
         ref={scrollRef}
         onScroll={(event) => {
           syncScrollPosition(event.currentTarget);
+          footer.onScroll(event);
         }}
+        onWheel={footer.onWheel}
         className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the

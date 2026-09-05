@@ -174,9 +174,11 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     expect(within(sidebar()).queryByText("Planning")).toBeNull();
   });
 
-  it("runs the site footer under both columns, after the sidebar in document order", () => {
+  it("runs the site footer under both columns, after the sidebar in document order — hidden until asked for", () => {
     renderAtAgentTab();
-    const footer = screen.getByRole("contentinfo");
+    // Shut until the reader scrolls past the transcript's end (useFooterReveal).
+    const footer = screen.getByRole("contentinfo", { hidden: true });
+    expect(footer.closest("[aria-hidden]")).toHaveAttribute("aria-hidden", "true");
     expect(sidebar().compareDocumentPosition(footer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     // Under both columns: the footer is a child of <main>, not of the
     // conversation column the sidebar sits beside.

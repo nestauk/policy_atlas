@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useConversation } from "../../../api/queries";
 import { useChatConversation } from "../../../store";
@@ -9,11 +9,7 @@ import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { ChatMessages } from "./ChatMessages";
 import { ContextBar } from "./ContextBar";
 import { takeFirstMessage } from "./conversationState";
-
-/** Footer reveal thresholds (px from the transcript's end), the planning
- *  pane's own pair. */
-const FOOTER_SHOW_WITHIN = 8;
-const FOOTER_HIDE_BEYOND = 120;
+import { useFooterReveal } from "./useFooterReveal";
 
 /** Compose one URL-addressable chat conversation — in the overlay, or wide
  *  in the Agent tab's main column.
@@ -21,8 +17,8 @@ const FOOTER_HIDE_BEYOND = 120;
  * Args:
  *   props: Conversation identity, optional starter section titles, the
  *     hand-off to the planning thread, `wide` for the Agent tab's reading
- *     column, and `onAtBottomChange`, reporting (with hysteresis) whether the
- *     transcript is flush with its end so the tab can reveal the footer.
+ *     column, and `onAtBottomChange`, reporting the reader's deliberate
+ *     scroll past the transcript's end so the tab can reveal the footer.
  *
  * Returns:
  *   A transcript, context bar, and composer.
@@ -85,22 +81,15 @@ export function ChatPane({
     if (first !== null) void sendTurn(first).catch(() => undefined);
   }, [conversationId, sendTurn]);
 
-  const atBottom = useRef(true);
-  const syncScrollPosition = (el: HTMLElement) => {
-    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    const next = atBottom.current ? distance <= FOOTER_HIDE_BEYOND : distance <= FOOTER_SHOW_WITHIN;
-    if (next !== atBottom.current) {
-      atBottom.current = next;
-      onAtBottomChange?.(next);
-    }
-  };
+  const footer = useFooterReveal(onAtBottomChange);
 
   const empty = !chat.isPending && chat.rows.length === 0;
   const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
   return (
     <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
       <div
-        onScroll={(event) => syncScrollPosition(event.currentTarget)}
+        onScroll={footer.onScroll}
+        onWheel={footer.onWheel}
         className="min-h-0 flex-1 overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
         <div className={cn("w-full", column)}>

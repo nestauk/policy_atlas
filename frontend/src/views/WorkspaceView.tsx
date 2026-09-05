@@ -43,9 +43,10 @@ export function WorkspaceView() {
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
   // Chats need a result to ask about.
   const chatsEnabled = hasResult(stream.run?.status);
-  // The site footer opens only when the conversation is scrolled flush with
-  // its end (the other tabs reveal theirs at the end of the scroll pane).
-  const [footerOpen, setFooterOpen] = useState(true);
+  // The site footer opens only on a deliberate scroll past the conversation's
+  // end (the other tabs reveal theirs at the end of their scroll pane), and
+  // hides again on any scroll up — so the composer can rest at the bottom.
+  const [footerOpen, setFooterOpen] = useState(false);
   const hasRun = stream.run !== null;
   const [planOpen, setPlanOpen] = useState(false);
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");
