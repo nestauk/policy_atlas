@@ -302,6 +302,46 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
     typecheck clean · lint 0 errors · `pnpm test` 75 files / 550 · build OK ·
     `pnpm e2e` 11 passed.
 
+- **Second pass (owner requests 2026-09-05, lead-built):**
+  - **Overlay ≡ sidebar.** `ChatSidePanel`'s tab strip (`ConversationTabs`) and
+    floating library dialog (`ChatsLibrary`) are retired; the panel header is
+    the sidebar's folded: a list toggle (`aria-pressed`) that swaps the body for
+    the same `ConversationList`, the conversation's name with the brand mark
+    for the Task Agent, New chat, close. The session-tab state
+    (`openChatTabs`/`addOpenChatTab`/`removeOpenChatTab`) is deleted with it.
+  - **Task Agent always listed.** On a completed task the run closes the
+    planning lineage and the active listing carries no planning row, so the
+    sidebar showed none. `ConversationList` now pins a synthetic Task Agent row
+    (`PLANNING_TAB_ID`, which every consumer already resolves to the planning
+    thread). Test: "still lists the Task Agent when the listing carries no
+    planning row at all".
+  - **Drafts.** New chat (sidebar, rail, overlay header) and "Ask about this
+    analysis" open `?chat=new[&entry=<artefact>]`: `DraftChatPane` shows the
+    empty state, the starters, the entry-artefact chip and a live composer; the
+    row is created on the first message, the message is handed to the real
+    `ChatPane` via `stashFirstMessage`/`takeFirstMessage`, and the URL moves
+    onto the new id. Abandoning a draft leaves nothing behind. The overlay
+    launcher opens the latest chat or the Task Agent — it never creates.
+  - **No chats before a result.** `lifecycle.hasResult(status)` (succeeded or
+    degraded — a run still writing is not a result, even though the Result tab
+    already opens) gates New chat everywhere: offered, disabled, with the reason
+    in `COPY.newChatUnavailable`.
+  - **Sidebar shut by default;** the stored choice still wins.
+  - **Scroll and footer.** The planning pane's and the chat pane's scroll
+    regions now span the whole main column (the reading column sits inside),
+    so the scrollbar is at the pane's edge like every other tab; both panes
+    report "flush with the end" with hysteresis (`onAtBottomChange`) and
+    `WorkspaceView` reveals the site footer under both columns only then,
+    animated on `grid-template-rows`.
+  - Tests: `ConversationList.test.tsx` (from the library tests; synthetic Task
+    Agent, draft row), `ChatSidePanel.test.tsx` rewritten (launcher opens the
+    Task Agent, header/list toggle, draft, gating), `WorkspaceView.test.tsx`
+    (shut-by-default, draft flow, gating, footer under both columns);
+    `journey.spec.ts` follows (New chat disabled before the run; the chat
+    round trip and the completed-task sidebar after it; the draft from "Ask
+    about this analysis"; the overlay's list). Gates: lint 0 errors ·
+    typecheck clean · `pnpm test` 74 files / 549 · build OK · `pnpm e2e` 11.
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and
