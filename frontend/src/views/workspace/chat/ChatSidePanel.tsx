@@ -76,7 +76,7 @@ function usePanelWidth() {
 }
 
 const HEADER_BUTTON =
-  "flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
+  "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
 /** The Agent overlay: side-by-side chat on every task view but the Agent tab
  *  (038 V8).
@@ -128,7 +128,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
         title={COPY.agent}
         disabled={!conversations.isSuccess}
         onClick={openLatestOrTaskAgent}
-        className="fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-60"
+        className="pressable fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-60"
       >
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
           <path d="M3 4.5h14v9H8l-3.5 3v-3H3v-9Z" />

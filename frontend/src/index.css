@@ -112,7 +112,26 @@
   --color-red-tint: #fde8ed;
 
   /* Nesta = 0 radius, everywhere */
+  /* Motion curves (design-engineering pass, 2026-09-05): the built-in CSS
+     easings are too weak for UI. Strong ease-out for anything entering or
+     responding; the Ionic/iOS drawer curve for sheets. */
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
   --radius-none: 0px;
+}
+
+/* Press feedback for anything pressable: the interface confirms it heard the
+   click. Colour changes ease too, so hover states do not snap. */
+@utility pressable {
+  transition:
+    transform 160ms var(--ease-out-strong),
+    background-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
 }
 
 /* The Nesta signature: 0 radius with a 45° cut top-right corner.
@@ -176,7 +195,7 @@
   }
 }
 @utility anim-rise {
-  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  animation: rise 300ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
   @media (prefers-reduced-motion: reduce) {
     animation-duration: 1ms;
   }

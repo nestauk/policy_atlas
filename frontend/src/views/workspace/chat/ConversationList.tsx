@@ -139,7 +139,7 @@ function ListGroups({ rows, ...props }: RowProps & { rows: ConversationRow[] }) 
 }
 
 const ACTION_CLASS =
-  "flex h-7 w-7 items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue";
+  "pressable flex h-7 w-7 items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue";
 
 function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitle, onRename, onCommit, onArchive, archived = false }: RowProps & { row: ConversationRow }) {
   const isPlanning = row.kind === "planning";

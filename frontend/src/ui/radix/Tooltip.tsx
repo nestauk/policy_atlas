@@ -29,6 +29,7 @@ export function Tooltip({
           className={cn(
             "z-50 max-w-sm border border-line-2 bg-paper px-3 py-2",
             "text-meta text-ink shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
+            "origin-[var(--radix-tooltip-content-transform-origin)] transition-[opacity,transform] duration-[125ms] ease-out-strong starting:scale-[0.97] starting:opacity-0",
             className,
           )}
           {...props}

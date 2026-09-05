@@ -94,7 +94,7 @@ export function ConversationSidebar({
       aria-controls="chats-sidebar-list"
       title={open ? "Hide chats" : "Show chats"}
       onClick={toggle}
-      className="flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+      className="pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
     >
       <PanelIcon size={16} />
     </button>
@@ -113,7 +113,7 @@ export function ConversationSidebar({
           title={newChatTitle}
           disabled={!chatsEnabled}
           onClick={onNewChat}
-          className="flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          className="pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
           <PlusIcon size={16} />
         </button>
@@ -124,7 +124,7 @@ export function ConversationSidebar({
           aria-current={onTaskAgent ? "true" : undefined}
           onClick={() => onSelect(null)}
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center focus-visible:outline-2 focus-visible:outline-blue",
+            "pressable flex h-8 w-8 shrink-0 items-center justify-center focus-visible:outline-2 focus-visible:outline-blue",
             onTaskAgent ? "bg-blue-tint" : "hover:bg-blue-tint-2",
           )}
         >
@@ -146,7 +146,7 @@ export function ConversationSidebar({
           title={newChatTitle}
           disabled={!chatsEnabled}
           onClick={onNewChat}
-          className="flex h-8 items-center gap-1.5 px-2.5 text-meta font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+          className="pressable flex h-8 items-center gap-1.5 px-2.5 text-meta font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
           <PlusIcon size={14} />
           {COPY.newChat}
