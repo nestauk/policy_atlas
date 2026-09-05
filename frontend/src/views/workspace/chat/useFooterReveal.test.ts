@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { UIEvent, WheelEvent } from "react";
+import type { TouchEvent, UIEvent, WheelEvent } from "react";
 
 import { useFooterReveal } from "./useFooterReveal";
 
@@ -11,6 +11,7 @@ function region(fromEnd: number) {
 }
 const scroll = (el: HTMLElement) => ({ currentTarget: el }) as unknown as UIEvent<HTMLElement>;
 const wheel = (el: HTMLElement, deltaY: number) => ({ currentTarget: el, deltaY }) as unknown as WheelEvent<HTMLElement>;
+const touch = (el: HTMLElement, clientY: number) => ({ currentTarget: el, touches: [{ clientY }] }) as unknown as TouchEvent<HTMLElement>;
 
 describe("useFooterReveal — the footer opens on a deliberate nudge past the end, never on arrival", () => {
   it("arriving at the end does not open it; wheeling on past the end does", () => {
@@ -45,6 +46,19 @@ describe("useFooterReveal — the footer opens on a deliberate nudge past the en
     act(() => result.current.onWheel(wheel(region(0), 40)));
     expect(onChange).toHaveBeenLastCalledWith(true);
     act(() => result.current.onScroll(scroll(region(200))));
+    expect(onChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("a finger swiping up at the end is the same nudge; swiping back down closes it (tablet)", () => {
+    const onChange = vi.fn();
+    const { result } = renderHook(() => useFooterReveal(onChange));
+    const el = region(0);
+    act(() => result.current.onTouchStart(touch(el, 600)));
+    act(() => result.current.onTouchMove(touch(el, 560))); // 40px up: not yet
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => result.current.onTouchMove(touch(el, 510))); // 90px in total: open
+    expect(onChange).toHaveBeenLastCalledWith(true);
+    act(() => result.current.onTouchMove(touch(el, 530))); // back down: close
     expect(onChange).toHaveBeenLastCalledWith(false);
   });
 });

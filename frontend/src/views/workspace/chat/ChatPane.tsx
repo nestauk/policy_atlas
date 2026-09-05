@@ -90,6 +90,8 @@ export function ChatPane({
       <div
         onScroll={footer.onScroll}
         onWheel={footer.onWheel}
+        onTouchStart={footer.onTouchStart}
+        onTouchMove={footer.onTouchMove}
         className="min-h-0 flex-1 overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
         <div className={cn("w-full", column)}>

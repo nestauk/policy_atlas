@@ -614,6 +614,8 @@ export function PlanningPane({
           footer.onScroll(event);
         }}
         onWheel={footer.onWheel}
+        onTouchStart={footer.onTouchStart}
+        onTouchMove={footer.onTouchMove}
         className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the
