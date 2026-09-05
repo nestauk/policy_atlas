@@ -390,6 +390,15 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   alone, and never pins against the pane growing (the footer closing);
   re-pins when the conversation id changes. Unit test (two cases); gates:
   typecheck · lint 0 errors · 556 tests · build · e2e 11.
+- **Jump to the end + one text scale (owner requests 2026-09-05, same
+  session):** once the reader scrolls up in either pane, a round arrow
+  button (`JumpToEnd`, icon only by owner request — `aria-label` and
+  `title` "Jump to the end") floats over the region's bottom edge and
+  scrolls smoothly to the end; the hook exposes `atEnd` and
+  `jumpToEnd`. The chat's user bubble and answers now use the Task Agent's
+  scale — `text-lead` on a `max-w-prose-measure` column — where they had
+  `text-body` on `52ch`; colours unchanged. Unit test (the pill appears on
+  scroll-up and hides after the jump); gates below.
 
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 

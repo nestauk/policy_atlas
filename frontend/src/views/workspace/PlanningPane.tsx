@@ -25,6 +25,7 @@ import { conflictSentences, errorCode, isConflictCode } from "../../lib/errors";
 import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
+import { JumpToEnd } from "./chat/JumpToEnd";
 import { useFooterReveal } from "./chat/useFooterReveal";
 import { usePinToBottom } from "./chat/usePinToBottom";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
@@ -591,6 +592,8 @@ export function PlanningPane({
       {/* The scroll region spans the whole pane so its scrollbar sits at the
           pane's edge like every other tab's; the reading column is inside. */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* `relative` for the jump-to-end pill, which floats over the region's bottom edge. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={scrollRef}
         onScroll={(event) => {
@@ -754,6 +757,8 @@ export function PlanningPane({
         )}
         </div>
         {landing && <div aria-hidden="true" className="flex-[2]" />}
+      </div>
+      <JumpToEnd visible={!pin.atEnd} onClick={pin.jumpToEnd} />
       </div>
 
       <div className="shrink-0 border-t border-line">

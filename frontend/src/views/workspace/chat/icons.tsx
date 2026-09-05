@@ -67,6 +67,15 @@ export function RestoreIcon(props: IconProps) {
   );
 }
 
+/** Down to the end of a transcript. */
+export function ArrowDownIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M8 3v10M3.5 8.5 8 13l4.5-4.5" />
+    </Glyph>
+  );
+}
+
 /** Points right; rotate with a class when a disclosure is open. */
 export function ChevronIcon(props: IconProps) {
   return (

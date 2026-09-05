@@ -105,13 +105,13 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlan
     const code = errorCodeOf(turn);
     const message = isConflictCode(code) ? conflictSentences[code] : "This answer failed.";
     return <div className="mr-8 space-y-2">
-      {answer && <p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
+      {answer && <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
       <p role="alert" className="text-body text-red">{message}</p>
       <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
     </div>;
   }
   if (!answer && !("id" in turn && turn.status === "pending")) return null;
-  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
+  return <div className="mr-8 space-y-2"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
 
 /** The prose's annotation layer (029 Fix C + 030 fold): span-anchored claims
@@ -393,7 +393,7 @@ function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: 
   );
 }
 
-function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p></div>; }
+function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p></div>; }
 function DateDivider({ value }: { value: string }) { return <div className="flex items-center gap-2 text-caption text-grey"><span className="h-px flex-1 bg-line" />{new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" })}<span className="h-px flex-1 bg-line" /></div>; }
 function createdAt(row: ChatConversationRow) { return "id" in row ? row.created_at : row.createdAt; }
 function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user_message : row.userMessage; }

@@ -8,6 +8,7 @@ import { ChatComposer } from "./ChatComposer";
 import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { ChatMessages } from "./ChatMessages";
 import { ContextBar } from "./ContextBar";
+import { JumpToEnd } from "./JumpToEnd";
 import { takeFirstMessage } from "./conversationState";
 import { useFooterReveal } from "./useFooterReveal";
 import { usePinToBottom } from "./usePinToBottom";
@@ -99,6 +100,8 @@ export function ChatPane({
   const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
   return (
     <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
+      {/* `relative` for the jump-to-end pill, which floats over the region's bottom edge. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         ref={scrollRef}
         onScroll={(event) => {
@@ -121,6 +124,8 @@ export function ChatPane({
             <ChatMessages taskId={taskId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
           )}
         </div>
+      </div>
+      <JumpToEnd visible={!pin.atEnd} onClick={pin.jumpToEnd} />
       </div>
       <div className={cn("w-full", column)}>
         <ContextBar
