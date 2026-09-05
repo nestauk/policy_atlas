@@ -21,7 +21,7 @@ import { WorkspaceView } from "./WorkspaceView";
  * each is covered thoroughly in its own file — so this proves the wiring:
  * which pane is mounted, and what ownership it is handed.
  */
-const taskState = vi.hoisted(() => ({ isOwner: true }));
+const taskState = vi.hoisted(() => ({ isOwner: true, runStatus: "succeeded" as string | undefined }));
 const state = vi.hoisted(() => ({
   create: vi.fn(async () => ({ id: "c-new" })),
   archive: vi.fn(),
@@ -55,7 +55,18 @@ vi.mock("../api/queries", () => ({
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
 }));
 vi.mock("../store", () => ({
-  useRunStream: () => ({ run: null, stages: [], pendingCheckIn: null, decisions: [], plan: null }),
+  useRunStream: () => ({
+    run: taskState.runStatus === undefined ? null : { status: taskState.runStatus },
+    stages: [],
+    pendingCheckIn: null,
+    decisions: [],
+    plan: null,
+  }),
+}));
+vi.mock("./workspace/chat/DraftChatPane", () => ({
+  DraftChatPane: ({ entryArtefactId }: { entryArtefactId: string | null }) => (
+    <div data-testid="draft-chat-pane">{entryArtefactId ?? "no-entry"}</div>
+  ),
 }));
 vi.mock("./workspace/chat/conversationState", async (importOriginal) => ({
   // The selection rule and the URL param are the subject — only the
@@ -111,6 +122,7 @@ const sidebar = () => screen.getByRole("complementary", { name: "Chats" });
 describe("WorkspaceView — the URL leg (task 033 phase 10c, contract § 11 / rubric 37)", () => {
   beforeEach(() => {
     taskState.isOwner = true;
+    taskState.runStatus = "succeeded";
     sessionStorage.clear();
     state.create.mockClear();
   });
@@ -140,12 +152,15 @@ describe("WorkspaceView — the URL leg (task 033 phase 10c, contract § 11 / ru
 describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2026-09-05)", () => {
   beforeEach(() => {
     taskState.isOwner = true;
+    taskState.runStatus = "succeeded";
     sessionStorage.clear();
     state.create.mockClear();
   });
 
-  it("lists the Task's conversations in an always-visible sidebar, the Task Agent pinned first", () => {
+  it("lists the Task's conversations in the sidebar once opened, the Task Agent pinned first", async () => {
+    const user = userEvent.setup();
     renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     const names = ["Task Agent", "Cost barriers", "Earlier plan"];
     const rendered = within(sidebar())
       .getAllByRole("button")
@@ -163,12 +178,17 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     renderAtAgentTab();
     const footer = screen.getByRole("contentinfo");
     expect(sidebar().compareDocumentPosition(footer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(footer.parentElement).toBe(screen.getByRole("main"));
+    // Under both columns: the footer is a child of <main>, not of the
+    // conversation column the sidebar sits beside.
+    expect(screen.getByRole("main").contains(footer)).toBe(true);
+    expect(sidebar().parentElement?.contains(footer)).toBe(false);
   });
 
-  it("collapses the sidebar to a rail and back", async () => {
+  it("starts as a rail, opens to the list and collapses back", async () => {
     const user = userEvent.setup();
     const first = renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
+    expect(within(sidebar()).getByRole("button", { name: "Cost barriers" })).toBeInTheDocument();
     await user.click(within(sidebar()).getByRole("button", { name: "Hide chats" }));
     // The rail: no list rows, the Task Agent and New chat as icon buttons.
     expect(within(sidebar()).queryByRole("button", { name: "Cost barriers" })).toBeNull();
@@ -190,6 +210,7 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
   it("swaps the main column to a chat when one is chosen, and shuts the plan rail", async () => {
     const user = userEvent.setup();
     renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     await user.click(screen.getByRole("button", { name: "Open plan (test)" }));
     expect(screen.getByTestId("plan-document-read-only")).toBeInTheDocument();
 
@@ -210,6 +231,7 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
   it("restores the planning pane and clears ?chat= when the Task Agent is chosen", async () => {
     const user = userEvent.setup();
     renderAtAgentTab("?chat=c1");
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     await user.click(within(sidebar()).getByRole("button", { name: "Task Agent" }));
     expect(screen.getByTestId("planning-pane-is-owner")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
@@ -223,18 +245,36 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
   });
 
-  it("creates and opens a chat from the sidebar's New chat action", async () => {
+  it("New chat opens a draft in the main view — nothing is created until the first message", async () => {
     const user = userEvent.setup();
     renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     await user.click(within(sidebar()).getByRole("button", { name: "New chat" }));
-    expect(state.create).toHaveBeenCalledWith(null);
-    expect(screen.getByTestId("search")).toHaveTextContent("?chat=c-new");
+    expect(state.create).not.toHaveBeenCalled();
+    expect(screen.getByTestId("search")).toHaveTextContent("?chat=new");
+    expect(screen.getByTestId("draft-chat-pane")).toHaveTextContent("no-entry");
+    // The sidebar shows the draft as its selected row (the header action
+    // and the row share the name; the row is the one marked current).
+    const newChatButtons = within(sidebar()).getAllByRole("button", { name: "New chat" });
+    expect(newChatButtons).toHaveLength(2);
+    expect(newChatButtons.some((button) => button.getAttribute("aria-current") === "true")).toBe(true);
+  });
+
+  it("offers New chat only once the task has a result — before that it is disabled with the reason", async () => {
+    taskState.runStatus = "running";
+    const user = userEvent.setup();
+    renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
+    const newChat = within(sidebar()).getByRole("button", { name: "New chat" });
+    expect(newChat).toBeDisabled();
+    expect(newChat.getAttribute("title")).toContain("available once the task has a result");
   });
 
   it("a non-owner sees the same rows under the same labels, with the surface still read-only (A9)", async () => {
     taskState.isOwner = false;
     const user = userEvent.setup();
     renderAtAgentTab();
+    await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     // Nothing in this view filters the listing — it renders what the
     // owner-relative API returned, labels and all.
     const names = ["Task Agent", "Cost barriers", "Earlier plan"];

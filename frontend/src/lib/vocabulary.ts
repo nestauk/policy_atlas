@@ -73,6 +73,7 @@ export const COPY = {
    *  label (contract § V8, invariant I8 / fold A10). */
   taskAgent: `${TASK.one} Agent`,
   newChat: "New chat",
+  newChatUnavailable: `New chat — available once the ${TASK.lower} has a result`,
   /** An older, closed planning lineage in the chats library — chipped, never
    *  pinned. */
   earlierPlan: "Earlier plan",

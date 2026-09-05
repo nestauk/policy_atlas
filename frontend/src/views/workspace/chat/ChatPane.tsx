@@ -1,26 +1,50 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useConversation } from "../../../api/queries";
 import { useChatConversation } from "../../../store";
+import { cn } from "../../../ui/brand/cn";
+import { LIFECYCLE_PAGE_CLASS } from "../../listPageChrome";
 import { ChatComposer } from "./ChatComposer";
+import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { ChatMessages } from "./ChatMessages";
 import { ContextBar } from "./ContextBar";
+import { takeFirstMessage } from "./conversationState";
 
-/** Compose one URL-addressable chat conversation in the workspace rail.
+/** Footer reveal thresholds (px from the transcript's end), the planning
+ *  pane's own pair. */
+const FOOTER_SHOW_WITHIN = 8;
+const FOOTER_HIDE_BEYOND = 120;
+
+/** Compose one URL-addressable chat conversation — in the overlay, or wide
+ *  in the Agent tab's main column.
  *
  * Args:
- *   props: Conversation identity, optional starter section titles, and hand-off.
+ *   props: Conversation identity, optional starter section titles, the
+ *     hand-off to the planning thread, `wide` for the Agent tab's reading
+ *     column, and `onAtBottomChange`, reporting (with hysteresis) whether the
+ *     transcript is flush with its end so the tab can reveal the footer.
  *
  * Returns:
  *   A transcript, context bar, and composer.
  */
-export function ChatPane({ taskId, conversationId, sectionTitles = [], onOpenPlanning }: { taskId: string; conversationId: string; sectionTitles?: string[]; onOpenPlanning: () => void }) {
+export function ChatPane({
+  taskId,
+  conversationId,
+  sectionTitles = [],
+  onOpenPlanning,
+  wide = false,
+  onAtBottomChange,
+}: {
+  taskId: string;
+  conversationId: string;
+  sectionTitles?: string[];
+  onOpenPlanning: () => void;
+  wide?: boolean;
+  onAtBottomChange?: (atBottom: boolean) => void;
+}) {
   const conversation = useConversation(conversationId);
   const chat = useChatConversation(conversationId);
-  const starterQuestions = useMemo(
-    () => sectionTitles.slice(0, 3).map((title) => `Tell me more about "${title}"`),
-    [sectionTitles],
-  );
+  const starters = useMemo(() => starterQuestions(sectionTitles), [sectionTitles]);
   const durableRows = chat.rows.filter(
     (row): row is Extract<(typeof chat.rows)[number], { id: string }> => "id" in row,
   );
@@ -51,44 +75,63 @@ export function ChatPane({ taskId, conversationId, sectionTitles = [], onOpenPla
     );
     if (row !== undefined) void chat.cancelTurn(row.id);
   };
+
+  // A draft chat hands its first message over as it becomes this chat (038
+  // V8): send it once, on mount under the new id. `sendTurn` is the store's
+  // stable callback for this conversation, so the effect keys on it honestly.
+  const { sendTurn } = chat;
+  useEffect(() => {
+    const first = takeFirstMessage(conversationId);
+    if (first !== null) void sendTurn(first).catch(() => undefined);
+  }, [conversationId, sendTurn]);
+
+  const atBottom = useRef(true);
+  const syncScrollPosition = (el: HTMLElement) => {
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const next = atBottom.current ? distance <= FOOTER_HIDE_BEYOND : distance <= FOOTER_SHOW_WITHIN;
+    if (next !== atBottom.current) {
+      atBottom.current = next;
+      onAtBottomChange?.(next);
+    }
+  };
+
   const empty = !chat.isPending && chat.rows.length === 0;
+  const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
   return (
     <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {empty ? (
-          <div className="space-y-2 py-8">
-            <p className="text-body text-grey">
-              {conversation.isError ? "This chat couldn't be opened." : "Ask about the evidence."}
-            </p>
-            {!conversation.isError &&
-              starterQuestions.map((question) => (
-                <button
-                  key={question}
-                  type="button"
-                  onClick={() => send(question)}
-                  className="block text-left text-meta font-semibold text-blue hover:underline"
-                >
-                  {question}
-                </button>
-              ))}
-          </div>
-        ) : (
-          <ChatMessages taskId={taskId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
-        )}
+      <div
+        onScroll={(event) => syncScrollPosition(event.currentTarget)}
+        className="min-h-0 flex-1 overflow-y-auto py-4 [scrollbar-gutter:stable]"
+      >
+        <div className={cn("w-full", column)}>
+          {empty ? (
+            <ChatEmptyState
+              message={conversation.isError ? "This chat couldn't be opened." : "Ask about the evidence."}
+              questions={conversation.isError ? [] : starters}
+              onAsk={send}
+            />
+          ) : (
+            <ChatMessages taskId={taskId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
+          )}
+        </div>
       </div>
-      <ContextBar
-        taskId={taskId}
-        conversationId={conversationId}
-        entryArtefactId={conversation.data?.entry_artefact_id ?? null}
-      />
-      <div className="border-t border-line p-4">
-        <ChatComposer
+      <div className={cn("w-full", column)}>
+        <ContextBar
+          taskId={taskId}
           conversationId={conversationId}
-          isStreaming={chat.isStreaming}
-          disabledReason={disabledReason}
-          onSend={send}
-          onStop={() => void cancel()}
+          entryArtefactId={conversation.data?.entry_artefact_id ?? null}
         />
+      </div>
+      <div className="border-t border-line">
+        <div className={cn("w-full py-4", column)}>
+          <ChatComposer
+            conversationId={conversationId}
+            isStreaming={chat.isStreaming}
+            disabledReason={disabledReason}
+            onSend={send}
+            onStop={() => void cancel()}
+          />
+        </div>
       </div>
     </section>
   );

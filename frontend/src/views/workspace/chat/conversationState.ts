@@ -8,11 +8,29 @@ import { queryKeys, useApiClient } from "../../../api/queries";
 type ConversationOut = components["schemas"]["ConversationOut"];
 type ConversationListPage = components["schemas"]["Page_ConversationListItemOut_"];
 
-const OPEN_TABS_PREFIX = "policy-atlas.open-chat-tabs.";
-
 /** URL token for the planning thread in the chat overlay (`?chat=planning`)
  *  when the task has no planning-conversation row yet. */
 export const PLANNING_TAB_ID = "planning";
+
+/** URL token for a chat that does not exist yet (`?chat=new`, 038 V8): the
+ *  reader sees an empty chat and a composer, and the row is created on the
+ *  first message — never before, so an abandoned "New chat" leaves nothing
+ *  behind. */
+export const DRAFT_CHAT_ID = "new";
+
+const firstMessages = new Map<string, string>();
+
+/** Hand the draft's first message to the chat that is about to mount under
+ *  its real id; `takeFirstMessage` returns it once and forgets it. */
+export function stashFirstMessage(conversationId: string, message: string) {
+  firstMessages.set(conversationId, message);
+}
+
+export function takeFirstMessage(conversationId: string): string | null {
+  const message = firstMessages.get(conversationId) ?? null;
+  firstMessages.delete(conversationId);
+  return message;
+}
 
 /** The Task Agent: a Task's primary chat.
  *
@@ -61,53 +79,27 @@ export function useActiveConversation() {
   // `?chat=` (present but empty) must read as closed, not as a panel bound
   // to conversation id "" — align with AppShell's own `chatOpen` check.
   const activeConversationId = searchParams.get("chat") || null;
+  // A draft chat may carry the artefact it is about (`?chat=new&entry=<id>`).
+  const draftEntryArtefactId = activeConversationId === DRAFT_CHAT_ID ? searchParams.get("entry") || null : null;
   const setActiveConversation = useCallback((conversationId: string | null) => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
+      next.delete("entry");
       if (conversationId === null) next.delete("chat");
       else next.set("chat", conversationId);
       return next;
     });
   }, [setSearchParams]);
-  return { activeConversationId, setActiveConversation };
-}
-
-/** Return the session-local open chat ids for a task.
- *
- * Args:
- *   taskId: Owning task for the browser-session key.
- *
- * Returns:
- *   Chat ids in tab-strip order.
- */
-export function openChatTabs(taskId: string): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const stored = JSON.parse(window.sessionStorage.getItem(tabKey(taskId)) ?? "[]");
-    return Array.isArray(stored) ? stored.filter((value): value is string => typeof value === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-/** Add one chat to the session-local tab strip.
- *
- * Args:
- *   taskId: Owning task for the browser-session key.
- *   conversationId: Chat to make available in the strip.
- */
-export function addOpenChatTab(taskId: string, conversationId: string) {
-  writeOpenChatTabs(taskId, [...openChatTabs(taskId).filter((id) => id !== conversationId), conversationId]);
-}
-
-/** Remove one chat from the session-local tab strip.
- *
- * Args:
- *   taskId: Owning task for the browser-session key.
- *   conversationId: Chat to remove from the strip.
- */
-export function removeOpenChatTab(taskId: string, conversationId: string) {
-  writeOpenChatTabs(taskId, openChatTabs(taskId).filter((id) => id !== conversationId));
+  const openDraftChat = useCallback((entryArtefactId: string | null = null) => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("chat", DRAFT_CHAT_ID);
+      if (entryArtefactId === null) next.delete("entry");
+      else next.set("entry", entryArtefactId);
+      return next;
+    });
+  }, [setSearchParams]);
+  return { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat };
 }
 
 /** Small client-side mutations kept outside the read-only G1 stream store.
@@ -134,10 +126,8 @@ export function useConversationMutations(taskId: string) {
       body: entryArtefactId === null ? {} : { entry_artefact_id: entryArtefactId },
     });
     if (data === undefined) throw error;
-    // Write the row into the list cache before invalidate-refetch, or the
-    // tab strip filters it out (id in session storage, not yet in `data`)
-    // and the composer still sends against a conversation the strip doesn't
-    // show.
+    // Write the row into the list cache before invalidate-refetch, so the
+    // sidebar and the overlay header show the new chat on the first paint.
     seedCreatedConversation(queryClient, taskId, data);
     refresh();
     return data;
@@ -198,17 +188,4 @@ function seedCreatedConversation(
     },
   );
   queryClient.setQueryData(queryKeys.conversation(created.id), created);
-}
-
-function tabKey(taskId: string) {
-  return `${OPEN_TABS_PREFIX}${taskId}`;
-}
-
-function writeOpenChatTabs(taskId: string, ids: string[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(tabKey(taskId), JSON.stringify(ids));
-  } catch {
-    // Tabs are a session convenience; storage failures are non-fatal.
-  }
 }

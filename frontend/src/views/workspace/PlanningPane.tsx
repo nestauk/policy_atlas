@@ -40,6 +40,11 @@ import {
 } from "./runProgress";
 
 /** The server page-size cap; one planning conversation fits comfortably. */
+/** Footer reveal thresholds (px from the transcript's end): show when flush, hide once
+ *  the reader has scrolled up past roughly one footer height. */
+const FOOTER_SHOW_WITHIN = 8;
+const FOOTER_HIDE_BEYOND = 120;
+
 const TRANSCRIPT_PAGE_SIZE = 200;
 
 /**
@@ -435,6 +440,7 @@ export function PlanningPane({
   onReviewPlan,
   planOverlay,
   onOverlayApplied,
+  onAtBottomChange,
 }: {
   taskId: string;
   runStatus: RunStatus | undefined;
@@ -448,6 +454,11 @@ export function PlanningPane({
   onReviewPlan?: () => void;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
+  /** Reports whether the transcript is scrolled flush with its end, with
+   *  hysteresis (038 V8): the Agent tab reveals the site footer under both
+   *  columns only then, the way the other tabs reveal it at the end of
+   *  their scroll. */
+  onAtBottomChange?: (atBottom: boolean) => void;
 }) {
   const transcript = usePlanningTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
@@ -491,11 +502,26 @@ export function PlanningPane({
   const contentRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const pinnedToBottom = useRef(true);
-  // The site footer lives in `WorkspaceView`, under both columns (038 V8);
-  // this pane only tracks whether the reader is pinned to the newest turn.
+  // The site footer lives in `WorkspaceView`, under both columns (038 V8),
+  // and opens only when the transcript is flush with its end. Hysteresis:
+  // opening it shrinks this pane by roughly the footer's height, which would
+  // otherwise push `distance` past the show threshold and flip it shut
+  // again (jitter near the bottom).
+  const atBottom = useRef(true);
+  // Read through a ref so the scroll sync (and the layout effect that calls
+  // it) never closes over a fresh prop identity.
+  const onAtBottomChangeRef = useRef(onAtBottomChange);
+  useEffect(() => {
+    onAtBottomChangeRef.current = onAtBottomChange;
+  }, [onAtBottomChange]);
   const syncScrollPosition = (el: HTMLElement) => {
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottom.current = distance < 120;
+    const next = atBottom.current ? distance <= FOOTER_HIDE_BEYOND : distance <= FOOTER_SHOW_WITHIN;
+    if (next !== atBottom.current) {
+      atBottom.current = next;
+      onAtBottomChangeRef.current?.(next);
+    }
   };
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -595,19 +621,20 @@ export function PlanningPane({
 
   return (
     <section aria-label="Planning conversation" className="flex h-full min-h-0 flex-col">
-      {/* Reading column for chat + composer; footer below spans the pane. */}
-      <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", LIFECYCLE_PAGE_CLASS)}>
+      {/* The scroll region spans the whole pane so its scrollbar sits at the
+          pane's edge like every other tab's; the reading column is inside. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div
         ref={scrollRef}
         onScroll={(event) => {
           syncScrollPosition(event.currentTarget);
         }}
-        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
         {/* Bottom-anchor: pushes a short thread to the composer end; the
             landing prompt sits in the top third (1:2 spacer split). */}
         <div aria-hidden="true" className={landing ? "flex-[1]" : "mt-auto"} />
-        <div ref={contentRef} className="space-y-6">
+        <div ref={contentRef} className={cn("space-y-6", LIFECYCLE_PAGE_CLASS)}>
         {transcript.isPending && (
           <div role="status" className="anim-breathe text-body text-grey">
             Loading your planning conversation…
@@ -771,7 +798,7 @@ export function PlanningPane({
             }}
           />
         )}
-        <div className="px-4 py-3">
+        <div className={cn("py-3", LIFECYCLE_PAGE_CLASS)}>
         <Composer
           value={message}
           onChange={setMessage}

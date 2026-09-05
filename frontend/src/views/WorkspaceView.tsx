@@ -7,11 +7,12 @@ import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { useRunStream } from "../store";
 import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
-import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
 import { AppFooter } from "./AppFooter";
+import { hasResult } from "./lifecycle";
 import { ChatPane } from "./workspace/chat/ChatPane";
+import { DraftChatPane } from "./workspace/chat/DraftChatPane";
 import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
-import { isPlanningConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
+import { DRAFT_CHAT_ID, isPlanningConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { PlanningPane } from "./workspace/PlanningPane";
 import type { PlanOverlay } from "./workspace/planOverlay";
@@ -30,7 +31,7 @@ export function WorkspaceView() {
   const { taskId = "" } = useParams();
   const task = useTask(taskId);
   const stream = useRunStream(taskId);
-  const { activeConversationId, setActiveConversation } = useActiveConversation();
+  const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const artefact = useArtefact(taskId);
@@ -39,6 +40,12 @@ export function WorkspaceView() {
   // planning thread, never one lineage on its own.
   const onTaskAgent = activeConversationId === null || isPlanningConversation(activeConversationId, rows);
   const chatId = onTaskAgent ? null : activeConversationId;
+  const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
+  // Chats need a result to ask about.
+  const chatsEnabled = hasResult(stream.run?.status);
+  // The site footer opens only when the conversation is scrolled flush with
+  // its end (the other tabs reveal theirs at the end of the scroll pane).
+  const [footerOpen, setFooterOpen] = useState(true);
   const hasRun = stream.run !== null;
   const [planOpen, setPlanOpen] = useState(false);
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");
@@ -97,6 +104,8 @@ export function WorkspaceView() {
           taskId={taskId}
           selectedId={onTaskAgent ? taskAgentConversationId(rows) : activeConversationId}
           onSelect={setActiveConversation}
+          onNewChat={() => openDraftChat(null)}
+          chatsEnabled={chatsEnabled}
         />
         {/* The plan document's centred placement covers the conversation, not
             the sidebar — so `relative` sits on this column, not on <main>. */}
@@ -114,19 +123,25 @@ export function WorkspaceView() {
                 onReviewPlan={openPlan}
                 planOverlay={planOverlay}
                 onOverlayApplied={() => setPlanOverlay({})}
+                onAtBottomChange={setFooterOpen}
+              />
+            ) : chatId === DRAFT_CHAT_ID ? (
+              <DraftChatPane
+                taskId={taskId}
+                entryArtefactId={draftEntryArtefactId}
+                sectionTitles={sectionTitles}
+                wide
+                onCreated={setActiveConversation}
               />
             ) : (
-              // The same reading column the planning pane sets for itself —
-              // this main view is wide, and `ChatPane` was drawn for the
-              // 416px overlay.
-              <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", LIFECYCLE_PAGE_CLASS)}>
-                <ChatPane
-                  taskId={taskId}
-                  conversationId={chatId}
-                  sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
-                  onOpenPlanning={() => setActiveConversation(null)}
-                />
-              </div>
+              <ChatPane
+                taskId={taskId}
+                conversationId={chatId}
+                sectionTitles={sectionTitles}
+                onOpenPlanning={() => setActiveConversation(null)}
+                wide
+                onAtBottomChange={setFooterOpen}
+              />
             )}
           </div>
           {railOpen && planPlacement === "side" && planDocument}
@@ -135,7 +150,20 @@ export function WorkspaceView() {
           )}
         </div>
       </div>
-      <AppFooter className="mt-0" />
+      {/* Revealed only when the conversation is scrolled to its end; the
+          grid-row transition animates height without a layout property. */}
+      <div
+        className={cn(
+          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-out",
+          footerOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+        aria-hidden={!footerOpen}
+        inert={!footerOpen ? true : undefined}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <AppFooter className="mt-0" />
+        </div>
+      </div>
     </main>
   );
 }

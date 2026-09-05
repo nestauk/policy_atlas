@@ -5,13 +5,12 @@ import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { ConversationList, type ConversationRow } from "./ConversationList";
 import { useConversations } from "../../../api/queries";
-import { addOpenChatTab, taskAgentConversationId, useConversationMutations } from "./conversationState";
+import { taskAgentConversationId } from "./conversationState";
 import { PanelIcon, PlusIcon } from "./icons";
 
 const STORAGE_KEY = "policy-atlas:chats-sidebar";
 
-/** The reader's last choice, per browser; wide viewports start open, narrow
- *  ones start shut so the conversation gets the screen. */
+/** The reader's last choice, per browser; shut until they open it. */
 function readInitialOpen(): boolean {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -20,9 +19,9 @@ function readInitialOpen(): boolean {
   } catch {
     // Storage blocked: fall through to the viewport default.
   }
-  return typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia("(min-width: 1024px)").matches
-    : true;
+  // Shut by default (owner, 2026-09-05): the conversation gets the screen
+  // until the reader asks for the list.
+  return false;
 }
 
 function storeOpen(open: boolean) {
@@ -53,12 +52,18 @@ export function ConversationSidebar({
   taskId,
   selectedId,
   onSelect,
+  onNewChat,
+  chatsEnabled,
 }: {
   taskId: string;
   selectedId: string | null;
   onSelect: (conversationId: string | null) => void;
+  /** Opens a draft chat (nothing is persisted until its first message). */
+  onNewChat: () => void;
+  /** False until the task has a result — there is no evidence to ask about
+   *  before then, so New chat is offered but disabled, with the reason. */
+  chatsEnabled: boolean;
 }) {
-  const { create } = useConversationMutations(taskId);
   const conversations = useConversations(taskId, { status: "active" });
   // The main view marks the Task Agent by its planning id; the rail has no
   // rows to compare against, so it resolves the same id here.
@@ -77,14 +82,9 @@ export function ConversationSidebar({
     // Task's planning thread, never one lineage in isolation, so an id in
     // the URL would claim more than the view delivers.
     if (row.kind === "planning") return onSelect(null);
-    addOpenChatTab(taskId, row.id);
     onSelect(row.id);
   };
-  const newChat = async () => {
-    const created = await create(null);
-    addOpenChatTab(taskId, created.id);
-    onSelect(created.id);
-  };
+  const newChatTitle = chatsEnabled ? COPY.newChat : COPY.newChatUnavailable;
 
   const toggleButton = (
     <button
@@ -110,9 +110,10 @@ export function ConversationSidebar({
         <button
           type="button"
           aria-label={COPY.newChat}
-          title={COPY.newChat}
-          onClick={() => void newChat()}
-          className="flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+          title={newChatTitle}
+          disabled={!chatsEnabled}
+          onClick={onNewChat}
+          className="flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
           <PlusIcon size={16} />
         </button>
@@ -142,8 +143,10 @@ export function ConversationSidebar({
         {toggleButton}
         <button
           type="button"
-          onClick={() => void newChat()}
-          className="flex h-8 items-center gap-1.5 px-2.5 text-meta font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
+          title={newChatTitle}
+          disabled={!chatsEnabled}
+          onClick={onNewChat}
+          className="flex h-8 items-center gap-1.5 px-2.5 text-meta font-semibold text-navy hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
         >
           <PlusIcon size={14} />
           {COPY.newChat}

@@ -83,8 +83,10 @@ test.describe("mock task-lifecycle journey", () => {
     const chats = page.getByRole("complementary", { name: "Chats" });
     await expect(chats).toBeVisible();
     await expect(page.getByRole("button", { name: "Open the Agent" })).toHaveCount(0);
-    // The Task Agent is pinned first, and it is what the main view shows.
-    // First row after the sidebar's own two actions (Hide chats, New chat).
+    // The sidebar starts as a rail (shut by default); open it. The Task Agent
+    // is the first row after the sidebar's own two actions (Hide chats, New
+    // chat), and it is what the main view shows.
+    await chats.getByRole("button", { name: "Show chats" }).click();
     await expect(chats.getByRole("button").nth(2)).toHaveAccessibleName("Task Agent");
     await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(1);
 
@@ -114,15 +116,11 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("button", { name: "Archive" })).toBeVisible();
     await settings.click(); // close the popover
 
-    // A chat opened from the sidebar takes the main view; the Task Agent
-    // brings the planning conversation back and clears the param.
-    await chats.getByRole("button", { name: "New chat" }).first().click();
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}\\?chat=`));
-    await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(0);
-    await chats.getByRole("button", { name: "Task Agent" }).click();
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}$`));
-    await expect(page.getByRole("region", { name: "Planning conversation" })).toBeVisible();
+    // No result yet, so there is nothing to ask about: New chat is offered
+    // but disabled, with the reason (038 V8, owner 2026-09-05). The chat
+    // round-trip itself runs after the run, in the chat test below.
+    await expect(chats.getByRole("button", { name: "New chat" })).toBeDisabled();
+    await expect(chats.getByRole("button", { name: "New chat" })).toHaveAttribute("title", /available once the task has a result/);
 
     // (d) The lifecycle bar shows all five stages from the first moment —
     // with no run yet, Plan and Share are open; Results/Sources/History
@@ -264,10 +262,16 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("button", { name: "Open the Agent" }).click();
     const overlay = page.getByRole("complementary", { name: "Agent" });
     await expect(overlay).toBeVisible();
-    // The Task Agent is pinned first in the strip (038 V8, invariant I8).
-    const strip = overlay.getByRole("navigation", { name: "Conversations" });
-    await expect(strip.getByRole("button").first()).toHaveAccessibleName("Task Agent");
-    await strip.getByRole("button", { name: "Task Agent" }).click();
+    // The overlay is the Agent tab's sidebar folded into one column: with no
+    // chat yet the launcher opens the Task Agent itself (nothing is created),
+    // its header names it, and the header's list toggle shows the same list
+    // with the Task Agent pinned first (038 V8, invariant I8).
+    await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
+    await expect(overlay.getByText("Task Agent").first()).toBeVisible();
+    await overlay.getByRole("button", { name: "Chats" }).click();
+    const overlayList = overlay.getByRole("region", { name: "Chats" });
+    await expect(overlayList.getByRole("button").first()).toHaveAccessibleName("Task Agent");
+    await overlayList.getByRole("button", { name: "Task Agent" }).click();
     await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
     await overlay.getByRole("button", { name: "Close chat panel" }).click();
     await sourcesSubnav.getByRole("link", { name: "Themes" }).click();
@@ -452,18 +456,21 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("button", { name: "Ask about this analysis" }).click();
     // rev 3.4: the chat opens as a side panel BESIDE the artefact — the URL
     // stays on the results route and simply gains the chat param.
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result\\?chat=`));
+    // 038 V8: it is a DRAFT (`?chat=new`) carrying the report as its entry
+    // context; no row exists until the first message.
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result\\?chat=new`));
     await expect(page.getByRole("complementary", { name: "Agent" })).toBeVisible();
     await expect(page.locator(".artefact-page")).toBeVisible();
 
-    // Entry context renders as the removable "Report" chip (rev 2.6)
-    // — scoped to the chat region since the nav also carries a "Result"
-    // link.
+    // Entry context renders as the "Report" chip (rev 2.6) — scoped to the
+    // chat region since the nav also carries a "Result" link.
     const chat = page.getByRole("region", { name: "Chat" });
     await expect(chat.getByRole("link", { name: "Report" })).toBeVisible();
 
     await page.getByPlaceholder("Ask about the evidence").fill("What does the evidence show about breakfast provision?");
     await chat.getByRole("button", { name: "Send" }).click();
+    // The first message created the chat: the URL moves onto its id.
+    await expect(page).not.toHaveURL(/chat=new/);
 
     // The activity label appears, and the stop control is visible while
     // streaming (no need to click it).
@@ -501,10 +508,10 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(chat.getByText("Unchecked · awaiting evidence check")).toBeVisible();
     await expect(chat.getByText("Tier 2 · grounded")).toBeVisible({ timeout: 12_000 });
 
-    // Library: opens, lists the chat, rename round-trips, archive removes
-    // it from the default (active) list.
+    // The list (the overlay header's toggle): lists the chat, rename
+    // round-trips, archive removes it from the default (active) list.
     await page.getByRole("button", { name: "Chats" }).click();
-    const library = page.getByRole("dialog", { name: "Chats" });
+    const library = page.getByRole("region", { name: "Chats" });
     await expect(library).toBeVisible();
     await expect(library.getByRole("button", { name: "New chat", exact: true })).toBeVisible();
 
@@ -520,6 +527,21 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(library.getByRole("button", { name: "Restore" })).toHaveCount(0);
     await library.getByRole("heading", { name: "Archived" }).click();
     await expect(library.getByRole("button", { name: "Restore" })).toBeVisible();
+
+    // The Agent tab on the completed task: the Task Agent is still listed
+    // (the run closed the planning lineage), New chat opens a draft in the
+    // main view, and the Task Agent brings the planning pane back.
+    await page.getByRole("link", { name: /^Agent/ }).click();
+    const chats = page.getByRole("complementary", { name: "Chats" });
+    await chats.getByRole("button", { name: "Show chats" }).click();
+    await expect(chats.getByRole("button").nth(2)).toHaveAccessibleName("Task Agent");
+    await chats.getByRole("button", { name: "New chat" }).first().click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}\\?chat=new`));
+    await expect(page.getByRole("region", { name: "Chat" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(0);
+    await chats.getByRole("button", { name: "Task Agent" }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}$`));
+    await expect(page.getByRole("region", { name: "Planning conversation" })).toBeVisible();
   });
 
   // --- Two regressions this slice introduced, found while updating this

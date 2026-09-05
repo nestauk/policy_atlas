@@ -6,7 +6,7 @@ import { scrub } from "../../../lib/scrub";
 import { COPY } from "../../../lib/vocabulary";
 import { cn } from "../../../ui/brand/cn";
 import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
-import { taskAgentConversationId, useConversationMutations } from "./conversationState";
+import { DRAFT_CHAT_ID, PLANNING_TAB_ID, taskAgentConversationId, useConversationMutations } from "./conversationState";
 import { ArchiveIcon, ChevronIcon, PencilIcon, RestoreIcon } from "./icons";
 
 export type ConversationRow = components["schemas"]["ConversationListItemOut"];
@@ -14,8 +14,8 @@ export type ConversationRow = components["schemas"]["ConversationListItemOut"];
 /** A Task's conversations, the Task Agent pinned first.
  *
  * The list body itself, with no chrome of its own: the Agent tab mounts it
- * as its always-visible sidebar, and the overlay's `ChatsLibrary` mounts the
- * same body inside its dialog (038 V8 — one list, two frames). Rows carry a
+ * in its sidebar, and the overlay mounts the same body behind its header's
+ * list toggle (038 V8 — one list, two frames). Rows carry a
  * title and nothing else — the selected row and the pinned Task Agent are
  * marked the way the Result tab's contents nav marks its place (a 2px blue
  * rule on the left), and a row's actions surface on hover or focus.
@@ -64,8 +64,16 @@ export function ConversationList({
   // first would drag its "Earlier" heading above "Today".
   const activeRows = active.data?.data ?? [];
   const taskAgentId = taskAgentConversationId(activeRows);
-  const pinned = activeRows.find((row) => row.id === taskAgentId) ?? null;
-  const rest = pinned === null ? activeRows : activeRows.filter((row) => row.id !== pinned.id);
+  // The Task Agent is always listed: a run closes the planning lineage, and
+  // the active listing then carries no planning row at all — the row here is
+  // the planning thread itself (`PLANNING_TAB_ID`), which every consumer
+  // resolves to the Task Agent (038 V8 build finding on completed tasks).
+  const pinned: ConversationRow =
+    activeRows.find((row) => row.id === taskAgentId) ?? syntheticRow(PLANNING_TAB_ID, "planning", COPY.taskAgent);
+  const rest = activeRows.filter((row) => row.id !== pinned.id);
+  // A draft chat (`?chat=new`) shows as a selected "New chat" row until its
+  // first message creates the real row.
+  const draft = selectedId === DRAFT_CHAT_ID ? syntheticRow(DRAFT_CHAT_ID, "chat", COPY.newChat) : null;
   const archivedRows = archived.data?.data ?? [];
   const rowProps = {
     taskAgentId,
@@ -81,8 +89,8 @@ export function ConversationList({
 
   return (
     <div className="flex flex-col">
-      {pinned !== null && <ListRow row={pinned} {...rowProps} />}
-      <ListGroups rows={rest} {...rowProps} />
+      <ListRow row={pinned} {...rowProps} />
+      <ListGroups rows={draft === null ? rest : [draft, ...rest]} {...rowProps} />
       {archivedRows.length > 0 && (
         <details className="group/archive mt-4">
           <summary className="flex cursor-pointer select-none items-center gap-1.5 py-1 pl-1.5 pr-2 text-caption font-bold uppercase tracking-label text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue [&::-webkit-details-marker]:hidden">
@@ -179,7 +187,7 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
         {isPlanning && <FoldMarkIcon size={10} className="text-blue" />}
         <span className="truncate">{label}</span>
       </button>
-      {!isPlanning && (
+      {!isPlanning && row.id !== DRAFT_CHAT_ID && (
         <div className="flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
           {!archived && (
             <button type="button" aria-label={`Rename ${row.title}`} title="Rename" onClick={() => onRename(row)} className={ACTION_CLASS}>
@@ -199,6 +207,23 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
       )}
     </div>
   );
+}
+
+/** A row the listing does not carry but the list must show: the Task Agent
+ *  once a run has closed the planning lineage, or a draft chat. Only the
+ *  fields the rows read are meaningful; the rest satisfy the wire shape. */
+function syntheticRow(id: string, kind: "planning" | "chat", title: string): ConversationRow {
+  return {
+    id,
+    kind,
+    title,
+    status: "active",
+    closed_at: null,
+    archived_at: null,
+    created_at: new Date().toISOString(),
+    entry_artefact_id: null,
+    latest_turn_preview: null,
+  } as ConversationRow;
 }
 
 function dateGroup(value: string) {

@@ -47,6 +47,13 @@ function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[]
   }
 }
 
+/** Whether the task has a result to ask about: the run finished with a
+ *  report (038 V8 — chats are offered only then; a run still writing is not
+ *  a result yet, even though the Result tab already opens for it). */
+export function hasResult(status: RunStatus | null | undefined): boolean {
+  return status === "succeeded" || status === "degraded";
+}
+
 /** Whether one lifecycle tab can be opened at this run state. */
 export function isTabOpen(tab: LifecycleTab, status: RunStatus | null | undefined): boolean {
   return openTabs(status).includes(tab);

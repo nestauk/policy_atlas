@@ -50,7 +50,7 @@ import {
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
-import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./workspace/chat/conversationState";
+import { useActiveConversation } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -1310,7 +1310,6 @@ export function ArtefactView() {
     { kind: "chat", status: "active" },
     { enabled: !isPublicView },
   );
-  const { create } = useConversationMutations(taskId);
   // Cited-scoped distributions for the facts strip: study types and years
   // count what the report CITES, not the whole included corpus (owner,
   // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
@@ -1335,19 +1334,18 @@ export function ArtefactView() {
       return next;
     });
   };
-  const { setActiveConversation } = useActiveConversation();
-  const askAboutAnalysis = async () => {
+  const { setActiveConversation, openDraftChat } = useActiveConversation();
+  const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
-    // fact, never a scope fence); reuse a blank chat already carrying it.
+    // fact, never a scope fence); reuse a blank chat already carrying it,
+    // else open a DRAFT beside the artefact (rev 3.4) — the row is created
+    // on the first message, never before (038 V8).
     const artefactId = artefact.data?.artefact_id ?? null;
     const blank = chats.data?.data.find(
       (chat) => chat.title === "New chat" && chat.entry_artefact_id === artefactId,
     );
-    const conversation = blank ?? await create(artefactId);
-    // Open the side panel HERE (rev 3.4): questions arise while reading, so
-    // the chat lands beside the artefact instead of navigating away.
-    addOpenChatTab(taskId, conversation.id);
-    setActiveConversation(conversation.id);
+    if (blank !== undefined) return setActiveConversation(blank.id);
+    openDraftChat(artefactId);
   };
 
   if (artefact.isPending) {
@@ -1546,7 +1544,7 @@ export function ArtefactView() {
         {!isPublicView && (
           <button
             type="button"
-            onClick={() => void askAboutAnalysis()}
+            onClick={askAboutAnalysis}
             className="print-hide mt-3 text-caption font-bold text-blue hover:underline"
           >
             Ask about this analysis
