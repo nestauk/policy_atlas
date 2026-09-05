@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ConversationRail } from "./ConversationRail";
 
 describe("ConversationRail", () => {
-  it("marks the recent chats, names the one on show, dots a new reply, and opens on click", async () => {
+  it("marks the recent chats by title, names the one on show, and opens on click", async () => {
     const onSelectChat = vi.fn();
     render(
       <ConversationRail
@@ -13,22 +13,23 @@ describe("ConversationRail", () => {
         expanded={false}
         onToggle={() => undefined}
         onNewChat={() => undefined}
-        chatsEnabled
+        chatsEnabled={false}
         onTaskAgent={false}
         onSelectTaskAgent={() => undefined}
         recent={[
-          { id: "c-1", title: "Budget options", unread: false },
-          { id: "c-2", title: "Active travel", unread: true },
+          { id: "c-1", title: "Budget options" },
+          { id: "c-2", title: "Active travel" },
         ]}
         currentId="c-1"
         onSelectChat={onSelectChat}
       />,
     );
-    const current = screen.getByRole("button", { name: "Budget options" });
-    expect(current).toHaveAttribute("aria-current", "true");
-    const unread = screen.getByRole("button", { name: "Active travel — new reply" });
-    expect(unread).not.toHaveAttribute("aria-current");
-    await userEvent.setup().click(unread);
+    expect(screen.getByRole("button", { name: "Budget options" })).toHaveAttribute("aria-current", "true");
+    const other = screen.getByRole("button", { name: "Active travel" });
+    expect(other).not.toHaveAttribute("aria-current");
+    await userEvent.setup().click(other);
     expect(onSelectChat).toHaveBeenCalledWith("c-2");
+    // New chat keeps its name while disabled; the reason is the tooltip's.
+    expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
   });
 });

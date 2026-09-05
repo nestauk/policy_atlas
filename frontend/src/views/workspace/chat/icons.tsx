@@ -67,6 +67,15 @@ export function RestoreIcon(props: IconProps) {
   );
 }
 
+/** One chat (the rail's marks); the stacked `ChatsIcon` is the list. */
+export function ChatIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M2.5 3.5h11v7.5H7l-3 2.5v-2.5H2.5v-7.5Z" />
+    </Glyph>
+  );
+}
+
 /** Down to the end of a transcript. */
 export function ArrowDownIcon(props: IconProps) {
   return (

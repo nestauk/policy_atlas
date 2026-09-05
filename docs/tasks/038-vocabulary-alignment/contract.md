@@ -795,8 +795,10 @@ step 9.
   sidebar shuts to (`ConversationRail`), so one object carries the
   conversations on every tab; and the overlay keeps its open chat across the
   non-Agent tabs (the tab links carry `?chat=`; the Agent tab keeps its own
-  default); the rail marks the four newest chats (one chat glyph each, the
-  title as tooltip) and dots one whose reply the reader has not yet seen.
+  default); the rail marks the four newest chats (one single-bubble glyph
+  each, the title as a quick tooltip); the rail's and overlay header's
+  tooltips use the app's tooltip at 150ms rather than the browser's (none on
+  the expand toggle), and the app tooltip is restyled for every user.
 
 Evidence and gates per change: [verification.md](verification.md) § Phase 4
 follow-ons.

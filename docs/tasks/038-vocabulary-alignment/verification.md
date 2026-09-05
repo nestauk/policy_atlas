@@ -416,19 +416,23 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   carries the param onto every tab link but the Agent tab's (that tab keeps
   its own default, the Task Agent); the shell applies it to the lifecycle
   bar. Pure-function test in `lifecycle.test.ts`.
-- **Recent chat marks and a new-reply dot on the rail (owner requests
-  2026-09-05, same session):** under the Task Agent mark the rail shows the
-  four newest chats as chat-glyph marks (one glyph for all — the owner
-  turned down initials; title as tooltip, `aria-current` on
-  the one on show; click opens it — in the main column on the Agent tab, in
-  the overlay elsewhere). A chat whose latest turn holds a reply the reader
-  has not had on screen carries a small dot ("— new reply" in its name);
-  `markChatSeen`/`isChatUnread` keep a per-browser stamp of the reply seen
-  (`localStorage`, try/catch), written whenever the chat is on show, and
-  the chat on show is never dotted. Limit: the dot appears when the list
-  next refetches (a tab move, a focus), not by push. Tests:
-  `ConversationRail.test.tsx`, `conversationState.test.ts` (marks and the
-  seen round trip with a stubbed storage), `WorkspaceView.test.tsx` updated.
+- **Recent chat marks on the rail (owner requests 2026-09-05, same
+  session):** under the Task Agent mark the rail shows the four newest chats
+  as single-bubble marks (`ChatIcon`; the stacked `ChatsIcon` stays the
+  list toggle — the owner turned down initials and the stacked glyph),
+  title as tooltip, `aria-current` on the one on show; click opens it — in
+  the main column on the Agent tab, in the overlay elsewhere. A new-reply
+  dot was built and then **removed** at the owner's request (bug-prone, and
+  it only refreshed on a tab move). **Quick tooltips:** the rail's and the
+  overlay header's icon buttons drop the browser `title` for the app's
+  Radix tooltip at a 150ms delay (`RAIL_TOOLTIP_DELAY_MS`; a disabled
+  button's tooltip carries the reason, its name stays "New chat"; the rail's
+  expand toggle carries none — owner). The app tooltip itself is restyled
+  (`ui/radix/Tooltip.tsx`, every user): caption scale, navy ink, a tight
+  paper card with the system's 2px blue leading rule and a closer shadow,
+  `collisionPadding` so it never touches the viewport edge. Tests:
+  `ConversationRail.test.tsx`, `conversationState.test.ts` (`recentChats`),
+  `WorkspaceView.test.tsx` updated.
 
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 

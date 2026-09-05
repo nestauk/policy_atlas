@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { COPY } from "../../../lib/vocabulary";
 import { ConversationList, type ConversationRow } from "./ConversationList";
 import { ConversationRail } from "./ConversationRail";
 import { useConversations } from "../../../api/queries";
-import { markChatSeen, recentChats, taskAgentConversationId } from "./conversationState";
+import { recentChats, taskAgentConversationId } from "./conversationState";
 import { PanelIcon, PlusIcon } from "./icons";
 
 const STORAGE_KEY = "policy-atlas:chats-sidebar";
@@ -64,16 +64,10 @@ export function ConversationSidebar({
   chatsEnabled: boolean;
 }) {
   const conversations = useConversations(taskId, { status: "active" });
-  const data = conversations.data?.data;
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = conversations.data?.data ?? [];
   // The main view marks the Task Agent by its planning id; the rail has no
   // rows to compare against, so it resolves the same id here.
   const onTaskAgent = selectedId === null || selectedId === taskAgentConversationId(rows);
-  // The chat on show has its reply on screen: clear its "new reply" mark.
-  useEffect(() => {
-    const shown = rows.find((row) => row.id === selectedId);
-    if (shown !== undefined) markChatSeen(shown);
-  }, [rows, selectedId]);
   const [open, setOpen] = useState(readInitialOpen);
   const toggle = () => {
     setOpen((current) => {
@@ -115,7 +109,7 @@ export function ConversationSidebar({
         chatsEnabled={chatsEnabled}
         onTaskAgent={onTaskAgent}
         onSelectTaskAgent={() => onSelect(null)}
-        recent={recentChats(rows, selectedId)}
+        recent={recentChats(rows)}
         currentId={selectedId}
         onSelectChat={onSelect}
         className="border-b px-2 py-1.5 lg:h-full lg:w-12 lg:flex-col lg:border-b-0 lg:border-r lg:px-0 lg:py-2"

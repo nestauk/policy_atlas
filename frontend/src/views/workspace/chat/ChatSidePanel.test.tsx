@@ -175,7 +175,9 @@ describe("ChatSidePanel", () => {
     render(<ChatSidePanel taskId="p1" isOwner />);
     const newChat = screen.getByRole("button", { name: "New chat" });
     expect(newChat).toBeDisabled();
-    expect(newChat.getAttribute("title")).toContain("available once the task has a result");
+    // The reason is the (quick) tooltip on the disabled button's wrapper.
+    await user.hover(newChat.parentElement as HTMLElement);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("available once the task has a result");
   });
 
   it("renders the draft pane while the URL names a draft chat", () => {

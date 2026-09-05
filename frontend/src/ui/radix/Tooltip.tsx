@@ -26,9 +26,12 @@ export function Tooltip({
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
           sideOffset={6}
+          collisionPadding={8}
           className={cn(
-            "z-50 max-w-sm border border-line-2 bg-paper px-3 py-2",
-            "text-meta text-ink shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
+            // The system's marker — a 2px blue rule on the leading edge, as on
+            // a selected row — on a tight paper card; caption scale, navy ink.
+            "z-50 max-w-xs border border-line-2 border-l-2 border-l-blue bg-paper px-2.5 py-1.5",
+            "text-caption leading-snug text-navy shadow-[0_4px_16px_rgba(15,41,74,0.12)]",
             "origin-[var(--radix-tooltip-content-transform-origin)] transition-[opacity,transform] duration-[125ms] ease-out-strong starting:scale-[0.97] starting:opacity-0",
             className,
           )}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useArtefact, useConversations, useTask } from "../../../api/queries";
@@ -10,12 +10,12 @@ import { hasResult } from "../../lifecycle";
 import { PlanningPane } from "../PlanningPane";
 import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
+import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationList, type ConversationRow } from "./ConversationList";
-import { ConversationRail } from "./ConversationRail";
+import { ConversationRail, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
 import {
   DRAFT_CHAT_ID,
   isPlanningConversation,
-  markChatSeen,
   recentChats,
   taskAgentConversationId,
   useActiveConversation,
@@ -108,8 +108,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const panel = usePanelWidth();
   const navigate = useNavigate();
   const conversations = useConversations(taskId, { status: "active" });
-  const data = conversations.data?.data;
-  const rows = useMemo(() => data ?? [], [data]);
+  const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
   const taskAgentId = taskAgentConversationId(rows);
   const planningOpen = isPlanningConversation(activeConversationId, rows);
@@ -119,12 +118,6 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const task = useTask(taskId);
   // Either source may be behind (see `WorkspaceView`).
   const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
-  // The chat on show has its reply on screen: clear its "new reply" mark.
-  useEffect(() => {
-    const shown = rows.find((row) => row.id === activeConversationId);
-    if (shown !== undefined) markChatSeen(shown);
-  }, [rows, activeConversationId]);
-
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
     // then "no chats" is read off `undefined` data.
@@ -145,7 +138,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
         chatsEnabled={chatsEnabled}
         onTaskAgent={false}
         onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
-        recent={recentChats(rows, null)}
+        recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
         className="h-full w-12 flex-col border-r py-2"
       />
@@ -175,45 +168,52 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
       />
       {/* The Agent tab's sidebar header, folded: list toggle · the
           conversation on show · New chat · close. */}
+      <TooltipProvider delayDuration={RAIL_TOOLTIP_DELAY_MS}>
       <div className="flex shrink-0 items-center gap-1 border-b border-line bg-paper-2 px-2 py-1.5">
-        <button
-          type="button"
-          aria-label="Chats"
-          aria-pressed={listOpen}
-          aria-controls="agent-overlay-list"
-          title="Chats"
-          onClick={() => setListOpen((open) => !open)}
-          className={cn(HEADER_BUTTON, listOpen && "bg-blue-tint text-navy")}
-        >
-          <ChatsIcon size={15} />
-        </button>
+        <Tooltip content="Chats" side="bottom">
+          <button
+            type="button"
+            aria-label="Chats"
+            aria-pressed={listOpen}
+            aria-controls="agent-overlay-list"
+            onClick={() => setListOpen((open) => !open)}
+            className={cn(HEADER_BUTTON, listOpen && "bg-blue-tint text-navy")}
+          >
+            <ChatsIcon size={15} />
+          </button>
+        </Tooltip>
         <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-meta font-semibold text-navy">
           {planningOpen && <FoldMarkIcon size={10} />}
           <span className="truncate">{currentTitle}</span>
         </div>
-        <button
-          type="button"
-          aria-label={COPY.newChat}
-          title={chatsEnabled ? COPY.newChat : COPY.newChatUnavailable}
-          disabled={!chatsEnabled}
-          onClick={() => {
-            openDraftChat(null);
-            setListOpen(false);
-          }}
-          className={HEADER_BUTTON}
-        >
-          <PlusIcon size={14} />
-        </button>
-        <button
-          type="button"
-          aria-label="Close chat panel"
-          title="Close"
-          onClick={() => setActiveConversation(null)}
-          className={HEADER_BUTTON}
-        >
-          <CloseIcon size={14} />
-        </button>
+        <Tooltip content={chatsEnabled ? COPY.newChat : COPY.newChatUnavailable} side="bottom">
+          <span className="inline-flex">
+            <button
+              type="button"
+              aria-label={COPY.newChat}
+              disabled={!chatsEnabled}
+              onClick={() => {
+                openDraftChat(null);
+                setListOpen(false);
+              }}
+              className={HEADER_BUTTON}
+            >
+              <PlusIcon size={14} />
+            </button>
+          </span>
+        </Tooltip>
+        <Tooltip content="Close" side="bottom">
+          <button
+            type="button"
+            aria-label="Close chat panel"
+            onClick={() => setActiveConversation(null)}
+            className={HEADER_BUTTON}
+          >
+            <CloseIcon size={14} />
+          </button>
+        </Tooltip>
       </div>
+      </TooltipProvider>
       {listOpen ? (
         <div id="agent-overlay-list" role="region" aria-label="Chats" className="min-h-0 flex-1 overflow-y-auto bg-paper-2 px-1.5 pb-3 pt-1">
           <ConversationList taskId={taskId} onOpen={openRow} selectedId={planningOpen ? taskAgentId : activeConversationId} />
