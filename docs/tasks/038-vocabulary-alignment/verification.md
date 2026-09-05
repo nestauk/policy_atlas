@@ -539,7 +539,7 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
 | `alembic upgrade head` on the dev DB (52 real Tasks) | pass | e7a1b5c3d9f2 → c1a7f4e9b0d2; counts under the new names match |
 | Live Playwright check against `make dev` | pass | 4 passed — [live-check.md](live-check.md) |
 | `make fe-api-smoke` | pass | 3 passed (built frontend, real API, own DB: list · create · stub run over SSE) |
-| **`make verify` (step-6 exit, final tree: Agent-tab passes + Mine default)** | **pass** | one uninterrupted run: okf 129/0 · backend **2520 passed** (8m16s) · infra 46 · audit-paths 116 files / 0 · prompt-guard 13 unchanged · font-guard · drift-check OK · frontend 74 files / **549 tests** · build OK. `pnpm e2e` 11 passed on this frontend, plus the live checks above. |
+| **`make verify` (step-6 exit, final tree: Agent-tab passes, Mine default, motion pass)** | **pass** | one uninterrupted run: okf 129/0 · backend **2520 passed** (7m50s) · infra 46 · audit-paths 116 files / 0 · prompt-guard 13 unchanged · font-guard · drift-check OK · frontend 74 files / **549 tests** · build OK. `pnpm e2e` 11 passed on this frontend, plus the live checks above. |
 
 ## Checks beyond the build
 
