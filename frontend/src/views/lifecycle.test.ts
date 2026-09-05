@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { LIFECYCLE_TABS, isTabOpen, lifecycleTabs, taskDestination } from "./lifecycle";
+import { LIFECYCLE_TABS, isTabOpen, lifecycleTabs, taskDestination, withChat } from "./lifecycle";
 import type { LifecycleTab } from "./lifecycle";
+
+describe("withChat", () => {
+  it("carries the open chat onto every tab link but the Agent tab's", () => {
+    const tabs = lifecycleTabs("/tasks/t1", "succeeded");
+    const carried = withChat(tabs, "c 1");
+    expect(carried.find((item) => item.tab === "sources")?.to).toBe("/tasks/t1/sources?chat=c%201");
+    expect(carried.find((item) => item.tab === "agent")?.to).toBe("/tasks/t1");
+    expect(withChat(tabs, null)).toBe(tabs);
+  });
+});
 
 /** The locking table after the 2026-08-25 steer: Result opens while a run
  *  is executing so the in-progress write-up is reachable. Failed runs still

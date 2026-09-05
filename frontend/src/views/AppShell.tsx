@@ -12,7 +12,7 @@ import { cn } from "../ui/brand/cn";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs, publicLifecycleTabs } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
 import { PublicViewProvider } from "./publicView";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
@@ -308,7 +308,8 @@ export function AppShell() {
   // `.get`, not `.has`: `?chat=` (present but empty) must read as closed,
   // matching `useActiveConversation`'s own non-empty check — otherwise a
   // bare `?chat=` opens a panel bound to conversation id "".
-  const chatOpen = showChatPanel && Boolean(new URLSearchParams(location.search).get("chat"));
+  const chatParam = new URLSearchParams(location.search).get("chat") || null;
+  const chatOpen = showChatPanel && chatParam !== null;
   // Non-Plan task tabs: footer rides the shell scroll pane. Plan keeps its
   // own inner chat scroll, so the footer mounts there (PlanningPane) instead
   // of sticking under the composer.
@@ -385,9 +386,11 @@ export function AppShell() {
           </div>
           <LifecycleBar
             hint={COPY.lockedHint}
-            items={(publicAccess
-              ? publicLifecycleTabs(base)
-              : lifecycleTabs(base, task.data?.latest_run?.status)
+            items={withChat(
+              publicAccess
+                ? publicLifecycleTabs(base)
+                : lifecycleTabs(base, task.data?.latest_run?.status),
+              chatParam,
             ).map((item) =>
               item.tab === "agent" && hasPendingCheckIn
                 ? {

@@ -793,7 +793,9 @@ step 9.
   chat text takes the Task Agent's scale; and the round floating launcher on
   the non-Agent tabs is replaced by the same slim rail the Agent tab's
   sidebar shuts to (`ConversationRail`), so one object carries the
-  conversations on every tab.
+  conversations on every tab; and the overlay keeps its open chat across the
+  non-Agent tabs (the tab links carry `?chat=`; the Agent tab keeps its own
+  default).
 
 Evidence and gates per change: [verification.md](verification.md) § Phase 4
 follow-ons.

@@ -410,6 +410,12 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   mark opens the Task Agent in the overlay. Existing launcher tests and the
   journey e2e keep their names; one test added for the rail's other two
   actions.
+- **The overlay keeps its state across the non-Agent tabs (owner request
+  2026-09-05, same session):** its state is the `?chat=` param, and the tab
+  links dropped it, so every tab move shut the panel. `lifecycle.withChat`
+  carries the param onto every tab link but the Agent tab's (that tab keeps
+  its own default, the Task Agent); the shell applies it to the lifecycle
+  bar. Pure-function test in `lifecycle.test.ts`.
 
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 

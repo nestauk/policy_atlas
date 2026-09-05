@@ -71,6 +71,21 @@ export function lifecycleTabs(base: string, status: RunStatus | null | undefined
 }
 
 /**
+ * Carry the Agent overlay's open chat (`?chat=`) onto the tab links, so a
+ * move between tabs keeps the panel as it was (owner, 2026-09-05). The
+ * Agent tab keeps its own default — the Task Agent — and never inherits it.
+ */
+export function withChat<T extends { tab: LifecycleTab; to: string }>(
+  items: T[],
+  chat: string | null,
+): T[] {
+  if (chat === null) return items;
+  return items.map((item) =>
+    item.tab === "agent" ? item : { ...item, to: `${item.to}?chat=${encodeURIComponent(chat)}` },
+  );
+}
+
+/**
  * The two tabs the public (link-shared) task view exposes — task 037.
  * One list, shared with `LifecycleRoute`'s public gate so the nav and the
  * gate cannot drift apart.
