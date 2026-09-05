@@ -76,6 +76,7 @@ def _dispatch_run(
             plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
             backends=backends,
             io=ParkIO(),
+            session_id=task_id,
         )
     except Exception:
         log.exception("api.run_dispatch_failed", task_id=str(task_id))

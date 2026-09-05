@@ -54,8 +54,10 @@ class CountingPlanner(StubPlannerBackend):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Record and delegate the deterministic planner turn."""
+        del conversation_id
         self.calls.append((turns, previous_draft))
         self.session_ids.append(session_id)
         return super().plan_turn(turns, previous_draft)
@@ -70,12 +72,15 @@ class FailOncePlanner(CountingPlanner):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Fail once, then use the ordinary deterministic reply."""
         if not self.calls:
             self.calls.append((turns, previous_draft))
             raise RuntimeError("planned test failure")
-        return super().plan_turn(turns, previous_draft, session_id=session_id)
+        return super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
 
 
 class PartPlanner(CountingPlanner):
@@ -91,9 +96,12 @@ class PartPlanner(CountingPlanner):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Return the ordinary stub turn with the configured structured part."""
-        turn = super().plan_turn(turns, previous_draft, session_id=session_id)
+        turn = super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
         return turn.model_copy(update={"part": self.part})
 
 
@@ -216,7 +224,8 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert ready.status_code == 200
         assert ready.json()["plan"]["ready"] is True
         assert ready.json()["conversation_id"] == conversation_id
-        assert stub.session_ids == [uuid.UUID(conversation_id), uuid.UUID(conversation_id)]
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids == [uuid.UUID(task_id), uuid.UUID(task_id)]
         persisted = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "approved"
@@ -870,8 +879,11 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
             previous_draft: dict[str, object] | None,
             *,
             session_id: uuid.UUID | None = None,
+            conversation_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            wire = super().plan_turn(turns, previous_draft, session_id=session_id)
+            wire = super().plan_turn(
+                turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+            )
             if wire.ready and self.task_id is not None:
                 scope_id = uuid.uuid4()
                 with engine.begin() as conn:
@@ -988,7 +1000,8 @@ def test_closed_planning_conversation_creates_seeded_successor(
         assert stub.calls[-1][1] == seed_draft_from_executed_plan(
             TaskPlan.model_validate(plan_payload)
         ).model_dump(mode="json")
-        assert stub.session_ids[-1] == successor_id
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids[-1] == uuid.UUID(task_id)
 
         follow_up = client.post(
             f"/api/v1/tasks/{task_id}/planning-turns",
@@ -1004,7 +1017,8 @@ def test_closed_planning_conversation_creates_seeded_successor(
             {"role": "planner", "text": successor.json()["reply"]},
             {"role": "user", "text": "Keep the same evidence question"},
         ]
-        assert stub.session_ids[-1] == successor_id
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids[-1] == uuid.UUID(task_id)
 
 
 def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:

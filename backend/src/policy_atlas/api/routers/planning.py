@@ -416,7 +416,9 @@ def create_planning_turn(
             turns, previous_draft = _planner_inputs(conn, task_id, conversation_id)
         turns.append({"role": "user", "text": payload.message})
         try:
-            turn = planner.plan_turn(turns, previous_draft, session_id=conversation_id)
+            turn = planner.plan_turn(
+                turns, previous_draft, session_id=task_id, conversation_id=conversation_id
+            )
         except Exception:
             with engine.begin() as conn:
                 conn.execute(

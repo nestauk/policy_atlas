@@ -316,8 +316,9 @@ class _UnattendedPlanner:
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        del previous_draft, session_id
+        del previous_draft, session_id, conversation_id
         return PlannerTurnWire(
             reply="Unattended plan proposed.",
             plan_draft=PlanDraftWire(
@@ -410,8 +411,9 @@ def test_planner_declared_steer_point_defaults_reach_the_plan(engine: Engine) ->
             previous_draft: dict[str, object] | None,
             *,
             session_id: uuid.UUID | None = None,
+            conversation_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            del previous_draft, session_id
+            del previous_draft, session_id, conversation_id
             return PlannerTurnWire(
                 reply="Unattended plan with pre-declared defaults.",
                 plan_draft=PlanDraftWire(
@@ -472,8 +474,9 @@ def test_planner_draft_author_affiliation_countries_reach_the_plan(engine: Engin
             previous_draft: dict[str, object] | None,
             *,
             session_id: uuid.UUID | None = None,
+            conversation_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            del previous_draft, session_id
+            del previous_draft, session_id, conversation_id
             return PlannerTurnWire(
                 reply="Plan scoped to GB/US author affiliations.",
                 plan_draft=PlanDraftWire(
@@ -726,8 +729,11 @@ class _ModerateStubPlanner(StubPlannerBackend):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        turn = super().plan_turn(turns, previous_draft, session_id=session_id)
+        turn = super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
         return turn.model_copy(
             update={"plan_draft": turn.plan_draft.model_copy(update={"steering_mode": "moderate"})}
         )
@@ -858,8 +864,9 @@ class _StandingInstructionsPlanner:
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
-        del previous_draft, session_id
+        del previous_draft, session_id, conversation_id
         answers = [turn["text"] for turn in turns if turn["role"] == "user"][1:]
         defaults = [self._default_for(self._POINTS[i], answer) for i, answer in enumerate(answers)]
         draft = PlanDraftWire(

@@ -924,7 +924,8 @@ def run_chat_turn(
                 run_id=turn_id,
                 task_id=task_id,
                 component="chat_v1",
-                session_id=conversation_id,
+                session_id=task_id,
+                conversation_id=conversation_id,
             ) as root_span:
                 loop = run_tool_loop(
                     turn_fn,
