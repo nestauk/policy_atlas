@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "react-router";
 
@@ -22,6 +22,25 @@ function AppRouter() {
   const auth = useAuth();
   const status = auth.status;
   const [lastSettled, setLastSettled] = useState<string | null>(null);
+
+  // Land on the stashed deep link after a sign-in round trip (task 038 V11).
+  // `OidcAuthProvider.onSigninCallback` restores it with
+  // `window.history.replaceState`, which React Router does not observe, and
+  // both routers are module-level singletons created (and initialised) at
+  // import time — so the authenticated router mounts at the location its
+  // history captured before the redirect, and the landing route renders on
+  // the deep link's URL until a reload. Sync it once, and only on mismatch.
+  //
+  // The destination is read from `window.location`, never from the stash:
+  // the callback stays the single consumer of that key, so this cannot be
+  // pointed anywhere but the current same-origin address.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const target = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const at = authenticatedRouter.state.location;
+    if (`${at.pathname}${at.search}${at.hash}` === target) return;
+    void authenticatedRouter.navigate(target, { replace: true });
+  }, [status]);
 
   if (status === "loading") {
     return (
