@@ -374,8 +374,10 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   the end, and closes it on any wheel up or a 120px scroll back; it starts
   hidden. The planning pane's pin observer now also watches the scroll
   container, so the footer opening does not leave the newest turn a footer's
-  height above the true bottom. Unit test on the hook (three cases); gates
-  green (typecheck · lint · 552 tests · build · e2e 11).
+  height above the true bottom. Touch (owner follow-up, same day): a finger
+  swiping up at the end accumulates the same travel via `touchstart`/`touchmove`,
+  a swipe down closes — one `nudge` rule for both input forms. Unit test on the
+  hook (four cases); gates green (typecheck · lint · 553 tests · build · e2e 11).
 
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
