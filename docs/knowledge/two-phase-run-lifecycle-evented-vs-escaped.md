@@ -2,7 +2,7 @@
 type: Convention
 title: A runner above self-catching components must distinguish evented failure from escaped exception
 description: LangGraph-harness components catch their own exceptions and commit "failed" state cleanly; an exception that escapes means the transaction rolled back — committing run identity before component work makes the fresh-transaction failure backstop's FK trivially valid.
-tags: [runner, orchestrator, transactions, failure-semantics, event-log]
+tags: [runner, agent, transactions, failure-semantics, event-log]
 timestamp: 2026-07-10
 ---
 

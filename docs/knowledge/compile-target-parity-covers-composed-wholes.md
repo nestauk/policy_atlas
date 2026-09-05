@@ -2,7 +2,7 @@
 type: Invariant
 title: Compile-target parity is checked on the composed whole, with the real composer
 description: Per-field caps are not parity — a plan whose fields all validate can still compose past a downstream cap and silently truncate (screen criteria vanished while provenance claimed they applied); and round-trip checks against a canonicalising composer must use containment, not byte equality.
-tags: [plan, compile, fail-closed, parity, steering, orchestrator]
+tags: [plan, compile, fail-closed, parity, steering, agent]
 timestamp: 2026-07-10
 ---
 
@@ -12,7 +12,7 @@ Where a plan compiles into a downstream surface with its own bounds or
 canonical shape, plan validation must exercise **the real composer** against
 **the real bound** — not mirror per-field constants:
 
-- `OrchestrationPlan` composes the actual screen intent
+- `TaskPlan` composes the actual screen intent
   (`screen._compose_screen_intent(question, criteria)`) and rejects when it
   exceeds `SCREEN_INTENT_MAX` — per-criterion caps alone let a long question
   silently truncate every criterion at prompt assembly while the plan row

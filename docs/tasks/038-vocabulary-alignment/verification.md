@@ -257,17 +257,206 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   inside Phase 4's full `make verify` (the plan allows consecutive phases to
   share one full gate).
 
+### Phase 9 — living docs, specs, verification (V7; step 6)
+
+- **Lead (specs and ADR cross-references):** two-step word pass over the living
+  system specs, `product.md` and `capabilities/evidence-search/*` (code-word
+  `project`→`task` then `portfolio`→`project`; persona `orchestrator`→Agent;
+  "orchestration plan"→"task plan"; steer-point id; API paths and schema names),
+  `log.md` and `sources/**` untouched (history and frozen). Hand rewrites:
+  `data-model.md` § Entity hierarchy names both rows and ADR 0036;
+  `web-api.md` additive-only rule points at the one recorded break and
+  § Deprecations carries the dated 038 entry (paths, schemas, fields, SSE frame,
+  wire literal, no redirects, rollback pointer); `index.md` routing table gains
+  `vocabulary.md`, the Agent wording, "Evidence search run", and the I7
+  frozen-source mapping note; `vocabulary.md` § Code words is the as-built table
+  (entity → table → route → TS type/key → pre-038 word) plus the read-side
+  stored values and the kept `eb_*` ids, and the owner's three "at the moment"
+  notes now say "until task 038"; ADR 0031 decision 2 marked superseded by ADR
+  0036 (status bullet + in-place note; decision 1 stands). `make okf-validate`
+  green.
+- **I4 residue in docs/specs (accepted):** the spec file id and title
+  `system/execution-orchestration.md` / "Execution & orchestration" and its
+  `orchestration` tag name the engineering concept (coordinating components),
+  not the persona; links to it from other specs; `log.md` (changelog, history).
+  Everything that named the persona says Agent.
+- `fast-worker` (docs/knowledge bodies, deferred.md words): see below.
+
+### Phase 8 — repo hygiene (V12, review commit h, last and droppable) — `fast-worker`
+
+- **Part 1 (deletions and moves):** `git rm` `frontend/e2e/live-027.spec.ts`,
+  `live-027b.spec.ts`, `live-028.spec.ts`, `playwright.live-027.config.ts`,
+  `playwright.live-028.config.ts` (rubric 5: slice-specific live checks of merged
+  work, referenced by nothing — `Makefile`, `package.json`, `scripts/`, `.github/`
+  grep clean; `playwright.fe-api-smoke.config.ts` kept). Dead backend functions
+  `chat_floor._sentence_around` and `steering.resolve_unattended` deleted (zero
+  references in src and tests; `OpenAIRelevanceAnnotatorBackend` kept, A12).
+  `git rm -r scripts/scratchpad docs/tasks/029-search-volume-cap
+  docs/tasks/030-multi-round-search` (repo-wide referrer grep clean). `git mv
+  JUMPBOX.md infra/JUMPBOX.md`; referrers updated: `infra/DEPLOYMENT.md` (the
+  one real link) and the bare filename mentions in
+  `docs/tasks/030-rds-jumpbox/verification.md`, `033-organisations/plan.md`,
+  `033-organisations/verification.md` (rubric 15 exception). One further bare
+  mention in `docs/tasks/033-organisations/contract.md` (lines 95, 417) left
+  untouched — historical doc, not in the rubric's list.
+- Ignore entries confirmed: `.gitignore` carries `.cursor/hooks.json`,
+  `.github/hooks/`, `.impeccable/`, `scripts/.rename_038_state.json`;
+  `backend/.dockerignore` carries `.impeccable/`.
+- `uvx vulture src/policy_atlas --min-confidence 80`: 17 lines, all the known
+  false-positive classes — `cls` on pydantic validators (`contract/waitlist.py`
+  ×2, `runtime/task_plan.py` ×13) and `exc_type`/`traceback` context-manager
+  args (`sourcing/fetch_live.py` ×2). `wc -l AGENTS.md` = 51, no phase state.
+  `git ls-files scripts/scratchpad docs/tasks/029-search-volume-cap
+  docs/tasks/030-multi-round-search JUMPBOX.md` empty (I12).
+- Gates: ruff + mypy clean; `tests/runtime/test_chat_floor.py`,
+  `test_steering.py`, `test_steering_unattended.py` 120 passed.
+- Part 2 (knip dispositions, D8): see below.
+
+### Phase 7 — post-sign-in landing (V11, review commit f) — `deep-reasoner`
+
+- `App.tsx` (+20/−1): one `useEffect` in `AppRouter`, unconditional, runs when
+  `status === "authenticated"`; compares `authenticatedRouter.state.location`
+  (pathname+search+hash) with `window.location` and, only on mismatch, calls
+  `authenticatedRouter.navigate(target, { replace: true })` once. Nothing else
+  changed: `OidcAuthProvider.onSigninCallback` stays the sole reader/remover of
+  `AUTH_RETURN_TO_KEY` (writers: `StashAndSplashRedirect`, `RequireAuth`,
+  `PublicTaskShell.onSignIn`, `onUnauthenticated`, `retrySignIn`; verified by
+  grep); `StashAndSplashRedirect` and `routes.tsx` untouched.
+- Tests (`App.test.tsx`, real `App` + real module-level routers, auth via the
+  existing `VITE_MOCK` seam; no new test seam): (1) router/URL mismatch after the
+  callback → navigates exactly once to `/tasks/<id>/sources`; (2) already
+  synchronised → no navigation; (3) the 036 stash-and-splash flow end to end
+  (signed-out deep link → stash → callback restores → lands). Anti-vacuity:
+  with `App.tsx` stashed, tests 1 and 3 fail. StrictMode probe: exactly one
+  `navigate` call (no ref guard needed).
+- react-router 7.18.1 facts relied on (from the installed package):
+  `createBrowserRouter` initialises immediately, so both singletons are pinned
+  to the `window.location` at import; `history.replaceState` fires no
+  `popstate`, so the router cannot observe the callback's rewrite;
+  `router.navigate(to, { replace: true })` → `REPLACE`. **For the security
+  lane:** `router.state` is annotated `@private` in the `Router` type (as is
+  `subscribe`); `navigate` is public. The contract pinned `state.location` and
+  `routes.test.tsx` already reads it — precedent, but an officially-private read.
+- Security reasoning (for the lane): the target is same-origin by construction
+  (pathname/search/hash only, no scheme or host, nothing from storage or query);
+  the effect runs only once auth is `authenticated`, behind the unchanged
+  `RequireAuth`; a second stash consumer was deliberately not added.
+- Note: the V11 transition is a *mount* of `AppRouter` (the OIDC adapter renders
+  a loading paragraph until auth settles, and the Cognito round trip is a full
+  page load), so the tests mount fresh per phase rather than re-render.
+- Gate: the worker's 3 tests pass; `pnpm lint` 0 errors; whole-suite gate run
+  by the lead after Phase 5a (concurrent) lands — see Commands run.
+
+### Phase 5b — Task Agent (V8, review commit d) — `deep-reasoner`
+
+- Copy (binding table): overlay `aria-label` "Agent"; launcher "Open the Agent" /
+  "Agent"; pinned tab and library chip "Task Agent"; "Message the Task Agent";
+  "The Agent decided" (key already `agent`; the backend canonicalises stored
+  `orchestrator` on read); `store/types.ts` already `"agent"`. New `COPY` keys
+  `agentAriaLabel`, `openAgent`, `agent`, `taskAgent`, `earlierPlan`,
+  `messageTaskAgent`.
+- Pinning rule (no new state, no query change — A9): `conversationState.
+  taskAgentConversationId(rows)` = open planning row, else newest closed, else
+  the planning tab id; `ConversationTabs` renders it first and it is the only row
+  with the label (A10); `ChatsLibrary` hoists it above the date groups, names and
+  chips every planning row by label so the stored title "Planning" never
+  surfaces; older lineages read "Earlier plan", unpinned.
+- Overlay on the Agent tab: `AppShell.showChatPanel` drops `!inWorkspace` and
+  passes `planningInMainPane`; every in-overlay path to the planning conversation
+  routes through one `focusTaskAgent` (focus `#planning-message` in the main
+  pane, close the overlay); backstop: with `?chat=` naming a planning row on that
+  tab the panel renders the collapsed launcher, never a second transcript.
+  Verified in a real browser: one `#planning-message`, one "Planning
+  conversation" region.
+- **Flagged deviation (defect found and fixed):** the shared `Composer`
+  hard-coded `id="planning-message"`, a pre-existing duplicate id whenever the
+  overlay was open, which also made the hand-off focus the *chat's* composer and
+  would have put "Message the Task Agent" on every chat. `Composer` now takes
+  `id`/`label` (Task Agent defaults); `ChatComposer` passes
+  `chat-message-<id>` and **"Message the Agent"** — one new copy string outside
+  the binding table (the persona is the Agent in every chat; A10 kept).
+- I8 grep `'"Planning"'` over `src` (non-test): `mock/api.ts:156` (the mock's
+  stored title, mirroring the backend — kept so the mapping is exercised),
+  `historyPresentation.ts:83` (History category, unchanged by contract), one
+  comment. "Task Agent" rendered only via `COPY.taskAgent` in four components.
+- Judgment calls for the reviewer: the overlay still rests collapsed on the Agent
+  tab unless `?chat=` is set (I8's "list is visible" = when open); a planning row
+  is named twice (title + chip, mirroring today's shape); **"Earlier plan" is
+  unreachable in production** (closed planning rows are filtered out by the
+  library queries — backend; → `deferred.md`); `ChatMessages` "Open planning"
+  and the "Planning conversation" region label are not in the copy table and
+  were left.
+- Gates: typecheck clean · lint 0 errors · `pnpm test` 75 files / 547 passed ·
+  build OK · `pnpm e2e` 11 passed.
+
 ## Commands run
 
 | Command | Result | Notes |
 |---|---:|---|
-| `make verify` (Phase 0 baseline) | pass | backend 2442 passed; infra green after the `.dockerignore` fix |
+| `make verify` (Phase 0 baseline) | pass | backend 2442 passed; infra green after the `.dockerignore` fix; remaining root gates green |
+| `make verify-fast` (Phase 1 gate) | pass | 2442 passed, mypy 299 files, ruff clean |
+| `make frontend-verify` + `pnpm e2e` (Phase 1) | pass | 75 files / 532 tests; e2e 11 passed |
+| `make verify-fast` (Phase 2 gate) | pass | 2508 passed (+66 tool tests), mypy 301 files, ruff clean |
+| `make verify` (Phase 3 gate) | pass except `drift-check` | backend 2517 passed (8m16s), infra 46, audit-paths/prompt-guard/font-guard green; `drift-check` red by the plan's phase split (openapi-sync is Phase 4); ruff/mypy/147 touched tests re-run green after the screen-sense fixes |
+| `make verify` (Phase 4 gate) | pass | okf 129/0 · backend 2520 (incl. Phase 6) · infra 46 · drift-check OK · frontend 75 files / 530 tests · build OK; worker `pnpm e2e` 11 passed |
+| `make frontend-verify` + `pnpm e2e` (Phases 5a + 7 gate) | pass | 533 tests; e2e 11 passed after two spec labels caught up with V6 |
 
 ## Checks beyond the build
+
+- **Migration on real local data (the local "deploy").** The dev database
+  (`policy_atlas`, 52 Task rows from live runs, 1 Project, head `e7a1b5c3d9f2`)
+  was backed up (`pg_dump`, 782 MB, kept outside the repo) and upgraded
+  `alembic upgrade head`: `e7a1b5c3d9f2 → a8c3e1f5b9d2 → b2f6a9d4c1e7 →
+  c1a7f4e9b0d2`, no lock timeout, no error. After: `task` 52 · `project` 1 ·
+  `plan` 36 · `task_source_snapshot` 1,132 · `capability_run` with
+  `evidence_search` 18 and `evidence_base` 0 · `pg_class` names matching
+  `portfolio|pss|oplan|orchestration` 0 (I1, I2, V3).
+- **Migration round trip on a seeded pre-migration database**
+  (`tests/core/test_migration_038.py`, 2 tests): catalog equals the manifest at
+  head; populated fixture (Task in a Project, `is_public`, run, `evidence_base`
+  capability run, all four old `project.*` events, an `orchestrator` decision,
+  plan payload and pause record with `evidence_base_coverage`) reads back
+  identically under the new names, the old steer point validates through
+  `TaskPlan`, downgrade restores the fixture byte-identically with each of the
+  five stored values reversed independently, upgrade again succeeds.
+- **Pre-038 stored-value compatibility**
+  (`tests/api/test_pre_038_vocabulary_compatibility.py`, 7 tests): old value in
+  → new value out through the real read paths (SSE check-in frame, decisions
+  read model, `TaskPlan.model_validate`, `checkin_read`, both event-kind readers).
+- **Trace sessions** (`tests/api/test_trace_sessions_038.py`, 3 tests): planning
+  turn, chat turn, run start + steering continuation all emit `session_id ==
+  str(task_id)`; planning and chat carry `conversation_id` (I9).
+- **Sweep tool** (`tests/scripts/test_rename_038.py`, 66 tests): case forms,
+  compound-before-bare, path literals vs prose, never-map contexts, collision
+  refusal, step ordering, idempotence, fresh-clone guard.
 
 ## End-to-end command
 
 ## Diff summary
+
+One PR, eight review commits plus the docs commit (contract A15 isolation):
+(g) Phase 1 V10 riders · Phase 2 sweep tool + scan tables · (b) Phase 3 schema
+migration + backend sweep + compatibility readers + prompt word swaps · (c)
+Phase 4 API paths, generated client, frontend sweep, copy table, spec bundle
+move · (e) Phase 6 Langfuse session per Task · Phase 5a tabs and literals ·
+(d) Phase 5b Task Agent · (f) Phase 7 post-sign-in landing · (h) Phase 8 repo
+hygiene · Phase 9 living docs. **No product behaviour change** except the
+enumerated deltas: routes/URLs (`/tasks/**`, `/projects/**`, `/result`, no
+redirects — F3), labels (Agent · Result tabs; Report; Task Agent; the Agent
+overlay copy), trace grouping (V9) and the post-sign-in landing (V11).
+
+**Flagged deviations, resolved within the contract's vocabulary** (each also
+in the phase log above): the `.dockerignore` counterpart of the V12 gitignore
+entry · deterministic manifest sort · six manifest FK rows corrected to the
+catalog's explicit names · `useCreateProject` deleted in Phase 4, not 8 ·
+string-level (not whole-file) exemption of copy/prompt modules · component
+prompt hashes changed by import lines only · `canonical_actor` applied at the
+three real stored-actor projections (one the contract missed, two it named
+that do not project a stored value) · sharing event kinds not added to the
+decisions read model · the ops CLI flag collision (mid-sweep) · screen-sense
+prose and identifiers restored after both sweeps · Phase 3's gate closes
+without `drift-check` by the plan's own phase split · "Untitled project"
+backfill name left as data (→ deferred).
 
 ## Review findings
 
@@ -275,9 +464,28 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
 
 ## Intent & assumptions
 
+- The contract's I4 ("no `orchestrat` token remains") is read as *no live use
+  of the retired word*: compatibility maps whose data is the retired value,
+  tests that seed pre-038 rows, the migration itself, the sweep tool and its
+  test, and the engineering-concept spec id `execution-orchestration.md` are
+  accepted residue and listed where each occurs.
+- Contract V3's "identical hash values" for the component prompt modules could
+  not hold once their `import` lines moved packages; the words-only proof is
+  [prompt-diff.md](prompt-diff.md), reviewed as such.
+- Rebase path for open PRs (#62, #52 — owner F5): run the committed
+  `scripts/rename_038.py --apply --phase {3,4} --step all` on the PR's own
+  pre-038 branch before merging `dev`; the fresh-clone guard refuses a
+  post-038 tree.
+
 ## Known unverified items
 
 ## Public safety
+
+Everything in this slice is committable: identifier and copy renames, one
+migration, tests with synthetic ids, the scan tables (identifier names and
+counts only), the prompt diff (product prompt text is already public in this
+AGPL repo). No traces, credentials, evidence text or account ids. The Langfuse
+and Metabase follow-ups are named, not linked to any private dashboard.
 
 ## Review handoff (step-7/8 inputs)
 
@@ -285,5 +493,49 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   - `schema_manifest.py` sort-key gotcha: sorting SQLAlchemy constraints by
     `con.name` is non-deterministic for auto-named FKs (`name is None`);
     resolve the PostgreSQL default name first.
+  - **Metadata is not the catalog.** Six FKs that SQLAlchemy metadata leaves
+    unnamed were created by earlier migrations under explicit names; a manifest
+    generated from metadata alone lists names that never existed. Any rename
+    migration must be checked against `pg_constraint`, and the manifest generator
+    now carries the explicit-name map.
+  - **A code-word sweep inverts screen-sense prose and identifiers.** Comments,
+    docstrings and a few identifiers written after ADR 0031 already used the
+    *screen* words ("a Task inside a Project", `ProjectPicker`,
+    `showProjectPrefix`, `COPY.noProject`); a `project→task` sweep turns them into
+    "a Task inside a Task". Detect by pairing removed/added lines and filtering
+    for lines that also name the other entity; the frontend was protected by
+    never-mapping exact `Task`/`Project`.
+  - **Two-step rename idempotence needs a ledger or a sentinel.** When step 2
+    produces step 1's source word (`portfolio→project` after `project→task`), no
+    tokeniser can tell a swept tree from an unswept one; the tool keeps a
+    per-checkout hash ledger and refuses a tree that already looks swept.
+  - **Never-map patterns must be anchored.** `[project]` (pyproject table) matched
+    a list literal `data=[project]`; `--project` (the uv flag) matched the ops CLI
+    flag and caused a mid-sweep collision (`--portfolio` → `--project` landed on
+    an unrenamed `--project`). Anchor to the line start / the `uv run` prefix.
+  - **Historical migration tests cannot share one `Table` object across the
+    rename boundary.** Below the renaming revision, address old names by
+    reflection (`Table(..., autoload_with=conn)`) or textual SQL; at head use
+    current metadata (`tests/core/legacy_catalog.py`).
+  - **A phase split can make one gate structurally red.** Regenerating the
+    OpenAPI client belongs with the frontend sweep, so the backend-only commit
+    cannot be `drift-check` clean; the plan's gate map must say so up front.
+  - **Prompt hash guard hashes the whole module**, so a package move changes
+    component prompt hashes via their `import` lines even when no prompt text
+    moved; the words-only proof is the diff, not the hash equality.
+  - **Compatibility maps are legitimate I4 residue.** A "no retired word remains"
+    invariant must exempt the readers whose data *is* the retired value.
+  - **react-router data routers are pinned to `window.location` at import.**
+    `history.replaceState` fires no `popstate`; a freshly mounted singleton
+    router starts from its captured location. `router.state` is `@private` in
+    the type (precedent exists in `routes.test.tsx`).
+  - **The collision check counts prose occurrences.** A comment saying "the
+    global projects page" blocks `projects→tasks` in a file that declares
+    `tasks`; reword the comment first or teach the tool to skip comments.
+  - **BSD `sed` has no `\b`.** Word-boundary edits on macOS need
+    `[[:<:]]…[[:>:]]` or Python.
+  - `docs/knowledge/run-component-driver-for-scoped-live-checks.md` describes
+    `skeleton._run_component`, which no longer exists — retire or rewrite at
+    step 8.
 
 ## Deferred work

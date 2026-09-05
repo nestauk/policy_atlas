@@ -23,7 +23,7 @@ This document helps us align and use the same definitions for the different conc
 Presently we are considering the following **Capabilities:**
 
 * **Evidence search** [ready]: searching and appraising literature, extracting findings, synthesising
-  * Note that at the moment we call Evidence search `Evidence Base` in the backend
+  * The backend called this `evidence_base` until task 038; now `evidence_search`
 * **Options scoping** [in progress]: formulating actionable "options" and appraising them according to a set of criteria (evidence strength, impact, transferability)
 * **Theory of change** [in progress]: exploring how a policy intervention ("option") could lead to a specific outcome, going into detail on the mechanisms and potential failures
 * **Stakeholder mapping** [in progress]: identifying relevant organisations and individuals to any policy area
@@ -37,15 +37,15 @@ Presently we are considering the following **Capabilities:**
 
 **Task:** a single use of a Capability, that generates Artefacts (eg, a report, source list) and organises them across "tabs" such as Results and Sources
 
-* Note that at the moment we call Tasks `projects` in the backend
+* The backend called a Task a `project` until task 038; now `task`
 
 **Project:** a collection of Tasks. They might be manually collected by the user, by assigning Tasks to Projects manually. Alternatively, the user might naturally build on top of another Task
 
-* Note that at the moment we call Projects `portfolios` in the backend
+* The backend called a Project a `portfolio` until task 038; now `project`
 
 Each Task should (more or less) feature similar "Lifecycle Tabs" (**Tabs**):
 
-* **Agent:** Users start their work by interacting with the Agent (we call it the "orchestrator" in the backend), which helps with **Planning** the work. The Agent creates **Plans** that the user can inspect and edit before running long workflows, and allows the user to **Ask questions** about the completed work. The Agent tab replaces the Plan tab: it is where the user initially has the planning chat, and it shows **all chats within the Task** in a sidebar. The user can have different kinds of chats with the Agent and sees them all here.
+* **Agent:** Users start their work by interacting with the Agent (the backend called it the "orchestrator" until task 038), which helps with **Planning** the work. The Agent creates **Plans** that the user can inspect and edit before running long workflows, and allows the user to **Ask questions** about the completed work. The Agent tab replaces the Plan tab: it is where the user initially has the planning chat, and it shows **all chats within the Task** in a sidebar. The user can have different kinds of chats with the Agent and sees them all here.
 * **Result:** Home for the main output of the work
 * **Sources:** Information about the evidence sources that were used in producing the Result
 * **Share:** Controls for sharing the Task internally/externally and collaborating on the Task
@@ -74,17 +74,28 @@ Each Task should (more or less) feature similar "Lifecycle Tabs" (**Tabs**):
 
 ## Code words
 
-Filled by task 038 (V7). Until it lands, the screen word and the code word differ per
-[ADR 0031](../adr/0031-portfolio-layer-above-the-project.md) decision 2:
+As built by task 038 ([ADR 0036](../adr/0036-one-vocabulary-across-code-schema-api-and-screen.md);
+retires [ADR 0031](../adr/0031-portfolio-layer-above-the-project.md) decision 2). The
+screen word and the code word are now the same word; `frontend/src/lib/vocabulary.ts`
+stays the one place screen copy is maintained.
 
-| Product word | Code row / key today | After task 038 |
-|---|---|---|
-| Task | `project` | `task` |
-| Project | `portfolio` | `project` |
-| Evidence search (capability) | `evidence_base` | `evidence_search` |
-| Agent | `orchestrator` | `agent` |
-| Task Agent | conversation `kind = planning` | unchanged (screen label only) |
-| Chat | conversation `kind = chat` | unchanged |
+| Product word | Table | Route (API · app) | TS type / key | Was (pre-038) |
+|---|---|---|---|---|
+| Task | `task` (`task_source_snapshot`) | `/api/v1/tasks/**` · `/tasks/:taskId[/result\|/sources\|/share\|/history]` | `TaskOut`, `TaskCreate`, `TaskUpdate`; `useTask`, query key `"tasks"` | `project` |
+| Project | `project`, `project_membership` | `/api/v1/projects/**` · `/projects[/:projectId]` | `ProjectOut`, `ProjectCreate`, `ProjectUpdate`; `useProject`, query key `"projects"` | `portfolio` |
+| Evidence search (capability) | `capability_run.capability = 'evidence_search'` | `/new?capability=evidence_search` | package `policy_atlas.evidence_search`; `lib/capabilities.ts` key | `evidence_base` |
+| Evidence base (the collection) | — | — | screen copy only (kept) | — |
+| Report (the Result tab's artefact) | `artefact` | `/tasks/:taskId/result` | `LIFECYCLE_LABELS.result` | "Evidence base" as the page name |
+| Agent | `plan` (the Task plan) | — | `runtime/agent.py`, `agent_backend.py`, `agent_prompt.py`, `task_plan.TaskPlan`; wire `decided_by`/`authored_by` = `agent`; env `POLICY_ATLAS_AGENT_MODEL`; spans `agent:*`, steer point `evidence_search_coverage` | `orchestrator`, `orchestration_plan` |
+| Tabs | — | Agent (index) · Result · Sources · Share · History | `LIFECYCLE_LABELS` | Plan · Results |
+| Task Agent | conversation `kind = planning` (active, else newest closed) | — | screen label only; pinned first | "Planning" |
+| Chat | conversation `kind = chat` | — | unchanged | — |
+
+Stored values a reader must still accept from before 038 (read-side only, `event_log` is
+append-only): `event_type` `project.*` beside `task.*`; `decided_by`/`authored_by`
+`orchestrator` (read as `agent`); steer-point id `evidence_base_coverage` (read as
+`evidence_search_coverage`). Kept on purpose: extraction profile ids `eb_iof_base_v1` /
+`eb_icf_base_v1` (fingerprints).
 
 **Two senses of "task".** The product Task above; and "task NNN", an engineering slice
 under `docs/tasks/`. Code comments that say "(task 022)" mean the slice.

@@ -26,10 +26,10 @@ may be refined as implementation lands.
   doesn't validate is a **caught error, never a silent run**. The mapping round-trips, so
   **"approved plan" and "executed config" are provably the same** — the point of plan-as-canonical
   for audit. Genuinely fuzzy edits are **surfaced for confirmation, not compiled silently**.
-- **Forecast vs commit — what actually compiles.** The orchestrator's up-front per-capability
+- **Forecast vs commit — what actually compiles.** The Agent's up-front per-capability
   plan is a **forecast** (drives the preview + time estimate; **does not compile**); each
   capability agent's just-in-time selection is the **commit** (the execution-bearing layer that
-  compiles, by construction). Two tiers, staged compilation: the orchestration spine's
+  compiles, by construction). Two tiers, staged compilation: the plan spine's
   sequence/wiring compiles up front; each commit compiles **just-in-time** once its inputs exist.
 - **Plan-field ↔ chat-turn provenance** — each compiled field back-references the conversation
   turn(s) that produced it (raw prose retained behind the structured field), so the plan carries
@@ -37,9 +37,9 @@ may be refined as implementation lands.
 
 ## What a plan contains 🟡 *(candidate, per §5)*
 
-- **Frame** — a thin narrative intent statement; a **living field** the orchestrator re-derives
+- **Frame** — a thin narrative intent statement; a **living field** the Agent re-derives
   from structured inputs on a material scope-changing edit (never re-summarising chat). The
-  *authoritative* "what this project is doing" is the structural reading (capability set +
+  *authoritative* "what this task is doing" is the structural reading (capability set +
   assumptions + statuses); the narrative is the readable gloss.
 - **Inputs & dependencies** — sources, uploads, prior artefacts it draws on; whether it fetches
   new evidence. Also carries the capability's **extraction specs** + **selected source subset**
@@ -56,14 +56,14 @@ may be refined as implementation lands.
 Depth stays a per-section **gradation** (the deterministic compile target) but is **never a
 user-entered field, and no absolute level is surfaced** (an abstract label has no calibratable
 referent). Instead:
-- The orchestrator **infers depth from task scale** (intent breadth, # capabilities, corpus
+- The Agent **infers depth from task scale** (intent breadth, # capabilities, corpus
   size); urgency is not elicited separately.
 - **The anchor is the concrete proposal + a cost signal, not a label** — e.g. "compare 3 options,
   screen ~50 sources, light per-source extraction, recommendation block" + a rough time band. The
   estimate **model is ⏸ deferred** for v3.0; a coarse band suffices.
 - **Two adjustment paths, both anchored to the proposal**: (1) edit the proposal / converse;
   (2) a single **relative nudge — lighter / as-proposed / deeper** — re-deriving all per-section
-  depths in one move. Named bundles ("modes") survive only as an orchestrator/authoring
+  depths in one move. Named bundles ("modes") survive only as an Agent/authoring
   convenience, **never a user-facing absolute dial**.
 - *(Maps the wireframe's **Quick / Deep** control: treat it as a `search_effort_signal` /
   `search_breadth_signal`, **not** a hard public depth ladder — EB handoff §7.1.)*
@@ -91,13 +91,13 @@ statistics and peer-reviewed evaluations only"). Two faces:
 
 ## Two-level & progressive planning
 
-- **Orchestration plan (forecast spine)** — orchestrator-authored: which capabilities, order,
+- **Task plan (forecast spine)** — Agent-authored: which capabilities, order,
   inter-capability dependency graph, overall steering, best-guess component/depth forecast. A
   **living** object tracking forecast-vs-actual as commits land. The **template is a default
-  orchestration plan**.
+  task plan**.
 - **Per-capability plan (commit)** — capability-agent-authored just-in-time once inputs land.
 - **Plan is artefact-*like*** — versioned, user-facing, editable; **reuses the artefact machinery**
-  (blocks, units, versioning, change log) but stays a distinct *kind* (orchestrator-authored
+  (blocks, units, versioning, change log) but stays a distinct *kind* (Agent-authored
   executable instrument). Structure is **separate-but-linked** (spine + per-capability plans).
 - **System proposes, user disposes** — intent → recommended capability set (template), accepted
   wholesale (fast path) or edited (power path); ordering bounded by declared dependencies.
@@ -116,7 +116,7 @@ statistics and peer-reviewed evaluations only"). Two faces:
 
 ## Enough context to propose — ask only on shape
 
-A **principle, not an intake schema**. The orchestrator may propose on thin context but:
+A **principle, not an intake schema**. The Agent may propose on thin context but:
 - **The proposal is honestly calibrated to what it actually knows** — assumptions/open guesses are
   first-class, cheaply-correctable plan content. A thin-context plan is *visibly* thin, which
   defuses anchoring better than withholding it.

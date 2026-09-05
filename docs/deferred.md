@@ -43,8 +43,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Export & sharing** — share CTAs, version-pinned external deep links
   back into the body (handoff §7.3). The primary surface is the tool itself.
   **Read-only/public links DISCHARGED (task 037):** a Task's owner shares it
-  publicly from the Share tab (`project.is_public`, ADR 0035) — same URL,
-  Results + Sources only. Still deferred from that slice: portfolio-level
+  publicly from the Share tab (`task.is_public`, ADR 0035) — same URL,
+  Results + Sources only. Still deferred from that slice: project-level
   public sharing; a public index/gallery of public Tasks; a public mode for
   the frontend mock API (`src/mock/api.ts` still serves only the signed-in
   world, so public-view e2e journeys have no mock to run against); a shared
@@ -77,7 +77,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   select's run-scoped `selection_result` row defines it) + modifier-tag-driven rubric dimensions
   (appraise component 4). Typed dimensions (`dimensions` column/bag) arrive with that second
   pass — nothing populates or reads them in v3.0, so no half-built column shipped (task 006).
-- **Steerable / plan-carried appraisal rubric** — the orchestrator compiles a provisional
+- **Steerable / plan-carried appraisal rubric** — the agent compiles a provisional
   evidence hierarchy into the plan; the user inspects/adjusts before the run. v3.0 is
   default-rubric-only (`DEFAULT_RUBRIC` in `appraise.py`), with provenance carried by
   `rubric_version` (`v2-hierarchy-v1`) on every row and event — the seam a plan-carried rubric
@@ -95,7 +95,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   richer full-text appraisal pass, not silently dropped (contract decision 3, task 006).
 - **`source_appraisal_result` → `source_classification_result` FK — deliberately absent, not
   just deferred** (mirrors the classify→screen entry below). A composite FK onto
-  classification's `(evidence_scope_id, project_source_snapshot_id)` unique key would
+  classification's `(evidence_scope_id, task_source_snapshot_id)` unique key would
   DB-enforce "only classified rows are appraised", but both result tables' unique constraints
   are slated to gain re-run/rubric-version columns, which the FK would hard-block. The
   invariant lives in the read path (`appraise_sources` selects *from*
@@ -126,13 +126,13 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   sources are classified" discipline is enforced only in `classify_sources`, not durably at the
   schema level. This is low-risk today (no direct writer to the table exists besides
   `classify_sources`), but a hard FK here may be the *wrong* direction long-term, not merely
-  incomplete hardening: `project_source_snapshot.origin` already distinguishes `"uploaded"` from
+  incomplete hardening: `task_source_snapshot.origin` already distinguishes `"uploaded"` from
   `"acquired"` sources, and uploaded documents are plausibly relevant by user intent alone — a
   future slice may let them skip `screen` entirely and go straight to `classify`, which a FK to
   `source_screening_result` would hard-block. **Confirmed direction: `acquired` sources always
   screen** (search/acquisition provides no relevance signal, so screen's recall-oriented filter
   still applies); whether `uploaded` sources skip screen is the open question for that future
-  slice — needs its own spec refinement (`docs/specs/capabilities/evidence-base/components.md`
+  slice — needs its own spec refinement (`docs/specs/capabilities/evidence-search/components.md`
   currently describes classify as running on "the screened-in set" unconditionally) before any
   component is built against it.
 - **`characterise`+ EB components** — subsequent slices (screen, classify, appraise, acquire
@@ -145,7 +145,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   fail loudly, contract decision 6) — and v2's fragilities (fetch errors swallowed at debug
   level; thin landing-page text reported `ok`) are structurally closed (reason-coded
   `full_text_status`/`full_text_error`, thin-text guard). Snapshot identity resolved as a
-  **new immutable `full_text` snapshot linked at the project-source link** (ADR 0003).
+  **new immutable `full_text` snapshot linked at the task-source link** (ADR 0003).
 - **`implementation_context_finding` — DISCHARGED (task 021, ADR 0017).** The second
   reusable finding schema (mechanisms, barriers, implementation conditions) shipped:
   the `implementation_context_finding` table + `eb_icf_base_v1` extraction profile (own
@@ -266,8 +266,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   **automated recovery sweep** that notices and re-runs failures without an operator-initiated
   rerun.
 - **Graph-structured synthesis** — query-time multi-hop / community / contradiction-location over
-  the findings graph (run-local → project-scoped persistent → graph datastore), gated on an
-  entity-resolution-quality bar; **never** an ingestion-time global / cross-project KG.
+  the findings graph (run-local → task-scoped persistent → graph datastore), gated on an
+  entity-resolution-quality bar; **never** an ingestion-time global / cross-task KG.
 
 ## Search / acquisition (task 007 seams)
 
@@ -321,7 +321,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   `tests/runtime/test_search_rounds.py`.
   **Accepted blemishes — the per-round *counts* are DISCHARGED (task 031, 2026-08-13).**
   The "Where I looked" pane now sums query hits across every acquire run that wrote a
-  coverage record for the project, so `results` and `relevant` are both cumulative. The
+  coverage record for the task, so `results` and `relevant` are both cumulative. The
   P1 check-in reports the counts and queries of the single acquire run that just
   finished, taken from that run's `component.completed` payload rather than the coverage
   record's never-written `backends[].count`. `successful_runs["acquire"]` is
@@ -333,10 +333,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     `sentence`, `base` (stop condition, adequacy, verdict origin) and the `backends` name
     list — only `backends_detail` went cumulative. A backend used in an earlier round but
     absent from the latest row contributes no card, so its hits stay invisible.
-  - `backends_detail.relevant` remains **project-wide** per backend while `results` is now
+  - `backends_detail.relevant` remains **task-wide** per backend while `results` is now
     one question's rounds (task 027 §C.1; `_acquire_run_ids` was scoped to the evidence
     scope by the 031 review stack). This is deliberate — screening re-screens the whole
-    project pool per question, so project-wide relevance is the design
+    task pool per question, so task-wide relevance is the design
     (`docs/knowledge/coverage-base-project-pool-wide.md`) — and the contract's invariant 3
     requires only that the copy never imply one number contains the other, which it does
     not. Revisit if the multi-question IA makes per-question relevance meaningful.
@@ -366,7 +366,7 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **`TARGET_CONFIDENT_RELEVANT` / `search.target` removed — DISCHARGED (task 029,
   2026-08-06).** The round cap is the budget; there is no confident-relevant stop target.
   `TARGET_CONFIDENT_RELEVANT`, `SEARCH_TARGET_MIN/MAX`, the parser's `target` key, the
-  orchestrator-prompt line advertising it (stale 5–60 range) and the
+  agent-prompt line advertising it (stale 5–60 range) and the
   `target_confident_relevant` payload echo are all deleted. Free text like "aim for 30
   papers" now gets an honest parser refusal instead of compiling to a silent no-op (the
   plan layer always discarded the value; nothing read the echo). `target_reached` stays
@@ -384,7 +384,10 @@ architectural decision to defer, not an omission. Sources: architecture referenc
   calls plus retries. If a latency bound is ever needed it belongs at the runner as a
   step timeout, not inside the fan-out where it truncates an ordered list of queries.
 
-- **`http_budget` counts logical calls, not HTTP requests — OPEN (2026-08-04).**
+- **`http_budget` counts logical calls, not HTTP requests — DISCHARGED (task 038, V10):**
+  renamed `call_budget` (the dict, the field, the reader and the comment), so the name says
+  what it counts. `_TransportMixin.http_calls` is still incremented and never read — a
+  note, not a seam. The original entry:
   `http_calls_by_backend` increments once per `execute_call`, but backends paginate
   internally to satisfy `max_results` (Overton page 50, OpenAlex 200). Holding per-call
   targets near one page keeps the two roughly equal, which is why the current values are
@@ -486,7 +489,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   transport filter (the V2 lesson).
 - **Tool-wide depth/time-budget gradation** (rev 3.12, user direction) — the depth axis is
   a spectrum (really-rapid → intermediate → deep → long-running report-grade); the
-  orchestrator compiles a user time/quality preference into per-component depth directives
+  agent compiles a user time/quality preference into per-component depth directives
   + budgets (search depth+wall-clock · screen stage · the 008 parser-tier seam · select
   budget · synthesis caps) at the plan-as-object compile surface. 015's per-depth constants
   table is the extensible compile target. Two 015 observations join this seam: whether the
@@ -581,26 +584,26 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   control flows differ enough (status-outcome objects vs exception-only) that unification
   waits for a third live client to prove the seam.
 - **Concurrent-run write guard** — **DISCHARGED (task 025)**: the API enforces at most one
-  active run per project in Postgres at dispatch (`SELECT … FOR UPDATE` on the project row,
-  `policy_atlas.api.locks.project_lock`); the same primitive serialises check-in answers and
-  continuation claims. *Review amendment (2026-07-21):* the one residual same-project race —
-  the walk executor and a project-locked API mutation (rename) are two unserialized writer
+  active run per task in Postgres at dispatch (`SELECT … FOR UPDATE` on the task row,
+  `policy_atlas.api.locks.task_lock`); the same primitive serialises check-in answers and
+  continuation claims. *Review amendment (2026-07-21):* the one residual same-task race —
+  the walk executor and a task-locked API mutation (rename) are two unserialized writer
   families sharing the `max+1` event-sequence allocator — was found by the 025 review stack
   and closed with a SAVEPOINT-retry in `events.append` (collision → re-read, never a failed
   component commit; misordering remains impossible). Original note: eligibility selection takes no row locks and final writes
   are unconditional, so two simultaneous ingest runs over **one scope** could interleave
   (mirrors 007's concurrent-run dedup note; Codex adversarial finding, task 008). Scoped
   precisely (user question, 2026-07-05): the load-bearing invariant is **at most one active
-  run per project**, not a single-process deployment. Everything the pipeline components
-  mutate is project-scoped (eligibility filters on `project_id`; updates hit
-  `project_source_snapshot`; result-table unique constraints are per-scope; the event-log
-  sequence is `(project_id, sequence)`), so a **multi-user web app with users on different
-  projects is already safe** — the spec's "single active writer" is a per-project property.
-  The hazard is two writers on the *same* project (double-submit, retry racing the original,
+  run per task**, not a single-process deployment. Everything the pipeline components
+  mutate is task-scoped (eligibility filters on `task_id`; updates hit
+  `task_source_snapshot`; result-table unique constraints are per-scope; the event-log
+  sequence is `(task_id, sequence)`), so a **multi-user web app with users on different
+  tasks is already safe** — the spec's "single active writer" is a per-task property.
+  The hazard is two writers on the *same* task (double-submit, retry racing the original,
   two queue workers claiming one run). **Pre-registered requirement for the web-app /
-  durable-execution slice:** enforce one-active-run-per-project at run dispatch (Postgres
-  advisory lock on project id, or a partial unique index allowing one `running` run per
-  project) — or add row-level guards (`SELECT … FOR UPDATE` / status-guarded `UPDATE … WHERE`)
+  durable-execution slice:** enforce one-active-run-per-task at run dispatch (Postgres
+  advisory lock on task id, or a partial unique index allowing one `running` run per
+  task) — or add row-level guards (`SELECT … FOR UPDATE` / status-guarded `UPDATE … WHERE`)
   in the components.
 - **ML-layout parse escalation (docling)** — the quality tier for documents where pymupdf4llm's
   font-size heading heuristic fails. Observed at 008's /verify: four heading-light academic
@@ -657,12 +660,12 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Injection-screening posture extended to fetched full text** — same posture as acquired
   abstracts (007 entry above): full-text chunks are third-party content-of-record; nothing in
   v3.0 interprets them; enforcement lands with the LLM seams that read them.
-- **Cross-project full-text snapshot reuse** — same shape as the acquired-envelope dedup entry
-  (Data model section): `source_snapshot` is project-free, so reuse is additive. Note: today
-  concurrent ingest of one document in two projects merely duplicates snapshots (wasteful, not
-  corrupting); the reuse seam turns that into the system's first genuinely **cross**-project
-  write race (two projects deduping onto one snapshot) — that slice inherits the concurrency
-  design, alongside the per-project run guard above.
+- **Cross-task full-text snapshot reuse** — same shape as the acquired-envelope dedup entry
+  (Data model section): `source_snapshot` is task-free, so reuse is additive. Note: today
+  concurrent ingest of one document in two tasks merely duplicates snapshots (wasteful, not
+  corrupting); the reuse seam turns that into the system's first genuinely **cross**-task
+  write race (two tasks deduping onto one snapshot) — that slice inherits the concurrency
+  design, alongside the per-task run guard above.
 
 ## Characterise / embeddings / telemetry (task 009 seams)
 
@@ -672,15 +675,18 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   wart (extract windows, screening fan-outs now nest under the component root
   instead of minting separate traces). Second half stays open: planner turns
   are deliberately separate traces (B2 record), session-correlated — consider
-  one conversation-root trace per orchestrate process with turn spans, or
-  accept the session view as the grouping. Bounded telemetry rider; the
+  one conversation-root trace per agent process with turn spans, or
+  accept the session view as the grouping — **second half DISCHARGED (task 038, V9):**
+  the session view is the grouping, and one Task is one session: planning turns, run
+  start, steering continuation and chat turns all pass `session_id = task id`, with the
+  conversation id kept as trace metadata `conversation_id`. Bounded telemetry rider; the
   capability-run entity (§ Select) — **DISCHARGED task 024** — is now the
   structural home; the trace-grouping work itself (turn-span consolidation)
   remains open.
 
 - **EB artefact composition — LANDED with revised ownership (task 013, ADRs 0009 + 0010).**
-  Synthesise (not the orchestrator) composes the one EB artefact at the run terminus —
-  capability-composes; the orchestrator shapes sections at plan time. What remains
+  Synthesise (not the agent) composes the one EB artefact at the run terminus —
+  capability-composes; the agent shapes sections at plan time. What remains
   deferred is the **composition-conventions** seam (block ordering/summary/key-findings
   conventions beyond proposal-order binding; citation renumbering-by-first-appearance —
   the V2-autopsy composition-seam note) and supersede + lock-on-advance versioning
@@ -728,7 +734,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   owns: quality bars, adversarial/injection-shaped corpora beyond the shipped unit tests,
   **zero-support theme pruning** (discovery can emit themes assignment gives no members;
   they persist honestly with `size: 0` — pruning is a quality call, review adjudication
-  2026-07-06), and a **two-scopes-one-project coverage fixture** (semantics verified
+  2026-07-06), and a **two-scopes-one-task coverage fixture** (semantics verified
   correct, untested combination).
 - **TopicGPT extensions** — topic refinement (merge/split against assignment evidence) and
   quotation-verified assignment, at the grouping-quality eval seam (contract § Research
@@ -751,7 +757,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   fail-closed `FACET_VALUE_CAP`; unseeded runs → deterministic sorted value
   ordering/ids (identical inputs yield identical prompts).
 - **Tag namespace consolidation** — pruning/merging accreted `source_tag` assertions
-  (re-runs accrete by design; provenance classes never merge) — an orchestrator-seam
+  (re-runs accrete by design; provenance classes never merge) — an agent-seam
   follow-on once real tag spaces emerge (contract decisions 5, 10). A third search backend
   also registers its tag extractor next to its mapper — `_provider_tags` dispatches by
   backend name and silently yields no tags for unknown names (`_MAPPERS` and the tag
@@ -759,8 +765,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   #3 lands — review adjudication, 2026-07-06). **Sharpened trigger (user live
   observation, 2026-07-10, recorded at the 017 gate):** classify's open
   methodological/structural tag vocabulary fragments at live scale, isolating
-  documents — consolidation becomes useful there first; still an orchestrator-family
-  seam with the trigger unfired in v1 (one run per project).
+  documents — consolidation becomes useful there first; still an agent-family
+  seam with the trigger unfired in v1 (one run per task).
 - **Langfuse follow-ons** (decision 13 ships the baseline: env-gated client, full-I/O
   spans, in-span scores, no-op with nothing configured, loud on partial config / missing
   host): runtime prompt-registry deployment (labels/environments, emergency-edit
@@ -982,10 +988,10 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Intra-run shared-basis-snapshot memo** — two selected docs whose basis resolves to the
   *same* content-keyed snapshot (identical full text dedup'd across docs) would both
   fresh-extract and collide on the memo key (IntegrityError → honest loud failure).
-  Impossible with the current corpus (pss is unique per project+snapshot; full-text
+  Impossible with the current corpus (tss is unique per task+snapshot; full-text
   snapshots are per-doc); if content-hash full-text dedup ever lands, add an in-run memo
   update so the second doc reuses the first's record. Same posture for **concurrent
-  extract runs** over the same project/fingerprint (011 review, Codex): the memo read is
+  extract runs** over the same task/fingerprint (011 review, Codex): the memo read is
   not atomic with the insert, so two simultaneous runs can both extract fresh and the
   second fails loudly on `uq_ser_memo` — wasted spend, never corruption; a single-writer
   operating model makes this a non-path today.
@@ -994,7 +1000,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   `source_extraction_record.primary_evidence_type` now records what was actually sent
   to the prompt (CHECK'd against `EVIDENCE_TYPES` + `'Unclassified'`; null on
   pre-prompt failure rows only — `empty_basis`/`basis_mismatch` never fabricate a
-  value). The memo-match rule stays deferred: the memo still keys on (project, basis
+  value). The memo-match rule stays deferred: the memo still keys on (task, basis
   snapshot, fingerprint) only, and its trigger — a hand-rolled plan that extracts
   *before* classifying — still doesn't exist. If such plans become supported, make
   memo hits require an evidence-type match too.
@@ -1031,7 +1037,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **`query-findings` tool — DISCHARGED in full (task 013).** The scoped read tool landed
   with its deliberative consumer exactly as recorded: agent-invoked in synthesise's
   section loop (`make_findings_reader` behind the closed tool set), deterministic and
-  project/run-scoped. Group's deterministic read stands unchanged; the 012 deviation
+  task/run-scoped. Group's deterministic read stands unchanged; the 012 deviation
   from components §8's tool table is closed.
 - **Facet-grouping quality evals** — extends the 009 grouping-quality eval seam:
   partition coherence/usefulness on real reference sets, negative-rule adherence beyond
@@ -1083,7 +1089,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   (B3 `grouping.guidance`), or as-proposed — routed through `propose_synthesis_plan`.
 - **Facet-theme promotion** (012 contract rev 1.2) — canonical/queryable facet groupings
   for downstream capability agents. The data-model's staged ladder: run-local (shipped —
-  rung 1) → project-scoped persistent → graph datastore, gated on an
+  rung 1) → task-scoped persistent → graph datastore, gated on an
   entity-resolution-quality bar (a facet-group label bundling different sources' strings
   asserts cross-source identity, often question-relative — never trusted canonically
   before that bar exists). Options Assessment reads run-referenced groupings by
@@ -1167,7 +1173,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   gather strategically per section instead of relying on global boosts — "act like a
   researcher". Interacts with the Cohere/Bedrock cross-encoder rerank recorded at the
   `retrieve` seam. **Plumbing BUILT (task 022, item 13)** — per-argument fail-closed
-  filters (doc ids ∈ corpus · group ids resolve · evidence types enum · tags ∈ project
+  filters (doc ids ∈ corpus · group ids resolve · evidence types enum · tags ∈ task
   set; the earlier "like the directive boosts" precedent was corrected at the 022
   adversarial review — boosts record unmatched values, these REJECT) + the v7 tool
   description. Remaining seam: **WHEN-to-scope prompt guidance** — post-eval tuning
@@ -1378,7 +1384,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   size. Behaviour-preserving, test-pinned (byte-identical first-window payload + the
   prefix-hydration proof).
 
-## Orchestrator (task 017 seams)
+## Agent (task 017 seams)
 
 - **`_REGISTRY_COMPONENT_BY_STEP` simplification candidate — DISCHARGED
   (task 019).** Collapsed to the `registry_component_for()` one-liner; the
@@ -1394,11 +1400,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   evals). Contract rev 2c, user + lead converged. **Still open after task 024
   (2026-07-16)** — the agent itself stays post-eval as pinned, but 024 built
   its walk-forward sockets (author-blind compile, `authored_by`/`decided_by`
-  attribution, the authoring-seam protocol at the orchestrator watch + the
+  attribution, the authoring-seam protocol at the agent watch + the
   `leg_directive` slot) so arrival is a backend swap; see the "EB-expert
   capability agent" entry in the Steering surface section below.
 - **Plan-field ↔ chat-turn provenance** — v1 persists the approved plan
-  object (`orchestration_plan` rows), not per-field conversation
+  object (`plan` rows), not per-field conversation
   back-references; the planning transcript is ephemeral CLI state. The
   spec's provenance rule (plan-as-object) waits for the workspace cluster.
   017 review addendum: a steer-point reselect's plan version row carries
@@ -1420,8 +1426,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   steering → replanning · mid-run mode *suppression* rules. All stayed out of
   017 by contract (Out-of-scope); check-in content stayed deterministic renders.
   024 resolves three of these: **`agent_judgement_routed` residual events** ship
-  in full (the orchestrator watch emits them for every triage/decision/authoring
-  verdict, `decided_by: user | orchestrator | standing_default` attributed) ·
+  in full (the agent watch emits them for every triage/decision/authoring
+  verdict, `decided_by: user | agent | standing_default` attributed) ·
   **`clarify`/`escalate` parking on durable signals** ships as the watch's
   bias-to-escalate rule over the persisted trigger floor, event-backed · **free-text
   steering** ships as the router (fan-out compile across not-yet-run components,
@@ -1452,13 +1458,13 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 
 - **`supersedes` edge on `source_snapshot`** — human-asserted pointer from a corrected re-upload
   to its predecessor; deferred until the re-upload UX is scoped. The schema shape (content-addressed
-  snapshots without project_id) already supports it; no data migration needed.
-- **Content-hash dedup for acquired cross-project snapshots** — the schema shape supports sharing
-  (no `project_id` on `source_snapshot`); task 007 built **project-scoped** dedup only (three
+  snapshots without task_id) already supports it; no data migration needed.
+- **Content-hash dedup for acquired cross-task snapshots** — the schema shape supports sharing
+  (no `task_id` on `source_snapshot`); task 007 built **task-scoped** dedup only (three
   guards: `backend_record_id` · normalized DOI · content hash, preloaded in-memory per call).
-  Cross-project snapshot reuse, **fuzzy near-dup matching** (title similarity — DOI-only
+  Cross-task snapshot reuse, **fuzzy near-dup matching** (title similarity — DOI-only
   cross-backend identity in v3.0), and **concurrent-run dedup hardening** (two simultaneous
-  acquire runs for one project could double-insert past the in-memory preload; a DB-level guard
+  acquire runs for one task could double-insert past the in-memory preload; a DB-level guard
   is a gated schema change; v3.0 execution is single-process/serial — Codex adversarial finding,
   task 007) are the follow-ons.
 - **LLM-as-judge grounding tier on `citation`** — `citation.verification_result` is set by the
@@ -1471,7 +1477,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   normalisation remains the recorded seam. (The 001 echo path's first-matching-chunk
   behaviour stands until that path is retired.)
 
-- **`Library`** (curated cross-project collection: per-user → team/org) and **`Connected`**
+- **`Library`** (curated cross-task collection: per-user → team/org) and **`Connected`**
   (auth'd departmental-repository ingest) — the public/acquired dedup slice is *un*-deferred; the
   curated collection + access layers are not. **Source-class lifecycles** stay collapsed to
   `origin`.
@@ -1480,26 +1486,27 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Open-web `search` backend** (trust class: untrusted open web) — behind the same `search` verb,
   declaration-scoped, with mandatory injection screening; ingests as frozen chunks (no
   cite-the-live-web path).
-- **Cross-project finding reuse** (sits next to the rejected global KG).
+- **Cross-task finding reuse** (sits next to the rejected global KG).
 - **Editing UX** — human amendment is representable in provenance now; the editing *UX* is
   deferred to user testing.
 - **Support-direction relations** (supports / caveats / contradicts) + user counter-evidence
   search.
-- **Multi-question-project reuse seams (workspace-cluster design input, owner
-  conversation, 2026-07-12)** — docs-only, no build. Project = a container for
-  MULTIPLE EB questions (see `project-multi-question-intent.md`); three
+- **Multi-question-task reuse seams (workspace-cluster design input, owner
+  conversation, 2026-07-12)** — docs-only, no build. Task = a container for
+  MULTIPLE EB questions (see `project-multi-question-intent.md`; the row this
+  note calls `project` is `task` as of task 038); three
   recorded reuse questions for when the workspace-cluster contract is drafted:
-  **project-grain classify label reuse** — an extraction-memo-style seam
+  **task-grain classify label reuse** — an extraction-memo-style seam
   (classify's per-(scope, source) result reused across questions in one
-  project rather than re-run per question), which must respect the
+  task rather than re-run per question), which must respect the
   Unknown-resolution staged-result pattern (§ Evidence Base internals) rather
   than bypass it; **appraisal reuse keyed on `rubric_version`** — per-scope
   appraisal rows are a deliberate hedge for the plan-carried rubric seam
   (§ Evidence Base internals: Steerable / plan-carried appraisal rubric), so
-  reuse must key on `rubric_version`, not assume one rubric per project; and
+  reuse must key on `rubric_version`, not assume one rubric per task; and
   **pool-wide per-question screening cost growth** — screening re-runs
   pool-wide per question (verified scope mechanics, 2026-07-12), so cost grows
-  with the number of questions per project, a sizing input for the
+  with the number of questions per task, a sizing input for the
   workspace-cluster contract.
 
 ## Execution / collaboration / ops
@@ -1533,7 +1540,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   dependent sub-graph; a dedicated durable workflow engine; durable timers. (Within-step
   data-parallel fan-out is **retained**, not deferred.)
 - **Formal sign-off / clearance workflow**, **artefact-scoped permissions / full RBAC**,
-  cross-project nudges.
+  cross-task nudges.
 - **Per-item sensitivity gates & egress control**, **private / self-host deployments** — return
   when a sensitivity label drives concrete behaviour (block / approve / generalise / route /
   private deploy).
@@ -1547,9 +1554,9 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   **Data accrual starts in 018** (durable per-component wall-clock + in/out counts on every
   run); the model itself is eval-slice-or-later work over that accrued telemetry.
 - **Forecast/prewarm extraction** — modelled only if built (no inert forecast object otherwise).
-- **`structlog.contextvars.bind_contextvars` for ambient run/project correlation —
+- **`structlog.contextvars.bind_contextvars` for ambient run/task correlation —
   DISCHARGED (task 019).** Bound once per component execution at `run_harness`
-  (`bound_contextvars` context manager), instead of threading `project_id`/`run_id`
+  (`bound_contextvars` context manager), instead of threading `task_id`/`run_id`
   kwargs through every call site. `exc_info` renderers (`dict_tracebacks` for JSON,
   `format_exc_info` for console) were added to the processor chain so
   `exc_info=True` now carries type/traceback.
@@ -1564,7 +1571,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Search-as-shared-tool layer** (owner ruling, 2026-07-14) — the spec classes search as
   a universal core tool, but no incoming capability searches; they read the EB corpus.
   Extract a `tools/`-style search layer only when a web-search capability or a new data
-  source lands. Until then search lives in `evidence_base/sourcing/`.
+  source lands. Until then search lives in `evidence_search/sourcing/`.
 - **Five-facet group fan-out** (023 optimisation lane #1, high impact on deep runs) — the
   5 facet pipelines in `group` are verified order-independent, but claim-theme facets read
   via a shared non-thread-safe Connection. Safe shape: hoist per-facet conn reads before a
@@ -1582,11 +1589,11 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
   into every caller. Retire alongside the inference-seam decisions at Bedrock, when the
   routing seam is touched anyway.
 - **`core/tracing.py` EB-domain score renderers** — tracing imports
-  `evidence_base.corpus.theme_grouping` + finding PROFILE_IDs for its `*_score_summary`
+  `evidence_search.corpus.theme_grouping` + finding PROFILE_IDs for its `*_score_summary`
   functions; a core→capability edge the regroup made visible. Relocate renderers into
   their phase modules (or invert via injection) in a slice that touches tracing.
 - **Per-lane test-DB partition — RECURRENCE (023)** — the 018 entry above fired twice in
-  023's build: parallel lane done-checks and the orchestrate smoke both left committed
+  023's build: parallel lane done-checks and the agent smoke both left committed
   rows that break migration-roundtrip downgrades across sessions. 023's mitigations:
   serial gate re-runs + dropdb/createdb resets + the smoke recipe
   (`docs/knowledge/orchestrate-stub-smoke.md`). If parallel lanes stay routine, promote
@@ -1619,7 +1626,7 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 - **Per-query source provenance (demo carry-back, 2026-07-15)** — the search fan-out is
   already fully audited at the query grain (`search.executed` events persist query text,
   backend, filters, origin and result count), but `source.acquired` /
-  `project_source_snapshot` never record *which query surfaced the source*. Two
+  `task_source_snapshot` never record *which query surfaced the source*. Two
   consequences: per-query relevance ("this query surfaced 12 sources, 5 screened
   relevant") is underivable, and any user-facing search-audit surface can only attribute
   relevance per backend. Fix is in acquire: stamp acquired sources with the surfacing
@@ -1631,8 +1638,8 @@ Recorded per contract § Verification (rev 3.14 list) + the 015 review stack.
 Recorded per the annex's "Still OUT, even in the big slice" list
 (`docs/tasks/024-steering-surface/steerability-refinement.md`) plus seams the
 build itself surfaced. 024 shipped the P1–P4 steer-point lattice (search
-exception · evidence-base coverage · deepening selection · the synthesis
-shape), the four delegation-posture modes + decider dial, the orchestrator
+exception · evidence-search coverage · deepening selection · the synthesis
+shape), the four delegation-posture modes + decider dial, the agent
 watch (triage/decide/route, two-tier information model), the router (free-text
 → fan-out compile), guidance channels B1/B3/B5, structured keys
 D1/D3/D5/D6/D7/D8/D9, and the two re-run modes (additive/replacement) as
@@ -1676,7 +1683,7 @@ first-class vocabulary. What follows is what it deliberately left out.
   024's trigger floor does not include it.
 - **Mid-component steering** (between deep-search rounds, between synthesis
   sections) **— OUT (2026-07-16).** Requires the durable-resume engine
-  (§ Orchestrator task-017 seams, "Resume-engine design requirement"); the
+  (§ Agent task-017 seams, "Resume-engine design requirement"); the
   boundary-only pause model holds. 024's segment re-entry generalises the
   *boundary* re-run (bounded forward re-walk, one cycle per boundary), never
   an in-flight pause mid-component.
@@ -1693,16 +1700,16 @@ first-class vocabulary. What follows is what it deliberately left out.
   (`search.executed` events), targeted additive re-search after via P2's
   segment re-entry.
 - **The EB-expert capability agent — still post-eval (2026-07-16); three
-  sockets shipped.** Cross-refs the entry above (§ Orchestrator task-017
+  sockets shipped.** Cross-refs the entry above (§ Agent task-017
   seams). 024 builds the walk-forward sockets so the eventual arrival is a
   backend swap, not surgery: (1) author-blind compile — already the design
   for every channel/key; (2) `authored_by`/`decided_by` attribution on every
   steering event — the history projection is unchanged when the author
   changes; (3) the authoring seam as a protocol — "boundary state + intent →
-  suggested responses / decision" — the orchestrator watch implements it
+  suggested responses / decision" — the agent watch implements it
   today; post-eval the EB-expert plugs in behind it at the runner's existing
   `leg_directive` slot. Authority order is fixed regardless of author: user >
-  declared rules > orchestrator.
+  declared rules > agent.
 - **Tier-1 (routine-boundary) triage tooling — deferred (2026-07-16).**
   Bounded read-only tool pulls (`lookup`, `query_findings`, cap ~4) ship at
   decision points (P1–P4 + watch escalations — tier 2); tooling for tier-1
@@ -1716,10 +1723,10 @@ first-class vocabulary. What follows is what it deliberately left out.
   the record lives in our store (018 standing constraint; audit/FOI/
   portability). 025's co-pilot Q&A needs persisted per-user sessions
   ("multiple persisted sessions; browse previous ones") — the transcript
-  companion store (per-user/per-project turn table, session/`capability_run`
+  companion store (per-user/per-task turn table, session/`capability_run`
   linkage, window-plus-recall context assembly) lands there. **DISCHARGED
   (task 029, contract §1/§5):** the unified `conversation` + `chat_turn`
-  tables are that companion store — per-project chats (many, read-only),
+  tables are that companion store — per-task chats (many, read-only),
   `client_turn_id` idempotency, and a ceiling-windowed context assembler
   (frame + verbatim turns, no recall-with-summarization yet — see "recall
   beyond the window" below). Provider-side conversation state stays
@@ -1735,7 +1742,7 @@ first-class vocabulary. What follows is what it deliberately left out.
   - **Segment-reentry re-presentation boundary runs unwatched** — the
     one-cycle re-presentation after an additive segment re-entry
     (`_run_plan_segment_reentry`, `runner.py:2982`) calls
-    `_handle_after_component_boundary` without an `orchestrator` argument
+    `_handle_after_component_boundary` without an `agent` argument
     (defaults `None`); that specific re-presentation is structural-floor-only,
     no watch judgement. Named, not yet closed.
   - **D3 repeat-refresh fingerprint collision** — the refresh-tagged
@@ -1763,7 +1770,7 @@ first-class vocabulary. What follows is what it deliberately left out.
     pending-select entry above).
   - **Deliberation `needs_tool` structured field is primary** — the watch's
     fallback tool-call loop reads the structured `needs_tool`/`needs_arguments`
-    wire fields (`orchestrator_backend.py:578`, `orchestrator_prompt.py:229`)
+    wire fields (`agent_backend.py:587`, `agent_prompt.py:244`)
     first; the legacy JSON-in-`needs` free-text fallback is retained for
     backward parse tolerance, not the primary path.
 
@@ -1843,7 +1850,7 @@ first-class vocabulary. What follows is what it deliberately left out.
   transports). A *designed* per-component progress protocol (typed progress shapes,
   coverage of every component, durable where warranted) is still open.
 - **Cursor pagination migration path** (025 API pins) — offset + `total_items` is the
-  deliberate v1 shape at per-project scale; if cross-project or unbounded-growth listings
+  deliberate v1 shape at per-task scale; if cross-task or unbounded-growth listings
   appear, add an opaque `cursor` param alongside (additive, never a breaking reshape).
 - **Hard purge** (025 contract 🟡) — delete = idempotent archive (rows retained per the
   audit/FOI/portability constraint). A real purge (rows, snapshots, event history) is its
@@ -1854,9 +1861,9 @@ first-class vocabulary. What follows is what it deliberately left out.
 - **Plan-field↔turn provenance** (025 adversarial finding 7) — ephemeral planner prose is
   not execution-bearing for continuation, but which conversation turn produced which plan
   field remains an acknowledged loss until the transcript store (026) / workspace-cluster.
-- **NULL-owner pre-025 projects** (migration b5f1a3d7e9c2) — rows predating ownership keep
+- **NULL-owner pre-025 tasks** (migration b5f1a3d7e9c2) — rows predating ownership keep
   `owner_user_id NULL` and are intentionally inaccessible via the strictly owner-scoped
-  API (the dev DB's two live-run projects are the known case). Recovery is a documented
+  API (the dev DB's two live-run tasks are the known case). Recovery is a documented
   manual UPDATE at the DB; an admin/ownership-claim surface is deliberately unbuilt.
 - **`CitationOut.source_id`** (025 live check, 2026-07-21) — **CLOSED at 027 owner
   feedback (2026-07-29)**: `source_id` (+ `grounding_rationale`) added to `CitationOut`;
@@ -1874,8 +1881,9 @@ first-class vocabulary. What follows is what it deliberately left out.
   **fixed in-slice**: on error the provider renders a "Sign in again" retry that
   strips consumed `code`/`state` params before stashing the return path; the shell
   never mounts. Only the router-navigate restoration above remains open.)
-- **Rename/archive controls in the UI** (025 live check) — the PATCH/archive mutations
-  exist, are authz-tested and envelope-conformant; no view exposes them yet. Ingest also
+- **Rename/archive controls in the UI** (025 live check) — **CORRECTED (task 038):** the
+  task settings menu has exposed rename and archive since task 032; the entry was stale.
+  The PATCH/archive mutations exist, are authz-tested and envelope-conformant. Ingest also
   presents under the acquire stage label ("Searching sources" while reading documents) —
   both are workspace-surface polish for the next frontend-touching slice.
 
@@ -1895,7 +1903,7 @@ first-class vocabulary. What follows is what it deliberately left out.
 - **025 "draft conversation is lost on restart" pin — DISCHARGED** (027 strand 12,
   2026-07-29): the planning conversation persists in `planning_transcript` (durable
   idempotency, rehydration, restart-surviving thread — live-checked). No backfill:
-  pre-027 projects have zero turn rows.
+  pre-027 tasks have zero turn rows.
 - **Co-pilot Q&A UI seam** — multi-thread chat, Chats library, per-thread artifact
   context (PR #35 adjudication): the transcript schema is deliberately single-table/
   planning-only so the co-pilot slice brings its own thread/context model; the rail is
@@ -1921,11 +1929,11 @@ first-class vocabulary. What follows is what it deliberately left out.
   the acquire component, so mid-stage per-backend counts genuinely cannot stream yet;
   the journey shows tick-based activity until stage completion. Revisit if tick payloads
   ever widen (behaviour change, own gate).
-- **Print/share/export CTA** — the evidence-base print stylesheet ships; the share/export
+- **Print/share/export CTA** — the report print stylesheet ships; the share/export
   product seam stays deferred and undischarged.
-- **Project-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
+- **Task-wide decision-log scoping** (read-model-additions.md rev 2 [D-2], recorded
   here per its own commitment): the decisions read model derives from every run in the
-  project; the journey card says "attributed across this project". Run-scoped decision
+  task; the journey card says "attributed across this project". Run-scoped decision
   views wait on the workspace-cluster IA's run-scoped read models (above).
 - **`DecisionOut.detail` server-side narrowing** (read-model-additions.md rev 2 [D-4],
   API hygiene): `detail` passes the raw event payload through; the client renders only
@@ -1937,9 +1945,9 @@ first-class vocabulary. What follows is what it deliberately left out.
   capability run interrupted, so the user-facing state is honest). A runs-row
   reconciliation sweep is the seam if that trail ever needs to be self-consistent.
 - **Filter pagination materialises the collection** (027 C.2, by design): evidence and
-  findings pages derive the full project collection per request for collection-true
+  findings pages derive the full task collection per request for collection-true
   `total_items` (funnel precedent), so a page walk is O(N) per page. Fine at
-  single-project scale; revisit with SQL-level filters if project corpora grow 10×.
+  single-task scale; revisit with SQL-level filters if task corpora grow 10×.
 
 ## UX refinement (task 028 seams)
 
@@ -1957,14 +1965,14 @@ first-class vocabulary. What follows is what it deliberately left out.
   contract admit it, nothing writes it; the FE keys strictly on `"verified"` so nothing
   mislabels, but in-flight and never-summarised are indistinguishable to readers. Write
   `pending` at mint (or drop the vocab) when a consumer needs the distinction.
-- **P1 sample titles are project-wide** (028 review m4): `p1_bundle.sample_titles` takes
-  the five latest `project_source_snapshot` rows for the whole project while counts and
-  queries are scope-filtered — in a multi-question project the card can show another
+- **P1 sample titles are task-wide** (028 review m4): `p1_bundle.sample_titles` takes
+  the five latest `task_source_snapshot` rows for the whole task while counts and
+  queries are scope-filtered — in a multi-question task the card can show another
   question's documents. Scope the sample when the workspace-cluster/multi-question IA
   lands.
-- **`_source_reason_maps` scans the full project event log per request** (028 review
+- **`_source_reason_maps` scans the full task event log per request** (028 review
   m5): every evidence page / dossier read JSON-walks all `source.screened`/
-  `source.classified` events (the dossier builds both whole-project maps for one
+  `source.classified` events (the dossier builds both whole-task maps for one
   source). Within the funnel_out materialisation precedent, but this is the append-only
   event log — payload-filtered SQL or a dossier-scoped variant when event logs grow.
 - **`planning_part_dropped` is a structlog warning, not a domain event** (028 review
@@ -1998,7 +2006,7 @@ first-class vocabulary. What follows is what it deliberately left out.
 
 ## Co-pilot chat (task 029 seams)
 
-029 shipped the unified `conversation` model — many read-only chats per project plus
+029 shipped the unified `conversation` model — many read-only chats per task plus
 one planning conversation per plan lineage — with streamed NDJSON turns, claim-grained
 citation floors, and async grounding-judge enrichment (contract
 `docs/tasks/029-copilot-chat/contract.md`). What follows is what it deliberately left
@@ -2027,7 +2035,7 @@ out (Out-of-scope list plus seams named in the strands).
   `search_chunks` retrieves within its evidence scope (`chat_scope.py` passes
   `scope.evidence_scope_id` into `build_retrieval_scope`). The contract's
   strand-4 "whole shared corpus (all runs' screened-in text)" search is
-  therefore NOT what shipped — on a re-run project, earlier runs'
+  therefore NOT what shipped — on a re-run task, earlier runs'
   screened-in text is unsearchable from chat (identical behaviour on the
   dominant single-lineage shape; conservative, no leak). Found by the 029
   review stack (contract-verifier lane); flagged to the owner at the 029 PR.
@@ -2045,9 +2053,9 @@ out (Out-of-scope list plus seams named in the strands).
 - **Conversation search** — the library lists and previews (title, latest-turn
   snippet); there is no search-within-conversations or cross-conversation content
   search.
-- **Project-level standing chat instructions** — no per-project custom/standing
+- **Task-level standing chat instructions** — no per-task custom/standing
   instructions layer sits above `chat_v1`; the system prompt is the one
-  lead-authored, version-pinned surface for every chat in every project.
+  lead-authored, version-pinned surface for every chat in every task.
 - **"Continue generating" on a stopped turn** — a cancelled turn keeps its partial
   prose but offers no resume-this-generation affordance; asking again starts a new
   turn.
@@ -2095,15 +2103,18 @@ omissions.
   `plan.title`. So a task keeps its derived name until renamed by hand, even after
   planning settles on a better one. Writing it back is new behaviour (which write
   wins, and when) rather than a display fix.
-- **Portfolio soft-delete** — the `portfolio` row has no `archived_at` and there is
+- **Project soft-delete** — the `project` row has no `archived_at` and there is
   no archive route (ADR 0031 decision 3). Both land together when archiving a project
   is actually wanted.
-- **Portfolio membership beyond one** — **discharged in 033** (ADR 0032):
-  `portfolio_membership` is many-to-many; a task in two projects counts in
+- **Project membership beyond one** — **discharged in 033** (ADR 0032):
+  `project_membership` is many-to-many; a task in two projects counts in
   both `task_count`s; `source_count` stays on the task.
-- **The code-word/screen-word split** (ADR 0031) — screen **Task** = code `project`,
-  screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this gets its own
-  rename slice, scheduled after 033-organisations** — `project` → `task`,
+- **The code-word/screen-word split** (ADR 0031) — **DISCHARGED (task 038, ADR 0036):**
+  the rows are `task` and `project`, the API is `/api/v1/tasks/**` and `/api/v1/projects/**`,
+  the screen word and the code word are the same word; `frontend/src/lib/vocabulary.ts`
+  stays the one place screen copy is maintained. The original entry: screen **Task** =
+  code `project`, screen **Project** = code `portfolio`. **Owner ruling 2026-08-24: this
+  gets its own rename slice, scheduled after 033-organisations** — `project` → `task`,
   `portfolio` → `project`, mechanical, no behaviour change. It was not folded into 033
   because a ~249-file rename would bury the ~200 lines of tenancy logic that 033's
   security review has to read, and it must also cover the code 033 adds. It breaks
@@ -2148,15 +2159,15 @@ omissions.
   stand:** the admin leg's only control is the trace log, because nothing discloses the
   access to users.
 - **Org-level chat and run capacity policy** — 033 re-keys the chat pending cap from the
-  project owner to the acting user (owner call (b) fairness), which removes the only
-  per-project bound: an organisation of N members can drive 2N concurrent chat turns
-  against one owner's project. Named rather than presented as neutral.
+  task owner to the acting user (owner call (b) fairness), which removes the only
+  per-task bound: an organisation of N members can drive 2N concurrent chat turns
+  against one owner's task. Named rather than presented as neutral.
 - **Cognito email re-sync as an automatic process** — 033 ships `user resync --email` as a
   manual lever. Nothing detects an address changed in Cognito, so the stored value goes
   stale until an operator acts. Staleness is not correctness-critical (`sub` is the key)
   but it does break admin search and means the app holds an inaccurate address.
 - **NULL-owner pre-025 rows are still not adopted, but they are no longer unreachable** —
-  033's admin read leg has no owner predicate, so `runtime/orchestrate.py` CLI rows and
+  033's admin read leg has no owner predicate, so `runtime/agent.py` CLI rows and
   pre-025 rows appear in an admin's cross-org listing with a null owner and null
   organisation. This amends the "unreachable" wording in the recorded posture.
 - **An admin dashboard / admin surface** — 033 adds `app_user.is_admin` (owner call (f),
@@ -2168,12 +2179,12 @@ omissions.
 - **What remains of the workspace-cluster IA** — this slice discharged the
   *navigational* half of the IA seam: one lifecycle, a grouping above tasks, and one
   destination per task state. It did **not** re-parent plan, run or artefact onto a
-  task entity, so the code word `project` still means what the screen calls a Task,
-  and the vocabulary split recorded in ADR 0031 persists. The cluster slice remains
-  the place where that split is finally resolved.
+  task entity. **Corrected (task 038):** the vocabulary split recorded in ADR 0031 was
+  resolved by the rename slice (ADR 0036), not by re-parenting — the code row is now
+  `task`. What remains for the cluster slice is the re-parenting question alone.
 - **Sharing and export** — Share hosts **project membership** from task
   creation (033). Sharing and export themselves stay coming soon. The
-  download control reuses the evidence-base print stylesheet that already
+  download control reuses the report print stylesheet that already
   ships; any other format says coming soon. The share/export product seam is
   unchanged from `docs/deferred.md` § Web app.
 - **The three unbuilt capabilities** — scoping policy options, theory of change and
@@ -2185,11 +2196,11 @@ omissions.
   `index.css` token list and the tailwind-merge registration in `cn.ts` stay in sync
   (`src/ui/brand/typeScale.test.ts`), which is the failure that actually shipped in
   028.
-- **Portfolio surfaces in the mock API** — ~~`src/mock/api.ts` serves no
+- **Project surfaces in the mock API** — ~~`src/mock/api.ts` serves no
   `/api/v1/portfolios`~~ **discharged by 033** (Phase 10a + ux-snags): the mock now
-  serves `/api/v1/me`, `GET /api/v1/portfolios`, `GET /api/v1/portfolios/{id}`,
-  `portfolio_id` filtering on the projects list, and membership on the project so
-  Share and the projects list work under `VITE_MOCK=1`. Mock coverage of portfolio
+  serves `/api/v1/me`, `GET /api/v1/projects`, `GET /api/v1/projects/{id}`,
+  `project_id` filtering on the tasks list, and membership on the task so
+  Share and the tasks list work under `VITE_MOCK=1`. Mock coverage of project
   *mutations* beyond the visibility PATCH remains partial.
 
 ## Organisations (task 033 build seams)
@@ -2219,11 +2230,11 @@ omissions.
   stronger org-enrolment refusal.) The live check's "admin in neither org"
   is met by enrolling the admin into a third organisation. If a truly
   org-less admin is ever wanted, an org-less enrol mode is the only route.
-- **`PortfolioOut` carries no last-task-updated timestamp**, so the Projects
+- **`ProjectOut` carries no last-task-updated timestamp**, so the Projects
   overview derives "most recently active" from one global projects page raised to
   the 200-row server cap — an approximation that can mis-order the overview beyond
-  200 active tasks. The fix is a derived field on the portfolio read shape; the
-  detail view is already exact via the `portfolio_id` filter.
+  200 active tasks. The fix is a derived field on the project read shape; the
+  detail view is already exact via the `project_id` filter.
 - **`admin_stream_read` volume** — an idle admin SSE stream emits one trace line per
   0.4 s poll (~2.5/s), which is § 3a's grain implemented as written. If CloudWatch
   cost bites, the lever is the poll interval (or batching), never dropping the grain.
@@ -2238,7 +2249,7 @@ omissions.
   limits. Until then `user create --invite manual` (single-use minted temp
   password, printed once, forced change at first sign-in) is the workaround.
 - **Membership moves race API row creation** (review finding, 2026-08-25, declined
-  as a code fix). `creator_org_id` is a non-locking read, so a project created in
+  as a code fix). `creator_org_id` is a non-locking read, so a task created in
   the window around an enrol/re-enrol/de-enrol can carry the old membership's
   stamp — after a re-enrol A→B, one new row can land org-visible in A. Closing it
   in code taxes every create with a shared `app_user` lock to cover an
@@ -2250,21 +2261,62 @@ omissions.
   surfaces it for user review, the plan editor remains locked (same locked state as
   during an active run). The plan should be unlocked for editing once the lifecycle
   reaches the review/approval step, matching the initial-run behaviour. Observed
-  2026-09-03 on project `65f4e460`.
+  2026-09-03 on task `65f4e460`.
 - **Re-run: previous succeeded artefact inaccessible after later run fails** —
   after a re-run fails (e.g. at the Writing/synthesise stage), the Results tab for
   the earlier succeeded run becomes unreachable from the UI. The previous artefact
   is intact in the DB but the frontend surfaces only the latest run's terminal
   state. The read-model and Results route need to surface the last-succeeded
-  artefact when the latest run is terminal-failed. Observed 2026-09-03 on project
+  artefact when the latest run is terminal-failed. Observed 2026-09-03 on task
   `65f4e460` (first run `99b80f91` succeeded; second run `6f0e353c` failed).
 - **Waitlist spam: WAF rate rule is the upgrade path** — the public
   `POST /api/v1/waitlist` (task 036) is protected by field caps, one row per
   email, and a `website` honeypot only. If real spam appears, add a
   CloudFront/WAF rate-based rule on that path — an infra change, no app
   code. Decided 2026-09-03 (036 review): no CAPTCHA, no in-app rate limiter.
-- **`RunPane`/`JourneyPane` are dead code** — imported by no route; 033 Phase 10c
-  gated and tested them anyway, so re-wiring them inherits the affordance matrix.
-  Either re-wire or delete in a later slice.
-- **The ops CLI reports in code words** (`project`/`portfolio`) — the post-033 rename
-  slice must cover `policy_atlas.ops` and its operator-facing strings.
+- **`RunPane`/`JourneyPane` are dead code — DISCHARGED (task 038, V10): deleted** with
+  their tests and the orphaned `anim-bar` utility (owner chose delete over re-wire;
+  `journey/presentation.ts` stays, `runProgress.ts` imports it). The original entry:
+  imported by no route; 033 Phase 10c gated and tested them anyway.
+- **The ops CLI reports in code words** — **DISCHARGED (task 038):** `rows assign
+  --task/--project`, Makefile `TASK`/`PROJECT`, "moved N task(s), M project(s)".
+
+## Vocabulary (task 038 residue and seams)
+
+Task 038 (ADR 0036) made the code, schema, API and screen use one vocabulary. What it
+deliberately left, each with its reason:
+
+- **`eb_iof_base_v1` / `eb_icf_base_v1` extraction profile ids** — stored fingerprint
+  inputs; renaming them changes every fingerprint for no user-visible gain. Kept.
+- **Public share links copied before the deploy** (`/projects/{id}/results`) — no
+  redirects (owner fork F3; 037 sharing is staging-only); users copy a new
+  `/tasks/{id}/result` link.
+- **Metabase saved questions** on staging Aurora query `project`/`portfolio` by name and
+  break on migration; **Langfuse saved filters** on `orchestrator:*` spans and
+  `project_id` metadata stop matching new traces (`agent:*`, `task_id`). Owner action after
+  merge; the PR names both.
+- **"Untitled project"** — the 025 migration backfilled planless Tasks with that literal
+  name. It is user-editable data, not one of the five reversible stored values, so 038
+  did not rewrite it; such a Task reads "Untitled project" on screen until renamed.
+- **The Task Agent phase model** — planning / running / Q&A stay internal states
+  (conversation `kind` + run status), never shown as words (owner amendment 2026-09-04).
+  A mode enum or a new conversation kind is a feature slice.
+- **Pre-038 stored values are read-side compatible, not rewritten**: `event_log`
+  `project.*` beside `task.*`; `decided_by`/`authored_by` `orchestrator` (read as `agent`);
+  steer-point id `evidence_base_coverage` (read as `evidence_search_coverage`). The
+  downgrade reverses the five values the new image writes (ADR 0036 § Rollback).
+- **Two `docs/knowledge/` filenames keep the old word** (`coverage-base-project-pool-wide.md`,
+  `harness-scope-lookup-project-scoped.md`) — OKF concept ids do not change; each body
+  says the row is now `task`.
+- **Future direction from the definitions (not built):** re-running a Task or part of it
+  from any chat; active chats reachable app-wide from the round Agent icon; any Tasks or
+  Projects as chat context (meta-analysis); "chat more functional" as its own task.
+- **Open PRs #62 and #52** rebase with `scripts/rename_038.py --apply --phase {3,4}
+  --step all` on their own pre-038 branch before merging `dev` (owner fork F5); the
+  script refuses a tree that already looks swept.
+- **"Earlier plan" is unreachable in production (task 038 V8 build finding)** — closing a
+  planning conversation sets `status = 'closed'` (`runtime/conversation_lifecycle.py`),
+  and both library listings ask for `status=active|archived`, so older planning lineages
+  are never returned today. The Task Agent selector and the "Earlier plan" chip are
+  correct whenever they are, and are exercised by tests only. Decide whether closed
+  planning rows should list (a backend filter change) — a one-line owner call.

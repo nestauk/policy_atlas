@@ -24,7 +24,7 @@ intent in four recurring ways:
 3. **A joined lock statement needs `with_for_update(of=table)`**. The bare
    form locks every joined row — found twice in 033 (the turn reservation
    and the graded conversation resolver both silently locked the owner's
-   project row through the join).
+   task row through the join).
 4. **The lock's subject must match the invariant's subject.** A
    conversation-row lock cannot serialize a *per-user* count across
    conversations; 033's pending cap needed a transaction-scoped
@@ -47,7 +47,7 @@ tests, one by an adversarial reviewer reproducing it empirically.
   Same family as re-keying a cap and its sweeper together: a limit and its
   enforcement move as one.
 - The lock a path takes is part of its tenancy design: 033's pre-existing
-  project lock on chat paths protected nothing the conversation row could
+  task lock on chat paths protected nothing the conversation row could
   not, and removing it was safe only because that was proven, not assumed.
 - `hashtext` collisions between two subjects cost a needless wait and
   nothing else — acceptable for a cap, not for a correctness-critical

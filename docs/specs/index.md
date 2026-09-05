@@ -24,6 +24,13 @@ When two of them disagree on such an area, the lower number wins (ratified from 
 8. [synthesis-report-ux/](sources/synthesis-report-ux/README.md) — the 2026-08-26 clickable prototype for the report's Results tab (front matter, key-findings bullets, case-study cards). Product intent only, never a schema/contract source; task 034's contract records its deliberate departures. Read its README for how to unpack it.
 9. [vocabulary/policy-atlas-definitions.md](sources/vocabulary/policy-atlas-definitions.md) — the team's definitions as agreed on 2026-09-04 (Capability · Component · Task · Project · Tabs · Artefact · Agent · Task Agent · Chats · Links · Context). Frozen snapshot; the living version is [vocabulary.md](vocabulary.md).
 
+**Reading a frozen source after task 038** ([ADR 0036](../adr/0036-one-vocabulary-across-code-schema-api-and-screen.md)):
+the sources use the pre-038 words — `project` there is today's **`task`** (the Task),
+`portfolio` is today's **`project`** (the Project), "Evidence Base" as a capability is
+**Evidence search** (`evidence_search`; the phrase still names the collection of documents),
+and "the orchestrator" is the **Agent** (`agent`). The living table is
+[vocabulary.md § Code words](vocabulary.md#code-words).
+
 Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7).
 
 ## Distilled specs in this repo
@@ -36,7 +43,7 @@ implementation lands — see the flow-back in [README](README).
 - [product.md](product.md) — product boundary and shared mental model.
 - [vocabulary.md](vocabulary.md) — the living product vocabulary (owner-maintained
   definitions + the code-word table task 038 keeps in step).
-- System contracts (the cross-cutting framework every capability + the orchestrator honours):
+- System contracts (the cross-cutting framework every capability + the Agent honours):
   - [system/data-model.md](system/data-model.md)
   - [system/provenance-grounding.md](system/provenance-grounding.md)
   - [system/execution-orchestration.md](system/execution-orchestration.md)
@@ -50,12 +57,13 @@ implementation lands — see the flow-back in [README](README).
 
 | If the task touches… | Read |
 |---|---|
+| Product words (Task, Project, Agent, Task Agent, chat, report, evidence base), the code-word table, the two senses of "task" | [vocabulary.md](vocabulary.md) |
 | Entities, blocks, addressable units, annotations, columns/tags, corpus, snapshots, findings layer, versioning, staleness | [system/data-model.md](system/data-model.md) → arch §3 |
 | Meta-synthesis, cross-artefact derivation/dependencies, inherited-artefact edits | [system/data-model.md](system/data-model.md) → arch §3.4 |
 | Claims, citations, grounding tiers, gaps, patterns, `produce-grounded-block`/verify, summaries | [system/provenance-grounding.md](system/provenance-grounding.md) → arch §3.3, §4 |
-| Orchestrator/sub-agents, the tool registry + universal core, steering modes, the routing rule, durability | [system/execution-orchestration.md](system/execution-orchestration.md) → arch §4, §6 |
+| Agent/sub-agents, the tool registry + universal core, steering modes, the routing rule, durability | [system/execution-orchestration.md](system/execution-orchestration.md) → arch §4, §6 |
 | The plan object, plan→config compile, two-level/progressive planning, source/evidence policy, depth/thoroughness | [system/plan-as-object.md](system/plan-as-object.md) → arch §5 |
-| Anything in the Evidence Base run (acquire → … → synthesise) | [capabilities/evidence-search/](capabilities/evidence-search/) → build spec |
+| Anything in the Evidence search run (acquire → … → synthesise) | [capabilities/evidence-search/](capabilities/evidence-search/) → build spec |
 | Writing or changing ANY LLM prompt/envelope surface; the refine-replay loop; model swaps | [system/prompting.md](system/prompting.md) — no frozen-source arch section (018 origin) |
 | Export/share, version-pinned deep-links, the superseded-version banner | **No contract drafted yet** — read arch §10 directly (a down-weighted v3.0 seam). |
 | Collaboration/comments/event log, persistence substrate, observability/eval, security/egress | **No contract drafted yet** — read arch §7, §9, §8, §11 directly; draft the contract when the first task lands. |

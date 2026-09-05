@@ -18,8 +18,8 @@ A corrected re-upload is a new snapshot by design. Silent content-hash dedup wou
 intent to supersede an earlier upload. The planned `supersedes` edge (deferred) is what lets a user
 explicitly mark a re-upload as correcting its predecessor; dedup would make that link invisible.
 
-Cross-project dedup for **acquired** sources (search-pipeline results) is a separate, follow-on
-feature with different rules — the schema shape supports it (no `project_id` on `source_snapshot`),
+Cross-task dedup for **acquired** sources (search-pipeline results) is a separate, follow-on
+feature with different rules — the schema shape supports it (no `task_id` on `source_snapshot`),
 but the lookup logic is deferred.
 
 # Watch out

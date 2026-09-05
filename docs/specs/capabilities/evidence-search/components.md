@@ -23,12 +23,12 @@ acquire → screen → classify → appraise → ingest(fetch) → synthesise   
 **The mandatory EB spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016
 flow-back): every EB run executes acquire(`search`) → screen → classify → appraise →
 ingest(fetch) → synthesise; every other component — characterise · select · extract · group ·
-stage-2 screen — is **orchestrator-discretionary**, chosen per the depth gradation. Mandatory
+stage-2 screen — is **Agent-discretionary**, chosen per the depth gradation. Mandatory
 ingest is a mandatory **attempt**, not a substrate guarantee: live fetching can fail per
 document (in the worst corpus, for every document); what the spine guarantees is that the
 attempt was made and every outcome is reason-coded, with unfetchable documents entering the
 substrate on labelled abstract text (§4). Beyond the spine, the components are a **registry the
-plan selects from** (task 013 flow-back): which fire is the orchestrator's plan-time selection
+plan selects from** (task 013 flow-back): which fire is the Agent's plan-time selection
 from intent; **data dependencies stay structural** (extract needs a selection; group and
 finding claims need an extraction; the artefact needs **at least one groundable substrate** —
 every upstream reference is optional, ADR 0010), expressed as explicit run references compiling
@@ -175,8 +175,8 @@ budget cap + lazy vectorisation for very large relevant sets is a possible later
 Produces the evidence-landscape **content, not presentation**: a run-scoped characterisation
 record + topic/theme tags (task 009 clarification, decision 7). Characterise does **not** mint
 an artefact or blocks — EB produces **one** artefact, composed once at the run terminus **by
-synthesise** (task 013 flow-back, superseding the earlier orchestrator-composes reading; the
-orchestrator shapes sections at plan time — see [capability.md](capability.md)). Two parts:
+synthesise** (task 013 flow-back, superseding the earlier Agent-composes reading; the
+Agent shapes sections at plan time — see [capability.md](capability.md)). Two parts:
 - **Coverage / patterns over metadata** — deterministic distributions and gaps over Tier-0
   columns (study-type, geography, recency, population, category). **Source/evidence policy is
   flag-not-block here** — EB reads and counts *all* relevant in-corpus evidence, so coverage/gaps
@@ -311,7 +311,7 @@ designed.
 ## 9 — synthesise (run terminus)
 
 **EB's terminal component at every depth** (task 013 flow-back): it **composes the one artefact**
-— mints it, renders content into blocks, binds them — with the orchestrator shaping the sections
+— mints it, renders content into blocks, binds them — with the Agent shaping the sections
 at plan time (capability-composes; see [capability.md](capability.md)). What it renders depends
 on what the run produced:
 
@@ -329,7 +329,7 @@ on what the run produced:
   zero — the true miscomposition backstop, unreachable in a composed run under the
   mandatory spine (ADR 0013; the envelope-only refusal the 015 chain smoke hit is
   closed by composition; see the synthesise-is-run-terminus knowledge concept)) and
-  never hard-wires a component combination — the orchestrator selects any coherent
+  never hard-wires a component combination — the Agent selects any coherent
   registry subset and synthesise adapts. **Retrieval scope = the screened-in corpus
   always** (screen is the relevance discipline that bounds reading); **a referenced
   selection is a soft ranking prior, never a hard boundary** — the data-model's scoping
@@ -359,7 +359,7 @@ on what the run produced:
   (the universal-core read tool: appraisals, classifications, selection rationale,
   coverage records, characterisation/grouping rows, **and the tag layer** — per its own
   definition, aggregate queries over columns/tags included; closed query vocabulary,
-  project-guarded), under a hard per-section turn cap, then emits typed claims.
+  task-guarded), under a hard per-section turn cap, then emits typed claims.
   **Availability by substrate**: **pattern claims** (coverage counts with a
   characterisation; direction spreads with extraction/grouping — **IOF-only**,
   deterministically validated; v2's `effect_consensus` counts as this steer — plus, with an

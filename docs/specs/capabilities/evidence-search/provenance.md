@@ -76,5 +76,5 @@ The same discipline applies to *patterns*, not only gaps. Each grade carries dif
   selection would create a material `not_selected` gap (a large / high-priority / user-nominated
   cluster dropped) or when the base is thin / the policy is unmeetable above-bar.
 - At synthesise, the source/evidence policy is **flag-not-block**: below-bar support is **flagged
-  weakly-grounded / below-policy**, never hidden or silently dropped (project-wide
+  weakly-grounded / below-policy**, never hidden or silently dropped (task-wide
   flag-don't-drop).

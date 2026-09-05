@@ -2,7 +2,7 @@
 type: Convention
 title: The event log's run-id FK decides what can carry audit state — no run, no event
 description: Anything that happens without a run — a skipped component, a pre-run plan event, a steering interaction — needs a table-first or outcome-object carrier instead; the same constraint resurfaced three times in one slice. Corollary — some tables reach their run only transitively (annotation via block → artefact), shaping how run-scoped queries must be written.
-tags: [event-log, persistence, audit, orchestrator, architecture]
+tags: [event-log, persistence, audit, agent, architecture]
 timestamp: 2026-07-12
 ---
 
@@ -14,7 +14,7 @@ timestamp: 2026-07-12
 carrier, chosen deliberately:
 
 - **plan lifecycle** (proposed/approved/superseded, before any run) →
-  table-first: `orchestration_plan` version rows (017 contract rev 2.5).
+  table-first: `plan` version rows (017 contract rev 2.5).
 - **skipped components** (a skip means no run row exists) → the
   `RunPlanOutcome` object + end-of-run collation.
 - **steering interactions** → a user-attributed plan version row for
