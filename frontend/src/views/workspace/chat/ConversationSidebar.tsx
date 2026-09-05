@@ -1,9 +1,8 @@
 import { useState } from "react";
 
 import { COPY } from "../../../lib/vocabulary";
-import { cn } from "../../../ui/brand/cn";
-import { FoldMarkIcon } from "../../../ui/brand/FoldMarkIcon";
 import { ConversationList, type ConversationRow } from "./ConversationList";
+import { ConversationRail } from "./ConversationRail";
 import { useConversations } from "../../../api/queries";
 import { taskAgentConversationId } from "./conversationState";
 import { PanelIcon, PlusIcon } from "./icons";
@@ -102,35 +101,16 @@ export function ConversationSidebar({
 
   if (!open) {
     return (
-      <aside
-        aria-label="Chats"
-        className="flex shrink-0 items-center gap-1 border-b border-line bg-paper-2 px-2 py-1.5 lg:h-full lg:w-12 lg:flex-col lg:items-center lg:border-b-0 lg:border-r lg:px-0 lg:py-2"
-      >
-        {toggleButton}
-        <button
-          type="button"
-          aria-label={COPY.newChat}
-          title={newChatTitle}
-          disabled={!chatsEnabled}
-          onClick={onNewChat}
-          className="pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-        >
-          <PlusIcon size={16} />
-        </button>
-        <button
-          type="button"
-          aria-label={COPY.taskAgent}
-          title={COPY.taskAgent}
-          aria-current={onTaskAgent ? "true" : undefined}
-          onClick={() => onSelect(null)}
-          className={cn(
-            "pressable flex h-8 w-8 shrink-0 items-center justify-center focus-visible:outline-2 focus-visible:outline-blue",
-            onTaskAgent ? "bg-blue-tint" : "hover:bg-blue-tint-2",
-          )}
-        >
-          <FoldMarkIcon size={11} />
-        </button>
-      </aside>
+      <ConversationRail
+        toggleLabel="Show chats"
+        expanded={false}
+        onToggle={toggle}
+        onNewChat={onNewChat}
+        chatsEnabled={chatsEnabled}
+        onTaskAgent={onTaskAgent}
+        onSelectTaskAgent={() => onSelect(null)}
+        className="border-b px-2 py-1.5 lg:h-full lg:w-12 lg:flex-col lg:border-b-0 lg:border-r lg:px-0 lg:py-2"
+      />
     );
   }
 

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -96,6 +96,19 @@ describe("ChatSidePanel", () => {
     expect(launcher).toBeDisabled();
     await user.click(launcher);
     expect(state.setActiveConversation).not.toHaveBeenCalled();
+  });
+
+  it("shut, it is the Agent tab's rail: New chat opens a draft and the mark opens the Task Agent", async () => {
+    state.activeConversationId = null;
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    const user = userEvent.setup();
+    render(<ChatSidePanel taskId="p1" isOwner />);
+    const rail = screen.getByRole("complementary", { name: "Chats" });
+    await user.click(within(rail).getByRole("button", { name: "New chat" }));
+    expect(state.openDraftChat).toHaveBeenCalledWith(null);
+    await user.click(within(rail).getByRole("button", { name: "Task Agent" }));
+    expect(state.setActiveConversation).toHaveBeenCalledWith("plan-1");
+    expect(state.create).not.toHaveBeenCalled();
   });
 
   it("ignores a newer planning conversation when picking the latest chat to open", async () => {

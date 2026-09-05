@@ -11,6 +11,7 @@ import { PlanningPane } from "../PlanningPane";
 import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
 import { ConversationList, type ConversationRow } from "./ConversationList";
+import { ConversationRail } from "./ConversationRail";
 import {
   DRAFT_CHAT_ID,
   isPlanningConversation,
@@ -86,8 +87,9 @@ const HEADER_BUTTON =
  * header names the conversation on show and toggles the same conversation
  * list the Agent tab keeps open beside its main view; the body is that
  * conversation — the Task Agent's planning thread, a chat, or a draft chat
- * that persists nothing until its first message. The edge launcher opens the
- * latest chat, or the Task Agent when there is none.
+ * that persists nothing until its first message. Shut, it is the same slim
+ * rail the Agent tab's sidebar shuts to; the rail's toggle opens the latest
+ * chat, or the Task Agent when there is none.
  *
  * Args:
  *   props: The owning task id, and `isOwner` for the planning duplicate's
@@ -123,19 +125,20 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   };
 
   if (activeConversationId === null) {
+    // Shut, the overlay is the same rail the Agent tab's sidebar shuts to
+    // (owner request 2026-09-05): one object on every task tab.
     return (
-      <button
-        type="button"
-        aria-label={COPY.openAgent}
-        title={COPY.agent}
-        disabled={!conversations.isSuccess}
-        onClick={openLatestOrTaskAgent}
-        className="pressable fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round">
-          <path d="M3 4.5h14v9H8l-3.5 3v-3H3v-9Z" />
-        </svg>
-      </button>
+      <ConversationRail
+        toggleLabel={COPY.openAgent}
+        expanded={false}
+        toggleDisabled={!conversations.isSuccess}
+        onToggle={openLatestOrTaskAgent}
+        onNewChat={() => openDraftChat(null)}
+        chatsEnabled={chatsEnabled}
+        onTaskAgent={false}
+        onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
+        className="h-full w-12 flex-col border-r py-2"
+      />
     );
   }
 

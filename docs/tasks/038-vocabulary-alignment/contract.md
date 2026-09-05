@@ -788,6 +788,12 @@ step 9.
   only; the API default stays `scope=all`).
 - **Motion pass** (easing tokens, press feedback, popover/tooltip/sheet/toast
   entrances) and the **footer nudge** on the Agent tab (`useFooterReveal`).
+- **After PR #65 opened (2026-09-05):** a chat opens at its end and a round
+  arrow button jumps back to it once the reader scrolls up (both panes);
+  chat text takes the Task Agent's scale; and the round floating launcher on
+  the non-Agent tabs is replaced by the same slim rail the Agent tab's
+  sidebar shuts to (`ConversationRail`), so one object carries the
+  conversations on every tab.
 
 Evidence and gates per change: [verification.md](verification.md) § Phase 4
 follow-ons.

@@ -399,6 +399,17 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   scale — `text-lead` on a `max-w-prose-measure` column — where they had
   `text-body` on `52ch`; colours unchanged. Unit test (the pill appears on
   scroll-up and hides after the jump); gates below.
+- **One rail on every tab (owner request 2026-09-05, same session):** the
+  round floating launcher on the non-Agent tabs is replaced by the slim
+  conversation rail the Agent tab's sidebar shuts to — `ConversationRail`
+  (extracted from `ConversationSidebar`): toggle · New chat · the Task Agent
+  mark, a 48px left column with the same border as the sidebar. On the
+  Agent tab the toggle ("Show chats") expands the sidebar; elsewhere it
+  ("Open the Agent", disabled until the chats query resolves) opens the
+  overlay on the latest chat or the Task Agent; New chat opens a draft; the
+  mark opens the Task Agent in the overlay. Existing launcher tests and the
+  journey e2e keep their names; one test added for the rail's other two
+  actions.
 
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
