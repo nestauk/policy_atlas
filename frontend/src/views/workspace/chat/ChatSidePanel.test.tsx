@@ -69,7 +69,7 @@ describe("ChatSidePanel", () => {
     const user = userEvent.setup();
     render(<ChatSidePanel taskId="p1" isOwner />);
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open chat" }));
+    await user.click(screen.getByRole("button", { name: "Open the Agent" }));
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
     expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
   });
@@ -79,7 +79,7 @@ describe("ChatSidePanel", () => {
     state.chatsResolved = false;
     const user = userEvent.setup();
     render(<ChatSidePanel taskId="p1" isOwner />);
-    const launcher = screen.getByRole("button", { name: "Open chat" });
+    const launcher = screen.getByRole("button", { name: "Open the Agent" });
     expect(launcher).toBeDisabled();
     await user.click(launcher);
     expect(state.create).not.toHaveBeenCalled();
@@ -91,7 +91,7 @@ describe("ChatSidePanel", () => {
     state.rows = [PLAN_ROW, CHAT_ROW];
     const user = userEvent.setup();
     render(<ChatSidePanel taskId="p1" isOwner />);
-    await user.click(screen.getByRole("button", { name: "Open chat" }));
+    await user.click(screen.getByRole("button", { name: "Open the Agent" }));
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c1");
     expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
   });
@@ -101,7 +101,7 @@ describe("ChatSidePanel", () => {
     state.rows = [PLAN_ROW];
     const user = userEvent.setup();
     render(<ChatSidePanel taskId="p1" isOwner />);
-    await user.click(screen.getByRole("button", { name: "Open chat" }));
+    await user.click(screen.getByRole("button", { name: "Open the Agent" }));
     expect(state.create).toHaveBeenCalledWith(null);
     expect(state.addOpenChatTab).toHaveBeenCalledWith("p1", "c-new");
     expect(state.setActiveConversation).toHaveBeenCalledWith("c-new");
@@ -111,21 +111,48 @@ describe("ChatSidePanel", () => {
     state.activeConversationId = "c1";
     const user = userEvent.setup();
     render(<ChatSidePanel taskId="p1" isOwner />);
-    expect(screen.getByRole("complementary", { name: "Project chat" })).toBeInTheDocument();
+    expect(screen.getByRole("complementary", { name: "Agent" })).toBeInTheDocument();
     expect(screen.getByTestId("chat-pane")).toHaveTextContent("c1");
-    expect(screen.getByRole("button", { name: "Planning" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Task Agent" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Chats" }));
     expect(screen.getByTestId("library")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close chat panel" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
-  it("shows the planning thread when the strip's Planning tab is selected", () => {
+  it("shows the planning thread when the strip's Task Agent tab is selected", () => {
     state.activeConversationId = "plan-1";
     state.rows = [PLAN_ROW, CHAT_ROW];
     render(<ChatSidePanel taskId="p1" isOwner />);
     expect(screen.getByTestId("planning-pane")).toBeInTheDocument();
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
+  });
+
+  it("never renders a second planning transcript on the tab that already has one (038 V8)", async () => {
+    // The Agent tab's own PlanningPane is the Task Agent. Selecting it in
+    // the strip hands off to that pane — this overlay closes rather than
+    // mounting the same thread twice.
+    state.activeConversationId = "c1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    const user = userEvent.setup();
+    const composer = document.createElement("textarea");
+    composer.id = "planning-message";
+    document.body.append(composer);
+    render(<ChatSidePanel taskId="p1" isOwner planningInMainPane />);
+    await user.click(screen.getByRole("button", { name: "Task Agent" }));
+    expect(state.setActiveConversation).toHaveBeenCalledWith(null);
+    expect(composer).toHaveFocus();
+    expect(screen.queryByTestId("planning-pane")).not.toBeInTheDocument();
+    composer.remove();
+  });
+
+  it("falls back to the launcher rather than duplicating the pane when the URL names the planning thread", () => {
+    state.activeConversationId = "plan-1";
+    state.rows = [PLAN_ROW, CHAT_ROW];
+    render(<ChatSidePanel taskId="p1" isOwner planningInMainPane />);
+    expect(screen.queryByTestId("planning-pane")).not.toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Agent" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open the Agent" })).toBeInTheDocument();
   });
 
   it("threads isOwner=false into the planning duplicate (task 033 phase 10c, contract § 11 / rubric 37)", () => {

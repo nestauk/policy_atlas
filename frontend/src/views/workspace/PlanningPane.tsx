@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
-import { TASK } from "../../lib/vocabulary";
+import { COPY, TASK } from "../../lib/vocabulary";
 import { composePlanningThread, usePlanningTranscript } from "../../store";
 import type {
   OptimisticPlanningTurn,
@@ -126,6 +126,8 @@ export function Composer({
   placeholder,
   disabled,
   sendDisabled,
+  id = "planning-message",
+  label = COPY.messageTaskAgent,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -135,6 +137,13 @@ export function Composer({
   disabled: boolean;
   /** Send button's disabled state (027: also covers in-flight submission). */
   sendDisabled: boolean;
+  /** DOM id and label, defaulting to the Task Agent's own composer. A chat
+   *  passes its own (038 V8): with the Agent overlay beside the Task Agent's
+   *  pane, one shared id would be two elements, and `getElementById` — the
+   *  seed hand-off and the overlay's focus hand-off both use it — would take
+   *  whichever came first in the document. */
+  id?: string;
+  label?: string;
 }) {
   return (
     <div>
@@ -145,11 +154,11 @@ export function Composer({
           onSubmit();
         }}
       >
-        <label className="sr-only" htmlFor="planning-message">
-          Message the planner
+        <label className="sr-only" htmlFor={id}>
+          {label}
         </label>
         <textarea
-          id="planning-message"
+          id={id}
           rows={2}
           value={value}
           onChange={(event) => onChange(event.target.value)}

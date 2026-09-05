@@ -50,9 +50,9 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     if (!taskId) throw new Error("real-API task creation did not supply a task id");
 
     await page.goto(`/tasks/${taskId}`);
-    await page.getByLabel("Message the planner").fill("Map school-meal evidence.");
+    await page.getByLabel("Message the Task Agent").fill("Map school-meal evidence.");
     await page.getByRole("button", { name: "Send" }).click();
-    await page.getByLabel("Message the planner").fill("landscape only");
+    await page.getByLabel("Message the Task Agent").fill("landscape only");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByRole("button", { name: "Start search" }).click();
 

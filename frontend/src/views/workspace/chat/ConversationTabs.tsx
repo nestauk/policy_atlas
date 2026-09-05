@@ -2,25 +2,29 @@ import { useState } from "react";
 
 import { useConversations } from "../../../api/queries";
 import { scrub } from "../../../lib/scrub";
+import { COPY } from "../../../lib/vocabulary";
 import { ChatsIcon } from "./ChatsIcon";
 import {
   addOpenChatTab,
   isPlanningConversation,
   openChatTabs,
-  planningConversationId,
   removeOpenChatTab,
+  taskAgentConversationId,
   useActiveConversation,
   useConversationMutations,
 } from "./conversationState";
 
-/** Conversation switcher for the task chat overlay.
+/** Conversation switcher for the task's Agent overlay.
  *
  * Args:
- *   props: Project, planning lifecycle, library-open callback, and an
- *     optional close control used when the strip sits in the side panel.
+ *   props: Task, planning lifecycle, library-open callback, an optional
+ *     close control used when the strip sits in the side panel, and
+ *     `onSelectTaskAgent` — supplied on the Agent tab, where the Task Agent
+ *     already owns the main column and must not be opened here as well.
  *
  * Returns:
- *   A planning tab, session-local chat tabs, and library / new-chat actions.
+ *   The pinned Task Agent tab, session-local chat tabs, and library /
+ *   new-chat actions.
  */
 export function ConversationTabs({
   taskId,
@@ -28,12 +32,14 @@ export function ConversationTabs({
   planningClosed,
   onOpenLibrary,
   onClose,
+  onSelectTaskAgent,
 }: {
   taskId: string;
   entryArtefactId?: string | null;
   planningClosed: boolean;
   onOpenLibrary: () => void;
   onClose?: () => void;
+  onSelectTaskAgent?: () => void;
 }) {
   const conversations = useConversations(taskId, { status: "active" });
   const { activeConversationId, setActiveConversation } = useActiveConversation();
@@ -47,7 +53,7 @@ export function ConversationTabs({
   }
 
   const rows = conversations.data?.data ?? [];
-  const planningId = planningConversationId(rows);
+  const taskAgentId = taskAgentConversationId(rows);
   const planningActive = isPlanningConversation(activeConversationId, rows);
   const activeChats = rows.filter((row) => row.kind === "chat");
   // A chat opened from the launcher or "+" can land in the URL before this
@@ -70,6 +76,9 @@ export function ConversationTabs({
     return [];
   });
 
+  // On the Agent tab the Task Agent is the main column, so selecting it here
+  // hands off to that pane instead of binding `?chat=` to a second copy.
+  const selectTaskAgent = onSelectTaskAgent ?? (() => setActiveConversation(taskAgentId));
   const select = (id: string) => {
     addOpenChatTab(taskId, id);
     setTabIds(openChatTabs(taskId));
@@ -87,19 +96,23 @@ export function ConversationTabs({
     removeOpenChatTab(taskId, id);
     setTabIds(openChatTabs(taskId));
     if (activeConversationId === id) {
-      setActiveConversation(tabs[index + 1]?.id ?? tabs[index - 1]?.id ?? planningId);
+      const next = tabs[index + 1]?.id ?? tabs[index - 1]?.id;
+      if (next === undefined) selectTaskAgent();
+      else setActiveConversation(next);
     }
   };
 
   return (
     <nav aria-label="Conversations" className="flex min-w-0 items-stretch border-b border-line">
+      {/* The Task Agent is pinned first — its label is the only marker it
+          carries (contract § V8, fork F4). */}
       <button
         type="button"
-        onClick={() => setActiveConversation(planningId)}
+        onClick={() => selectTaskAgent()}
         className={`flex min-w-0 items-center gap-2 px-3 py-2 text-meta font-semibold ${planningActive ? "border-b-2 border-blue text-navy" : "text-grey hover:bg-ground"}`}
       >
         <span aria-hidden="true" className={`h-2 w-2 rounded-full ${planningClosed ? "bg-line-2" : "bg-blue"}`} />
-        <span className="truncate">Planning</span>
+        <span className="truncate">{COPY.taskAgent}</span>
       </button>
       {tabs.map((chat) => (
         <div key={chat.id} className={`group flex min-w-0 items-center ${activeConversationId === chat.id ? "border-b-2 border-blue" : ""}`}>

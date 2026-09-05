@@ -62,9 +62,21 @@ export const COPY = {
   /** A locked tab explains itself rather than showing an empty page. */
   lockedHint: "Available once the analysis has run",
   notDecided: "Not decided yet",
-  /** `ChatSidePanel`'s overlay region — phase 5b (V8) renames the value,
-   *  not the call site. */
-  projectChatAriaLabel: `${PROJECT.one} chat`,
+  /** `ChatSidePanel`'s overlay region: the Agent, the one persona a user
+   *  talks to (ADR 0036, contract § V4 / § V8). */
+  agentAriaLabel: "Agent",
+  /** The collapsed overlay's launcher — its `aria-label`, then its `title`. */
+  openAgent: "Open the Agent",
+  agent: "Agent",
+  /** A Task's primary chat: the `kind = planning` conversation — the active
+   *  one, else the most recently closed. Exactly one row ever carries this
+   *  label (contract § V8, invariant I8 / fold A10). */
+  taskAgent: `${TASK.one} Agent`,
+  /** An older, closed planning lineage in the chats library — chipped, never
+   *  pinned. */
+  earlierPlan: "Earlier plan",
+  /** `PlanningPane`'s composer label. */
+  messageTaskAgent: `Message the ${TASK.one} Agent`,
 } as const;
 
 /**

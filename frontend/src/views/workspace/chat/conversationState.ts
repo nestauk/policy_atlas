@@ -14,12 +14,31 @@ const OPEN_TABS_PREFIX = "policy-atlas.open-chat-tabs.";
  *  when the task has no planning-conversation row yet. */
 export const PLANNING_TAB_ID = "planning";
 
-/** The planning conversation to select in the overlay strip — the newest
- *  planning row, or `PLANNING_TAB_ID` when none exists yet. */
-export function planningConversationId(
-  rows: ReadonlyArray<{ id: string; kind: string }>,
+/** The Task Agent: a Task's primary chat.
+ *
+ * The `kind = planning` conversation — the open one, or, once a run has
+ * closed that lineage, the most recently closed one (contract 038 § Terms).
+ * Exactly one row is ever the Task Agent (invariant I8 / fold A10); older
+ * closed lineages are "Earlier plan" and are never pinned. No new state:
+ * this is a selection rule over the rows the listing already returns.
+ *
+ * Args:
+ *   rows: The task's listed conversations, newest created first.
+ *
+ * Returns:
+ *   The Task Agent's conversation id, or `PLANNING_TAB_ID` when the task has
+ *   no planning row yet.
+ */
+export function taskAgentConversationId(
+  rows: ReadonlyArray<{ id: string; kind: string; closed_at?: string | null }>,
 ): string {
-  return rows.find((row) => row.kind === "planning")?.id ?? PLANNING_TAB_ID;
+  const planning = rows.filter((row) => row.kind === "planning");
+  const open = planning.find((row) => (row.closed_at ?? null) === null);
+  if (open !== undefined) return open.id;
+  // Newest closure wins. `rows` arrives created_at-descending, so rows
+  // carrying no closure time keep that order behind the ones that do.
+  return [...planning].sort((a, b) => (b.closed_at ?? "").localeCompare(a.closed_at ?? ""))[0]?.id
+    ?? PLANNING_TAB_ID;
 }
 
 /** True when the overlay is showing the planning thread, not a follow-up chat. */

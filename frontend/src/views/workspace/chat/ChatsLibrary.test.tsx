@@ -17,16 +17,25 @@ const now = Date.now();
 const iso = (minutesAgo: number) => new Date(now - minutesAgo * 60_000).toISOString();
 
 // Deliberately interleaved (not grouped by kind) — a bug that re-sorts by
-// kind before rendering would still pass a kind-grouped fixture.
-const activeRows = [
+// kind before rendering would still pass a kind-grouped fixture. Several
+// planning lineages, one still open: the Task Agent selection rule and the
+// "Earlier plan" label both need that shape (contract 038 § V8).
+type Row = {
+  id: string; kind: string; status: string; closed_at: string | null; title: string;
+  created_at: string; entry_artefact_id: string | null;
+  latest_turn_preview: { reply_snippet: string; user_message: string; at: string } | null;
+};
+const defaultActiveRows = (): Row[] => [
   { id: "c1", kind: "chat", status: "active", closed_at: null, title: "Cost barriers", created_at: iso(1), entry_artefact_id: "a1", latest_turn_preview: { reply_snippet: "A short answer", user_message: "What changed?", at: iso(1) } },
   { id: "p1", kind: "planning", status: "active", closed_at: null, title: "Plan for Task Alpha", created_at: iso(2), entry_artefact_id: null, latest_turn_preview: null },
   { id: "p2", kind: "planning", status: "active", closed_at: iso(3), title: "Plan round 1", created_at: iso(3), entry_artefact_id: null, latest_turn_preview: null },
   { id: "p3", kind: "planning", status: "active", closed_at: iso(4), title: "Plan round 2", created_at: iso(4), entry_artefact_id: null, latest_turn_preview: null },
 ];
-const archivedRows = [
+const defaultArchivedRows = (): Row[] => [
   { id: "c2", kind: "chat", status: "archived", closed_at: null, title: "Old thread", created_at: iso(5), entry_artefact_id: null, latest_turn_preview: null },
 ];
+let activeRows = defaultActiveRows();
+let archivedRows = defaultArchivedRows();
 
 vi.mock("react-router", () => ({ useNavigate: () => state.navigate }));
 vi.mock("../../../api/queries", () => ({
@@ -34,7 +43,14 @@ vi.mock("../../../api/queries", () => ({
     data: { data: query.status === "active" ? activeRows : archivedRows },
   }),
 }));
-vi.mock("./conversationState", () => ({ addOpenChatTab: state.addOpenChatTab, useActiveConversation: () => ({ setActiveConversation: state.setActiveConversation }), useConversationMutations: () => ({ archive: state.archive, unarchive: state.unarchive, update: state.update }) }));
+vi.mock("./conversationState", async (importOriginal) => ({
+  // `taskAgentConversationId` is the real selection rule under test here —
+  // only the URL/mutation hooks are stubbed.
+  ...(await importOriginal<typeof import("./conversationState")>()),
+  addOpenChatTab: state.addOpenChatTab,
+  useActiveConversation: () => ({ setActiveConversation: state.setActiveConversation }),
+  useConversationMutations: () => ({ archive: state.archive, unarchive: state.unarchive, update: state.update }),
+}));
 
 describe("ChatsLibrary", () => {
   beforeEach(() => {
@@ -44,6 +60,8 @@ describe("ChatsLibrary", () => {
     state.setActiveConversation.mockClear();
     state.addOpenChatTab.mockClear();
     state.navigate.mockClear();
+    activeRows = defaultActiveRows();
+    archivedRows = defaultArchivedRows();
   });
 
   it("shows previews, the report chip, and supports inline rename and archive on a chat row", async () => {
@@ -71,28 +89,61 @@ describe("ChatsLibrary", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("lists both conversation kinds, newest first, preserving the API's own order", () => {
+  it("pins the Task Agent first, then keeps the API's own order for the rest", () => {
     render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
-    const titles = ["Cost barriers", "Plan for Task Alpha", "Plan round 1", "Plan round 2"];
+    const names = ["Cost barriers", "Task Agent", "Earlier plan"];
     const rendered = screen.getAllByRole("button")
       .map((button) => button.textContent)
-      .filter((text): text is string => text !== null && titles.includes(text));
-    expect(rendered).toEqual(titles);
+      .filter((text): text is string => text !== null && names.includes(text));
+    // p1 (the open planning lineage) is pinned above the date groups; the
+    // chat and the two older lineages keep the order the API sent.
+    expect(rendered).toEqual(["Task Agent", "Cost barriers", "Earlier plan", "Earlier plan"]);
   });
 
-  it("badges a planning row as planning, showing Open or Closed from closed_at", () => {
+  it("names exactly one row the Task Agent and every older lineage an earlier plan (I8/A10)", () => {
     render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
-    expect(screen.getAllByText("Planning")).toHaveLength(3);
+    // Title and chip, as today — one row, one label.
+    expect(screen.getAllByText("Task Agent")).toHaveLength(2);
+    expect(screen.getAllByText("Earlier plan")).toHaveLength(4);
+    expect(screen.queryByText("Planning")).toBeNull();
     expect(screen.getByText("Open")).toBeInTheDocument();
     // Several closed planning rows on one task is the expected state
     // (rubric 44) — both render, neither is deduped or dropped.
     expect(screen.getAllByText("Closed")).toHaveLength(2);
   });
 
+  it("falls back to the most recently closed lineage once the run has closed the open one", () => {
+    activeRows = activeRows.filter((row) => row.id !== "p1");
+    render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
+    const rendered = screen.getAllByRole("button")
+      .map((button) => button.textContent)
+      .filter((text): text is string => text === "Task Agent" || text === "Earlier plan");
+    // p2 closed 3 minutes ago, p3 four — the newer closure is the Task Agent.
+    expect(rendered).toEqual(["Task Agent", "Earlier plan"]);
+    expect(screen.getAllByText("Task Agent")).toHaveLength(2);
+  });
+
+  it("a non-owner's list is exactly the rows the API returned, only the labels differ (A9)", () => {
+    // The listing is owner-relative server-side: a colleague's page carries
+    // their own chats and no planning row at all. Nothing here filters,
+    // hides or invents a row — and with no planning row, nothing is pinned.
+    activeRows = [
+      { id: "c9", kind: "chat", status: "active", closed_at: null, title: "Colleague question", created_at: iso(1), entry_artefact_id: null, latest_turn_preview: null },
+    ];
+    archivedRows = [];
+    render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Colleague question" })).toBeInTheDocument();
+    expect(screen.queryByText("Task Agent")).toBeNull();
+    expect(screen.queryByText("Earlier plan")).toBeNull();
+    expect(screen.queryByText("Planning")).toBeNull();
+  });
+
   it("offers neither a rename nor an archive control on a planning row", () => {
     render(<ChatsLibrary taskId="p1" open onClose={vi.fn()} />);
     expect(screen.queryByRole("button", { name: "Rename Plan for Task Alpha" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Archive Plan for Task Alpha" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename Task Agent" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Archive Task Agent" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Rename Plan round 1" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Archive Plan round 1" })).toBeNull();
   });
@@ -107,11 +158,22 @@ describe("ChatsLibrary", () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
     render(<ChatsLibrary taskId="proj-9" open onClose={onClose} />);
-    await user.click(screen.getByRole("button", { name: "Plan for Task Alpha" }));
+    await user.click(screen.getByRole("button", { name: "Task Agent" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith("p1");
     expect(onClose).toHaveBeenCalledOnce();
     expect(state.addOpenChatTab).not.toHaveBeenCalled();
     expect(state.navigate).not.toHaveBeenCalled();
+  });
+
+  it("hands a planning row off to its own pane when the caller owns it (the Agent tab)", async () => {
+    const onOpenTaskAgent = vi.fn();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<ChatsLibrary taskId="p1" open onClose={onClose} onOpenTaskAgent={onOpenTaskAgent} />);
+    await user.click(screen.getByRole("button", { name: "Task Agent" }));
+    expect(onOpenTaskAgent).toHaveBeenCalledOnce();
+    expect(state.setActiveConversation).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("still opens a chat row in the panel when selected", async () => {

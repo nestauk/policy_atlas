@@ -75,9 +75,13 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
     await expect(page.getByRole("link", { name: mockTask.name })).toBeVisible();
 
-    // (b) Into the workspace (Plan).
+    // (b) Into the workspace (the Agent tab).
     await page.getByRole("link", { name: mockTask.name }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}`));
+    // The Agent overlay rides this tab too now (038 V8) — the Task Agent's
+    // own pane stays the main column beside it.
+    await expect(page.getByRole("button", { name: "Open the Agent" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Planning conversation" })).toHaveCount(1);
 
     // (c) Rename/archive now lives in the header's "Task settings"
     // popover: inline rename (cancel restores the original, then a real
@@ -242,10 +246,13 @@ test.describe("mock task-lifecycle journey", () => {
     const sourcesSubnav = page.getByRole("navigation", { name: "Sources" });
     await page.getByRole("link", { name: /School food environments/ }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/sources/all\\?theme=`));
-    await page.getByRole("button", { name: "Open chat" }).click();
-    const overlay = page.getByRole("complementary", { name: "Project chat" });
+    await page.getByRole("button", { name: "Open the Agent" }).click();
+    const overlay = page.getByRole("complementary", { name: "Agent" });
     await expect(overlay).toBeVisible();
-    await overlay.getByRole("button", { name: "Planning" }).click();
+    // The Task Agent is pinned first in the strip (038 V8, invariant I8).
+    const strip = overlay.getByRole("navigation", { name: "Conversations" });
+    await expect(strip.getByRole("button").first()).toHaveAccessibleName("Task Agent");
+    await strip.getByRole("button", { name: "Task Agent" }).click();
     await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
     await overlay.getByRole("button", { name: "Close chat panel" }).click();
     await sourcesSubnav.getByRole("link", { name: "Themes" }).click();
@@ -431,7 +438,7 @@ test.describe("mock task-lifecycle journey", () => {
     // rev 3.4: the chat opens as a side panel BESIDE the artefact — the URL
     // stays on the results route and simply gains the chat param.
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result\\?chat=`));
-    await expect(page.getByRole("complementary", { name: "Project chat" })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Agent" })).toBeVisible();
     await expect(page.locator(".artefact-page")).toBeVisible();
 
     // Entry context renders as the removable "Report" chip (rev 2.6)

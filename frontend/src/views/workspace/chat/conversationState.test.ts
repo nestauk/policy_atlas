@@ -8,7 +8,7 @@ import { queryKeys } from "../../../api/queries";
 import {
   isPlanningConversation,
   PLANNING_TAB_ID,
-  planningConversationId,
+  taskAgentConversationId,
   useActiveConversation,
   useConversationMutations,
 } from "./conversationState";
@@ -75,15 +75,35 @@ describe("useConversationMutations", () => {
   });
 });
 
-describe("planningConversationId", () => {
-  it("returns the newest planning row, falling back to the planning tab token", () => {
-    expect(planningConversationId([])).toBe(PLANNING_TAB_ID);
+describe("taskAgentConversationId", () => {
+  it("returns the planning row, falling back to the planning tab token", () => {
+    expect(taskAgentConversationId([])).toBe(PLANNING_TAB_ID);
     expect(
-      planningConversationId([
+      taskAgentConversationId([
         { id: "c1", kind: "chat" },
         { id: "p1", kind: "planning" },
       ]),
     ).toBe("p1");
+  });
+
+  it("prefers the open planning lineage over any closed one, whatever the list order", () => {
+    expect(
+      taskAgentConversationId([
+        { id: "p3", kind: "planning", closed_at: "2026-09-03T10:00:00Z" },
+        { id: "p-open", kind: "planning", closed_at: null },
+        { id: "p2", kind: "planning", closed_at: "2026-09-01T10:00:00Z" },
+      ]),
+    ).toBe("p-open");
+  });
+
+  it("falls back to the most recently closed lineage once the run has closed the open one", () => {
+    expect(
+      taskAgentConversationId([
+        { id: "p2", kind: "planning", closed_at: "2026-09-01T10:00:00Z" },
+        { id: "p3", kind: "planning", closed_at: "2026-09-03T10:00:00Z" },
+        { id: "c1", kind: "chat", closed_at: null },
+      ]),
+    ).toBe("p3");
   });
 });
 

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,10 +42,11 @@ describe("ConversationTabs", () => {
     state.setActiveConversation.mockClear();
   });
 
-  it("renders planning, reuses the open blank-chat path, and archives a tab", async () => {
+  it("renders the Task Agent, reuses the open blank-chat path, and archives a tab", async () => {
     const user = userEvent.setup();
     render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
-    expect(screen.getByRole("button", { name: "Planning" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Task Agent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Planning" })).toBeNull();
     expect(screen.getByText("Barriers")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "New chat" }));
     expect(state.create).toHaveBeenCalledOnce();
@@ -63,11 +64,33 @@ describe("ConversationTabs", () => {
     expect(onOpenLibrary).toHaveBeenCalledOnce();
   });
 
-  it("selects the planning conversation when the Planning tab is clicked", async () => {
+  it("pins the Task Agent first, before the chat tabs", () => {
+    render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
+    const strip = screen.getByRole("navigation", { name: "Conversations" });
+    expect(within(strip).getAllByRole("button")[0]).toHaveAccessibleName("Task Agent");
+  });
+
+  it("selects the planning conversation when the Task Agent tab is clicked", async () => {
     const user = userEvent.setup();
     render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: "Planning" }));
+    await user.click(screen.getByRole("button", { name: "Task Agent" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith("p1");
+  });
+
+  it("hands the Task Agent off to its own pane when the caller owns it (the Agent tab)", async () => {
+    const onSelectTaskAgent = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <ConversationTabs
+        taskId="p1"
+        planningClosed={false}
+        onOpenLibrary={vi.fn()}
+        onSelectTaskAgent={onSelectTaskAgent}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Task Agent" }));
+    expect(onSelectTaskAgent).toHaveBeenCalledOnce();
+    expect(state.setActiveConversation).not.toHaveBeenCalled();
   });
 
   it("shows a New chat tab for an active follow-up that is not yet in the list", () => {

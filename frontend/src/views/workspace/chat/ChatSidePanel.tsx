@@ -8,7 +8,7 @@ import { PlanningPane } from "../PlanningPane";
 import { ChatPane } from "./ChatPane";
 import { ChatsLibrary } from "./ChatsLibrary";
 import { ConversationTabs } from "./ConversationTabs";
-import { addOpenChatTab, isPlanningConversation, planningConversationId, useActiveConversation, useConversationMutations } from "./conversationState";
+import { addOpenChatTab, isPlanningConversation, taskAgentConversationId, useActiveConversation, useConversationMutations } from "./conversationState";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -65,23 +65,25 @@ function usePanelWidth() {
   };
 }
 
-/** Side-by-side chat on task views outside Plan (rev 3.4).
+/** The Agent overlay: side-by-side chat on every task view (038 V8).
  *
  * The panel is URL-addressable: it is open exactly when the route carries
  * `?chat=<cid>` — the same deep-link grammar the conversation strip uses.
- * The edge launcher opens the latest follow-up chat. The strip lists
- * planning plus those chats; selecting planning renders that thread here.
+ * The edge launcher opens the latest follow-up chat. The strip lists the
+ * Task Agent plus those chats; selecting the Task Agent renders that thread
+ * here — except on the Agent tab, where it already is the main column.
  *
  * Args:
- *   props: The owning task id, and `isOwner` for the planning duplicate's
+ *   props: The owning task id; `isOwner` for the planning duplicate's
  *     read-only gate (task 033 phase 10c, contract § 11 / rubric 37) — this
  *     is the `ChatSidePanel` duplicate the rubric names alongside the
- *     workspace's own `PlanningPane`.
+ *     workspace's own `PlanningPane`; and `planningInMainPane`, set on the
+ *     Agent tab, where that main `PlanningPane` is already on screen.
  *
  * Returns:
  *   The open panel beside the view, or a compact edge toggle when closed.
  */
-export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: boolean }) {
+export function ChatSidePanel({ taskId, isOwner, planningInMainPane = false }: { taskId: string; isOwner: boolean; planningInMainPane?: boolean }) {
   const { activeConversationId, setActiveConversation } = useActiveConversation();
   const [libraryOpen, setLibraryOpen] = useState(false);
   const panel = usePanelWidth();
@@ -89,7 +91,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const conversations = useConversations(taskId, { status: "active" });
   const rows = conversations.data?.data ?? [];
   const chatRows = rows.filter((row) => row.kind === "chat");
-  const planningId = planningConversationId(rows);
+  const taskAgentId = taskAgentConversationId(rows);
   const planningOpen = isPlanningConversation(activeConversationId, rows);
   const artefact = useArtefact(taskId);
   const { create } = useConversationMutations(taskId);
@@ -98,6 +100,20 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
     addOpenChatTab(taskId, conversationId);
     setActiveConversation(conversationId);
   };
+
+  // The one planning transcript rule (contract § V8): on the Agent tab the
+  // Task Agent is the routed view's main column, so every "open the Task
+  // Agent" path here hands off to it — closing this overlay and putting the
+  // caret in that composer — instead of mounting a second copy of the same
+  // thread (two live transcripts, and two `planning-message` ids).
+  const focusTaskAgent = () => {
+    // Focus first, close second: closing unmounts the control that was
+    // focused, and the browser would drop focus to <body> before the caret
+    // ever reached the composer.
+    document.getElementById("planning-message")?.focus();
+    setActiveConversation(null);
+  };
+  const openTaskAgent = planningInMainPane ? focusTaskAgent : undefined;
 
   const openLatestOrNew = async () => {
     // The launcher's create-vs-open decision needs the chats list resolved
@@ -108,12 +124,16 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
     openChat((await create(null)).id);
   };
 
-  if (activeConversationId === null) {
+  // Closed, or asked for the Task Agent on the tab that already renders it.
+  // Only a pasted `?chat=<planning>` lands here — every in-app path routes
+  // through `focusTaskAgent`, and the tab links carry no query — but the
+  // guard is what makes "one planning transcript" true by construction.
+  if (activeConversationId === null || (planningInMainPane && planningOpen)) {
     return (
       <button
         type="button"
-        aria-label="Open chat"
-        title="Chat"
+        aria-label={COPY.openAgent}
+        title={COPY.agent}
         disabled={!conversations.isSuccess}
         onClick={() => void openLatestOrNew()}
         className="fixed bottom-5 left-5 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-line bg-paper text-grey shadow-lg hover:text-blue focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-50"
@@ -130,7 +150,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
 
   return (
     <aside
-      aria-label={COPY.projectChatAriaLabel}
+      aria-label={COPY.agentAriaLabel}
       style={{ width: panel.width }}
       className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-line bg-paper"
     >
@@ -143,6 +163,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
         planningClosed={planningClosed}
         onOpenLibrary={() => setLibraryOpen(true)}
         onClose={() => setActiveConversation(null)}
+        onSelectTaskAgent={openTaskAgent}
       />
       <div className="min-h-0 flex-1">
         {planningOpen ? (
@@ -158,11 +179,11 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
             taskId={taskId}
             conversationId={activeConversationId}
             sectionTitles={(artefact.data?.sections ?? []).map((section) => section.title)}
-            onOpenPlanning={() => setActiveConversation(planningId)}
+            onOpenPlanning={openTaskAgent ?? (() => setActiveConversation(taskAgentId))}
           />
         )}
       </div>
-      <ChatsLibrary taskId={taskId} open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+      <ChatsLibrary taskId={taskId} open={libraryOpen} onClose={() => setLibraryOpen(false)} onOpenTaskAgent={openTaskAgent} />
     </aside>
   );
 }

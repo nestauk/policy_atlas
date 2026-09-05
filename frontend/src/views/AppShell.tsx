@@ -298,7 +298,10 @@ export function AppShell() {
       ? task.data?.latest_run?.status === "running"
       : (allTasks.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
-  const showChatPanel = base !== null && !inWorkspace && taskResolved && !publicAccess;
+  // The Agent overlay rides every task tab, the Agent tab included (038 V8).
+  // There it renders beside the Task Agent's own pane, which is why
+  // `ChatSidePanel` is told the planning conversation is already on screen.
+  const showChatPanel = base !== null && taskResolved && !publicAccess;
   // With a chat open beside the view, the two columns scroll independently —
   // the workspace's own two-pane behaviour (fixed viewport height, each
   // column owns its scroll). Closed, the page keeps its normal scroll.
@@ -414,9 +417,9 @@ export function AppShell() {
           </NavItem>
         </div>
       )}
-      {/* Chat beside every task view outside the workspace (029
-          rev 3.4): the workspace already hosts the full conversation
-          rail, so the panel mounts everywhere else in the task. */}
+      {/* The Agent overlay beside every task view (038 V8): the Agent tab
+          keeps the Task Agent as its main column and gains the chat list
+          here; every other tab is unchanged. */}
       <div
         className={cn(
           "flex min-w-0 flex-1",
@@ -429,7 +432,7 @@ export function AppShell() {
             out the rest of the shell (nav, the routed view). */}
         {showChatPanel && (
           <ErrorBoundary key={taskId}>
-            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
+            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} planningInMainPane={inWorkspace} />
           </ErrorBoundary>
         )}
         <div

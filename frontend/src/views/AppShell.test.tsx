@@ -117,7 +117,7 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
     expect(screen.getByText("Check-in pending")).toBeInTheDocument();
   });
 
-  it("hides the badge while already on the workspace view", () => {
+  it("hides the badge while already on the Agent tab", () => {
     renderShell(`/tasks/${TASK_ID}`);
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
   });
@@ -347,6 +347,23 @@ describe("AppShell — global chrome, continued", () => {
   });
 });
 
+describe("AppShell — the Agent overlay rides every task tab (038 V8)", () => {
+  it("mounts the overlay on the Agent tab, which used to hide it", () => {
+    renderShell(`/tasks/${TASK_ID}`);
+    expect(screen.getByRole("button", { name: "Open the Agent" })).toBeInTheDocument();
+  });
+
+  it("keeps mounting it on the other task tabs", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    expect(screen.getByRole("button", { name: "Open the Agent" })).toBeInTheDocument();
+  });
+
+  it("never mounts it outside a task", () => {
+    renderShell("/projects");
+    expect(screen.queryByRole("button", { name: "Open the Agent" })).not.toBeInTheDocument();
+  });
+});
+
 describe("AppShell — public-leg access renders the two-tab view (task 037)", () => {
   beforeEach(() => {
     taskState.isOwner = false;
@@ -366,8 +383,8 @@ describe("AppShell — public-leg access renders the two-tab view (task 037)", (
 
   it("does not mount the chat side panel on the public leg", () => {
     renderShell(`/tasks/${TASK_ID}/result`);
-    expect(screen.queryByLabelText("Project chat")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Open chat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open the Agent")).not.toBeInTheDocument();
   });
 
   it("keeps the five-tab shell for graded readers", () => {
@@ -400,7 +417,7 @@ describe("AppShell — gates the run stream and chat panel until access is known
   it("does not fetch conversations or show the chat panel while the task query is pending", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
     expect(useConversationsState.mock).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText("Project chat")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Open chat")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Agent")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Open the Agent")).not.toBeInTheDocument();
   });
 });

@@ -122,7 +122,7 @@ export function triggerCopy(triggers: Array<{ trigger: string }> | undefined): s
 
 export const DECIDED_BY_LABEL: Record<string, string> = {
   user: "You decided",
-  agent: "The orchestrator decided",
+  agent: "The Agent decided",
   standing_default: "Your standing rule decided",
 };
 

@@ -136,7 +136,7 @@ describe("Composer", () => {
     const user = userEvent.setup();
     const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
 
-    await user.click(screen.getByLabelText("Message the planner"));
+    await user.click(screen.getByLabelText("Message the Task Agent"));
     await user.keyboard("{Enter}");
 
     expect(onSubmit).toHaveBeenCalledOnce();
@@ -147,7 +147,7 @@ describe("Composer", () => {
     const user = userEvent.setup();
     const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
 
-    await user.click(screen.getByLabelText("Message the planner"));
+    await user.click(screen.getByLabelText("Message the Task Agent"));
     await user.keyboard("{Shift>}{Enter}{/Shift}");
 
     expect(onSubmit).not.toHaveBeenCalled();
@@ -161,7 +161,7 @@ describe("Composer", () => {
       placeholder: "Replanning unlocks when this run finishes.",
     });
 
-    const textarea = screen.getByLabelText("Message the planner");
+    const textarea = screen.getByLabelText("Message the Task Agent");
     expect(textarea).toBeDisabled();
     expect(textarea).toHaveAttribute("placeholder", "Replanning unlocks when this run finishes.");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -303,7 +303,7 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
 
   it("disables the composer with the owner-only placeholder", () => {
     renderPane();
-    const textarea = screen.getByLabelText("Message the planner");
+    const textarea = screen.getByLabelText("Message the Task Agent");
     expect(textarea).toBeDisabled();
     expect(textarea).toHaveAttribute("placeholder", "Steering is limited to the task owner.");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -312,7 +312,7 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
   it("puts the site footer under the composer, visible when scrolled to the bottom", () => {
     renderPane();
     const footer = screen.getByRole("contentinfo");
-    const composer = screen.getByLabelText("Message the planner");
+    const composer = screen.getByLabelText("Message the Task Agent");
     expect(footer).toHaveTextContent(SITE_DISCLAIMER);
     // Under the composer: composer precedes footer in document order.
     expect(composer.compareDocumentPosition(footer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
@@ -336,6 +336,6 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
     renderPane({ isOwner: true, stream: { ...createInitialRunStreamState(), pendingCheckIn: checkIn() } });
     expect(screen.getByText("Waiting on your input")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Message the planner")).not.toBeDisabled();
+    expect(screen.getByLabelText("Message the Task Agent")).not.toBeDisabled();
   });
 });
