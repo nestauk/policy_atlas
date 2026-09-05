@@ -80,7 +80,7 @@ export function ShareView() {
           toast.toast({
             title: isConflictCode(code)
               ? conflictSentences[code]
-              : "The task's visibility couldn't be changed. Try again.",
+              : `The ${TASK.lower}'s visibility couldn't be changed. Try again.`,
             tone: "error",
           });
         },
@@ -117,7 +117,7 @@ export function ShareView() {
   };
 
   const copyPublicLink = () => {
-    const url = `${window.location.origin}/tasks/${taskId}/results`;
+    const url = `${window.location.origin}/tasks/${taskId}/result`;
     navigator.clipboard.writeText(url).then(
       () => toast.toast({ title: PUBLIC_SHARE.copied, tone: "default" }),
       () => toast.toast({ title: PUBLIC_SHARE.copyLink, description: url, tone: "error" }),

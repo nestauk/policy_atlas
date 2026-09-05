@@ -5,14 +5,14 @@ import type { components } from "../api/gen/types";
 type RunStatus = components["schemas"]["LatestRun"]["status"];
 
 /** The five task-level stages, in the order a task runs through them. */
-export const LIFECYCLE_TABS = ["plan", "results", "sources", "share", "history"] as const;
+export const LIFECYCLE_TABS = ["agent", "result", "sources", "share", "history"] as const;
 
 export type LifecycleTab = (typeof LIFECYCLE_TABS)[number];
 
 /** Path suffix for each tab, relative to `/tasks/:taskId`. */
 const TAB_PATHS: Record<LifecycleTab, string> = {
-  plan: "",
-  results: "/results",
+  agent: "",
+  result: "/result",
   sources: "/sources",
   share: "/share",
   history: "/history",
@@ -33,7 +33,7 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
  * locked after a failed run — a partial write-up is still on Plan.
  */
 function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
-  if (status === null || status === undefined) return ["plan", "share"];
+  if (status === null || status === undefined) return ["agent", "share"];
   switch (status) {
     case "running":
     case "paused":
@@ -43,7 +43,7 @@ function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[]
     case "failed":
     case "aborted":
     case "interrupted":
-      return ["plan", "sources", "share", "history"];
+      return ["agent", "sources", "share", "history"];
   }
 }
 
@@ -68,7 +68,7 @@ export function lifecycleTabs(base: string, status: RunStatus | null | undefined
  * One list, shared with `LifecycleRoute`'s public gate so the nav and the
  * gate cannot drift apart.
  */
-export const PUBLIC_TABS: readonly LifecycleTab[] = ["results", "sources"];
+export const PUBLIC_TABS: readonly LifecycleTab[] = ["result", "sources"];
 
 /**
  * The public tab set as nav items. Both stay open regardless of run state:
@@ -93,5 +93,5 @@ export function publicLifecycleTabs(base: string) {
  */
 export function taskDestination(taskId: string, status: RunStatus | null | undefined): string {
   const base = `/tasks/${taskId}`;
-  return status === "succeeded" ? `${base}/results` : base;
+  return status === "succeeded" ? `${base}/result` : base;
 }

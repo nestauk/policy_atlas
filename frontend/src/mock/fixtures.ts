@@ -1,4 +1,5 @@
 import type { components } from "../api/gen/types";
+import { TASK } from "../lib/vocabulary";
 
 export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
@@ -44,7 +45,7 @@ export const mockTask: components["schemas"]["TaskOut"] = {
 export const mockProject: components["schemas"]["ProjectOut"] = {
   project_id: MOCK_PROJECT_ID,
   name: "Child health, Tower Hamlets",
-  description: "Tasks assessing childhood health policy levers for the borough.",
+  description: `${TASK.many} assessing childhood health policy levers for the borough.`,
   created_at: "2026-07-15T09:00:00Z",
   task_count: 1,
   visibility: "org",

@@ -115,7 +115,7 @@ describe("ShareView — public link section (task 037, contract § R1)", () => {
     renderShare();
     await user.click(screen.getByRole("button", { name: PUBLIC_SHARE.copyLink }));
 
-    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`/tasks/${TASK_ID}/results$`)));
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`/tasks/${TASK_ID}/result$`)));
     expect(await screen.findByText(PUBLIC_SHARE.copied)).toBeInTheDocument();
   });
 });

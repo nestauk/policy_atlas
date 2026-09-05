@@ -1,3 +1,4 @@
+import { LIFECYCLE_LABELS } from "../../lib/vocabulary";
 import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store";
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
@@ -34,7 +35,7 @@ export const SEE_PLAN_CTA_CLASS =
 
 /** Chat-thread notice once the run has landed. */
 export const RUN_FINISHED_MESSAGE =
-  "Evidence search is finished. You can read the report in the Results tab.";
+  `Evidence search is finished. You can read the report in the ${LIFECYCLE_LABELS.result} tab.`;
 
 /** Eyebrow and title for the in-thread running card. */
 export function runningCardCopy(status: RunStatus | undefined): {
@@ -276,8 +277,8 @@ export function runFinishedSignpost(
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
     return {
-      href: `/tasks/${taskId}/results`,
-      label: "Results",
+      href: `/tasks/${taskId}/result`,
+      label: LIFECYCLE_LABELS.result,
       message: RUN_FINISHED_MESSAGE,
     };
   }
@@ -309,7 +310,7 @@ export function resultsSignpost(
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
     return {
-      href: `/tasks/${taskId}/results`,
+      href: `/tasks/${taskId}/result`,
       label: "Read the report",
       message: RUN_FINISHED_MESSAGE,
     };

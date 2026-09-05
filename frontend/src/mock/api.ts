@@ -1,6 +1,7 @@
 import type { SseFrame } from "../api/sseFrame";
 import type { AuthApi } from "../auth/types";
 import type { components } from "../api/gen/types";
+import { PROJECT, TASK } from "../lib/vocabulary";
 import type { EvidenceSortField } from "../views/sourcesPresentation";
 import {
   mockArtefact,
@@ -268,7 +269,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       (body.visibility === "org" || body.visibility === "private") &&
       (mockTask.project_ids?.length ?? 0) > 0
     ) {
-      return json({ error: { code: "visibility_conflict", message: "Task is in a Project." } }, 409);
+      return json({ error: { code: "visibility_conflict", message: `${TASK.one} is in a ${PROJECT.one}.` } }, 409);
     }
     if (isRecord(body) && typeof body.name === "string") mockTask.name = body.name;
     if (isRecord(body) && typeof body.question === "string") mockTask.question = body.question;

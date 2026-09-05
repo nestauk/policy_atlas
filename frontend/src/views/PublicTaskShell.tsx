@@ -8,7 +8,7 @@ import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink } from "../ui/brand/Nav";
-import { COPY } from "../lib/vocabulary";
+import { COPY, TASK } from "../lib/vocabulary";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { ToastProvider } from "../ui/radix/Toast";
@@ -81,7 +81,7 @@ export function PublicTaskShell() {
                   Sign in
                 </Button>
               </NavBar>
-              <NavBar aria-label="Task" className="shrink-0 bg-ground">
+              <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-lead font-semibold text-navy">
                     {scrub(task.data.name)}

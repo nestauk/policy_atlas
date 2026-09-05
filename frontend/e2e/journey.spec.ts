@@ -69,7 +69,7 @@ async function driveRunToSuccess(page: Page): Promise<void> {
 test.describe("mock task-lifecycle journey", () => {
   test("plan through run, results, sources and history", async ({ page }) => {
     // (a) Tasks list: the mock task's row, no per-row rename/archive (task
-    // 032 moved that into the header's "Project settings" popover, reachable
+    // 032 moved that into the header's "Task settings" popover, reachable
     // only once inside a task).
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Tasks" })).toBeVisible();
@@ -79,22 +79,22 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("link", { name: mockTask.name }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}`));
 
-    // (c) Rename/archive now lives in the header's "Project settings"
+    // (c) Rename/archive now lives in the header's "Task settings"
     // popover: inline rename (cancel restores the original, then a real
     // save) and the two-step archive confirm (exercised, then cancelled —
     // the task carries on into the rest of the journey below).
-    const settings = page.getByRole("button", { name: "Project settings" });
+    const settings = page.getByRole("button", { name: "Task settings" });
     await settings.click();
 
     await page.getByRole("button", { name: "Rename" }).click();
-    await page.getByLabel("Project name").fill("A name that gets cancelled");
+    await page.getByLabel("Task name").fill("A name that gets cancelled");
     await page.getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByLabel("Project name")).toHaveCount(0);
+    await expect(page.getByLabel("Task name")).toHaveCount(0);
     await expect(page.getByText(mockTask.name)).toBeVisible();
 
     const renamedName = "Healthier childhoods in Tower Hamlets (2026 pass)";
     await page.getByRole("button", { name: "Rename" }).click();
-    await page.getByLabel("Project name").fill(renamedName);
+    await page.getByLabel("Task name").fill(renamedName);
     await page.getByRole("button", { name: "Save name" }).click();
     await expect(page.getByText(renamedName)).toBeVisible();
 
@@ -109,9 +109,9 @@ test.describe("mock task-lifecycle journey", () => {
     // with no run yet, Plan and Share are open; Results/Sources/History
     // render but are locked (a `<span aria-disabled>`, not a link).
     const nav = lifecycleNav(page);
-    await expect(nav.getByRole("link", { name: "Plan", exact: true })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Agent", exact: true })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Share", exact: true })).toBeVisible();
-    for (const label of ["Results", "Sources", "History"]) {
+    for (const label of ["Result", "Sources", "History"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toHaveCount(0);
       await expect(nav.getByText(label)).toBeVisible();
     }
@@ -160,7 +160,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(page.getByText(mockCheckIn.render)).toBeVisible();
     await expect(runCard.getByRole("heading", { name: "Paused — waiting on you" })).toBeVisible();
 
-    for (const label of ["Plan", "Results", "Sources", "Share", "History"]) {
+    for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
 
@@ -173,18 +173,18 @@ test.describe("mock task-lifecycle journey", () => {
 
     // (i) The run has now reached "succeeded" — all five stages open. The
     // completion card's "Read the report" link is also on the page,
-    // pointing at `/results`.
+    // pointing at `/result`.
     await expect(runCompletionLink(page)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: "See plan" })).toBeVisible();
-    for (const label of ["Plan", "Results", "Sources", "Share", "History"]) {
+    for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
       await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
     }
 
-    // (j) Results: the committed A4 report. The tab is reachable while
+    // (j) Result: the committed A4 report. The tab is reachable while
     // writing is in progress; a finished run must not replay the in-progress
     // view.
-    await nav.getByRole("link", { name: "Results", exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/results$`));
+    await nav.getByRole("link", { name: "Result", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(page.getByRole("heading", { name: "What appears to help" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Implications for local action" })).toBeVisible();
@@ -297,7 +297,7 @@ test.describe("mock task-lifecycle journey", () => {
   test("keyboard: tab to a citation marker and open it with Enter", async ({ page }) => {
     await driveRunToSuccess(page);
     await runCompletionLink(page).click();
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/results$`));
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result$`));
     await expect(
       page.getByRole("heading", { name: "Policy options for healthier childhoods" }),
     ).toBeVisible();
@@ -421,7 +421,7 @@ test.describe("mock task-lifecycle journey", () => {
     await driveRunToSuccess(page);
 
     await runCompletionLink(page).click();
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/results$`));
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result$`));
     await expect(page.locator(".artefact-page")).toBeVisible();
     await expect(
       page.getByText(/Pair school food action with safer active-travel routes/),
@@ -430,12 +430,12 @@ test.describe("mock task-lifecycle journey", () => {
     await page.getByRole("button", { name: "Ask about this analysis" }).click();
     // rev 3.4: the chat opens as a side panel BESIDE the artefact — the URL
     // stays on the results route and simply gains the chat param.
-    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/results\\?chat=`));
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result\\?chat=`));
     await expect(page.getByRole("complementary", { name: "Project chat" })).toBeVisible();
     await expect(page.locator(".artefact-page")).toBeVisible();
 
     // Entry context renders as the removable "Report" chip (rev 2.6)
-    // — scoped to the chat region since the nav also carries a "Results"
+    // — scoped to the chat region since the nav also carries a "Result"
     // link.
     const chat = page.getByRole("region", { name: "Chat" });
     await expect(chat.getByRole("link", { name: "Report" })).toBeVisible();
@@ -511,7 +511,7 @@ test.describe("mock task-lifecycle journey", () => {
     async ({ page }) => {
       await driveRunToSuccess(page);
       await runCompletionLink(page).click();
-      await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/results$`));
+      await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/result$`));
       await page.getByRole("button", { name: /Implications for local action/ }).click();
       await page.getByRole("button", { name: "pattern" }).click();
       await page

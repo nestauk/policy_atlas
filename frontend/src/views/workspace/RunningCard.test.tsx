@@ -178,8 +178,8 @@ describe("runningCard helpers", () => {
     expect(resultsSignpost(TASK_ID, "succeeded")?.label).toBe("Read the report");
     expect(resultsSignpost(TASK_ID, "running")).toBeNull();
     expect(runFinishedSignpost(TASK_ID, "succeeded")).toEqual({
-      href: `/tasks/${TASK_ID}/results`,
-      label: "Results",
+      href: `/tasks/${TASK_ID}/result`,
+      label: "Result",
       message: RUN_FINISHED_MESSAGE,
     });
     expect(runFinishedSignpost(TASK_ID, "running")).toBeNull();
@@ -328,7 +328,7 @@ describe("RunningCard", () => {
       </MemoryRouter>,
     );
     const results = screen.getByRole("link", { name: "Read the report" });
-    expect(results).toHaveAttribute("href", `/tasks/${TASK_ID}/results`);
+    expect(results).toHaveAttribute("href", `/tasks/${TASK_ID}/result`);
     expect(results.className).toContain("px-6");
     expect(results.className).toContain("text-body");
     expect(CHAT_PRIMARY_CTA_CLASS).toContain("px-6 py-3.5 text-body font-bold");

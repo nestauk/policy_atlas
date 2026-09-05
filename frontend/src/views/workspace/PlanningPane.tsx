@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
 import { useComposerSeed } from "../../lib/composerSeed";
 import { scrub } from "../../lib/scrub";
+import { TASK } from "../../lib/vocabulary";
 import { composePlanningThread, usePlanningTranscript } from "../../store";
 import type {
   OptimisticPlanningTurn,
@@ -95,7 +96,7 @@ export function planningComposerPlaceholder(
   isOwner = true,
 ): string {
   if (!isOwner) {
-    return "Steering is limited to the task owner.";
+    return `Steering is limited to the ${TASK.lower} owner.`;
   }
   if (runStatus === "running" || runStatus === "paused") {
     return "Replanning unlocks when this run finishes.";

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useArtefact, useConversations } from "../../../api/queries";
+import { COPY } from "../../../lib/vocabulary";
 import { createInitialRunStreamState } from "../../../store";
 import { PlanningPane } from "../PlanningPane";
 import { ChatPane } from "./ChatPane";
@@ -129,7 +130,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
 
   return (
     <aside
-      aria-label="Project chat"
+      aria-label={COPY.projectChatAriaLabel}
       style={{ width: panel.width }}
       className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-line bg-paper"
     >

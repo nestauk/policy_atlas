@@ -1,4 +1,5 @@
 import type { components } from "../api/gen/types";
+import { TASK } from "../lib/vocabulary";
 
 type Decision = components["schemas"]["DecisionOut"];
 
@@ -6,7 +7,7 @@ type Decision = components["schemas"]["DecisionOut"];
 export const DECISION_DETAIL_LABELS: Record<string, string> = {
   acquired: "New sources found",
   results_returned: "Results returned by the databases",
-  already_acquired: "Already in the project",
+  already_acquired: `Already in the ${TASK.lower}`,
   dropped_over_cap: "Set aside — over this round's limit",
   relevant: "Judged relevant",
   not_relevant: "Screened out",

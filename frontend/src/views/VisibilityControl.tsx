@@ -1,5 +1,6 @@
 import type { components } from "../api/gen/types";
 import { Button } from "../ui/brand/Button";
+import { TASK } from "../lib/vocabulary";
 
 type Visibility = components["schemas"]["TaskOut"]["visibility"];
 
@@ -11,7 +12,9 @@ type Visibility = components["schemas"]["TaskOut"]["visibility"];
 export function visibilityOutcomeLine(next: Visibility, taskCount?: number): string {
   const base = next === "private" ? "Now private." : "Now shared with your organisation.";
   if (taskCount === undefined) return base;
-  return taskCount === 1 ? `${base} 1 Task follows.` : `${base} ${taskCount} Tasks follow.`;
+  return taskCount === 1
+    ? `${base} 1 ${TASK.one} follows.`
+    : `${base} ${taskCount} ${TASK.many} follow.`;
 }
 
 /**

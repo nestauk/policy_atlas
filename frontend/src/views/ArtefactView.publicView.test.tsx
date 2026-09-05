@@ -77,10 +77,10 @@ function renderPublicArtefact() {
   render(
     <AuthContext.Provider value={auth()}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/results`]}>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
           <Routes>
             <Route
-              path="/tasks/:taskId/results"
+              path="/tasks/:taskId/result"
               element={
                 <PublicViewProvider value={true}>
                   <ArtefactView />

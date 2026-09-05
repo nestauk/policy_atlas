@@ -16,5 +16,5 @@ import { useConversationMutations } from "./conversationState";
 export function ContextBar({ taskId, conversationId, entryArtefactId }: { taskId: string; conversationId: string; entryArtefactId: string | null }) {
   const { update } = useConversationMutations(taskId);
   if (entryArtefactId === null) return null;
-  return <div className="flex items-center gap-2 border-t border-line px-4 py-2"><Link to={`/tasks/${taskId}/results`} className="hover:underline"><Chip tone="soft">Report</Chip></Link><button type="button" aria-label="Clear report context" onClick={() => void update(conversationId, { entry_artefact_id: null })} className="text-meta text-grey hover:text-navy">×</button></div>;
+  return <div className="flex items-center gap-2 border-t border-line px-4 py-2"><Link to={`/tasks/${taskId}/result`} className="hover:underline"><Chip tone="soft">Report</Chip></Link><button type="button" aria-label="Clear report context" onClick={() => void update(conversationId, { entry_artefact_id: null })} className="text-meta text-grey hover:text-navy">×</button></div>;
 }

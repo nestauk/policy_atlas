@@ -141,9 +141,9 @@ function renderResults(initialPending: boolean) {
   const view = render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/results`]}>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
           <Routes>
-            <Route path="/tasks/:taskId/results" element={<ArtefactView />} />
+            <Route path="/tasks/:taskId/result" element={<ArtefactView />} />
           </Routes>
         </MemoryRouter>
       </TooltipProvider>
@@ -156,9 +156,9 @@ function renderResults(initialPending: boolean) {
       view.rerender(
         <QueryClientProvider client={queryClient}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/results`]}>
+            <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/result`]}>
               <Routes>
-                <Route path="/tasks/:taskId/results" element={<ArtefactView />} />
+                <Route path="/tasks/:taskId/result" element={<ArtefactView />} />
               </Routes>
             </MemoryRouter>
           </TooltipProvider>

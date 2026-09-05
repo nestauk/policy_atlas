@@ -43,10 +43,10 @@ function buildPublicRouter(initialPath: string) {
         path: "/tasks/:taskId",
         element: <PublicTaskShell />,
         children: [
-          { index: true, element: <RedirectToPath suffix="/results" /> },
-          { path: "results", element: <div>results probe</div> },
+          { index: true, element: <RedirectToPath suffix="/result" /> },
+          { path: "result", element: <div>results probe</div> },
           { path: "sources", element: <div>sources probe</div> },
-          { path: "*", element: <RedirectToPath suffix="/results" preserveOriginal /> },
+          { path: "*", element: <RedirectToPath suffix="/result" preserveOriginal /> },
         ],
       },
       { path: "*", element: <StashAndSplashRedirect /> },
@@ -65,7 +65,7 @@ describe("publicRouter's wildcard redirect must not rewrite the stashed return U
     // Stale-but-still-public cached data (a task that WAS public and got
     // unshared) resolves the query immediately with `access: "public"` —
     // Outlet renders, the wildcard child matches `/share` and fires its
-    // client-side redirect to `/results`, carrying the original path.
+    // client-side redirect to `/result`, carrying the original path.
     vi.mocked(queries.useTask).mockReturnValue({
       isPending: false,
       data: PUBLIC_TASK,
@@ -78,7 +78,7 @@ describe("publicRouter's wildcard redirect must not rewrite the stashed return U
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.getByText("results probe")).toBeInTheDocument());
-    expect(router.state.location.pathname).toBe(`/tasks/${TASK_ID}/results`);
+    expect(router.state.location.pathname).toBe(`/tasks/${TASK_ID}/result`);
     expect(router.state.location.state).toEqual({ from: `/tasks/${TASK_ID}/share` });
   });
 
@@ -87,7 +87,7 @@ describe("publicRouter's wildcard redirect must not rewrite the stashed return U
     const router = createMemoryRouter([{ path: "*", element: <StashAndSplashRedirect /> }], {
       initialEntries: [
         {
-          pathname: `/tasks/${TASK_ID}/results`,
+          pathname: `/tasks/${TASK_ID}/result`,
           state: { from: `/tasks/${TASK_ID}/share` },
         },
       ],
@@ -103,12 +103,12 @@ describe("publicRouter's wildcard redirect must not rewrite the stashed return U
       data: undefined,
     } as unknown as ReturnType<typeof queries.useTask>);
 
-    const router = buildPublicRouter(`/tasks/${TASK_ID}/results`);
+    const router = buildPublicRouter(`/tasks/${TASK_ID}/result`);
     render(
       <QueryClientProvider client={new QueryClient()}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
-    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/results`);
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/result`);
   });
 });

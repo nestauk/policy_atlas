@@ -23,7 +23,7 @@ import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
-/** Project settings affordance (028 F.5): rename + archive, wired to the
+/** Task settings affordance (028 F.5): rename + archive, wired to the
  *  existing task mutations — the task-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
  *  explicit confirm step before the mutation fires. Visibility moved to the
@@ -86,8 +86,8 @@ function TaskSettingsMenu({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Project settings"
-          title="Project settings"
+          aria-label={COPY.taskSettings}
+          title={COPY.taskSettings}
           className="cursor-pointer text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
         >
           <svg
@@ -113,7 +113,7 @@ function TaskSettingsMenu({
             }}
           >
             <label className="sr-only" htmlFor="task-settings-name">
-              Project name
+              {TASK.one} name
             </label>
             <input
               id="task-settings-name"
@@ -365,7 +365,7 @@ export function AppShell() {
         </div>
       </NavBar>
       {base !== null && (
-        <NavBar aria-label="Task" className="shrink-0 bg-ground">
+        <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
           <div className="flex min-w-0 items-center gap-2">
             {task.data !== undefined && (
               <>
@@ -386,7 +386,7 @@ export function AppShell() {
               ? publicLifecycleTabs(base)
               : lifecycleTabs(base, task.data?.latest_run?.status)
             ).map((item) =>
-              item.tab === "plan" && hasPendingCheckIn
+              item.tab === "agent" && hasPendingCheckIn
                 ? {
                     ...item,
                     marker: (

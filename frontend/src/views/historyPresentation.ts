@@ -1,4 +1,5 @@
 import { friendlyDecisionDetails, groupSearchDecisions } from "./decisionsPresentation";
+import { TASK } from "../lib/vocabulary";
 
 /** One row of the task's history, already reduced to what a reader sees. */
 export type HistoryRow = {
@@ -43,8 +44,8 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
   "steering.decision": { label: "Check-in", tone: "blue" },
   "steering.pause": { label: "Check-in", tone: "yellow" },
   "search.executed.grouped": { label: "Search", tone: "soft" },
-  "project.renamed": { label: "Task", tone: "soft" },
-  "project.archived": { label: "Task", tone: "soft" },
+  "project.renamed": { label: TASK.one, tone: "soft" },
+  "project.archived": { label: TASK.one, tone: "soft" },
   "plan.approved": { label: "Plan", tone: "green" },
   "component.completed": { label: "Completed", tone: "green" },
   "component.failed": { label: "Failed", tone: "red" },

@@ -59,7 +59,7 @@ function renderShell(path: string) {
         <Routes>
           <Route path="/" element={<div>splash probe</div>} />
           <Route path="/tasks/:taskId" element={<PublicTaskShell />}>
-            <Route path="results" element={<div>results probe</div>} />
+            <Route path="result" element={<div>results probe</div>} />
             <Route path="sources" element={<div>sources probe</div>} />
           </Route>
         </Routes>
@@ -76,31 +76,31 @@ beforeEach(() => {
 describe("PublicTaskShell — the public task view (task 037)", () => {
   it("shows a loading state while the tokenless task read is pending", () => {
     mockTask(undefined, { pending: true });
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     expect(screen.getByRole("status")).toHaveTextContent("Loading…");
   });
 
   it("keeps stash-and-splash for a Task that is not public — same as before the slice", () => {
     mockTask(undefined);
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     expect(screen.getByText("splash probe")).toBeInTheDocument();
-    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/results`);
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/result`);
   });
 
   it("renders the two-tab shell around a public Task's Results", () => {
     mockTask(PUBLIC_TASK);
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     expect(screen.getByText("Shared evidence review")).toBeInTheDocument();
     expect(screen.getByText("results probe")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
     const taskNav = screen.getByRole("navigation", { name: "Task" });
     const links = Array.from(taskNav.querySelectorAll("a")).map((a) => a.textContent);
-    expect(links).toEqual(["Results", "Sources"]);
+    expect(links).toEqual(["Result", "Sources"]);
   });
 
   it("never opens the run event stream — the events route is not public", () => {
     mockTask(PUBLIC_TASK);
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     expect(sseState.connect).not.toHaveBeenCalled();
   });
 });

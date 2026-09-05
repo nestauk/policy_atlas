@@ -35,15 +35,15 @@ function renderAt(path: string) {
         <Route
           path="/tasks/:taskId"
           element={
-            <LifecycleRoute tab="plan">
+            <LifecycleRoute tab="agent">
               <div>Plan page</div>
             </LifecycleRoute>
           }
         />
         <Route
-          path="/tasks/:taskId/results"
+          path="/tasks/:taskId/result"
           element={
-            <LifecycleRoute tab="results">
+            <LifecycleRoute tab="result">
               <div>Results page</div>
             </LifecycleRoute>
           }
@@ -80,7 +80,7 @@ function renderAt(path: string) {
 describe("LifecycleRoute — a locked stage is unreachable by URL", () => {
   it("redirects a locked route to Plan rather than showing an empty page", () => {
     mockTask(null);
-    renderAt(`/tasks/${TASK_ID}/results`);
+    renderAt(`/tasks/${TASK_ID}/result`);
     expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}`);
     expect(screen.queryByText("Results page")).not.toBeInTheDocument();
     expect(screen.getByText("Plan page")).toBeInTheDocument();
@@ -88,7 +88,7 @@ describe("LifecycleRoute — a locked stage is unreachable by URL", () => {
 
   it("renders the stage when the run state opens it", () => {
     mockTask("succeeded");
-    renderAt(`/tasks/${TASK_ID}/results`);
+    renderAt(`/tasks/${TASK_ID}/result`);
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });
 
@@ -106,20 +106,20 @@ describe("LifecycleRoute — a locked stage is unreachable by URL", () => {
 
   it("opens Results while a run is executing so the in-progress write-up is reachable", () => {
     mockTask("running");
-    renderAt(`/tasks/${TASK_ID}/results`);
+    renderAt(`/tasks/${TASK_ID}/result`);
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });
 
   it("still locks Results after a failed run", () => {
     mockTask("failed");
-    renderAt(`/tasks/${TASK_ID}/results`);
+    renderAt(`/tasks/${TASK_ID}/result`);
     expect(screen.getByText("Plan page")).toBeInTheDocument();
   });
 
   it("waits for the task to load before deciding — a cold deep link is not bounced", () => {
     mockTask(null, { pending: true });
-    renderAt(`/tasks/${TASK_ID}/results`);
-    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/results`);
+    renderAt(`/tasks/${TASK_ID}/result`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/result`);
     expect(screen.queryByText("Plan page")).not.toBeInTheDocument();
   });
 });
@@ -128,7 +128,7 @@ describe("LifecycleRoute — public-leg access shows Results and Sources only (t
   it("sends a public-leg reader's Share URL to Results", () => {
     mockTask("succeeded", { access: "public" });
     renderAt(`/tasks/${TASK_ID}/share`);
-    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/results`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/result`);
     expect(screen.queryByText("Share page")).not.toBeInTheDocument();
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });
@@ -143,14 +143,14 @@ describe("LifecycleRoute — public-leg access shows Results and Sources only (t
     // The backend's public leg is the gate; run-state locks are an
     // owner-side affordance and never apply to the public view.
     mockTask(null, { access: "public" });
-    renderAt(`/tasks/${TASK_ID}/results`);
+    renderAt(`/tasks/${TASK_ID}/result`);
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });
 
   it("sends a public-leg reader's Plan URL to Results", () => {
     mockTask("succeeded", { access: "public" });
     renderAt(`/tasks/${TASK_ID}`);
-    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/results`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/result`);
     expect(screen.queryByText("Plan page")).not.toBeInTheDocument();
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });
@@ -158,7 +158,7 @@ describe("LifecycleRoute — public-leg access shows Results and Sources only (t
   it("sends a public-leg reader's History URL to Results", () => {
     mockTask("succeeded", { access: "public" });
     renderAt(`/tasks/${TASK_ID}/history`);
-    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/results`);
+    expect(screen.getByTestId("path")).toHaveTextContent(`/tasks/${TASK_ID}/result`);
     expect(screen.queryByText("History page")).not.toBeInTheDocument();
     expect(screen.getByText("Results page")).toBeInTheDocument();
   });

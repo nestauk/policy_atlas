@@ -152,7 +152,7 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
   async function openTaskSettings() {
     const user = userEvent.setup();
     renderShell(`/tasks/${TASK_ID}`);
-    await user.click(screen.getByRole("button", { name: "Project settings" }));
+    await user.click(screen.getByRole("button", { name: "Task settings" }));
     return user;
   }
 
@@ -166,7 +166,7 @@ describe("AppShell — the task-settings popover (task 033 phase 10c, contract �
   it("non-owner: hides the settings gear itself, not just the items inside it — an empty popover is not a fix", () => {
     taskState.isOwner = false;
     renderShell(`/tasks/${TASK_ID}`);
-    expect(screen.queryByRole("button", { name: "Project settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Task settings" })).not.toBeInTheDocument();
     // With the trigger gone, Rename and Archive can never be reached either.
     expect(screen.queryByRole("button", { name: "Rename" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Archive" })).not.toBeInTheDocument();
@@ -217,17 +217,17 @@ describe("AppShell — global chrome", () => {
     expect(appNav).toHaveTextContent("New");
     expect(appNav).toHaveTextContent(TASK.many);
     expect(appNav).toHaveTextContent("Projects");
-    expect(appNav).not.toHaveTextContent("Plan");
+    expect(appNav).not.toHaveTextContent("Agent");
     expect(taskNav).toHaveTextContent("Acme task");
-    expect(taskNav).toHaveTextContent("Plan");
-    expect(taskNav).toHaveTextContent("Results");
+    expect(taskNav).toHaveTextContent("Agent");
+    expect(taskNav).toHaveTextContent("Result");
   });
 
   it("hides the task bar on workspace-level pages", () => {
     renderShell("/projects");
     expect(screen.queryByRole("navigation", { name: "Task" })).not.toBeInTheDocument();
     expect(screen.queryByText("Acme task")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Plan" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Agent" })).not.toBeInTheDocument();
   });
 
   it("shows the site footer with privacy and terms links on workspace-level pages", () => {
@@ -358,14 +358,14 @@ describe("AppShell — public-leg access renders the two-tab view (task 037)", (
   });
 
   it("shows only Results and Sources in the task nav for a public-leg reader", () => {
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     const taskNav = screen.getByRole("navigation", { name: "Task" });
     const links = Array.from(taskNav.querySelectorAll("a")).map((a) => a.textContent);
-    expect(links).toEqual(["Results", "Sources"]);
+    expect(links).toEqual(["Result", "Sources"]);
   });
 
   it("does not mount the chat side panel on the public leg", () => {
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     expect(screen.queryByLabelText("Project chat")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Open chat")).not.toBeInTheDocument();
   });
@@ -373,7 +373,7 @@ describe("AppShell — public-leg access renders the two-tab view (task 037)", (
   it("keeps the five-tab shell for graded readers", () => {
     taskState.access = "full";
     taskState.isOwner = true;
-    renderShell(`/tasks/${TASK_ID}/results`);
+    renderShell(`/tasks/${TASK_ID}/result`);
     const taskNav = screen.getByRole("navigation", { name: "Task" });
     const labels = Array.from(taskNav.querySelectorAll("a, [aria-disabled]")).map(
       (el) => el.textContent,

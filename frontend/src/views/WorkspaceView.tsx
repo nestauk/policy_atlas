@@ -3,6 +3,7 @@ import { useParams } from "react-router";
 
 import { useTask } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
+import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { useRunStream } from "../store";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
 import { PlanDocument } from "./workspace/PlanDocument";
@@ -21,7 +22,7 @@ export function WorkspaceView() {
   const [planOpen, setPlanOpen] = useState(false);
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");
   const [planOverlay, setPlanOverlay] = useState<PlanOverlay>({});
-  useDocumentTitle(task.data?.name, "Plan");
+  useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.agent);
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
   // Task 033 phase 10c (contract § 11 / rubric 37) — the Plan route (this

@@ -28,7 +28,7 @@ export function LifecycleRoute({ tab, children }: { tab: LifecycleTab; children:
   // pages render their own shaped absence when a run has not finished.
   if (task.data.access === "public") {
     if (PUBLIC_TABS.includes(tab)) return <>{children}</>;
-    return <Navigate to={`/tasks/${taskId}/results`} replace />;
+    return <Navigate to={`/tasks/${taskId}/result`} replace />;
   }
   if (!isTabOpen(tab, task.data.latest_run?.status)) {
     return <Navigate to={`/tasks/${taskId}`} replace />;
