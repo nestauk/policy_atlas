@@ -119,7 +119,7 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
     );
   });
 
-  it("shows the switcher when enrolled, defaulting to Organisation, and drives scope", async () => {
+  it("shows the switcher when enrolled, defaulting to Mine, and drives scope", async () => {
     vi.mocked(queries.useMe).mockReturnValue(
       {
         data: {
@@ -132,15 +132,16 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
     );
     const user = userEvent.setup();
     renderList();
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all" });
-    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "all" });
-
-    await user.click(screen.getByRole("tab", { name: "Mine" }));
     expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine" });
     expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "mine" });
+    expect(screen.getByRole("tab", { name: "Mine" })).toHaveAttribute("aria-selected", "true");
+
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
+    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all" });
+    expect(queries.useTasks).toHaveBeenCalledWith({ page_size: 200, scope: "all" });
   });
 
-  it("shows the admin wider-list notice only for admin + Organisation scope", () => {
+  it("shows the admin wider-list notice only for admin + Organisation scope", async () => {
     vi.mocked(queries.useMe).mockReturnValue(
       {
         data: {
@@ -151,7 +152,10 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
         },
       } as unknown as ReturnType<typeof queries.useMe>,
     );
+    const user = userEvent.setup();
     renderList();
+    // Mine is the default now; the wide list is behind the Organisation tab.
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
     expect(screen.getByText("Showing every organisation.")).toBeInTheDocument();
   });
 
@@ -170,7 +174,7 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
     expect(screen.queryByText("Showing every organisation.")).not.toBeInTheDocument();
   });
 
-  it("renders a null owner_display as 'No organisation' on the admin wide list", () => {
+  it("renders a null owner_display as 'No organisation' on the admin wide list", async () => {
     vi.mocked(queries.useMe).mockReturnValue(
       {
         data: {
@@ -200,7 +204,10 @@ describe("ProjectsView — the Organisation/Mine switcher (task 033 phase 10b)",
         isPending: false,
       } as unknown as ReturnType<typeof queries.useProjects>,
     );
+    const user = userEvent.setup();
     renderList();
+    // Mine is the default now; the wide list is behind the Organisation tab.
+    await user.click(screen.getByRole("tab", { name: "Organisation" }));
     expect(screen.getByText("No organisation")).toBeInTheDocument();
   });
 });

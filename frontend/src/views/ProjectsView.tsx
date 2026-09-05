@@ -51,7 +51,7 @@ export function ProjectsView() {
   // Hidden entirely with no organisation (rubric 14's dark-launch invariant):
   // an unenrolled caller's page — including its queries — stays unchanged.
   const hasSwitcher = me.data?.organisation != null;
-  const [scope, setScope] = useState<Scope>("all");
+  const [scope, setScope] = useState<Scope>("mine");
   const projects = useProjects(hasSwitcher ? { scope } : undefined);
   const tasksQuery = useTasks(
     hasSwitcher

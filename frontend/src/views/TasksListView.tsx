@@ -20,7 +20,7 @@ export function TasksListView() {
   // a merge gate): an unenrolled caller's list stays byte-identical to
   // today, including the query itself — no `scope` param is sent.
   const hasSwitcher = me.data?.organisation != null;
-  const [scope, setScope] = useState<Scope>("all");
+  const [scope, setScope] = useState<Scope>("mine");
   const tasks = useTasks(hasSwitcher ? { scope } : undefined);
   const archived = useTasks(
     hasSwitcher ? { scope, status: "archived" } : { status: "archived" },
