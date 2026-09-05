@@ -367,6 +367,16 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   `@starting-style` rules present). Gates: lint 0 errors · 549 tests · build ·
   e2e 11.
 
+- **Footer reveal, stickier (owner request 2026-09-05):** arriving at the
+  transcript's end no longer opens the footer, so the composer can rest at the
+  bottom of the screen. `useFooterReveal` (shared by the planning pane and the
+  chat pane) opens it only after 80px of further wheel travel while already at
+  the end, and closes it on any wheel up or a 120px scroll back; it starts
+  hidden. The planning pane's pin observer now also watches the scroll
+  container, so the footer opening does not leave the newest turn a footer's
+  height above the true bottom. Unit test on the hook (three cases); gates
+  green (typecheck · lint · 552 tests · build · e2e 11).
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and
