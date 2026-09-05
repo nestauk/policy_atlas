@@ -382,6 +382,15 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   a swipe down closes — one `nudge` rule for both input forms. Unit test on the
   hook (four cases); gates green (typecheck · lint · 553 tests · build · e2e 11).
 
+- **Chats open at their end (owner request 2026-09-05, after PR #65 opened):**
+  a chat pane opened at its top. `usePinToBottom` (extracted from the
+  planning pane's pin logic, now shared by both panes) scrolls a freshly
+  opened transcript to its end, keeps it there while turns stream in when
+  the reader is within 120px of the end, leaves a reader who scrolled up
+  alone, and never pins against the pane growing (the footer closing);
+  re-pins when the conversation id changes. Unit test (two cases); gates:
+  typecheck · lint 0 errors · 556 tests · build · e2e 11.
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and

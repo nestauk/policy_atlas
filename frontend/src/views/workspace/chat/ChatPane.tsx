@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useConversation } from "../../../api/queries";
 import { useChatConversation } from "../../../store";
@@ -10,6 +10,7 @@ import { ChatMessages } from "./ChatMessages";
 import { ContextBar } from "./ContextBar";
 import { takeFirstMessage } from "./conversationState";
 import { useFooterReveal } from "./useFooterReveal";
+import { usePinToBottom } from "./usePinToBottom";
 
 /** Compose one URL-addressable chat conversation — in the overlay, or wide
  *  in the Agent tab's main column.
@@ -88,19 +89,28 @@ export function ChatPane({
   }, [conversationId, sendTurn]);
 
   const footer = useFooterReveal(onAtBottomChange);
+  // A chat opens at its end and stays there as turns stream in (owner,
+  // 2026-09-05); a reader who scrolls up is left alone.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pin = usePinToBottom(scrollRef, contentRef, conversationId);
 
   const empty = !chat.isPending && chat.rows.length === 0;
   const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
   return (
     <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
       <div
-        onScroll={footer.onScroll}
+        ref={scrollRef}
+        onScroll={(event) => {
+          pin.onScroll(event);
+          footer.onScroll(event);
+        }}
         onWheel={footer.onWheel}
         onTouchStart={footer.onTouchStart}
         onTouchMove={footer.onTouchMove}
         className="min-h-0 flex-1 overflow-y-auto py-4 [scrollbar-gutter:stable]"
       >
-        <div className={cn("w-full", column)}>
+        <div ref={contentRef} className={cn("w-full", column)}>
           {empty ? (
             <ChatEmptyState
               message={conversation.isError ? "This chat couldn't be opened." : "Ask about the evidence."}

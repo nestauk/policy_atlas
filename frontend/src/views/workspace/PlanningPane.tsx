@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useCheckIns, useDecisions, useFunnel, usePlan, useRuns } from "../../api/queries";
@@ -26,6 +26,7 @@ import { ReauthRedirect } from "../../ui/feedback";
 import { groupSearchDecisions } from "../decisionsPresentation";
 import { LIFECYCLE_PAGE_CLASS } from "../listPageChrome";
 import { useFooterReveal } from "./chat/useFooterReveal";
+import { usePinToBottom } from "./chat/usePinToBottom";
 import { AnsweredCheckIn } from "./AnsweredCheckIn";
 import { CheckInCard } from "./CheckInCard";
 import { PartCard, type PartState, confirmTarget, derivePartStates } from "./PartCard";
@@ -496,37 +497,12 @@ export function PlanningPane({
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const pinnedToBottom = useRef(true);
   // The site footer lives in `WorkspaceView`, under both columns (038 V8),
   // and opens only on a deliberate nudge past the transcript's end.
   const footer = useFooterReveal(onAtBottomChange);
-  const syncScrollPosition = (el: HTMLElement) => {
-    pinnedToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
-  };
-  useLayoutEffect(() => {
-    const el = scrollRef.current;
-    const content = contentRef.current;
-    if (el === null || content === null) return;
-    let paneHeight = el.clientHeight;
-    const pin = (entries: readonly ResizeObserverEntry[] = []) => {
-      // The pane growing is the footer closing under a reader scrolling up —
-      // never pin against that; pin on new content and on the pane shrinking.
-      const paneGrew = entries.some(
-        (entry) => entry.target === el && entry.contentRect.height > paneHeight,
-      );
-      paneHeight = el.clientHeight;
-      if (paneGrew) return;
-      if (pinnedToBottom.current) el.scrollTop = el.scrollHeight;
-      syncScrollPosition(el);
-    };
-    pin();
-    const observer = new ResizeObserver(pin);
-    observer.observe(content);
-    // The footer opening shrinks this pane; re-pin so the newest turn stays
-    // in view rather than a footer's height above the true bottom.
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  // The transcript opens at its end and stays there while new turns land
+  // (shared with the chat pane).
+  const pin = usePinToBottom(scrollRef, contentRef, taskId);
 
   // The plan card sits at its chronological position: right after the last
   // planning turn (approval always comes from a turn; turns are 409-fenced
@@ -618,7 +594,7 @@ export function PlanningPane({
       <div
         ref={scrollRef}
         onScroll={(event) => {
-          syncScrollPosition(event.currentTarget);
+          pin.onScroll(event);
           footer.onScroll(event);
         }}
         onWheel={footer.onWheel}
