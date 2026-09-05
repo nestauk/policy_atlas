@@ -273,7 +273,7 @@ test.describe("mock task-lifecycle journey", () => {
     await expect(overlayList.getByRole("button").first()).toHaveAccessibleName("Task Agent");
     await overlayList.getByRole("button", { name: "Task Agent" }).click();
     await expect(overlay.getByRole("region", { name: "Planning conversation" })).toBeVisible();
-    await overlay.getByRole("button", { name: "Close chat panel" }).click();
+    await overlay.getByRole("button", { name: "Close sidebar" }).click();
     await sourcesSubnav.getByRole("link", { name: "Themes" }).click();
     await sourcesSubnav.getByRole("link", { name: "Findings" }).click();
     await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}/sources/findings$`));

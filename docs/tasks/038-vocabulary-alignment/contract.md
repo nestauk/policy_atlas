@@ -797,8 +797,10 @@ step 9.
   non-Agent tabs (the tab links carry `?chat=`; the Agent tab keeps its own
   default); the rail marks the four newest chats (one single-bubble glyph
   each, the title as a quick tooltip); the rail's and overlay header's
-  tooltips use the app's tooltip at 150ms rather than the browser's (none on
-  the expand toggle), and the app tooltip is restyled for every user.
+  tooltips use the app's tooltip at 150ms rather than the browser's ("Open
+  sidebar" on the expand toggle; the overlay closes with a close-sidebar
+  glyph named "Close sidebar"), and the app tooltip is restyled for every
+  user.
 
 Evidence and gates per change: [verification.md](verification.md) § Phase 4
 follow-ons.

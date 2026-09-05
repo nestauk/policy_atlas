@@ -41,6 +41,17 @@ export function PanelIcon(props: IconProps) {
   );
 }
 
+/** Close the sidebar: the panel, its left column, and a chevron tucking in. */
+export function PanelCloseIcon(props: IconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="2" y="3" width="12" height="10" rx="1" />
+      <path d="M6 3v10" />
+      <path d="M11.5 6 9.5 8l2 2" />
+    </Glyph>
+  );
+}
+
 export function PencilIcon(props: IconProps) {
   return (
     <Glyph {...props}>

@@ -21,7 +21,7 @@ import {
   useActiveConversation,
 } from "./conversationState";
 import { DraftChatPane } from "./DraftChatPane";
-import { CloseIcon, PlusIcon } from "./icons";
+import { PanelCloseIcon, PlusIcon } from "./icons";
 
 /** Resize bounds (px) — the workspace rail's own clamp. */
 const PANEL_MIN = 280;
@@ -202,14 +202,14 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
             </button>
           </span>
         </Tooltip>
-        <Tooltip content="Close" side="bottom">
+        <Tooltip content="Close sidebar" side="bottom">
           <button
             type="button"
-            aria-label="Close chat panel"
+            aria-label="Close sidebar"
             onClick={() => setActiveConversation(null)}
             className={HEADER_BUTTON}
           >
-            <CloseIcon size={14} />
+            <PanelCloseIcon size={16} />
           </button>
         </Tooltip>
       </div>

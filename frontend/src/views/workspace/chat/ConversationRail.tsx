@@ -113,7 +113,7 @@ export function ConversationRail({
         aria-label="Chats"
         className={cn("flex shrink-0 items-center gap-1 border-line bg-paper-2", className)}
       >
-        <RailButton label={toggleLabel} tip={null} aria-expanded={expanded} disabled={toggleDisabled} onClick={onToggle}>
+        <RailButton label={toggleLabel} tip="Open sidebar" aria-expanded={expanded} disabled={toggleDisabled} onClick={onToggle}>
           <PanelIcon size={16} />
         </RailButton>
         <RailButton

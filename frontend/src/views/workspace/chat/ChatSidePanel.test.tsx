@@ -142,7 +142,7 @@ describe("ChatSidePanel", () => {
     expect(screen.queryByTestId("chat-pane")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Chats" }));
     expect(screen.getByTestId("chat-pane")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Close chat panel" }));
+    await user.click(screen.getByRole("button", { name: "Close sidebar" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith(null);
   });
 
