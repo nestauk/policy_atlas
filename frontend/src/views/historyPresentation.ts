@@ -2,7 +2,7 @@ import { friendlyDecisionDetails, groupSearchDecisions } from "./decisionsPresen
 import { TASK } from "../lib/vocabulary";
 
 /** One row of the task's history, already reduced to what a reader sees. */
-export type HistoryRow = {
+type HistoryRow = {
   /** Stable list key. */
   id: string;
   /** ISO timestamp the row is ordered by. */

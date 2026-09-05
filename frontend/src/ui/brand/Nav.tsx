@@ -11,9 +11,6 @@ import { FoldMarkIcon } from "./FoldMarkIcon";
 export const BETA_CHIP_HINT =
   "Beta means Policy Atlas is an experimental tool under development. Features may be incomplete or change, and outputs should be verified before they inform advice or decisions. We're testing with users and improving it continuously.";
 
-/** Height of one chrome row. The shell stacks two of these inside a task. */
-export const NAV_BAR_HEIGHT_PX = 64;
-
 /** Top nav bar: brand left, links right, full viewport width. */
 export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLElement>) {
   return (

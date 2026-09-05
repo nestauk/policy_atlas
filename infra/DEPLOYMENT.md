@@ -445,7 +445,7 @@ private `ssm` and `ssmmessages` interface endpoints and the jumpbox attaches
 their pre-wired managed-node SG; it has no public HTTPS fallback. The selection
 is explicit in `network_config.json` as `ssm_connectivity: nat` or
 `ssm_connectivity: interface_endpoints`. See
-[`JUMPBOX.md`](../JUMPBOX.md) for the full operator and IAM guidance.
+[`JUMPBOX.md`](./JUMPBOX.md) for the full operator and IAM guidance.
 
 Prereqs: AWS CLI + session-manager-plugin; IAM allowing `ssm:StartSession` on the
 jumpbox instance **and only its generated custom Session document**; permission

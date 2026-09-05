@@ -65,7 +65,7 @@ export const RESEARCH_APPROACH_HINT =
   "Standard combinations of Search scope and Analysis level. Choose one or make a custom combination using Search scope and Analysis level below.";
 export const RESEARCH_APPROACH_CUSTOM = "Custom";
 
-export const RESEARCH_APPROACH_PRESETS: Record<
+const RESEARCH_APPROACH_PRESETS: Record<
   string,
   { search_effort: string; analysis_depth: string; label: string }
 > = {
@@ -116,7 +116,7 @@ export const STEERING_MODE_LABEL: Record<string, string> = {
  * × analysis depth. Kept here so the plan panel can update the estimate
  * without a planner round-trip.
  */
-export const TIME_BANDS: Record<string, Record<string, string>> = {
+const TIME_BANDS: Record<string, Record<string, string>> = {
   rapid: {
     landscape: "~10-15 min",
     standard: "~30-45 min",

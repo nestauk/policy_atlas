@@ -1,9 +1,8 @@
 # API layer
 
-`client.ts` exports `createApiClient()` (unauthenticated) and
-`createAuthedApiClient(auth)` — both typed `openapi-fetch` clients bound to
-the generated `paths` type in `gen/types.ts`. Base URL comes from
-`VITE_API_BASE_URL`, defaulting to `/api` (the local dev proxy).
+`client.ts` exports `createAuthedApiClient(auth)`, a typed `openapi-fetch`
+client bound to the generated `paths` type in `gen/types.ts`. Base URL comes
+from `VITE_API_BASE_URL`, defaulting to `/api` (the local dev proxy).
 
 The generated client is schema-first: `gen/types.ts` and the committed
 `../../openapi.json` are produced from the backend's Pydantic contract

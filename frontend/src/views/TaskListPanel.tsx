@@ -12,7 +12,7 @@ import { TaskListRow } from "./TaskListRow";
 
 type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
-export type TaskListItem = {
+type TaskListItem = {
   task_id: string;
   name: string;
   updated_at: string;

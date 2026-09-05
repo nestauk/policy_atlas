@@ -58,7 +58,7 @@ export const queryKeys = {
  *  `project_id`). `scope` defaults server-side to `all`; the frontend
  *  passes it explicitly only where a caller needs something other than that
  *  default (the phase 10b switcher), so day-one behaviour is unchanged. */
-export interface TasksQuery {
+interface TasksQuery {
   status?: "active" | "archived" | "all";
   scope?: "all" | "mine";
   project_id?: string | null;
@@ -67,7 +67,7 @@ export interface TasksQuery {
 }
 
 /** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`). */
-export interface ProjectsQuery {
+interface ProjectsQuery {
   scope?: "all" | "mine";
   page?: number;
   page_size?: number;
@@ -108,7 +108,7 @@ export interface EvidenceQuery extends PageQuery {
   year_to?: number;
 }
 
-export interface FindingsQuery extends PageQuery {
+interface FindingsQuery extends PageQuery {
   profile?: "iof" | "icf";
   facet?: string;
   group?: string;
@@ -117,7 +117,7 @@ export interface FindingsQuery extends PageQuery {
 }
 
 /** Filters for the task conversation library. */
-export interface ConversationQuery {
+interface ConversationQuery {
   kind?: "planning" | "chat";
   status?: "active" | "closed" | "archived";
 }

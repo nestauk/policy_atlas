@@ -1,5 +1,5 @@
 /** List-page column (Tasks, Projects, New task) — not the in-task tabs. */
-export const PAGE_COLUMN_MAX_W = "max-w-[1180px]";
+const PAGE_COLUMN_MAX_W = "max-w-[1180px]";
 
 /** Reading measure: the report paper, and the content column on Plan,
  *  History and Share. Sources (Themes, Landscape, All sources, Findings)

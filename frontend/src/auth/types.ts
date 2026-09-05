@@ -11,7 +11,7 @@
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 /** The authenticated subject, as far as the frontend needs to know. */
-export interface AuthUser {
+interface AuthUser {
   /** Token `sub` claim — the owner-scoping identity the API keys on. */
   sub: string;
 }

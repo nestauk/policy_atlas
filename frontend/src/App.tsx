@@ -66,7 +66,7 @@ function AppRouter() {
   return <RouterProvider key={status} router={router} />;
 }
 
-export function App() {
+function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>

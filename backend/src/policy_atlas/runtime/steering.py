@@ -519,23 +519,6 @@ def render_collation(flagged_events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def resolve_unattended(plan: TaskPlan, point: str) -> str:
-    """Resolve an Unattended-mode steer point from visible plan defaults.
-
-    Args:
-        plan: Approved task plan.
-        point: Steer-point name to resolve.
-
-    Returns:
-        ``"proceed_flag"`` or ``"stop"``. Missing defaults proceed with a
-        visible unconfigured-default flag owned by the caller.
-    """
-    for rule in plan.steer_point_defaults:
-        if rule.steer_point == point:
-            return rule.action
-    return "proceed_flag"
-
-
 # Deepening-selection emphasis multipliers (plan-pinned, contract decision 6
 # rev 2.5): weight_emphasis values MULTIPLY the default signal weights — select
 # multiplies the defaults by these values and sums unnormalised (select.py:439,

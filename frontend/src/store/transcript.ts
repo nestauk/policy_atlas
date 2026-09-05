@@ -19,11 +19,11 @@ export interface OptimisticPlanningTurn {
   errorCode?: string;
 }
 
-export interface OptimisticTranscriptState {
+interface OptimisticTranscriptState {
   turns: OptimisticPlanningTurn[];
 }
 
-export type OptimisticTranscriptAction =
+type OptimisticTranscriptAction =
   | { type: "submitted"; turn: OptimisticPlanningTurn }
   | { type: "reconciled"; clientTurnId: string }
   | { type: "failed"; clientTurnId: string; errorMessage: string; errorCode?: string }

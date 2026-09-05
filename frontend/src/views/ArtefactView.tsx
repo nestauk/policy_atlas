@@ -780,7 +780,7 @@ function ClaimSpan({
   );
 }
 
-export type SpanSegment<C> = { kind: "plain"; text: string } | { kind: "claim"; text: string; claim: C };
+type SpanSegment<C> = { kind: "plain"; text: string } | { kind: "claim"; text: string; claim: C };
 
 /**
  * Split `prose` into plain/claim segments by each claim's `[start, end)`

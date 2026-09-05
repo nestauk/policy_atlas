@@ -4,7 +4,7 @@ export type PlanningThreadTurn = components["schemas"]["PlanningTranscriptTurnOu
 export type PlanningThreadRun = components["schemas"]["RunOut"];
 export type PlanningThreadDecision = components["schemas"]["DecisionOut"];
 
-export interface SessionAnsweredCheckIn {
+interface SessionAnsweredCheckIn {
   chosenOptionLabel: string;
   rejectedOptionLabels: string[];
 }

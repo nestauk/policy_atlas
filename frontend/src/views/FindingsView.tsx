@@ -34,7 +34,7 @@ type IcfFinding = Extract<FindingOut, { profile: "icf" }>;
 /** The IOF expansion's statistics vocabulary — the as-built keys
  *  (`ci_lower`/`ci_upper`/`standard_error`/`i_squared`/`tau2`), never the
  *  demo's `ci`/`se`/`i2` (transcription trap 1). */
-export function statRows(statistics: IofFinding["statistics"]): Array<[string, string]> {
+function statRows(statistics: IofFinding["statistics"]): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
   if (statistics.effect_size !== null && statistics.effect_size !== undefined) {
     const type = statistics.effect_size_type;

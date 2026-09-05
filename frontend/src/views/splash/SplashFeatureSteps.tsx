@@ -2,7 +2,7 @@
  * Splash feature steps (01–06). Hidden until product screenshots are ready —
  * flip {@link SHOW_SPLASH_FEATURE_STEPS} in SplashView to show again.
  */
-export const SPLASH_FEATURES: {
+const SPLASH_FEATURES: {
   n: string;
   title: string;
   body: string;

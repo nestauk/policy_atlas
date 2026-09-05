@@ -27,8 +27,6 @@ export const CAPABILITIES = [
   },
 ] as const;
 
-export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];
-
 const LABEL_BY_KEY = new Map<string, string>(
   CAPABILITIES.map((capability) => [capability.key, capability.name]),
 );

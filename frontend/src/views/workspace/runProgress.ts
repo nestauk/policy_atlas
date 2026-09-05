@@ -3,7 +3,7 @@ import type { PlanDraft, RunStatus, StageEntry, StageStatus } from "../../store"
 import { timelineSummary } from "./journey/presentation";
 import { stepsForAnalysisDepth, type PlanStepPreview } from "./planVocabulary";
 
-export type RunningCardTone = "running" | "paused" | "done" | "stopped";
+type RunningCardTone = "running" | "paused" | "done" | "stopped";
 
 export type StageRow = {
   /** Unique among rows on this card — stage repeats across search rounds. */
@@ -16,7 +16,7 @@ export type StageRow = {
   seconds?: number | null;
 };
 
-export type StageSignpost = { href: string; label: string; message: string };
+type StageSignpost = { href: string; label: string; message: string };
 
 /** Chat-thread primary CTA — same size as Review the plan / Start search. */
 export const CHAT_PRIMARY_CTA_CLASS =
@@ -219,7 +219,7 @@ export function stageRows(stages: StageEntry[], plan: PlanDraft | null | undefin
 }
 
 /** Label of the in-flight step, else the last completed one. */
-export function currentStepLabel(rows: StageRow[]): string | null {
+function currentStepLabel(rows: StageRow[]): string | null {
   const started = rows.find((row) => row.status === "started");
   if (started !== undefined) return started.label;
   const completed = [...rows].reverse().find((row) => row.status === "completed");

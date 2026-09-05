@@ -3,7 +3,7 @@ import { PROJECT, TASK } from "./vocabulary";
 /** Machine-readable conflict conditions surfaced by the API (the real
  *  `ApiConflict` codes raised by the backend — see `runs.py`,
  *  `planning.py`, `check_ins.py`). */
-export type ConflictCode =
+type ConflictCode =
   | "run_active"
   | "capacity"
   | "planning_turn_in_progress"

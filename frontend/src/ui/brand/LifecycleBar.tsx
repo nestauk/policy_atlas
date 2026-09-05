@@ -3,7 +3,7 @@ import { NavLink } from "react-router";
 
 import { cn } from "./cn";
 
-export type LifecycleBarItem = {
+type LifecycleBarItem = {
   tab: string;
   label: string;
   to: string;

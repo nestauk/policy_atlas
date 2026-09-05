@@ -9,7 +9,7 @@ const MIN_BACKOFF_MS = 1000;
 /** Maximum reconnect backoff. */
 const MAX_BACKOFF_MS = 30000;
 
-export interface ConnectEventStreamOptions {
+interface ConnectEventStreamOptions {
   /** Project whose event stream to open. */
   taskId: string;
   /** API base URL. Defaults to `VITE_API_BASE_URL`, falling back to same-origin. */
@@ -47,7 +47,7 @@ export interface ConnectEventStreamOptions {
   maxBackoffMs?: number;
 }
 
-export interface EventStreamConnection {
+interface EventStreamConnection {
   /** Abort the stream and stop reconnecting. */
   close: () => void;
 }
