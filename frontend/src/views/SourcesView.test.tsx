@@ -9,7 +9,7 @@ import { SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
-  useProject: vi.fn(),
+  useTask: vi.fn(),
   useLandscape: vi.fn(),
   useCoverage: vi.fn(),
   useEvidence: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock("../api/queries", () => ({
   useFunnel: vi.fn(),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 /** The school-food theme in `mockLandscape` — the fixture theme that
  *  carries a `theme_id` and so is eligible for the sources theme filter. */
@@ -39,10 +39,10 @@ function LocationProbe() {
 function renderSources() {
   return render(
     <TooltipProvider>
-      <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/sources`]}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/sources`]}>
         <Routes>
           <Route
-            path="/projects/:projectId/sources"
+            path="/tasks/:taskId/sources"
             element={(
               <>
                 <SourcesView />
@@ -62,8 +62,8 @@ function lastEvidenceQuery() {
 }
 
 beforeEach(() => {
-  vi.mocked(queries.useProject).mockReturnValue(
-    { data: { name: "Tower Hamlets project" } } as unknown as ReturnType<typeof queries.useProject>,
+  vi.mocked(queries.useTask).mockReturnValue(
+    { data: { name: "Tower Hamlets task" } } as unknown as ReturnType<typeof queries.useTask>,
   );
   vi.mocked(queries.useLandscape).mockReturnValue(
     { data: mockLandscape } as unknown as ReturnType<typeof queries.useLandscape>,

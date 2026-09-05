@@ -18,8 +18,8 @@ from pydantic import BaseModel, Field
 
 from .check_ins import CheckInOut
 from .planning import PlanDraft
-from .projects import ProjectStatus
 from .runs import RunStatus
+from .tasks import TaskStatus
 
 #: The pinned stable component-vocabulary stage keys (spec § SSE).
 StageKey = Literal[
@@ -48,7 +48,7 @@ STAGE_KEYS: tuple[StageKey, ...] = (
 )
 
 #: Who decided a resolved check-in. Mirrors `steering_events.DecidedBy`.
-DecidedBy = Literal["user", "orchestrator", "standing_default"]
+DecidedBy = Literal["user", "agent", "standing_default"]
 
 
 class _PersistedFrameBase(BaseModel):
@@ -155,13 +155,13 @@ class PlanUpdatedFrame(_PersistedFrameBase):
     version: int
 
 
-class ProjectUpdatedFrame(_PersistedFrameBase):
+class TaskUpdatedFrame(_PersistedFrameBase):
     """A lifecycle audit event (rename, archive)."""
 
-    type: Literal["project.updated"]
+    type: Literal["task.updated"]
     name: str | None = None
     question: str | None = None
-    status: ProjectStatus | None = None
+    status: TaskStatus | None = None
 
 
 class TickFrame(BaseModel):
@@ -190,7 +190,7 @@ SseFrame = Annotated[
     | CheckinPendingFrame
     | CheckinResolvedFrame
     | PlanUpdatedFrame
-    | ProjectUpdatedFrame
+    | TaskUpdatedFrame
     | TickFrame,
     Field(discriminator="type"),
 ]

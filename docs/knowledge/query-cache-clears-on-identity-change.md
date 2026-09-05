@@ -8,10 +8,10 @@ timestamp: 2026-09-04
 
 # Rule
 
-Query keys in this app identify **resources** (`project(id)`), not the
+Query keys in this app identify **resources** (`task(id)`), not the
 caller. Any router swap on auth-status change therefore re-reads whatever
 the previous identity cached — a just-signed-out owner's `access: "full"`
-project renders in the public shell until a tokenless refetch lands.
+task renders in the public shell until a tokenless refetch lands.
 
 The fix is one clear of the whole cache on every settled identity change
 (`App.tsx`), with two properties that both matter:

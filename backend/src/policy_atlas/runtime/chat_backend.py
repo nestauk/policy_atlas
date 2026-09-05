@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any, Protocol, TypedDict
 
 from policy_atlas.core.usage import TokenUsage, UsageResult
-from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
+from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
 from policy_atlas.runtime.chat_prompt import ChatAnswerWire, ChatCitationWire, ChatClaimWire
 
 _NO_USAGE = TokenUsage(prompt=None, completion=None, total=None)

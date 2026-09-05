@@ -20,7 +20,7 @@ export function PrivacyView() {
       <LegalSection title="2. Contact details">
         <p>
           Nesta is the data controller and is responsible for your personal data collected in
-          connection with this project. This means that we will be responsible for keeping your
+          connection with this task. This means that we will be responsible for keeping your
           information safe and only using it for the purposes set out in this notice.
         </p>
         <p>
@@ -83,11 +83,11 @@ export function PrivacyView() {
         </p>
         <p>
           <strong>Legal basis.</strong> Data protection law requires us to have a specific legal
-          basis for processing your personal data. For this project, our lawful basis will be:
+          basis for processing your personal data. For this task, our lawful basis will be:
         </p>
         <p>
           <strong>Legitimate business interest:</strong> We have a legitimate business interest in
-          delivering the Policy Atlas platform. The project fulfils our organisation&apos;s aims
+          delivering the Policy Atlas platform. The task fulfils our organisation&apos;s aims
           including undertaking innovative research and information activities that will deliver
           social impact.
         </p>
@@ -96,7 +96,7 @@ export function PrivacyView() {
       <LegalSection title="6. Who has access to your information?">
         <p>
           Your information will be accessed by a limited number of advisors in our team working on
-          this project.
+          this task.
         </p>
         <p>
           In addition, we may disclose your information to third parties in connection with the

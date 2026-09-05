@@ -24,7 +24,7 @@ Public-safe evidence for the jumpbox hardening slice.
 ## End-to-end command
 
 Not run against AWS. The generated `PortForwardingCommand` CloudFormation
-output is the operator entry point documented in `JUMPBOX.md`.
+output is the operator entry point documented in `infra/JUMPBOX.md`.
 
 ## Diff summary
 

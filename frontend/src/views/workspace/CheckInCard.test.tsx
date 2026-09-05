@@ -16,7 +16,7 @@ vi.mock("../../api/mutations", () => ({
   useAnswerCheckIn: () => ({ mutate, isPending: false }),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 const CHECK_IN_ID = "22222222-2222-2222-2222-222222222222";
 
 function baseCheckIn(overrides: Partial<CheckInOut> = {}): CheckInOut {
@@ -55,7 +55,7 @@ function option(overrides: Partial<CheckInOption> = {}): CheckInOption {
 function renderCard(checkIn: CheckInOut, stages: StageEntry[] = [], isOwner = true) {
   return render(
     <ToastProvider>
-      <CheckInCard projectId={PROJECT_ID} checkIn={checkIn} stages={stages} isOwner={isOwner} />
+      <CheckInCard taskId={TASK_ID} checkIn={checkIn} stages={stages} isOwner={isOwner} />
     </ToastProvider>,
   );
 }

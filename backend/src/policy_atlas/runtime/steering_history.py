@@ -1,8 +1,8 @@
 """Steering-history read model (task 024, decision 3).
 
-The front-end's read surface over a project's steering history: a deterministic,
+The front-end's read surface over a task's steering history: a deterministic,
 per-walk projection built from the ``capability_run`` table (the walk identities)
-and the project's ``event_log`` (the steering-event vocabulary emitted by
+and the task's ``event_log`` (the steering-event vocabulary emitted by
 :mod:`policy_atlas.runtime.steering_events`). Pure read — no writes, no LLM.
 
 Partitioning pin (plan m3): walk membership is decided by the PAYLOAD's
@@ -48,14 +48,14 @@ STEERING_EVENT_TYPES = (
 
 def steering_history(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
-    """Rebuild a project's steering history as one story per capability-run walk.
+    """Rebuild a task's steering history as one story per capability-run walk.
 
     Args:
         conn: Open database connection. Pure read — no writes are issued.
-        project_id: Project whose walks (and events) to read.
+        task_id: Task whose walks (and events) to read.
         capability_run_id: When given, scope the result to that single walk.
 
     Returns:
@@ -65,13 +65,13 @@ def steering_history(
         ``started_at``, ``ended_at`` and ``events`` — the ordered list of
         steering events (``sequence``, ``event_type``, ``occurred_at``,
         ``payload``) belonging to that walk by payload key. With
-        ``capability_run_id=None`` this covers every walk in the project; with
+        ``capability_run_id=None`` this covers every walk in the task; with
         a specific id it is a single-element list (empty ``events`` if the
         walk emitted none), or ``[]`` if no such walk exists.
     """
     walk_rows = conn.execute(
         select(capability_run)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .order_by(capability_run.c.started_at, capability_run.c.capability_run_id)
     ).all()
 
@@ -81,7 +81,7 @@ def steering_history(
             return []
 
     events_by_walk: dict[str, list[dict[str, Any]]] = {}
-    for entry in events.read(conn, project_id, event_types=STEERING_EVENT_TYPES):
+    for entry in events.read(conn, task_id, event_types=STEERING_EVENT_TYPES):
         walk_key = entry["payload"].get("capability_run_id")
         if walk_key is None:
             # Not a walk-scoped steering event — excluded regardless of vocabulary.

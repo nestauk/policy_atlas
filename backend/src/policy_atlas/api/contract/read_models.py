@@ -1,6 +1,6 @@
 """Owner-scoped read-model contract (spec § Read models).
 
-These are the shapes served under `/api/v1/projects/{id}/…` for `funnel`,
+These are the shapes served under `/api/v1/tasks/{id}/…` for `funnel`,
 `landscape`, `groups`, `evidence`, `findings`, `decisions`, `artefact` and
 `coverage`, plus the `chunk-context` seam. Read models render honest
 absence: missing stages are `null`/absent, never faked.
@@ -358,7 +358,7 @@ class CitationOut(BaseModel):
         citation_id: Durable citation identity — the key for the
             chunk-context endpoint (`GET .../citations/{citation_id}/context`).
         n: Reference number (matches a `ReferenceOut.n`).
-        source_id: The cited document's project source identity, when the
+        source_id: The cited document's task source identity, when the
             citation resolves to one (joins to the sources/dossier surface).
         source_title: Cited source's title (envelope metadata).
         quote: The quoted span from the source.
@@ -401,7 +401,7 @@ class ThemeSourceOut(BaseModel):
     """One source contributing to a theme or grouping reference.
 
     Args:
-        source_id: The project's source identity.
+        source_id: The task's source identity.
         title: Display title of the source.
     """
 
@@ -571,7 +571,7 @@ class MostRelevantNoteOut(BaseModel):
     """A grounded one-liner note for a top cited source.
 
     Args:
-        source_id: The project source identity.
+        source_id: The task source identity.
         note: One-sentence note restating only supplied evidence.
     """
 
@@ -632,7 +632,7 @@ class CoverageQueryOut(BaseModel):
 class CoverageBackendDetailOut(BaseModel):
     """Post-run source counts for one public backend.
 
-    ``relevant`` is deliberately project-wide in C.1; per-query relevance
+    ``relevant`` is deliberately task-wide in C.1; per-query relevance
     was not recorded and is therefore absent.
     """
 

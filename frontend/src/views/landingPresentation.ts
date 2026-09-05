@@ -1,16 +1,16 @@
 import type { components } from "../api/gen/types";
 
-type LatestRun = components["schemas"]["ProjectOut"]["latest_run"];
+type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
-/** The precise local-state reset used when a project rename is cancelled. */
-export function cancelledRenameState(projectName: string): { editing: false; draftName: string } {
-  return { editing: false, draftName: projectName };
+/** The precise local-state reset used when a task rename is cancelled. */
+export function cancelledRenameState(taskName: string): { editing: false; draftName: string } {
+  return { editing: false, draftName: taskName };
 }
 
 /** A task is stale once its finished run is this old. */
-export const STALE_AFTER_MONTHS = 12;
+const STALE_AFTER_MONTHS = 12;
 
-export type RunPresentation = {
+type RunPresentation = {
   dot: "running" | "complete" | "paused" | "idle" | "failed";
   label: string;
   tone: "default" | "blue" | "soft" | "green" | "yellow" | "red";
@@ -19,9 +19,9 @@ export type RunPresentation = {
 /**
  * Derive a task's presentation from its latest capability run.
  *
- * Run state is never cached on the project row, so this reads the derived
+ * Run state is never cached on the task row, so this reads the derived
  * `latest_run` read model. This is the app's ONE status vocabulary — the
- * tasks list, the project pages and the landing cards all come here rather
+ * tasks list, the task pages and the landing cards all come here rather
  * than inventing a second set of words for the same states.
  */
 export function runPresentation(latestRun: LatestRun): RunPresentation {

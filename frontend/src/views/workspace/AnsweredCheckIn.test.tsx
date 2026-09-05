@@ -29,6 +29,13 @@ describe("AnsweredCheckIn", () => {
     expect(screen.getByText(/prioritise UK school-based studies/)).toBeInTheDocument();
   });
 
+  it("attributes a decision the Agent took to the Agent (038 V4)", () => {
+    // `agent` is the wire literal; the backend canonicalises a stored
+    // `orchestrator` to it on read, so this is the only key to label.
+    render(<AnsweredCheckIn decision={decision({ decidedBy: "agent" })} />);
+    expect(screen.getByText("The Agent decided")).toBeInTheDocument();
+  });
+
   it("never renders raw params — only allowlisted friendly-labelled detail", () => {
     render(
       <AnsweredCheckIn

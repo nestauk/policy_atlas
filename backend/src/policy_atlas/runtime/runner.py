@@ -1,7 +1,7 @@
-"""EB capability-runner for executing approved orchestration plans.
+"""EB capability-runner for executing approved task plans.
 
 The runner is the deterministic sub-agent boundary for task 017: it walks a
-composed orchestration plan, owns per-component commits, applies component
+composed task plan, owns per-component commits, applies component
 directive deltas to the scope context, and delegates one component at a time to
 the existing harness.
 """
@@ -27,24 +27,24 @@ from policy_atlas.core.schema import (
     capability_run,
     event_log,
     evidence_scope,
-    orchestration_plan,
     runs,
+    task_plan,
 )
 from policy_atlas.core.usage import UsageAccumulator
-from policy_atlas.evidence_base.assess.classification_backend import ClassificationBackend
-from policy_atlas.evidence_base.assess.screening_backend import ScreeningBackend
-from policy_atlas.evidence_base.corpus.ranking import RankingBackend
-from policy_atlas.evidence_base.corpus.theme_grouping import ThemeGroupingBackend
-from policy_atlas.evidence_base.extract.extraction_backend import ExtractionBackend
-from policy_atlas.evidence_base.extract.finding_vetter import (
+from policy_atlas.evidence_search.assess.classification_backend import ClassificationBackend
+from policy_atlas.evidence_search.assess.screening_backend import ScreeningBackend
+from policy_atlas.evidence_search.corpus.ranking import RankingBackend
+from policy_atlas.evidence_search.corpus.theme_grouping import ThemeGroupingBackend
+from policy_atlas.evidence_search.extract.extraction_backend import ExtractionBackend
+from policy_atlas.evidence_search.extract.finding_vetter import (
     FindingVetterBackend,
     ICFFindingVetterBackend,
 )
-from policy_atlas.evidence_base.group.group import GroupClusteringBackendFactory
-from policy_atlas.evidence_base.sourcing.acquire import SearchBackend
-from policy_atlas.evidence_base.sourcing.ingest_full_text import DocumentFetcher
-from policy_atlas.evidence_base.sourcing.search_generation import SearchGenerationBackend
-from policy_atlas.evidence_base.sourcing.search_loop import (
+from policy_atlas.evidence_search.group.group import GroupClusteringBackendFactory
+from policy_atlas.evidence_search.sourcing.acquire import SearchBackend
+from policy_atlas.evidence_search.sourcing.ingest_full_text import DocumentFetcher
+from policy_atlas.evidence_search.sourcing.search_generation import SearchGenerationBackend
+from policy_atlas.evidence_search.sourcing.search_loop import (
     DEPTH_CONSTANTS,
     THIN_CONFIDENT_RELEVANT,
     confident_relevant_count,
@@ -54,43 +54,35 @@ from policy_atlas.evidence_base.sourcing.search_loop import (
     finalise_deep_stop,
     new_confident_relevant_for_run,
 )
-from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
-from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     StubSynthesisBackend,
     SynthesisBackend,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import (
+from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     DIRECTIVE_SECTION_TEXT_MAX,
     SECTION_CAP,
 )
-from policy_atlas.evidence_base.synthesis.synthesise import (
+from policy_atlas.evidence_search.synthesis.synthesise import (
     SynthesiseContext,
     write_summaries_after_commit,
 )
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
-from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
-from policy_atlas.runtime.harness import run_harness
-from policy_atlas.runtime.orchestration_plan import (
-    SPINE,
-    ComponentStep,
-    ComposedChain,
-    OrchestrationPlan,
-    compose,
-    registry_component_for,
-)
-from policy_atlas.runtime.orchestrator_backend import (
-    OrchestratorBackend,
+from policy_atlas.runtime.agent_backend import (
+    AgentBackend,
     build_watch_discretion_hook,
     classify_boundary,
     run_watch_decision,
 )
-from policy_atlas.runtime.orchestrator_prompt import WATCH_AUTHORING_PROMPT_VERSION
+from policy_atlas.runtime.agent_prompt import WATCH_AUTHORING_PROMPT_VERSION
+from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
+from policy_atlas.runtime.conversation_lifecycle import close_planning_conversation
+from policy_atlas.runtime.harness import run_harness
 from policy_atlas.runtime.progress import ProgressEmitter
 from policy_atlas.runtime.run_spec import Plan, compile
 from policy_atlas.runtime.steering import (
     DEEPENING_SELECTION,
-    EVIDENCE_BASE_COVERAGE,
+    EVIDENCE_SEARCH_COVERAGE,
     FINDING_GROUPS,
     SEARCH_EXCEPTION,
     SHIPPED_SEGMENT_START,
@@ -140,6 +132,14 @@ from policy_atlas.runtime.steering_triggers import (
     floor_triggers,
     grouping_flag_triggers,
     p1_coverage_triggers,
+)
+from policy_atlas.runtime.task_plan import (
+    SPINE,
+    ComponentStep,
+    ComposedChain,
+    TaskPlan,
+    compose,
+    registry_component_for,
 )
 
 log = structlog.get_logger()
@@ -287,7 +287,7 @@ class CheckInIO(Protocol):
         """Report a component boundary outcome.
 
         Args:
-            component: Orchestration step name.
+            component: Plan step name.
             payload: Deterministic outcome payload containing status and
                 headline counts.
         """
@@ -305,13 +305,13 @@ class _ConfirmCapable(Protocol):
 
 
 class NullIO:
-    """No-op orchestrator IO implementation."""
+    """No-op agent IO implementation."""
 
     def check_in(self, component: str, payload: dict[str, Any]) -> None:
         """Ignore a component boundary outcome.
 
         Args:
-            component: Orchestration step name.
+            component: Plan step name.
             payload: Deterministic outcome payload.
         """
         del component, payload
@@ -332,10 +332,10 @@ class NullIO:
 
 @dataclass
 class RunStepOutcome:
-    """Outcome for one composed orchestration step.
+    """Outcome for one composed plan step.
 
     Args:
-        component: Orchestration step name.
+        component: Plan step name.
         run_id: Final attempted run id, or ``None`` for skipped steps.
         status: Final step status.
         wall_clock_s: Final attempt wall-clock seconds, or ``None`` for skips.
@@ -357,7 +357,7 @@ class RunStepOutcome:
 
 @dataclass
 class RunPlanOutcome:
-    """End-of-run outcome for an orchestration plan walk.
+    """End-of-run outcome for an task plan walk.
 
     Args:
         status: Overall plan-run status.
@@ -385,7 +385,7 @@ class _AttemptOutcome:
 
 @dataclass
 class _SteeringState:
-    plan: OrchestrationPlan
+    plan: TaskPlan
     plan_id: uuid.UUID
     plan_version: int
     plan_row_id: uuid.UUID | None
@@ -418,7 +418,7 @@ class _WatchObservation:
 
     Args:
         authored_options: Watch-authored decision-point options (or ``None`` when
-            the watch triaged, authoring failed, or no orchestrator ran).
+            the watch triaged, authoring failed, or no agent ran).
         promoted: Whether a triage verdict PROMOTED — the m6 rule; an attended
             non-decision boundary then escalates to a generic-floor pause.
         promoted_reason: The triage's reason, surfaced in the escalation render.
@@ -467,7 +467,7 @@ class _DiscretionContext:
         component: The component the boundary concerns.
         triggers: The fired floor triggers at this boundary (never suppressible —
             the watch can add to the floor, never remove from it).
-        plan: The current orchestration plan.
+        plan: The current task plan.
         bundle: The pre-fetched decision bundle (P2/P3/P4), or ``None`` (Task 14 —
             the watch decides over the same option-complete state a pause shows).
         header: Orienting header — refined question, plan summary, mode, standing
@@ -481,7 +481,7 @@ class _DiscretionContext:
     boundary: str
     component: str
     triggers: list[dict[str, Any]]
-    plan: OrchestrationPlan
+    plan: TaskPlan
     bundle: dict[str, Any] | None = None
     header: dict[str, Any] = field(default_factory=dict)
     digest: dict[str, Any] = field(default_factory=dict)
@@ -500,7 +500,7 @@ class _DiscretionOutcome:
         interpreted_action: The action taken — ``"proceed"`` for the floor, or
             ``"apply"`` when the watch authored a delta to apply (Task 14).
         rule: The flag/rule label — ``"unconfigured_default"`` for the floor,
-            ``"orchestrator_decision"``/``"orchestrator_escalation"`` for the watch.
+            ``"agent_decision"``/``"agent_escalation"`` for the watch.
         delta: The watch-authored directive delta to apply (``interpreted_action``
             ``"apply"`` only), or ``None``.
         component: Target component for an authored delta, or ``None``.
@@ -525,7 +525,7 @@ class _DiscretionOutcome:
 # returns a discretion decision. Default = the deterministic floor (proceed +
 # loudest flag). Threaded through run_plan so a test/watch can inject it; a
 # pinned standing rule is resolved BEFORE the hook is ever consulted (authority
-# order: declared rules > orchestrator).
+# order: declared rules > agent).
 DiscretionHook = Callable[[_DiscretionContext], _DiscretionOutcome]
 
 UNCONFIGURED_DEFAULT_RULE = "unconfigured_default"
@@ -538,20 +538,20 @@ def _deterministic_discretion_floor(context: _DiscretionContext) -> _DiscretionO
 
 
 def leg_directive(
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     step: ComponentStep,
     upstream_state: dict[str, Any],
 ) -> dict[str, Any]:
     """Return the directive delta for the next component.
 
     This is the named directive-authoring seam for a future EB-expert agent:
-    given the approved orchestration plan, the next component step and the
+    given the approved task plan, the next component step and the
     successful upstream state, that agent can author the component's context
     delta. V1 is intentionally deterministic and returns the composer-emitted
     directive unchanged.
 
     Args:
-        plan: Approved orchestration plan.
+        plan: Approved task plan.
         step: Composed component step.
         upstream_state: Successful predecessor state accumulated by the runner.
 
@@ -593,9 +593,9 @@ def _extend_overlays(
 def _run_plan_impl(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     plan_id: uuid.UUID,
     plan_version: int,
     plan_row_id: uuid.UUID | None = None,
@@ -603,35 +603,35 @@ def _run_plan_impl(
     io: CheckInIO | None = None,
     session_id: uuid.UUID | None = None,
     discretion_hook: DiscretionHook | None = None,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
     resume_from: ContinuationState | None = None,
     resume_decision: ResumeDecision | None = None,
     park_context: dict[str, Any] | None = None,
 ) -> RunPlanOutcome:
-    """Execute an approved orchestration plan with per-component commits.
+    """Execute an approved task plan with per-component commits.
 
     Args:
         engine: SQLAlchemy engine. The runner owns short transactions and
             commits component work as it completes.
-        project_id: Project owning the scope and runs.
+        task_id: Task owning the scope and runs.
         evidence_scope_id: Evidence scope all components execute over.
-        plan: Approved orchestration plan to compose and walk.
-        plan_id: Persisted orchestration-plan id carried into compile events.
-        plan_version: Persisted orchestration-plan version carried into events.
-        plan_row_id: Current orchestration-plan row id for steering amendments
+        plan: Approved task plan to compose and walk.
+        plan_id: Persisted task-plan id carried into compile events.
+        plan_version: Persisted task-plan version carried into events.
+        plan_row_id: Current task-plan row id for steering amendments
             and abort status flips. ``None`` rejects adjustment persistence and
             makes abort a run-local stop only.
         backends: Optional backend seam bundle. ``None`` uses harness defaults.
-        io: Optional orchestrator IO seam. ``None`` uses ``NullIO``.
+        io: Optional agent IO seam. ``None`` uses ``NullIO``.
         session_id: Optional Langfuse session id shared by the planner and all
-            component attempts for one orchestrator conversation.
+            component attempts for one agent conversation.
         discretion_hook: Optional Unattended-mode discretion hook consulted only
             at a lattice boundary with NO pinned standing rule (the Phase-5 watch
             seam). ``None`` uses the deterministic floor (proceed +
             ``unconfigured_default``). A pinned rule is always resolved before the
-            hook is consulted (authority order: declared rules > orchestrator).
-            An explicit hook takes precedence over one derived from ``orchestrator``.
-        orchestrator: Optional orchestrator backend (Task 14). ``None`` = no watch:
+            hook is consulted (authority order: declared rules > agent).
+            An explicit hook takes precedence over one derived from ``agent``.
+        agent: Optional agent backend (Task 14). ``None`` = no watch:
             today's deterministic behaviour, no LLM calls, no judgement events. When
             provided, the watch authors options at attended lattice pauses, triages
             anomalous/trigger-fired boundaries, decides in loco user at Unattended
@@ -646,8 +646,8 @@ def _run_plan_impl(
     io_sink = io if io is not None else NullIO()
     if discretion_hook is not None:
         discretion = discretion_hook
-    elif orchestrator is not None:
-        discretion = build_watch_discretion_hook(orchestrator, session_id=session_id)
+    elif agent is not None:
+        discretion = build_watch_discretion_hook(agent, session_id=session_id)
     else:
         discretion = _deterministic_discretion_floor
     if resume_from is None:
@@ -655,7 +655,7 @@ def _run_plan_impl(
         _open_capability_run(
             engine,
             capability_run_id=capability_run_id,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             plan_id=plan_id,
             plan_version=plan_version,
@@ -714,7 +714,7 @@ def _run_plan_impl(
     if park_context is not None:
         park_context.update(
             capability_run_id=capability_run_id,
-            project_id=project_id,
+            task_id=task_id,
             step_outcomes=step_outcomes,
             flagged_events=flagged_events,
             # Snapshot, don't let the reducer re-derive: completed_components
@@ -731,7 +731,7 @@ def _run_plan_impl(
             last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
                 engine,
                 io_sink,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 state=steering_state,
                 component=resume_decision.component,
@@ -767,7 +767,7 @@ def _run_plan_impl(
                 segment_result = _run_plan_segment_reentry(
                     engine,
                     io_sink,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     boundary_step=boundary_step,
                     segment_reentry=segment_reentry,
@@ -786,7 +786,7 @@ def _run_plan_impl(
                 segment_result = _run_plan_before_segment_reentry(
                     engine,
                     io_sink,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     boundary_step=boundary_step,
                     segment_reentry=segment_reentry,
@@ -800,7 +800,7 @@ def _run_plan_impl(
                     step_outcomes=step_outcomes,
                     flagged_events=flagged_events,
                     capability_run_id=capability_run_id,
-                    orchestrator=orchestrator,
+                    agent=agent,
                     discretion_hook=discretion,
                 )
             steering_state = segment_result.state
@@ -813,7 +813,7 @@ def _run_plan_impl(
                     flagged_events,
                     status=segment_result.run_status,
                     capability_run_id=capability_run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                 )
         elif (
             resume_decision.response in {"continue", "adjust", "mode_change"}
@@ -842,7 +842,7 @@ def _run_plan_impl(
             and "screen_abstract" in completed_components
             and _search_round_continues(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 plan=steering_state.plan,
                 successful_runs=successful_runs,
@@ -862,7 +862,7 @@ def _run_plan_impl(
                 step=step,
                 render=render_check_in(last_check_in_payload),
                 state=steering_state,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 successful_runs=successful_runs,
                 backends=backend_bundle,
@@ -872,7 +872,7 @@ def _run_plan_impl(
                 attempted_runs=attempted_runs,
                 flagged_events=flagged_events,
                 discretion_hook=discretion,
-                orchestrator=orchestrator,
+                agent=agent,
                 session_id=session_id,
             )
             steering_state = pause_result.state
@@ -883,7 +883,7 @@ def _run_plan_impl(
                     flagged_events,
                     status="aborted",
                     capability_run_id=capability_run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                 )
             # P2/P4 re-runs steered at a before_component boundary execute here,
             # then the walk falls through to run the pending step referencing the
@@ -896,7 +896,7 @@ def _run_plan_impl(
                 last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
                     engine,
                     io_sink,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     state=steering_state,
                     component=pause_result.rerun["component"],
@@ -914,7 +914,7 @@ def _run_plan_impl(
                 segment_result = _run_plan_before_segment_reentry(
                     engine,
                     io_sink,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     boundary_step=step,
                     segment_reentry=pause_result.segment_reentry,
@@ -928,7 +928,7 @@ def _run_plan_impl(
                     step_outcomes=step_outcomes,
                     flagged_events=flagged_events,
                     capability_run_id=capability_run_id,
-                    orchestrator=orchestrator,
+                    agent=agent,
                     discretion_hook=discretion,
                 )
                 steering_state = segment_result.state
@@ -943,7 +943,7 @@ def _run_plan_impl(
                         flagged_events,
                         status=segment_result.run_status,
                         capability_run_id=capability_run_id,
-                        project_id=project_id,
+                        task_id=task_id,
                     )
             elif pause_result.changed:
                 remaining_steps = _remaining_steps(
@@ -972,7 +972,7 @@ def _run_plan_impl(
             _emit_component_skipped(
                 engine,
                 capability_run_id=capability_run_id,
-                project_id=project_id,
+                task_id=task_id,
                 state=steering_state,
                 component=step.component,
                 reason=skip_reason,
@@ -990,7 +990,7 @@ def _run_plan_impl(
                 step=step,
                 render=render_check_in(last_check_in_payload),
                 state=steering_state,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 successful_runs=successful_runs,
                 backends=backend_bundle,
@@ -1001,7 +1001,7 @@ def _run_plan_impl(
                 attempted_runs=attempted_runs,
                 boundary_run_id=None,
                 discretion_hook=discretion,
-                orchestrator=orchestrator,
+                agent=agent,
                 session_id=session_id,
                 anomalous=True,
             )
@@ -1013,7 +1013,7 @@ def _run_plan_impl(
                     flagged_events,
                     status="aborted",
                     capability_run_id=capability_run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                 )
             remaining_steps = _remaining_steps(
                 steering_state.chain,
@@ -1036,7 +1036,7 @@ def _run_plan_impl(
         for attempt_index in range(retry_cap + 1):
             attempt = _run_step_attempt(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 plan=steering_state.plan,
                 plan_id=steering_state.plan_id,
@@ -1099,7 +1099,7 @@ def _run_plan_impl(
                 step=step,
                 render=render_check_in(last_check_in_payload),
                 state=steering_state,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 successful_runs=successful_runs,
                 backends=backend_bundle,
@@ -1112,7 +1112,7 @@ def _run_plan_impl(
                 selection_run_id=(final_attempt.run_id if step.component == "select" else None),
                 allow_segment_reentry=True,
                 discretion_hook=discretion,
-                orchestrator=orchestrator,
+                agent=agent,
                 session_id=session_id,
                 anomalous=retried,
             )
@@ -1124,13 +1124,13 @@ def _run_plan_impl(
                     flagged_events,
                     status="aborted",
                     capability_run_id=capability_run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                 )
             if pause_result.rerun is not None:
                 last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
                     engine,
                     io_sink,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     state=steering_state,
                     component=pause_result.rerun["component"],
@@ -1148,7 +1148,7 @@ def _run_plan_impl(
                 segment_result = _run_plan_segment_reentry(
                     engine,
                     io_sink,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     boundary_step=step,
                     segment_reentry=pause_result.segment_reentry,
@@ -1175,7 +1175,7 @@ def _run_plan_impl(
                         flagged_events,
                         status=segment_result.run_status,
                         capability_run_id=capability_run_id,
-                        project_id=project_id,
+                        task_id=task_id,
                     )
             remaining_steps = _remaining_steps(
                 steering_state.chain,
@@ -1214,7 +1214,7 @@ def _run_plan_impl(
             step=step,
             render=render_check_in(last_check_in_payload),
             state=steering_state,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backend_bundle,
@@ -1225,7 +1225,7 @@ def _run_plan_impl(
             attempted_runs=attempted_runs,
             boundary_run_id=final_attempt.run_id,
             discretion_hook=discretion,
-            orchestrator=orchestrator,
+            agent=agent,
             session_id=session_id,
             anomalous=True,
         )
@@ -1237,7 +1237,7 @@ def _run_plan_impl(
                 flagged_events,
                 status="aborted",
                 capability_run_id=capability_run_id,
-                project_id=project_id,
+                task_id=task_id,
             )
         remaining_steps = _remaining_steps(
             steering_state.chain,
@@ -1252,7 +1252,7 @@ def _run_plan_impl(
                 flagged_events,
                 status=summary_status,
                 capability_run_id=capability_run_id,
-                project_id=project_id,
+                task_id=task_id,
             )
         blocked_discretionary[step.component] = reason
 
@@ -1267,16 +1267,16 @@ def _run_plan_impl(
         flagged_events,
         status=summary_status,
         capability_run_id=capability_run_id,
-        project_id=project_id,
+        task_id=task_id,
     )
 
 
 def run_plan(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     plan_id: uuid.UUID,
     plan_version: int,
     plan_row_id: uuid.UUID | None = None,
@@ -1284,11 +1284,11 @@ def run_plan(
     io: CheckInIO | None = None,
     session_id: uuid.UUID | None = None,
     discretion_hook: DiscretionHook | None = None,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
     resume_from: ContinuationState | None = None,
     resume_decision: ResumeDecision | None = None,
 ) -> RunPlanOutcome:
-    """Execute or resume an approved orchestration-plan walk.
+    """Execute or resume an approved task-plan walk.
 
     A park-disposition IO raises :class:`WalkParked`. This single boundary
     converts that control flow into the durable paused state and snapshot; the
@@ -1296,7 +1296,7 @@ def run_plan(
 
     Args:
         engine: SQLAlchemy engine used by the walk.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: Evidence scope executed by components.
         plan: Approved plan for a new walk (ignored for durable resume state).
         plan_id: Current plan id for a new walk.
@@ -1306,7 +1306,7 @@ def run_plan(
         io: Optional check-in and pause IO seam.
         session_id: Optional tracing session id.
         discretion_hook: Optional unattended discretion seam.
-        orchestrator: Optional watch backend.
+        agent: Optional watch backend.
         resume_from: Durable state of a previously parked capability run.
         resume_decision: Persisted answer to apply before resuming.
 
@@ -1317,7 +1317,7 @@ def run_plan(
     try:
         return _run_plan_impl(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -1327,7 +1327,7 @@ def run_plan(
             io=io,
             session_id=session_id,
             discretion_hook=discretion_hook,
-            orchestrator=orchestrator,
+            agent=agent,
             resume_from=resume_from,
             resume_decision=resume_decision,
             park_context=park_context,
@@ -1338,7 +1338,7 @@ def run_plan(
         flagged_events = park_context["flagged_events"]
         _park_capability_run(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             step_outcomes=step_outcomes,
             flagged_events=flagged_events,
@@ -1355,7 +1355,7 @@ def run_plan(
 def _park_capability_run(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     step_outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
@@ -1365,7 +1365,7 @@ def _park_capability_run(
     with engine.begin() as conn:
         pause_rows = conn.execute(
             select(event_log)
-            .where(event_log.c.project_id == project_id)
+            .where(event_log.c.task_id == task_id)
             .where(event_log.c.event_type == steering_events.STEERING_PAUSE)
             .order_by(event_log.c.sequence.desc())
         )
@@ -1383,12 +1383,12 @@ def _park_capability_run(
         conn.execute(
             capability_run.update()
             .where(capability_run.c.capability_run_id == capability_run_id)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .values(status="paused")
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=attachment_run_id,
             event_type="run.parked",
             payload={
@@ -1443,7 +1443,7 @@ def _handle_after_component_boundary(
     step: ComponentStep,
     render: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
@@ -1456,7 +1456,7 @@ def _handle_after_component_boundary(
     selection_run_id: uuid.UUID | None = None,
     allow_segment_reentry: bool = False,
     discretion_hook: DiscretionHook = _deterministic_discretion_floor,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
     session_id: uuid.UUID | None = None,
     anomalous: bool = False,
 ) -> _PauseApplied:
@@ -1476,7 +1476,7 @@ def _handle_after_component_boundary(
             point=point,
             name=name,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             attempted_runs=floor_run_ids,
@@ -1499,7 +1499,7 @@ def _handle_after_component_boundary(
         engine,
         point=point,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         attempted_runs=floor_run_ids,
@@ -1520,16 +1520,16 @@ def _handle_after_component_boundary(
     event_run_id = boundary_run_id if boundary_run_id is not None else most_recent_attempted_run_id
     # Gated watch invocation (Task 14): the watch observes EVERY attended boundary
     # — authoring at a decision-point pause, triaging an anomalous/trigger-fired
-    # boundary, or emitting a deterministic clean_boundary event. No orchestrator =
+    # boundary, or emitting a deterministic clean_boundary event. No agent =
     # no watch = today's behaviour (no judgement events).
     observation = _WatchObservation()
-    if orchestrator is not None and event_run_id is not None:
+    if agent is not None and event_run_id is not None:
         observation = _watch_observe_boundary(
             engine,
-            orchestrator=orchestrator,
+            agent=agent,
             point=point,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
@@ -1557,12 +1557,12 @@ def _handle_after_component_boundary(
     if promoted_escalation:
         # A promoted lattice boundary keeps its identity: its canonical floor
         # and bundle are the actual decision surface, not a generic substitute.
-        render = f"{render}\nThe orchestrator flagged this boundary: {observation.promoted_reason}"
+        render = f"{render}\nThe agent flagged this boundary: {observation.promoted_reason}"
     options, bundle = _pause_options_and_bundle(
         engine,
         steer_point_name=steer_point_name,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
@@ -1589,7 +1589,7 @@ def _handle_after_component_boundary(
         point=point,
         render=render,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         completed_components=completed_components,
         capability_run_id=capability_run_id,
         event_run_id=event_run_id,
@@ -1600,7 +1600,7 @@ def _handle_after_component_boundary(
         rerun_component=rerun_component,
         segment_reentry_allowed=segment_reentry_allowed,
         authored_options=authored_options,
-        orchestrator=orchestrator,
+        agent=agent,
         session_id=session_id,
     )
 
@@ -1657,7 +1657,7 @@ def _handle_before_component_boundary(
     step: ComponentStep,
     render: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
@@ -1667,7 +1667,7 @@ def _handle_before_component_boundary(
     flagged_events: list[dict[str, Any]],
     attempted_runs: dict[str, uuid.UUID] | None = None,
     discretion_hook: DiscretionHook = _deterministic_discretion_floor,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
     session_id: uuid.UUID | None = None,
     allow_segment_reentry: bool = True,
     anomalous: bool = False,
@@ -1700,7 +1700,7 @@ def _handle_before_component_boundary(
             point=point,
             name=name,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             attempted_runs=floor_run_ids,
@@ -1718,19 +1718,19 @@ def _handle_before_component_boundary(
         engine,
         point=point,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         attempted_runs=floor_run_ids,
     )
     observation = _WatchObservation()
-    if orchestrator is not None and most_recent_attempted_run_id is not None:
+    if agent is not None and most_recent_attempted_run_id is not None:
         observation = _watch_observe_boundary(
             engine,
-            orchestrator=orchestrator,
+            agent=agent,
             point=point,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
@@ -1750,12 +1750,12 @@ def _handle_before_component_boundary(
             flagged_events.append(_trigger_fired_flag(point, triggers))
         return _PauseApplied(state=state)
     if promoted_escalation:
-        render = f"{render}\nThe orchestrator flagged this boundary: {observation.promoted_reason}"
+        render = f"{render}\nThe agent flagged this boundary: {observation.promoted_reason}"
     options, bundle = _pause_options_and_bundle(
         engine,
         steer_point_name=steer_point_name,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
@@ -1768,7 +1768,7 @@ def _handle_before_component_boundary(
         point=point,
         render=render,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         completed_components=completed_components,
         capability_run_id=capability_run_id,
         event_run_id=most_recent_attempted_run_id,
@@ -1779,7 +1779,7 @@ def _handle_before_component_boundary(
         rerun_component=rerun_component,
         segment_reentry_allowed=segment_reentry_allowed,
         authored_options=authored_options,
-        orchestrator=orchestrator,
+        agent=agent,
         session_id=session_id,
     )
 
@@ -1800,7 +1800,7 @@ def _floor_boundary_triggers(
     engine: Engine,
     *,
     boundary: FloorBoundary,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     attempted_runs: dict[str, uuid.UUID],
 ) -> list[dict[str, Any]]:
@@ -1818,7 +1818,7 @@ def _floor_boundary_triggers(
     with engine.connect() as conn:
         return floor_triggers(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             boundary_component=boundary,
             evidence_scope_id=evidence_scope_id,
             run_ids=dict(attempted_runs),
@@ -1830,7 +1830,7 @@ def _evaluate_boundary(
     *,
     point: PausePoint,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     attempted_runs: dict[str, uuid.UUID],
@@ -1855,7 +1855,7 @@ def _evaluate_boundary(
             engine,
             name=name,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             attempted_runs=attempted_runs,
@@ -1869,7 +1869,7 @@ def _evaluate_boundary(
         floor = _floor_boundary_triggers(
             engine,
             boundary=floor_boundary,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             attempted_runs=attempted_runs,
         )
@@ -1890,7 +1890,7 @@ def _lattice_triggers(
     *,
     name: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     attempted_runs: dict[str, uuid.UUID],
@@ -1901,11 +1901,11 @@ def _lattice_triggers(
             acquire_run_id = successful_runs.get("acquire")
             if acquire_run_id is None:
                 return []
-            return p1_coverage_triggers(conn, project_id=project_id, acquire_run_id=acquire_run_id)
-        if name == EVIDENCE_BASE_COVERAGE:
+            return p1_coverage_triggers(conn, task_id=task_id, acquire_run_id=acquire_run_id)
+        if name == EVIDENCE_SEARCH_COVERAGE:
             return floor_triggers(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 boundary_component="pre_select",
                 evidence_scope_id=evidence_scope_id,
                 run_ids=dict(attempted_runs),
@@ -1916,7 +1916,7 @@ def _lattice_triggers(
                 return []
             return steer_point_triggers(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 selection_run_id=selection_run_id,
                 plan=state.plan,
             )
@@ -1924,7 +1924,7 @@ def _lattice_triggers(
             group_run_id = successful_runs.get("group")
             if group_run_id is None:
                 return []
-            return grouping_flag_triggers(conn, project_id=project_id, group_run_id=group_run_id)
+            return grouping_flag_triggers(conn, task_id=task_id, group_run_id=group_run_id)
     return []
 
 
@@ -1933,7 +1933,7 @@ def _pause_options_and_bundle(
     *,
     steer_point_name: str | None,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
@@ -1970,7 +1970,7 @@ def _pause_options_and_bundle(
         else _build_bundle(
             engine,
             name=steer_point_name,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
@@ -2027,7 +2027,7 @@ def _build_bundle(
     engine: Engine,
     *,
     name: str,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
@@ -2052,14 +2052,14 @@ def _build_bundle(
                     acquire_run_id = None
                 return p1_bundle(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     acquire_run_id=acquire_run_id,
                 )
-            if name == EVIDENCE_BASE_COVERAGE:
+            if name == EVIDENCE_SEARCH_COVERAGE:
                 return p2_bundle(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     characterisation_run_id=successful_runs.get("characterise"),
                 )
@@ -2067,18 +2067,18 @@ def _build_bundle(
                 selection_run_id = successful_runs.get("select")
                 if selection_run_id is None:
                     return None
-                return p3_bundle(conn, project_id=project_id, selection_run_id=selection_run_id)
+                return p3_bundle(conn, task_id=task_id, selection_run_id=selection_run_id)
             if name == FINDING_GROUPS:
                 group_run_id = successful_runs.get("group")
                 return (
-                    groups_bundle(conn, project_id=project_id, group_run_id=group_run_id)
+                    groups_bundle(conn, task_id=task_id, group_run_id=group_run_id)
                     if group_run_id is not None
                     else None
                 )
             if name == SYNTHESIS_SHAPE:
                 context = _synthesise_context(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=evidence_scope_id,
                     successful_runs=successful_runs,
                 )
@@ -2091,7 +2091,7 @@ def _build_bundle(
                 )
                 return p4_bundle(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     context=context,
                     synthesis_backend=synthesis_backend,
                     group_run_id=successful_runs.get("group"),
@@ -2106,7 +2106,7 @@ def _build_bundle(
 def _synthesise_context(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
 ) -> SynthesiseContext | None:
@@ -2114,7 +2114,7 @@ def _synthesise_context(
     row = conn.execute(
         select(evidence_scope.c.intent, evidence_scope.c.context)
         .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
-        .where(evidence_scope.c.project_id == project_id)
+        .where(evidence_scope.c.task_id == task_id)
     ).first()
     if row is None:
         return None
@@ -2136,7 +2136,7 @@ def _handle_pause(
     point: PausePoint,
     render: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     capability_run_id: uuid.UUID,
     event_run_id: uuid.UUID | None,
@@ -2147,7 +2147,7 @@ def _handle_pause(
     rerun_component: str | None = None,
     segment_reentry_allowed: bool = False,
     authored_options: list[dict[str, Any]] | None = None,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
     session_id: uuid.UUID | None = None,
 ) -> _PauseApplied:
     pause_payload = _pause_payload(
@@ -2174,7 +2174,7 @@ def _handle_pause(
     # runner presented — never a re-derivation.
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=event_run_id,
         event_type=steering_events.STEERING_PAUSE,
         payload={**base, **pause_payload, "render": render},
@@ -2185,7 +2185,7 @@ def _handle_pause(
         if isinstance(response, Continue):
             _emit_decision_standalone(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=event_run_id,
                 base=base,
                 response="continue",
@@ -2205,7 +2205,7 @@ def _handle_pause(
                 utterance=response.text,
                 point=point,
                 state=state,
-                project_id=project_id,
+                task_id=task_id,
                 completed_components=completed_components,
                 capability_run_id=capability_run_id,
                 event_run_id=event_run_id,
@@ -2214,7 +2214,7 @@ def _handle_pause(
                 rerun_component=rerun_component,
                 segment_reentry_allowed=segment_reentry_allowed,
                 base=base,
-                orchestrator=orchestrator,
+                agent=agent,
                 session_id=session_id,
             )
             if result.applied is not None:
@@ -2224,7 +2224,7 @@ def _handle_pause(
         if isinstance(response, Abort):
             _abort_and_record(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 state=state,
                 base=base,
                 event_run_id=event_run_id,
@@ -2242,7 +2242,7 @@ def _handle_pause(
                 )
                 _emit_rejected(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=event_run_id,
                     base=base,
                     exc=exc,
@@ -2253,7 +2253,7 @@ def _handle_pause(
             try:
                 reentry_state = _apply_segment_reentry(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     state=state,
                     response=response,
                     base=base,
@@ -2264,7 +2264,7 @@ def _handle_pause(
             except SteeringAdjustmentError as exc:
                 _emit_rejected(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=event_run_id,
                     base=base,
                     exc=exc,
@@ -2295,7 +2295,7 @@ def _handle_pause(
                 # carries the replacement wording. Declined (or a non-confirm IO,
                 # fail-closed) → nothing applies, the decision is recorded
                 # confirmed=false, and the canonical menu is re-presented.
-                if response.authored_by == "orchestrator" and not _confirm(
+                if response.authored_by == "agent" and not _confirm(
                     io,
                     render_authored_replacement_confirmation(
                         CompiledFragment(
@@ -2309,7 +2309,7 @@ def _handle_pause(
                 ):
                     _emit_authored_declined(
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         run_id=event_run_id,
                         base=base,
                         interpreted_action=_interpreted_action(response),
@@ -2321,7 +2321,7 @@ def _handle_pause(
                 try:
                     rerun_state, merged_directive = _apply_replacement_rerun(
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         state=state,
                         adjustment=response,
                         base=base,
@@ -2332,7 +2332,7 @@ def _handle_pause(
                 except SteeringAdjustmentError as exc:
                     _emit_rejected(
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         run_id=event_run_id,
                         base=base,
                         exc=exc,
@@ -2347,7 +2347,7 @@ def _handle_pause(
             try:
                 amended_state = _apply_runner_adjustment(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     state=state,
                     adjustment=response,
                     completed_components=completed_components,
@@ -2358,7 +2358,7 @@ def _handle_pause(
             except SteeringAdjustmentError as exc:
                 _emit_rejected(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=event_run_id,
                     base=base,
                     exc=exc,
@@ -2444,7 +2444,7 @@ def _handle_free_text(
     utterance: str,
     point: PausePoint,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     capability_run_id: uuid.UUID,
     event_run_id: uuid.UUID | None,
@@ -2453,27 +2453,27 @@ def _handle_free_text(
     rerun_component: str | None,
     segment_reentry_allowed: bool,
     base: dict[str, Any],
-    orchestrator: OrchestratorBackend | None,
+    agent: AgentBackend | None,
     session_id: uuid.UUID | None,
 ) -> _FreeTextResult:
     """Compile free text into a confirmed fan-out and apply it (contract decision 3).
 
-    Routes the utterance through ``orchestrator.route``, re-validates every
+    Routes the utterance through ``agent.route``, re-validates every
     fragment author-blind through :func:`compile_fanout`, renders the fan-out,
     gates it behind the IO's ``confirm``, and — only on confirmation — applies
     refusals, one merged plan adjustment and at most one re-run through the SAME
     apply machinery a canonical option choice uses. Any backend error degrades to
     the canonical menu (watch discipline 5).
     """
-    if orchestrator is None:
+    if agent is None:
         _emit_router_degrade(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             state=state,
             point=point,
             run_id=event_run_id,
-            reason="no orchestrator backend — canonical menu re-presented",
+            reason="no agent backend — canonical menu re-presented",
         )
         return _FreeTextResult(None, "Free-text steering is unavailable here; choose an option.")
 
@@ -2487,12 +2487,12 @@ def _handle_free_text(
         segment_reentry_allowed=segment_reentry_allowed,
     )
     try:
-        compile_result = orchestrator.route(utterance, pause_context, session_id=session_id)
+        compile_result = agent.route(utterance, pause_context, session_id=session_id)
     except Exception as exc:  # noqa: BLE001 — fail-safe to the canonical floor (discipline 5)
-        log.warning("orchestrator.route_failed", component=point.component, error=str(exc)[:200])
+        log.warning("agent.route_failed", component=point.component, error=str(exc)[:200])
         _emit_router_degrade(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             state=state,
             point=point,
@@ -2517,7 +2517,7 @@ def _handle_free_text(
     for refused in fanout.refused:
         _emit_refused(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             fragment_text=refused.fragment_text,
@@ -2546,7 +2546,7 @@ def _handle_free_text(
         # Unconfirmed: nothing applies; the record shows what was offered and declined.
         _emit_fanout_declined(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             fanout=fanout,
@@ -2560,7 +2560,7 @@ def _handle_free_text(
         utterance=utterance,
         point=point,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         completed_components=completed_components,
         base=base,
         event_run_id=event_run_id,
@@ -2574,7 +2574,7 @@ def _apply_fanout(
     utterance: str,
     point: PausePoint,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
@@ -2604,7 +2604,7 @@ def _apply_fanout(
         try:
             state = _apply_runner_adjustment(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 state=state,
                 adjustment=Adjust(
                     directive_deltas={frag.component: frag.delta for frag in adjustments}
@@ -2618,7 +2618,7 @@ def _apply_fanout(
         except SteeringAdjustmentError as exc:
             return _fanout_apply_rejected(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 event_run_id=event_run_id,
                 base=base,
                 exc=exc,
@@ -2637,7 +2637,7 @@ def _apply_fanout(
                 interpreted=interpreted,
                 point=point,
                 state=state,
-                project_id=project_id,
+                task_id=task_id,
                 completed_components=completed_components,
                 base=base,
                 event_run_id=event_run_id,
@@ -2645,7 +2645,7 @@ def _apply_fanout(
         except SteeringAdjustmentError as exc:
             return _fanout_apply_rejected(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 event_run_id=event_run_id,
                 base=base,
                 exc=exc,
@@ -2661,7 +2661,7 @@ def _apply_fanout(
 def _fanout_apply_rejected(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     event_run_id: uuid.UUID | None,
     base: dict[str, Any],
     exc: SteeringAdjustmentError,
@@ -2671,7 +2671,7 @@ def _fanout_apply_rejected(
     """Event a confirmed-fan-out apply failure and re-present the menu (FIX 3a)."""
     _emit_rejected(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=event_run_id,
         base=base,
         exc=exc,
@@ -2689,7 +2689,7 @@ def _apply_fanout_rerun(
     interpreted: dict[str, Any],
     point: PausePoint,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
@@ -2698,7 +2698,7 @@ def _apply_fanout_rerun(
     if fragment.kind == "replacement_rerun":
         rerun_state, merged = _apply_replacement_rerun(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=Adjust(directive_deltas={fragment.component: fragment.delta}),
             base=base,
@@ -2715,7 +2715,7 @@ def _apply_fanout_rerun(
     )
     reentry_state = _apply_segment_reentry(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         state=state,
         response=response,
         base=base,
@@ -2738,7 +2738,7 @@ def _apply_fanout_rerun(
 def _emit_refused(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     fragment_text: str,
@@ -2749,7 +2749,7 @@ def _emit_refused(
         return
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_REFUSED,
         payload={**base, "fragment_text": fragment_text, "reason": reason},
@@ -2759,7 +2759,7 @@ def _emit_refused(
 def _emit_fanout_declined(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     fanout: FanOut,
@@ -2780,7 +2780,7 @@ def _emit_fanout_declined(
     )
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_DECISION,
         payload=payload,
@@ -2790,7 +2790,7 @@ def _emit_fanout_declined(
 def _emit_authored_declined(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     interpreted_action: dict[str, Any],
@@ -2800,14 +2800,14 @@ def _emit_authored_declined(
     The user picked a watch-authored replacement option but declined its mode+delta
     confirm (or the IO cannot confirm), so nothing applied — but the decision still
     surfaces in the durable record as an offered-and-declined authored action
-    (decided_by=user, authored_by=orchestrator).
+    (decided_by=user, authored_by=agent).
     """
     if run_id is None:
         return
     payload = steering_events.decision_payload(
         base,
         decided_by="user",
-        authored_by="orchestrator",
+        authored_by="agent",
         response="adjust",
         interpreted_action=interpreted_action,
         confirmed=False,
@@ -2815,7 +2815,7 @@ def _emit_authored_declined(
     )
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_DECISION,
         payload=payload,
@@ -2825,7 +2825,7 @@ def _emit_authored_declined(
 def _emit_router_degrade(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     state: _SteeringState,
     point: PausePoint,
@@ -2837,7 +2837,7 @@ def _emit_router_degrade(
         return
     _emit_judgement_routed(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         capability_run_id=capability_run_id,
         state=state,
         point=point,
@@ -2909,7 +2909,7 @@ def _pause_payload(
     if bundle is not None:
         payload["bundle"] = bundle
     if authored_options is not None:
-        payload["authored_by"] = "orchestrator"
+        payload["authored_by"] = "agent"
         # Retained for the terminal adapter's compatibility; HTTP reads the
         # projected ``options`` list above.
         payload["authored_options"] = authored_options
@@ -2955,7 +2955,7 @@ def _reentry_interpreted_action(
 def _emit_decision_standalone(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     response: steering_events.DecisionResponse,
@@ -2974,7 +2974,7 @@ def _emit_decision_standalone(
     )
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_DECISION,
         payload=payload,
@@ -2984,7 +2984,7 @@ def _emit_decision_standalone(
 def _emit_rejected(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     exc: SteeringAdjustmentError,
@@ -3005,7 +3005,7 @@ def _emit_rejected(
         payload["user_text"] = user_text
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_REJECTED,
         payload=payload,
@@ -3016,7 +3016,7 @@ def _emit_component_skipped(
     engine: Engine,
     *,
     capability_run_id: uuid.UUID,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     state: _SteeringState,
     component: str,
     reason: str,
@@ -3032,7 +3032,7 @@ def _emit_component_skipped(
     )
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.COMPONENT_SKIPPED,
         payload={**base, "reason": reason},
@@ -3042,7 +3042,7 @@ def _emit_component_skipped(
 def _abort_and_record(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     state: _SteeringState,
     base: dict[str, Any],
     event_run_id: uuid.UUID | None,
@@ -3074,7 +3074,7 @@ def _abort_and_record(
     if state.plan_row_id is None:
         steering_events.emit_standalone(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
@@ -3082,14 +3082,14 @@ def _abort_and_record(
         return
     with engine.begin() as conn:
         conn.execute(
-            orchestration_plan.update()
-            .where(orchestration_plan.c.plan_id == state.plan_row_id)
-            .where(orchestration_plan.c.project_id == project_id)
+            task_plan.update()
+            .where(task_plan.c.plan_id == state.plan_row_id)
+            .where(task_plan.c.task_id == task_id)
             .values(status="abandoned")
         )
         steering_events.emit(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
@@ -3099,7 +3099,7 @@ def _abort_and_record(
 def _apply_runner_adjustment(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     state: _SteeringState,
     adjustment: Adjust,
     completed_components: set[str],
@@ -3115,11 +3115,11 @@ def _apply_runner_adjustment(
         raise SteeringAdjustmentError("plan_row_id is required to persist an adjustment")
     with engine.begin() as conn:
         plan_row = conn.execute(
-            select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
+            select(task_plan).where(task_plan.c.plan_id == state.plan_row_id)
         ).one()
         amended_plan, amended_plan_id, amended_version = apply_adjustment(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=state.plan,
             adjustment=adjustment,
@@ -3147,7 +3147,7 @@ def _apply_runner_adjustment(
             decision.update(extra_payload)
         steering_events.emit(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
@@ -3172,7 +3172,7 @@ def _apply_runner_adjustment(
 def _apply_replacement_rerun(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     state: _SteeringState,
     adjustment: Adjust,
     base: dict[str, Any],
@@ -3212,11 +3212,11 @@ def _apply_replacement_rerun(
     merged_directive = {key: {**base_directive, **option_value}}
     with engine.begin() as conn:
         plan_row = conn.execute(
-            select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
+            select(task_plan).where(task_plan.c.plan_id == state.plan_row_id)
         ).one()
         new_plan_id, new_version = apply_replacement_rerun(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=state.plan,
             component=component,
@@ -3238,7 +3238,7 @@ def _apply_replacement_rerun(
             decision.update(extra_payload)
         steering_events.emit(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
@@ -3259,7 +3259,7 @@ def _run_component_rerun(
     engine: Engine,
     io: CheckInIO,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     state: _SteeringState,
     component: str,
@@ -3304,7 +3304,7 @@ def _run_component_rerun(
     for attempt_index in range(retry_cap + 1):
         attempt = _run_step_attempt(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             plan=state.plan,
             plan_id=state.plan_id,
@@ -3418,7 +3418,7 @@ def _merge_amendment(
 def _apply_segment_reentry(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     state: _SteeringState,
     response: ReEnterSegment,
     base: dict[str, Any],
@@ -3457,11 +3457,11 @@ def _apply_segment_reentry(
             )
     with engine.begin() as conn:
         plan_row = conn.execute(
-            select(orchestration_plan).where(orchestration_plan.c.plan_id == state.plan_row_id)
+            select(task_plan).where(task_plan.c.plan_id == state.plan_row_id)
         ).one()
         new_plan_id, new_version = apply_segment_reentry(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=state.plan,
             segment_start=response.segment_start,
@@ -3481,7 +3481,7 @@ def _apply_segment_reentry(
             decision.update(extra_payload)
         steering_events.emit(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
@@ -3501,7 +3501,7 @@ def _run_segment_reentry(
     engine: Engine,
     io: CheckInIO,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     state: _SteeringState,
     segment_start: str,
@@ -3572,7 +3572,7 @@ def _run_segment_reentry(
         for attempt_index in range(retry_cap + 1):
             attempt = _run_step_attempt(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 plan=state.plan,
                 plan_id=state.plan_id,
@@ -3699,7 +3699,7 @@ def _run_plan_segment_reentry(
     engine: Engine,
     io: CheckInIO,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     boundary_step: ComponentStep,
     segment_reentry: dict[str, Any],
@@ -3726,7 +3726,7 @@ def _run_plan_segment_reentry(
     result = _run_segment_reentry(
         engine,
         io,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         state=state,
         segment_start=segment_reentry["segment_start"],
@@ -3766,7 +3766,7 @@ def _run_plan_segment_reentry(
         step=boundary_step,
         render=render_check_in(last_check_in_payload),
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
@@ -3793,7 +3793,7 @@ def _run_plan_segment_reentry(
         last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
             engine,
             io,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             state=state,
             component=reentry.rerun["component"],
@@ -3819,7 +3819,7 @@ def _run_plan_before_segment_reentry(
     engine: Engine,
     io: CheckInIO,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     boundary_step: ComponentStep,
     segment_reentry: dict[str, Any],
@@ -3833,7 +3833,7 @@ def _run_plan_before_segment_reentry(
     step_outcomes: list[RunStepOutcome],
     flagged_events: list[dict[str, Any]],
     capability_run_id: uuid.UUID,
-    orchestrator: OrchestratorBackend | None,
+    agent: AgentBackend | None,
     discretion_hook: DiscretionHook,
 ) -> _PlanSegmentReentryResult:
     """Additive segment re-entry at a before_component boundary (Task 15b, P2).
@@ -3849,7 +3849,7 @@ def _run_plan_before_segment_reentry(
     result = _run_segment_reentry(
         engine,
         io,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         state=state,
         segment_start=segment_reentry["segment_start"],
@@ -3889,7 +3889,7 @@ def _run_plan_before_segment_reentry(
         step=boundary_step,
         render=render_check_in(last_check_in_payload),
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         backends=backends,
@@ -3898,7 +3898,7 @@ def _run_plan_before_segment_reentry(
         most_recent_attempted_run_id=most_recent_attempted_run_id,
         flagged_events=flagged_events,
         discretion_hook=discretion_hook,
-        orchestrator=orchestrator,
+        agent=agent,
         session_id=session_id,
         allow_segment_reentry=False,
     )
@@ -3914,7 +3914,7 @@ def _run_plan_before_segment_reentry(
         last_check_in_payload, most_recent_attempted_run_id = _run_component_rerun(
             engine,
             io,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             state=state,
             component=reentry.rerun["component"],
@@ -3942,7 +3942,7 @@ def _resolve_unattended_boundary(
     point: PausePoint,
     name: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     attempted_runs: dict[str, uuid.UUID],
@@ -3960,7 +3960,7 @@ def _resolve_unattended_boundary(
 
     Never pauses (ADR 0021 decision 4). The fired floor triggers are read first
     and ride every emitted decision (discipline 1 — the floor is never
-    suppressible). Then, in authority order (declared rules > orchestrator):
+    suppressible). Then, in authority order (declared rules > agent):
 
     * P1 (search_exception) is exception-only — no fired triggers means nothing
       to decide, so the walk proceeds silently;
@@ -3981,7 +3981,7 @@ def _resolve_unattended_boundary(
         engine,
         name=name,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=evidence_scope_id,
         successful_runs=successful_runs,
         attempted_runs=attempted_runs,
@@ -4004,13 +4004,13 @@ def _resolve_unattended_boundary(
     if rule is None:
         # No pinned rule → the discretion floor / watch. The hook is consulted only
         # on this branch (a pinned rule is resolved above), pinning the authority
-        # order structurally: declared rules > orchestrator. The runner pre-fetches
+        # order structurally: declared rules > agent. The runner pre-fetches
         # the bundle/header/digest so the watch decides over the same option-complete
         # state a pause shows (Task 14); the deterministic floor ignores them.
         bundle = _build_bundle(
             engine,
             name=name,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=evidence_scope_id,
             successful_runs=successful_runs,
             backends=backends,
@@ -4027,7 +4027,7 @@ def _resolve_unattended_boundary(
                 bundle=bundle,
                 header=_watch_header(state),
                 digest=_watch_digest(
-                    engine, project_id=project_id, capability_run_id=capability_run_id
+                    engine, task_id=task_id, capability_run_id=capability_run_id
                 ),
                 read_tools=None,
             )
@@ -4038,7 +4038,7 @@ def _resolve_unattended_boundary(
             point=point,
             name=name,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             completed_components=completed_components,
             flagged_events=flagged_events,
             base=base,
@@ -4053,7 +4053,7 @@ def _resolve_unattended_boundary(
         # A hard stop is ALWAYS honoured — no code path routes around it.
         _abort_and_record(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             base=base,
             event_run_id=event_run_id,
@@ -4070,7 +4070,7 @@ def _resolve_unattended_boundary(
         name=name,
         rule=rule,
         state=state,
-        project_id=project_id,
+        task_id=task_id,
         completed_components=completed_components,
         flagged_events=flagged_events,
         base=base,
@@ -4113,7 +4113,7 @@ def _apply_standing_proceed(
     name: str,
     rule: Any,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     flagged_events: list[dict[str, Any]],
     base: dict[str, Any],
@@ -4148,7 +4148,7 @@ def _apply_standing_proceed(
     if not effective:
         _emit_standing_proceed_decision(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             interpreted_action="proceed",
@@ -4167,7 +4167,7 @@ def _apply_standing_proceed(
             assert rerun_component is not None
             rerun_state, merged = _apply_replacement_rerun(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 state=state,
                 adjustment=Adjust(directive_deltas=replacement_deltas),
                 base=base,
@@ -4191,7 +4191,7 @@ def _apply_standing_proceed(
             response = ReEnterSegment(directive_deltas=effective)
             reentry_state = _apply_segment_reentry(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 state=state,
                 response=response,
                 base=base,
@@ -4215,7 +4215,7 @@ def _apply_standing_proceed(
             )
         amended_state = _apply_runner_adjustment(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=Adjust(directive_deltas=effective),
             completed_components=completed_components,
@@ -4235,7 +4235,7 @@ def _apply_standing_proceed(
         # the record, rather than failing the run.
         _emit_rejected(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             exc=exc,
@@ -4243,7 +4243,7 @@ def _apply_standing_proceed(
         )
         _emit_standing_proceed_decision(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             interpreted_action="proceed",
@@ -4291,7 +4291,7 @@ def _rule_echo(rule: Any) -> dict[str, Any]:
 def _emit_standing_proceed_decision(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     interpreted_action: Any,
@@ -4312,7 +4312,7 @@ def _emit_standing_proceed_decision(
     payload["triggers"] = triggers
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_DECISION,
         payload=payload,
@@ -4322,7 +4322,7 @@ def _emit_standing_proceed_decision(
 def _emit_judgement_routed(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     state: _SteeringState,
     point: PausePoint,
@@ -4344,7 +4344,7 @@ def _emit_judgement_routed(
         payload.update(extra)
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.AGENT_JUDGEMENT_ROUTED,
         payload=payload,
@@ -4354,10 +4354,10 @@ def _emit_judgement_routed(
 def _watch_observe_boundary(
     engine: Engine,
     *,
-    orchestrator: OrchestratorBackend,
+    agent: AgentBackend,
     point: PausePoint,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     successful_runs: dict[str, uuid.UUID],
     backends: RunnerBackends,
@@ -4385,7 +4385,7 @@ def _watch_observe_boundary(
 
     ANY backend exception degrades to the deterministic floor (watch discipline 5):
     a ``watch_error`` verdict is recorded and the run proceeds exactly as it would
-    with no orchestrator.
+    with no agent.
     """
     verdict = classify_boundary(
         is_decision_point=is_decision_point,
@@ -4395,7 +4395,7 @@ def _watch_observe_boundary(
     if verdict == "clean_boundary":
         _emit_judgement_routed(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             state=state,
             point=point,
@@ -4406,14 +4406,14 @@ def _watch_observe_boundary(
         return _WatchObservation()
 
     header = _watch_header(state)
-    digest = _watch_digest(engine, project_id=project_id, capability_run_id=capability_run_id)
+    digest = _watch_digest(engine, task_id=task_id, capability_run_id=capability_run_id)
 
     if verdict == "decision_point":
         bundle = (
             _build_bundle(
                 engine,
                 name=steer_point_name,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 successful_runs=successful_runs,
                 backends=backends,
@@ -4425,7 +4425,7 @@ def _watch_observe_boundary(
         )
         try:
             result = run_watch_decision(
-                orchestrator,
+                agent,
                 request=f"author suggested options at {steer_point_name}",
                 header=header,
                 payload={"steer_point": steer_point_name, "triggers": triggers, "bundle": bundle},
@@ -4436,13 +4436,13 @@ def _watch_observe_boundary(
             authored = result.decision.authored_options
         except Exception as exc:  # noqa: BLE001 — authoring failure degrades to the floor
             log.warning(
-                "orchestrator.authoring_failed",
+                "agent.authoring_failed",
                 steer_point=steer_point_name,
                 error=str(exc)[:200],
             )
             _emit_judgement_routed(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 capability_run_id=capability_run_id,
                 state=state,
                 point=point,
@@ -4459,13 +4459,13 @@ def _watch_observe_boundary(
             state=state,
             point=point,
             steer_point_name=steer_point_name,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             run_id=event_run_id,
         )
         _emit_judgement_routed(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             state=state,
             point=point,
@@ -4474,7 +4474,7 @@ def _watch_observe_boundary(
             reason="watch authored options on the canonical floor",
             extra={
                 "authored": bool(authored_dicts),
-                "authored_by": "orchestrator",
+                "authored_by": "agent",
                 "authored_options": authored_dicts,
                 "execution_profile": {
                     "prompt_version": WATCH_AUTHORING_PROMPT_VERSION,
@@ -4485,17 +4485,17 @@ def _watch_observe_boundary(
 
     # triage
     try:
-        triage = orchestrator.triage(
+        triage = agent.triage(
             f"triage this boundary at {point.component}",
             header,
             {"steer_point": steer_point_name, "triggers": triggers, "anomalous": anomalous},
             digest,
         )
     except Exception as exc:  # noqa: BLE001 — triage failure degrades to the floor
-        log.warning("orchestrator.triage_failed", component=point.component, error=str(exc)[:200])
+        log.warning("agent.triage_failed", component=point.component, error=str(exc)[:200])
         _emit_judgement_routed(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             state=state,
             point=point,
@@ -4507,7 +4507,7 @@ def _watch_observe_boundary(
     if triage.notable:
         _emit_judgement_routed(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             state=state,
             point=point,
@@ -4519,7 +4519,7 @@ def _watch_observe_boundary(
         return _WatchObservation(promoted=True, promoted_reason=triage.reason)
     _emit_judgement_routed(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         capability_run_id=capability_run_id,
         state=state,
         point=point,
@@ -4537,7 +4537,7 @@ def _validated_authored_options(
     state: _SteeringState,
     point: PausePoint,
     steer_point_name: str | None,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     run_id: uuid.UUID | None,
 ) -> list[dict[str, Any]] | None:
@@ -4582,7 +4582,7 @@ def _validated_authored_options(
             if run_id is not None:
                 steering_events.emit_standalone(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     event_type="authored_option_dropped",
                     payload={
@@ -4618,7 +4618,7 @@ def _watch_header(state: _SteeringState) -> dict[str, Any]:
 
 
 def _watch_digest(
-    engine: Engine, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+    engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> dict[str, Any]:
     """The run-so-far digest — prior steering decisions for this walk (decision memory)."""
     walk_key = str(capability_run_id)
@@ -4627,11 +4627,14 @@ def _watch_digest(
             {
                 "boundary": entry["payload"].get("boundary"),
                 "component": entry["payload"].get("component"),
-                "decided_by": entry["payload"].get("decided_by"),
+                # Pre-038 rows carry the old actor word (task 038, A5).
+                "decided_by": steering_events.canonical_actor(
+                    entry["payload"].get("decided_by")
+                ),
                 "response": entry["payload"].get("response"),
             }
             for entry in events.read(
-                conn, project_id, event_types=[steering_events.STEERING_DECISION]
+                conn, task_id, event_types=[steering_events.STEERING_DECISION]
             )
             if entry["payload"].get("capability_run_id") == walk_key
         ]
@@ -4639,14 +4642,14 @@ def _watch_digest(
 
 
 def _watch_flag(component: str, steer_point: str, *, rule: str, action: str) -> dict[str, Any]:
-    """One auto-resolution flag for a watch (orchestrator) decision in the collation."""
+    """One auto-resolution flag for a watch (agent) decision in the collation."""
     return {
         "component": component,
         "status": "auto_resolved",
         "steer_point": steer_point,
         "rule": rule,
         "action": action,
-        "authored_by": "orchestrator",
+        "authored_by": "agent",
     }
 
 
@@ -4662,30 +4665,30 @@ def _watch_extra(outcome: _DiscretionOutcome, *, triggers: list[dict[str, Any]])
     return extra
 
 
-def _emit_orchestrator_proceed_decision(
+def _emit_agent_proceed_decision(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     base: dict[str, Any],
     outcome: _DiscretionOutcome,
     triggers: list[dict[str, Any]],
 ) -> None:
-    """Append an orchestrator-attributed proceed/escalate decision (no state partner)."""
+    """Append an agent-attributed proceed/escalate decision (no state partner)."""
     payload = steering_events.decision_payload(
         base,
-        decided_by="orchestrator",
-        authored_by="orchestrator",
+        decided_by="agent",
+        authored_by="agent",
         response="continue",
         interpreted_action=outcome.interpreted_action,
         confirmed=True,
         rerun_mode=None,
     )
     payload.update(_watch_extra(outcome, triggers=triggers))
-    payload["orchestrator_rule"] = outcome.rule
+    payload["agent_rule"] = outcome.rule
     steering_events.emit_standalone(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=steering_events.STEERING_DECISION,
         payload=payload,
@@ -4699,7 +4702,7 @@ def _apply_discretion_outcome(
     point: PausePoint,
     name: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     flagged_events: list[dict[str, Any]],
     base: dict[str, Any],
@@ -4712,7 +4715,7 @@ def _apply_discretion_outcome(
     """Route a no-pinned-rule discretion outcome — deterministic floor OR watch.
 
     ``outcome.profile is not None`` marks an outcome the watch actually decided
-    (attributed to the orchestrator); its absence is the deterministic floor (or a
+    (attributed to the agent); its absence is the deterministic floor (or a
     fail-safe degrade to it), attributed to ``standing_default`` — byte-identical to
     the Task-12 behaviour. An ``apply`` action routes the watch's authored delta
     through the SAME apply machinery a standing rule uses.
@@ -4725,7 +4728,7 @@ def _apply_discretion_outcome(
             point=point,
             name=name,
             state=state,
-            project_id=project_id,
+            task_id=task_id,
             completed_components=completed_components,
             flagged_events=flagged_events,
             base=base,
@@ -4736,9 +4739,9 @@ def _apply_discretion_outcome(
             rerun_component=rerun_component,
         )
     if watch_decided:
-        _emit_orchestrator_proceed_decision(
+        _emit_agent_proceed_decision(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             outcome=outcome,
@@ -4750,7 +4753,7 @@ def _apply_discretion_outcome(
         return _PauseApplied(state=state)
     _emit_standing_proceed_decision(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=event_run_id,
         base=base,
         interpreted_action=outcome.interpreted_action,
@@ -4770,7 +4773,7 @@ def _apply_watch_delta(
     point: PausePoint,
     name: str,
     state: _SteeringState,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     completed_components: set[str],
     flagged_events: list[dict[str, Any]],
     base: dict[str, Any],
@@ -4785,7 +4788,7 @@ def _apply_watch_delta(
     Mirrors :func:`_apply_standing_proceed`'s routing (replacement re-run of the
     point's re-run component · additive segment re-entry · pending-component
     adjustment) but takes the raw authored delta and attributes the decision to
-    the orchestrator (``decided_by``/``authored_by`` = ``orchestrator``), carrying
+    the agent (``decided_by``/``authored_by`` = ``agent``), carrying
     the verbatim reasoning + deliberation trail + execution profile. The watch's
     delta is author-blind-validated by the SAME fail-closed grammars user input
     takes: an out-of-grammar delta raises :class:`SteeringAdjustmentError`, is
@@ -4795,9 +4798,9 @@ def _apply_watch_delta(
     effective = outcome.delta or {}
     extra = _watch_extra(outcome, triggers=triggers)
     if not effective:
-        _emit_orchestrator_proceed_decision(
+        _emit_agent_proceed_decision(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             outcome=outcome,
@@ -4821,14 +4824,14 @@ def _apply_watch_delta(
             assert rerun_component is not None
             rerun_state, merged = _apply_replacement_rerun(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 state=state,
                 adjustment=Adjust(directive_deltas={rerun_component: effective}),
                 base=base,
                 event_run_id=event_run_id,
                 component=rerun_component,
-                decided_by="orchestrator",
-                authored_by="orchestrator",
+                decided_by="agent",
+                authored_by="agent",
                 extra_payload=extra,
             )
             flagged_events.append(
@@ -4845,15 +4848,15 @@ def _apply_watch_delta(
             response = ReEnterSegment(directive_deltas=effective)
             reentry_state = _apply_segment_reentry(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 state=state,
                 response=response,
                 base=base,
                 event_run_id=event_run_id,
                 completed_components=completed_components,
                 boundary_component=point.component,
-                decided_by="orchestrator",
-                authored_by="orchestrator",
+                decided_by="agent",
+                authored_by="agent",
                 extra_payload=extra,
             )
             flagged_events.append(
@@ -4869,14 +4872,14 @@ def _apply_watch_delta(
             )
         amended_state = _apply_runner_adjustment(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             state=state,
             adjustment=Adjust(directive_deltas=effective),
             completed_components=completed_components,
             base=base,
             event_run_id=event_run_id,
-            decided_by="orchestrator",
-            authored_by="orchestrator",
+            decided_by="agent",
+            authored_by="agent",
             extra_payload=extra,
         )
         flagged_events.append(_watch_flag(point.component, name, rule=outcome.rule, action="apply"))
@@ -4886,15 +4889,15 @@ def _apply_watch_delta(
         # rejected on the record and degrades to proceed-and-flag (watch discipline 5).
         _emit_rejected(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             exc=exc,
             offending_delta=effective,
         )
-        _emit_orchestrator_proceed_decision(
+        _emit_agent_proceed_decision(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=event_run_id,
             base=base,
             outcome=outcome,
@@ -4917,9 +4920,9 @@ def _remaining_steps(
 def _search_round_continues(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     successful_runs: dict[str, uuid.UUID],
 ) -> bool:
     """Evaluate the multi-round search gate after a completed screen round.
@@ -4941,9 +4944,9 @@ def _search_round_continues(
 
     Args:
         engine: Engine for the short evaluation reads and the stop write.
-        project_id: Owning project.
+        task_id: Owning task.
         evidence_scope_id: Scope being searched.
-        plan: Current orchestration plan; ``search_effort`` picks the budget.
+        plan: Current task plan; ``search_effort`` picks the budget.
         successful_runs: Per-component last successful run ids.
 
     Returns:
@@ -4956,19 +4959,19 @@ def _search_round_continues(
         return False
     with engine.connect() as conn:
         rounds_done = count_existing_rounds(
-            conn, project_id=project_id, scope_id=evidence_scope_id
+            conn, task_id=task_id, scope_id=evidence_scope_id
         )
         confident = confident_relevant_count(
-            conn, project_id=project_id, scope_id=evidence_scope_id
+            conn, task_id=task_id, scope_id=evidence_scope_id
         )
         new_confident = new_confident_relevant_for_run(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=evidence_scope_id,
             run_id=screen_run_id,
         )
         screen_payload = _find_component_payload(
-            events.read_for_run(conn, project_id, screen_run_id),
+            events.read_for_run(conn, task_id, screen_run_id),
             "screen",
             event_type="component.completed",
             run_id=screen_run_id,
@@ -4986,7 +4989,7 @@ def _search_round_continues(
     if not decision.stop:
         log.info(
             "search.round_continue",
-            project_id=str(project_id),
+            task_id=str(task_id),
             round_completed=rounds_done,
             round_cap=round_cap,
             confident_relevant=confident,
@@ -4997,14 +5000,14 @@ def _search_round_continues(
     with engine.begin() as conn:
         final = finalise_deep_stop(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=evidence_scope_id,
             stop_condition=decision.stop_condition,
             thin=confident < THIN_CONFIDENT_RELEVANT,
         )
     log.info(
         "search.rounds_stopped",
-        project_id=str(project_id),
+        task_id=str(task_id),
         rounds=rounds_done,
         stop_condition=final,
         confident_relevant=confident,
@@ -5016,7 +5019,7 @@ def _open_capability_run(
     engine: Engine,
     *,
     capability_run_id: uuid.UUID,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     plan_id: uuid.UUID,
     plan_version: int,
@@ -5027,9 +5030,9 @@ def _open_capability_run(
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=capability_run_id,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
-                capability="evidence_base",
+                capability="evidence_search",
                 plan_id=plan_id,
                 plan_version=plan_version,
                 status="running",
@@ -5039,7 +5042,7 @@ def _open_capability_run(
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=None,
             event_type="run.opened",
             payload={
@@ -5057,19 +5060,19 @@ def _finish_run(
     *,
     status: RunPlanStatus,
     capability_run_id: uuid.UUID,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
 ) -> RunPlanOutcome:
     with engine.begin() as conn:
         ended_at = datetime.now(UTC)
         conn.execute(
             capability_run.update()
             .where(capability_run.c.capability_run_id == capability_run_id)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .values(status=status, ended_at=ended_at)
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=None,
             event_type="run.finished",
             payload={"capability_run_id": str(capability_run_id), "status": status},
@@ -5078,7 +5081,7 @@ def _finish_run(
         # terminal status + run.finished event (029 strand 2): a crash can
         # never leave a succeeded run with an active planning conversation.
         if status in ("succeeded", "degraded"):
-            close_planning_conversation(conn, project_id=project_id, closed_at=ended_at)
+            close_planning_conversation(conn, task_id=task_id, closed_at=ended_at)
     collation = render_collation(flagged_events)
     log.info("runner.collation", render=collation)
     _log_run_summary(outcomes, status=status)
@@ -5127,9 +5130,9 @@ def _reference_kwargs(
 def _run_step_attempt(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     plan_id: uuid.UUID,
     plan_version: int,
     step: ComponentStep,
@@ -5156,7 +5159,7 @@ def _run_step_attempt(
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 status="running",
                 started_at=datetime.now(UTC),
                 capability_run_id=capability_run_id,
@@ -5164,7 +5167,7 @@ def _run_step_attempt(
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="run.started",
             payload={
@@ -5180,7 +5183,7 @@ def _run_step_attempt(
         )
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="plan.compiled",
             payload=plan_payload,
@@ -5193,7 +5196,7 @@ def _run_step_attempt(
     with engine.begin() as conn:
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="component.started",
             payload={"component": registry_component},
@@ -5211,7 +5214,7 @@ def _run_step_attempt(
         with engine.begin() as conn:
             _apply_directive(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
                 directive_delta=directive_delta,
             )
@@ -5226,14 +5229,14 @@ def _run_step_attempt(
             with tracing.component_span(
                 backends.langfuse_client,
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 component=step.component,
                 session_id=session_id,
             ):
                 harness_outcome = run_harness(
                     conn,
                     config=config,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     provider=StubEchoProvider(),
                     embedding_backend=backends.embedding,
@@ -5252,7 +5255,7 @@ def _run_step_attempt(
                     search_generation_backend=backends.search_generation,
                     document_fetcher=backends.document_fetcher,
                     progress_emitter=(
-                        ProgressEmitter(engine, project_id=project_id, run_id=run_id)
+                        ProgressEmitter(engine, task_id=task_id, run_id=run_id)
                         if registry_component == "synthesise"
                         else None
                     ),
@@ -5263,7 +5266,7 @@ def _run_step_attempt(
             try:
                 summary_accounting = write_summaries_after_commit(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     synthesis_backend=(
                         backends.synthesis
@@ -5285,7 +5288,7 @@ def _run_step_attempt(
             except Exception as exc:  # noqa: BLE001 - summaries never fail a component
                 log.warning(
                     "runner.summaries_degraded",
-                    project_id=str(project_id),
+                    task_id=str(task_id),
                     run_id=str(run_id),
                     error=_bounded_error(exc),
                 )
@@ -5296,7 +5299,7 @@ def _run_step_attempt(
             with engine.begin() as conn:
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=run_id,
                     event_type="component.completed",
                     payload={"component": registry_component, **component_summary},
@@ -5320,18 +5323,18 @@ def _run_step_attempt(
         )
         _record_failure_backstop(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             registry_component=registry_component,
             error=error,
         )
         with engine.connect() as conn:
-            log_entries = events.read_for_run(conn, project_id, run_id)
+            log_entries = events.read_for_run(conn, task_id, run_id)
         headline_counts = _headline_counts(log_entries, registry_component, run_id=run_id)
         usage_totals = _usage_totals(log_entries, registry_component, run_id=run_id)
         _record_component_timing(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             component=step.component,
             registry_component=registry_component,
@@ -5351,7 +5354,7 @@ def _run_step_attempt(
 
     with engine.connect() as conn:
         status = conn.execute(select(runs.c.status).where(runs.c.run_id == run_id)).scalar_one()
-        log_entries = events.read_for_run(conn, project_id, run_id)
+        log_entries = events.read_for_run(conn, task_id, run_id)
 
     headline_counts = _headline_counts(log_entries, registry_component, run_id=run_id)
     usage_totals = _usage_totals(log_entries, registry_component, run_id=run_id)
@@ -5359,7 +5362,7 @@ def _run_step_attempt(
     if status == "succeeded":
         _record_component_timing(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             component=step.component,
             registry_component=registry_component,
@@ -5377,7 +5380,7 @@ def _run_step_attempt(
         )
     _record_component_timing(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         component=step.component,
         registry_component=registry_component,
@@ -5398,7 +5401,7 @@ def _run_step_attempt(
 def _record_component_timing(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     component: str,
     registry_component: str,
@@ -5418,7 +5421,7 @@ def _record_component_timing(
     with engine.begin() as conn:
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="component.timing",
             payload=payload,
@@ -5441,7 +5444,7 @@ def _bounded_error(exc: Exception) -> str:
 def _record_failure_backstop(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     registry_component: str,
     error: str,
@@ -5449,13 +5452,13 @@ def _record_failure_backstop(
     with engine.begin() as conn:
         run_row = conn.execute(
             select(runs.c.status, runs.c.ended_at)
-            .where(runs.c.project_id == project_id)
+            .where(runs.c.task_id == task_id)
             .where(runs.c.run_id == run_id)
         ).one()
         component_failed_exists = (
             conn.execute(
                 select(event_log.c.event_id)
-                .where(event_log.c.project_id == project_id)
+                .where(event_log.c.task_id == task_id)
                 .where(event_log.c.run_id == run_id)
                 .where(event_log.c.event_type == "component.failed")
                 .limit(1)
@@ -5465,7 +5468,7 @@ def _record_failure_backstop(
         if not component_failed_exists:
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 event_type="component.failed",
                 payload={"component": registry_component, "error": error},
@@ -5474,7 +5477,7 @@ def _record_failure_backstop(
         run_failed_exists = (
             conn.execute(
                 select(event_log.c.event_id)
-                .where(event_log.c.project_id == project_id)
+                .where(event_log.c.task_id == task_id)
                 .where(event_log.c.run_id == run_id)
                 .where(event_log.c.event_type == "run.failed")
                 .limit(1)
@@ -5484,7 +5487,7 @@ def _record_failure_backstop(
         if not run_failed_exists and run_row.status != "succeeded":
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 event_type="run.failed",
                 payload={"error": error},
@@ -5494,7 +5497,7 @@ def _record_failure_backstop(
             now = datetime.now(UTC)
             conn.execute(
                 runs.update()
-                .where(runs.c.project_id == project_id)
+                .where(runs.c.task_id == task_id)
                 .where(runs.c.run_id == run_id)
                 .values(status="failed", ended_at=now)
             )
@@ -5502,7 +5505,7 @@ def _record_failure_backstop(
             now = datetime.now(UTC)
             conn.execute(
                 runs.update()
-                .where(runs.c.project_id == project_id)
+                .where(runs.c.task_id == task_id)
                 .where(runs.c.run_id == run_id)
                 .values(ended_at=now)
             )
@@ -5539,21 +5542,21 @@ def _plan_compiled_payload(
 def _apply_directive(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     evidence_scope_id: uuid.UUID,
     directive_delta: dict[str, Any],
 ) -> None:
     row = conn.execute(
         select(evidence_scope.c.context)
         .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
-        .where(evidence_scope.c.project_id == project_id)
+        .where(evidence_scope.c.task_id == task_id)
     ).one()
     scope_context = dict(row.context)
     directed_context = {**scope_context, **directive_delta}
     conn.execute(
         evidence_scope.update()
         .where(evidence_scope.c.evidence_scope_id == evidence_scope_id)
-        .where(evidence_scope.c.project_id == project_id)
+        .where(evidence_scope.c.task_id == task_id)
         .values(context=directed_context)
     )
 

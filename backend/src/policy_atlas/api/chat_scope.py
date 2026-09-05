@@ -1,4 +1,4 @@
-"""Read-only, turn-scoped evidence readers for project chat.
+"""Read-only, turn-scoped evidence readers for task chat.
 
 ``resolve_terminal_run_components`` reconstructs a completed walk's terminal
 component references once at chat-turn reservation time.  ``search_chunks`` is
@@ -24,7 +24,7 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core import events
 from policy_atlas.core.embeddings import EmbeddingBackend, StubEmbeddingBackend
 from policy_atlas.core.schema import capability_run, grouping_result, runs, selection_result
-from policy_atlas.evidence_base.synthesis.synthesis_tools import (
+from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     ChunkRetriever,
     PassThroughChunkReranker,
     SynthesisDirective,
@@ -57,7 +57,7 @@ class ResolvedRunScope:
 
 
 def resolve_terminal_run_components(
-    engine: Engine, *, project_id: uuid.UUID
+    engine: Engine, *, task_id: uuid.UUID
 ) -> ResolvedRunScope | None:
     """Resolve the latest completed walk's terminal component attempts.
 
@@ -67,7 +67,7 @@ def resolve_terminal_run_components(
 
     Args:
         engine: Database engine used for this short-lived read.
-        project_id: Project owning the completed walk.
+        task_id: Task owning the completed walk.
 
     Returns:
         The resolved terminal scope, or ``None`` when no completed walk exists.
@@ -75,7 +75,7 @@ def resolve_terminal_run_components(
     with engine.connect() as conn:
         cap_row = conn.execute(
             select(capability_run)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.status.in_(("succeeded", "degraded")))
             .order_by(
                 capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc()
@@ -85,12 +85,12 @@ def resolve_terminal_run_components(
         if cap_row is None:
             return None
         cap = dict(cap_row._mapping)
-        event_rows = events.read(conn, project_id)
+        event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)
             for row in conn.execute(
                 select(runs)
-                .where(runs.c.project_id == project_id)
+                .where(runs.c.task_id == task_id)
                 .where(runs.c.capability_run_id == cap["capability_run_id"])
             )
         ]
@@ -139,7 +139,7 @@ def resolve_terminal_run_components(
 def build_chat_readers(
     engine: Engine,
     scope: ResolvedRunScope,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     *,
     embedding_backend: EmbeddingBackend | None = None,
 ) -> tuple[
@@ -152,7 +152,7 @@ def build_chat_readers(
     Args:
         engine: Database engine; connections are opened only to build/read.
         scope: Turn-start terminal component resolution.
-        project_id: Project owning all returned evidence.
+        task_id: Task owning all returned evidence.
         embedding_backend: Query embedding seam.  The zero-egress stub is the
             default until the chat service injects its configured live backend.
 
@@ -160,31 +160,31 @@ def build_chat_readers(
         Chunk retriever, findings reader (when extraction resolved), and lookup reader.
     """
     with engine.connect() as conn:
-        selected_pss_ids: set[uuid.UUID] = set()
+        selected_tss_ids: set[uuid.UUID] = set()
         if scope.selection_run_id is not None:
             selected = conn.execute(
                 select(selection_result.c.selected)
-                .where(selection_result.c.project_id == project_id)
+                .where(selection_result.c.task_id == task_id)
                 .where(selection_result.c.evidence_scope_id == scope.evidence_scope_id)
                 .where(selection_result.c.run_id == scope.selection_run_id)
             ).scalar_one_or_none()
             if isinstance(selected, list):
                 for item in selected:
-                    if isinstance(item, dict) and isinstance(item.get("pss_id"), str):
+                    if isinstance(item, dict) and isinstance(item.get("tss_id"), str):
                         try:
-                            selected_pss_ids.add(uuid.UUID(item["pss_id"]))
+                            selected_tss_ids.add(uuid.UUID(item["tss_id"]))
                         except ValueError:
                             continue
         retrieval_scope = build_retrieval_scope(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             scope_id=scope.evidence_scope_id,
-            selected_pss_ids=selected_pss_ids,
+            selected_tss_ids=selected_tss_ids,
         )
         terminal_run_ids = set(
             conn.execute(
                 select(runs.c.run_id)
-                .where(runs.c.project_id == project_id)
+                .where(runs.c.task_id == task_id)
                 .where(runs.c.capability_run_id == scope.capability_run_id)
             ).scalars()
         )
@@ -201,7 +201,7 @@ def build_chat_readers(
         with engine.connect() as conn:
             return make_lookup_reader(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 scope_id=scope.evidence_scope_id,
                 characterisation_run_id=scope.characterisation_run_id,
                 selection_run_id=scope.selection_run_id,
@@ -220,14 +220,14 @@ def build_chat_readers(
             if scope.grouping_run_id is not None:
                 raw_groups = conn.execute(
                     select(grouping_result.c.groups)
-                    .where(grouping_result.c.project_id == project_id)
+                    .where(grouping_result.c.task_id == task_id)
                     .where(grouping_result.c.evidence_scope_id == scope.evidence_scope_id)
                     .where(grouping_result.c.run_id == scope.grouping_run_id)
                 ).scalar_one_or_none()
                 groups = _grouping_summary(raw_groups)["groups"]
             return make_findings_reader(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 extraction_run_id=extraction_run_id,
                 evidence_scope_id=scope.evidence_scope_id,
                 grouping_groups=groups,

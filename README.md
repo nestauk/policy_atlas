@@ -4,7 +4,7 @@ An evidence-led policy-analysis workspace: capabilities run bounded, inspectable
 pipelines over an acquired evidence corpus and produce grounded artefacts - evidence
 syntheses whose significant claims carry citations, verbatim quotes and appraisal. 
 The v3.0 backend ships one capability,
-the **Evidence Base**: plan → acquire → screen → classify → appraise → ingest →
+**Evidence search**: plan → acquire → screen → classify → appraise → ingest →
 (characterise · select · extract · group, plan-selected) → synthesise.
 
 Product intent and system contracts live in [`docs/specs/`](docs/specs/index.md);
@@ -16,9 +16,9 @@ in [`docs/tasks/`](docs/tasks/).
 ```
 backend/                     Python project (import-neutral hoist, task 025 A.2)
 backend/src/policy_atlas/
-  runtime/                   orchestrator CLI, capability runner, LangGraph harness,
+  runtime/                   agent CLI, capability runner, LangGraph harness,
                              planner, steering, run-spec compile
-  evidence_base/             the EB capability
+  evidence_search/           the EB capability
     sourcing/                search backends + loop, acquisition, full-text ingest
     assess/                  screening, classification, appraisal
     corpus/                  characterise, select, ranking, theme grouping
@@ -113,12 +113,12 @@ dev server already on :5173, including a plain (non-mock) one**, and every
 spec then fails at the sign-in panel. If you had `pnpm dev` running for step
 4, stop it before `pnpm e2e`.
 
-## Running the orchestrator CLI 
+## Running the agent CLI 
 
 The capability-runner CLI is the non-web entry point:
 
 ```sh
-uv run --project backend python -m policy_atlas.runtime.orchestrate
+uv run --project backend python -m policy_atlas.runtime.agent
 ```
 
 ## Licence

@@ -5,11 +5,11 @@ import { TitleMarkerProvider, useDocumentTitle } from "./title";
 
 describe("useDocumentTitle", () => {
   it("joins non-empty parts and always appends Policy Atlas", () => {
-    renderHook(() => useDocumentTitle("Acme project", "Workspace"));
-    expect(document.title).toBe("Acme project · Workspace · Policy Atlas");
+    renderHook(() => useDocumentTitle("Acme task", "Workspace"));
+    expect(document.title).toBe("Acme task · Workspace · Policy Atlas");
   });
 
-  it("skips empty/absent parts (e.g. a project name still loading)", () => {
+  it("skips empty/absent parts (e.g. a task name still loading)", () => {
     renderHook(() => useDocumentTitle(undefined, "Workspace"));
     expect(document.title).toBe("Workspace · Policy Atlas");
   });

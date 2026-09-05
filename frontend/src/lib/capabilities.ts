@@ -6,7 +6,7 @@
  */
 export const CAPABILITIES = [
   {
-    key: "evidence_base",
+    key: "evidence_search",
     name: "Evidence search",
     available: true,
   },
@@ -27,8 +27,6 @@ export const CAPABILITIES = [
   },
 ] as const;
 
-export type CapabilityKey = (typeof CAPABILITIES)[number]["key"];
-
 const LABEL_BY_KEY = new Map<string, string>(
   CAPABILITIES.map((capability) => [capability.key, capability.name]),
 );
@@ -36,10 +34,10 @@ const LABEL_BY_KEY = new Map<string, string>(
 /**
  * Human label for a capability key on list surfaces.
  *
- * The projects API does not carry capability yet; every live task is evidence
+ * The tasks API does not carry capability yet; every live task is evidence
  * search until that field lands, so a missing key falls back honestly.
  */
 export function capabilityLabel(key?: string | null): string {
-  if (key == null) return LABEL_BY_KEY.get("evidence_base") ?? "Evidence search";
+  if (key == null) return LABEL_BY_KEY.get("evidence_search") ?? "Evidence search";
   return LABEL_BY_KEY.get(key) ?? key;
 }

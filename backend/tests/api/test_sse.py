@@ -32,24 +32,24 @@ from policy_atlas.core.liveness import tick_hub
 from policy_atlas.core.schema import (
     app_user,
     event_log,
-    portfolio,
-    portfolio_membership,
     project,
+    project_membership,
+    task,
 )
 from policy_atlas.ops import commands as ops_commands
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
 from tests.api.org_support import (
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     ops_enrol,
     ops_set_admin,
     seeded,
     unique_email,
 )
-from tests.helpers import delete_project_data
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
+from tests.helpers import delete_task_data
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
 from tests.runtime.test_steering import _insert_plan_row
 
 
@@ -234,7 +234,7 @@ class _SseStream:
 
         It returns the drained items rather than discarding them because
         "closes eventually" is the weaker half of the property. A stream that
-        emits one more frame about the project and *then* closes passes
+        emits one more frame about the task and *then* closes passes
         "closed" and still disclosed the frame — which is exactly what the
         pre-fix loop did with a tick, having yielded it before the tail
         re-authorised. The caller asserts on the list.
@@ -274,7 +274,7 @@ class _ApiSession:
 
     async def open_stream(
         self,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         *,
         cursor: int = 0,
         headers: dict[str, str] | None = None,
@@ -287,7 +287,7 @@ class _ApiSession:
         """
         context = self.client.stream(
             "GET",
-            f"/api/v1/projects/{project_id}/events?cursor={cursor}",
+            f"/api/v1/tasks/{task_id}/events?cursor={cursor}",
             headers=headers if headers is not None else self.owner_headers,
         )
         response = await context.__aenter__()
@@ -329,20 +329,20 @@ async def _api_session(
 
 
 def _owned_seed(engine: Engine, owner_id: str) -> tuple[uuid.UUID, uuid.UUID]:
-    """Create the fixture corpus project and attach it to the API-session owner."""
-    project_id, scope_id = _seed_project(engine)
+    """Create the fixture corpus task and attach it to the API-session owner."""
+    task_id, scope_id = _seed_task(engine)
     with engine.begin() as conn:
         conn.execute(
-            update(project)
-            .where(project.c.project_id == project_id)
+            update(task)
+            .where(task.c.task_id == task_id)
             .values(owner_user_id=owner_id)
         )
-    return project_id, scope_id
+    return task_id, scope_id
 
 
 def _plan_walk(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     *,
     steering: str,
@@ -354,13 +354,13 @@ def _plan_walk(
         grouping_facets=None,
         steering_mode=steering,
     )
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     return plan, plan_id
 
 
 def _run_walk(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     plan: Any,
     plan_id: uuid.UUID,
@@ -370,7 +370,7 @@ def _run_walk(
     """Run one fixture walk through the real runner seam."""
     return run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -381,11 +381,11 @@ def _run_walk(
     )
 
 
-def _cleanup(engine: Engine, project_id: uuid.UUID | None) -> None:
+def _cleanup(engine: Engine, task_id: uuid.UUID | None) -> None:
     """Delete committed fixture data after a streaming test."""
-    if project_id is not None:
+    if task_id is not None:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def _persisted(items: list[_SseItem]) -> list[_SseItem]:
@@ -427,20 +427,20 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
     """Replay rebuilds the same durable narrative and cursors select its exact suffix."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, scope_id = _owned_seed(engine, api.owner_id)
-                plan, plan_id = _plan_walk(engine, project_id, scope_id, steering="unattended")
+                task_id, scope_id = _owned_seed(engine, api.owner_id)
+                plan, plan_id = _plan_walk(engine, task_id, scope_id, steering="unattended")
                 outcome = await asyncio.to_thread(
-                    _run_walk, engine, project_id, scope_id, plan, plan_id
+                    _run_walk, engine, task_id, scope_id, plan, plan_id
                 )
                 assert outcome.status == "succeeded"
 
-                first_stream = await api.open_stream(project_id)
+                first_stream = await api.open_stream(task_id)
                 first = _persisted(await first_stream.collect_until(_finished))
                 await first_stream.aclose()
-                second_stream = await api.open_stream(project_id)
+                second_stream = await api.open_stream(task_id)
                 second = _persisted(await second_stream.collect_until(_finished))
                 await second_stream.aclose()
 
@@ -457,7 +457,7 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                         event["event_type"] == "run.started"
                         and isinstance(event["payload"], dict)
                         and stage_for_payload(event["payload"]) is not None
-                        for event in events.read(conn, project_id)
+                        for event in events.read(conn, task_id)
                     )
                 # ingest_full_text (and screen_full) still write run.started but
                 # are not public stages, so the counts match the mapped subset.
@@ -465,7 +465,7 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
 
                 cursor = first[len(first) // 2].sequence
                 assert cursor is not None
-                suffix_stream = await api.open_stream(project_id, cursor=cursor)
+                suffix_stream = await api.open_stream(task_id, cursor=cursor)
                 suffix = _persisted(await suffix_stream.collect_until(_finished))
                 await suffix_stream.aclose()
                 assert [(item.sequence, item.event, item.data) for item in suffix] == [
@@ -474,7 +474,7 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                     if _sequence(item) > cursor
                 ]
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -485,7 +485,7 @@ def test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences(
     """A stream crossing its snapshot cutoff observes every mapped durable event once."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         original = runner_module._run_step_attempt
         entered = threading.Event()
 
@@ -497,25 +497,25 @@ def test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences(
         monkeypatch.setattr(runner_module, "_run_step_attempt", slow_attempt)
         try:
             async with _api_session(tmp_path) as api:
-                project_id, scope_id = _owned_seed(engine, api.owner_id)
-                plan, plan_id = _plan_walk(engine, project_id, scope_id, steering="unattended")
+                task_id, scope_id = _owned_seed(engine, api.owner_id)
+                plan, plan_id = _plan_walk(engine, task_id, scope_id, steering="unattended")
                 walk = asyncio.create_task(
-                    asyncio.to_thread(_run_walk, engine, project_id, scope_id, plan, plan_id)
+                    asyncio.to_thread(_run_walk, engine, task_id, scope_id, plan, plan_id)
                 )
                 assert await asyncio.to_thread(entered.wait, 2.0)
-                stream = await api.open_stream(project_id)
+                stream = await api.open_stream(task_id)
                 observed = _persisted(await stream.collect_until(_finished, timeout=10.0))
                 await stream.aclose()
                 assert (await walk).status == "succeeded"
 
                 with engine.connect() as conn:
-                    rows = events.read(conn, project_id)
+                    rows = events.read(conn, task_id)
                     from policy_atlas.api.routers import sse
 
                     expected = [
                         frame["sequence"]
                         for frame in sse._map_rows(
-                            conn, project_id=project_id, rows=rows, through=None
+                            conn, task_id=task_id, rows=rows, through=None
                         )
                     ]
                 observed_ids = [_sequence(item) for item in observed]
@@ -523,7 +523,7 @@ def test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences(
                 assert len(observed_ids) == len(set(observed_ids))
                 assert set(observed_ids) == set(expected)
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -549,18 +549,18 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
     """A parked replay ends pending; after continuation it replays pending then resolved."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, scope_id = _owned_seed(engine, api.owner_id)
-                plan, plan_id = _plan_walk(engine, project_id, scope_id, steering="frequent")
+                task_id, scope_id = _owned_seed(engine, api.owner_id)
+                plan, plan_id = _plan_walk(engine, task_id, scope_id, steering="frequent")
                 parked = await asyncio.to_thread(
-                    _run_walk, engine, project_id, scope_id, plan, plan_id, io=_ParkOnceIO()
+                    _run_walk, engine, task_id, scope_id, plan, plan_id, io=_ParkOnceIO()
                 )
                 assert parked.status == "paused"
                 assert parked.capability_run_id is not None
 
-                stream = await api.open_stream(project_id)
+                stream = await api.open_stream(task_id)
                 before = _persisted(
                     await stream.collect_until(
                         lambda item: item.event == "run.status"
@@ -578,7 +578,7 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                 answer = await asyncio.to_thread(
                     continuation.answer_check_in,
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     check_in_id=check_in_id,
                     response={"kind": "option", "option_id": "continue"},
                     actor=api.owner_id,
@@ -586,7 +586,7 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                 claim = await asyncio.to_thread(
                     continuation.claim_continuation,
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     capability_run_id=answer.capability_run_id,
                 )
                 assert claim is not None
@@ -594,14 +594,14 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                     await asyncio.to_thread(
                         continuation.execute_continuation,
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         capability_run_id=answer.capability_run_id,
                         backends=_runner_backends(),
                         io=NullIO(),
                     )
                 ).status == "succeeded"
 
-                history_stream = await api.open_stream(project_id)
+                history_stream = await api.open_stream(task_id)
                 history = _persisted(await history_stream.collect_until(_finished, timeout=10.0))
                 await history_stream.aclose()
                 pending_index = next(
@@ -620,50 +620,50 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                 )
                 assert pending_index < resolved_index
                 response = await api.client.get(
-                    f"/api/v1/projects/{project_id}/check-ins", headers=api.owner_headers
+                    f"/api/v1/tasks/{task_id}/check-ins", headers=api.owner_headers
                 )
                 assert response.status_code == 200
                 assert response.json()["data"] == []
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
 
 def test_sse_idle_stream_emits_a_heartbeat(engine: Engine, tmp_path: Path) -> None:
-    """The injectable heartbeat interval produces an SSE comment for an idle project."""
+    """The injectable heartbeat interval produces an SSE comment for an idle task."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-                project_id, _ = _owned_seed(engine, api.owner_id)
-                stream = await api.open_stream(project_id)
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
                 item = await stream.next(timeout=1.0)
                 await stream.aclose()
                 assert item.comment == "keep-alive"
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
 
 def test_sse_requires_authentication_and_owner_scope(engine: Engine, tmp_path: Path) -> None:
-    """The stream rejects missing credentials and hides another owner's project."""
+    """The stream rejects missing credentials and hides another owner's task."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, _ = _owned_seed(engine, api.owner_id)
-                unauthenticated = await api.client.get(f"/api/v1/projects/{project_id}/events")
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                unauthenticated = await api.client.get(f"/api/v1/tasks/{task_id}/events")
                 cross_owner = await api.client.get(
-                    f"/api/v1/projects/{project_id}/events", headers=api.other_headers
+                    f"/api/v1/tasks/{task_id}/events", headers=api.other_headers
                 )
                 assert unauthenticated.status_code == 401
                 assert cross_owner.status_code == 404
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -672,29 +672,29 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
     """A liveness tick reaches a live stream without adding an event-log row."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, _ = _owned_seed(engine, api.owner_id)
+                task_id, _ = _owned_seed(engine, api.owner_id)
                 with engine.connect() as conn:
                     before = conn.execute(
-                        select(event_log.c.event_id).where(event_log.c.project_id == project_id)
+                        select(event_log.c.event_id).where(event_log.c.task_id == task_id)
                     ).all()
-                stream = await api.open_stream(project_id)
+                stream = await api.open_stream(task_id)
                 await asyncio.sleep(0.02)
-                tick_hub.publish(project_id, stage="acquire", note="Test tick")
+                tick_hub.publish(task_id, stage="acquire", note="Test tick")
                 item = await stream.next(timeout=1.0)
                 await stream.aclose()
                 with engine.connect() as conn:
                     after = conn.execute(
-                        select(event_log.c.event_id).where(event_log.c.project_id == project_id)
+                        select(event_log.c.event_id).where(event_log.c.task_id == task_id)
                     ).all()
                 assert item.event == "tick"
                 assert item.sequence is None
                 assert item.data is not None and item.data["note"] == "Test tick"
                 assert after == before
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -704,8 +704,8 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
 # Contract § 5. The stream used to authorise once in `_snapshot` and then loop
 # indefinitely, so none of this slice's four revocation events reached an open
 # stream. Three of them are exercised here for real: de-enrolment, a
-# visibility flip, and the i.4 portfolio cascade (simulated by the direct
-# `project.visibility` update, and again through the real PATCH lever).
+# visibility flip, and the i.4 project cascade (simulated by the direct
+# `task.visibility` update, and again through the real PATCH lever).
 #
 # The fourth — admin revoke — was pinned only structurally while the admin
 # read leg did not exist. Phase 8 shipped the leg, so it is now exercised for
@@ -720,12 +720,12 @@ def _org_seed(
     *,
     owner_id: str,
     colleague_id: str,
-    in_portfolio: bool = False,
+    in_project: bool = False,
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID | None]:
-    """Seed one organisation, two enrolled members, and an org-visible project.
+    """Seed one organisation, two enrolled members, and an org-visible task.
 
     Deliberately not `_owned_seed`: a revocation case needs no evidence
-    fixtures and no walk, only a project row a colleague can read and a tail
+    fixtures and no walk, only a task row a colleague can read and a tail
     loop running over it. Nothing is cleaned up afterwards, for the reason
     `org_support` documents — every subject and organisation name here is
     UUID-unique, so leftover rows are unreachable from any other test.
@@ -733,31 +733,31 @@ def _org_seed(
     Args:
         engine: The session engine; writes here commit, because the
             application reads through its own connection.
-        owner_id: The project owner's subject.
+        owner_id: The task owner's subject.
         colleague_id: A second subject enrolled in the same organisation.
-        in_portfolio: Whether to put the project in a portfolio, which the
+        in_project: Whether to put the task in a project, which the
             i.4 cascade case needs and the others do not.
 
     Returns:
-        The organisation, the project, and the portfolio if one was made.
+        The organisation, the task, and the project if one was made.
     """
     with seeded(engine) as conn:
         org_id = make_org(conn)
         ops_enrol(conn, user_id=owner_id, org_id=org_id, display_name="Owner")
         ops_enrol(conn, user_id=colleague_id, org_id=org_id, display_name="Colleague")
-        portfolio_id = (
-            make_portfolio(conn, owner_user_id=owner_id, org_id=org_id, visibility="org")
-            if in_portfolio
+        project_id = (
+            make_project(conn, owner_user_id=owner_id, org_id=org_id, visibility="org")
+            if in_project
             else None
         )
-        project_id = make_project(
+        task_id = make_task(
             conn,
             owner_user_id=owner_id,
             org_id=org_id,
             visibility="org",
-            portfolio_id=portfolio_id,
+            project_id=project_id,
         )
-    return org_id, project_id, portfolio_id
+    return org_id, task_id, project_id
 
 
 async def _live(stream: _SseStream) -> None:
@@ -773,7 +773,7 @@ def _frames(items: list[_SseItem]) -> list[_SseItem]:
     """Every item that is a frame — durable or tick — and not a keep-alive.
 
     A keep-alive is the literal comment `: keep-alive` and says nothing about
-    the project; a frame is content. So "no further frames" is the disclosure
+    the task; a frame is content. So "no further frames" is the disclosure
     property, and it does not become flaky because a heartbeat happened to fire
     in the same millisecond as a revocation.
     """
@@ -782,7 +782,7 @@ def _frames(items: list[_SseItem]) -> list[_SseItem]:
 
 async def _colleague_stream_closes_when(
     api: _ApiSession,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     revoke: Callable[[], Awaitable[None]],
 ) -> None:
     """Hold a colleague's stream open, revoke, require closure **and silence**.
@@ -794,9 +794,9 @@ async def _colleague_stream_closes_when(
     **A tick is published immediately after the revocation commits**, and no
     frame may follow it. That is what turns every revocation case into a
     disclosure assertion rather than only a liveness one: the loop used to
-    yield `_encode_tick(tick)` — the project's current stage and progress
+    yield `_encode_tick(tick)` — the task's current stage and progress
     note — *before* the tail re-authorised, so a revoked caller received one
-    more frame about the project on their way out. Draining and discarding, as
+    more frame about the task on their way out. Draining and discarding, as
     these cases did before, cannot see that: the stream still closes.
 
     The tick is the deterministic probe for it. Ticks are queued per
@@ -805,11 +805,11 @@ async def _colleague_stream_closes_when(
     discovers the revocation — it escapes on every run against the old order
     and on none against the new one.
     """
-    stream = await api.open_stream(project_id, headers=api.other_headers)
+    stream = await api.open_stream(task_id, headers=api.other_headers)
     try:
         await _live(stream)
         await revoke()
-        tick_hub.publish(project_id, stage="acquire", note="After the revocation")
+        tick_hub.publish(task_id, stage="acquire", note="After the revocation")
         closed, drained = await stream.drain_until_closed(timeout=5.0)
         assert closed
         assert _frames(drained) == []
@@ -820,7 +820,7 @@ async def _colleague_stream_closes_when(
 async def _colleague_stream_closes_on(
     api: _ApiSession,
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     revoke: Callable[[Connection], None],
 ) -> None:
     """:func:`_colleague_stream_closes_when` for the direct-write revocations."""
@@ -829,7 +829,7 @@ async def _colleague_stream_closes_on(
         with seeded(engine) as conn:
             revoke(conn)
 
-    await _colleague_stream_closes_when(api, project_id, apply)
+    await _colleague_stream_closes_when(api, task_id, apply)
 
 
 def test_sse_stream_closes_when_the_colleague_is_de_enrolled(
@@ -839,7 +839,7 @@ def test_sse_stream_closes_when_the_colleague_is_de_enrolled(
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, _ = _org_seed(
+            _, task_id, _ = _org_seed(
                 engine, owner_id=api.owner_id, colleague_id=api.other_id
             )
 
@@ -850,7 +850,7 @@ def test_sse_stream_closes_when_the_colleague_is_de_enrolled(
                     .values(org_id=None)
                 )
 
-            await _colleague_stream_closes_on(api, engine, project_id, revoke)
+            await _colleague_stream_closes_on(api, engine, task_id, revoke)
 
     asyncio.run(exercise())
 
@@ -863,7 +863,7 @@ def test_sse_stream_closes_when_the_real_ops_cli_de_enrols_the_colleague(
     The case above writes ``app_user.org_id = NULL`` itself, because in phase 6
     that was the only lever there was. Phase 9b ships the real one, so this runs
     it: ``policy_atlas.ops.commands.de_enrol_user`` against the test database,
-    while a colleague holds a stream open on an org-visible project.
+    while a colleague holds a stream open on an org-visible task.
 
     Two things this catches that the simulated version cannot. The stream reacts
     to whatever the **real** command writes, so a de-enrolment that ever stopped
@@ -880,7 +880,7 @@ def test_sse_stream_closes_when_the_real_ops_cli_de_enrols_the_colleague(
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, _ = _org_seed(
+            _, task_id, _ = _org_seed(
                 engine, owner_id=api.owner_id, colleague_id=api.other_id
             )
             # `_org_seed` enrols without an address; the CLI resolves by one.
@@ -897,41 +897,41 @@ def test_sse_stream_closes_when_the_real_ops_cli_de_enrols_the_colleague(
                     result = ops_commands.de_enrol_user(conn, email=email)
                 assert result.user_id == api.other_id
 
-            await _colleague_stream_closes_when(api, project_id, de_enrol)
+            await _colleague_stream_closes_when(api, task_id, de_enrol)
 
     asyncio.run(exercise())
 
 
-def test_sse_stream_closes_when_the_project_flips_org_to_private(
+def test_sse_stream_closes_when_the_task_flips_org_to_private(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Revocation 2: the owner unshares the project while a colleague watches."""
+    """Revocation 2: the owner unshares the task while a colleague watches."""
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, _ = _org_seed(
+            _, task_id, _ = _org_seed(
                 engine, owner_id=api.owner_id, colleague_id=api.other_id
             )
 
             def revoke(conn: Connection) -> None:
                 conn.execute(
-                    update(project)
-                    .where(project.c.project_id == project_id)
+                    update(task)
+                    .where(task.c.task_id == task_id)
                     .values(visibility="private")
                 )
 
-            await _colleague_stream_closes_on(api, engine, project_id, revoke)
+            await _colleague_stream_closes_on(api, engine, task_id, revoke)
 
     asyncio.run(exercise())
 
 
-def test_sse_stream_closes_when_a_portfolio_cascade_privatises_the_member(
+def test_sse_stream_closes_when_a_project_cascade_privatises_the_member(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Revocation 3: the i.4 cascade — the portfolio flips and its member follows.
+    """Revocation 3: the i.4 cascade — the project flips and its member follows.
 
     Written before the cascade existed, so it writes exactly what the cascade
-    writes: the portfolio's `visibility`, and the member project's with it.
+    writes: the project's `visibility`, and the member task's with it.
     Kept alongside the real-lever case below rather than replaced by it,
     because the two answer different questions — this one pins the *effect* a
     stream must react to, whatever produces it, so a future revocation path
@@ -940,51 +940,51 @@ def test_sse_stream_closes_when_a_portfolio_cascade_privatises_the_member(
     Kept as its own case rather than folded into the flip above because the
     contract's acceptance list names it separately: it is the revocation whose
     trigger is on a *different row* from the one the caller is streaming, and
-    a re-auth that watched only the project it was handed would still be
+    a re-auth that watched only the task it was handed would still be
     correct here only by accident.
     """
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, portfolio_id = _org_seed(
+            _, task_id, project_id = _org_seed(
                 engine,
                 owner_id=api.owner_id,
                 colleague_id=api.other_id,
-                in_portfolio=True,
+                in_project=True,
             )
 
             def revoke(conn: Connection) -> None:
                 conn.execute(
-                    update(portfolio)
-                    .where(portfolio.c.portfolio_id == portfolio_id)
+                    update(project)
+                    .where(project.c.project_id == project_id)
                     .values(visibility="private")
                 )
                 conn.execute(
-                    update(project)
+                    update(task)
                     .where(
-                        project.c.project_id.in_(
-                            select(portfolio_membership.c.project_id).where(
-                                portfolio_membership.c.portfolio_id == portfolio_id
+                        task.c.task_id.in_(
+                            select(project_membership.c.task_id).where(
+                                project_membership.c.project_id == project_id
                             )
                         )
                     )
                     .values(visibility="private")
                 )
 
-            await _colleague_stream_closes_on(api, engine, project_id, revoke)
+            await _colleague_stream_closes_on(api, engine, task_id, revoke)
 
     asyncio.run(exercise())
 
 
-def test_sse_stream_closes_when_the_real_portfolio_cascade_runs(
+def test_sse_stream_closes_when_the_real_project_cascade_runs(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Revocation 3, driven by the actual route instead of a simulated write.
 
     Phase 6 could only write what it believed the cascade would write. Phase 7
     shipped the lever, so this runs it: the owner sends `PATCH
-    /api/v1/portfolios/{id} {"visibility": "private"}` while a colleague
-    watches a member project's stream, and the colleague's stream ends.
+    /api/v1/projects/{id} {"visibility": "private"}` while a colleague
+    watches a member task's stream, and the colleague's stream ends.
 
     This is the case that fails if the cascade ever stops carrying its
     members — the simulated version above would keep passing, because it
@@ -993,23 +993,23 @@ def test_sse_stream_closes_when_the_real_portfolio_cascade_runs(
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, portfolio_id = _org_seed(
+            _, task_id, project_id = _org_seed(
                 engine,
                 owner_id=api.owner_id,
                 colleague_id=api.other_id,
-                in_portfolio=True,
+                in_project=True,
             )
 
             async def cascade() -> None:
                 response = await api.client.patch(
-                    f"/api/v1/portfolios/{portfolio_id}",
+                    f"/api/v1/projects/{project_id}",
                     headers=api.owner_headers,
                     json={"visibility": "private"},
                 )
                 assert response.status_code == 200, response.text
                 assert response.json()["visibility"] == "private"
 
-            await _colleague_stream_closes_when(api, project_id, cascade)
+            await _colleague_stream_closes_when(api, task_id, cascade)
 
     asyncio.run(exercise())
 
@@ -1019,11 +1019,11 @@ def test_a_batch_read_after_the_grade_check_discloses_nothing_once_access_is_gon
 ) -> None:
     """The tail's batch select carries the grade, not just the check before it.
 
-    `_tail` asks `may_read_project` in one statement and reads the event batch
+    `_tail` asks `may_read_task` in one statement and reads the event batch
     in another, so a revocation committing *between* the two was still worth
     one batch of frames: the check had already answered "yes". The window is
     small and unhittable on purpose in a test, so it is simulated exactly —
-    `may_read_project` is forced to answer "yes" while the row itself has been
+    `may_read_task` is forced to answer "yes" while the row itself has been
     privatised — and the assertion is that the batch comes back empty anyway,
     because the select that reads the events applies the same read legs in the
     same statement.
@@ -1034,33 +1034,33 @@ def test_a_batch_read_after_the_grade_check_discloses_nothing_once_access_is_gon
     """
     owner_id = f"owner-{uuid.uuid4()}"
     colleague_id = f"colleague-{uuid.uuid4()}"
-    _, project_id, _ = _org_seed(engine, owner_id=owner_id, colleague_id=colleague_id)
+    _, task_id, _ = _org_seed(engine, owner_id=owner_id, colleague_id=colleague_id)
     with seeded(engine) as conn:
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=None,
-            event_type="project.renamed",
+            event_type="task.renamed",
             payload={"name_to": "A name the colleague may still read"},
         )
 
-    readable = _tail(engine, project_id=project_id, user_id=colleague_id, after=0)
+    readable = _tail(engine, task_id=task_id, user_id=colleague_id, after=0)
     assert readable is not None
-    assert [frame["type"] for frame in readable[1]] == ["project.updated"]
+    assert [frame["type"] for frame in readable[1]] == ["task.updated"]
 
     monkeypatch.setattr(
         sse,
-        "may_read_project",
+        "may_read_task",
         lambda *_args, **_kwargs: _access.ReadCheck(allowed=True, via_admin=False),
     )
     with seeded(engine) as conn:
         conn.execute(
-            update(project)
-            .where(project.c.project_id == project_id)
+            update(task)
+            .where(task.c.task_id == task_id)
             .values(visibility="private")
         )
 
-    revoked = _tail(engine, project_id=project_id, user_id=colleague_id, after=0)
+    revoked = _tail(engine, task_id=task_id, user_id=colleague_id, after=0)
     assert revoked is not None
     assert revoked[1] == []
 
@@ -1070,8 +1070,8 @@ def test_sse_owner_stream_survives_every_revocation_event(
 ) -> None:
     """The owner leg never revokes: all three levers at once, stream still open.
 
-    De-enrolling the *owner*, privatising the project, and running the
-    portfolio cascade over it are each enough to close a colleague's stream,
+    De-enrolling the *owner*, privatising the task, and running the
+    project cascade over it are each enough to close a colleague's stream,
     and not one of them touches `owner_user_id`. The owner keeps watching
     their own run throughout — the colleague's stream closing in the same
     breath is what makes that a statement about the legs rather than about
@@ -1080,14 +1080,14 @@ def test_sse_owner_stream_survives_every_revocation_event(
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, portfolio_id = _org_seed(
+            _, task_id, project_id = _org_seed(
                 engine,
                 owner_id=api.owner_id,
                 colleague_id=api.other_id,
-                in_portfolio=True,
+                in_project=True,
             )
-            owner_stream = await api.open_stream(project_id)
-            colleague_stream = await api.open_stream(project_id, headers=api.other_headers)
+            owner_stream = await api.open_stream(task_id)
+            colleague_stream = await api.open_stream(task_id, headers=api.other_headers)
             try:
                 await _live(owner_stream)
                 await _live(colleague_stream)
@@ -1098,13 +1098,13 @@ def test_sse_owner_stream_survives_every_revocation_event(
                         .values(org_id=None)
                     )
                     conn.execute(
-                        update(portfolio)
-                        .where(portfolio.c.portfolio_id == portfolio_id)
+                        update(project)
+                        .where(project.c.project_id == project_id)
                         .values(visibility="private")
                     )
                     conn.execute(
-                        update(project)
-                        .where(project.c.project_id == project_id)
+                        update(task)
+                        .where(task.c.task_id == task_id)
                         .values(visibility="private")
                     )
                 assert await colleague_stream.closed(timeout=5.0)
@@ -1122,7 +1122,7 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
     """The tail asks the same question the snapshot did, whatever the legs are.
 
     The admin read leg is a third disjunct inside `_access._read_legs` — the
-    single function `_snapshot`'s `accessible_project` resolves through. This
+    single function `_snapshot`'s `accessible_task` resolves through. This
     pins that the **tail** resolves through that same function and honours
     whatever it returns, which is why phase 8 widened the live stream at the
     same line it widened the snapshot and needed no edit to `sse.py`'s grade.
@@ -1149,17 +1149,17 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            _, project_id, _ = _org_seed(
+            _, task_id, _ = _org_seed(
                 engine, owner_id=api.owner_id, colleague_id=api.other_id
             )
-            stream = await api.open_stream(project_id, headers=api.other_headers)
+            stream = await api.open_stream(task_id, headers=api.other_headers)
             try:
                 await _live(stream)
                 # One call authorised the snapshot; the rest are the tail
                 # re-authorising per batch. All of them ask about the same row
                 # for the same subject.
                 assert len(calls) >= 2
-                assert set(calls) == {("project", api.other_id)}
+                assert set(calls) == {("task", api.other_id)}
                 state["revoked"] = True
                 assert await stream.closed(timeout=5.0)
             finally:
@@ -1171,7 +1171,7 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
 # --- Phase 8: the admin leg on an open stream, and its trace grain -----------
 #
 # Contract § 3a's SSE clause, in two halves. The **subscribe** is an ordinary
-# graded row read — `_snapshot` calls `accessible_project` — so it emits one
+# graded row read — `_snapshot` calls `accessible_task` — so it emits one
 # `admin_read` line and nothing special happens here. The **tail** owes one
 # `admin_stream_read` line per re-authorisation batch, which is the grain that
 # keeps an unbounded stream from becoming an unbounded log: a line per event
@@ -1183,7 +1183,7 @@ def test_sse_reauthorisation_resolves_through_the_same_legs_as_the_snapshot(
 
 
 def _admin_seed(engine: Engine, *, owner_id: str, admin_id: str) -> uuid.UUID:
-    """Seed a **private** project in one organisation and an admin in another.
+    """Seed a **private** task in one organisation and an admin in another.
 
     Private, and cross-organisation, on purpose: every other leg is closed, so
     a stream that opens at all opened on `is_admin` and nothing else.
@@ -1191,11 +1191,11 @@ def _admin_seed(engine: Engine, *, owner_id: str, admin_id: str) -> uuid.UUID:
     Args:
         engine: The session engine; writes here commit, because the
             application reads through its own connection.
-        owner_id: The project owner's subject, enrolled in organisation A.
+        owner_id: The task owner's subject, enrolled in organisation A.
         admin_id: The administrator's subject, enrolled in organisation B.
 
     Returns:
-        The project the administrator will stream.
+        The task the administrator will stream.
     """
     with seeded(engine) as conn:
         org_a = make_org(conn, name="Owner Org")
@@ -1208,17 +1208,17 @@ def _admin_seed(engine: Engine, *, owner_id: str, admin_id: str) -> uuid.UUID:
             display_name="Support",
             is_admin=True,
         )
-        return make_project(
+        return make_task(
             conn, owner_user_id=owner_id, org_id=org_a, visibility="private"
         )
 
 
-def test_an_administrator_stream_on_an_ownerless_project_survives_its_polls(
+def test_an_administrator_stream_on_an_ownerless_task_survives_its_polls(
     engine: Engine, tmp_path: Path
 ) -> None:
     """The re-check must reach the rows only the admin leg reaches (contract § 11).
 
-    A `runtime/orchestrate.py` project has no owner and no organisation, so an
+    A `runtime/agent.py` task has no owner and no organisation, so an
     administrator is the only caller who can read it at all — and the own-leg
     boolean the re-check selects beside its answer is **SQL NULL** on such a
     row, because every disjunct of it compares a NULL column. Read through
@@ -1240,10 +1240,10 @@ def test_an_administrator_stream_on_an_ownerless_project_survives_its_polls(
                     display_name="Support",
                     is_admin=True,
                 )
-                project_id = make_project(
+                task_id = make_task(
                     conn, owner_user_id=None, org_id=None, visibility="org"
                 )
-            stream = await api.open_stream(project_id, headers=api.other_headers)
+            stream = await api.open_stream(task_id, headers=api.other_headers)
             try:
                 await _live(stream)
                 await _live(stream)
@@ -1259,7 +1259,7 @@ def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation
     """One `admin_read` at subscribe, then one `admin_stream_read` per batch.
 
     The grain assertion is made against the re-authorisations themselves
-    rather than against a wall-clock count: `may_read_project` is wrapped to
+    rather than against a wall-clock count: `may_read_task` is wrapped to
     record every call the admin leg carried, and the number of
     `admin_stream_read` lines must equal it exactly. That is "one per
     re-authorisation batch" stated as an equality — a per-frame
@@ -1267,29 +1267,29 @@ def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation
 
     The subscribe line is deliberately *not* a fourth event name: it is a
     direct row read on the graded helper like any other, so it carries the
-    same `admin_read` shape and the same project id.
+    same `admin_read` shape and the same task id.
     """
 
     carried: list[str] = []
-    real = _access.may_read_project
+    real = _access.may_read_task
 
     def recording(
-        conn: Connection, *, project_id: uuid.UUID, user_id: str
+        conn: Connection, *, task_id: uuid.UUID, user_id: str
     ) -> _access.ReadCheck:
-        check = real(conn, project_id=project_id, user_id=user_id)
+        check = real(conn, task_id=task_id, user_id=user_id)
         if check.allowed and check.via_admin:
             carried.append(user_id)
         return check
 
-    monkeypatch.setattr(sse, "may_read_project", recording)
+    monkeypatch.setattr(sse, "may_read_task", recording)
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            project_id = _admin_seed(
+            task_id = _admin_seed(
                 engine, owner_id=api.owner_id, admin_id=api.other_id
             )
             with capture_logs() as captured:
-                stream = await api.open_stream(project_id, headers=api.other_headers)
+                stream = await api.open_stream(task_id, headers=api.other_headers)
                 try:
                     await _live(stream)
                     await _live(stream)
@@ -1305,15 +1305,15 @@ def test_sse_administrator_stream_traces_the_subscribe_and_every_reauthorisation
                     entry for entry in captured if entry.get("event") == "admin_read"
                 ]
 
-            # The private, cross-organisation project opened at all, which is
+            # The private, cross-organisation task opened at all, which is
             # the leg doing its job; and every re-check ran on the admin leg.
             assert batches
             assert set(batches) == {api.other_id}
             assert len(lines) == len(batches)
-            assert {entry["row_id"] for entry in lines} == {str(project_id)}
+            assert {entry["row_id"] for entry in lines} == {str(task_id)}
             assert {entry["user_id"] for entry in lines} == {api.other_id}
             assert [(entry["kind"], entry["row_id"]) for entry in subscribes] == [
-                ("project", str(project_id))
+                ("task", str(task_id))
             ]
 
     asyncio.run(exercise())
@@ -1325,12 +1325,12 @@ def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
     """Revocation 4, for real. Clearing `is_admin` ends an open admin stream.
 
     The last of contract § 5's four revocation events, and the one phase 6
-    could only pin structurally. The project is private and in another
+    could only pin structurally. The task is private and in another
     organisation, so the admin leg is the *only* thing holding the stream
     open — when the flag goes, there is nothing left to fall back to, and the
     tail's next re-authorisation ends the response.
 
-    The owner's own stream on the same project is untouched by the same write,
+    The owner's own stream on the same task is untouched by the same write,
     which is what makes this a statement about the leg rather than about the
     tail closing whenever anything is written.
 
@@ -1342,18 +1342,18 @@ def test_sse_stream_closes_when_the_administrators_flag_is_revoked(
 
     async def exercise() -> None:
         async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-            project_id = _admin_seed(
+            task_id = _admin_seed(
                 engine, owner_id=api.owner_id, admin_id=api.other_id
             )
-            owner_stream = await api.open_stream(project_id)
-            admin_stream = await api.open_stream(project_id, headers=api.other_headers)
+            owner_stream = await api.open_stream(task_id)
+            admin_stream = await api.open_stream(task_id, headers=api.other_headers)
             try:
                 await _live(owner_stream)
                 await _live(admin_stream)
                 with seeded(engine) as conn:
                     ops_set_admin(conn, user_id=api.other_id, is_admin=False)
                 tick_hub.publish(
-                    project_id, stage="acquire", note="After the revocation"
+                    task_id, stage="acquire", note="After the revocation"
                 )
                 closed, drained = await admin_stream.drain_until_closed(timeout=5.0)
                 assert closed

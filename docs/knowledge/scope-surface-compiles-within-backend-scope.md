@@ -39,8 +39,8 @@ scope directions.
 
 # Citations
 
-- `src/policy_atlas/orchestration_plan.py` (`_directive_delta` backend_scope pops)
-- `tests/test_orchestration_plan.py`
+- `src/policy_atlas/runtime/task_plan.py` (`_directive_delta` backend_scope pops)
+- `tests/runtime/test_task_plan.py`
   (`test_country_group_compile_drops_overton_block_for_academic_only_scope` + grey-lit twin)
 - [019 verification.md § Review findings](../tasks/019-folding-pass/verification.md)
   (adversarial lane, adopted MAJOR)

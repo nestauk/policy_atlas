@@ -11,8 +11,7 @@ from typing import Any, Literal, cast
 import pytest
 
 from policy_atlas.core import tracing
-from policy_atlas.evidence_base.extract.extract import KNOWN_PROFILE_IDS
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
+from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.runtime.planner import (
     OpenAIPlannerBackend,
     PlannerBackend,
@@ -26,6 +25,7 @@ from policy_atlas.runtime.planner_prompt import (
     PlanDraftWire,
     PlannerTurnWire,
 )
+from policy_atlas.runtime.task_plan import TaskPlan, compose
 from tests.helpers import fake_parse_client
 
 
@@ -33,15 +33,15 @@ def _turn(text: str, role: str = "user") -> dict[str, str]:
     return {"role": role, "text": text}
 
 
-def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
-    """Build an OrchestrationPlan from a stub draft's non-null fields.
+def _plan_from_draft(draft: PlanDraftWire) -> TaskPlan:
+    """Build an TaskPlan from a stub draft's non-null fields.
 
-    Unset draft fields fall back to OrchestrationPlan's own defaults (e.g.
+    Unset draft fields fall back to TaskPlan's own defaults (e.g.
     ``scoping_notes``); derived fields (``expected_artefact_shape``,
     ``time_band``) are always computed code-side by the model validator.
     """
     data = {key: value for key, value in draft.model_dump().items() if value is not None}
-    return OrchestrationPlan(**data)
+    return TaskPlan(**data)
 
 
 # --- Stub turn shapes -------------------------------------------------------
@@ -147,10 +147,10 @@ def test_stub_satisfies_protocol() -> None:
     assert isinstance(backend, StubPlannerBackend)
 
 
-# --- Stub draft round-trips into a valid OrchestrationPlan -----------------
+# --- Stub draft round-trips into a valid TaskPlan -----------------
 
 
-def test_stub_ready_draft_round_trips_into_orchestration_plan() -> None:
+def test_stub_ready_draft_round_trips_into_task_plan() -> None:
     backend = StubPlannerBackend()
     turns = [
         _turn("Do school meals improve attainment?"),
@@ -166,7 +166,7 @@ def test_stub_ready_draft_round_trips_into_orchestration_plan() -> None:
     assert plan.expected_artefact_shape
 
 
-def test_stub_landscape_draft_round_trips_into_orchestration_plan() -> None:
+def test_stub_landscape_draft_round_trips_into_task_plan() -> None:
     backend = StubPlannerBackend()
     turns = [
         _turn("Map the evidence base on school meals."),
@@ -181,7 +181,7 @@ def test_stub_landscape_draft_round_trips_into_orchestration_plan() -> None:
     assert plan.grouping_facets is None
 
 
-def test_planner_draft_with_select_at_standard_round_trips_into_orchestration_plan() -> None:
+def test_planner_draft_with_select_at_standard_round_trips_into_task_plan() -> None:
     """019 select-at-standard regrade: a planner draft may compose select at
     standard depth (without the findings chain) and still validate.
     """
@@ -207,7 +207,7 @@ def test_planner_draft_with_select_at_standard_round_trips_into_orchestration_pl
     assert "group" not in plan.components
 
 
-def test_planner_draft_extract_profiles_round_trips_into_orchestration_plan() -> None:
+def test_planner_draft_extract_profiles_round_trips_into_task_plan() -> None:
     draft = PlanDraftWire(
         title="Evidence review",
         question="Do school meals improve attainment?",

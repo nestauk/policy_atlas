@@ -69,7 +69,7 @@ describe("OidcAuthProvider splash gating", () => {
   });
 
   it("renders a manual sign-in retry — not the shell, not a redirect loop — when the OIDC layer errors", () => {
-    window.history.replaceState({}, "", "/projects/1?code=stale&state=stale&tab=runs#top");
+    window.history.replaceState({}, "", "/tasks/1?code=stale&state=stale&tab=runs#top");
     oidcState = {
       isLoading: false,
       isAuthenticated: false,
@@ -85,7 +85,7 @@ describe("OidcAuthProvider splash gating", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /sign in again/i }));
     expect(signinRedirect).toHaveBeenCalledOnce();
-    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe("/projects/1?tab=runs#top");
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe("/tasks/1?tab=runs#top");
   });
 
   it("signIn redirects without auto-stashing when called from AuthApi", async () => {

@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router";
 
-import { useLandscape, useProject } from "../api/queries";
+import { useLandscape, useTask } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -54,10 +54,10 @@ function ThemeRow({
  * Finding-facet groups (intervention, barrier, …) live on the Findings tab.
  */
 export function ThemesView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  useDocumentTitle(project.data?.name, "Themes");
-  const landscape = useLandscape(projectId);
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Themes");
+  const landscape = useLandscape(taskId);
 
   // `not_found` is the server's honest shape for "no landscape yet"
   // (screening hasn't run) — the expected empty state below, not a failure
@@ -115,7 +115,7 @@ export function ThemesView() {
                 description={theme.description}
                 to={
                   theme.theme_id
-                    ? `/projects/${projectId}/sources/all?theme=${theme.theme_id}`
+                    ? `/tasks/${taskId}/sources/all?theme=${theme.theme_id}`
                     : undefined
                 }
               />

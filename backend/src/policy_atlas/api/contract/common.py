@@ -30,7 +30,7 @@ def reject_explicit_nulls(model: BaseModel, *fields: str) -> None:
     and the request 500s on the constraint. A caller's malformed body should
     not be an internal error.
 
-    Contrast the fields deliberately **not** passed here. `portfolio_id: null`
+    Contrast the fields deliberately **not** passed here. `project_id: null`
     is contract § 6's i.6 (unassign), and `question: null` / `description:
     null` clear nullable columns. Null is a real instruction on those, so this
     guard is per-field and never blanket.

@@ -12,7 +12,7 @@ When a read model materialises row A and needs a companion payload from table
 B, it resolves B through **the reference recorded on A** (here:
 `synthesis_result.characterisation_run_id` / `grouping_run_id`, FK-backed to
 `(evidence_scope_id, run_id)`), never through "B's latest row for the
-project". A NULL reference means A never had that companion — return nothing,
+task". A NULL reference means A never had that companion — return nothing,
 don't substitute the newest B.
 
 Shipped instance: `repository.py::_characterisation_theme_refs` /

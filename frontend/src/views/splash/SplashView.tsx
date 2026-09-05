@@ -130,7 +130,7 @@ export function SplashView() {
             </li>
             <li>
               <a
-                href="https://www.nesta.org.uk/project/policy-atlas-harnessing-ai-to-improve-policy-design/"
+                href="https://www.nesta.org.uk/task/policy-atlas-harnessing-ai-to-improve-policy-design/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-aqua no-underline hover:underline"

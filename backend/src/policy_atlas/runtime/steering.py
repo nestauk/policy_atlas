@@ -1,4 +1,4 @@
-"""Deterministic steering primitives for orchestration-plan runs.
+"""Deterministic steering primitives for task-plan runs.
 
 This module owns the task-017 structural steering core: pause-boundary
 compilation, deterministic human-readable renders, bounded adjustment
@@ -20,45 +20,45 @@ from sqlalchemy import select as sa_select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.prompt_fields import scrub_nul
-from policy_atlas.core.schema import orchestration_plan, selection_result
-from policy_atlas.evidence_base.assess import appraise as appraise_module
-from policy_atlas.evidence_base.assess import screen as screen_module
-from policy_atlas.evidence_base.corpus import characterise as characterise_module
-from policy_atlas.evidence_base.corpus import select as select_module
-from policy_atlas.evidence_base.extract import extract as extract_module
-from policy_atlas.evidence_base.group.facet_values import (
+from policy_atlas.core.schema import selection_result, task_plan
+from policy_atlas.evidence_search.assess import appraise as appraise_module
+from policy_atlas.evidence_search.assess import screen as screen_module
+from policy_atlas.evidence_search.corpus import characterise as characterise_module
+from policy_atlas.evidence_search.corpus import select as select_module
+from policy_atlas.evidence_search.extract import extract as extract_module
+from policy_atlas.evidence_search.group.facet_values import (
     FacetDirectiveError,
     parse_grouping_directive,
 )
-from policy_atlas.evidence_base.sourcing.search_loop import (
+from policy_atlas.evidence_search.sourcing.search_loop import (
     SearchDirectiveError,
     parse_search_directive,
     validate_scope_filters,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import (
+from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     SynthesisDirectiveError,
     parse_synthesis_directive,
 )
-from policy_atlas.runtime.orchestration_plan import (
+from policy_atlas.runtime.agent_prompt import RouterCompileWire
+from policy_atlas.runtime.task_plan import (
     ANALYSIS_DEPTH_TABLE,
     EXTRACT_PROFILE_IDS,
     NAMED_PAIRINGS,
     AnalysisDepth,
     ComposedChain,
-    OrchestrationPlan,
     SearchEffort,
     SteeringMode,
+    TaskPlan,
     _enabled_components,
     compose,
     time_band_for,
 )
-from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire
 
 PauseBoundary = Literal["after_component", "before_component"]
 UnattendedAction = Literal["proceed_flag", "stop"]
 
 # Commit-layer components (task 024, 15c): their directive validates through
-# ``_validate_directive_delta`` but has NO OrchestrationPlan field to round-trip
+# ``_validate_directive_delta`` but has NO TaskPlan field to round-trip
 # through (appraise's rubric, characterise's themes/guidance, synthesise's
 # sections/boosts). A pending adjustment for one of these is recorded on the plan
 # version but reaches the component's run through the runner's PENDING OVERLAY,
@@ -160,7 +160,7 @@ def commit_layer_overlay(component: str, delta: dict[str, Any]) -> dict[str, Any
 SEARCH_REVIEW = "search_review"
 # Compatibility alias for callers compiled before the owner-ruled rename.
 SEARCH_EXCEPTION = SEARCH_REVIEW
-EVIDENCE_BASE_COVERAGE = "evidence_base_coverage"
+EVIDENCE_SEARCH_COVERAGE = "evidence_search_coverage"
 DEEPENING_SELECTION = "deepening_selection"
 FINDING_GROUPS = "finding_groups"
 SYNTHESIS_SHAPE = "synthesis_shape"
@@ -177,28 +177,28 @@ LatticePolicy = Literal["always", "fired", "off"]
 _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
     "frequent": {
         SEARCH_REVIEW: "always",
-        EVIDENCE_BASE_COVERAGE: "always",
+        EVIDENCE_SEARCH_COVERAGE: "always",
         DEEPENING_SELECTION: "always",
         FINDING_GROUPS: "always",
         SYNTHESIS_SHAPE: "always",
     },
     "moderate": {
         SEARCH_REVIEW: "always",
-        EVIDENCE_BASE_COVERAGE: "fired",
+        EVIDENCE_SEARCH_COVERAGE: "fired",
         DEEPENING_SELECTION: "fired",
         FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "always",
     },
     "minimal": {
         SEARCH_REVIEW: "fired",
-        EVIDENCE_BASE_COVERAGE: "fired",
+        EVIDENCE_SEARCH_COVERAGE: "fired",
         DEEPENING_SELECTION: "fired",
         FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "fired",
     },
     "unattended": {
         SEARCH_REVIEW: "off",
-        EVIDENCE_BASE_COVERAGE: "off",
+        EVIDENCE_SEARCH_COVERAGE: "off",
         DEEPENING_SELECTION: "off",
         FINDING_GROUPS: "off",
         SYNTHESIS_SHAPE: "off",
@@ -223,7 +223,7 @@ class PausePoint:
 # are after-boundaries. Defined after PausePoint (it constructs them).
 LATTICE_POINTS: dict[str, PausePoint] = {
     SEARCH_REVIEW: PausePoint("after_component", "acquire"),
-    EVIDENCE_BASE_COVERAGE: PausePoint("before_component", "select"),
+    EVIDENCE_SEARCH_COVERAGE: PausePoint("before_component", "select"),
     DEEPENING_SELECTION: PausePoint("after_component", "select"),
     FINDING_GROUPS: PausePoint("after_component", "group"),
     SYNTHESIS_SHAPE: PausePoint("before_component", "synthesise"),
@@ -238,7 +238,7 @@ def lattice_name_for(point: PausePoint) -> str | None:
         point: A concrete component boundary.
 
     Returns:
-        The steer-point name (``search_exception``/``evidence_base_coverage``/
+        The steer-point name (``search_exception``/``evidence_search_coverage``/
         ``deepening_selection``/``synthesis_shape``) or ``None`` when the
         boundary is not a lattice point.
     """
@@ -277,9 +277,9 @@ class Adjust:
     directive_deltas: dict[str, dict[str, Any]] = field(default_factory=dict)
     new_mode: str | None = None
     nudge: str | None = None
-    # Authorship of the delta's CONTENT (steering discipline iv): "orchestrator"
+    # Authorship of the delta's CONTENT (steering discipline iv): "agent"
     # when the user picked a watch-authored option — the user decided, the
-    # orchestrator authored. None ≡ user-authored.
+    # agent authored. None ≡ user-authored.
     authored_by: str | None = None
 
 
@@ -328,7 +328,7 @@ class FreeText:
 
     Returned by a pause-capable IO layer (the CLI, Task 17) when the user typed
     prose rather than picking a canonical option. The runner compiles it through
-    the orchestrator ``route`` backend into a deterministically-validated fan-out
+    the agent ``route`` backend into a deterministically-validated fan-out
     of bounded directive deltas, renders that fan-out for confirmation, and
     applies only what the user confirms. ``NullIO`` never returns it.
 
@@ -425,7 +425,7 @@ def pause_points(mode: SteeringMode, chain: ComposedChain) -> set[PausePoint]:
     P2/P3/P4; Minimal: none — all four are fired-only). Unattended is empty.
 
     Args:
-        mode: Steering mode from the approved orchestration plan.
+        mode: Steering mode from the approved task plan.
         chain: Deterministically composed component chain.
 
     Returns:
@@ -449,7 +449,7 @@ def render_check_in(step_outcome_payload: dict[str, Any]) -> str:
     """Render one runner check-in payload deterministically.
 
     Args:
-        step_outcome_payload: Payload emitted through ``OrchestratorIO.check_in``.
+        step_outcome_payload: Payload emitted through ``AgentIO.check_in``.
 
     Returns:
         Human-readable, stable check-in text.
@@ -519,23 +519,6 @@ def render_collation(flagged_events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def resolve_unattended(plan: OrchestrationPlan, point: str) -> str:
-    """Resolve an Unattended-mode steer point from visible plan defaults.
-
-    Args:
-        plan: Approved orchestration plan.
-        point: Steer-point name to resolve.
-
-    Returns:
-        ``"proceed_flag"`` or ``"stop"``. Missing defaults proceed with a
-        visible unconfigured-default flag owned by the caller.
-    """
-    for rule in plan.steer_point_defaults:
-        if rule.steer_point == point:
-            return rule.action
-    return "proceed_flag"
-
-
 # Deepening-selection emphasis multipliers (plan-pinned, contract decision 6
 # rev 2.5): weight_emphasis values MULTIPLY the default signal weights — select
 # multiplies the defaults by these values and sums unnormalised (select.py:439,
@@ -567,9 +550,9 @@ _OPTION_PLACEHOLDERS: frozenset[str] = frozenset(
 def steer_point_triggers(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     selection_run_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
 ) -> list[dict[str, Any]]:
     """Compute fired deepening-selection triggers from a persisted selection.
 
@@ -581,9 +564,9 @@ def steer_point_triggers(
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         selection_run_id: Run id whose ``selection_result`` carries the rationale.
-        plan: Approved orchestration plan (nomination source, read-only).
+        plan: Approved task plan (nomination source, read-only).
 
     Returns:
         Fired trigger dicts, each ``{"trigger": str, "detail": Any}``. Empty when
@@ -596,7 +579,7 @@ def steer_point_triggers(
     del plan
     row = conn.execute(
         sa_select(selection_result.c.flags)
-        .where(selection_result.c.project_id == project_id)
+        .where(selection_result.c.task_id == task_id)
         .where(selection_result.c.run_id == selection_run_id)
     ).first()
     if row is None:
@@ -622,7 +605,7 @@ def steer_point_triggers(
 
 def build_steer_point_options(
     *,
-    plan: OrchestrationPlan | None,
+    plan: TaskPlan | None,
     point: str,
 ) -> list[dict[str, Any]]:
     """Return the canonical floor options for a lattice point, in intent vocabulary.
@@ -631,17 +614,17 @@ def build_steer_point_options(
     description, a ``delta`` template that compiles through an EXISTING grammar
     (no new keys), and ``requires_user_input``. The per-point set is the closed
     **deterministic floor** the watch/router build on and ``steer_point_defaults``
-    rules anchor (steerability-refinement "Orchestrator-authored options"). A
+    rules anchor (steerability-refinement "Agent-authored options"). A
     free-text intent matching none of them is answered with
     ``refuse_inexpressible`` and recorded as a seam, never approximated.
 
     Args:
-        plan: Current orchestration plan (source of the current select budget), or
+        plan: Current task plan (source of the current select budget), or
             ``None`` when only the option vocabulary is needed (plan-validation
             time): P3's budget-adjust template then falls back to
             ``DEFAULT_SELECTION_BUDGET`` — the ids and grammar are plan-independent.
         point: Lattice point name — one of ``search_exception``,
-            ``evidence_base_coverage``, ``deepening_selection``,
+            ``evidence_search_coverage``, ``deepening_selection``,
             ``synthesis_shape``.
 
     Returns:
@@ -652,7 +635,7 @@ def build_steer_point_options(
     """
     if point == SEARCH_REVIEW:
         return _p1_options()
-    if point == EVIDENCE_BASE_COVERAGE:
+    if point == EVIDENCE_SEARCH_COVERAGE:
         return _p2_options()
     if point == DEEPENING_SELECTION:
         return _p3_options(plan)
@@ -756,7 +739,7 @@ def _p1_options() -> list[dict[str, Any]]:
 
 
 def _p2_options() -> list[dict[str, Any]]:
-    """P2 evidence_base_coverage floor (before select).
+    """P2 evidence_search_coverage floor (before select).
 
     ``search_more`` is ADDITIVE (segment re-entry back to acquire); the criteria
     re-screen and re-characterise are REPLACEMENT re-runs (contract decision 7):
@@ -836,7 +819,7 @@ def _p2_options() -> list[dict[str, Any]]:
     ]
 
 
-def _p3_options(plan: OrchestrationPlan | None) -> list[dict[str, Any]]:
+def _p3_options(plan: TaskPlan | None) -> list[dict[str, Any]]:
     """P3 reading-list floor (after select)."""
     current_budget = (
         ANALYSIS_DEPTH_TABLE[plan.analysis_depth]["selection_budget"] if plan is not None else None
@@ -999,7 +982,7 @@ def refuse_inexpressible(intent_text: str) -> str:
 
 # --- The router fan-out (task 024, decision 3) -----------------------------
 #
-# A user's free-text utterance at a pause is compiled by the orchestrator
+# A user's free-text utterance at a pause is compiled by the agent
 # ``route`` backend into a fan-out of per-intent fragments. Every fragment the
 # model claims compiles is RE-VALIDATED here, author-blind, through the SAME
 # fail-closed grammars a canonical option choice takes (steering discipline 3):
@@ -1584,19 +1567,19 @@ def validate_steer_point_default(
 def apply_adjustment(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     plan_row: Any,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     adjustment: Adjust,
     completed_components: set[str],
-) -> tuple[OrchestrationPlan, uuid.UUID, int]:
+) -> tuple[TaskPlan, uuid.UUID, int]:
     """Validate and persist a bounded steering adjustment as a new plan row.
 
     Args:
         conn: Open transaction used for the short plan-version write.
-        project_id: Project owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan payload.
+        task_id: Task owning the plan lineage.
+        plan_row: Current persisted task-plan row.
+        plan: Current validated task plan payload.
         adjustment: Requested steering adjustment.
         completed_components: Components whose boundary has already passed.
 
@@ -1625,7 +1608,7 @@ def apply_adjustment(
             _apply_component_delta_to_payload(payload, component=component, delta=delta)
         payload["expected_artefact_shape"] = ""
         payload["time_band"] = ""
-        amended = OrchestrationPlan.model_validate(payload)
+        amended = TaskPlan.model_validate(payload)
     except (ValidationError, ValueError, TypeError) as exc:
         raise SteeringAdjustmentError(str(exc)) from exc
 
@@ -1639,7 +1622,7 @@ def apply_adjustment(
 
     new_plan_id, new_version = _persist_new_plan_version(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         plan_row=plan_row,
         payload=amended.model_dump(mode="json"),
     )
@@ -1649,7 +1632,7 @@ def apply_adjustment(
 def _persist_new_plan_version(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     plan_row: Any,
     payload: dict[str, Any],
 ) -> tuple[uuid.UUID, int]:
@@ -1657,8 +1640,8 @@ def _persist_new_plan_version(
 
     Args:
         conn: Open transaction for the version-row write.
-        project_id: Project owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
+        task_id: Task owning the plan lineage.
+        plan_row: Current persisted task-plan row.
         payload: JSON payload for the new approved version row.
 
     Returns:
@@ -1680,15 +1663,15 @@ def _persist_new_plan_version(
     new_version = prior_version + 1
     now = datetime.now(UTC)
     conn.execute(
-        orchestration_plan.update()
-        .where(orchestration_plan.c.plan_id == prior_plan_id)
-        .where(orchestration_plan.c.project_id == project_id)
+        task_plan.update()
+        .where(task_plan.c.plan_id == prior_plan_id)
+        .where(task_plan.c.task_id == task_id)
         .values(status="superseded")
     )
     conn.execute(
-        orchestration_plan.insert().values(
+        task_plan.insert().values(
             plan_id=new_plan_id,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=_plan_row_value(plan_row, "conversation_id"),
             evidence_scope_id=evidence_scope_id,
             version=new_version,
@@ -1748,9 +1731,9 @@ def _validate_replacement_directive(component: str, directive: dict[str, Any]) -
 def apply_replacement_rerun(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     plan_row: Any,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     component: str,
     directive: dict[str, Any],
 ) -> tuple[uuid.UUID, int]:
@@ -1766,16 +1749,16 @@ def apply_replacement_rerun(
 
     The fine directive (select ``weight_emphasis``/``budget``, characterise
     ``themes``/``guidance``, group ``granularity``/``guidance``/``facets``) is a
-    **commit-layer** directive the task-2 ``OrchestrationPlan`` model deliberately
+    **commit-layer** directive the task-2 ``TaskPlan`` model deliberately
     does not carry: the runner applies it to the scope context and it is recorded
     faithfully in the re-run's own result provenance — never smuggled into the
     plan payload, which therefore carries forward unchanged.
 
     Args:
         conn: Open transaction for the version-row write.
-        project_id: Project owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan (carried forward unchanged).
+        task_id: Task owning the plan lineage.
+        plan_row: Current persisted task-plan row.
+        plan: Current validated task plan (carried forward unchanged).
         component: The re-run component — ``select``/``characterise``/``group``.
         directive: The merged fine directive, validated fail-closed.
 
@@ -1790,7 +1773,7 @@ def apply_replacement_rerun(
     _validate_replacement_directive(component, directive)
     return _persist_new_plan_version(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         plan_row=plan_row,
         payload=plan.model_dump(mode="json"),
     )
@@ -1799,9 +1782,9 @@ def apply_replacement_rerun(
 def apply_segment_reentry(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     plan_row: Any,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     segment_start: str,
     directive_deltas: dict[str, dict[str, Any]],
 ) -> tuple[uuid.UUID, int]:
@@ -1820,9 +1803,9 @@ def apply_segment_reentry(
 
     Args:
         conn: Open transaction for the version-row write.
-        project_id: Project owning the plan lineage.
-        plan_row: Current persisted orchestration-plan row.
-        plan: Current validated orchestration plan (carried forward unchanged).
+        task_id: Task owning the plan lineage.
+        plan_row: Current persisted task-plan row.
+        plan: Current validated task plan (carried forward unchanged).
         segment_start: The segment start component; must be ``"acquire"``.
         directive_deltas: The amendment, keyed by component.
 
@@ -1843,7 +1826,7 @@ def apply_segment_reentry(
         _validate_directive_delta(component, delta, backend_scope=plan.backend_scope)
     return _persist_new_plan_version(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         plan_row=plan_row,
         payload=plan.model_dump(mode="json"),
     )
@@ -1852,9 +1835,9 @@ def apply_segment_reentry(
 def apply_reselect(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     plan_row: Any,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     select_directive: dict[str, Any],
 ) -> tuple[uuid.UUID, int]:
     """Thin alias for ``apply_replacement_rerun`` at the ``select`` component.
@@ -1864,7 +1847,7 @@ def apply_reselect(
     """
     return apply_replacement_rerun(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         plan_row=plan_row,
         plan=plan,
         component="select",
@@ -2002,7 +1985,7 @@ def _validate_directive_delta(
         return
     if component == "synthesise":
         # P4 synthesis-shape edits (sections / retrieval boosts) are a
-        # commit-layer directive with no OrchestrationPlan field (the appraise /
+        # commit-layer directive with no TaskPlan field (the appraise /
         # characterise precedent): validated through the synthesis grammar, and
         # exempt from the plan round-trip below.
         _require_keys(component, delta, {"synthesis"})
@@ -2065,20 +2048,20 @@ def _apply_component_delta_to_payload(
             payload["grouping_facets"] = facets
     elif component == "appraise":
         # D1's appraisal rubric override is a commit-layer directive with no
-        # OrchestrationPlan field (apply_reselect's fine select directive is
+        # TaskPlan field (apply_reselect's fine select directive is
         # the same precedent, documented on its docstring): there is nothing
         # to write into the plan payload, so the amended payload carries
         # appraisal forward unchanged, same as an untouched component.
         pass
     elif component == "characterise":
         # B5/D9's characterise directive (themes bound + guidance) is a
-        # commit-layer directive with no OrchestrationPlan field (same
+        # commit-layer directive with no TaskPlan field (same
         # precedent as appraise): nothing to write into the plan payload;
         # characterise carries forward unchanged.
         pass
     elif component == "synthesise":
         # P4's synthesis directive (sections / retrieval boosts) is a
-        # commit-layer directive with no OrchestrationPlan field (same
+        # commit-layer directive with no TaskPlan field (same
         # precedent as characterise): nothing to write into the plan payload.
         pass
 
@@ -2218,7 +2201,7 @@ def _validate_delta_round_trip(
     for component, requested_delta in directive_deltas.items():
         # D1/B5/D9: appraise's appraisal-rubric delta and characterise's
         # themes/guidance delta are commit-layer directives with no
-        # OrchestrationPlan field by design (same exemption as
+        # TaskPlan field by design (same exemption as
         # apply_reselect's fine select directive, which never re-enters this
         # generic round-trip path at all) — there is no plan field for either
         # to round-trip through, so both are exempted rather than failed closed.

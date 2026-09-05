@@ -1,21 +1,22 @@
 import type { components } from "../api/gen/types";
+import { TASK } from "../lib/vocabulary";
 
-export const MOCK_PROJECT_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
+export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
 export const MOCK_CHECK_IN_ID = "4c1acbe7-c4a1-4e0b-8d5a-bb25ea2ef634";
 export const MOCK_PLAN_ID = "80000000-0000-4000-8000-000000000001";
 export const MOCK_PLANNING_CONVERSATION_ID = "50000000-0000-4000-8000-000000000001";
-export const MOCK_PORTFOLIO_ID = "60000000-0000-4000-8000-000000000001";
-export const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
+export const MOCK_PROJECT_ID = "60000000-0000-4000-8000-000000000001";
+const MOCK_ORGANISATION_ID = "90000000-0000-4000-8000-000000000001";
 
 const now = "2026-07-21T09:30:00Z";
 
-// The mock project starts with NO run (`latest_run: null`): the 027 journey
+// The mock task starts with NO run (`latest_run: null`): the 027 journey
 // begins at the plan pane, not mid-analysis. `mock/api.ts` mutates
 // `latest_run` in place once a run actually starts, so every read of this
 // object stays consistent with the scripted run state.
-export const mockProject: components["schemas"]["ProjectOut"] = {
-  project_id: MOCK_PROJECT_ID,
+export const mockTask: components["schemas"]["TaskOut"] = {
+  task_id: MOCK_TASK_ID,
   name: "Healthier childhoods in Tower Hamlets",
   question: "Which local policy approaches reduce childhood obesity for primary-school children, and under what conditions?",
   status: "active",
@@ -25,7 +26,7 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   latest_run: null,
   // Task 033 tenancy. The mock signs in as the row's owner, so `is_owner` is
   // true and every affordance stays live; the org journeys the switcher needs
-  // arrive with the mock's `/me` and portfolio routes.
+  // arrive with the mock's `/me` and project routes.
   visibility: "org",
   is_owner: true,
   owner_display: "Ada Lovelace",
@@ -33,18 +34,18 @@ export const mockProject: components["schemas"]["ProjectOut"] = {
   // full grade — mock mode signs in as the owner.
   is_public: false,
   access: "full",
-  // Assigned to `mockPortfolio` below so `GET /projects?portfolio_id=` has a
+  // Assigned to `mockProject` below so `GET /tasks?project_id=` has a
   // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
-  portfolio_ids: [MOCK_PORTFOLIO_ID],
+  project_ids: [MOCK_PROJECT_ID],
 };
 
-/** Task 033 phase 10a: the one portfolio the mock serves. `task_count`
+/** Task 033 phase 10a: the one project the mock serves. `task_count`
  *  mirrors the real read model's own derivation (never cached on the row) —
- *  it counts `mockProject`, the fixture's only member. */
-export const mockPortfolio: components["schemas"]["PortfolioOut"] = {
-  portfolio_id: MOCK_PORTFOLIO_ID,
+ *  it counts `mockTask`, the fixture's only member. */
+export const mockProject: components["schemas"]["ProjectOut"] = {
+  project_id: MOCK_PROJECT_ID,
   name: "Child health, Tower Hamlets",
-  description: "Tasks assessing childhood health policy levers for the borough.",
+  description: `${TASK.many} assessing childhood health policy levers for the borough.`,
   created_at: "2026-07-15T09:00:00Z",
   task_count: 1,
   visibility: "org",
@@ -112,7 +113,7 @@ export const mockEvidence: components["schemas"]["EvidenceItemOut"][] = [
   { source_id: "10000000-0000-4000-8000-000000000005", title: "School meals and child weight outcomes", year: 2021, venue: "The Lancet Child & Adolescent Health", origin: "OpenAlex", status: "selected", evidence_type: "Systematic review", screen_status: "relevant", screen_confidence: 0.88, screen_reason: "Directly evaluates school-meal policies against child weight outcomes.", classification_reason: "Explicit systematic search and synthesis across 42 trials.", cited: false, read_in_full: false },
   { source_id: "10000000-0000-4000-8000-000000000006", title: "Neighbourhood food access and family choices", year: 2020, venue: "Health & Place", origin: "OpenAlex", status: "read_in_full", evidence_type: "Qualitative study", screen_status: "relevant", screen_confidence: 0.81, screen_reason: "Family food-choice mechanisms around primary schools are in scope.", cited: false, read_in_full: true },
   { source_id: "10000000-0000-4000-8000-000000000007", title: "Active travel incentives: implementation findings", year: 2024, venue: "Local Government Studies", origin: "OpenAlex", status: "findings_extracted", evidence_type: "Mixed methods", screen_status: "relevant", screen_confidence: 0.86, screen_reason: "Implementation evidence for an in-scope active-travel lever.", cited: false, read_in_full: true },
-  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the project owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true },
+  { source_id: "10000000-0000-4000-8000-000000000008", title: "Making healthy choices easier near schools", year: 2023, venue: "Nesta", origin: "Uploaded", status: "cited", evidence_type: "Policy analysis", appraisal_tier: "Moderate", screen_status: "relevant", screen_confidence: 0.95, screen_reason: "Uploaded by the task owner; directly addresses the question.", classification_reason: "Argument-led policy analysis rather than primary data collection.", cited: true, read_in_full: true },
   { source_id: "10000000-0000-4000-8000-000000000009", title: "Children's food environment survey", year: null, venue: null, origin: "Uploaded", status: "unavailable", status_reason: "Full text could not be obtained", screen_status: "relevant", screen_confidence: 0.79, screen_reason: "Survey coverage of children's food environments matches the scope.", cited: false, read_in_full: false },
 ];
 
@@ -279,7 +280,7 @@ export const mockCheckIn: components["schemas"]["CheckInOut"] = {
 export const mockArtefact: components["schemas"]["ArtefactOut"] = {
   artefact_id: "00000000-0000-4000-8000-00000000a001",
   title: "Policy options for healthier childhoods",
-  question: mockProject.question ?? "",
+  question: mockTask.question ?? "",
   coverage_snapshot: { source_count: 46, included: 46, screened_out: 82, study_types: { review: 20, evaluation: 14, analysis: 12 }, year_range: [2019, 2024] },
   sections: [
     {
@@ -383,7 +384,7 @@ export const MOCK_CHAT_CLAIM_TEXT = "Universal breakfast provision supported mor
 export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
 
 /**
- * A ready plan draft (contract 027 F.2 fixture item 1b): the mock project
+ * A ready plan draft (contract 027 F.2 fixture item 1b): the mock task
  * represents a resumed session — the planning conversation already
  * happened, and its transcript persisted (`seedPlanningTurns`), so the
  * plan pane renders ready immediately. Demonstrates `time_band`,
@@ -391,7 +392,7 @@ export const MOCK_CHAT_PROGRESS_LABEL = "Searching the evidence…";
  */
 export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   title: "Healthier childhoods in Tower Hamlets",
-  question: mockProject.question ?? null,
+  question: mockTask.question ?? null,
   scoping_notes: ["Primary-school children", "Local policy levers"],
   screening_criteria: ["UK or comparable-context studies", "Published 2019 or later"],
   backend_scope: "both",
@@ -419,12 +420,12 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
     { stage: "classify", label: "Classifying evidence", blurb: "Labelling evidence types and settings." },
     { stage: "appraise", label: "Appraising quality", blurb: "Reviewing the strength of selected evidence." },
     { stage: "characterise", label: "Characterising findings", blurb: "Extracting implementation conditions." },
-    { stage: "synthesise", label: "Synthesising the evidence", blurb: "Preparing a decision-ready evidence base." },
+    { stage: "synthesise", label: "Writing the report", blurb: "Preparing a decision-ready evidence base." },
   ],
   ready: true,
 };
 
-export const MOCK_PLANNING_TURN_IDS = {
+const MOCK_PLANNING_TURN_IDS = {
   first: "60000000-0000-4000-8000-000000000001",
   second: "60000000-0000-4000-8000-000000000002",
   failed: "60000000-0000-4000-8000-000000000003",

@@ -9,13 +9,13 @@ vi.mock("../api/queries", () => ({
   useFunnel: vi.fn(),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function renderLayout(path = `/projects/${PROJECT_ID}/sources`) {
+function renderLayout(path = `/tasks/${TASK_ID}/sources`) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/projects/:projectId/sources" element={<SourcesLayout />}>
+        <Route path="/tasks/:taskId/sources" element={<SourcesLayout />}>
           <Route index element={<div>themes child</div>} />
           <Route path="landscape" element={<div>landscape child</div>} />
           <Route path="all" element={<div>all child</div>} />

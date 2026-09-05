@@ -1,7 +1,13 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–037; 030–032 change no env; 034 changes no env; 036 adds the
+stands (tasks 001–038; 038 renames the catalog (`project`→`task`,
+`portfolio`→`project`, `orchestration_plan`→`plan`) and the API paths
+(`/api/v1/tasks`, `/api/v1/projects`) — run `alembic upgrade head` against
+the dev DB after pulling (reversible: ADR 0036 § Rollback), and rename any
+local `POLICY_ATLAS_ORCHESTRATOR_*` override to `POLICY_ATLAS_AGENT_*` (a
+stale one is logged at boot and ignored); the CLI is
+`python -m policy_atlas.runtime.agent`; 030–032 change no env; 034 changes no env; 036 adds the
 `waitlist_entry` table and 037 adds `project.is_public` — both additive
 migrations, so run `alembic upgrade head` against the dev DB after pulling;
 neither adds env vars; 033 adds the `ops` dependency

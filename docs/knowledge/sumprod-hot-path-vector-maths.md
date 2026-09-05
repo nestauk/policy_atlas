@@ -37,5 +37,5 @@ and preserve any zero-norm guard when refactoring.
 
 # Citations
 
-- [src/policy_atlas/evidence_base/synthesis/synthesis_tools.py](../../src/policy_atlas/evidence_base/synthesis/synthesis_tools.py) — `ChunkRetriever` (`__init__` norm precompute; `search`)
+- [src/policy_atlas/evidence_search/synthesis/synthesis_tools.py](../../src/policy_atlas/evidence_search/synthesis/synthesis_tools.py) — `ChunkRetriever` (`__init__` norm precompute; `search`)
 - docs/tasks/023-codebase-health/review-findings.md § Lane 7 #7 (the finding + precision analysis)

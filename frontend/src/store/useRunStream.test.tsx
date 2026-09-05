@@ -31,7 +31,7 @@ vi.mock("../auth", () => ({
   useAuth: () => authApi,
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 describe("RunStreamProvider / useRunStream", () => {
   beforeEach(() => {
@@ -45,10 +45,10 @@ describe("RunStreamProvider / useRunStream", () => {
 
   it("shares one connection's state with consumers", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const { result } = renderHook(() => useRunStream(PROJECT_ID), {
+    const { result } = renderHook(() => useRunStream(TASK_ID), {
       wrapper: ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>
-          <RunStreamProvider projectId={PROJECT_ID}>{children}</RunStreamProvider>
+          <RunStreamProvider taskId={TASK_ID}>{children}</RunStreamProvider>
         </QueryClientProvider>
       ),
     });
@@ -61,10 +61,10 @@ describe("RunStreamProvider / useRunStream", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const invalidateQueries = vi.spyOn(client, "invalidateQueries").mockResolvedValue(undefined);
 
-    renderHook(() => useRunStream(PROJECT_ID), {
+    renderHook(() => useRunStream(TASK_ID), {
       wrapper: ({ children }: { children: ReactNode }) => (
         <QueryClientProvider client={client}>
-          <RunStreamProvider projectId={PROJECT_ID}>{children}</RunStreamProvider>
+          <RunStreamProvider taskId={TASK_ID}>{children}</RunStreamProvider>
         </QueryClientProvider>
       ),
     });
@@ -106,13 +106,13 @@ describe("RunStreamProvider / useRunStream", () => {
   });
 
   it("throws when used outside the provider", () => {
-    expect(() => renderHook(() => useRunStream(PROJECT_ID))).toThrow(/RunStreamProvider/);
+    expect(() => renderHook(() => useRunStream(TASK_ID))).toThrow(/RunStreamProvider/);
   });
 
   it("closes the connection on unmount", () => {
     const { unmount } = render(
       <QueryClientProvider client={new QueryClient()}>
-        <RunStreamProvider projectId={PROJECT_ID}>
+        <RunStreamProvider taskId={TASK_ID}>
           <div />
         </RunStreamProvider>
       </QueryClientProvider>,

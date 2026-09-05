@@ -1,7 +1,9 @@
+import { PROJECT, TASK } from "./vocabulary";
+
 /** Machine-readable conflict conditions surfaced by the API (the real
  *  `ApiConflict` codes raised by the backend — see `runs.py`,
  *  `planning.py`, `check_ins.py`). */
-export type ConflictCode =
+type ConflictCode =
   | "run_active"
   | "capacity"
   | "planning_turn_in_progress"
@@ -16,20 +18,20 @@ export type ConflictCode =
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
 export const conflictSentences: Record<ConflictCode, string> = {
-  run_active: "A run is already active for this project. Refresh to see its current progress.",
+  run_active: `A run is already active for this ${TASK.lower}. Refresh to see its current progress.`,
   capacity: "This run cannot start yet because the workspace is at capacity. Try again shortly.",
   planning_turn_in_progress: "That planning turn is still being prepared. Refresh to see the completed turn.",
   stale_turn: "That planning turn is no longer the latest one. Refresh the planning conversation and try again.",
   already_answered: "This check-in has already been answered. Refresh to see the recorded decision.",
   plan_stale:
     "The plan predates your latest planning message. Review the updated plan, then start.",
-  no_completed_run: "This project needs a completed run before you can chat about the evidence.",
+  no_completed_run: `This ${TASK.lower} needs a completed run before you can chat about the evidence.`,
   chat_turn_in_progress: "A chat turn is already running. Refresh to see it finish.",
   chat_capacity: "Chat is at capacity right now. Try again shortly.",
   // Task 033 i.5, contract § 11 (lead-owned, binding): a Task's own
   // visibility can't diverge from the Project it belongs to.
   visibility_conflict:
-    "This Task is in a Project. Change the Project's visibility, or leave the Task out of the Project.",
+    `This ${TASK.one} is in a ${PROJECT.one}. Change the ${PROJECT.one}'s visibility, or leave the ${TASK.one} out of the ${PROJECT.one}.`,
 };
 
 /**

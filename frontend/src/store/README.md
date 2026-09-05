@@ -14,7 +14,7 @@ no framework, a plain reducer:
   `tick` frames are the one exception — no `sequence`, they only update the
   transient `liveness` slice.
 - `useRunStream.tsx` — `RunStreamProvider` owns one SSE connection per open
-  task (mounted from `AppShell`); `useRunStream(projectId)` reads that
+  task (mounted from `AppShell`); `useRunStream(taskId)` reads that
   shared reducer state. Read-model invalidations on `stage.completed` /
   `run.status` are trailing-debounced so a cold full-history replay does
   not storm refetches. Leaf tabs (Plan / Results / Sources) must not open

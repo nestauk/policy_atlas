@@ -803,7 +803,7 @@
               {
                 "enum": [
                   "user",
-                  "orchestrator",
+                  "agent",
                   "standing_default"
                 ],
                 "type": "string"
@@ -919,7 +919,7 @@
         "type": "object"
       },
       "CitationOut": {
-        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's project source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    grounding_rationale: The grounding judge's recorded reason for the\n        tier, when one was persisted with the verdict.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.",
+        "description": "One citation attached to a citation-type claim.\n\nArgs:\n    citation_id: Durable citation identity \u2014 the key for the\n        chunk-context endpoint (`GET .../citations/{citation_id}/context`).\n    n: Reference number (matches a `ReferenceOut.n`).\n    source_id: The cited document's task source identity, when the\n        citation resolves to one (joins to the sources/dossier surface).\n    source_title: Cited source's title (envelope metadata).\n    quote: The quoted span from the source.\n    grounding_tier: Optional grounding-judge tier label.\n    grounding_rationale: The grounding judge's recorded reason for the\n        tier, when one was persisted with the verdict.\n    appraisal_label: Optional appraisal label.\n    evidence_type: The cited document's classified evidence type \u2014 the\n        input the appraisal rubric scores from.",
         "properties": {
           "appraisal_label": {
             "anyOf": [
@@ -1141,7 +1141,7 @@
       },
       "ConversationCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for creating a follow-up chat conversation.\n\nArgs:\n    entry_artefact_id: Optional project-local artefact used as entry context.",
+        "description": "Inbound body for creating a follow-up chat conversation.\n\nArgs:\n    entry_artefact_id: Optional task-local artefact used as entry context.",
         "properties": {
           "entry_artefact_id": {
             "anyOf": [
@@ -1226,11 +1226,6 @@
               }
             ]
           },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          },
           "status": {
             "enum": [
               "active",
@@ -1240,6 +1235,11 @@
             "title": "Status",
             "type": "string"
           },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1247,7 +1247,7 @@
         },
         "required": [
           "id",
-          "project_id",
+          "task_id",
           "kind",
           "title",
           "status",
@@ -1261,7 +1261,7 @@
         "type": "object"
       },
       "ConversationOut": {
-        "description": "Durable public projection of one conversation.\n\nArgs:\n    id: Conversation identity.\n    project_id: Owning project identity.\n    kind: Whether this is a planning conversation or a follow-up chat.\n    title: User-visible conversation title.\n    status: Current conversation lifecycle status.\n    entry_artefact_id: Optional project-local entry-context artefact.\n    created_at: When the conversation was created.\n    closed_at: When it closed, if applicable.\n    archived_at: When it was archived, if applicable.",
+        "description": "Durable public projection of one conversation.\n\nArgs:\n    id: Conversation identity.\n    task_id: Owning task identity.\n    kind: Whether this is a planning conversation or a follow-up chat.\n    title: User-visible conversation title.\n    status: Current conversation lifecycle status.\n    entry_artefact_id: Optional task-local entry-context artefact.\n    created_at: When the conversation was created.\n    closed_at: When it closed, if applicable.\n    archived_at: When it was archived, if applicable.",
         "properties": {
           "archived_at": {
             "anyOf": [
@@ -1317,11 +1317,6 @@
             "title": "Kind",
             "type": "string"
           },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          },
           "status": {
             "enum": [
               "active",
@@ -1331,6 +1326,11 @@
             "title": "Status",
             "type": "string"
           },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1338,7 +1338,7 @@
         },
         "required": [
           "id",
-          "project_id",
+          "task_id",
           "kind",
           "title",
           "status",
@@ -1352,7 +1352,7 @@
       },
       "ConversationUpdate": {
         "additionalProperties": false,
-        "description": "Partial update for an existing chat conversation.\n\nOmitted fields remain unchanged. An explicitly null ``entry_artefact_id``\nclears its entry-context chip.\n\nArgs:\n    title: Replacement user-visible chat title.\n    entry_artefact_id: Replacement project-local entry context, or null to clear it.",
+        "description": "Partial update for an existing chat conversation.\n\nOmitted fields remain unchanged. An explicitly null ``entry_artefact_id``\nclears its entry-context chip.\n\nArgs:\n    title: Replacement user-visible chat title.\n    entry_artefact_id: Replacement task-local entry context, or null to clear it.",
         "properties": {
           "entry_artefact_id": {
             "anyOf": [
@@ -1434,7 +1434,7 @@
         "type": "object"
       },
       "CoverageBackendDetailOut": {
-        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately project-wide in C.1; per-query relevance\nwas not recorded and is therefore absent.",
+        "description": "Post-run source counts for one public backend.\n\n``relevant`` is deliberately task-wide in C.1; per-query relevance\nwas not recorded and is therefore absent.",
         "properties": {
           "backend": {
             "title": "Backend",
@@ -1592,7 +1592,7 @@
               {
                 "enum": [
                   "user",
-                  "orchestrator",
+                  "agent",
                   "standing_default"
                 ],
                 "type": "string"
@@ -2844,7 +2844,7 @@
         "type": "object"
       },
       "LatestRun": {
-        "description": "The derived latest-run read model carried on a project.\n\nArgs:\n    capability_run_id: Identity of the project's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.",
+        "description": "The derived latest-run read model carried on a task.\n\nArgs:\n    capability_run_id: Identity of the task's most recent run.\n    status: That run's current status.\n    started_at: When that run started executing.\n    ended_at: When that run reached a terminal status, or `None` while\n        still running or paused.",
         "properties": {
           "capability_run_id": {
             "format": "uuid",
@@ -2975,7 +2975,7 @@
         "type": "object"
       },
       "MostRelevantNoteOut": {
-        "description": "A grounded one-liner note for a top cited source.\n\nArgs:\n    source_id: The project source identity.\n    note: One-sentence note restating only supplied evidence.",
+        "description": "A grounded one-liner note for a top cited source.\n\nArgs:\n    source_id: The task source identity.\n    note: One-sentence note restating only supplied evidence.",
         "properties": {
           "note": {
             "title": "Note",
@@ -3215,26 +3215,6 @@
         "title": "Page[PlanningTranscriptTurnOut]",
         "type": "object"
       },
-      "Page_PortfolioOut_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/PortfolioOut"
-            },
-            "title": "Data",
-            "type": "array"
-          },
-          "pagination": {
-            "$ref": "#/components/schemas/PageMeta"
-          }
-        },
-        "required": [
-          "data",
-          "pagination"
-        ],
-        "title": "Page[PortfolioOut]",
-        "type": "object"
-      },
       "Page_ProjectOut_": {
         "properties": {
           "data": {
@@ -3273,6 +3253,26 @@
           "pagination"
         ],
         "title": "Page[RunOut]",
+        "type": "object"
+      },
+      "Page_TaskOut_": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PageMeta"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ],
+        "title": "Page[TaskOut]",
         "type": "object"
       },
       "PartChipOut": {
@@ -3408,7 +3408,7 @@
         "type": "object"
       },
       "PlanDraft": {
-        "description": "Draft or approved orchestration plan, as surfaced to the client.\n\nMirrors the runtime `OrchestrationPlan` field-by-field. Every field\nexcept `steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible title for the run.\n    question: Refined evidence question.\n    scoping_notes: User-expressed scoping notes.\n    screening_criteria: Visible inclusion/exclusion criteria for screening.\n    backend_scope: Search backend scope.\n    scope_constraints: Optional recency and publisher-geography constraints.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    components: Discretionary orchestration components only.\n    component_rationale: Visible intent-fit rationale keyed by\n        discretionary component.\n    grouping_facets: Optional grouping facets, valid only when `group`\n        runs.\n    extract_profiles: Optional finding profile short names, valid only\n        when `extract` runs.\n    steering_mode: Steering mode for the run.\n    assumptions: Visible assumptions and open guesses.\n    expected_artefact_shape: Deterministic forecast derived from components.\n    time_band: Deterministic wall-clock band derived from the two axes.\n    section_budget: Optional future synthesis cap for ordinary sections.\n    steps: The composed chain, presentation-labelled, in execution order.\n    ready: Whether the draft has validated fail-closed into an\n        executable plan.",
+        "description": "Draft or approved task plan, as surfaced to the client.\n\nMirrors the runtime `TaskPlan` field-by-field. Every field\nexcept `steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible title for the run.\n    question: Refined evidence question.\n    scoping_notes: User-expressed scoping notes.\n    screening_criteria: Visible inclusion/exclusion criteria for screening.\n    backend_scope: Search backend scope.\n    scope_constraints: Optional recency and publisher-geography constraints.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    components: Discretionary plan components only.\n    component_rationale: Visible intent-fit rationale keyed by\n        discretionary component.\n    grouping_facets: Optional grouping facets, valid only when `group`\n        runs.\n    extract_profiles: Optional finding profile short names, valid only\n        when `extract` runs.\n    steering_mode: Steering mode for the run.\n    assumptions: Visible assumptions and open guesses.\n    expected_artefact_shape: Deterministic forecast derived from components.\n    time_band: Deterministic wall-clock band derived from the two axes.\n    section_budget: Optional future synthesis cap for ordinary sections.\n    steps: The composed chain, presentation-labelled, in execution order.\n    ready: Whether the draft has validated fail-closed into an\n        executable plan.",
         "properties": {
           "analysis_depth": {
             "anyOf": [
@@ -3693,7 +3693,7 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.\n\nArgs:\n    plan: The current plan (draft or approved).\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
+        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current plan (draft or approved).\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
         "properties": {
           "plan": {
             "$ref": "#/components/schemas/PlanDraft"
@@ -3717,7 +3717,7 @@
       },
       "PlanPatchIn": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.",
+        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.",
         "properties": {
           "analysis_depth": {
             "anyOf": [
@@ -3918,7 +3918,7 @@
         "type": "object"
       },
       "PlanningTranscriptTurnOut": {
-        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-project conversation coordinate.\n    conversation_id: Owning planning conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    part: Structured sequential-planning proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+        "description": "One durable planning-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning planning conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Planner reply, absent until a pending turn completes.\n    suggestions: Planner quick-reply suggestions, if the turn completed.\n    part: Structured sequential-planning proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
         "properties": {
           "client_turn_id": {
             "format": "uuid",
@@ -4014,7 +4014,7 @@
       },
       "PlanningTurnCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/projects/{id}/planning-turns`.\n\nArgs:\n    message: The user's chat message for this planner turn.\n    client_turn_id: Caller-minted UUID making double-submit idempotent \u2014\n        resubmitting the same `client_turn_id` returns the same turn\n        rather than re-running the planner.",
+        "description": "Inbound body for `POST /api/v1/tasks/{id}/planning-turns`.\n\nArgs:\n    message: The user's chat message for this planner turn.\n    client_turn_id: Caller-minted UUID making double-submit idempotent \u2014\n        resubmitting the same `client_turn_id` returns the same turn\n        rather than re-running the planner.",
         "properties": {
           "client_turn_id": {
             "format": "uuid",
@@ -4082,161 +4082,6 @@
         "title": "PlanningTurnOut",
         "type": "object"
       },
-      "PortfolioCreate": {
-        "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/portfolios`.\n\nArgs:\n    name: Portfolio display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_project_id: Seed the new portfolio from an existing project the\n        caller **owns**: the portfolio inherits that project's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        portfolio. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0033 records the amendment.",
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "from_project_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "From Project Id"
-          },
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "PortfolioCreate",
-        "type": "object"
-      },
-      "PortfolioOut": {
-        "description": "A portfolio resource.\n\nArgs:\n    portfolio_id: The portfolio's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the portfolio was created.\n    task_count: How many active projects **the caller may read, in the\n        caller's own organisation** are assigned to this portfolio,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.",
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "is_owner": {
-            "title": "Is Owner",
-            "type": "boolean"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "owner_display": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner Display"
-          },
-          "portfolio_id": {
-            "format": "uuid",
-            "title": "Portfolio Id",
-            "type": "string"
-          },
-          "task_count": {
-            "title": "Task Count",
-            "type": "integer"
-          },
-          "visibility": {
-            "enum": [
-              "org",
-              "private"
-            ],
-            "title": "Visibility",
-            "type": "string"
-          }
-        },
-        "required": [
-          "portfolio_id",
-          "name",
-          "created_at",
-          "task_count",
-          "visibility",
-          "is_owner",
-          "owner_display"
-        ],
-        "title": "PortfolioOut",
-        "type": "object"
-      },
-      "PortfolioUpdate": {
-        "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged; an\n        explicit `null` is refused 422 (the column is NOT NULL).\n    description: New description, when changing it, or an explicit `null`\n        to clear it. Omit to leave unchanged.\n    visibility: How widely to share this portfolio **and every project\n        assigned to it** \u2014 supplying it runs the i.4 cascade, not a field\n        write (contract \u00a7 6). Owner-only. Omit to leave unchanged; an\n        explicit `null` is refused 422, because there is no such thing as\n        \"no visibility\" (the column is NOT NULL) and silently ignoring it\n        would give one request shape two outcomes.\n\nNote:\n    The field arrives here **with** the cascade and never without it\n    (contract \u00a7 6, i.4: the cascade is the only writer of\n    `portfolio.visibility`, because a portfolio's visibility change must\n    carry every member with it). The route keeps it out of its patchable\n    column list and routes it explicitly, so no splat can ever hand the\n    column to this field: an owner setting a Project private and leaving\n    its Tasks readable by the whole organisation is not a state this\n    route can produce.\n\n    Unlike `ProjectUpdate`, no pairing is rejected: `name`, `description`\n    and `visibility` are independent writes with no ordering between\n    them, so one body carrying all three has exactly one outcome. The\n    pairing `ProjectUpdate` refuses is ambiguous for the opposite reason \u2014\n    there `visibility` and `portfolio_id` fight over the same column.",
-        "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "name": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Name"
-          },
-          "visibility": {
-            "anyOf": [
-              {
-                "enum": [
-                  "org",
-                  "private"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Visibility"
-          }
-        },
-        "title": "PortfolioUpdate",
-        "type": "object"
-      },
       "ProgressEvent": {
         "description": "A user-facing read-tool activity emitted before that tool runs.",
         "properties": {
@@ -4259,15 +4104,9 @@
       },
       "ProjectCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/projects`.\n\nArgs:\n    name: Project display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.",
+        "description": "Inbound body for `POST /api/v1/projects`.\n\nArgs:\n    name: Project display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied.\n    description: Optional free-text description.\n    from_task_id: Seed the new project from an existing task the\n        caller **owns**: the project inherits that task's\n        `visibility` and organisation and takes it as its first member,\n        in one transaction (contract \u00a7 6, i.1). Omit to create an empty\n        project. This amends ADR 0031 decision 4 (\"assignment is a\n        PATCH, not a field on create\"); ADR 0033 records the amendment.",
         "properties": {
-          "name": {
-            "maxLength": 200,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "question": {
+          "description": {
             "anyOf": [
               {
                 "type": "string"
@@ -4276,7 +4115,25 @@
                 "type": "null"
               }
             ],
-            "title": "Question"
+            "title": "Description"
+          },
+          "from_task_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Task Id"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
           }
         },
         "required": [
@@ -4286,50 +4143,27 @@
         "type": "object"
       },
       "ProjectOut": {
-        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the project was created.\n    updated_at: When the project row was last written.\n    archived_at: When the project was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    portfolio_ids: Portfolios this project belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this project has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same project is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.\n    is_public: Whether the owner has turned public sharing on for this\n        row (task 037). A property of the row, not the caller.\n    access: **Caller-relative**, not a property of the row: `\"public\"`\n        means this read was served by the public leg and the shape is\n        redacted (`owner_display = None`, `portfolio_ids = []`,\n        `is_owner = False`); a graded read (owner, colleague or admin)\n        always says `\"full\"`.",
+        "description": "A project resource.\n\nArgs:\n    project_id: The project's identity.\n    name: Current display name.\n    description: Current description, or `None` if not set.\n    created_at: When the project was created.\n    task_count: How many active tasks **the caller may read, in the\n        caller's own organisation** are assigned to this project,\n        derived per request and never cached on the row (contract \u00a7 8).\n        A colleague's private member is not counted, and an\n        administrator's count stays their own organisation's count rather\n        than a cross-organisation sum.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all.",
         "properties": {
-          "access": {
-            "enum": [
-              "full",
-              "public"
-            ],
-            "title": "Access",
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
             "type": "string"
           },
-          "archived_at": {
+          "description": {
             "anyOf": [
               {
-                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Archived At"
-          },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
+            "title": "Description"
           },
           "is_owner": {
             "title": "Is Owner",
             "type": "boolean"
-          },
-          "is_public": {
-            "title": "Is Public",
-            "type": "boolean"
-          },
-          "latest_run": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LatestRun"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "name": {
             "title": "Name",
@@ -4346,53 +4180,14 @@
             ],
             "title": "Owner Display"
           },
-          "portfolio_ids": {
-            "items": {
-              "format": "uuid",
-              "type": "string"
-            },
-            "title": "Portfolio Ids",
-            "type": "array"
-          },
           "project_id": {
             "format": "uuid",
             "title": "Project Id",
             "type": "string"
           },
-          "question": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Question"
-          },
-          "source_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Count"
-          },
-          "status": {
-            "enum": [
-              "active",
-              "archived"
-            ],
-            "title": "Status",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "title": "Updated At",
-            "type": "string"
+          "task_count": {
+            "title": "Task Count",
+            "type": "integer"
           },
           "visibility": {
             "enum": [
@@ -4406,32 +4201,29 @@
         "required": [
           "project_id",
           "name",
-          "status",
           "created_at",
-          "updated_at",
+          "task_count",
           "visibility",
           "is_owner",
-          "owner_display",
-          "is_public",
-          "access"
+          "owner_display"
         ],
         "title": "ProjectOut",
         "type": "object"
       },
       "ProjectUpdate": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    portfolio_ids: Portfolios to assign this project to. Omit to leave\n        membership unchanged; `[]` unassigns every portfolio; a list\n        replaces the set.\n    visibility: How widely to share this project. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `portfolio_ids` in one body \u2014 see\n        :meth:`reject_visibility_with_portfolio`.\n    is_public: Owner-only public-sharing flag (task 037). Omit to leave\n        unchanged; an explicit `null` is refused 422 \u2014 see\n        :meth:`reject_nulls_without_meaning`.\n\nNote:\n    `name`, `visibility` and `is_public` back NOT NULL columns, so an\n    explicit `null` on any of them is refused rather than treated as\n    \"unchanged\" \u2014 see :meth:`reject_nulls_without_meaning`. `question`\n    and `portfolio_ids` are not: null clears the question, and null on\n    `portfolio_ids` is read as `[]` (unassign every portfolio).",
+        "description": "Inbound body for `PATCH /api/v1/projects/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged; an\n        explicit `null` is refused 422 (the column is NOT NULL).\n    description: New description, when changing it, or an explicit `null`\n        to clear it. Omit to leave unchanged.\n    visibility: How widely to share this project **and every task\n        assigned to it** \u2014 supplying it runs the i.4 cascade, not a field\n        write (contract \u00a7 6). Owner-only. Omit to leave unchanged; an\n        explicit `null` is refused 422, because there is no such thing as\n        \"no visibility\" (the column is NOT NULL) and silently ignoring it\n        would give one request shape two outcomes.\n\nNote:\n    The field arrives here **with** the cascade and never without it\n    (contract \u00a7 6, i.4: the cascade is the only writer of\n    `project.visibility`, because a project's visibility change must\n    carry every member with it). The route keeps it out of its patchable\n    column list and routes it explicitly, so no splat can ever hand the\n    column to this field: an owner setting a Project private and leaving\n    its Tasks readable by the whole organisation is not a state this\n    route can produce.\n\n    Unlike `TaskUpdate`, no pairing is rejected: `name`, `description`\n    and `visibility` are independent writes with no ordering between\n    them, so one body carrying all three has exactly one outcome. The\n    pairing `TaskUpdate` refuses is ambiguous for the opposite reason \u2014\n    there `visibility` and `project_id` fight over the same column.",
         "properties": {
-          "is_public": {
+          "description": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Is Public"
+            "title": "Description"
           },
           "name": {
             "anyOf": [
@@ -4445,32 +4237,6 @@
               }
             ],
             "title": "Name"
-          },
-          "portfolio_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Portfolio Ids"
-          },
-          "question": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Question"
           },
           "visibility": {
             "anyOf": [
@@ -4489,72 +4255,6 @@
           }
         },
         "title": "ProjectUpdate",
-        "type": "object"
-      },
-      "ProjectUpdatedFrame": {
-        "description": "A lifecycle audit event (rename, archive).",
-        "properties": {
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Name"
-          },
-          "occurred_at": {
-            "format": "date-time",
-            "title": "Occurred At",
-            "type": "string"
-          },
-          "question": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Question"
-          },
-          "sequence": {
-            "title": "Sequence",
-            "type": "integer"
-          },
-          "status": {
-            "anyOf": [
-              {
-                "enum": [
-                  "active",
-                  "archived"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Status"
-          },
-          "type": {
-            "const": "project.updated",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "sequence",
-          "occurred_at",
-          "type"
-        ],
-        "title": "ProjectUpdatedFrame",
         "type": "object"
       },
       "ReferenceOut": {
@@ -4611,13 +4311,13 @@
       },
       "RunCreate": {
         "additionalProperties": false,
-        "description": "Inbound body for `POST /api/v1/projects/{id}/runs`.\n\nThe run is created from the project's current approved-ready plan; the\nrequest body carries no fields. `extra=\"forbid\"` rejects any body at\nall beyond `{}`.",
+        "description": "Inbound body for `POST /api/v1/tasks/{id}/runs`.\n\nThe run is created from the task's current approved-ready plan; the\nrequest body carries no fields. `extra=\"forbid\"` rejects any body at\nall beyond `{}`.",
         "properties": {},
         "title": "RunCreate",
         "type": "object"
       },
       "RunOut": {
-        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    project_id: Owning project.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.",
+        "description": "A capability run resource.\n\nArgs:\n    capability_run_id: The run's identity.\n    task_id: Owning task.\n    plan_id: Identity of the plan the run executes.\n    plan_version: Plan version current at run creation.\n    status: Current run status.\n    started_at: When the run started executing.\n    ended_at: When the run reached a terminal status, or `None` while\n        still running or paused.",
         "properties": {
           "capability_run_id": {
             "format": "uuid",
@@ -4645,11 +4345,6 @@
             "title": "Plan Version",
             "type": "integer"
           },
-          "project_id": {
-            "format": "uuid",
-            "title": "Project Id",
-            "type": "string"
-          },
           "started_at": {
             "format": "date-time",
             "title": "Started At",
@@ -4667,11 +4362,16 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
           }
         },
         "required": [
           "capability_run_id",
-          "project_id",
+          "task_id",
           "plan_id",
           "plan_version",
           "status",
@@ -5215,11 +4915,11 @@
             "checkin.pending": "#/components/schemas/CheckinPendingFrame",
             "checkin.resolved": "#/components/schemas/CheckinResolvedFrame",
             "plan.updated": "#/components/schemas/PlanUpdatedFrame",
-            "project.updated": "#/components/schemas/ProjectUpdatedFrame",
             "run.status": "#/components/schemas/RunStatusFrame",
             "stage.completed": "#/components/schemas/StageCompletedFrame",
             "stage.failed": "#/components/schemas/StageFailedFrame",
             "stage.started": "#/components/schemas/StageStartedFrame",
+            "task.updated": "#/components/schemas/TaskUpdatedFrame",
             "tick": "#/components/schemas/TickFrame"
           },
           "propertyName": "type"
@@ -5256,7 +4956,7 @@
             "$ref": "#/components/schemas/PlanUpdatedFrame"
           },
           {
-            "$ref": "#/components/schemas/ProjectUpdatedFrame"
+            "$ref": "#/components/schemas/TaskUpdatedFrame"
           },
           {
             "$ref": "#/components/schemas/TickFrame"
@@ -5448,6 +5148,306 @@
         "title": "StageStartedFrame",
         "type": "object"
       },
+      "TaskCreate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/tasks`.\n\nArgs:\n    name: Task display name, 1-200 characters. Outer whitespace is\n        stripped before the length constraint is applied\n        (`str_strip_whitespace`).\n    question: Optional initial evidence question.",
+        "properties": {
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TaskCreate",
+        "type": "object"
+      },
+      "TaskOut": {
+        "description": "A task resource.\n\nArgs:\n    task_id: The task's identity.\n    name: Current display name.\n    question: Current evidence question, or `None` if not yet set.\n    status: Lifecycle status (`active` unless archived; no hard delete).\n    created_at: When the task was created.\n    updated_at: When the task row was last written.\n    archived_at: When the task was archived, or `None` if active.\n    latest_run: The derived latest-run read model, or `None` before any\n        run has been created.\n    project_ids: Projects this task belongs to. Empty means\n        unassigned, which is a normal state, not an error.\n    source_count: How many Included sources this task has (funnel\n        `relevant`), or `None` when no run has started. `None` and `0`\n        differ: `None` means the question has not been asked yet, `0`\n        means a run asked and none are Included.\n    visibility: How widely the row is shared (task 033). `org` where the\n        organisation may read it, `private` where only its owner may.\n    is_owner: Whether the *calling* user owns this row. Per-caller, not a\n        property of the row: the same task is `true` for its owner and\n        `false` for a colleague reading it. Every read-only affordance on\n        screen keys off this.\n    owner_display: How to name the row's owner \u2014 the owner's display\n        name, or a rendering derived from their subject when they have no\n        identity row yet. **Never an email** (contract \u00a7 3b). `None` when\n        the row has no owner at all (the CLI-created rows), leaving the\n        placeholder glyph to the frontend.\n    is_public: Whether the owner has turned public sharing on for this\n        row (task 037). A property of the row, not the caller.\n    access: **Caller-relative**, not a property of the row: `\"public\"`\n        means this read was served by the public leg and the shape is\n        redacted (`owner_display = None`, `project_ids = []`,\n        `is_owner = False`); a graded read (owner, colleague or admin)\n        always says `\"full\"`.",
+        "properties": {
+          "access": {
+            "enum": [
+              "full",
+              "public"
+            ],
+            "title": "Access",
+            "type": "string"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "is_owner": {
+            "title": "Is Owner",
+            "type": "boolean"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "latest_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LatestRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Display"
+          },
+          "project_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Project Ids",
+            "type": "array"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "source_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Count"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "org",
+              "private"
+            ],
+            "title": "Visibility",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "name",
+          "status",
+          "created_at",
+          "updated_at",
+          "visibility",
+          "is_owner",
+          "owner_display",
+          "is_public",
+          "access"
+        ],
+        "title": "TaskOut",
+        "type": "object"
+      },
+      "TaskUpdate": {
+        "additionalProperties": false,
+        "description": "Inbound body for `PATCH /api/v1/tasks/{id}` (partial update).\n\nArgs:\n    name: New display name, when renaming. Omit to leave unchanged.\n    question: New evidence question, when changing it. Omit to leave\n        unchanged.\n    project_ids: Projects to assign this task to. Omit to leave\n        membership unchanged; `[]` unassigns every project; a list\n        replaces the set.\n    visibility: How widely to share this task. Owner-only. Omit to\n        leave unchanged; an explicit `null` is refused 422. Cannot be\n        combined with `project_ids` in one body \u2014 see\n        :meth:`reject_visibility_with_project`.\n    is_public: Owner-only public-sharing flag (task 037). Omit to leave\n        unchanged; an explicit `null` is refused 422 \u2014 see\n        :meth:`reject_nulls_without_meaning`.\n\nNote:\n    `name`, `visibility` and `is_public` back NOT NULL columns, so an\n    explicit `null` on any of them is refused rather than treated as\n    \"unchanged\" \u2014 see :meth:`reject_nulls_without_meaning`. `question`\n    and `project_ids` are not: null clears the question, and null on\n    `project_ids` is read as `[]` (unassign every project).",
+        "properties": {
+          "is_public": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Public"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "project_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Ids"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "enum": [
+                  "org",
+                  "private"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visibility"
+          }
+        },
+        "title": "TaskUpdate",
+        "type": "object"
+      },
+      "TaskUpdatedFrame": {
+        "description": "A lifecycle audit event (rename, archive).",
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Question"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "type": {
+            "const": "task.updated",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence",
+          "occurred_at",
+          "type"
+        ],
+        "title": "TaskUpdatedFrame",
+        "type": "object"
+      },
       "ThemeOut": {
         "description": "One landscape theme.\n\nArgs:\n    name: Theme name.\n    size: Number of items in the theme.\n    description: Short theme description.\n    theme_id: Stable theme identity, absent for legacy characterisations.",
         "properties": {
@@ -5583,7 +5583,7 @@
         "type": "object"
       },
       "ThemeSourceOut": {
-        "description": "One source contributing to a theme or grouping reference.\n\nArgs:\n    source_id: The project's source identity.\n    title: Display title of the source.",
+        "description": "One source contributing to a theme or grouping reference.\n\nArgs:\n    source_id: The task's source identity.\n    title: Display title of the source.",
         "properties": {
           "source_id": {
             "format": "uuid",
@@ -6020,7 +6020,7 @@
         ]
       },
       "post": {
-        "description": "Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.\n\nThe second of the three colleague mutations (contract \u00a7 4): post a turn to\n**your own** conversation. Two conditions, both resolved in the one\nstatement below, both 404 on failure:\n\n- :func:`own_chat_leg` \u2014 the conversation is a chat the caller created,\n  or a legacy pre-033 chat on a project they own. An owner cannot post\n  into a colleague's chat and a colleague cannot post into the owner's.\n- :func:`own_estate` on the project \u2014 the caller must still reach the\n  project as its owner or as a same-org colleague. This is the leg that\n  **dies on de-enrolment**: clearing a colleague's ``org_id`` takes their\n  turn POST to 404 on the next request, even though they still match\n  ``created_by``. Deliberately :func:`own_estate` rather than the full\n  read grade, so phase 8's admin leg never reaches this mutation.\n\nNo lock is taken here. The reservation's lock lives one layer down, on the\n**conversation** row (``chat_turns._phase_one_turn``) \u2014 never on the\nowner's project row.",
+        "description": "Reserve a chat turn and stream its provider-neutral NDJSON lifecycle.\n\nThe second of the three colleague mutations (contract \u00a7 4): post a turn to\n**your own** conversation. Two conditions, both resolved in the one\nstatement below, both 404 on failure:\n\n- :func:`own_chat_leg` \u2014 the conversation is a chat the caller created,\n  or a legacy pre-033 chat on a task they own. An owner cannot post\n  into a colleague's chat and a colleague cannot post into the owner's.\n- :func:`own_estate` on the task \u2014 the caller must still reach the\n  task as its owner or as a same-org colleague. This is the leg that\n  **dies on de-enrolment**: clearing a colleague's ``org_id`` takes their\n  turn POST to 404 on the next request, even though they still match\n  ``created_by``. Deliberately :func:`own_estate` rather than the full\n  read grade, so phase 8's admin leg never reaches this mutation.\n\nNo lock is taken here. The reservation's lock lives one layer down, on the\n**conversation** row (``chat_turns._phase_one_turn``) \u2014 never on the\nowner's task row.",
         "operationId": "create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post",
         "parameters": [
           {
@@ -6079,7 +6079,7 @@
     },
     "/api/v1/conversations/{conversation_id}/turns/{turn_id}/cancel": {
       "post": {
-        "description": "Explicitly stop a pending chat turn, preserving any streamed partial.\n\nThe third colleague mutation (contract \u00a7 4): cancel **your own** turn,\nresolved through the same two conditions as the turn POST \u2014\n:func:`own_chat_leg` on the conversation and :func:`own_estate` on the\nproject \u2014 so cancellation is isolated in both directions and dies with a\ncolleague's org leg.\n\nOne deliberate asymmetry with the POST: no ``project.status = 'active'``\nfilter, which is the pre-033 behaviour preserved. Cancelling is a stop,\nnot a start; refusing it on an archived project would strand a pending\nrow for the TTL sweep with no way for its author to close it.\n\nNo lock: the write below is already a compare-and-set guarded on\n``status = 'pending'``.",
+        "description": "Explicitly stop a pending chat turn, preserving any streamed partial.\n\nThe third colleague mutation (contract \u00a7 4): cancel **your own** turn,\nresolved through the same two conditions as the turn POST \u2014\n:func:`own_chat_leg` on the conversation and :func:`own_estate` on the\ntask \u2014 so cancellation is isolated in both directions and dies with a\ncolleague's org leg.\n\nOne deliberate asymmetry with the POST: no ``task.status = 'active'``\nfilter, which is the pre-033 behaviour preserved. Cancelling is a stop,\nnot a start; refusing it on an archived task would strand a pending\nrow for the TTL sweep with no way for its author to close it.\n\nNo lock: the write below is already a compare-and-set guarded on\n``status = 'pending'``.",
         "operationId": "cancel_chat_turn_api_v1_conversations__conversation_id__turns__turn_id__cancel_post",
         "parameters": [
           {
@@ -6212,272 +6212,13 @@
         ]
       }
     },
-    "/api/v1/portfolios": {
-      "get": {
-        "description": "List the portfolios the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `projects.list_projects`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of portfolios.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
-        "operationId": "list_portfolios_api_v1_portfolios_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "scope",
-            "required": false,
-            "schema": {
-              "default": "all",
-              "enum": [
-                "all",
-                "mine"
-              ],
-              "title": "Scope",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "owner_email",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 254,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Owner Email"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page",
-            "required": false,
-            "schema": {
-              "default": 1,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "page_size",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Page Size",
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Page_PortfolioOut_"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "List Portfolios",
-        "tags": [
-          "portfolios"
-        ]
-      },
-      "post": {
-        "description": "Create one portfolio owned by the authenticated subject.\n\nWith `from_project_id` (contract \u00a7 6, i.1) the new portfolio inherits that\nproject's `visibility` **and** organisation and takes it as its first\nmember, all in the request's single transaction \u2014 so the invariant \"a\nproject in a portfolio matches its portfolio on both\" holds from the\nmoment the row exists rather than being repaired afterwards.\n\nThe source project resolves under the **write** grade, not a read grade.\nUnder a read grade a same-org colleague \u2014 or, once the admin leg lands, an\nadministrator \u2014 could pull a row they do not own into a portfolio and\nchange its visibility, which is the concrete admin-write escape the\ncontract names.\n\nWithout `from_project_id`, the portfolio is empty and its organisation is\nstamped from the creator (contract \u00a7 7).\n\nArgs:\n    payload: The create body.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The created portfolio.\n\nRaises:\n    HTTPException: 404 when `from_project_id` names a project the caller\n        cannot read, 403 when they can read it but do not own it.",
-        "operationId": "create_portfolio_api_v1_portfolios_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PortfolioCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PortfolioOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Create Portfolio",
-        "tags": [
-          "portfolios"
-        ]
-      }
-    },
-    "/api/v1/portfolios/{portfolio_id}": {
-      "get": {
-        "description": "Return one portfolio readable by the caller (owner or same-org colleague).",
-        "operationId": "get_portfolio_api_v1_portfolios__portfolio_id__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "portfolio_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Portfolio Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PortfolioOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Get Portfolio",
-        "tags": [
-          "portfolios"
-        ]
-      },
-      "patch": {
-        "description": "Apply the supplied portfolio fields without changing omitted fields.\n\n**Two code paths, not one.** `name` and `description` are written by an\nexplicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off\nthe model **by name** and routed to :func:`_cascade_visibility`, and never\njoins the splat. Contract \u00a7 6, i.4 makes the cascade the only writer of\n`portfolio.visibility`; a blind `.values(**changes)` hands the column to\nwhatever field a later slice adds to `PortfolioUpdate`, and the failure it\nproduces is silent \u2014 the owner sets a Project private, the UI agrees, and\nits Tasks stay readable by the whole organisation. The field now exists on\nthe model, so the allow-list is the thing keeping that true.\n\n`payload.visibility is not None` **is** \"the caller supplied it\": the\nmodel refuses an explicit null, so the absent value and the None value are\nthe same state.\n\n**Owner-only, like every other write** (contract \u00a7 3): the route resolves\nthrough the write grade, so a same-org colleague gets 403 and an\nadministrator \u2014 whose leg is a *read* leg \u2014 never reaches the cascade\nhowever wide their read becomes.\n\nThe row is locked (`for_update`) because the cascade and the assignment\npath in `projects.py` write overlapping rows: without it, an assignment\nthat read this portfolio's visibility a moment before the cascade\ncommitted would write the stale value onto the project it is assigning and\nleave an org-visible row inside a private Project.\n\nArgs:\n    portfolio_id: The portfolio to update.\n    payload: The partial update. Supplying `visibility` runs the cascade.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated portfolio. Its `task_count` is the caller-visible active\n    member count \u2014 see the note below on what the outcome copy may claim.\n\nRaises:\n    HTTPException: 404 when the portfolio is unreadable, 403 when it is\n        readable but not owned.",
-        "operationId": "update_portfolio_api_v1_portfolios__portfolio_id__patch",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "portfolio_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Portfolio Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PortfolioUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PortfolioOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Update Portfolio",
-        "tags": [
-          "portfolios"
-        ]
-      }
-    },
     "/api/v1/projects": {
       "get": {
-        "description": "List the projects the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    portfolio_id: Narrow to one portfolio's members. Server-side because\n        `PortfolioDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 the value is\n        logged verbatim on the admin trace, so it is bounded and shaped at\n        the boundary rather than in the log.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
+        "description": "List the projects the caller may see, with a derived task count.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 see\n        `tasks.list_tasks`.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of projects.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
         "operationId": "list_projects_api_v1_projects_get",
         "parameters": [
           {
             "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "default": "active",
-              "enum": [
-                "active",
-                "archived",
-                "all"
-              ],
-              "title": "Status",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "scope",
             "required": false,
             "schema": {
@@ -6488,23 +6229,6 @@
               ],
               "title": "Scope",
               "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "portfolio_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "uuid",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Portfolio Id"
             }
           },
           {
@@ -6581,7 +6305,7 @@
         ]
       },
       "post": {
-        "description": "Create one active project owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).",
+        "description": "Create one project owned by the authenticated subject.\n\nWith `from_task_id` (contract \u00a7 6, i.1) the new project inherits that\ntask's `visibility` **and** organisation and takes it as its first\nmember, all in the request's single transaction \u2014 so the invariant \"a\ntask in a project matches its project on both\" holds from the\nmoment the row exists rather than being repaired afterwards.\n\nThe source task resolves under the **write** grade, not a read grade.\nUnder a read grade a same-org colleague \u2014 or, once the admin leg lands, an\nadministrator \u2014 could pull a row they do not own into a project and\nchange its visibility, which is the concrete admin-write escape the\ncontract names.\n\nWithout `from_task_id`, the project is empty and its organisation is\nstamped from the creator (contract \u00a7 7).\n\nArgs:\n    payload: The create body.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The created project.\n\nRaises:\n    HTTPException: 404 when `from_task_id` names a task the caller\n        cannot read, 403 when they can read it but do not own it.",
         "operationId": "create_project_api_v1_projects_post",
         "requestBody": {
           "content": {
@@ -6628,7 +6352,7 @@
     },
     "/api/v1/projects/{project_id}": {
       "get": {
-        "description": "Return one active project through its graded or redacted public leg.",
+        "description": "Return one project readable by the caller (owner or same-org colleague).",
         "operationId": "get_project_api_v1_projects__project_id__get",
         "parameters": [
           {
@@ -6675,7 +6399,7 @@
         ]
       },
       "patch": {
-        "description": "Apply the supplied project fields without changing omitted fields.\n\nResolves under the **write** grade (contract \u00a7 3: write is owner-only), so\na same-org colleague who can now *see* this row in their listing gets 403\n`forbidden` here rather than the 404 that would claim the row does not\nexist \u2014 they are already looking at it.\n\nThree of the invariant's six paths run here (contract \u00a7 6). Setting\n`visibility` on a project that belongs to a portfolio is **i.5**, refused\n409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** \u2014 the\nmember becomes org-visible if **any** named portfolio is org-visible and\nprivate otherwise (owner ruling 2026-08-27), promotion and demotion being\nthe same rule read in two directions; a set spanning two organisations is\nrefused 409, since a row carries one `org_id`. Targets resolve under the\n**colleague-mutation** grade (owner \u222a same-org org-visible, never the\nadmin leg \u2014 owner ruling 2026-08-27): a colleague may add their own task\nto an org-visible portfolio they did not create. Setting it to `[]` (or\n`null`) is **i.6** \u2014 the row leaves with the visibility and organisation\nit had.\n\nArgs:\n    project_id: The project to update.\n    payload: The partial update. A body carrying both `visibility` and\n        `portfolio_ids` was already rejected 422 by the model.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated project.\n\nRaises:\n    HTTPException: 404 when the row is unreadable, 403 when it is\n        readable but not owned.\n    ApiConflict: 409 `visibility_conflict` when setting `visibility` on a\n        project that belongs to a portfolio.",
+        "description": "Apply the supplied project fields without changing omitted fields.\n\n**Two code paths, not one.** `name` and `description` are written by an\nexplicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off\nthe model **by name** and routed to :func:`_cascade_visibility`, and never\njoins the splat. Contract \u00a7 6, i.4 makes the cascade the only writer of\n`project.visibility`; a blind `.values(**changes)` hands the column to\nwhatever field a later slice adds to `ProjectUpdate`, and the failure it\nproduces is silent \u2014 the owner sets a Project private, the UI agrees, and\nits Tasks stay readable by the whole organisation. The field now exists on\nthe model, so the allow-list is the thing keeping that true.\n\n`payload.visibility is not None` **is** \"the caller supplied it\": the\nmodel refuses an explicit null, so the absent value and the None value are\nthe same state.\n\n**Owner-only, like every other write** (contract \u00a7 3): the route resolves\nthrough the write grade, so a same-org colleague gets 403 and an\nadministrator \u2014 whose leg is a *read* leg \u2014 never reaches the cascade\nhowever wide their read becomes.\n\nThe row is locked (`for_update`) because the cascade and the assignment\npath in `tasks.py` write overlapping rows: without it, an assignment\nthat read this project's visibility a moment before the cascade\ncommitted would write the stale value onto the task it is assigning and\nleave an org-visible row inside a private Project.\n\nArgs:\n    project_id: The project to update.\n    payload: The partial update. Supplying `visibility` runs the cascade.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated project. Its `task_count` is the caller-visible active\n    member count \u2014 see the note below on what the outcome copy may claim.\n\nRaises:\n    HTTPException: 404 when the project is unreadable, 403 when it is\n        readable but not owned.",
         "operationId": "update_project_api_v1_projects__project_id__patch",
         "parameters": [
           {
@@ -6732,19 +6456,95 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/archive": {
-      "post": {
-        "description": "Soft-delete a project unless its latest walk is active or parked.",
-        "operationId": "archive_project_route_api_v1_projects__project_id__archive_post",
+    "/api/v1/tasks": {
+      "get": {
+        "description": "List the tasks the caller may see, with derived latest-run state.\n\nArgs:\n    user: The authenticated caller.\n    conn: Open database connection.\n    status_filter: `active` (default), `archived` or `all`.\n    scope: `all` (default) \u2014 the caller's own rows plus their\n        organisation's org-visible rows, and for an administrator every\n        row in every organisation \u2014 or `mine` for owner-only, the\n        pre-033 behaviour. **The default is `all`**: a `mine` default\n        would hide the whole feature behind a switcher.\n    project_id: Narrow to one project's members. Server-side because\n        `ProjectDetailView` filtered the default 50-row global page\n        client-side and would silently under-report once the visible\n        estate spans an organisation.\n    owner_email: Narrow to one owner's rows. **Administrators only**; any\n        other caller gets 422 `validation_error`, as does a value longer\n        than `OWNER_EMAIL_MAX` or one carrying no `@` \u2014 the value is\n        logged verbatim on the admin trace, so it is bounded and shaped at\n        the boundary rather than in the log.\n    page: 1-indexed page number.\n    page_size: Rows per page, server-capped.\n\nReturns:\n    One page of tasks.\n\nRaises:\n    HTTPException: 422 when a non-administrator passes `owner_email`.",
+        "operationId": "list_tasks_api_v1_tasks_get",
         "parameters": [
           {
-            "in": "path",
-            "name": "project_id",
-            "required": true,
+            "in": "query",
+            "name": "status",
+            "required": false,
             "schema": {
-              "format": "uuid",
-              "title": "Project Id",
+              "default": "active",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "title": "Status",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "mine"
+              ],
+              "title": "Scope",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_email",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 254,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Owner Email"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Size",
+              "type": "integer"
             }
           }
         ],
@@ -6753,7 +6553,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectOut"
+                  "$ref": "#/components/schemas/Page_TaskOut_"
                 }
               }
             },
@@ -6775,24 +6575,224 @@
             "HTTPBearer": []
           }
         ],
-        "summary": "Archive Project Route",
+        "summary": "List Tasks",
         "tags": [
-          "projects"
+          "tasks"
+        ]
+      },
+      "post": {
+        "description": "Create one active task owned by the authenticated subject.\n\nStamps the creator's organisation onto the row (contract \u00a7 7) \u2014 NULL when\nthe creator is unenrolled, which leaves the row reachable by its owner\nalone. `visibility` takes the column default `private` (owner amendment\n2026-08-26 \u2014 new work is unshared until its owner deliberately shares it).",
+        "operationId": "create_task_api_v1_tasks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Task",
+        "tags": [
+          "tasks"
         ]
       }
     },
-    "/api/v1/projects/{project_id}/artefact": {
+    "/api/v1/tasks/{task_id}": {
       "get": {
-        "description": "Return the latest persisted synthesis artefact or a shaped absence.",
-        "operationId": "artefact_api_v1_projects__project_id__artefact_get",
+        "description": "Return one active task through its graded or redacted public leg.",
+        "operationId": "get_task_api_v1_tasks__task_id__get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Task",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "patch": {
+        "description": "Apply the supplied task fields without changing omitted fields.\n\nResolves under the **write** grade (contract \u00a7 3: write is owner-only), so\na same-org colleague who can now *see* this row in their listing gets 403\n`forbidden` here rather than the 404 that would claim the row does not\nexist \u2014 they are already looking at it.\n\nThree of the invariant's six paths run here (contract \u00a7 6). Setting\n`visibility` on a task that belongs to a project is **i.5**, refused\n409. Setting `project_ids` to a non-empty set is **i.2/i.3** \u2014 the\nmember becomes org-visible if **any** named project is org-visible and\nprivate otherwise (owner ruling 2026-08-27), promotion and demotion being\nthe same rule read in two directions; a set spanning two organisations is\nrefused 409, since a row carries one `org_id`. Targets resolve under the\n**colleague-mutation** grade (owner \u222a same-org org-visible, never the\nadmin leg \u2014 owner ruling 2026-08-27): a colleague may add their own task\nto an org-visible project they did not create. Setting it to `[]` (or\n`null`) is **i.6** \u2014 the row leaves with the visibility and organisation\nit had.\n\nArgs:\n    task_id: The task to update.\n    payload: The partial update. A body carrying both `visibility` and\n        `project_ids` was already rejected 422 by the model.\n    user: The authenticated caller.\n    conn: Open database connection.\n\nReturns:\n    The updated task.\n\nRaises:\n    HTTPException: 404 when the row is unreadable, 403 when it is\n        readable but not owned.\n    ApiConflict: 409 `visibility_conflict` when setting `visibility` on a\n        task that belongs to a project.",
+        "operationId": "update_task_api_v1_tasks__task_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/archive": {
+      "post": {
+        "description": "Soft-delete a task unless its latest walk is active or parked.",
+        "operationId": "archive_task_route_api_v1_tasks__task_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Archive Task Route",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/v1/tasks/{task_id}/artefact": {
+      "get": {
+        "description": "Return the latest persisted synthesis artefact or a shaped absence.",
+        "operationId": "artefact_api_v1_tasks__task_id__artefact_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -6830,18 +6830,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/check-ins": {
+    "/api/v1/tasks/{task_id}/check-ins": {
       "get": {
-        "description": "Return a latest pending card or the durable steering history projection.\n\nPaginated (rubric item 17 \u2014 check-ins accumulate over a project's life);\nthe pending view is at most one card by construction.",
-        "operationId": "list_check_ins_api_v1_projects__project_id__check_ins_get",
+        "description": "Return a latest pending card or the durable steering history projection.\n\nPaginated (rubric item 17 \u2014 check-ins accumulate over a task's life);\nthe pending view is at most one card by construction.",
+        "operationId": "list_check_ins_api_v1_tasks__task_id__check_ins_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -6916,18 +6916,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/check-ins/{check_in_id}/response": {
+    "/api/v1/tasks/{task_id}/check-ins/{check_in_id}/response": {
       "post": {
         "description": "Compile or durably answer one check-in, dispatching continuations after commit.",
-        "operationId": "respond_to_check_in_api_v1_projects__project_id__check_ins__check_in_id__response_post",
+        "operationId": "respond_to_check_in_api_v1_tasks__task_id__check_ins__check_in_id__response_post",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7008,18 +7008,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/chunks/{chunk_id}/context": {
+    "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context": {
       "get": {
         "description": "Return a clamped context window for a chat citation's chunk + quote.\n\nChat citations carry durable chunk ids (not artefact citation-table ids),\nso the hover quote-in-context read resolves the quote inside the cited\nchunk directly \u2014 same window mechanics as the artefact citation seam.\n``quote`` is validated AFTER ownership so cross-owner and unknown ids stay\n404-indistinguishable (the conformance sweep's byte-identical rule).",
-        "operationId": "chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get",
+        "operationId": "chat_chunk_context_api_v1_tasks__task_id__chunks__chunk_id__context_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7085,18 +7085,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
+    "/api/v1/tasks/{task_id}/citations/{citation_key}/context": {
       "get": {
         "description": "Return a clamped context window for an artefact citation id.",
-        "operationId": "chunk_context_api_v1_projects__project_id__citations__citation_key__context_get",
+        "operationId": "chunk_context_api_v1_tasks__task_id__citations__citation_key__context_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7144,18 +7144,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/conversations": {
+    "/api/v1/tasks/{task_id}/conversations": {
       "get": {
-        "description": "List one readable project's conversations the caller created, newest first.\n\nRead-graded on the project (owner or same-org colleague may open the\nlibrary), but the conversation rows themselves are narrowed further: a\ncolleague sees only the chats *they* created, never the owner's or\nanother colleague's. The owner keeps seeing every legacy pre-033 row\n(``created_by IS NULL``) as their own, in addition to rows their own\nsubject created since.\n\nThe filter is :func:`own_conversation_leg`, **not** its chat-narrowed\nsibling: this library lists both kinds, and the owner must keep seeing\ntheir project's planning conversation here. A colleague never matches a\nplanning row anyway \u2014 planning conversations are minted by the runtime\nand record no ``created_by``, so only the project owner reaches them\nthrough the legacy disjunct.",
-        "operationId": "list_conversations_api_v1_projects__project_id__conversations_get",
+        "description": "List one readable task's conversations the caller created, newest first.\n\nRead-graded on the task (owner or same-org colleague may open the\nlibrary), but the conversation rows themselves are narrowed further: a\ncolleague sees only the chats *they* created, never the owner's or\nanother colleague's. The owner keeps seeing every legacy pre-033 row\n(``created_by IS NULL``) as their own, in addition to rows their own\nsubject created since.\n\nThe filter is :func:`own_conversation_leg`, **not** its chat-narrowed\nsibling: this library lists both kinds, and the owner must keep seeing\ntheir task's planning conversation here. A colleague never matches a\nplanning row anyway \u2014 planning conversations are minted by the runtime\nand record no ``created_by``, so only the task owner reaches them\nthrough the legacy disjunct.",
+        "operationId": "list_conversations_api_v1_tasks__task_id__conversations_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7257,16 +7257,16 @@
         ]
       },
       "post": {
-        "description": "Create one active chat conversation with optional entry context.\n\nThe first of the three mutations owner call (b) grants a same-org\ncolleague (contract \u00a7 4). The grade is :func:`chat_mutable_project` \u2014 the\nowner or a colleague who can read the project, and never an admin.\n\n**This route can only ever mint a chat**, for anybody: ``kind`` is not a\nfield on ``ConversationCreate`` (which forbids extras), it is written as\nthe literal ``\"chat\"`` below, and planning conversations are minted\nexclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s\nowner-graded project lock. So \"a planning conversation can only ever be\ncreated by the project owner\" needs no branch here to hold \u2014 the shape of\nthe request body is what enforces it, and a body carrying ``kind`` is\nrejected 422 before this function runs.\n\n**No project-row lock** (contract \u00a7 4). The lock this route used to take\nprotected nothing a chat insert needs: the only uniqueness constraint on\n``conversation`` is the partial index over ``kind = 'planning' AND status\n= 'active'``, which a chat row cannot collide with, and the insert itself\ncarries a freshly minted primary key. Kept, it would have let any\ncolleague block the owner's rename, archive and run-start.",
-        "operationId": "create_conversation_api_v1_projects__project_id__conversations_post",
+        "description": "Create one active chat conversation with optional entry context.\n\nThe first of the three mutations owner call (b) grants a same-org\ncolleague (contract \u00a7 4). The grade is :func:`chat_mutable_task` \u2014 the\nowner or a colleague who can read the task, and never an admin.\n\n**This route can only ever mint a chat**, for anybody: ``kind`` is not a\nfield on ``ConversationCreate`` (which forbids extras), it is written as\nthe literal ``\"chat\"`` below, and planning conversations are minted\nexclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s\nowner-graded task lock. So \"a planning conversation can only ever be\ncreated by the task owner\" needs no branch here to hold \u2014 the shape of\nthe request body is what enforces it, and a body carrying ``kind`` is\nrejected 422 before this function runs.\n\n**No task-row lock** (contract \u00a7 4). The lock this route used to take\nprotected nothing a chat insert needs: the only uniqueness constraint on\n``conversation`` is the partial index over ``kind = 'planning' AND status\n= 'active'``, which a chat row cannot collide with, and the insert itself\ncarries a freshly minted primary key. Kept, it would have let any\ncolleague block the owner's rename, archive and run-start.",
+        "operationId": "create_conversation_api_v1_tasks__task_id__conversations_post",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -7314,18 +7314,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/coverage": {
+    "/api/v1/tasks/{task_id}/coverage": {
       "get": {
         "description": "Return the composed latest search coverage statement.",
-        "operationId": "coverage_api_v1_projects__project_id__coverage_get",
+        "operationId": "coverage_api_v1_tasks__task_id__coverage_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -7363,18 +7363,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/decisions": {
+    "/api/v1/tasks/{task_id}/decisions": {
       "get": {
         "description": "Return the allowlisted audit and steering decision history.",
-        "operationId": "decisions_api_v1_projects__project_id__decisions_get",
+        "operationId": "decisions_api_v1_tasks__task_id__decisions_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7435,18 +7435,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/events": {
+    "/api/v1/tasks/{task_id}/events": {
       "get": {
         "description": "Stream a read-graded durable replay followed by a re-authorising live tail.\n\nThe replay is authorised once by ``_snapshot``; the tail re-authorises on\nevery batch through the same read legs and ends the response the moment the\ncaller's access is gone (contract \u00a7 5). **Re-authorisation precedes every\nframe of its iteration, ephemeral ticks included** \u2014 see the loop.",
-        "operationId": "stream_events_api_v1_projects__project_id__events_get",
+        "operationId": "stream_events_api_v1_tasks__task_id__events_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7493,18 +7493,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/evidence": {
+    "/api/v1/tasks/{task_id}/evidence": {
       "get": {
         "description": "Return a bounded page from the evidence status ladder, optionally filtered.",
-        "operationId": "evidence_api_v1_projects__project_id__evidence_get",
+        "operationId": "evidence_api_v1_tasks__task_id__evidence_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7770,18 +7770,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/findings": {
+    "/api/v1/tasks/{task_id}/findings": {
       "get": {
         "description": "Return a bounded page of IOF and ICF findings, optionally filtered.",
-        "operationId": "findings_api_v1_projects__project_id__findings_get",
+        "operationId": "findings_api_v1_tasks__task_id__findings_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -7927,18 +7927,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/funnel": {
+    "/api/v1/tasks/{task_id}/funnel": {
       "get": {
         "description": "Return the durable acquisition-to-citation funnel.",
-        "operationId": "funnel_api_v1_projects__project_id__funnel_get",
+        "operationId": "funnel_api_v1_tasks__task_id__funnel_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -7976,18 +7976,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/groups": {
+    "/api/v1/tasks/{task_id}/groups": {
       "get": {
         "description": "Return the latest grouping facets and residual counts.",
-        "operationId": "groups_api_v1_projects__project_id__groups_get",
+        "operationId": "groups_api_v1_tasks__task_id__groups_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -8025,18 +8025,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/landscape": {
+    "/api/v1/tasks/{task_id}/landscape": {
       "get": {
         "description": "Return screened-in-only or cited-only landscape distributions.",
-        "operationId": "landscape_api_v1_projects__project_id__landscape_get",
+        "operationId": "landscape_api_v1_tasks__task_id__landscape_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -8091,18 +8091,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/plan": {
+    "/api/v1/tasks/{task_id}/plan": {
       "get": {
         "description": "Return the durable approved plan or latest completed durable draft.\n\nOwner-only sweep, for the reason :func:`list_planning_turns` states: a\ncolleague's or an administrator's read must not write the owner's rows.",
-        "operationId": "get_plan_api_v1_projects__project_id__plan_get",
+        "operationId": "get_plan_api_v1_tasks__task_id__plan_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -8141,15 +8141,15 @@
       },
       "patch": {
         "description": "Apply typed edits to the current plan and persist a new approved version.",
-        "operationId": "patch_plan_api_v1_projects__project_id__plan_patch",
+        "operationId": "patch_plan_api_v1_tasks__task_id__plan_patch",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -8197,18 +8197,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/planning-turns": {
+    "/api/v1/tasks/{task_id}/planning-turns": {
       "get": {
         "description": "Return the durable planning transcript in ascending conversation order.\n\n**Read-graded, and the sweep is owner-only.** The grade here is the read\ngrade \u2014 owner \u222a same-org colleague \u222a administrator \u2014 but\n:func:`_expire_stale_pending_turns` is a *write*, and contract \u00a7 3 makes\nthe admin leg read-only: a support read that fails somebody else's pending\nplanning turn is a mutation nobody asked for and nothing records. So the\nsweep runs only for the owner, whose own turn it is. Nothing is lost: the\nowner's own GET sweeps, and every mutating planning path sweeps under the\nwrite grade before it does anything.",
-        "operationId": "list_planning_turns_api_v1_projects__project_id__planning_turns_get",
+        "operationId": "list_planning_turns_api_v1_tasks__task_id__planning_turns_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -8269,16 +8269,16 @@
         ]
       },
       "post": {
-        "description": "Advance one project's durable planner conversation once per client turn id.",
-        "operationId": "create_planning_turn_api_v1_projects__project_id__planning_turns_post",
+        "description": "Advance one task's durable planner conversation once per client turn id.",
+        "operationId": "create_planning_turn_api_v1_tasks__task_id__planning_turns_post",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -8326,18 +8326,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/runs": {
+    "/api/v1/tasks/{task_id}/runs": {
       "get": {
-        "description": "List a project's walks from newest to oldest (paginated \u2014 runs accumulate).",
-        "operationId": "list_runs_api_v1_projects__project_id__runs_get",
+        "description": "List a task's walks from newest to oldest (paginated \u2014 runs accumulate).",
+        "operationId": "list_runs_api_v1_tasks__task_id__runs_get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -8399,15 +8399,15 @@
       },
       "post": {
         "description": "Dispatch an approved plan off the request path and return its walk row.",
-        "operationId": "create_run_api_v1_projects__project_id__runs_post",
+        "operationId": "create_run_api_v1_tasks__task_id__runs_post",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           }
@@ -8455,18 +8455,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/runs/{run_id}": {
+    "/api/v1/tasks/{task_id}/runs/{run_id}": {
       "get": {
-        "description": "Return one readable project's capability run, or the opaque 404.",
-        "operationId": "get_run_api_v1_projects__project_id__runs__run_id__get",
+        "description": "Return one readable task's capability run, or the opaque 404.",
+        "operationId": "get_run_api_v1_tasks__task_id__runs__run_id__get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },
@@ -8514,18 +8514,18 @@
         ]
       }
     },
-    "/api/v1/projects/{project_id}/sources/{source_id}": {
+    "/api/v1/tasks/{task_id}/sources/{source_id}": {
       "get": {
         "description": "Return one owner-scoped source dossier or an indistinguishable 404.",
-        "operationId": "source_dossier_api_v1_projects__project_id__sources__source_id__get",
+        "operationId": "source_dossier_api_v1_tasks__task_id__sources__source_id__get",
         "parameters": [
           {
             "in": "path",
-            "name": "project_id",
+            "name": "task_id",
             "required": true,
             "schema": {
               "format": "uuid",
-              "title": "Project Id",
+              "title": "Task Id",
               "type": "string"
             }
           },

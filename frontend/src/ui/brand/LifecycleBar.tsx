@@ -3,7 +3,7 @@ import { NavLink } from "react-router";
 
 import { cn } from "./cn";
 
-export type LifecycleBarItem = {
+type LifecycleBarItem = {
   tab: string;
   label: string;
   to: string;
@@ -38,9 +38,9 @@ export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem
           <NavLink
             key={item.tab}
             to={item.to}
-            // Plan is the bare project path, so without `end` it would stay
+            // Agent is the bare task path, so without `end` it would stay
             // active on every stage beneath it.
-            end={item.tab === "plan"}
+            end={item.tab === "agent"}
             className={({ isActive }) =>
               cn(
                 "inline-flex items-center gap-1.5 border-b-[3px] border-transparent pb-1 text-lead font-semibold leading-none text-grey no-underline hover:text-navy",

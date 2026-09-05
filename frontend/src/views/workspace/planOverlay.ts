@@ -26,13 +26,13 @@ export function overlayIsDirty(overlay: PlanOverlay): boolean {
   return Object.keys(overlay).length > 0;
 }
 
-export function yearFromIso(iso?: string | null): string {
+function yearFromIso(iso?: string | null): string {
   if (iso == null || iso === "") return "";
   const match = /^(\d{4})/.exec(iso);
   return match ? match[1] : "";
 }
 
-export function geographyFromConstraints(constraints?: ScopeConstraints | null): string {
+function geographyFromConstraints(constraints?: ScopeConstraints | null): string {
   const chips = scopeChips(constraints);
   const geo = chips.find((chip) => chip.startsWith("Geography: "));
   return geo != null ? geo.slice("Geography: ".length) : "";

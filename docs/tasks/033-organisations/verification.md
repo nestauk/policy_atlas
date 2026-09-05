@@ -452,7 +452,7 @@ order-dependent failures were caused by Phase 0b itself and fixed (see Deviation
   colleague mutations and the re-keyed cap/sweeper; read models re-headed to the
   read grade; SSE gains the re-authorisation paragraph.
 - `data-model.md`: tenancy note under § Entity hierarchy.
-- `JUMPBOX.md`: operator IAM (exactly `ListUsers` + `AdminCreateUser`; no
+- `infra/JUMPBOX.md`: operator IAM (exactly `ListUsers` + `AdminCreateUser`; no
   deletable path; no task-role Cognito permission). `DEPLOYMENT.md`: § 6 ops-CLI
   invocation over the tunnel; § 8 the 033 roll-forward posture, the evidenced
   chat-exposure rationale, and the manual downgrade procedure (the ECS task

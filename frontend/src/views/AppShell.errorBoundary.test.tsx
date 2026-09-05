@@ -5,24 +5,24 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./AppShell";
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 vi.mock("../api/queries", () => ({
   useMe: () => ({ data: { user_id: "policy-lead", display_name: "Ada Lovelace", organisation: null, is_admin: false } }),
-  useProject: () => ({
-    data: { project_id: PROJECT_ID, name: "Acme project", visibility: "org", is_owner: true },
+  useTask: () => ({
+    data: { task_id: TASK_ID, name: "Acme task", visibility: "org", is_owner: true },
   }),
   useCheckIns: () => ({ data: { data: [] } }),
-  // The nav logo checks all projects for an active run outside a task.
-  useProjects: () => ({ data: { data: [] } }),
-  // The header's project-settings popover wires rename/archive mutations,
+  // The nav logo checks all tasks for an active run outside a task.
+  useTasks: () => ({ data: { data: [] } }),
+  // The header's task-settings popover wires rename/archive mutations,
   // which resolve their client through this hook.
   useApiClient: () => ({}),
 }));
 
 vi.mock("../api/mutations", () => ({
-  useUpdateProject: () => ({ mutate: vi.fn(), isPending: false }),
-  useArchiveProject: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  useUpdateTask: () => ({ mutate: vi.fn(), isPending: false }),
+  useArchiveTask: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
 }));
 
 vi.mock("../auth", () => ({
@@ -55,7 +55,7 @@ function renderShell(initialPath: string) {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
-          <Route path="/projects/:projectId/*" element={<AppShell />} />
+          <Route path="/tasks/:taskId/*" element={<AppShell />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -65,7 +65,7 @@ function renderShell(initialPath: string) {
 describe("AppShell — chat subtree error containment (029 fix 6)", () => {
   it("keeps the nav and routed view usable when the chat panel throws while rendering", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    renderShell(`/projects/${PROJECT_ID}/sources`);
+    renderShell(`/tasks/${TASK_ID}/sources`);
 
     // The chat's own boundary caught it — the last-resort fallback shows in
     // its place, not a full-page crash.

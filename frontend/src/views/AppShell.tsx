@@ -1,8 +1,8 @@
 import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
-import { useArchiveProject, useUpdateProject } from "../api/mutations";
-import { useCheckIns, useMe, useProject, useProjects } from "../api/queries";
+import { useArchiveTask, useUpdateTask } from "../api/mutations";
+import { useCheckIns, useMe, useTask, useTasks } from "../api/queries";
 import { useAuth } from "../auth";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
@@ -12,7 +12,7 @@ import { cn } from "../ui/brand/cn";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
-import { lifecycleTabs, publicLifecycleTabs } from "./lifecycle";
+import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
 import { PublicViewProvider } from "./publicView";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
@@ -23,26 +23,26 @@ import { ChatSidePanel } from "./workspace/chat/ChatSidePanel";
 import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
-/** Project settings affordance (028 F.5): rename + archive, wired to the
- *  existing project mutations — the project-card pattern,
+/** Task settings affordance (028 F.5): rename + archive, wired to the
+ *  existing task mutations — the task-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
  *  explicit confirm step before the mutation fires. Visibility moved to the
  *  Share page (`ShareView`). */
-function ProjectSettingsMenu({
-  projectId,
-  projectName,
+function TaskSettingsMenu({
+  taskId,
+  taskName,
   isOwner,
 }: {
-  projectId: string;
-  projectName: string;
+  taskId: string;
+  taskName: string;
   isOwner: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
-  const [draftName, setDraftName] = useState(projectName);
-  const update = useUpdateProject(projectId);
-  const archive = useArchiveProject(projectId);
+  const [draftName, setDraftName] = useState(taskName);
+  const update = useUpdateTask(taskId);
+  const archive = useArchiveTask(taskId);
   const toast = useToast();
 
   // Non-owner (task 033 phase 10c, contract § 11 / rubric 37): every item
@@ -55,7 +55,7 @@ function ProjectSettingsMenu({
   const reset = () => {
     setEditing(false);
     setConfirmingArchive(false);
-    setDraftName(projectName);
+    setDraftName(taskName);
   };
 
   const saveRename = () => {
@@ -68,7 +68,7 @@ function ProjectSettingsMenu({
         onError: () =>
           toast.toast({
             title: "Rename failed",
-            description: "The project couldn't be renamed. Try again.",
+            description: "The task couldn't be renamed. Try again.",
             tone: "error",
           }),
       },
@@ -86,8 +86,8 @@ function ProjectSettingsMenu({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Project settings"
-          title="Project settings"
+          aria-label={COPY.taskSettings}
+          title={COPY.taskSettings}
           className="cursor-pointer text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
         >
           <svg
@@ -112,11 +112,11 @@ function ProjectSettingsMenu({
               saveRename();
             }}
           >
-            <label className="sr-only" htmlFor="project-settings-name">
-              Project name
+            <label className="sr-only" htmlFor="task-settings-name">
+              {TASK.one} name
             </label>
             <input
-              id="project-settings-name"
+              id="task-settings-name"
               autoFocus
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
@@ -127,7 +127,7 @@ function ProjectSettingsMenu({
             />
             {update.isError && (
               <p role="alert" className="mt-2 text-body text-red">
-                The project couldn't be renamed. Try again.
+                The task couldn't be renamed. Try again.
               </p>
             )}
             <div className="mt-3 flex gap-2">
@@ -144,7 +144,7 @@ function ProjectSettingsMenu({
             {/* Rename and archive are owner-only mutations (task 033 phase
                 10c, contract § 11 / rubric 37) — hidden entirely for a
                 non-owner. Rev 1 of this menu shipped these ungated: a
-                colleague would see Rename, click, and get "The project
+                colleague would see Rename, click, and get "The task
                 couldn't be renamed." */}
             {isOwner && (
               <button
@@ -157,13 +157,13 @@ function ProjectSettingsMenu({
             )}
             {isOwner && archive.isError && (
               <p role="alert" className="text-body text-red">
-                The project couldn't be archived. Try again.
+                The task couldn't be archived. Try again.
               </p>
             )}
             {isOwner &&
               (confirmingArchive ? (
                 <div className="space-y-2 text-body text-grey">
-                  <p>Archiving removes this project from your active projects.</p>
+                  <p>Archiving removes this task from your active tasks.</p>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -174,7 +174,7 @@ function ProjectSettingsMenu({
                           onError: () =>
                             toast.toast({
                               title: "Archive failed",
-                              description: "The project couldn't be archived. Try again.",
+                              description: "The task couldn't be archived. Try again.",
                               tone: "error",
                             }),
                         })
@@ -271,41 +271,45 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
 
 /** App chrome: global controls always; task stages on a second bar. */
 export function AppShell() {
-  const { projectId } = useParams();
+  const { taskId } = useParams();
   const location = useLocation();
   const auth = useAuth();
   // Belt-and-braces while a run is active: the shell-owned run stream
   // already invalidates this query on `stage.completed` / `run.status`, but
   // polling covers a reconnect gap so lifecycle locking stays honest.
-  const project = useProject(projectId ?? "", { pollWhileRunning: true });
-  const base = projectId === undefined ? null : `/projects/${projectId}`;
+  const task = useTask(taskId ?? "", { pollWhileRunning: true });
+  const base = taskId === undefined ? null : `/tasks/${taskId}`;
   // Public-leg access (task 037): a signed-in outsider reading a public Task
   // gets the same two-tab view as an anonymous visitor — no chat, no SSE,
   // no Plan/Share/History (their URLs redirect in LifecycleRoute).
-  const publicAccess = project.data?.access === "public";
-  // Review fix (task 037): `publicAccess` reads false while the project
+  const publicAccess = task.data?.access === "public";
+  // Review fix (task 037): `publicAccess` reads false while the task
   // query is still pending — same as a graded reader — so a cold visit to
   // a public Task briefly opened the run stream and mounted the chat panel
   // before access was known. Both gate on the query having resolved.
-  const projectResolved = project.data !== undefined;
-  // Outside a task, check all projects so the nav logo animates even when the
+  const taskResolved = task.data !== undefined;
+  // Outside a task, check all tasks so the nav logo animates even when the
   // user has navigated away. Cost: one list fetch when the shell mounts (once
-  // per session — AppShell is the layout route), plus useProjects's own 15s
+  // per session — AppShell is the layout route), plus useTasks's own 15s
   // poll while any run is active; the query is shared with TasksListView.
-  const allProjects = useProjects();
+  const allTasks = useTasks();
   const anyRunning =
     base !== null
-      ? project.data?.latest_run?.status === "running"
-      : (allProjects.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
+      ? task.data?.latest_run?.status === "running"
+      : (allTasks.data?.data.some((p) => p.latest_run?.status === "running") ?? false);
   const inWorkspace = base !== null && location.pathname === base;
-  const showChatPanel = base !== null && !inWorkspace && projectResolved && !publicAccess;
+  // Every task tab but Agent (038 V8, owner ruling 2026-09-05): the Agent
+  // tab lists the same conversations in its own sidebar and shows the
+  // selected one in its main column, so the overlay would be a second copy.
+  const showChatPanel = base !== null && !inWorkspace && taskResolved && !publicAccess;
   // With a chat open beside the view, the two columns scroll independently —
   // the workspace's own two-pane behaviour (fixed viewport height, each
   // column owns its scroll). Closed, the page keeps its normal scroll.
   // `.get`, not `.has`: `?chat=` (present but empty) must read as closed,
   // matching `useActiveConversation`'s own non-empty check — otherwise a
   // bare `?chat=` opens a panel bound to conversation id "".
-  const chatOpen = showChatPanel && Boolean(new URLSearchParams(location.search).get("chat"));
+  const chatParam = new URLSearchParams(location.search).get("chat") || null;
+  const chatOpen = showChatPanel && chatParam !== null;
   // Non-Plan task tabs: footer rides the shell scroll pane. Plan keeps its
   // own inner chat scroll, so the footer mounts there (PlanningPane) instead
   // of sticking under the composer.
@@ -320,11 +324,11 @@ export function AppShell() {
   // Owner-scoped (task 033 phase 10b, contract § 11 / rubric 38): steering
   // is owner-only, so a colleague reading an org-shared Task must never be
   // told a check-in is "waiting on you" — this used to poll and show for
-  // every viewer. `project.data?.is_owner` gates both the poll (cheapest
+  // every viewer. `task.data?.is_owner` gates both the poll (cheapest
   // honest rule: don't even ask) and, transitively through `hasPendingCheckIn`
   // below, the nav badge, the lifecycle-tab marker and the cross-tab banner.
-  const isOwner = project.data?.is_owner === true;
-  const pendingCheckIns = useCheckIns(projectId ?? "", "pending", {
+  const isOwner = task.data?.is_owner === true;
+  const pendingCheckIns = useCheckIns(taskId ?? "", "pending", {
     enabled: base !== null && !inWorkspace && isOwner,
     refetchInterval: 15_000,
   });
@@ -354,39 +358,41 @@ export function AppShell() {
           </NavItem>
           <NavItem
             to="/"
-            match={(path) => path === "/" || path.startsWith("/projects/")}
+            match={(path) => path === "/" || path.startsWith("/tasks/")}
           >
             {TASK.many}
           </NavItem>
-          <NavItem to="/portfolios">{PROJECT.many}</NavItem>
+          <NavItem to="/projects">{PROJECT.many}</NavItem>
           {/* 026 live-check gap: the AuthApi always had signOut; nothing
               rendered it — Cognito users had no way out of a session. */}
           {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
         </div>
       </NavBar>
       {base !== null && (
-        <NavBar aria-label="Task" className="shrink-0 bg-ground">
+        <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
           <div className="flex min-w-0 items-center gap-2">
-            {project.data !== undefined && (
+            {task.data !== undefined && (
               <>
                 <span className="truncate text-lead font-semibold text-navy">
-                  {scrub(project.data.name)}
+                  {scrub(task.data.name)}
                 </span>
-                <ProjectSettingsMenu
-                  projectId={project.data.project_id}
-                  projectName={project.data.name}
-                  isOwner={project.data.is_owner}
+                <TaskSettingsMenu
+                  taskId={task.data.task_id}
+                  taskName={task.data.name}
+                  isOwner={task.data.is_owner}
                 />
               </>
             )}
           </div>
           <LifecycleBar
             hint={COPY.lockedHint}
-            items={(publicAccess
-              ? publicLifecycleTabs(base)
-              : lifecycleTabs(base, project.data?.latest_run?.status)
+            items={withChat(
+              publicAccess
+                ? publicLifecycleTabs(base)
+                : lifecycleTabs(base, task.data?.latest_run?.status),
+              chatParam,
             ).map((item) =>
-              item.tab === "plan" && hasPendingCheckIn
+              item.tab === "agent" && hasPendingCheckIn
                 ? {
                     ...item,
                     marker: (
@@ -414,9 +420,9 @@ export function AppShell() {
           </NavItem>
         </div>
       )}
-      {/* Chat beside every project view outside the workspace (029
-          rev 3.4): the workspace already hosts the full conversation
-          rail, so the panel mounts everywhere else in the project. */}
+      {/* The Agent overlay beside every task view outside the Agent tab
+          (029 rev 3.4, 038 V8): the Agent tab hosts the conversation list
+          and the conversation itself, so the panel mounts everywhere else. */}
       <div
         className={cn(
           "flex min-w-0 flex-1",
@@ -428,8 +434,8 @@ export function AppShell() {
             boundary: a render error in the chat subtree must not take
             out the rest of the shell (nav, the routed view). */}
         {showChatPanel && (
-          <ErrorBoundary key={projectId}>
-            <ChatSidePanel projectId={projectId ?? ""} isOwner={isOwner} />
+          <ErrorBoundary key={taskId}>
+            <ChatSidePanel taskId={taskId ?? ""} isOwner={isOwner} />
           </ErrorBoundary>
         )}
         <div
@@ -461,14 +467,14 @@ export function AppShell() {
       <TooltipProvider delayDuration={200}>
         <TitleMarkerProvider active={hasPendingCheckIn}>
           <PublicViewProvider value={publicAccess}>
-            {projectId !== undefined ? (
-              // `connect` stays false until the project query resolves, then
+            {taskId !== undefined ? (
+              // `connect` stays false until the task query resolves, then
               // flips false permanently once a public-leg read identifies the
               // Task (the events route is not on the public surface) — for
               // entitled readers it flips true and stays there. Before that
               // resolution, access is unknown, so this must not connect
               // either (review fix, task 037).
-              <RunStreamProvider projectId={projectId} connect={projectResolved && !publicAccess}>
+              <RunStreamProvider taskId={taskId} connect={taskResolved && !publicAccess}>
                 {shellChrome}
               </RunStreamProvider>
             ) : (

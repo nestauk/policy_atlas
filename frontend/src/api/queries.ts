@@ -7,67 +7,67 @@ import type { components } from "./gen/types";
 
 /**
  * Query-key roots, shared with `src/store/useRunStream.tsx` so SSE-driven
- * invalidation can target "everything under this project" without every
+ * invalidation can target "everything under this task" without every
  * hook here needing to know about the stream.
  */
 export const queryKeys = {
   me: () => ["me"] as const,
-  projectRoot: (projectId: string) => ["projects", projectId] as const,
-  // `scope` and `portfolio_id` are embedded via the whole `query` object, so
+  taskRoot: (taskId: string) => ["tasks", taskId] as const,
+  // `scope` and `project_id` are embedded via the whole `query` object, so
   // they participate in the key automatically (task 033 phase 10a) — every
   // distinct filter combination, including the switcher's future `scope`,
   // gets its own cache entry rather than silently serving another scope's
   // rows.
-  projects: (query?: ProjectsQuery) => ["projects", "list", query] as const,
-  project: (projectId: string) => ["projects", projectId, "detail"] as const,
-  checkIns: (projectId: string, status?: "pending" | "all") =>
-    ["projects", projectId, "check-ins", status] as const,
-  funnel: (projectId: string) => ["projects", projectId, "funnel"] as const,
-  landscape: (projectId: string, scope?: "cited") =>
-    ["projects", projectId, "landscape", scope] as const,
-  evidence: (projectId: string, query?: EvidenceQuery) =>
-    ["projects", projectId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
-  findings: (projectId: string, query?: FindingsQuery) =>
-    ["projects", projectId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
-  decisions: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "decisions", page, pageSize] as const,
-  planningTurns: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "planning-turns", page, pageSize] as const,
-  plan: (projectId: string) => ["projects", projectId, "plan"] as const,
-  runs: (projectId: string, page?: number, pageSize?: number) =>
-    ["projects", projectId, "runs", page, pageSize] as const,
-  artefact: (projectId: string) => ["projects", projectId, "artefact"] as const,
-  sourceDossier: (projectId: string, sourceId: string) =>
-    ["projects", projectId, "source-dossier", sourceId] as const,
+  tasks: (query?: TasksQuery) => ["tasks", "list", query] as const,
+  task: (taskId: string) => ["tasks", taskId, "detail"] as const,
+  checkIns: (taskId: string, status?: "pending" | "all") =>
+    ["tasks", taskId, "check-ins", status] as const,
+  funnel: (taskId: string) => ["tasks", taskId, "funnel"] as const,
+  landscape: (taskId: string, scope?: "cited") =>
+    ["tasks", taskId, "landscape", scope] as const,
+  evidence: (taskId: string, query?: EvidenceQuery) =>
+    ["tasks", taskId, "evidence", query?.page, query?.page_size, query?.status, query?.cited, query?.sort, query?.order, query?.theme, query?.origin, query?.evidence_type, query?.strength, query?.year_from, query?.year_to] as const,
+  findings: (taskId: string, query?: FindingsQuery) =>
+    ["tasks", taskId, "findings", query?.page, query?.page_size, query?.profile, query?.facet, query?.group, query?.group_id, query?.source_id] as const,
+  decisions: (taskId: string, page?: number, pageSize?: number) =>
+    ["tasks", taskId, "decisions", page, pageSize] as const,
+  planningTurns: (taskId: string, page?: number, pageSize?: number) =>
+    ["tasks", taskId, "planning-turns", page, pageSize] as const,
+  plan: (taskId: string) => ["tasks", taskId, "plan"] as const,
+  runs: (taskId: string, page?: number, pageSize?: number) =>
+    ["tasks", taskId, "runs", page, pageSize] as const,
+  artefact: (taskId: string) => ["tasks", taskId, "artefact"] as const,
+  sourceDossier: (taskId: string, sourceId: string) =>
+    ["tasks", taskId, "source-dossier", sourceId] as const,
   /** Prefix shared by every filtered variant below — invalidate with this,
    *  not the filtered key, so a mutation clears every consumer's cache
    *  regardless of which `kind`/`status` it queried with (partial match
    *  requires the invalidated key to be an actual prefix of the stored one). */
-  conversationsRoot: (projectId: string) => ["projects", projectId, "conversations"] as const,
-  conversations: (projectId: string, query?: ConversationQuery) =>
-    [...queryKeys.conversationsRoot(projectId), query?.kind, query?.status] as const,
+  conversationsRoot: (taskId: string) => ["tasks", taskId, "conversations"] as const,
+  conversations: (taskId: string, query?: ConversationQuery) =>
+    [...queryKeys.conversationsRoot(taskId), query?.kind, query?.status] as const,
   conversation: (conversationId: string) => ["conversations", conversationId, "detail"] as const,
   chatTurns: (conversationId: string) => ["conversations", conversationId, "turns"] as const,
-  // Same whole-object embedding as `projects` above, so `scope` differs the
+  // Same whole-object embedding as `tasks` above, so `scope` differs the
   // key without a separate positional argument.
-  portfolios: (query?: PortfoliosQuery) => ["portfolios", "list", query] as const,
-  portfolio: (portfolioId: string) => ["portfolios", portfolioId, "detail"] as const,
+  projects: (query?: ProjectsQuery) => ["projects", "list", query] as const,
+  project: (projectId: string) => ["projects", projectId, "detail"] as const,
 };
 
-/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope` and
- *  `portfolio_id`). `scope` defaults server-side to `all`; the frontend
+/** `GET /api/v1/tasks` filters (task 033 phase 10a adds `scope` and
+ *  `project_id`). `scope` defaults server-side to `all`; the frontend
  *  passes it explicitly only where a caller needs something other than that
  *  default (the phase 10b switcher), so day-one behaviour is unchanged. */
-export interface ProjectsQuery {
+interface TasksQuery {
   status?: "active" | "archived" | "all";
   scope?: "all" | "mine";
-  portfolio_id?: string | null;
+  project_id?: string | null;
   page?: number;
   page_size?: number;
 }
 
-/** `GET /api/v1/portfolios` filters (task 033 phase 10a adds `scope`). */
-export interface PortfoliosQuery {
+/** `GET /api/v1/projects` filters (task 033 phase 10a adds `scope`). */
+interface ProjectsQuery {
   scope?: "all" | "mine";
   page?: number;
   page_size?: number;
@@ -108,7 +108,7 @@ export interface EvidenceQuery extends PageQuery {
   year_to?: number;
 }
 
-export interface FindingsQuery extends PageQuery {
+interface FindingsQuery extends PageQuery {
   profile?: "iof" | "icf";
   facet?: string;
   group?: string;
@@ -116,8 +116,8 @@ export interface FindingsQuery extends PageQuery {
   source_id?: string;
 }
 
-/** Filters for the project conversation library. */
-export interface ConversationQuery {
+/** Filters for the task conversation library. */
+interface ConversationQuery {
   kind?: "planning" | "chat";
   status?: "active" | "closed" | "archived";
 }
@@ -155,12 +155,33 @@ export function useMe() {
 
 const ACTIVE_RUN_STATUSES = new Set(["running", "paused"]);
 
-/** `GET /api/v1/projects` — paginated, owner-scoped. Live landing statuses
- *  (contract strand 14): while any listed project's `latest_run.status` is
+/** `GET /api/v1/tasks` — paginated, owner-scoped. Live landing statuses
+ *  (contract strand 14): while any listed task's `latest_run.status` is
  *  non-terminal, the list refetches on a modest interval so a card never
  *  keeps showing "Analysing"/"Paused" after the run has actually moved on.
  *  `refetchIntervalInBackground` defaults to `false`, so this only polls
  *  while the tab is visible. */
+export function useTasks(query?: TasksQuery) {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.tasks(query),
+    queryFn: async () => {
+      const { data, error } = await client.GET("/api/v1/tasks", { params: { query } });
+      if (error) throw error;
+      return data;
+    },
+    refetchInterval: (activeQuery) => {
+      const hasActiveRun = activeQuery.state.data?.data.some((task) =>
+        task.latest_run !== null &&
+        task.latest_run !== undefined &&
+        ACTIVE_RUN_STATUSES.has(task.latest_run.status),
+      );
+      return hasActiveRun ? 15_000 : false;
+    },
+  });
+}
+
+/** `GET /api/v1/projects` — the screen's Projects, with a derived task count. */
 export function useProjects(query?: ProjectsQuery) {
   const client = useApiClient();
   return useQuery({
@@ -170,65 +191,44 @@ export function useProjects(query?: ProjectsQuery) {
       if (error) throw error;
       return data;
     },
-    refetchInterval: (activeQuery) => {
-      const hasActiveRun = activeQuery.state.data?.data.some((project) =>
-        project.latest_run !== null &&
-        project.latest_run !== undefined &&
-        ACTIVE_RUN_STATUSES.has(project.latest_run.status),
-      );
-      return hasActiveRun ? 15_000 : false;
-    },
   });
 }
 
-/** `GET /api/v1/portfolios` — the screen's Projects, with a derived task count. */
-export function usePortfolios(query?: PortfoliosQuery) {
+/** `GET /api/v1/projects/{project_id}`. */
+export function useProject(projectId: string) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.portfolios(query),
+    queryKey: queryKeys.project(projectId),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/portfolios", { params: { query } });
-      if (error) throw error;
-      return data;
-    },
-  });
-}
-
-/** `GET /api/v1/portfolios/{portfolio_id}`. */
-export function usePortfolio(portfolioId: string) {
-  const client = useApiClient();
-  return useQuery({
-    queryKey: queryKeys.portfolio(portfolioId),
-    queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/portfolios/{portfolio_id}", {
-        params: { path: { portfolio_id: portfolioId } },
+      const { data, error } = await client.GET("/api/v1/projects/{project_id}", {
+        params: { path: { project_id: projectId } },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(portfolioId),
+    enabled: Boolean(projectId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}`.
+/** `GET /api/v1/tasks/{task_id}`.
  *
  *  `options.pollWhileRunning` keeps `latest_run.status` fresh for a caller
  *  with no run stream of its own — historically the app shell's lifecycle
  *  locking. The shell now also owns `RunStreamProvider`, which invalidates
  *  this query on `stage.completed` / `run.status`; polling remains as a
  *  reconnect-gap belt-and-braces. */
-export function useProject(projectId: string, options?: { pollWhileRunning?: boolean }) {
+export function useTask(taskId: string, options?: { pollWhileRunning?: boolean }) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.project(projectId),
+    queryKey: queryKeys.task(taskId),
     queryFn: async () => {
-      const { data, error, response } = await client.GET("/api/v1/projects/{project_id}", {
-        params: { path: { project_id: projectId } },
+      const { data, error, response } = await client.GET("/api/v1/tasks/{task_id}", {
+        params: { path: { task_id: taskId } },
       });
-      if (error) throw Object.assign(new Error("Failed to load project"), { status: response.status });
+      if (error) throw Object.assign(new Error("Failed to load task"), { status: response.status });
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
     // A 4xx (an anonymous 404 on a private/unknown Task, task 037) means the
     // same thing on every attempt — retrying it just holds the caller
     // (PublicTaskShell's stash-and-splash fallback) for ~7s across the
@@ -249,28 +249,28 @@ export function useProject(projectId: string, options?: { pollWhileRunning?: boo
 }
 
 /**
- * `GET /api/v1/projects/{project_id}/check-ins` — the derived pending card
+ * `GET /api/v1/tasks/{task_id}/check-ins` — the derived pending card
  * (`status=pending`, the default) or the durable steering history
  * (`status=all`). `options.enabled`/`options.refetchInterval` let a caller
  * outside the workspace (the AppShell nav badge) poll cheaply for a pending
  * check-in without a live-run stream connection of its own.
  */
 export function useCheckIns(
-  projectId: string,
+  taskId: string,
   status?: "pending" | "all",
   options?: { enabled?: boolean; refetchInterval?: number | false },
 ) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.checkIns(projectId, status),
+    queryKey: queryKeys.checkIns(taskId, status),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/check-ins", {
-        params: { path: { project_id: projectId }, query: { status } },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/check-ins", {
+        params: { path: { task_id: taskId }, query: { status } },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId) && (options?.enabled ?? true),
+    enabled: Boolean(taskId) && (options?.enabled ?? true),
     refetchInterval: options?.refetchInterval,
   });
 }
@@ -287,146 +287,146 @@ export function useCheckIns(
 // in practice, that's an ordinary query error surfaced through
 // `useQuery`'s `error` — not a typecheck-time concern.
 
-/** `GET /api/v1/projects/{project_id}/funnel` — the durable
+/** `GET /api/v1/tasks/{task_id}/funnel` — the durable
  *  acquisition-to-citation funnel, whole-object. */
-export function useFunnel(projectId: string) {
+export function useFunnel(taskId: string) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.funnel(projectId),
+    queryKey: queryKeys.funnel(taskId),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/funnel", {
-        params: { path: { project_id: projectId } },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/funnel", {
+        params: { path: { task_id: taskId } },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/landscape` — screened-in-only
+/** `GET /api/v1/tasks/{task_id}/landscape` — screened-in-only
  *  distributions, whole-object. */
-export function useLandscape(projectId: string, scope?: "cited") {
+export function useLandscape(taskId: string, scope?: "cited") {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.landscape(projectId, scope),
+    queryKey: queryKeys.landscape(taskId, scope),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/landscape", {
-        params: { path: { project_id: projectId }, query: scope !== undefined ? { scope } : undefined },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/landscape", {
+        params: { path: { task_id: taskId }, query: scope !== undefined ? { scope } : undefined },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/evidence` — paginated source list
+/** `GET /api/v1/tasks/{task_id}/evidence` — paginated source list
  *  with the status ladder. */
-export function useEvidence(projectId: string, query?: EvidenceQuery) {
+export function useEvidence(taskId: string, query?: EvidenceQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.evidence(projectId, query),
+    queryKey: queryKeys.evidence(taskId, query),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/evidence", {
-        params: { path: { project_id: projectId }, query },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/evidence", {
+        params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/findings` — paginated IOF/ICF
+/** `GET /api/v1/tasks/{task_id}/findings` — paginated IOF/ICF
  *  findings. */
-export function useFindings(projectId: string, query?: FindingsQuery) {
+export function useFindings(taskId: string, query?: FindingsQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.findings(projectId, query),
+    queryKey: queryKeys.findings(taskId, query),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/findings", {
-        params: { path: { project_id: projectId }, query },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/findings", {
+        params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/sources/{source_id}` — one source's
+/** `GET /api/v1/tasks/{task_id}/sources/{source_id}` — one source's
  * provenance, latest citations and dossier detail. */
-export function useSourceDossier(projectId: string, sourceId: string | null) {
+export function useSourceDossier(taskId: string, sourceId: string | null) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.sourceDossier(projectId, sourceId ?? ""),
+    queryKey: queryKeys.sourceDossier(taskId, sourceId ?? ""),
     queryFn: async () => {
       if (!sourceId) return undefined;
       const { data, error } = await client.GET(
-        "/api/v1/projects/{project_id}/sources/{source_id}",
-        { params: { path: { project_id: projectId, source_id: sourceId } } },
+        "/api/v1/tasks/{task_id}/sources/{source_id}",
+        { params: { path: { task_id: taskId, source_id: sourceId } } },
       );
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId && sourceId),
+    enabled: Boolean(taskId && sourceId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/decisions` — paginated decision log
+/** `GET /api/v1/tasks/{task_id}/decisions` — paginated decision log
  *  (`steering_history` + allowlisted events). */
-export function useDecisions(projectId: string, query?: PageQuery) {
+export function useDecisions(taskId: string, query?: PageQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.decisions(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.decisions(taskId, query?.page, query?.page_size),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/decisions", {
-        params: { path: { project_id: projectId }, query },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/decisions", {
+        params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/planning-turns` — the durable,
+/** `GET /api/v1/tasks/{task_id}/planning-turns` — the durable,
  * paginated planning transcript in ascending `turn_index` order. */
-export function usePlanningTurns(projectId: string, query?: PageQuery) {
+export function usePlanningTurns(taskId: string, query?: PageQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.planningTurns(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.planningTurns(taskId, query?.page, query?.page_size),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/planning-turns", {
-        params: { path: { project_id: projectId }, query },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/planning-turns", {
+        params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/conversations` — the project chat and
+/** `GET /api/v1/tasks/{task_id}/conversations` — the task chat and
  * planning-conversation library. `options.enabled` lets the public task view
  * (task 037) keep the hook mounted without issuing the non-public request. */
 export function useConversations(
-  projectId: string,
+  taskId: string,
   query?: ConversationQuery,
   options?: { enabled?: boolean },
 ) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.conversations(projectId, query),
+    queryKey: queryKeys.conversations(taskId, query),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/conversations", {
-        params: { path: { project_id: projectId }, query },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/conversations", {
+        params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId) && (options?.enabled ?? true),
+    enabled: Boolean(taskId) && (options?.enabled ?? true),
   });
 }
 
@@ -484,95 +484,95 @@ export function useChatTurns(conversationId: string) {
 
 /** `GET .../plan` — the approved plan or the latest durable draft. A 404 is a
  * normal pre-conversation state and resolves to `null`, never an error. */
-export function usePlan(projectId: string) {
+export function usePlan(taskId: string) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.plan(projectId),
+    queryKey: queryKeys.plan(taskId),
     queryFn: async () => {
       const { data, error, response } = await client.GET(
-        "/api/v1/projects/{project_id}/plan",
-        { params: { path: { project_id: projectId } } },
+        "/api/v1/tasks/{task_id}/plan",
+        { params: { path: { task_id: taskId } } },
       );
       if (response.status === 404) return null;
       if (error) throw error;
       return data ?? null;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/runs` — paginated run blocks for the
+/** `GET /api/v1/tasks/{task_id}/runs` — paginated run blocks for the
  * planning-thread composition model. */
-export function useRuns(projectId: string, query?: PageQuery) {
+export function useRuns(taskId: string, query?: PageQuery) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.runs(projectId, query?.page, query?.page_size),
+    queryKey: queryKeys.runs(taskId, query?.page, query?.page_size),
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/runs", {
-        params: { path: { project_id: projectId }, query },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/runs", {
+        params: { path: { task_id: taskId }, query },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/artefact` — the latest persisted
+/** `GET /api/v1/tasks/{task_id}/artefact` — the latest persisted
  *  synthesis artefact (sections, span-anchored claims, citations), or a
  *  shaped absence, whole-object. */
-export function useArtefact(projectId: string) {
+export function useArtefact(taskId: string) {
   const client = useApiClient();
   return useQuery({
-    queryKey: queryKeys.artefact(projectId),
+    queryKey: queryKeys.artefact(taskId),
     queryFn: async () => {
       const { data, error, response } = await client.GET(
-        "/api/v1/projects/{project_id}/artefact",
-        { params: { path: { project_id: projectId } } },
+        "/api/v1/tasks/{task_id}/artefact",
+        { params: { path: { task_id: taskId } } },
       );
       // No artefact yet is a normal pre-synthesis state, not an error — a
       // thrown 404 here retries four times and holds a blank skeleton for
-      // ~10s on a fresh project (owner feedback, 2026-07-29).
+      // ~10s on a fresh task (owner feedback, 2026-07-29).
       if (response.status === 404) return null;
       if (error) throw error;
       return data ?? null;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/coverage` — the composed one-line
+/** `GET /api/v1/tasks/{task_id}/coverage` — the composed one-line
  *  coverage sentence (stop condition + adequacy), carrying its base. */
-export function useCoverage(projectId: string) {
+export function useCoverage(taskId: string) {
   const client = useApiClient();
   return useQuery({
-    queryKey: [...queryKeys.projectRoot(projectId), "coverage"] as const,
+    queryKey: [...queryKeys.taskRoot(taskId), "coverage"] as const,
     queryFn: async () => {
       const { data, error, response } = await client.GET(
-        "/api/v1/projects/{project_id}/coverage",
-        { params: { path: { project_id: projectId } } },
+        "/api/v1/tasks/{task_id}/coverage",
+        { params: { path: { task_id: taskId } } },
       );
       // No coverage record yet (nothing has run) is a normal state.
       if (response.status === 404) return null;
       if (error) throw error;
       return data ?? null;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }
 
-/** `GET /api/v1/projects/{project_id}/groups` — grouping facets. */
-export function useGroups(projectId: string) {
+/** `GET /api/v1/tasks/{task_id}/groups` — grouping facets. */
+export function useGroups(taskId: string) {
   const client = useApiClient();
   return useQuery({
-    queryKey: [...queryKeys.projectRoot(projectId), "groups"] as const,
+    queryKey: [...queryKeys.taskRoot(taskId), "groups"] as const,
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/groups", {
-        params: { path: { project_id: projectId } },
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/groups", {
+        params: { path: { task_id: taskId } },
       });
       if (error) throw error;
       return data;
     },
-    enabled: Boolean(projectId),
+    enabled: Boolean(taskId),
   });
 }

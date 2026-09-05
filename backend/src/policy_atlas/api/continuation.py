@@ -20,15 +20,14 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.api.locks import project_lock
+from policy_atlas.api.locks import task_lock
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, characterisation_result, orchestration_plan
+from policy_atlas.core.schema import capability_run, characterisation_result, task_plan
 from policy_atlas.core.tags import has_control_character
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
+from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
-from policy_atlas.runtime.orchestration_plan import compose
-from policy_atlas.runtime.orchestrator_backend import OrchestratorBackend
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
     Adjust,
@@ -47,6 +46,7 @@ from policy_atlas.runtime.steering import (
     render_fanout_confirmation,
     validate_steering_delta,
 )
+from policy_atlas.runtime.task_plan import canonical_steer_point, compose
 
 log = structlog.get_logger()
 
@@ -104,13 +104,13 @@ class ClaimedContinuation:
     """A continuation atomically claimed for execution.
 
     Args:
-        project_id: Project owning the walk.
+        task_id: Task owning the walk.
         capability_run_id: Walk to execute.
         requested_event_id: Durable continuation-request event.
         decision_event_id: Steering decision being resumed from.
     """
 
-    project_id: uuid.UUID
+    task_id: uuid.UUID
     capability_run_id: uuid.UUID
     requested_event_id: uuid.UUID
     decision_event_id: uuid.UUID
@@ -150,7 +150,7 @@ class _Pause:
 class _PendingCompilation:
     """A process-local compiled fan-out awaiting confirmation."""
 
-    project_id: uuid.UUID
+    task_id: uuid.UUID
     check_in_id: uuid.UUID
     capability_run_id: uuid.UUID
     fanout: FanOut
@@ -160,36 +160,36 @@ class _PendingCompilation:
 def answer_check_in(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     check_in_id: uuid.UUID,
     response: Any,
     actor: str,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
 ) -> AnswerResult:
     """Persist one canonical check-in response and its continuation request.
 
     Args:
         engine: Database engine.
-        project_id: Project owning the parked walk.
+        task_id: Task owning the parked walk.
         check_in_id: Durable ``steering.pause`` event identity.
         response: Transport response model or mapping with a ``kind`` field.
         actor: Authenticated actor recorded in logs.
-        orchestrator: Present for API symmetry; free text uses
+        agent: Present for API symmetry; free text uses
             :func:`compile_free_text` and is not applied here.
 
     Returns:
         The committed answer result.
 
     Raises:
-        LookupError: If the project, check-in, or parked run is absent.
+        LookupError: If the task, check-in, or parked run is absent.
         AlreadyAnsweredError: If this pause was already decided.
         InvalidResponseError: If the response is not in the durable affordance set.
     """
-    del orchestrator
+    del agent
     with engine.begin() as conn:
-        project_lock(conn, project_id)
-        pause = _pending_pause(conn, project_id=project_id, check_in_id=check_in_id)
-        state = build(engine, project_id=project_id, capability_run_id=pause.capability_run_id)
+        task_lock(conn, task_id)
+        pause = _pending_pause(conn, task_id=task_id, check_in_id=check_in_id)
+        state = build(engine, task_id=task_id, capability_run_id=pause.capability_run_id)
         kind = _field(response, "kind")
         if kind == "free_text":
             raise InvalidResponseError("free text must be compiled before it is confirmed")
@@ -197,7 +197,7 @@ def answer_check_in(
             raise InvalidResponseError("free-text confirmation uses confirm_free_text")
         if kind == "abort":
             return _persist_abort(
-                conn, project_id=project_id, pause=pause, state=state, actor=actor
+                conn, task_id=task_id, pause=pause, state=state, actor=actor
             )
         if kind != "option":
             raise InvalidResponseError("check-in response kind is not supported")
@@ -210,7 +210,7 @@ def answer_check_in(
         try:
             result = _persist_intent(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 pause=pause,
                 state=state,
                 intent=intent,
@@ -218,7 +218,7 @@ def answer_check_in(
             )
             if renames:
                 _apply_theme_renames(
-                    conn, project_id=project_id, pause=pause, state=state, renames=renames
+                    conn, task_id=task_id, pause=pause, state=state, renames=renames
                 )
             return result
         except SteeringAdjustmentError as exc:
@@ -227,9 +227,9 @@ def answer_check_in(
 
 def compile_free_text(
     engine: Engine,
-    orchestrator: OrchestratorBackend,
+    agent: AgentBackend,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     check_in_id: uuid.UUID,
     text: str,
 ) -> CompiledSteer:
@@ -237,8 +237,8 @@ def compile_free_text(
 
     Args:
         engine: Database engine.
-        orchestrator: Router backend used for the bounded fan-out compile.
-        project_id: Project owning the parked walk.
+        agent: Router backend used for the bounded fan-out compile.
+        task_id: Task owning the parked walk.
         check_in_id: Durable ``steering.pause`` event identity.
         text: User's free-text steering request.
 
@@ -252,9 +252,9 @@ def compile_free_text(
     if not text.strip():
         raise InvalidResponseError("free-text steering must not be empty")
     with engine.begin() as conn:
-        project_lock(conn, project_id)
-        pause = _pending_pause(conn, project_id=project_id, check_in_id=check_in_id)
-        state = build(engine, project_id=project_id, capability_run_id=pause.capability_run_id)
+        task_lock(conn, task_id)
+        pause = _pending_pause(conn, task_id=task_id, check_in_id=check_in_id)
+        state = build(engine, task_id=task_id, capability_run_id=pause.capability_run_id)
     point = PausePoint(
         cast(Literal["after_component", "before_component"], pause.payload["boundary"]),
         cast(str, pause.payload["component"]),
@@ -271,13 +271,15 @@ def compile_free_text(
     context = runner_module._router_pause_context(
         point,
         state=router_state,
-        steer_point_name=_optional_str(pause.payload.get("steer_point")),
+        steer_point_name=_optional_str(
+            canonical_steer_point(pause.payload.get("steer_point"))
+        ),
         options=_options(pause.payload),
         completed_components=state.completed_components,
         rerun_component=_optional_str(pause.payload.get("rerun_component")),
         segment_reentry_allowed=_bool_affordance(pause.payload, "segment_reentry_allowed"),
     )
-    compiled = orchestrator.route(text, context, session_id=state.session_id)
+    compiled = agent.route(text, context, session_id=state.session_id)
     fanout = compile_fanout(
         compiled,
         backend_scope=state.plan.backend_scope,
@@ -292,7 +294,7 @@ def compile_free_text(
     _put_compilation(
         token,
         _PendingCompilation(
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             capability_run_id=pause.capability_run_id,
             fanout=fanout,
@@ -305,7 +307,7 @@ def compile_free_text(
 def confirm_free_text(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     check_in_id: uuid.UUID,
     confirm_token: str,
     apply: bool,
@@ -315,7 +317,7 @@ def confirm_free_text(
 
     Args:
         engine: Database engine.
-        project_id: Project owning the parked walk.
+        task_id: Task owning the parked walk.
         check_in_id: Pause the compilation belongs to.
         confirm_token: Opaque token returned by :func:`compile_free_text`.
         apply: Whether to persist the compiled fan-out.
@@ -335,22 +337,22 @@ def confirm_free_text(
         raise ConfirmTokenExpiredError(
             "the compiled preview is no longer available - compile the request again"
         )
-    if pending.project_id != project_id or pending.check_in_id != check_in_id:
+    if pending.task_id != task_id or pending.check_in_id != check_in_id:
         raise LookupError("free-text confirmation does not belong to this check-in")
     if not apply:
         return None
     if not pending.fanout.compiled:
         raise InvalidResponseError("the compiled steering request has no applicable change")
     with engine.begin() as conn:
-        project_lock(conn, project_id)
-        pause = _pending_pause(conn, project_id=project_id, check_in_id=check_in_id)
+        task_lock(conn, task_id)
+        pause = _pending_pause(conn, task_id=task_id, check_in_id=check_in_id)
         if pause.capability_run_id != pending.capability_run_id:
             raise LookupError("free-text confirmation no longer matches the parked walk")
-        state = build(engine, project_id=project_id, capability_run_id=pause.capability_run_id)
+        state = build(engine, task_id=task_id, capability_run_id=pause.capability_run_id)
         try:
             return _persist_fanout(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 pause=pause,
                 state=state,
                 fanout=pending.fanout,
@@ -364,28 +366,28 @@ def confirm_free_text(
 def claim_continuation(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
 ) -> ClaimedContinuation | None:
     """Atomically claim the first unclaimed continuation for a parked walk.
 
     Args:
         engine: Database engine.
-        project_id: Project owning the parked walk.
+        task_id: Task owning the parked walk.
         capability_run_id: Walk whose continuation should be claimed.
 
     Returns:
         The claim, or ``None`` when it is not currently claimable.
 
     Raises:
-        LookupError: If the project does not exist.
+        LookupError: If the task does not exist.
     """
     with engine.begin() as conn:
-        project_lock(conn, project_id)
+        task_lock(conn, task_id)
         cap = (
             conn.execute(
                 select(capability_run)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .where(capability_run.c.capability_run_id == capability_run_id)
             )
             .mappings()
@@ -394,7 +396,7 @@ def claim_continuation(
         if cap is None or cap["status"] != "paused":
             return None
         requested = _unclaimed_requests(
-            conn, project_id=project_id, capability_run_id=capability_run_id
+            conn, task_id=task_id, capability_run_id=capability_run_id
         )
         if not requested:
             return None
@@ -404,7 +406,7 @@ def claim_continuation(
             raise LookupError("continuation request has no decision event identity")
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=request["run_id"],
             event_type="continuation.claimed",
             payload={
@@ -416,19 +418,19 @@ def claim_continuation(
         )
         conn.execute(
             update(capability_run)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == capability_run_id)
             .values(status="running")
         )
     claim = ClaimedContinuation(
-        project_id=project_id,
+        task_id=task_id,
         capability_run_id=capability_run_id,
         requested_event_id=request["event_id"],
         decision_event_id=decision_event_id,
     )
     log.info(
         "continuation.claimed",
-        project_id=str(project_id),
+        task_id=str(task_id),
         capability_run_id=str(capability_run_id),
     )
     return claim
@@ -437,12 +439,12 @@ def claim_continuation(
 def execute_continuation(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
     backends: Any,
     io: Any,
     discretion_hook: Any = None,
-    orchestrator: OrchestratorBackend | None = None,
+    agent: AgentBackend | None = None,
 ) -> RunPlanOutcome:
     """Rebuild and execute an already-claimed parked continuation.
 
@@ -453,12 +455,12 @@ def execute_continuation(
 
     Args:
         engine: Database engine.
-        project_id: Project owning the walk.
+        task_id: Task owning the walk.
         capability_run_id: Claimed walk to resume.
         backends: Runner component backends (the caller decides live vs stub).
         io: Runner IO seam (``ParkIO()`` on every API/drainer path).
         discretion_hook: Optional runner discretion hook.
-        orchestrator: Optional router/watch backend.
+        agent: Optional router/watch backend.
 
     Returns:
         The resumed runner outcome.
@@ -466,12 +468,12 @@ def execute_continuation(
     Raises:
         LookupError: If the walk or its claimed durable decision is absent.
     """
-    state = build(engine, project_id=project_id, capability_run_id=capability_run_id)
+    state = build(engine, task_id=task_id, capability_run_id=capability_run_id)
     with engine.connect() as conn:
         cap = (
             conn.execute(
                 select(capability_run)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .where(capability_run.c.capability_run_id == capability_run_id)
             )
             .mappings()
@@ -480,12 +482,12 @@ def execute_continuation(
         if cap is None:
             raise LookupError("capability run does not exist")
         decision = _claimed_decision(
-            conn, project_id=project_id, capability_run_id=capability_run_id
+            conn, task_id=task_id, capability_run_id=capability_run_id
         )
     resume = _resume_decision(state, decision)
     return run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=cap["evidence_scope_id"],
         plan=state.plan,
         plan_id=state.plan_id,
@@ -494,14 +496,14 @@ def execute_continuation(
         backends=backends,
         io=io,
         discretion_hook=discretion_hook,
-        orchestrator=orchestrator,
+        agent=agent,
         resume_from=state,
         resume_decision=resume,
     )
 
 
 def mark_interrupted_best_effort(
-    engine: Engine, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+    engine: Engine, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> None:
     """Terminally mark a walk whose executor raised outside runner handling.
 
@@ -512,10 +514,10 @@ def mark_interrupted_best_effort(
     """
     try:
         with engine.begin() as conn:
-            project_lock(conn, project_id)
+            task_lock(conn, task_id)
             updated = conn.execute(
                 update(capability_run)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .where(capability_run.c.capability_run_id == capability_run_id)
                 .where(capability_run.c.status == "running")
                 .values(status="interrupted", ended_at=datetime.now(UTC))
@@ -523,9 +525,9 @@ def mark_interrupted_best_effort(
             if updated.rowcount:
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=_latest_attachment(
-                        conn, project_id=project_id, capability_run_id=capability_run_id
+                        conn, task_id=task_id, capability_run_id=capability_run_id
                     ),
                     event_type="run.interrupted",
                     payload={"capability_run_id": str(capability_run_id)},
@@ -533,7 +535,7 @@ def mark_interrupted_best_effort(
     except Exception:
         log.exception(
             "continuation.interrupt_mark_failed",
-            project_id=str(project_id),
+            task_id=str(task_id),
             capability_run_id=str(capability_run_id),
         )
 
@@ -565,16 +567,16 @@ def startup_sweep(engine: Engine) -> SweepReport:
             conn.execute(
                 select(capability_run)
                 .where(capability_run.c.status == "running")
-                .order_by(capability_run.c.project_id, capability_run.c.capability_run_id)
+                .order_by(capability_run.c.task_id, capability_run.c.capability_run_id)
             )
             .mappings()
             .all()
         )
         for cap in running:
-            project_lock(conn, cap["project_id"])
+            task_lock(conn, cap["task_id"])
             claim = _claimed_without_progress(
                 conn,
-                project_id=cap["project_id"],
+                task_id=cap["task_id"],
                 capability_run_id=cap["capability_run_id"],
             )
             if claim is not None:
@@ -582,13 +584,13 @@ def startup_sweep(engine: Engine) -> SweepReport:
                 continue
             attachment = _latest_attachment(
                 conn,
-                project_id=cap["project_id"],
+                task_id=cap["task_id"],
                 capability_run_id=cap["capability_run_id"],
             )
             if attachment is None:
                 log.warning(
                     "continuation.sweep_orphan_without_attachment",
-                    project_id=str(cap["project_id"]),
+                    task_id=str(cap["task_id"]),
                     capability_run_id=str(cap["capability_run_id"]),
                 )
             conn.execute(
@@ -599,7 +601,7 @@ def startup_sweep(engine: Engine) -> SweepReport:
             )
             events.append(
                 conn,
-                project_id=cap["project_id"],
+                task_id=cap["task_id"],
                 run_id=attachment,
                 event_type="run.interrupted",
                 payload={"capability_run_id": str(cap["capability_run_id"])},
@@ -611,7 +613,7 @@ def startup_sweep(engine: Engine) -> SweepReport:
 
 
 def _claimed_without_progress(
-    conn: Connection, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> ClaimedContinuation | None:
     """Return the walk's claimed continuation if nothing executed after the claim.
 
@@ -620,11 +622,11 @@ def _claimed_without_progress(
     walk. "Progress" is any run-attached non-continuation event after the
     claim: component emissions (``run.started`` …) carry no
     ``capability_run_id`` in their payload, but they always carry a ``run_id``
-    attachment, and one active walk per project means any such event after the
+    attachment, and one active walk per task means any such event after the
     claim belongs to this walk's execution. Missing real progress here would
     silently re-run an already-committed component — err toward interruption.
     """
-    rows = events.read(conn, project_id)
+    rows = events.read(conn, task_id)
     claim_row: dict[str, Any] | None = None
     for row in rows:
         if (
@@ -646,7 +648,7 @@ def _claimed_without_progress(
     if requested_event_id is None or decision_event_id is None:
         return None
     return ClaimedContinuation(
-        project_id=project_id,
+        task_id=task_id,
         capability_run_id=capability_run_id,
         requested_event_id=requested_event_id,
         decision_event_id=decision_event_id,
@@ -656,11 +658,11 @@ def _claimed_without_progress(
 def _pending_pause(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     check_in_id: uuid.UUID,
 ) -> _Pause:
-    """Return the project's latest undecided pause or raise its domain error."""
-    rows = events.read(conn, project_id)
+    """Return the task's latest undecided pause or raise its domain error."""
+    rows = events.read(conn, task_id)
     pause_row = next(
         (
             row
@@ -692,19 +694,19 @@ def _pending_pause(
         raise AlreadyAnsweredError("check-in has already been answered")
     cap_status = conn.execute(
         select(capability_run.c.status)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.capability_run_id == capability_run_id)
     ).scalar_one_or_none()
     if cap_status != "paused":
         raise LookupError("check-in is not parked")
     latest_run_id = conn.execute(
         select(capability_run.c.capability_run_id)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
         .limit(1)
     ).scalar_one_or_none()
     if latest_run_id != capability_run_id:
-        raise LookupError("check-in does not belong to the project's latest walk")
+        raise LookupError("check-in does not belong to the task's latest walk")
     return _Pause(
         capability_run_id=capability_run_id,
         event_id=check_in_id,
@@ -717,7 +719,7 @@ def _pending_pause(
 def _persist_intent(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     pause: _Pause,
     state: Any,
     intent: tuple[str, Any],
@@ -726,20 +728,20 @@ def _persist_intent(
     """Persist one validated canonical-menu intent in the caller transaction."""
     kind, value = intent
     if kind == "abort":
-        return _persist_abort(conn, project_id=project_id, pause=pause, state=state, actor=actor)
+        return _persist_abort(conn, task_id=task_id, pause=pause, state=state, actor=actor)
     if kind == "continue":
         decision_id = _append_decision(
-            conn, project_id=project_id, pause=pause, state=state, response="continue", action=None
+            conn, task_id=task_id, pause=pause, state=state, response="continue", action=None
         )
         return _request_continuation(
-            conn, project_id=project_id, pause=pause, decision_event_id=decision_id, actor=actor
+            conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
         )
     if kind == "adjust":
         adjustment = cast(Adjust, value)
-        plan_row = _current_plan_row(conn, project_id=project_id, state=state)
+        plan_row = _current_plan_row(conn, task_id=task_id, state=state)
         apply_adjustment(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=state.plan,
             adjustment=adjustment,
@@ -750,22 +752,22 @@ def _persist_intent(
         )
         decision_id = _append_decision(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             pause=pause,
             state=state,
             response=decision_response,
             action=runner_module._interpreted_action(adjustment),
         )
         return _request_continuation(
-            conn, project_id=project_id, pause=pause, decision_event_id=decision_id, actor=actor
+            conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
         )
     if kind == "rerun":
         component, raw_delta = cast(tuple[str, dict[str, Any]], value)
         directive = _merged_rerun_directive(state, component, raw_delta)
-        plan_row = _current_plan_row(conn, project_id=project_id, state=state)
+        plan_row = _current_plan_row(conn, task_id=task_id, state=state)
         apply_replacement_rerun(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=state.plan,
             component=component,
@@ -774,7 +776,7 @@ def _persist_intent(
         adjustment = Adjust(directive_deltas=raw_delta)
         decision_id = _append_decision(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             pause=pause,
             state=state,
             response="adjust",
@@ -782,15 +784,15 @@ def _persist_intent(
             rerun_mode="replacement",
         )
         return _request_continuation(
-            conn, project_id=project_id, pause=pause, decision_event_id=decision_id, actor=actor
+            conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
         )
     if kind == "segment_reentry":
         reentry = cast(ReEnterSegment, value)
         _validate_segment_bounds(state, reentry, pause.payload)
-        plan_row = _current_plan_row(conn, project_id=project_id, state=state)
+        plan_row = _current_plan_row(conn, task_id=task_id, state=state)
         apply_segment_reentry(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=state.plan,
             segment_start=reentry.segment_start,
@@ -798,7 +800,7 @@ def _persist_intent(
         )
         decision_id = _append_decision(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             pause=pause,
             state=state,
             response="adjust",
@@ -806,7 +808,7 @@ def _persist_intent(
             rerun_mode="additive",
         )
         return _request_continuation(
-            conn, project_id=project_id, pause=pause, decision_event_id=decision_id, actor=actor
+            conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
         )
     raise AssertionError(f"unknown validated intent {kind!r}")
 
@@ -814,7 +816,7 @@ def _persist_intent(
 def _persist_abort(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     pause: _Pause,
     state: Any,
     actor: str,
@@ -828,36 +830,36 @@ def _persist_abort(
     showed an aborted run as still paused forever.
     """
     decision_id = _append_decision(
-        conn, project_id=project_id, pause=pause, state=state, response="abort", action=None
+        conn, task_id=task_id, pause=pause, state=state, response="abort", action=None
     )
     if state.plan_row_id is not None:
         conn.execute(
-            orchestration_plan.update()
-            .where(orchestration_plan.c.plan_id == state.plan_row_id)
-            .where(orchestration_plan.c.project_id == project_id)
+            task_plan.update()
+            .where(task_plan.c.plan_id == state.plan_row_id)
+            .where(task_plan.c.task_id == task_id)
             .values(status="abandoned")
         )
     conn.execute(
         update(capability_run)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.capability_run_id == pause.capability_run_id)
         .values(status="aborted", ended_at=datetime.now(UTC))
     )
     events.append(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=pause.run_id,
         event_type="run.finished",
         payload={"capability_run_id": str(pause.capability_run_id), "status": "aborted"},
     )
-    log.info("continuation.aborted", project_id=str(project_id), actor=actor)
+    log.info("continuation.aborted", task_id=str(task_id), actor=actor)
     return AnswerResult(pause.capability_run_id, decision_id, False)
 
 
 def _persist_fanout(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     pause: _Pause,
     state: Any,
     fanout: FanOut,
@@ -873,10 +875,10 @@ def _persist_fanout(
         adjustment = Adjust(
             directive_deltas={fragment.component: fragment.delta for fragment in adjustments}
         )
-        plan_row = _current_plan_row(conn, project_id=project_id, state=current_state)
+        plan_row = _current_plan_row(conn, task_id=task_id, state=current_state)
         amended, plan_id, version = apply_adjustment(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=plan_row,
             plan=current_state.plan,
             adjustment=adjustment,
@@ -884,7 +886,7 @@ def _persist_fanout(
         )
         decision_id = _append_decision(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             pause=pause,
             state=current_state,
             response="adjust",
@@ -896,10 +898,10 @@ def _persist_fanout(
     if rerun is not None:
         if rerun.kind == "replacement_rerun":
             directive = _merged_rerun_directive(current_state, rerun.component, rerun.delta)
-            plan_row = _current_plan_row(conn, project_id=project_id, state=current_state)
+            plan_row = _current_plan_row(conn, task_id=task_id, state=current_state)
             apply_replacement_rerun(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 plan_row=plan_row,
                 plan=current_state.plan,
                 component=rerun.component,
@@ -910,7 +912,7 @@ def _persist_fanout(
             # the wrong plan.updated version (review finding m1, 2026-07-21).
             decision_id = _append_decision(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 pause=pause,
                 state=current_state,
                 response="adjust",
@@ -921,10 +923,10 @@ def _persist_fanout(
         else:
             segment = ReEnterSegment(directive_deltas={rerun.component: rerun.delta})
             _validate_segment_bounds(current_state, segment, pause.payload)
-            plan_row = _current_plan_row(conn, project_id=project_id, state=current_state)
+            plan_row = _current_plan_row(conn, task_id=task_id, state=current_state)
             apply_segment_reentry(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 plan_row=plan_row,
                 plan=current_state.plan,
                 segment_start=segment.segment_start,
@@ -932,7 +934,7 @@ def _persist_fanout(
             )
             decision_id = _append_decision(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 pause=pause,
                 state=current_state,
                 response="adjust",
@@ -943,7 +945,7 @@ def _persist_fanout(
     if decision_id is None:
         raise InvalidResponseError("the compiled steering request has no applicable change")
     return _request_continuation(
-        conn, project_id=project_id, pause=pause, decision_event_id=decision_id, actor=actor
+        conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
     )
 
 
@@ -988,7 +990,7 @@ def _canonical_intent(option: dict[str, Any], *, params: Any) -> tuple[str, Any]
         return "segment_reentry", ReEnterSegment(directive_deltas=delta)
     return "adjust", Adjust(
         directive_deltas=delta,
-        authored_by="orchestrator" if option.get("authored") is True else None,
+        authored_by="agent" if option.get("authored") is True else None,
     )
 
 
@@ -1052,8 +1054,8 @@ def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str
     """Validate P2-only card-local theme-name edits from one option response."""
     if not isinstance(params, Mapping) or "renames" not in params:
         return []
-    if pause_payload.get("steer_point") != "evidence_base_coverage":
-        raise InvalidResponseError("rename_theme is only available at evidence_base_coverage")
+    if canonical_steer_point(pause_payload.get("steer_point")) != "evidence_search_coverage":
+        raise InvalidResponseError("rename_theme is only available at evidence_search_coverage")
     raw = params["renames"]
     if not isinstance(raw, list):
         raise InvalidResponseError("rename_theme requires a renames list")
@@ -1067,7 +1069,7 @@ def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str
             raise InvalidResponseError("each rename requires theme_id and a non-empty name")
         # The same bounds every other user-supplied directive text carries
         # (review 028, security lane): the name persists into the
-        # characterisation payload and renders project-wide.
+        # characterisation payload and renders task-wide.
         if len(name.strip()) > 200 or has_control_character(name):
             raise InvalidResponseError("theme names must be bounded plain text")
         if theme_id in seen:
@@ -1080,7 +1082,7 @@ def _theme_renames(params: Any, pause_payload: dict[str, Any]) -> list[tuple[str
 def _apply_theme_renames(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     pause: _Pause,
     state: Any,
     renames: list[tuple[str, str]],
@@ -1089,7 +1091,7 @@ def _apply_theme_renames(
     row = (
         conn.execute(
             select(characterisation_result)
-            .where(characterisation_result.c.project_id == project_id)
+            .where(characterisation_result.c.task_id == task_id)
             # pk tie-break: stub runs mint rows inside one clock tick, and the
             # rename target must be deterministic (review 028 m6).
             .order_by(
@@ -1119,7 +1121,7 @@ def _apply_theme_renames(
     )
     events.append(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=pause.run_id,
         event_type="steering.theme_renamed",
         payload={
@@ -1134,7 +1136,7 @@ def _apply_theme_renames(
 def _append_decision(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     pause: _Pause,
     state: Any,
     response: Literal["continue", "adjust", "abort", "mode_change"],
@@ -1162,7 +1164,7 @@ def _append_decision(
     )
     return steering_events.emit(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=pause.run_id,
         event_type=steering_events.STEERING_DECISION,
         payload=payload,
@@ -1172,7 +1174,7 @@ def _append_decision(
 def _request_continuation(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     pause: _Pause,
     decision_event_id: uuid.UUID,
     actor: str,
@@ -1180,7 +1182,7 @@ def _request_continuation(
     """Append the durable-before-executable request paired to a decision."""
     events.append(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=pause.run_id,
         event_type="continuation.requested",
         payload={
@@ -1191,14 +1193,14 @@ def _request_continuation(
     )
     log.info(
         "continuation.requested",
-        project_id=str(project_id),
+        task_id=str(task_id),
         capability_run_id=str(pause.capability_run_id),
         actor=actor,
     )
     return AnswerResult(pause.capability_run_id, decision_event_id, True)
 
 
-def _current_plan_row(conn: Connection, *, project_id: uuid.UUID, state: Any) -> Any:
+def _current_plan_row(conn: Connection, *, task_id: uuid.UUID, state: Any) -> Any:
     """Read the durable plan row currently represented by continuation state.
 
     Returns the SQLAlchemy row itself — the steering persistence helpers
@@ -1209,9 +1211,9 @@ def _current_plan_row(conn: Connection, *, project_id: uuid.UUID, state: Any) ->
     if state.plan_row_id is None:
         raise LookupError("parked walk has no persisted plan row")
     row = conn.execute(
-        select(orchestration_plan)
-        .where(orchestration_plan.c.project_id == project_id)
-        .where(orchestration_plan.c.plan_id == state.plan_row_id)
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.plan_id == state.plan_row_id)
     ).one_or_none()
     if row is None:
         raise LookupError("parked walk plan row does not exist")
@@ -1278,10 +1280,10 @@ def _validate_segment_bounds(state: Any, response: ReEnterSegment, payload: dict
 
 
 def _unclaimed_requests(
-    conn: Connection, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Return unclaimed requests for one walk in event sequence order."""
-    rows = events.read(conn, project_id)
+    rows = events.read(conn, task_id)
     claimed = {
         _payload_uuid(row["payload"], "requested_event_id")
         for row in rows
@@ -1297,10 +1299,10 @@ def _unclaimed_requests(
 
 
 def _claimed_decision(
-    conn: Connection, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> dict[str, Any]:
     """Read the decision referenced by the walk's durable claim."""
-    rows = events.read(conn, project_id)
+    rows = events.read(conn, task_id)
     claim = next(
         (
             row
@@ -1386,10 +1388,10 @@ def _fanout_rerun_fragment(action: dict[str, Any], mode: str) -> dict[str, Any] 
 
 
 def _latest_attachment(
-    conn: Connection, *, project_id: uuid.UUID, capability_run_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
 ) -> uuid.UUID | None:
     """Find the latest non-null run attachment for a capability walk."""
-    for row in reversed(events.read(conn, project_id)):
+    for row in reversed(events.read(conn, task_id)):
         if _payload_uuid(row["payload"], "capability_run_id") == capability_run_id and isinstance(
             row["run_id"], uuid.UUID
         ):
@@ -1403,7 +1405,7 @@ def _redispatchable_requests(conn: Connection) -> list[ClaimedContinuation]:
         conn.execute(
             select(capability_run)
             .where(capability_run.c.status == "paused")
-            .order_by(capability_run.c.project_id, capability_run.c.capability_run_id)
+            .order_by(capability_run.c.task_id, capability_run.c.capability_run_id)
         )
         .mappings()
         .all()
@@ -1412,14 +1414,14 @@ def _redispatchable_requests(conn: Connection) -> list[ClaimedContinuation]:
     for cap in rows:
         for request in _unclaimed_requests(
             conn,
-            project_id=cap["project_id"],
+            task_id=cap["task_id"],
             capability_run_id=cap["capability_run_id"],
         ):
             decision_id = _payload_uuid(request["payload"], "decision_event_id")
             if decision_id is not None:
                 redispatch.append(
                     ClaimedContinuation(
-                        project_id=cap["project_id"],
+                        task_id=cap["task_id"],
                         capability_run_id=cap["capability_run_id"],
                         requested_event_id=request["event_id"],
                         decision_event_id=decision_id,

@@ -10,7 +10,7 @@ timestamp: 2026-07-01
 
 A per-document fan-out function (`classify_sources`, `screen_sources`) must filter its candidate
 row set with a `WHERE NOT EXISTS` correlated subquery against its own result table, scoped by
-the same key the unique constraint uses (`evidence_scope_id` + `project_source_snapshot_id`).
+the same key the unique constraint uses (`evidence_scope_id` + `task_source_snapshot_id`).
 Without it, calling the function twice for the same scope re-processes already-done rows and
 raises `IntegrityError` on the unique constraint — which rolls back the caller's whole
 transaction, including unrelated writes made earlier in the same `run_harness` call.

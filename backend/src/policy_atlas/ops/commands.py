@@ -28,11 +28,11 @@ either commit order. See :func:`set_admin`.
 
 *Row moves are set operations, never walks.* ``UPDATE ... WHERE owner_user_id =
 :sub`` in one statement per table. Colleague assignment (owner ruling
-2026-08-27) means a portfolio's members are no longer always owned by its
+2026-08-27) means a project's members are no longer always owned by its
 owner, so a move first **severs** every membership pairing the mover's rows
 with someone else's (:func:`_sever_cross_owner_memberships`) — after which one
 person's rows are again a closed set, and stamping the set leaves every
-project matching its portfolios on both ``org_id`` and ``visibility``. Walking
+task matching its projects on both ``org_id`` and ``visibility``. Walking
 row by row through the cascade path would transiently violate it.
 
 **Nothing here logs.** A privilege change is recorded by
@@ -63,9 +63,9 @@ from sqlalchemy.exc import IntegrityError
 from policy_atlas.core.schema import (
     app_user,
     organisation,
-    portfolio,
-    portfolio_membership,
     project,
+    project_membership,
+    task,
 )
 from policy_atlas.ops.errors import OpsError
 
@@ -82,7 +82,7 @@ _PRIVATE = "private"
 # Records. Each carries its own operator-facing sentence: the CLI's safety UX
 # is these strings (plan phase 9b), and keeping them beside the counts they
 # describe is what stops a caller inventing a second wording for the same
-# outcome. Code words throughout ("project", "portfolio") — they match the
+# outcome. Code words throughout ("task", "project") — they match the
 # flags the operator just typed, and the rename slice that follows 033 covers
 # this module.
 #
@@ -145,16 +145,16 @@ class Enrolment(Record):
         email: The address the subject resolved from.
         org: The organisation they now belong to.
         created: Whether the ``app_user`` row was inserted rather than updated.
+        tasks_moved: Tasks stamped and privatised.
         projects_moved: Projects stamped and privatised.
-        portfolios_moved: Portfolios stamped and privatised.
     """
 
     user_id: str
     email: str
     org: Organisation
     created: bool
+    tasks_moved: int
     projects_moved: int
-    portfolios_moved: int
     #: Set only by `user create --invite manual` (owner amendment 2026-08-26).
     #: Rendered ONCE in the summary for out-of-band handover; never logged —
     #: `summary()` output goes to the operator's stdout, not through structlog.
@@ -168,8 +168,8 @@ class Enrolment(Record):
         verb = "enrolled" if self.created else "re-enrolled"
         line = (
             f"{verb} {self.email} ({self.user_id}) in {self.org.name!r}; "
-            f"moved {self.projects_moved} project(s), {self.portfolios_moved} "
-            "portfolio(s), all private"
+            f"moved {self.tasks_moved} task(s), {self.projects_moved} "
+            "project(s), all private"
         )
         if self.memberships_severed:
             line += (
@@ -190,8 +190,8 @@ class DeEnrolment(Record):
 
     user_id: str
     email: str | None
+    tasks_cleared: int
     projects_cleared: int
-    portfolios_cleared: int
     admin_revoked: bool
     #: Cross-owner membership links cut because the rows left the organisation
     #: (colleague assignment, owner ruling 2026-08-27).
@@ -208,8 +208,8 @@ class DeEnrolment(Record):
             else ""
         )
         return (
-            f"de-enrolled {who}; cleared the organisation on {self.projects_cleared} "
-            f"project(s) and {self.portfolios_cleared} portfolio(s){severed}{admin}"
+            f"de-enrolled {who}; cleared the organisation on {self.tasks_cleared} "
+            f"task(s) and {self.projects_cleared} project(s){severed}{admin}"
         )
 
     def admin_changes(self) -> Sequence[AdminTrace]:
@@ -250,11 +250,11 @@ class Assignment(Record):
 
     Attributes:
         org: The destination organisation.
-        portfolio_id: The portfolio the move went through, if any.
+        project_id: The project the move went through, if any.
+        tasks_moved: Tasks stamped.
         projects_moved: Projects stamped.
-        portfolios_moved: Portfolios stamped.
-        followed_membership: Whether a named project widened the move to its
-            portfolio and siblings.
+        followed_membership: Whether a named task widened the move to its
+            project and siblings.
         privatised: Whether the move changed the rows' organisation and
             therefore forced them ``private``. ``False`` only when the rows
             were already in the destination organisation, where there is no
@@ -262,24 +262,24 @@ class Assignment(Record):
     """
 
     org: Organisation
-    portfolio_id: uuid.UUID | None
+    project_id: uuid.UUID | None
+    tasks_moved: int
     projects_moved: int
-    portfolios_moved: int
     followed_membership: bool
     privatised: bool
 
     def summary(self) -> str:
         """Render the assignment line, naming the destination and the privatisation."""
         moved = (
-            f"moved {self.portfolios_moved} portfolio(s) and {self.projects_moved} "
-            f"project(s) into {self.org.name!r}"
+            f"moved {self.projects_moved} project(s) and {self.tasks_moved} "
+            f"task(s) into {self.org.name!r}"
         )
         if self.privatised:
             moved += ", all private"  # same words `Enrolment` uses, for the same rule
         if self.followed_membership:
             return (
-                f"{moved} — the project is a member of portfolio {self.portfolio_id}, "
-                "so the portfolio and every member moved together"
+                f"{moved} — the task is a member of project {self.project_id}, "
+                "so the project and every member moved together"
             )
         return moved
 
@@ -600,7 +600,7 @@ def _enrol(
         )
     )
     severed = _sever_cross_owner_memberships(conn, sub=sub)
-    projects_moved, portfolios_moved = _stamp_owned_rows(
+    tasks_moved, projects_moved = _stamp_owned_rows(
         conn, sub=sub, org_id=org.org_id, visibility=_PRIVATE
     )
     return Enrolment(
@@ -608,8 +608,8 @@ def _enrol(
         email=email,
         org=org,
         created=existing is None,
+        tasks_moved=tasks_moved,
         projects_moved=projects_moved,
-        portfolios_moved=portfolios_moved,
         memberships_severed=severed,
     )
 
@@ -682,7 +682,7 @@ def de_enrol_user(
     """Remove a person from their organisation and take their rows out with them.
 
     Clears ``org_id``, ``email`` and ``is_admin`` on ``app_user``, and ``org_id``
-    on every project and portfolio the person owns — so the organisation they
+    on every task and project the person owns — so the organisation they
     left loses sight of their work (contract § 7; flagged there as an owner
     decision, because the alternative needs ownership transfer, which is Out).
 
@@ -691,7 +691,7 @@ def de_enrol_user(
     their owner alone, so re-privatising would change nothing a caller can
     observe while destroying the choices the person made. The invariant holds
     because both tables are cleared in the same set operation: a member and its
-    portfolio arrive at NULL together, and neither one's visibility moved.
+    project arrive at NULL together, and neither one's visibility moved.
 
     Args:
         conn: Open connection inside the command's transaction.
@@ -715,12 +715,12 @@ def de_enrol_user(
         .values(org_id=None, email=None, is_admin=False)
     )
     severed = _sever_cross_owner_memberships(conn, sub=user_id)
-    projects_cleared, portfolios_cleared = _clear_owned_rows(conn, sub=user_id)
+    tasks_cleared, projects_cleared = _clear_owned_rows(conn, sub=user_id)
     return DeEnrolment(
         user_id=user_id,
         email=row["email"],
+        tasks_cleared=tasks_cleared,
         projects_cleared=projects_cleared,
-        portfolios_cleared=portfolios_cleared,
         admin_revoked=bool(row["is_admin"]),
         memberships_severed=severed,
     )
@@ -799,22 +799,22 @@ def assign_rows(
     conn: Connection,
     *,
     org: Organisation,
+    task_id: uuid.UUID | None = None,
     project_id: uuid.UUID | None = None,
-    portfolio_id: uuid.UUID | None = None,
 ) -> Assignment:
     """Assign one row to an organisation, privately, moving a membership whole.
 
-    Contract § 9 sends this through § 6's invariant: a project carries its
-    portfolio's ``org_id`` *and* ``visibility``. So there is no such thing as
+    Contract § 9 sends this through § 6's invariant: a task carries its
+    project's ``org_id`` *and* ``visibility``. So there is no such thing as
     assigning half of a membership, and the command never offers to:
 
-    - a **portfolio** moves with every member project — and, membership being
-      many-to-many (ADR 0032), with every portfolio reachable through shared
+    - a **project** moves with every member task — and, membership being
+      many-to-many (ADR 0032), with every project reachable through shared
       members (the connected component), or a shared member would be left
-      breaching its other portfolio;
-    - a **project that is a member** of portfolios moves those portfolios'
+      breaching its other project;
+    - a **task that is a member** of projects moves those projects'
       component and therefore every sibling, and says so in the summary;
-    - a **project with no portfolio** is unconstrained and moves alone.
+    - a **task with no project** is unconstrained and moves alone.
 
     **A move privatises, on exactly the enrolment rule** (:data:`_PRIVATE`,
     owner call (j), ADR 0033 decision 7). Stamping ``org_id`` while preserving
@@ -832,9 +832,9 @@ def assign_rows(
     Privatising is skipped only when the rows are **already** in the destination
     organisation, because then the assignment moves nobody's audience and
     flipping their visibility would be a gratuitous edit to the owner's choices.
-    In that case portfolio visibility is left alone — a component may
+    In that case project visibility is left alone — a component may
     legitimately mix visibilities — and each member is recomputed to the
-    derived value: org-visible iff *any* portfolio it is in is org-visible
+    derived value: org-visible iff *any* project it is in is org-visible
     (owner ruling 2026-08-27). That recompute is the ``i.4`` self-heal for a
     member that ever slipped out of step.
 
@@ -845,9 +845,9 @@ def assign_rows(
     Args:
         conn: Open connection inside the command's transaction.
         org: The destination.
-        project_id: The project to assign; mutually exclusive with
-            ``portfolio_id``.
-        portfolio_id: The portfolio to assign.
+        task_id: The task to assign; mutually exclusive with
+            ``project_id``.
+        project_id: The project to assign.
 
     Returns:
         What moved, and whether it was privatised.
@@ -855,29 +855,29 @@ def assign_rows(
     Raises:
         OpsError: If neither or both ids are given, or the row does not exist.
     """
-    if (project_id is None) == (portfolio_id is None):
-        raise OpsError("give exactly one of --project or --portfolio")
+    if (task_id is None) == (project_id is None):
+        raise OpsError("give exactly one of --task or --project")
 
     followed = False
-    if project_id is not None:
+    if task_id is not None:
         row = conn.execute(
-            select(project.c.project_id, project.c.org_id)
-            .where(project.c.project_id == project_id)
+            select(task.c.task_id, task.c.org_id)
+            .where(task.c.task_id == task_id)
             .with_for_update()
         ).one_or_none()
         if row is None:
-            raise OpsError(f"no project {project_id}")
+            raise OpsError(f"no task {task_id}")
         member_of = [
             membership_row[0]
             for membership_row in conn.execute(
-                select(portfolio_membership.c.portfolio_id)
-                .where(portfolio_membership.c.project_id == project_id)
-                .order_by(portfolio_membership.c.created_at, portfolio_membership.c.portfolio_id)
+                select(project_membership.c.project_id)
+                .where(project_membership.c.task_id == task_id)
+                .order_by(project_membership.c.created_at, project_membership.c.project_id)
             ).all()
         ]
         if not member_of:
             privatised = row.org_id != org.org_id
-            moving = update(project).where(project.c.project_id == project_id)
+            moving = update(task).where(task.c.task_id == task_id)
             # Two literal `.values()` calls rather than a built dict: rubric 24
             # bars the blind splat on the API's patch, and the same discipline
             # belongs on the operator writer of the same two columns.
@@ -891,9 +891,9 @@ def assign_rows(
                 conn.execute(moving.values(org_id=org.org_id, updated_at=_now()))
             return Assignment(
                 org=org,
-                portfolio_id=None,
-                projects_moved=1,
-                portfolios_moved=0,
+                project_id=None,
+                tasks_moved=1,
+                projects_moved=0,
                 followed_membership=False,
                 privatised=privatised,
             )
@@ -901,97 +901,97 @@ def assign_rows(
         target = member_of[0]
         followed = True
     else:
-        seeds = [portfolio_id]
-        target = portfolio_id
+        seeds = [project_id]
+        target = project_id
 
     current = conn.execute(
-        select(portfolio.c.org_id, portfolio.c.visibility)
-        .where(portfolio.c.portfolio_id == target)
+        select(project.c.org_id, project.c.visibility)
+        .where(project.c.project_id == target)
         .with_for_update()
     ).one_or_none()
     if current is None:
-        raise OpsError(f"no portfolio {target}")
+        raise OpsError(f"no project {target}")
     # Membership is many-to-many (ADR 0032), so "a membership moves whole"
-    # means the **connected component**: every portfolio reachable through
+    # means the **connected component**: every project reachable through
     # shared members moves too, or the shared member would be left matching
-    # one portfolio and breaching the other. Within a component every row
+    # one project and breaching the other. Within a component every row
     # already agrees on both fields (each shared member matches all of its
-    # portfolios), so the set moves coherently.
+    # projects), so the set moves coherently.
     component: set[uuid.UUID] = set(seeds)
     frontier: set[uuid.UUID] = set(seeds)
     while frontier:
-        member_ids = select(portfolio_membership.c.project_id).where(
-            portfolio_membership.c.portfolio_id.in_(frontier)
+        member_ids = select(project_membership.c.task_id).where(
+            project_membership.c.project_id.in_(frontier)
         )
         linked = {
             linked_row[0]
             for linked_row in conn.execute(
-                select(portfolio_membership.c.portfolio_id)
-                .where(portfolio_membership.c.project_id.in_(member_ids))
+                select(project_membership.c.project_id)
+                .where(project_membership.c.task_id.in_(member_ids))
                 .distinct()
             ).all()
         }
         frontier = linked - component
         component |= frontier
     privatised = current.org_id != org.org_id
-    member_rows = project.c.project_id.in_(
-        select(portfolio_membership.c.project_id).where(
-            portfolio_membership.c.portfolio_id.in_(component)
+    member_rows = task.c.task_id.in_(
+        select(project_membership.c.task_id).where(
+            project_membership.c.project_id.in_(component)
         )
     )
     # A cross-organisation move privatises everything it carries (owner call
     # (j)). A same-organisation assignment moves nobody's audience, so the
-    # portfolios keep their visibility and each member is **recomputed** to
-    # the derived value — org-visible iff any portfolio it is in is
+    # projects keep their visibility and each member is **recomputed** to
+    # the derived value — org-visible iff any project it is in is
     # org-visible (owner ruling 2026-08-27) — which is the i.4 self-heal for
     # a member that ever slipped out of step.
-    # No status filter on members: archived projects follow too, for the
-    # reason the API cascade documents — an archived project is still
+    # No status filter on members: archived tasks follow too, for the
+    # reason the API cascade documents — an archived task is still
     # readable by whoever may read it, so leaving it behind strands exactly
     # the rows nobody watches.
     if privatised:
-        portfolios_moved = conn.execute(
-            update(portfolio)
-            .where(portfolio.c.portfolio_id.in_(component))
+        projects_moved = conn.execute(
+            update(project)
+            .where(project.c.project_id.in_(component))
             .values(org_id=org.org_id, visibility=_PRIVATE)
         ).rowcount
         moved = conn.execute(
-            update(project)
+            update(task)
             .where(member_rows)
             .values(org_id=org.org_id, visibility=_PRIVATE, updated_at=_now())
         ).rowcount
     else:
-        portfolios_moved = conn.execute(
-            update(portfolio)
-            .where(portfolio.c.portfolio_id.in_(component))
+        projects_moved = conn.execute(
+            update(project)
+            .where(project.c.project_id.in_(component))
             .values(org_id=org.org_id)
         ).rowcount
-        in_any_org_portfolio = (
-            select(portfolio_membership.c.project_id)
+        in_any_org_project = (
+            select(project_membership.c.task_id)
             .select_from(
-                portfolio_membership.join(
-                    portfolio,
-                    portfolio.c.portfolio_id == portfolio_membership.c.portfolio_id,
+                project_membership.join(
+                    project,
+                    project.c.project_id == project_membership.c.project_id,
                 )
             )
-            .where(portfolio_membership.c.project_id == project.c.project_id)
-            .where(portfolio.c.visibility == "org")
+            .where(project_membership.c.task_id == task.c.task_id)
+            .where(project.c.visibility == "org")
             .exists()
         )
         moved = conn.execute(
-            update(project)
+            update(task)
             .where(member_rows)
             .values(
                 org_id=org.org_id,
-                visibility=case((in_any_org_portfolio, "org"), else_=_PRIVATE),
+                visibility=case((in_any_org_project, "org"), else_=_PRIVATE),
                 updated_at=_now(),
             )
         ).rowcount
     return Assignment(
         org=org,
-        portfolio_id=target,
-        projects_moved=moved,
-        portfolios_moved=portfolios_moved,
+        project_id=target,
+        tasks_moved=moved,
+        projects_moved=projects_moved,
         followed_membership=followed,
         privatised=privatised,
     )
@@ -1011,7 +1011,7 @@ def _stamp_owned_rows(
     the module docstring depends on.
 
     ``.values()`` names its columns literally rather than splatting a dict.
-    Rubric 24 bars the blind ``.values(**changes)`` splat on the API's portfolio
+    Rubric 24 bars the blind ``.values(**changes)`` splat on the API's project
     patch; the same discipline belongs on the one other writer of these two
     columns, even though the values here are internal.
 
@@ -1026,31 +1026,31 @@ def _stamp_owned_rows(
         visibility: The visibility to force — always ``private`` today.
 
     Returns:
-        ``(projects, portfolios)`` row counts.
+        ``(tasks, projects)`` row counts.
     """
+    tasks = conn.execute(
+        update(task)
+        .where(task.c.owner_user_id == sub)
+        .values(org_id=org_id, visibility=visibility)
+    ).rowcount
     projects = conn.execute(
         update(project)
         .where(project.c.owner_user_id == sub)
         .values(org_id=org_id, visibility=visibility)
     ).rowcount
-    portfolios = conn.execute(
-        update(portfolio)
-        .where(portfolio.c.owner_user_id == sub)
-        .values(org_id=org_id, visibility=visibility)
-    ).rowcount
-    return projects, portfolios
+    return tasks, projects
 
 
 def _sever_cross_owner_memberships(conn: Connection, *, sub: str) -> int:
     """Delete every membership pairing one of `sub`'s rows with someone else's.
 
-    Colleague assignment (owner ruling 2026-08-27) means a portfolio's members
-    are no longer always owned by the portfolio's owner — so "one person's
+    Colleague assignment (owner ruling 2026-08-27) means a project's members
+    are no longer always owned by the project's owner — so "one person's
     rows are a closed set" (the module docstring's invariant argument) is only
     true after the cross-owner links are cut. Called by every membership move
     (enrol, re-enrol, de-enrol): the moved rows change organisation and the
     other owner's rows do not, so any membership between them would leave a
-    member and a portfolio disagreeing on `org_id`. Severing keeps i.6's
+    member and a project disagreeing on `org_id`. Severing keeps i.6's
     reading — the rows on both sides keep the visibility and organisation
     they had; only the link is removed.
 
@@ -1065,21 +1065,21 @@ def _sever_cross_owner_memberships(conn: Connection, *, sub: str) -> int:
     Returns:
         The number of membership rows deleted.
     """
-    own_projects = select(project.c.project_id).where(project.c.owner_user_id == sub)
-    own_portfolios = select(portfolio.c.portfolio_id).where(
-        portfolio.c.owner_user_id == sub
+    own_tasks = select(task.c.task_id).where(task.c.owner_user_id == sub)
+    own_projects = select(project.c.project_id).where(
+        project.c.owner_user_id == sub
     )
     return int(
         conn.execute(
-            delete(portfolio_membership).where(
+            delete(project_membership).where(
                 or_(
                     and_(
-                        portfolio_membership.c.project_id.in_(own_projects),
-                        portfolio_membership.c.portfolio_id.notin_(own_portfolios),
+                        project_membership.c.task_id.in_(own_tasks),
+                        project_membership.c.project_id.notin_(own_projects),
                     ),
                     and_(
-                        portfolio_membership.c.portfolio_id.in_(own_portfolios),
-                        portfolio_membership.c.project_id.notin_(own_projects),
+                        project_membership.c.project_id.in_(own_projects),
+                        project_membership.c.task_id.notin_(own_tasks),
                     ),
                 )
             )
@@ -1099,15 +1099,15 @@ def _clear_owned_rows(conn: Connection, *, sub: str) -> tuple[int, int]:
         sub: The owner.
 
     Returns:
-        ``(projects, portfolios)`` row counts.
+        ``(tasks, projects)`` row counts.
     """
+    tasks = conn.execute(
+        update(task).where(task.c.owner_user_id == sub).values(org_id=None)
+    ).rowcount
     projects = conn.execute(
         update(project).where(project.c.owner_user_id == sub).values(org_id=None)
     ).rowcount
-    portfolios = conn.execute(
-        update(portfolio).where(portfolio.c.owner_user_id == sub).values(org_id=None)
-    ).rowcount
-    return projects, portfolios
+    return tasks, projects
 
 
 def _lock_user(conn: Connection, sub: str) -> RowMapping | None:

@@ -1,5 +1,46 @@
 # Knowledge update log
 
+## 2026-09-05 (task 038 step 8)
+* **Creation**: Added
+  [stored-json-keys-are-vocabulary-too](stored-json-keys-are-vocabulary-too.md) —
+  an identifier sweep renames stored JSON keys in code but not in data; the
+  per-column audit on real rows, reversible key rewrites for derived rows,
+  both-names readers for append-only logs (038 review stack R5/R6/R28).
+* **Creation**: Added
+  [rename-sweep-inverts-screen-sense-words](rename-sweep-inverts-screen-sense-words.md) —
+  prose, identifiers and message strings written in the screen sense invert
+  under a code-word sweep; the pairing check and the doubled-word grep
+  (038 build + R2).
+* **Creation**: Added
+  [two-step-rename-needs-ledger-and-anchored-exemptions](two-step-rename-needs-ledger-and-anchored-exemptions.md) —
+  the sweep tool's ledger, anchored never-map patterns, prose-counting
+  collision check and the re-sweep hazard (038 build + R15).
+* **Creation**: Added
+  [schema-manifest-from-catalog-not-metadata](schema-manifest-from-catalog-not-metadata.md) —
+  auto-named FK sort determinism, explicit catalog names, generate from the
+  pre-rename checkout, `(table, name)` pairs in the round-trip test (038
+  Phase 0/3.2 + R13/R14).
+* **Creation**: Added
+  [migration-tests-reflect-old-names-below-rename-revision](migration-tests-reflect-old-names-below-rename-revision.md) —
+  `legacy_table` below the rename, current metadata at head (038 D9).
+* **Creation**: Added
+  [prompt-hash-guard-hashes-whole-module](prompt-hash-guard-hashes-whole-module.md) —
+  a package move changes prompt hashes through import lines; the words-only
+  proof is the prose diff (038 Phase 3.3).
+* **Creation**: Added
+  [react-router-singleton-pinned-to-import-location](react-router-singleton-pinned-to-import-location.md) —
+  `replaceState` is invisible to a module-level router; the one-shot sync
+  and the controls that make it same-origin (038 V11 + security lane).
+* **Rewrite**: [run-component-driver-for-scoped-live-checks](run-component-driver-for-scoped-live-checks.md)
+  — its subject `skeleton._run_component` was retired in task 023; the body
+  now names the agent CLI as the live-check vehicle (filename kept: OKF id).
+* **Declined** (recorded here so the candidates are not re-raised): "a phase
+  split can make one gate structurally red" (a plan-template note, not
+  durable system knowledge — verification.md § Phase 3 gate records it);
+  "BSD `sed` has no `\b`" (AGENTS.md already routes deterministic edits to
+  a script); "compatibility maps are legitimate I4 residue" (folded into the
+  stored-JSON-keys concept).
+
 ## 2026-09-04 (task 037 step 8)
 * **Creation**: Added
   [auth-boundary-widening-needs-both-caller-sweeps](auth-boundary-widening-needs-both-caller-sweeps.md)

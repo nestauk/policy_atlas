@@ -24,43 +24,43 @@ from policy_atlas.api.deps import (
     get_runner_backends,
     get_settings,
 )
-from policy_atlas.api.routers._access import accessible_project
+from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
-from policy_atlas.core.schema import capability_run, orchestration_plan, planning_transcript
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
+from policy_atlas.core.schema import capability_run, planning_transcript, task_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
+from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
 
 router = APIRouter(
-    prefix="/api/v1/projects",
+    prefix="/api/v1/tasks",
     tags=["runs"],
     dependencies=[Depends(get_current_user)],
 )
 
 _dispatch_lock = threading.Lock()
-_dispatching_projects: set[uuid.UUID] = set()
+_dispatching_tasks: set[uuid.UUID] = set()
 
 
-def dispatch_reserved(project_id: uuid.UUID) -> bool:
-    """Whether a run admission for the project is in its pre-insert window.
+def dispatch_reserved(task_id: uuid.UUID) -> bool:
+    """Whether a run admission for the task is in its pre-insert window.
 
     The reservation lives in process memory between run admission and the
     executor's capability-run insert; archive must consult it or it can win
-    that window and archive a project whose run then executes hidden (review
+    that window and archive a task whose run then executes hidden (review
     finding codex-9, 2026-07-21). Sound under the pinned one-instance posture —
     the same posture the reservation itself relies on.
     """
     with _dispatch_lock:
-        return project_id in _dispatching_projects
+        return task_id in _dispatching_tasks
 
 
 def _dispatch_run(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     plan_row: dict[str, object],
     backends: RunnerBackends,
 ) -> None:
@@ -68,26 +68,27 @@ def _dispatch_run(
     try:
         run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
-            plan=OrchestrationPlan.model_validate(plan_row["payload"]),
+            plan=TaskPlan.model_validate(plan_row["payload"]),
             plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
             plan_version=plan_row["version"],  # type: ignore[arg-type]
             plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
             backends=backends,
             io=ParkIO(),
+            session_id=task_id,
         )
     except Exception:
-        log.exception("api.run_dispatch_failed", project_id=str(project_id))
+        log.exception("api.run_dispatch_failed", task_id=str(task_id))
     finally:
         with _dispatch_lock:
-            _dispatching_projects.discard(project_id)
+            _dispatching_tasks.discard(task_id)
 
 
 def _await_new_run(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     existing_ids: set[uuid.UUID],
 ) -> RunOut:
     """Wait briefly for the executor's runtime-owned capability-run insertion."""
@@ -100,7 +101,7 @@ def _await_new_run(
         with engine.connect() as conn:
             rows = conn.execute(
                 select(capability_run)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .order_by(
                     capability_run.c.started_at.desc(),
                     capability_run.c.capability_run_id.desc(),
@@ -113,9 +114,9 @@ def _await_new_run(
     raise RuntimeError("executor did not create a capability run")
 
 
-@router.post("/{project_id}/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{task_id}/runs", response_model=RunOut, status_code=status.HTTP_201_CREATED)
 def create_run(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     _: RunCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
@@ -126,36 +127,36 @@ def create_run(
     """Dispatch an approved plan off the request path and return its walk row."""
     with _dispatch_lock:
         with engine.begin() as conn:
-            accessible_project(
-                conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
+            accessible_task(
+                conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
             )
             active = conn.execute(
                 select(capability_run.c.capability_run_id)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .where(capability_run.c.status.in_(("running", "paused")))
                 .limit(1)
             ).scalar_one_or_none()
-            if active is not None or project_id in _dispatching_projects:
-                raise ApiConflict("run_active", "the project already has an active run")
+            if active is not None or task_id in _dispatching_tasks:
+                raise ApiConflict("run_active", "the task already has an active run")
             running = conn.execute(
                 select(capability_run.c.capability_run_id)
                 .where(capability_run.c.status == "running")
             ).all()
-            if len(running) + len(_dispatching_projects) >= settings.run_executor_max:
+            if len(running) + len(_dispatching_tasks) >= settings.run_executor_max:
                 raise ApiConflict("capacity", "the walk executor is at capacity")
             plan_row = conn.execute(
-                select(orchestration_plan)
-                .where(orchestration_plan.c.project_id == project_id)
-                .where(orchestration_plan.c.status == "approved")
-                .order_by(orchestration_plan.c.version.desc())
+                select(task_plan)
+                .where(task_plan.c.task_id == task_id)
+                .where(task_plan.c.status == "approved")
+                .order_by(task_plan.c.version.desc())
                 .limit(1)
             ).mappings().one_or_none()
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
-            approved_plan = OrchestrationPlan.model_validate(plan_row["payload"])
+            approved_plan = TaskPlan.model_validate(plan_row["payload"])
             latest_completed_turn = conn.execute(
                 select(func.max(planning_transcript.c.turn_index))
-                .where(planning_transcript.c.project_id == project_id)
+                .where(planning_transcript.c.task_id == task_id)
                 .where(planning_transcript.c.status == "completed")
             ).scalar_one()
             if (
@@ -171,45 +172,45 @@ def create_run(
                 row[0]
                 for row in conn.execute(
                     select(capability_run.c.capability_run_id).where(
-                        capability_run.c.project_id == project_id
+                        capability_run.c.task_id == task_id
                     )
                 )
             }
-            _dispatching_projects.add(project_id)
+            _dispatching_tasks.add(task_id)
         executor.submit(
             _dispatch_run,
             engine,
-            project_id=project_id,
+            task_id=task_id,
             plan_row=dict(plan_row),
             backends=backends,
         )
-    created = _await_new_run(engine, project_id=project_id, existing_ids=existing_ids)
+    created = _await_new_run(engine, task_id=task_id, existing_ids=existing_ids)
     # Once the runtime row exists, the database's ``running`` count owns
     # capacity accounting; keeping the launch reservation would double-count.
     with _dispatch_lock:
-        _dispatching_projects.discard(project_id)
+        _dispatching_tasks.discard(task_id)
     return created
 
 
-@router.get("/{project_id}/runs", response_model=Page[RunOut])
+@router.get("/{task_id}/runs", response_model=Page[RunOut])
 def list_runs(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[RunOut]:
-    """List a project's walks from newest to oldest (paginated — runs accumulate)."""
+    """List a task's walks from newest to oldest (paginated — runs accumulate)."""
     with engine.connect() as conn:
-        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         total = conn.execute(
             select(func.count())
             .select_from(capability_run)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
         ).scalar_one()
         rows = conn.execute(
             select(capability_run)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -220,19 +221,19 @@ def list_runs(
     )
 
 
-@router.get("/{project_id}/runs/{run_id}", response_model=RunOut)
+@router.get("/{task_id}/runs/{run_id}", response_model=RunOut)
 def get_run(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> RunOut:
-    """Return one readable project's capability run, or the opaque 404."""
+    """Return one readable task's capability run, or the opaque 404."""
     with engine.connect() as conn:
-        accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
         row = conn.execute(
             select(capability_run)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == run_id)
         ).mappings().one_or_none()
     if row is None:

@@ -27,9 +27,9 @@ RunStatus = Literal[
 
 
 class RunCreate(BaseModel):
-    """Inbound body for `POST /api/v1/projects/{id}/runs`.
+    """Inbound body for `POST /api/v1/tasks/{id}/runs`.
 
-    The run is created from the project's current approved-ready plan; the
+    The run is created from the task's current approved-ready plan; the
     request body carries no fields. `extra="forbid"` rejects any body at
     all beyond `{}`.
     """
@@ -42,7 +42,7 @@ class RunOut(BaseModel):
 
     Args:
         capability_run_id: The run's identity.
-        project_id: Owning project.
+        task_id: Owning task.
         plan_id: Identity of the plan the run executes.
         plan_version: Plan version current at run creation.
         status: Current run status.
@@ -52,7 +52,7 @@ class RunOut(BaseModel):
     """
 
     capability_run_id: uuid.UUID
-    project_id: uuid.UUID
+    task_id: uuid.UUID
     plan_id: uuid.UUID
     plan_version: int
     status: RunStatus

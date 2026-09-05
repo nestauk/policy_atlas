@@ -452,7 +452,7 @@ describe("mostRelevantSources case-study cards", () => {
     expect(result.map((source) => source.sourceId).sort()).toEqual(["block-source", "card-source"]);
   });
 
-  it("counts a claim once when a card re-projects its section block's claim", () => {
+  it("counts a claim once when a card re-tasks its section block's claim", () => {
     const sharedClaim = {
       claim_id: "claim-1",
       citations: [{ source_id: "shared-source", source_title: "Shared Source" }],
@@ -476,6 +476,6 @@ describe("downloadFilename", () => {
     expect(downloadFilename("What retains early years staff?", "md")).toBe(
       "what-retains-early-years-staff.md",
     );
-    expect(downloadFilename("???", "pdf")).toBe("evidence-base.pdf");
+    expect(downloadFilename("???", "pdf")).toBe("report.pdf");
   });
 });

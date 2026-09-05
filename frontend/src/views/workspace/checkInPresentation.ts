@@ -4,7 +4,7 @@ import type { ResolvedDecision, StageEntry } from "../../store";
  *  and check-in bundles carry. Shared by the journey pane's coverage card
  *  and the check-in bundle's P1 search-review card — both render raw
  *  backend keys without it. */
-export const BACKEND_LABELS: Record<string, string> = {
+const BACKEND_LABELS: Record<string, string> = {
   openalex: "OpenAlex · academic research",
   overton: "Overton · policy documents",
 };
@@ -12,7 +12,7 @@ export const BACKEND_LABELS: Record<string, string> = {
 /** Look a backend key up in the locked map. Unknown key → null (the caller
  *  omits). Case-insensitive: the coverage read model serves public names
  *  ("OpenAlex"), the stream serves durable keys ("openalex") — the label-map
- *  mismatch left a completed project's "Where I looked" card nearly empty
+ *  mismatch left a completed task's "Where I looked" card nearly empty
  *  (owner finding, 2026-08-05) and, separately, left the P1 search-review
  *  card rendering raw keys outright. */
 export function backendLabel(backend: string): string | null {
@@ -41,7 +41,7 @@ export const CHECK_IN_SECTIONS_HEADING = "Proposed sections · edit any row, kee
 /** Locked labels for deterministic component-completion count fields. Unknown
  * keys are deliberately omitted rather than converted from implementation
  * vocabulary. */
-export const CHECK_IN_COUNT_LABELS: Record<string, string> = {
+const CHECK_IN_COUNT_LABELS: Record<string, string> = {
   acquired: "Sources found",
   results: "Results returned",
   relevant: "Relevant sources",
@@ -61,10 +61,10 @@ const STAGE_LABELS: Record<string, string> = {
   classify: "Classifying evidence",
   appraise: "Appraising quality",
   characterise: "Mapping the landscape",
-  synthesise: "Synthesising the evidence",
+  synthesise: "Writing the report",
 };
 
-export interface PresentedCheckInRender {
+interface PresentedCheckInRender {
   stageLabel: string;
   status: "completed";
   seconds: string;
@@ -101,7 +101,7 @@ export function presentCheckInRender(
 /** Friendly copy for the known steering-trigger keys
  *  (`runtime/steering_triggers.py`). Unknown trigger → omit (locked
  *  vocabulary; raw keys never render). */
-export const TRIGGER_COPY: Record<string, string> = {
+const TRIGGER_COPY: Record<string, string> = {
   coverage_inadequate: "Search coverage looked inadequate for the question.",
   coverage_stop_condition: "A coverage stop condition was hit.",
   screen_quorum_failure_spike: "Screening hit a spike of failed relevance checks.",
@@ -122,7 +122,7 @@ export function triggerCopy(triggers: Array<{ trigger: string }> | undefined): s
 
 export const DECIDED_BY_LABEL: Record<string, string> = {
   user: "You decided",
-  orchestrator: "The orchestrator decided",
+  agent: "The Agent decided",
   standing_default: "Your standing rule decided",
 };
 

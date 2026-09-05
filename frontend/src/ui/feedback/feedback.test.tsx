@@ -36,7 +36,7 @@ describe("feedback error surfaces", () => {
 
   it("renders owner-indistinguishable not-found copy", () => {
     render(<NotFoundView />);
-    expect(screen.getByRole("heading", { name: "This project is unavailable" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "This task is unavailable" })).toBeInTheDocument();
   });
 
   it("maps 422 envelope locations to field-anchored messages", () => {

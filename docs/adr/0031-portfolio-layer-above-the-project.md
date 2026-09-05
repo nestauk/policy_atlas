@@ -5,6 +5,7 @@
   on membership cardinality (decision 1) and PATCH shape (decision 4). The
   portfolio still sits *above* the project; the screen/code vocabulary split
   is unchanged.
+- **Decision 2 superseded** by [ADR 0036](0036-one-vocabulary-across-code-schema-api-and-screen.md) — 2026-09-05 (task 038): the screen word and the code word are now the same word. Decision 1 stands.
 - **Date:** 2026-08-17
 - **Task:** 032-task-lifecycle-ia · contract approved 2026-08-17 · plan approved
   2026-08-17 (with two owner reductions: standard review, three full verify runs)
@@ -58,8 +59,10 @@ Two constraints bound the answer:
    description a person maintains, and pages of its own; a free-text tag gives
    no identity to rename and no row to hang a description on.
 
-2. **The screen word and the code word deliberately differ, and the mapping is
-   fixed.** On screen, a `project` row is a **Task** and a `portfolio` row is a
+2. **Superseded by [ADR 0036](0036-one-vocabulary-across-code-schema-api-and-screen.md)
+   (task 038, 2026-09-05): the screen word and the code word are now the same word.**
+   The original decision, kept for the record: **The screen word and the code word
+   deliberately differ, and the mapping is fixed.** On screen, a `project` row is a **Task** and a `portfolio` row is a
    **Project**. In the code, `project` and `portfolio` keep their names.
 
    This is the uncomfortable part of the decision, and it was taken with open

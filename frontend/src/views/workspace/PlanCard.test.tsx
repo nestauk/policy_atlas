@@ -18,7 +18,7 @@ vi.mock("../../api/mutations", () => ({
   usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 function basePlan(overrides: Partial<PlanDraft> = {}): PlanDraft {
   return {
@@ -51,7 +51,7 @@ function mockPlanQuery(data: PlanOut | undefined) {
 }
 
 function renderCard(overrides: Partial<Parameters<typeof PlanCard>[0]> = {}) {
-  return render(<PlanCard projectId={PROJECT_ID} runActive={false} isOwner {...overrides} />);
+  return render(<PlanCard taskId={TASK_ID} runActive={false} isOwner {...overrides} />);
 }
 
 describe("PlanCard — ready actions", () => {

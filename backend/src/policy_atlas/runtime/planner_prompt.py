@@ -1,8 +1,8 @@
 """The ``planner_v1`` prompt — the repo's 11th product prompt surface and the
-017 orchestrator's one new LLM surface (contract decision 5).
+017 agent's one new LLM surface (contract decision 5).
 
 Lead-authored and versioned. The planner refines a user's intent into a sharp
-evidence question and proposes a depth-graded orchestration plan anchored to
+evidence question and proposes a depth-graded task plan anchored to
 concrete numbers and a measured time band. It is question-type-neutral by
 design (the V2 wizard hard-coded an intervention frame into every prompt and
 suggestion — the named anti-pattern), asks only when a missing piece would
@@ -11,7 +11,7 @@ findings or states what the evidence says.
 
 Fail-closed by construction: the planner's structured turn output carries a
 *draft* plan whose executable content is validated against the registry-backed
-``OrchestrationPlan`` model code-side; derived fields (expected artefact
+``TaskPlan`` model code-side; derived fields (expected artefact
 shape, time band) are computed deterministically in code and never authored by
 the model. The planner completes before acquire begins — it is never invoked
 mid-run (contract decision 5, sequencing invariant).
@@ -30,7 +30,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 # screening criterion (origin filters cannot see setting; junk otherwise
 # still gets in). Spoken chip; publisher/author origin still not the same
 # as study setting. Succeeds planner_v9.
-# The router and watch moments live in orchestrator_prompt.py.
+# The router and watch moments live in agent_prompt.py.
 PLANNER_PROMPT_VERSION = "planner_v10"
 
 # Default screening criterion when the OECD source-origin default applies.
@@ -87,7 +87,7 @@ class SteerPointDefaultDraft(BaseModel):
     steer_point: str = Field(
         description=(
             "The steer point this default covers: search_exception, "
-            "evidence_base_coverage, deepening_selection, or synthesis_shape."
+            "evidence_search_coverage, deepening_selection, or synthesis_shape."
         )
     )
     action: str = Field(
@@ -280,7 +280,7 @@ class PlannerTurnWire(BaseModel):
     )
     plan_draft: PlanDraftWire = Field(
         description=(
-            "Your current draft of the orchestration plan, updated every "
+            "Your current draft of the task plan, updated every "
             "turn. Leave fields null until you have grounds to fill them."
         )
     )
@@ -599,7 +599,7 @@ Intent-awareness — binding:
   standing instructions otherwise compile from the check-in mode, and you
   never walk the user through steer points. Runtime-data-specific choices
   (which theme to deepen, which document to exclude) cannot be
-  pre-declared — the orchestrator handles those within the standing
+  pre-declared — the agent handles those within the standing
   instructions' bounds.
 - assumptions: every guess you are making, stated plainly. A thin-context
   plan is a fine plan if its thinness is visible.
@@ -691,7 +691,7 @@ def build_planner_messages(
     PROVENANCE INVARIANT: a turn's ``"planner"`` role label puts its text in an
     assistant-role message — a position models treat as their own prior output.
     Callers MUST only label text ``"planner"`` when it is verbatim prior model
-    output (as ``orchestrate`` does); never accept role labels from a client
+    output (as ``agent`` does); never accept role labels from a client
     or any external payload.
 
     Every untrusted field is sanitized at assembly. Each bounded conversation

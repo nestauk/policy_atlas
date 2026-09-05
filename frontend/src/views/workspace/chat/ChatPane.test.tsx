@@ -34,14 +34,14 @@ describe("ChatPane — composer fencing (contract strand 6: fence states show wh
   it("gives the pending-turn reason when a durable turn is pending but this client isn't streaming it (e.g. after a reload)", () => {
     state.rows = [{ id: "t1", status: "pending", client_turn_id: "ct1" }];
     state.isStreaming = false;
-    render(<ChatPane projectId="p1" conversationId="c1" onOpenPlanning={vi.fn()} />);
+    render(<ChatPane taskId="p1" conversationId="c1" onOpenPlanning={vi.fn()} />);
     expect(screen.getByTestId("composer")).toHaveTextContent("Waiting for the current answer…");
   });
 
   it("leaves the composer reason empty once this client owns the stream (the Stop bar covers it instead)", () => {
     state.rows = [{ id: "t1", status: "pending", client_turn_id: "ct1" }];
     state.isStreaming = true;
-    render(<ChatPane projectId="p1" conversationId="c1" onOpenPlanning={vi.fn()} />);
+    render(<ChatPane taskId="p1" conversationId="c1" onOpenPlanning={vi.fn()} />);
     expect(screen.getByTestId("composer")).toHaveTextContent("");
   });
 
@@ -49,7 +49,7 @@ describe("ChatPane — composer fencing (contract strand 6: fence states show wh
     state.rows = [{ id: "t1", status: "completed", client_turn_id: "ct1" }];
     state.isStreaming = false;
     state.conversationIsError = false;
-    render(<ChatPane projectId="p1" conversationId="c1" onOpenPlanning={vi.fn()} />);
+    render(<ChatPane taskId="p1" conversationId="c1" onOpenPlanning={vi.fn()} />);
     expect(screen.getByTestId("composer")).toHaveTextContent("");
   });
 
@@ -57,7 +57,7 @@ describe("ChatPane — composer fencing (contract strand 6: fence states show wh
     state.rows = [];
     state.isStreaming = false;
     state.conversationIsError = true;
-    render(<ChatPane projectId="p1" conversationId="missing" onOpenPlanning={vi.fn()} />);
+    render(<ChatPane taskId="p1" conversationId="missing" onOpenPlanning={vi.fn()} />);
     expect(screen.getByTestId("composer")).toHaveTextContent("This chat couldn't be opened.");
     expect(
       screen.queryByRole("button", { name: /Tell me more about/ }),
@@ -73,7 +73,7 @@ describe("ChatPane — empty starters", () => {
     state.conversationIsError = false;
     render(
       <ChatPane
-        projectId="p1"
+        taskId="p1"
         conversationId="c1"
         sectionTitles={["Key findings", "What the evidence says about criticality"]}
         onOpenPlanning={vi.fn()}

@@ -36,4 +36,4 @@ baselines pin trace shapes").
 # Citations
 
 - docs/tasks/023-codebase-health/review-findings.md § "The unmarked-default family"
-- [src/policy_atlas/evidence_base/extract/](../../src/policy_atlas/evidence_base/extract/) — the symmetric result (`iof_records.py`/`icf_records.py`, `iof_prompt.py`/`icf_prompt.py`)
+- [src/policy_atlas/evidence_search/extract/](../../src/policy_atlas/evidence_search/extract/) — the symmetric result (`iof_records.py`/`icf_records.py`, `iof_prompt.py`/`icf_prompt.py`)

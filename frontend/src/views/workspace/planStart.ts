@@ -14,19 +14,19 @@ export const START_SEARCH_CLASS =
  * actions and the plan document's own Start search.
  */
 export function usePlanStart({
-  projectId,
+  taskId,
   overlay,
   runActive,
   onStarted,
 }: {
-  projectId: string;
+  taskId: string;
   overlay: PlanOverlay;
   runActive: boolean;
   onStarted?: () => void;
 }) {
-  const planQuery = usePlan(projectId);
-  const startRun = useStartRun(projectId);
-  const patchPlan = usePatchPlan(projectId);
+  const planQuery = usePlan(taskId);
+  const startRun = useStartRun(taskId);
+  const patchPlan = usePatchPlan(taskId);
   const [startNotice, setStartNotice] = useState<string | null>(null);
   const plan = planQuery.data?.plan ?? null;
   const applying = patchPlan.isPending || startRun.isPending;

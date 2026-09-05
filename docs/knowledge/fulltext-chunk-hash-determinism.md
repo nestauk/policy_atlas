@@ -28,7 +28,7 @@ no measurable cost.
 
 Chunks written at ingest are the permanent content-of-record (no original bytes retained, so
 re-parse is impossible by construction). If the same PDF can hash two ways, "same content"
-stops being decidable — cross-run comparisons, retries and any future cross-project snapshot
+stops being decidable — cross-run comparisons, retries and any future cross-task snapshot
 reuse silently fracture.
 
 # Watch out

@@ -7,7 +7,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.core.hashing import content_hash
 from policy_atlas.core.schema import artefact, block
-from tests.helpers import now, seed_project_and_run
+from tests.helpers import now, seed_task_and_run
 
 
 def test_content_hash_stable() -> None:
@@ -20,14 +20,14 @@ def test_content_hash_whitespace_insensitive() -> None:
 
 def test_block_content_hash_is_unchanged_by_summary(conn: Connection) -> None:
     """Block summaries are metadata and never enter the content hash."""
-    project_id, _ = seed_project_and_run(conn)
+    task_id, _ = seed_task_and_run(conn)
     artefact_id, block_id = uuid.uuid4(), uuid.uuid4()
     prose = "The content that was synthesised."
     hashed = content_hash(prose)
     conn.execute(
         artefact.insert().values(
             artefact_id=artefact_id,
-            project_id=project_id,
+            task_id=task_id,
             title="Hash fixture",
             created_at=now(),
         )

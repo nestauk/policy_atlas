@@ -1,43 +1,82 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
-import { useProject } from "../api/queries";
+import { useArtefact, useConversations, useTask } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
+import { LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { useRunStream } from "../store";
+import { cn } from "../ui/brand/cn";
 import { NotFoundView } from "../ui/feedback/NotFoundView";
+import { AppFooter } from "./AppFooter";
+import { hasResult } from "./lifecycle";
+import { ChatPane } from "./workspace/chat/ChatPane";
+import { DraftChatPane } from "./workspace/chat/DraftChatPane";
+import { ConversationSidebar } from "./workspace/chat/ConversationSidebar";
+import { DRAFT_CHAT_ID, isPlanningConversation, taskAgentConversationId, useActiveConversation } from "./workspace/chat/conversationState";
 import { PlanDocument } from "./workspace/PlanDocument";
 import { PlanningPane } from "./workspace/PlanningPane";
 import type { PlanOverlay } from "./workspace/planOverlay";
 
 /**
- * The Plan tab. The planning conversation is the only thread here — follow-up
- * chats live in the project chat overlay on every other tab.
+ * The Agent tab: the Task's conversations in a sidebar, the selected one in
+ * the main column (owner ruling 2026-09-05, contract 038 § V8).
+ *
+ * The Task Agent is the default and carries no `?chat=`; it keeps this tab's
+ * original layout, the planning pane with its plan-document rail. Any other
+ * chat takes the main column instead, and the rail — which belongs to the
+ * plan, not to a chat — stays shut. The overlay (`ChatSidePanel`) is not
+ * mounted here: this sidebar is what it would have been.
  */
 export function WorkspaceView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  const stream = useRunStream(projectId);
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  const stream = useRunStream(taskId);
+  const { activeConversationId, draftEntryArtefactId, setActiveConversation, openDraftChat } = useActiveConversation();
+  const conversations = useConversations(taskId, { status: "active" });
+  const rows = conversations.data?.data ?? [];
+  const artefact = useArtefact(taskId);
+  // A planning id in the URL (a deep link, or the overlay's own selection
+  // carried over) reads as the Task Agent: the pane renders the Task's
+  // planning thread, never one lineage on its own.
+  const onTaskAgent = activeConversationId === null || isPlanningConversation(activeConversationId, rows);
+  const chatId = onTaskAgent ? null : activeConversationId;
+  const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
+  // Chats need a result to ask about. Either source may be behind: the task
+  // read model until its next refetch, the run stream until its replay
+  // reaches the final status frame.
+  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  // The site footer opens only on a deliberate scroll past the conversation's
+  // end (the other tabs reveal theirs at the end of their scroll pane), and
+  // hides again on any scroll up — so the composer can rest at the bottom.
+  const [footerOpen, setFooterOpen] = useState(false);
+  // A freshly mounted pane starts with its footer shut; the state follows it
+  // (state derived from the pane, reset during render).
+  const [footerPane, setFooterPane] = useState(chatId);
+  if (footerPane !== chatId) {
+    setFooterPane(chatId);
+    setFooterOpen(false);
+  }
   const hasRun = stream.run !== null;
   const [planOpen, setPlanOpen] = useState(false);
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");
   const [planOverlay, setPlanOverlay] = useState<PlanOverlay>({});
-  useDocumentTitle(project.data?.name, "Plan");
+  useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.agent);
 
   const runActive = stream.run?.status === "running" || stream.run?.status === "paused";
   // Task 033 phase 10c (contract § 11 / rubric 37) — the Plan route (this
   // view) hosts every owner-only mutation surface and is never gated by
   // `LifecycleRoute` (it's open at every run state), so `is_owner` is the
   // only line of defence against a non-owner reaching them by address.
-  // Undefined while `project` is still loading reads as "not the owner" —
+  // Undefined while `task` is still loading reads as "not the owner" —
   // fail closed, never grant the mutation surface before ownership is known.
-  const isOwner = project.data?.is_owner === true;
+  const isOwner = task.data?.is_owner === true;
   const openPlan = () => {
     setPlanPlacement("center");
     setPlanOpen(true);
   };
   const planDocument = (
     <PlanDocument
-      projectId={projectId}
+      taskId={taskId}
       placement={planPlacement}
       runActive={runActive}
       // The plan-start card (contract § 11 / rubric 37): folds `!isOwner`
@@ -55,34 +94,86 @@ export function WorkspaceView() {
     />
   );
 
-  // useProject (task 037 review fix) now throws a plain Error carrying
+  // useTask (task 037 review fix) now throws a plain Error carrying
   // `status`, not the API's `{error:{code}}` envelope — read the status
   // directly rather than a `code` field that no longer exists.
-  const projectErrorStatus = (project.error as { status?: number } | null)?.status;
-  if (project.isError && projectErrorStatus === 404) {
+  const taskErrorStatus = (task.error as { status?: number } | null)?.status;
+  if (task.isError && taskErrorStatus === 404) {
     return <NotFoundView />;
   }
 
+  // The rail belongs to the plan; a chat in the main column never carries it.
+  const railOpen = chatId === null && planOpen;
+
   return (
-    <main className="relative flex h-full min-h-0 overflow-hidden bg-paper">
-      <div
-        className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
-        inert={planOpen && planPlacement === "center" ? true : undefined}
-      >
-        <PlanningPane
-          projectId={projectId}
-          runStatus={stream.run?.status}
-          stream={stream}
-          isOwner={isOwner}
-          onReviewPlan={openPlan}
-          planOverlay={planOverlay}
-          onOverlayApplied={() => setPlanOverlay({})}
+    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-paper">
+      {/* Sidebar and conversation share the row; the site footer runs under
+          both, so neither column ever appears to overhang it. */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <ConversationSidebar
+          taskId={taskId}
+          selectedId={onTaskAgent ? taskAgentConversationId(rows) : activeConversationId}
+          onSelect={setActiveConversation}
+          onNewChat={() => openDraftChat(null)}
+          chatsEnabled={chatsEnabled}
         />
+        {/* The plan document's centred placement covers the conversation, not
+            the sidebar — so `relative` sits on this column, not on <main>. */}
+        <div className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div
+            className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+            inert={railOpen && planPlacement === "center" ? true : undefined}
+          >
+            {chatId === null ? (
+              <PlanningPane
+                taskId={taskId}
+                runStatus={stream.run?.status}
+                stream={stream}
+                isOwner={isOwner}
+                onReviewPlan={openPlan}
+                planOverlay={planOverlay}
+                onOverlayApplied={() => setPlanOverlay({})}
+                onAtBottomChange={setFooterOpen}
+              />
+            ) : chatId === DRAFT_CHAT_ID ? (
+              <DraftChatPane
+                taskId={taskId}
+                entryArtefactId={draftEntryArtefactId}
+                sectionTitles={sectionTitles}
+                wide
+                onCreated={setActiveConversation}
+              />
+            ) : (
+              <ChatPane
+                taskId={taskId}
+                conversationId={chatId}
+                sectionTitles={sectionTitles}
+                onOpenPlanning={() => setActiveConversation(null)}
+                wide
+                onAtBottomChange={setFooterOpen}
+              />
+            )}
+          </div>
+          {railOpen && planPlacement === "side" && planDocument}
+          {railOpen && planPlacement === "center" && (
+            <div className="absolute inset-0 z-20 overflow-hidden">{planDocument}</div>
+          )}
+        </div>
       </div>
-      {planOpen && planPlacement === "side" && planDocument}
-      {planOpen && planPlacement === "center" && (
-        <div className="absolute inset-0 z-20 overflow-hidden">{planDocument}</div>
-      )}
+      {/* Revealed only when the conversation is scrolled to its end; the
+          grid-row transition animates height without a layout property. */}
+      <div
+        className={cn(
+          "grid shrink-0 transition-[grid-template-rows] duration-200 ease-out",
+          footerOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+        )}
+        aria-hidden={!footerOpen}
+        inert={!footerOpen ? true : undefined}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <AppFooter className="mt-0" />
+        </div>
+      </div>
     </main>
   );
 }

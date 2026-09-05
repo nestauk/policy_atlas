@@ -14,12 +14,12 @@ from sqlalchemy.engine import Engine
 from policy_atlas.api import chat_turns
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.chat_turns import ChatTurnResult
-from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
-from policy_atlas.evidence_base.synthesis.synthesis_tools import build_section_tools
+from policy_atlas.core.schema import capability_run, chat_turn, conversation, task
+from policy_atlas.evidence_search.synthesis.synthesis_tools import build_section_tools
 from policy_atlas.runtime.chat_backend import StubChatBackend
 from tests.helpers import now
 from tests.runtime.test_runner import _cleanup as _cleanup
-from tests.runtime.test_runner import _seed_project as _seed_project
+from tests.runtime.test_runner import _seed_task as _seed_task
 
 
 class CountingChatBackend(StubChatBackend):
@@ -58,24 +58,24 @@ class CancellingChatBackend(StubChatBackend):
 def _chat(
     engine: Engine, *, owner: str = "chat-owner", created_by: str | None = None
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-    """Create an active chat over a project fixture.
+    """Create an active chat over a task fixture.
 
     ``created_by`` defaults to ``None``, the legacy pre-033 shape: an
-    unattributed chat belongs to the project owner through the contract's NULL
+    unattributed chat belongs to the task owner through the contract's NULL
     disjunct, so every case in this file that predates task 033 goes on
     exercising exactly what it always did. Pass it to make the chat somebody
     else's — a colleague's.
     """
-    project_id, scope_id = _seed_project(engine)
+    task_id, scope_id = _seed_task(engine)
     conversation_id = uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
-            update(project).where(project.c.project_id == project_id).values(owner_user_id=owner)
+            update(task).where(task.c.task_id == task_id).values(owner_user_id=owner)
         )
         conn.execute(
             conversation.insert().values(
                 id=conversation_id,
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 title="New chat",
                 entry_artefact_id=None,
@@ -86,18 +86,18 @@ def _chat(
                 created_by=created_by,
             )
         )
-    return project_id, scope_id, conversation_id
+    return task_id, scope_id, conversation_id
 
 
-def _walk(engine: Engine, *, project_id: uuid.UUID, scope_id: uuid.UUID, status: str) -> None:
+def _walk(engine: Engine, *, task_id: uuid.UUID, scope_id: uuid.UUID, status: str) -> None:
     """Persist the minimal capability-walk eligibility fixture."""
     with engine.begin() as conn:
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
-                capability="evidence_base",
+                capability="evidence_search",
                 plan_id=uuid.uuid4(),
                 plan_version=1,
                 status=status,
@@ -128,16 +128,16 @@ def test_stub_turn_completes_durably_and_replays(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A completed idempotent turn is read back verbatim without regeneration."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         backend = OutputCappedChatBackend()
         turn_id = uuid.uuid4()
         first = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="What does the evidence say?",
@@ -146,7 +146,7 @@ def test_stub_turn_completes_durably_and_replays(
         )
         replay = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="What does the evidence say?",
@@ -173,7 +173,7 @@ def test_stub_turn_completes_durably_and_replays(
         assert durable["answer_payload"] == first.answer_payload
         assert title == "What does the evidence say?"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 @pytest.mark.parametrize(
@@ -181,15 +181,15 @@ def test_stub_turn_completes_durably_and_replays(
 )
 def test_turn_requires_completed_run(engine: Engine, walk_status: str | None, code: str) -> None:
     """Missing completion and an active walk produce named eligibility conflicts."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
+        task_id, scope_id, conversation_id = _chat(engine)
         if walk_status is not None:
-            _walk(engine, project_id=project_id, scope_id=scope_id, status=walk_status)
+            _walk(engine, task_id=task_id, scope_id=scope_id, status=walk_status)
         with pytest.raises(ApiConflict) as raised:
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="Question",
@@ -198,20 +198,20 @@ def test_turn_requires_completed_run(engine: Engine, walk_status: str | None, co
             )
         assert raised.value.code == code
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_active_walk_fences_chat(engine: Engine) -> None:
     """A running walk wins over an older completed walk at reservation time."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="running")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="running")
         with pytest.raises(ApiConflict) as raised:
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="Question",
@@ -220,15 +220,15 @@ def test_active_walk_fences_chat(engine: Engine) -> None:
             )
         assert raised.value.code == "run_active"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_stale_pending_is_failed_before_reservation(engine: Engine) -> None:
     """A ten-minute-old pending row no longer blocks a new turn."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         with engine.begin() as conn:
             conn.execute(
                 chat_turn.insert().values(
@@ -247,7 +247,7 @@ def test_stale_pending_is_failed_before_reservation(engine: Engine) -> None:
             )
             reserved = chat_turns._phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="new",
@@ -263,7 +263,7 @@ def test_stale_pending_is_failed_before_reservation(engine: Engine) -> None:
             )
         assert sorted(statuses) == ["failed", "pending"]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_chat_tool_allowlist_is_closed() -> None:
@@ -280,15 +280,15 @@ def test_explicit_cancel_keeps_partial_prose_without_citations(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A cancel observed between deltas commits the partial with the stopped marker."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         cancel = threading.Event()
         result = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="Question",
@@ -307,19 +307,19 @@ def test_explicit_cancel_keeps_partial_prose_without_citations(
             "stopped_before_evidence_check": True,
         }
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
-def _second_chat_in_same_project(
-    engine: Engine, project_id: uuid.UUID, *, created_by: str | None = None
+def _second_chat_in_same_task(
+    engine: Engine, task_id: uuid.UUID, *, created_by: str | None = None
 ) -> uuid.UUID:
-    """Insert an additional active chat conversation onto an existing project."""
+    """Insert an additional active chat conversation onto an existing task."""
     conversation_id = uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
             conversation.insert().values(
                 id=conversation_id,
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 title="New chat",
                 entry_artefact_id=None,
@@ -420,10 +420,10 @@ def test_failed_turn_retries_in_place(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed turn keeps its row; retrying with the same ids completes it in place."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         backend = FailOnceChatBackend()
         turn_id = uuid.uuid4()
@@ -431,7 +431,7 @@ def test_failed_turn_retries_in_place(
         with pytest.raises(RuntimeError):
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message=message,
@@ -448,7 +448,7 @@ def test_failed_turn_retries_in_place(
 
         retried = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message=message,
@@ -460,23 +460,23 @@ def test_failed_turn_retries_in_place(
         assert retried.id == failed_row["id"]
         assert retried.turn_index == failed_row["turn_index"]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_retry_of_non_latest_failed_turn_is_stale(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Only the latest chat turn may be retried; an older failed turn is stale."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         turn_a, turn_b, turn_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
         chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="Question one",
@@ -486,7 +486,7 @@ def test_retry_of_non_latest_failed_turn_is_stale(
         with pytest.raises(RuntimeError):
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="Question two",
@@ -495,7 +495,7 @@ def test_retry_of_non_latest_failed_turn_is_stale(
             )
         chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="Question three",
@@ -506,7 +506,7 @@ def test_retry_of_non_latest_failed_turn_is_stale(
         with pytest.raises(ApiConflict) as raised:
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="Question two",
@@ -515,21 +515,21 @@ def test_retry_of_non_latest_failed_turn_is_stale(
             )
         assert raised.value.code == "stale_turn"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_new_turn_while_pending_conflicts(engine: Engine) -> None:
     """A fresh pending row blocks a differently-keyed new turn as in-progress."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         _insert_pending_turn(engine, conversation_id=conversation_id)
 
         with pytest.raises(ApiConflict) as raised:
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="a new question",
@@ -538,26 +538,26 @@ def test_new_turn_while_pending_conflicts(engine: Engine) -> None:
             )
         assert raised.value.code == "chat_turn_in_progress"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_owner_in_flight_cap(engine: Engine) -> None:
     """A third owner-scoped chat turn hits the process-wide in-flight cap."""
     owner = "cap-owner"
-    project_ids: list[uuid.UUID] = []
+    task_ids: list[uuid.UUID] = []
     try:
-        project_a, _scope_a, conv_a = _chat(engine, owner=owner)
-        project_b, _scope_b, conv_b = _chat(engine, owner=owner)
-        project_c, scope_c, conv_c = _chat(engine, owner=owner)
-        project_ids = [project_a, project_b, project_c]
-        _walk(engine, project_id=project_c, scope_id=scope_c, status="succeeded")
+        task_a, _scope_a, conv_a = _chat(engine, owner=owner)
+        task_b, _scope_b, conv_b = _chat(engine, owner=owner)
+        task_c, scope_c, conv_c = _chat(engine, owner=owner)
+        task_ids = [task_a, task_b, task_c]
+        _walk(engine, task_id=task_c, scope_id=scope_c, status="succeeded")
         _insert_pending_turn(engine, conversation_id=conv_a)
         _insert_pending_turn(engine, conversation_id=conv_b)
 
         with pytest.raises(ApiCapacity) as raised:
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_c,
+                task_id=task_c,
                 conversation_id=conv_c,
                 user_id=owner,
                 message="a third question",
@@ -566,23 +566,23 @@ def test_owner_in_flight_cap(engine: Engine) -> None:
             )
         assert raised.value.code == "chat_capacity"
     finally:
-        for project_id in project_ids:
-            _cleanup(engine, project_id)
+        for task_id in task_ids:
+            _cleanup(engine, task_id)
 
 
 def test_title_set_from_first_question_only(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The chat title derives from the first question only; later turns leave it alone."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         message = (
             "What does the evidence base say about the effectiveness of home "
             "visiting programmes for improving outcomes for families with young "
-            "children overall, across the studies committed to this project?"
+            "children overall, across the studies committed to this task?"
         )
         assert len(message) > 100
         expected_title = chat_turns._first_question_title(message)
@@ -590,7 +590,7 @@ def test_title_set_from_first_question_only(
 
         chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message=message,
@@ -605,7 +605,7 @@ def test_title_set_from_first_question_only(
 
         chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="A follow-up question that should not touch the title.",
@@ -618,27 +618,27 @@ def test_title_set_from_first_question_only(
             ).scalar_one()
         assert title_after == expected_title
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_cross_chat_concurrency_isolated(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two chats in one project run concurrently; the turn lock is conversation-scoped."""
-    project_id: uuid.UUID | None = None
+    """Two chats in one task run concurrently; the turn lock is conversation-scoped."""
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         with engine.begin() as conn:
             conn.execute(
-                update(project)
-                .where(project.c.project_id == project_id)
+                update(task)
+                .where(task.c.task_id == task_id)
                 .values(owner_user_id="cap-owner")
             )
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
 
-        conversation_one = _second_chat_in_same_project(engine, project_id)
-        conversation_two = _second_chat_in_same_project(engine, project_id)
+        conversation_one = _second_chat_in_same_task(engine, task_id)
+        conversation_two = _second_chat_in_same_task(engine, task_id)
 
         results: dict[str, Any] = {}
         errors: dict[str, BaseException] = {}
@@ -647,7 +647,7 @@ def test_cross_chat_concurrency_isolated(
             try:
                 results[name] = chat_turns.run_chat_turn(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     conversation_id=conversation_id,
                     user_id="cap-owner",
                     message=f"Question for {name}",
@@ -688,7 +688,7 @@ def test_cross_chat_concurrency_isolated(
             with pytest.raises(ApiConflict) as raised:
                 chat_turns.run_chat_turn(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     conversation_id=conversation_one,
                     user_id="cap-owner",
                     message="A conflicting question",
@@ -699,7 +699,7 @@ def test_cross_chat_concurrency_isolated(
 
             other_result = chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_two,
                 user_id="cap-owner",
                 message="An unrelated question",
@@ -714,19 +714,19 @@ def test_cross_chat_concurrency_isolated(
         assert not errors.get("three")
         assert results["three"].status == "completed"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_message_over_cap_rejected(engine: Engine) -> None:
     """A message beyond the contract cap is rejected before any reservation work."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         with pytest.raises(ValueError):
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message="x" * 10_001,
@@ -734,27 +734,27 @@ def test_message_over_cap_rejected(engine: Engine) -> None:
                 chat_backend=StubChatBackend(),
             )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
     """Persisted citations carry the cited document's title and source id."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
     from policy_atlas.core.schema import chunk as chunk_table
-    from tests.helpers import delete_project_data, seed_source
+    from tests.helpers import delete_task_data, seed_source
 
-    project_id = None
+    task_id = None
     try:
         with engine.begin() as conn:
             import uuid as _uuid
 
-            from policy_atlas.core.schema import project as project_table
+            from policy_atlas.core.schema import task as task_table
             from tests.helpers import now as _now_helper
 
-            project_id = _uuid.uuid4()
+            task_id = _uuid.uuid4()
             conn.execute(
-                project_table.insert().values(
-                    project_id=project_id,
+                task_table.insert().values(
+                    task_id=task_id,
                     created_at=_now_helper(),
                     name="Citation resolution test",
                     question=None,
@@ -763,8 +763,8 @@ def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
                     owner_user_id="chat-owner",
                 )
             )
-            snapshot_id, pss_id = seed_source(
-                conn, project_id, {"title": "A real document title"}
+            snapshot_id, tss_id = seed_source(
+                conn, task_id, {"title": "A real document title"}
             )
             chunk_id = _uuid.uuid4()
             conn.execute(
@@ -785,38 +785,38 @@ def test_citation_sources_resolve_to_document_titles(engine: Engine) -> None:
                 {"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "q", "state": "unchecked"},
                 {"n": 2, "id": "not-a-uuid", "kind": "chunk", "quote": "q", "state": "unchecked"},
             ],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert resolved[0]["source_title"] == "A real document title"
-        assert resolved[0]["source_id"] == str(pss_id)
+        assert resolved[0]["source_id"] == str(tss_id)
         assert "source_title" not in resolved[1]
     finally:
-        if project_id is not None:
+        if task_id is not None:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
-def test_citation_sources_are_scoped_to_the_calling_project(engine: Engine) -> None:
-    """A snapshot shared by two projects resolves to the calling project's own pss."""
+def test_citation_sources_are_scoped_to_the_calling_task(engine: Engine) -> None:
+    """A snapshot shared by two tasks resolves to the calling task's own tss."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
     from policy_atlas.core.schema import chunk as chunk_table
-    from policy_atlas.core.schema import project as project_table
-    from policy_atlas.core.schema import project_source_snapshot, source_snapshot
+    from policy_atlas.core.schema import source_snapshot, task_source_snapshot
+    from policy_atlas.core.schema import task as task_table
 
-    project_a, project_b = uuid.uuid4(), uuid.uuid4()
-    snapshot_id, pss_a, pss_b, chunk_id = (
+    task_a, task_b = uuid.uuid4(), uuid.uuid4()
+    snapshot_id, tss_a, tss_b, chunk_id = (
         uuid.uuid4(),
         uuid.uuid4(),
         uuid.uuid4(),
         uuid.uuid4(),
     )
     with engine.begin() as conn:
-        for proj_id in (project_a, project_b):
+        for proj_id in (task_a, task_b):
             conn.execute(
-                project_table.insert().values(
-                    project_id=proj_id,
+                task_table.insert().values(
+                    task_id=proj_id,
                     created_at=now(),
-                    name="Shared-snapshot test project",
+                    name="Shared-snapshot test task",
                     question=None,
                     status="active",
                     updated_at=now(),
@@ -833,11 +833,11 @@ def test_citation_sources_are_scoped_to_the_calling_project(engine: Engine) -> N
                 created_at=now(),
             )
         )
-        for pss_id, proj_id in ((pss_a, project_a), (pss_b, project_b)):
+        for tss_id, proj_id in ((tss_a, task_a), (tss_b, task_b)):
             conn.execute(
-                project_source_snapshot.insert().values(
-                    project_source_snapshot_id=pss_id,
-                    project_id=proj_id,
+                task_source_snapshot.insert().values(
+                    task_source_snapshot_id=tss_id,
+                    task_id=proj_id,
                     source_snapshot_id=snapshot_id,
                     origin="uploaded",
                     run_id=None,
@@ -860,16 +860,16 @@ def test_citation_sources_are_scoped_to_the_calling_project(engine: Engine) -> N
         resolved = _resolve_citation_sources(
             engine,
             [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "q", "state": "unchecked"}],
-            project_id=project_b,
+            task_id=task_b,
         )
-        assert resolved[0]["source_id"] == str(pss_b)
-        assert resolved[0]["source_id"] != str(pss_a)
+        assert resolved[0]["source_id"] == str(tss_b)
+        assert resolved[0]["source_id"] != str(tss_a)
     finally:
         with engine.begin() as conn:
             conn.execute(chunk_table.delete().where(chunk_table.c.chunk_id == chunk_id))
             conn.execute(
-                project_source_snapshot.delete().where(
-                    project_source_snapshot.c.project_source_snapshot_id.in_([pss_a, pss_b])
+                task_source_snapshot.delete().where(
+                    task_source_snapshot.c.task_source_snapshot_id.in_([tss_a, tss_b])
                 )
             )
             conn.execute(
@@ -878,25 +878,25 @@ def test_citation_sources_are_scoped_to_the_calling_project(engine: Engine) -> N
                 )
             )
             conn.execute(
-                project_table.delete().where(project_table.c.project_id.in_([project_a, project_b]))
+                task_table.delete().where(task_table.c.task_id.in_([task_a, task_b]))
             )
 
 
 def _seed_citation_chunk(engine: Engine, *, content: str) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID]:
-    """Insert a project + source + chunk with the given content.
+    """Insert a task + source + chunk with the given content.
 
     Returns:
-        ``(project_id, chunk_id, project_source_snapshot_id)``.
+        ``(task_id, chunk_id, task_source_snapshot_id)``.
     """
     from policy_atlas.core.schema import chunk as chunk_table
-    from policy_atlas.core.schema import project as project_table
+    from policy_atlas.core.schema import task as task_table
     from tests.helpers import seed_source
 
-    project_id, chunk_id = uuid.uuid4(), uuid.uuid4()
+    task_id, chunk_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
-            project_table.insert().values(
-                project_id=project_id,
+            task_table.insert().values(
+                task_id=task_id,
                 created_at=now(),
                 name="Citation resolution test",
                 question=None,
@@ -905,7 +905,7 @@ def _seed_citation_chunk(engine: Engine, *, content: str) -> tuple[uuid.UUID, uu
                 owner_user_id="chat-owner",
             )
         )
-        snapshot_id, pss_id = seed_source(conn, project_id)
+        snapshot_id, tss_id = seed_source(conn, task_id)
         conn.execute(
             chunk_table.insert().values(
                 chunk_id=chunk_id,
@@ -918,17 +918,17 @@ def _seed_citation_chunk(engine: Engine, *, content: str) -> tuple[uuid.UUID, uu
                 created_at=now(),
             )
         )
-    return project_id, chunk_id, pss_id
+    return task_id, chunk_id, tss_id
 
 
 def test_citation_quote_snaps_to_verbatim_source_on_near_miss(engine: Engine) -> None:
     """A near-miss chunk quote (curly quotes/case/whitespace) snaps to verbatim source text."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
     raw_span = "The report found “Clear   Evidence”\nacross studies."
     content = "Before text. " + raw_span + " After text."
-    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    task_id, chunk_id, _tss_id = _seed_citation_chunk(engine, content=content)
     try:
         resolved = _resolve_citation_sources(
             engine,
@@ -941,22 +941,22 @@ def test_citation_quote_snaps_to_verbatim_source_on_near_miss(engine: Engine) ->
                     "state": "unchecked",
                 }
             ],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert resolved[0]["quote"] == raw_span
         assert resolved[0]["quote_snapped"] is True
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_citation_quote_exact_match_persists_unchanged_without_marker(engine: Engine) -> None:
     """An exact chunk quote persists verbatim, with no snap marker either way."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
     content = "Before text. The exact quoted span. After text."
-    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    task_id, chunk_id, _tss_id = _seed_citation_chunk(engine, content=content)
     try:
         resolved = _resolve_citation_sources(
             engine,
@@ -969,22 +969,22 @@ def test_citation_quote_exact_match_persists_unchanged_without_marker(engine: En
                     "state": "unchecked",
                 }
             ],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert resolved[0]["quote"] == "The exact quoted span."
         assert "quote_snapped" not in resolved[0]
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_citation_quote_paraphrase_persists_untouched(engine: Engine) -> None:
     """A paraphrased chunk quote with no located span is left untouched, no marker."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
     content = "The report found clear evidence across studies."
-    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    task_id, chunk_id, _tss_id = _seed_citation_chunk(engine, content=content)
     try:
         resolved = _resolve_citation_sources(
             engine,
@@ -997,22 +997,22 @@ def test_citation_quote_paraphrase_persists_untouched(engine: Engine) -> None:
                     "state": "unchecked",
                 }
             ],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert resolved[0]["quote"] == "the studies broadly agreed the evidence was clear"
         assert "quote_snapped" not in resolved[0]
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_citation_quote_ambiguous_persists_untouched(engine: Engine) -> None:
     """A chunk quote with two normalised occurrences is left untouched, no marker."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
     content = "The New York pilot launched first. A second NEW YORK rollout followed later."
-    project_id, chunk_id, _pss_id = _seed_citation_chunk(engine, content=content)
+    task_id, chunk_id, _tss_id = _seed_citation_chunk(engine, content=content)
     try:
         resolved = _resolve_citation_sources(
             engine,
@@ -1025,19 +1025,19 @@ def test_citation_quote_ambiguous_persists_untouched(engine: Engine) -> None:
                     "state": "unchecked",
                 }
             ],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert resolved[0]["quote"] == "new york"
         assert "quote_snapped" not in resolved[0]
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> None:
     """A cited chunk resolves the appraisal SCORE (not a label) + evidence type.
 
-    ``evidence_base.assess.appraise`` pins labels as read-time copy, never
+    ``evidence_search.assess.appraise`` pins labels as read-time copy, never
     persisted — ``_resolve_citation_sources`` therefore persists the numeric
     score; ``chat_turns.apply_appraisal_labels`` is what derives the label,
     and only at read time (see the point-in-time test below)."""
@@ -1049,9 +1049,9 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
         source_appraisal_result,
         source_classification_result,
     )
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
-    project_id, chunk_id, pss_id = _seed_citation_chunk(
+    task_id, chunk_id, tss_id = _seed_citation_chunk(
         engine, content="Chunk content for appraisal resolution."
     )
     scope_id, run_id = uuid.uuid4(), uuid.uuid4()
@@ -1060,7 +1060,7 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     intent="test intent",
                     context={},
                     created_at=now(),
@@ -1069,7 +1069,7 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
             conn.execute(
                 runs.insert().values(
                     run_id=run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     status="succeeded",
                     started_at=now(),
                 )
@@ -1078,8 +1078,8 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
                 source_appraisal_result.insert().values(
                     source_appraisal_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=tss_id,
+                    task_id=task_id,
                     appraised_by_run_id=run_id,
                     quality_score=4,
                     rubric_version="v2",
@@ -1090,8 +1090,8 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
                 source_classification_result.insert().values(
                     source_classification_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=tss_id,
+                    task_id=task_id,
                     classified_by_run_id=run_id,
                     primary_evidence_type=EVIDENCE_TYPES[0],
                     classified_at=now(),
@@ -1100,36 +1100,36 @@ def test_citation_appraisal_score_and_evidence_type_resolve(engine: Engine) -> N
         resolved = _resolve_citation_sources(
             engine,
             [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert resolved[0]["appraisal_score"] == 4
         assert "appraisal_label" not in resolved[0]
         assert resolved[0]["evidence_type"] == EVIDENCE_TYPES[0]
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_citation_missing_appraisal_leaves_fields_absent(engine: Engine) -> None:
     """A cited chunk with no appraisal/classification rows leaves those fields absent."""
     from policy_atlas.api.chat_turns import _resolve_citation_sources
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
-    project_id, chunk_id, _pss_id = _seed_citation_chunk(
+    task_id, chunk_id, _tss_id = _seed_citation_chunk(
         engine, content="Unappraised chunk content."
     )
     try:
         resolved = _resolve_citation_sources(
             engine,
             [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert "appraisal_score" not in resolved[0]
         assert "appraisal_label" not in resolved[0]
         assert "evidence_type" not in resolved[0]
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_apply_appraisal_labels_maps_score_to_label() -> None:
@@ -1176,9 +1176,9 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
         source_appraisal_result,
         source_classification_result,
     )
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
-    project_id, chunk_id, pss_id = _seed_citation_chunk(
+    task_id, chunk_id, tss_id = _seed_citation_chunk(
         engine, content="Chunk content for point-in-time appraisal."
     )
     scope_id, run_id = uuid.uuid4(), uuid.uuid4()
@@ -1187,7 +1187,7 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     intent="test intent",
                     context={},
                     created_at=now(),
@@ -1195,15 +1195,15 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
             )
             conn.execute(
                 runs.insert().values(
-                    run_id=run_id, project_id=project_id, status="succeeded", started_at=now()
+                    run_id=run_id, task_id=task_id, status="succeeded", started_at=now()
                 )
             )
             conn.execute(
                 source_appraisal_result.insert().values(
                     source_appraisal_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=tss_id,
+                    task_id=task_id,
                     appraised_by_run_id=run_id,
                     quality_score=4,
                     rubric_version="v2",
@@ -1214,8 +1214,8 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
                 source_classification_result.insert().values(
                     source_classification_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=tss_id,
+                    task_id=task_id,
                     classified_by_run_id=run_id,
                     primary_evidence_type=EVIDENCE_TYPES[0],
                     classified_at=now(),
@@ -1225,19 +1225,19 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
         persisted_citations = _resolve_citation_sources(
             engine,
             [{"n": 1, "id": str(chunk_id), "kind": "chunk", "quote": "", "state": "unchecked"}],
-            project_id=project_id,
+            task_id=task_id,
         )
         assert persisted_citations[0]["appraisal_score"] == 4
 
         # A NEWER appraisal row lands (a rerun on a new scope with a different
-        # rubric outcome — one (evidence_scope_id, pss) pair per row, so the
+        # rubric outcome — one (evidence_scope_id, tss) pair per row, so the
         # rerun is a fresh scope).
         newer_scope_id, newer_run_id = uuid.uuid4(), uuid.uuid4()
         with engine.begin() as conn:
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=newer_scope_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     intent="rerun intent",
                     context={},
                     created_at=now(),
@@ -1246,7 +1246,7 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
             conn.execute(
                 runs.insert().values(
                     run_id=newer_run_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     status="succeeded",
                     started_at=now(),
                 )
@@ -1255,8 +1255,8 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
                 source_appraisal_result.insert().values(
                     source_appraisal_result_id=uuid.uuid4(),
                     evidence_scope_id=newer_scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=tss_id,
+                    task_id=task_id,
                     appraised_by_run_id=newer_run_id,
                     quality_score=1,
                     rubric_version="v2",
@@ -1270,15 +1270,15 @@ def test_appraisal_label_is_point_in_time_not_rewritten_by_a_later_reappraisal(
         assert rendered[0]["appraisal_label"] == "Strong"
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def test_retry_same_client_turn_id_against_live_pending_conflicts(engine: Engine) -> None:
     """A live pending row under this client_turn_id refuses a stranger, not a re-run."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         turn_id = uuid.uuid4()
         client_turn_id = uuid.uuid4()
         message = "In-flight question"
@@ -1302,7 +1302,7 @@ def test_retry_same_client_turn_id_against_live_pending_conflicts(engine: Engine
         with pytest.raises(ApiConflict) as raised:
             chat_turns.run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message=message,
@@ -1317,17 +1317,17 @@ def test_retry_same_client_turn_id_against_live_pending_conflicts(engine: Engine
             ).scalar_one()
         assert status == "pending"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_retry_same_client_turn_id_after_ttl_expiry_succeeds(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A ten-minute-stale pending row under its own client_turn_id retries in place."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         turn_id = uuid.uuid4()
         client_turn_id = uuid.uuid4()
@@ -1350,7 +1350,7 @@ def test_retry_same_client_turn_id_after_ttl_expiry_succeeds(
             )
         result = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message=message,
@@ -1360,24 +1360,24 @@ def test_retry_same_client_turn_id_after_ttl_expiry_succeeds(
         assert result.status == "completed"
         assert result.id == turn_id
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_run_chat_turn_reenters_its_own_reservation(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The caller's own reserved pending row is retried in place, not conflicted."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         client_turn_id = uuid.uuid4()
         message = "Route-reserved question"
         with engine.begin() as conn:
             reserved = chat_turns._phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id="chat-owner",
                 message=message,
@@ -1386,7 +1386,7 @@ def test_run_chat_turn_reenters_its_own_reservation(
         assert isinstance(reserved, uuid.UUID)
         result = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message=message,
@@ -1397,17 +1397,17 @@ def test_run_chat_turn_reenters_its_own_reservation(
         assert result.status == "completed"
         assert result.id == reserved
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_durable_cancel_after_last_check_wins_at_terminal_commit(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A cross-process cancel landing after the loop's last check stays cancelled."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         real_floor = getattr(chat_turns, "apply_citation_floor")  # noqa: B009
 
@@ -1425,7 +1425,7 @@ def test_durable_cancel_after_last_check_wins_at_terminal_commit(
         monkeypatch.setattr(chat_turns, "apply_citation_floor", _sneaky_floor)
         result = chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="Question",
@@ -1435,17 +1435,17 @@ def test_durable_cancel_after_last_check_wins_at_terminal_commit(
         assert result.status == "cancelled"
         assert result.answer == "stale partial"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The mapping handed to run_tool_loop at the chat call site is exactly the allowlist."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, conversation_id = _chat(engine)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, conversation_id = _chat(engine)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
         monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
         captured: dict[str, Any] = {}
         real_run_tool_loop = getattr(chat_turns, "run_tool_loop")  # noqa: B009
@@ -1458,7 +1458,7 @@ def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
         monkeypatch.setattr(chat_turns, "run_tool_loop", _capturing_run_tool_loop)
         chat_turns.run_chat_turn(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             user_id="chat-owner",
             message="Question",
@@ -1467,24 +1467,24 @@ def test_chat_call_site_pins_tool_allowlist_into_the_tool_loop(
         )
         assert set(captured["tools"]) == {"search_chunks", "query_findings", "lookup"}
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 # --- Task 033 phase 5: the cap, the sweeper and the reservation lock --------
 #
 # Both the pending cap and `_expire_stale_pending_turns` were keyed to
-# `project.owner_user_id`. They re-key to the conversation's creator together,
+# `task.owner_user_id`. They re-key to the conversation's creator together,
 # because re-keying either alone is a defect the contract names: a colleague
 # whose turns die would be rate-limited permanently with no operator lever,
 # and an owner's sweep would silently fail other people's in-flight turns.
 
 
-def _owner_of(engine: Engine, project_id: uuid.UUID) -> str:
-    """Read one project's owner subject."""
+def _owner_of(engine: Engine, task_id: uuid.UUID) -> str:
+    """Read one task's owner subject."""
     with engine.connect() as conn:
         return str(
             conn.execute(
-                select(project.c.owner_user_id).where(project.c.project_id == project_id)
+                select(task.c.owner_user_id).where(task.c.task_id == task_id)
             ).scalar_one()
         )
 
@@ -1510,25 +1510,25 @@ def _statements(conn: Any) -> list[str]:
     return recorded
 
 
-def test_pending_cap_is_keyed_to_the_acting_user_not_the_project_owner(engine: Engine) -> None:
+def test_pending_cap_is_keyed_to_the_acting_user_not_the_task_owner(engine: Engine) -> None:
     """Neither party's in-flight turns can exhaust the other's allowance.
 
-    Before task 033 the cap counted every pending turn under a project the
+    Before task 033 the cap counted every pending turn under a task the
     *owner* held, so the first colleague to open two chats would have locked
-    the owner out of their own project — and vice versa. It now counts the
+    the owner out of their own task — and vice versa. It now counts the
     turns of whoever is acting, over the conversations they created.
     """
     owner = f"cap-owner-{uuid.uuid4()}"
     colleague = f"cap-colleague-{uuid.uuid4()}"
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, owner_chat = _chat(engine, owner=owner)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-        owner_second = _second_chat_in_same_project(engine, project_id)
-        owner_third = _second_chat_in_same_project(engine, project_id)
-        colleague_chat = _second_chat_in_same_project(engine, project_id, created_by=colleague)
-        colleague_second = _second_chat_in_same_project(engine, project_id, created_by=colleague)
-        colleague_third = _second_chat_in_same_project(engine, project_id, created_by=colleague)
+        task_id, scope_id, owner_chat = _chat(engine, owner=owner)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+        owner_second = _second_chat_in_same_task(engine, task_id)
+        owner_third = _second_chat_in_same_task(engine, task_id)
+        colleague_chat = _second_chat_in_same_task(engine, task_id, created_by=colleague)
+        colleague_second = _second_chat_in_same_task(engine, task_id, created_by=colleague)
+        colleague_third = _second_chat_in_same_task(engine, task_id, created_by=colleague)
 
         # The owner holds two pending turns, on chats that record no author —
         # the legacy disjunct is what makes them count as theirs.
@@ -1539,7 +1539,7 @@ def test_pending_cap_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
             with engine.begin() as conn:
                 return chat_turns._phase_one_turn(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     conversation_id=conversation_id,
                     user_id=user_id,
                     message="a question",
@@ -1551,7 +1551,7 @@ def test_pending_cap_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
         assert owner_capped.value.code == "chat_capacity"
 
         # The colleague, at zero pending turns of their own, is unaffected by
-        # the owner sitting at the cap on the very same project.
+        # the owner sitting at the cap on the very same task.
         assert isinstance(_reserve(colleague_chat, colleague), uuid.UUID)
 
         # And the reverse: the colleague's own two now cap the colleague...
@@ -1569,39 +1569,39 @@ def test_pending_cap_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
             )
         assert isinstance(_reserve(owner_third, owner), uuid.UUID)
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
-def test_pending_cap_still_spans_every_project_the_acting_user_chats_in(engine: Engine) -> None:
+def test_pending_cap_still_spans_every_task_the_acting_user_chats_in(engine: Engine) -> None:
     """The cap's *scope* is unchanged — only its subject was re-keyed.
 
     It has always been one allowance per person across the whole estate, not a
-    per-project or per-conversation budget, and it stays that way: a colleague
-    holding two pending turns on two different projects is capped on a third.
+    per-task or per-conversation budget, and it stays that way: a colleague
+    holding two pending turns on two different tasks is capped on a third.
     What changed is who "their" turns are — the conversations they created,
-    rather than every conversation under a project someone else owns.
+    rather than every conversation under a task someone else owns.
     """
     colleague = f"cap-colleague-{uuid.uuid4()}"
-    project_ids: list[uuid.UUID] = []
+    task_ids: list[uuid.UUID] = []
     try:
-        project_a, _scope_a, chat_a = _chat(
+        task_a, _scope_a, chat_a = _chat(
             engine, owner=f"cap-owner-a-{uuid.uuid4()}", created_by=colleague
         )
-        project_b, _scope_b, chat_b = _chat(
+        task_b, _scope_b, chat_b = _chat(
             engine, owner=f"cap-owner-b-{uuid.uuid4()}", created_by=colleague
         )
-        project_c, scope_c, chat_c = _chat(
+        task_c, scope_c, chat_c = _chat(
             engine, owner=f"cap-owner-c-{uuid.uuid4()}", created_by=colleague
         )
-        project_ids = [project_a, project_b, project_c]
-        _walk(engine, project_id=project_c, scope_id=scope_c, status="succeeded")
+        task_ids = [task_a, task_b, task_c]
+        _walk(engine, task_id=task_c, scope_id=scope_c, status="succeeded")
         _insert_pending_turn(engine, conversation_id=chat_a)
         _insert_pending_turn(engine, conversation_id=chat_b)
 
         with pytest.raises(ApiCapacity) as raised, engine.begin() as conn:
             chat_turns._phase_one_turn(
                 conn,
-                project_id=project_c,
+                task_id=task_c,
                 conversation_id=chat_c,
                 user_id=colleague,
                 message="a third question",
@@ -1609,25 +1609,25 @@ def test_pending_cap_still_spans_every_project_the_acting_user_chats_in(engine: 
             )
         assert raised.value.code == "chat_capacity"
 
-        # The owner of project C holds no pending turns of their own and is
-        # not capped by a colleague's spend on two other people's projects.
-        owners_own = _second_chat_in_same_project(engine, project_c)
+        # The owner of task C holds no pending turns of their own and is
+        # not capped by a colleague's spend on two other people's tasks.
+        owners_own = _second_chat_in_same_task(engine, task_c)
         with engine.begin() as conn:
             reserved = chat_turns._phase_one_turn(
                 conn,
-                project_id=project_c,
+                task_id=task_c,
                 conversation_id=owners_own,
-                user_id=_owner_of(engine, project_c),
+                user_id=_owner_of(engine, task_c),
                 message="the owner's own question",
                 client_turn_id=uuid.uuid4(),
             )
         assert isinstance(reserved, uuid.UUID)
     finally:
-        for project_id in project_ids:
-            _cleanup(engine, project_id)
+        for task_id in task_ids:
+            _cleanup(engine, task_id)
 
 
-def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: Engine) -> None:
+def test_stale_sweep_is_keyed_to_the_acting_user_not_the_task_owner(engine: Engine) -> None:
     """The sweep re-keys with the cap, and only ever touches the actor's own turns.
 
     Two halves, both named by the contract. The owner acting must **not** fail
@@ -1638,19 +1638,19 @@ def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
     """
     owner = f"sweep-owner-{uuid.uuid4()}"
     colleague = f"sweep-colleague-{uuid.uuid4()}"
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, owner_chat = _chat(engine, owner=owner)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-        owner_second = _second_chat_in_same_project(engine, project_id)
-        colleague_stale_chat = _second_chat_in_same_project(
-            engine, project_id, created_by=colleague
+        task_id, scope_id, owner_chat = _chat(engine, owner=owner)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+        owner_second = _second_chat_in_same_task(engine, task_id)
+        colleague_stale_chat = _second_chat_in_same_task(
+            engine, task_id, created_by=colleague
         )
-        colleague_live_chat = _second_chat_in_same_project(
-            engine, project_id, created_by=colleague
+        colleague_live_chat = _second_chat_in_same_task(
+            engine, task_id, created_by=colleague
         )
-        colleague_next_chat = _second_chat_in_same_project(
-            engine, project_id, created_by=colleague
+        colleague_next_chat = _second_chat_in_same_task(
+            engine, task_id, created_by=colleague
         )
 
         owner_stale = _insert_pending_turn(engine, conversation_id=owner_chat, stale=True)
@@ -1662,7 +1662,7 @@ def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
         with engine.begin() as conn:
             chat_turns._phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=owner_second,
                 user_id=owner,
                 message="the owner acts",
@@ -1676,7 +1676,7 @@ def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
         with engine.begin() as conn:
             chat_turns._phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=colleague_next_chat,
                 user_id=colleague,
                 message="the colleague acts",
@@ -1685,7 +1685,7 @@ def test_stale_sweep_is_keyed_to_the_acting_user_not_the_project_owner(engine: E
         assert _status_of(engine, colleague_stale) == "failed"
         assert _status_of(engine, colleague_live) == "pending"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
@@ -1707,12 +1707,12 @@ def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
     refused for capacity. Unserialized, it returns a turn id here instead.
     """
     actor = f"cap-race-{uuid.uuid4()}"
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, first_chat = _chat(engine, owner=actor)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-        second_chat = _second_chat_in_same_project(engine, project_id)
-        held_chat = _second_chat_in_same_project(engine, project_id)
+        task_id, scope_id, first_chat = _chat(engine, owner=actor)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+        second_chat = _second_chat_in_same_task(engine, task_id)
+        held_chat = _second_chat_in_same_task(engine, task_id)
         # One pending turn already in flight, so the cap of two allows exactly
         # one of the two reservations below.
         _insert_pending_turn(engine, conversation_id=held_chat)
@@ -1728,7 +1728,7 @@ def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
                     outcome.append(
                         chat_turns._phase_one_turn(
                             conn,
-                            project_id=project_id,
+                            task_id=task_id,
                             conversation_id=second_chat,
                             user_id=actor,
                             message="the simultaneous question",
@@ -1743,7 +1743,7 @@ def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
         with engine.begin() as conn:
             reserved = chat_turns._phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=first_chat,
                 user_id=actor,
                 message="the first question",
@@ -1771,12 +1771,12 @@ def test_two_simultaneous_reservations_by_one_user_cannot_both_pass_the_cap(
                         conversation, chat_turn.c.conversation_id == conversation.c.id
                     )
                 )
-                .where(conversation.c.project_id == project_id)
+                .where(conversation.c.task_id == task_id)
                 .where(chat_turn.c.status == "pending")
             ).scalar_one()
         assert pending == chat_turns._USER_PENDING_CAP
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_the_per_user_lock_is_taken_before_the_pending_turns_are_counted(
@@ -1790,16 +1790,16 @@ def test_the_per_user_lock_is_taken_before_the_pending_turns_are_counted(
     the cap and only serialize the insert that follows.
     """
     actor = f"cap-order-{uuid.uuid4()}"
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, chat_id = _chat(engine, owner=actor)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
+        task_id, scope_id, chat_id = _chat(engine, owner=actor)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
 
         with engine.begin() as conn:
             issued = _statements(conn)
             chat_turns._phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=chat_id,
                 user_id=actor,
                 message="a question",
@@ -1819,39 +1819,39 @@ def test_the_per_user_lock_is_taken_before_the_pending_turns_are_counted(
         # would outlive the reservation and leak into the pooled connection.
         assert "pg_advisory_lock(" not in issued[locks[0]]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
-def test_reservation_locks_the_conversation_row_never_the_owners_project(
+def test_reservation_locks_the_conversation_row_never_the_owners_task(
     engine: Engine,
 ) -> None:
     """Contract § 4's lock rule, asserted structurally rather than by timing.
 
-    The reservation used to take `SELECT … FOR UPDATE` on the owner's project
+    The reservation used to take `SELECT … FOR UPDATE` on the owner's task
     row. A colleague doing that would block the owner's own rename, archive
     and run-start for the length of their transaction, so the lock moved to
     the `conversation` row — the row the reservation actually mutates.
 
     `OF conversation` is the load-bearing detail: the statement joins
-    `project`, and a bare `FOR UPDATE` would lock the joined project row too,
+    `task`, and a bare `FOR UPDATE` would lock the joined task row too,
     silently reinstating exactly what the contract forbids. Asserted for the
     colleague *and* the owner — the path is the same one for both, which is
     why there is no caller-dependent lock to get wrong.
     """
     owner = f"lock-owner-{uuid.uuid4()}"
     colleague = f"lock-colleague-{uuid.uuid4()}"
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id, owner_chat = _chat(engine, owner=owner)
-        _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-        colleague_chat = _second_chat_in_same_project(engine, project_id, created_by=colleague)
+        task_id, scope_id, owner_chat = _chat(engine, owner=owner)
+        _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+        colleague_chat = _second_chat_in_same_task(engine, task_id, created_by=colleague)
 
         for conversation_id, user_id in ((colleague_chat, colleague), (owner_chat, owner)):
             with engine.begin() as conn:
                 issued = _statements(conn)
                 chat_turns._phase_one_turn(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     conversation_id=conversation_id,
                     user_id=user_id,
                     message="a question",
@@ -1860,8 +1860,8 @@ def test_reservation_locks_the_conversation_row_never_the_owners_project(
             locking = [statement for statement in issued if "FOR UPDATE" in statement]
             assert len(locking) == 1, locking
             assert "FOR UPDATE OF conversation" in locking[0]
-            # The lock target is named explicitly, so the joined project row
+            # The lock target is named explicitly, so the joined task row
             # is read but never locked.
-            assert "FOR UPDATE OF project" not in locking[0]
+            assert "FOR UPDATE OF task" not in locking[0]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
