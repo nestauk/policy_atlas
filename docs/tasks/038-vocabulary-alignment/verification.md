@@ -400,6 +400,13 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
 | `make verify` (Phase 3 gate) | pass except `drift-check` | backend 2517 passed (8m16s), infra 46, audit-paths/prompt-guard/font-guard green; `drift-check` red by the plan's phase split (openapi-sync is Phase 4); ruff/mypy/147 touched tests re-run green after the screen-sense fixes |
 | `make verify` (Phase 4 gate) | pass | okf 129/0 · backend 2520 (incl. Phase 6) · infra 46 · drift-check OK · frontend 75 files / 530 tests · build OK; worker `pnpm e2e` 11 passed |
 | `make frontend-verify` + `pnpm e2e` (Phases 5a + 7 gate) | pass | 533 tests; e2e 11 passed after two spec labels caught up with V6 |
+| `pnpm typecheck/lint/test/build/e2e` (Phase 5b, worker) | pass | 547 tests; e2e 11 passed |
+| `pnpm typecheck/lint/test/build/e2e` (Phase 8 knip, worker) | pass | 545 tests; e2e 11 passed; knip 52→0 exports, 47→2 types (generated) |
+| `make okf-validate` (Phase 9 docs) | pass | 129 concepts, 0 violations |
+| `alembic upgrade head` on the dev DB (52 real Tasks) | pass | e7a1b5c3d9f2 → c1a7f4e9b0d2; counts under the new names match |
+| Live Playwright check against `make dev` | pass | 4 passed — [live-check.md](live-check.md) |
+| `make fe-api-smoke` | pass | 3 passed (built frontend, real API, own DB: list · create · stub run over SSE) |
+| **`make verify` (step-6 exit, complete tree)** | **pass** | okf 129/0 · backend **2520 passed** (8m33s) · infra 46 · audit-paths 116 files / 0 · prompt-guard 13 unchanged · font-guard · drift-check OK · frontend 75 files / **545 tests** · build OK. First run stopped at `audit-paths` because the Phase 8 `git mv JUMPBOX.md` was unstaged (the audit walks `git ls-files`); staged, the chain completed green. `pnpm e2e` 11 passed on this frontend (Phase 8 worker), plus the live checks above. |
 
 ## Checks beyond the build
 
@@ -431,6 +438,30 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   refusal, step ordering, idempotence, fresh-clone guard.
 
 ## End-to-end command
+
+Local live check (contract § Acceptance, pre-merge half), recorded in full with
+the spec text and results in [live-check.md](live-check.md):
+
+```bash
+make dev                                                 # API :8000 + Vite :5173 (dev token), dev DB at c1a7f4e9b0d2
+cd frontend && pnpm dev --port 5174 --strictPort         # token-less frontend for the signed-out leg
+cd frontend && TASK_ID=fdfe3811-cea5-4d8e-91c3-e6435fdb3a56 PROJECT_ID=97a96376-92d9-48ae-a19e-78efb23e3f58 \
+  npx playwright test --config live-038.config.ts        # 4 passed: five tabs · its Project · old URL unavailable · signed-out public URL
+make fe-api-smoke                                        # real API, own DB, browser: list → create → stub run over SSE
+```
+
+The Chrome extension was not connected in this session, so the browser leg ran
+as a Playwright spec against the same running app a hand-driven browser would
+have used. One real Task (Childhood Obesity, run succeeded 2026-07-29) opened on
+`/tasks/{id}` with the bar Agent · Result · Sources · Share · History (no Plan,
+no Results), Result at `/result` with the report contents, Share with the
+public-link region and "this Task's result and sources", History listing the
+pre-migration events under the new copy; its Project on `/projects/{id}` lists
+it; `/projects/{taskId}/results` lands on "This task is unavailable" (F3); a
+signed-out visitor opens `/tasks/{id}/result` and sees Result · Sources only.
+API: `GET /api/v1/tasks` (20 rows with `project_ids`), `GET /api/v1/projects`
+(`task_count` 3), `/api/v1/portfolios` 404, signed-out `GET /api/v1/tasks/{id}`
+200 once public, the old `/api/v1/projects/{taskId}` 401.
 
 ## Diff summary
 
@@ -478,6 +509,19 @@ backfill name left as data (→ deferred).
   post-038 tree.
 
 ## Known unverified items
+
+- The staging half of the live check (contract P11): one existing Task on
+  `/tasks/{id}` with report, sources and history intact after the staging
+  migration; its Project on `/projects/{id}`; one public Task from a freshly
+  copied link; **one real Cognito sign-in round trip from a Task deep link
+  (V11)**; `rows assign --task` dry run; `make fe-api-smoke` against staging.
+  Recorded post-merge as a dated addendum before the production promote.
+- "One staging Task shows as one Langfuse session" (rubric 19) — verifiable only
+  on staging; the stub-client test proves the ids.
+- Operators must rename any `POLICY_ATLAS_ORCHESTRATOR_*` override in the task
+  definition before deploying (the stack sets neither); the PR says so.
+- `knip` and `vulture` were run once, on this branch; neither is wired into
+  `make verify` (out of scope — a hygiene pass would decide).
 
 ## Public safety
 
@@ -539,3 +583,10 @@ and Metabase follow-ups are named, not linked to any private dashboard.
     step 8.
 
 ## Deferred work
+
+→ [docs/deferred.md](../../deferred.md) § Vocabulary (task 038 residue and seams) and
+the "Earlier plan is unreachable in production" entry; eight earlier entries
+discharged or corrected in place (Phase 9 log above). Judgment-bearing hygiene
+(production code only tests call, the `run_harness(provider=…)` seam, the
+`useComposerSeed` listener whose dispatcher went) → a Tier 1 `/ponytail-audit`
+pass after 038 (contract § Out of scope).
