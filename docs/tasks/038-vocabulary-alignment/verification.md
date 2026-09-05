@@ -431,8 +431,11 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   close-sidebar glyph (`PanelCloseIcon`), named "Close sidebar" — owner).
   The app tooltip itself is restyled
   (`ui/radix/Tooltip.tsx`, every user): caption scale, navy ink, a tight
-  paper card with the system's 2px blue leading rule and a closer shadow,
-  `collisionPadding` so it never touches the viewport edge. Tests:
+  paper card with a closer shadow, `collisionPadding` so it never touches
+  the viewport edge; the system's 2px blue leading rule is opt-in
+  (`RAIL_TOOLTIP_CLASS`) for tooltips that originate from the left edge —
+  the rail and the overlay header — and absent from the citation and source
+  tooltips that sit in running text (owner). Tests:
   `ConversationRail.test.tsx`, `conversationState.test.ts` (`recentChats`),
   `WorkspaceView.test.tsx` updated.
 

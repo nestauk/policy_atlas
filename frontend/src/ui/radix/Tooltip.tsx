@@ -28,9 +28,11 @@ export function Tooltip({
           sideOffset={6}
           collisionPadding={8}
           className={cn(
-            // The system's marker — a 2px blue rule on the leading edge, as on
-            // a selected row — on a tight paper card; caption scale, navy ink.
-            "z-50 max-w-xs border border-line-2 border-l-2 border-l-blue bg-paper px-2.5 py-1.5",
+            // A tight paper card; caption scale, navy ink. Tooltips that
+            // originate from an edge (the conversation rail) add the
+            // system's 2px blue leading rule via `className`; ones that
+            // sit in running text (citations) stay plain.
+            "z-50 max-w-xs border border-line-2 bg-paper px-2.5 py-1.5",
             "text-caption leading-snug text-navy shadow-[0_4px_16px_rgba(15,41,74,0.12)]",
             "origin-[var(--radix-tooltip-content-transform-origin)] transition-[opacity,transform] duration-[125ms] ease-out-strong starting:scale-[0.97] starting:opacity-0",
             className,

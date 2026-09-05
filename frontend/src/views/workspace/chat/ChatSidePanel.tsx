@@ -12,7 +12,7 @@ import { ChatPane } from "./ChatPane";
 import { ChatsIcon } from "./ChatsIcon";
 import { Tooltip, TooltipProvider } from "../../../ui/radix/Tooltip";
 import { ConversationList, type ConversationRow } from "./ConversationList";
-import { ConversationRail, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
+import { ConversationRail, RAIL_TOOLTIP_CLASS, RAIL_TOOLTIP_DELAY_MS } from "./ConversationRail";
 import {
   DRAFT_CHAT_ID,
   isPlanningConversation,
@@ -170,7 +170,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
           conversation on show · New chat · close. */}
       <TooltipProvider delayDuration={RAIL_TOOLTIP_DELAY_MS}>
       <div className="flex shrink-0 items-center gap-1 border-b border-line bg-paper-2 px-2 py-1.5">
-        <Tooltip content="Chats" side="bottom">
+        <Tooltip content="Chats" side="bottom" className={RAIL_TOOLTIP_CLASS}>
           <button
             type="button"
             aria-label="Chats"
@@ -186,7 +186,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
           {planningOpen && <FoldMarkIcon size={10} />}
           <span className="truncate">{currentTitle}</span>
         </div>
-        <Tooltip content={chatsEnabled ? COPY.newChat : COPY.newChatUnavailable} side="bottom">
+        <Tooltip content={chatsEnabled ? COPY.newChat : COPY.newChatUnavailable} side="bottom" className={RAIL_TOOLTIP_CLASS}>
           <span className="inline-flex">
             <button
               type="button"
@@ -202,7 +202,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
             </button>
           </span>
         </Tooltip>
-        <Tooltip content="Close sidebar" side="bottom">
+        <Tooltip content="Close sidebar" side="bottom" className={RAIL_TOOLTIP_CLASS}>
           <button
             type="button"
             aria-label="Close sidebar"

@@ -17,6 +17,10 @@ export const RAIL_RECENT = 4;
  *  browser's own `title` delay is too slow to be useful). */
 export const RAIL_TOOLTIP_DELAY_MS = 150;
 
+/** Rail and overlay tooltips originate from the left edge, so they carry the
+ *  system's 2px blue leading rule; tooltips in running text do not. */
+export const RAIL_TOOLTIP_CLASS = "border-l-2 border-l-blue";
+
 /** One recent chat on the rail. */
 export type RailChat = { id: string; title: string };
 
@@ -60,7 +64,7 @@ function RailButton({
   );
   if (tip === null) return button;
   return (
-    <Tooltip content={tip} side="right">
+    <Tooltip content={tip} side="right" className={RAIL_TOOLTIP_CLASS}>
       {disabled ? <span className="inline-flex">{button}</span> : button}
     </Tooltip>
   );
