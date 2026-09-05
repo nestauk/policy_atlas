@@ -76,9 +76,15 @@ export function ChatPane({
   // V8): send it once, on mount under the new id. `sendTurn` is the store's
   // stable callback for this conversation, so the effect keys on it honestly.
   const { sendTurn } = chat;
+  // Deferred one tick: a StrictMode rehearsal (mount → cleanup → mount) would
+  // otherwise start a send its own cleanup aborts and leave nothing for the
+  // real mount; the cleanup here cancels the timer before anything is taken.
   useEffect(() => {
-    const first = takeFirstMessage(conversationId);
-    if (first !== null) void sendTurn(first).catch(() => undefined);
+    const timer = setTimeout(() => {
+      const first = takeFirstMessage(conversationId);
+      if (first !== null) void sendTurn(first).catch(() => undefined);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [conversationId, sendTurn]);
 
   const footer = useFooterReveal(onAtBottomChange);

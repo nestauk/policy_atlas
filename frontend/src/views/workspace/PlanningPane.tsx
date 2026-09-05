@@ -507,7 +507,15 @@ export function PlanningPane({
     const el = scrollRef.current;
     const content = contentRef.current;
     if (el === null || content === null) return;
-    const pin = () => {
+    let paneHeight = el.clientHeight;
+    const pin = (entries: readonly ResizeObserverEntry[] = []) => {
+      // The pane growing is the footer closing under a reader scrolling up —
+      // never pin against that; pin on new content and on the pane shrinking.
+      const paneGrew = entries.some(
+        (entry) => entry.target === el && entry.contentRect.height > paneHeight,
+      );
+      paneHeight = el.clientHeight;
+      if (paneGrew) return;
       if (pinnedToBottom.current) el.scrollTop = el.scrollHeight;
       syncScrollPosition(el);
     };

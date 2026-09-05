@@ -46,9 +46,10 @@ records the post-sweep SHA-256 of every file it writes in
 still carrying that hash for those steps. So a second ``--apply`` reports zero
 changes; ``--step 1`` then ``--step 2`` still works; and a file the sweep never
 reached -- a module a merge from ``dev`` brought in -- is still swept. A file
-that has *changed* since its own sweep is re-swept and named in the output; when
-that would rename an already-correct `project` on to `task`, the collision check
-refuses instead. Rebase by sweeping the arriving files, not the settled ones.
+that has *changed* since its own sweep is re-swept whole and named in the output;
+the collision check catches that only when the file also declares the target
+symbol, so never run ``--apply`` on an edited post-038 tree. Rebase by sweeping
+the arriving files, not the settled ones.
 
 Step 1 is every rule except ``portfolio``->``project``; step 2 is that rule
 alone. ``--step all`` runs step 1 to completion and only then step 2, which is

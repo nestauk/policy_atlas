@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { useConversations } from "../../../api/queries";
 import type { components } from "../../../api/gen/types";
@@ -52,6 +52,7 @@ export function ConversationList({
     if (title.trim()) await update(id, { title: title.trim() });
     setEditing(null);
   };
+  const cancelRename = () => setEditing(null);
 
   // A planning row never archives (no control fires it), but guard the
   // restore-and-open path anyway so a synthetically-archived planning row
@@ -84,6 +85,7 @@ export function ConversationList({
     setTitle,
     onRename: startRename,
     onCommit: commitRename,
+    onCancel: cancelRename,
     onArchive: (id: string) => void archive(id),
   };
 
@@ -114,6 +116,7 @@ type RowProps = {
   setTitle: (value: string) => void;
   onRename: (row: ConversationRow) => void;
   onCommit: (id: string) => Promise<void>;
+  onCancel: () => void;
   onArchive: (id: string) => void;
   archived?: boolean;
 };
@@ -141,13 +144,14 @@ function ListGroups({ rows, ...props }: RowProps & { rows: ConversationRow[] }) 
 const ACTION_CLASS =
   "pressable flex h-7 w-7 items-center justify-center text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue";
 
-function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitle, onRename, onCommit, onArchive, archived = false }: RowProps & { row: ConversationRow }) {
+function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitle, onRename, onCommit, onCancel, onArchive, archived = false }: RowProps & { row: ConversationRow }) {
   const isPlanning = row.kind === "planning";
   // A planning row is named by its label, never by the stored title (the
   // runtime writes "Planning" there): exactly one is the Task Agent, and any
   // older lineage reads "Earlier plan" (contract § V8, invariant I8 / A10).
   const label = isPlanning ? (row.id === taskAgentId ? COPY.taskAgent : COPY.earlierPlan) : scrub(row.title);
   const selected = row.id === selectedId;
+  const cancelled = useRef(false);
 
   if (editing === row.id) {
     return (
@@ -157,11 +161,20 @@ function ListRow({ row, taskAgentId, selectedId, onOpen, editing, title, setTitl
           autoFocus
           value={title}
           onChange={(event) => setTitle(event.target.value)}
+          onFocus={() => {
+            cancelled.current = false;
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter") void onCommit(row.id);
-            if (event.key === "Escape") void onCommit(row.id);
+            if (event.key === "Escape") {
+              // Escape discards the edit; the blur that follows must not save it.
+              cancelled.current = true;
+              onCancel();
+            }
           }}
-          onBlur={() => void onCommit(row.id)}
+          onBlur={() => {
+            if (!cancelled.current) void onCommit(row.id);
+          }}
           className="w-full border border-line bg-paper px-2 py-1 text-meta text-navy focus:border-blue focus:outline-none"
         />
       </div>

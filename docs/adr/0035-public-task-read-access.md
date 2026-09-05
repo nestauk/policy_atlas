@@ -2,6 +2,9 @@
 
 - **Status:** Accepted — 2026-09-04 (owner, with the 037 combined
   contract+plan gate)
+- **Decision 5 amended** by [ADR 0036](0036-one-vocabulary-across-code-schema-api-and-screen.md)
+  — 2026-09-05 (task 038): the public paths are `/tasks/{id}/result` and
+  `/tasks/{id}/sources/*`, with no redirects from the paths written below.
 - **Date:** 2026-09-04
 - **Task:** 037-public-projects
 - **Relates to:** [ADR 0033](0033-organisation-tenancy-and-global-admin-read.md)

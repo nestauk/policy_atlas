@@ -26,6 +26,8 @@ import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
+import { COPY } from "../lib/vocabulary";
+import { hasResult } from "./lifecycle";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -1335,6 +1337,8 @@ export function ArtefactView() {
     });
   };
   const { setActiveConversation, openDraftChat } = useActiveConversation();
+  // Chats need a result to ask about (038 V8) — the same gate as New chat.
+  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
   const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
     // fact, never a scope fence); reuse a blank chat already carrying it,
@@ -1545,7 +1549,9 @@ export function ArtefactView() {
           <button
             type="button"
             onClick={askAboutAnalysis}
-            className="print-hide mt-3 text-caption font-bold text-blue hover:underline"
+            disabled={!chatsEnabled}
+            title={chatsEnabled ? undefined : COPY.newChatUnavailable}
+            className="print-hide mt-3 text-caption font-bold text-blue hover:underline disabled:text-grey disabled:no-underline"
           >
             Ask about this analysis
           </button>

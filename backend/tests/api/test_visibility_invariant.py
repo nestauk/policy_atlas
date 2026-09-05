@@ -735,7 +735,7 @@ def test_the_i5_then_i2_loop_ends_org_visible(engine: Engine, tmp_path: Path) ->
         )
         assert blocked.status_code == 409
         assert blocked.json()["error"]["code"] == "visibility_conflict"
-        assert "leave the task out of the task" in blocked.json()["error"]["message"].lower()
+        assert "leave the task out of the project" in blocked.json()["error"]["message"].lower()
 
         removed = client.patch(
             f"/api/v1/tasks/{row}", headers=owner.headers, json={"project_ids": []}

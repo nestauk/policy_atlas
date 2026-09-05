@@ -6,6 +6,11 @@ PostgreSQL's ``<table>_pkey`` / ``<table>_<col>_fkey`` convention) whose
 name carries one of the old vocabulary tokens, with its target name. The
 migration and the round-trip test are written from this output, never typed.
 
+Run it on a **pre-038 checkout** (a worktree at the last `dev` before the
+sweep): at HEAD `project` already names the Project entity, so the same
+mapping would read it as the old Task and emit a corrupt manifest — `main`
+refuses when the metadata already carries a `task` table.
+
 Usage (from the repo root)::
 
     uv run --project backend python scripts/schema_manifest.py \
@@ -61,6 +66,11 @@ def _row(kind: str, table: str, name: str) -> str:
 
 def main() -> None:
     md = schema.metadata
+    if "task" in md.tables:
+        raise SystemExit(
+            "schema_manifest.py maps the pre-038 metadata; this checkout is already swept "
+            "(`task` exists). Run it from a worktree at the last pre-038 `dev` commit."
+        )
     tables = sorted(md.tables.values(), key=lambda t: t.name)
     out: list[str] = []
     out.append("# Schema rename manifest (task 038)\n")

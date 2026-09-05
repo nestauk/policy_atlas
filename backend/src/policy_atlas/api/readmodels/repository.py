@@ -48,7 +48,7 @@ from policy_atlas.api.contract import (
     ThemeRefOut,
     ThemeSourceOut,
 )
-from policy_atlas.api.lifecycle import both_generations
+from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.core.schema import (
     GROUPING_FACETS,
     addressable_unit,
@@ -551,7 +551,13 @@ def _source_reason_maps(
     for row in rows:
         payload = row.payload if isinstance(row.payload, Mapping) else {}
         try:
-            tss_id = uuid.UUID(str(payload.get("task_source_snapshot_id")))
+            tss_id = uuid.UUID(
+                str(
+                    payload.get("task_source_snapshot_id")
+                    # Pre-038 rows carry the old key; `event_log` is never rewritten.
+                    or payload.get("project_source_snapshot_id")
+                )
+            )
         except (TypeError, ValueError):
             continue
         if row.event_type == "source.classified":
@@ -1109,7 +1115,7 @@ def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dic
     return result
 
 
-# The allowlisted audit events. The two lifecycle kinds appear under BOTH
+# The allowlisted audit events. The four lifecycle kinds appear under BOTH
 # generations: `event_log` is append-only, so rows written before task 038 say
 # `project.renamed` / `project.archived` and must still reach the read model.
 _EVENT_KINDS = {
@@ -1122,7 +1128,7 @@ _EVENT_KINDS = {
     "run.finished",
     "run.interrupted",
     "plan.approved",
-} | both_generations("renamed", "archived")
+} | both_generations(*LIFECYCLE_EVENT_KINDS)
 
 
 def _event_decision(row: Any) -> DecisionOut:
@@ -1142,6 +1148,8 @@ def _event_decision(row: Any) -> DecisionOut:
         # today's, whichever word the stored row carries.
         **dict.fromkeys(both_generations("renamed"), "Renamed the task."),
         **dict.fromkeys(both_generations("archived"), "Archived the task."),
+        **dict.fromkeys(both_generations("shared_publicly"), "Made the task public."),
+        **dict.fromkeys(both_generations("unshared"), "Made the task private."),
     }[row.event_type]
     return DecisionOut(
         sequence=int(row.sequence),

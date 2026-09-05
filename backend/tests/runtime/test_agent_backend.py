@@ -33,6 +33,7 @@ from policy_atlas.runtime.agent_backend import (
     OpenAIAgentBackend,
     StubAgentBackend,
     _parse_needs,
+    _warn_stale_agent_env,
     build_watch_discretion_hook,
     classify_boundary,
     run_watch_decision,
@@ -1550,3 +1551,16 @@ def test_fix2_not_notable_triage_does_not_pause(
         assert not io.pauses, "a not-notable triage must not pause"
     finally:
         _cleanup_task(engine, task_id)
+
+
+def test_stale_orchestrator_env_override_is_named_in_a_warning() -> None:
+    """A pre-038 ``POLICY_ATLAS_ORCHESTRATOR_*`` override is ignored, so it is logged."""
+    with capture_logs() as logs:
+        stale = _warn_stale_agent_env(
+            {"POLICY_ATLAS_ORCHESTRATOR_MODEL": "x", "POLICY_ATLAS_AGENT_MODEL": "y"}
+        )
+    assert stale == ["POLICY_ATLAS_ORCHESTRATOR_MODEL"]
+    assert [entry["event"] for entry in logs] == ["agent_env_override_stale"]
+    with capture_logs() as logs:
+        assert _warn_stale_agent_env({"POLICY_ATLAS_AGENT_MODEL": "y"}) == []
+    assert logs == []

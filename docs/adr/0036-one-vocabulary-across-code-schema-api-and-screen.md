@@ -120,13 +120,18 @@ The migration is reversible in names **and** values. The runbook:
 1. Quiesce: scale the API service to zero so no run or turn is in flight
    (`make deploy-check` shows the state; the one-shot migration task is the
    only writer during the window).
-2. `alembic downgrade -1` from the 038 revision. `downgrade()` runs the
-   manifest in reverse, then rewrites the values the new image may have
-   written in the window: `capability_run.capability` → `evidence_base`;
+2. `alembic downgrade -1` from the 038 revision. `downgrade()` first rewrites,
+   under the new names, the values the new image may have written in the
+   window, then runs the manifest in reverse (step 2, then step 1): `capability_run.capability` → `evidence_base`;
    `event_log.event_type` `task.*` → `project.*`; JSONB
    `decided_by`/`authored_by` `agent` → `orchestrator`; steer-point id
    `evidence_search_coverage` → `evidence_base_coverage` in plan payloads
-   and pause records.
+   and pause records; the JSONB keys `tss_id` → `pss_id` in
+   `selection_result.selected`/`excluded` and `selected_tss_ids` →
+   `selected_pss_ids` in `synthesis_result.synthesis_provenance` (two stored
+   keys the sweep renamed in code, found by the 038 review stack; the upgrade
+   rewrites them forward, while `event_log` payload keys stay and are read
+   under both names).
 3. Deploy the previous image; run the verification queries from the
    manifest (no object carries the new names; no row carries a new value).
 4. Public links copied during the window are dead after rollback too; they

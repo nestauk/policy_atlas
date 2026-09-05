@@ -152,10 +152,14 @@ by those names and the round-trip test asserts the catalog matches this file.
 
 - `finding_reference_union` — dropped and recreated with `task_id` in place of `project_id` (its definition lives in `schema.py`).
 
-## Stored values (five reversible updates)
+## Stored values (seven reversible updates)
 
 1. `capability_run.capability`: `'evidence_base'` → `'evidence_search'`; `ck_capr_capability` dropped and recreated.
 2. `event_log.event_type`: `project.renamed|archived|shared_publicly|unshared` → `task.*` on new writes; readers accept both; downgrade rewrites `task.*` → `project.*`.
 3. `event_log.payload` JSONB `decided_by` / `authored_by`: `orchestrator` → `agent` on new writes; downgrade rewrites back.
 4. `orchestration_plan.payload` (→ `plan.payload`) JSONB steer-point ids: `evidence_base_coverage` → `evidence_search_coverage` on new writes; downgrade rewrites back.
 5. `event_log.payload` JSONB pause records (`checkin_read.py`) steer-point id: same as 4; downgrade rewrites back.
+6. `selection_result.selected` / `.excluded` JSONB key `pss_id` → `tss_id`: rewritten on upgrade (the readers were swept to the new key); downgrade rewrites back. (038 review stack.)
+7. `synthesis_result.synthesis_provenance` JSONB key `selected_pss_ids` → `selected_tss_ids`: same treatment. (038 review stack.)
+
+`event_log.payload` **keys** are never rewritten (append-only): `project_source_snapshot_id` (the one key with a reader, `_source_reason_maps`) is read under both names; `acquired_pss_by_verb`, `orchestrator_rule`, `preserve_*_evidence_base` and the `orchestrator_v1_watch` prompt-version value have no reader.

@@ -269,8 +269,8 @@ def update_task(
         if int(in_project) > 0:
             raise ApiConflict(
                 "visibility_conflict",
-                "this task follows its task's visibility — change the task's "
-                "visibility, or leave the task out of the task",
+                "this task follows its project's visibility — change the project's "
+                "visibility, or leave the task out of the project",
             )
         conn.execute(
             update(task)
@@ -362,8 +362,8 @@ def update_task(
             if len(org_ids) > 1:
                 raise ApiConflict(
                     "visibility_conflict",
-                    "these tasks belong to different organisations — a task "
-                    "can only join tasks in one organisation",
+                    "these projects belong to different organisations — a task "
+                    "can only join projects in one organisation",
                 )
             assignment["visibility"] = (
                 "org"

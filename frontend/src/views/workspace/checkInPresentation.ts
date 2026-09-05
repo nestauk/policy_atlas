@@ -61,7 +61,7 @@ const STAGE_LABELS: Record<string, string> = {
   classify: "Classifying evidence",
   appraise: "Appraising quality",
   characterise: "Mapping the landscape",
-  synthesise: "Synthesising the evidence",
+  synthesise: "Writing the report",
 };
 
 interface PresentedCheckInRender {

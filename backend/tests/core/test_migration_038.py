@@ -14,7 +14,7 @@ this test proves three things and nothing else:
   reads back identically through the read models under the new names, and the
   stored plan still validates (contract A3).
 * **Reversal (D6).** The downgrade restores the pre-migration fixture
-  byte-identically **and** reverses each of the five stored values the new
+  byte-identically **and** reverses each of the seven stored values the new
   image can write during the deploy window, asserted one at a time.
 
 The manifest names the six explicitly-named FKs by their catalog names
@@ -34,7 +34,14 @@ from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.readmodels.repository import decisions_page
-from policy_atlas.core.schema import capability_run, event_log, project, task, task_plan
+from policy_atlas.core.schema import (
+    capability_run,
+    event_log,
+    project,
+    selection_result,
+    task,
+    task_plan,
+)
 from policy_atlas.runtime.task_plan import TaskPlan
 from tests.conftest import _alembic_cfg
 from tests.core.legacy_catalog import legacy_table
@@ -99,6 +106,7 @@ _SEEDED_TABLES = (
     "project",
     "runs",
     "evidence_scope",
+    "selection_result",
     "capability_run",
     "orchestration_plan",
     "event_log",
@@ -119,8 +127,14 @@ def _manifest_rows(section: str) -> list[list[str]]:
     return rows
 
 
-def _live_names(conn: Connection) -> tuple[set[str], set[str], set[str]]:
-    """Return the live (tables, columns, constraint-and-index names) name sets."""
+def _live_names(
+    conn: Connection,
+) -> tuple[set[str], set[tuple[str, str]], set[tuple[str, str]]]:
+    """Return the live tables, ``(table, column)`` pairs and ``(table, name)`` pairs.
+
+    Columns, constraints and indexes are keyed by their owning relation so one
+    ``task_id`` somewhere cannot stand in for every expected rename.
+    """
     tables = set(
         conn.execute(
             text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
@@ -129,27 +143,27 @@ def _live_names(conn: Connection) -> tuple[set[str], set[str], set[str]]:
     columns = set(
         conn.execute(
             text(
-                "SELECT a.attname FROM pg_attribute a "
+                "SELECT c.relname, a.attname FROM pg_attribute a "
                 "JOIN pg_class c ON c.oid = a.attrelid "
                 "JOIN pg_namespace n ON n.oid = c.relnamespace "
                 "WHERE n.nspname = 'public' AND a.attnum > 0 "
                 "AND NOT a.attisdropped AND c.relkind IN ('r', 'v')"
             )
-        ).scalars()
+        ).tuples()
     )
     names = set(
         conn.execute(
             text(
-                "SELECT c.conname FROM pg_constraint c "
+                "SELECT t.relname, c.conname FROM pg_constraint c "
                 "JOIN pg_class t ON t.oid = c.conrelid "
                 "JOIN pg_namespace n ON n.oid = t.relnamespace "
                 "WHERE n.nspname = 'public'"
             )
-        ).scalars()
+        ).tuples()
     ) | set(
         conn.execute(
-            text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")
-        ).scalars()
+            text("SELECT tablename, indexname FROM pg_indexes WHERE schemaname = 'public'")
+        ).tuples()
     )
     return tables, columns, names
 
@@ -164,6 +178,8 @@ def _seed_pre_migration(engine: Engine) -> dict[str, uuid.UUID]:
         "walk_id": uuid.uuid4(),
         "plan_id": uuid.uuid4(),
         "pause_id": uuid.uuid4(),
+        "selection_id": uuid.uuid4(),
+        "pss_id": uuid.uuid4(),
     }
     with engine.begin() as conn:
         conn.execute(
@@ -213,6 +229,22 @@ def _seed_pre_migration(engine: Engine) -> dict[str, uuid.UUID]:
                 project_id=ids["project_id"],
                 intent="Migration fixture",
                 context={},
+                created_at=now(),
+            )
+        )
+        conn.execute(
+            legacy_table(conn, "selection_result").insert().values(
+                selection_result_id=ids["selection_id"],
+                project_id=ids["project_id"],
+                evidence_scope_id=ids["scope_id"],
+                run_id=ids["run_id"],
+                strategy="coverage_stratified_v1",
+                budget=1,
+                selection_provenance={},
+                # The per-document key the sweep renamed in code (stored value 6).
+                selected=[{"pss_id": str(ids["pss_id"]), "reason": "must_include"}],
+                excluded={"notable": [{"pss_id": str(ids["pss_id"])}]},
+                flags={},
                 created_at=now(),
             )
         )
@@ -313,8 +345,15 @@ def _fixture_snapshot(engine: Engine) -> dict[str, list[dict[str, Any]]]:
 
 
 def _write_deploy_window_rows(engine: Engine, ids: dict[str, uuid.UUID]) -> None:
-    """Write, at head, exactly what the NEW image writes — all five values."""
+    """Write, at head, exactly what the NEW image writes — all seven values."""
     with engine.begin() as conn:
+        # A selection written under the new key (one row per scope and run, so
+        # the seeded row is rewritten rather than a second one inserted).
+        conn.execute(
+            selection_result.update()
+            .where(selection_result.c.selection_result_id == ids["selection_id"])
+            .values(selected=[{"tss_id": str(uuid.uuid4()), "reason": "ranked"}])
+        )
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=uuid.uuid4(),
@@ -379,6 +418,9 @@ def _delete_everything(engine: Engine, ids: dict[str, uuid.UUID]) -> None:
         )
         conn.execute(task_plan.delete().where(task_plan.c.task_id == ids["project_id"]))
         conn.execute(
+            selection_result.delete().where(selection_result.c.task_id == ids["project_id"])
+        )
+        conn.execute(
             text("DELETE FROM evidence_scope WHERE task_id = :task_id"),
             {"task_id": ids["project_id"]},
         )
@@ -400,33 +442,39 @@ def test_038_renames_the_catalog_to_the_manifest(engine: Engine) -> None:
     with engine.connect() as conn:
         tables, columns, names = _live_names(conn)
 
-    after_tables = {row[1] for row in _manifest_rows("Tables")}
-    after_columns = {row[2] for row in _manifest_rows("Columns")}
+    # Manifest rows name the owning table by its pre-migration name; at head
+    # it is the renamed table (`project` is the Project entity, `task` the Task).
+    table_after = {row[0]: row[1] for row in _manifest_rows("Tables")}
+    after_tables = set(table_after.values())
+    after_columns = {
+        (table_after.get(row[0], row[0]), row[2]) for row in _manifest_rows("Columns")
+    }
     after_names = {
-        row[3]
+        (table_after.get(row[1], row[1]), row[3])
         for row in _manifest_rows("Constraints and indexes")
     }
     assert after_tables <= tables
     assert after_columns <= columns
     assert after_names <= names
 
-    today_tables = {row[0] for row in _manifest_rows("Tables")}
-    today_columns = {row[1] for row in _manifest_rows("Columns")}
+    today_tables = set(table_after)
+    today_columns = {(table_after.get(row[0], row[0]), row[1]) for row in _manifest_rows("Columns")}
     today_names = {
-        row[2]
+        (table_after.get(row[1], row[1]), row[2])
         for row in _manifest_rows("Constraints and indexes")
         # `ck_capr_capability` is dropped and recreated under the same name.
         if row[2] != row[3]
     }
     assert (today_tables & tables) <= _REUSED_BY_THE_PROJECT_ENTITY
-    assert (today_columns & columns) <= _REUSED_BY_THE_PROJECT_ENTITY
-    assert (today_names & names) <= _REUSED_BY_THE_PROJECT_ENTITY
+    assert {name for _, name in today_columns & columns} <= _REUSED_BY_THE_PROJECT_ENTITY
+    assert {name for _, name in today_names & names} <= _REUSED_BY_THE_PROJECT_ENTITY
 
     # I1 stated the other way round: nothing in the live catalog still carries
     # a retired token, and every surviving `project` is the Project entity.
     retired = re.compile(r"portfolio|_pss_|uq_pss|ck_pss|fk_pss|oplan|orchestration_plan")
-    assert not [name for name in tables | columns | names if retired.search(name)]
-    survivors = {name for name in tables | columns | names if "project" in name}
+    live = tables | {name for _, name in columns} | {name for _, name in names}
+    assert not [name for name in live if retired.search(name)]
+    survivors = {name for name in live if "project" in name}
     assert survivors <= _REUSED_BY_THE_PROJECT_ENTITY
 
 
@@ -466,6 +514,17 @@ def test_038_round_trips_a_populated_pre_migration_database(engine: Engine) -> N
                     capability_run.c.capability_run_id == ids["walk_id"]
                 )
             ).scalar_one() == "evidence_search"
+
+            # Stored value 6 — the selection entries read under the new key.
+            selection = conn.execute(
+                select(selection_result.c.selected, selection_result.c.excluded).where(
+                    selection_result.c.selection_result_id == ids["selection_id"]
+                )
+            ).mappings().one()
+            assert selection["selected"] == [
+                {"tss_id": str(ids["pss_id"]), "reason": "must_include"}
+            ]
+            assert selection["excluded"] == {"notable": [{"tss_id": str(ids["pss_id"])}]}
 
             # I4 — a decision stored by the retired actor word renders as Agent,
             # and all four pre-038 lifecycle events still reach the read model.
@@ -535,6 +594,18 @@ def test_038_round_trips_a_populated_pre_migration_database(engine: Engine) -> N
                     select(plans.c.payload).where(plans.c.project_id == ids["project_id"])
                 ).scalars()
             } == {_OLD_STEER_POINT}
+            # 6. selection entries — every row for the project keys by `pss_id` again
+            selections = legacy_table(conn, "selection_result")
+            assert {
+                key
+                for selected in conn.execute(
+                    select(selections.c.selected).where(
+                        selections.c.project_id == ids["project_id"]
+                    )
+                ).scalars()
+                for entry in selected
+                for key in entry
+            } == {"pss_id", "reason"}
             # 5. pause-record steer-point ids
             assert {
                 row["payload"]["steer_point"]

@@ -31,12 +31,15 @@ function AppRouter() {
   // history captured before the redirect, and the landing route renders on
   // the deep link's URL until a reload. Sync it once, and only on mismatch.
   //
-  // The destination is read from `window.location`, never from the stash:
-  // the callback stays the single consumer of that key, so this cannot be
-  // pointed anywhere but the current same-origin address.
+  // Same-origin by construction: the destination is `window.location`, which
+  // `replaceState` only ever set to a same-origin URL (it throws on any
+  // other), and a `replace` navigation never falls back to
+  // `location.assign`. The guard below keeps that invariant local should
+  // either control change.
   useEffect(() => {
     if (status !== "authenticated") return;
     const target = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (!target.startsWith("/") || target.startsWith("//")) return;
     const at = authenticatedRouter.state.location;
     if (`${at.pathname}${at.search}${at.hash}` === target) return;
     void authenticatedRouter.navigate(target, { replace: true });

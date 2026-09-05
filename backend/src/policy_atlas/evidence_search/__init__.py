@@ -1,1 +1,1 @@
-"""Evidence base pipeline: sourcing, screening, extraction, grouping, and synthesis."""
+"""Evidence search pipeline: sourcing, screening, extraction, grouping, and synthesis."""

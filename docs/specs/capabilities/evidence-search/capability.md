@@ -6,7 +6,7 @@ tags: [capability, evidence-search, compile-target]
 timestamp: 2026-06-22
 ---
 
-# Capability spec — Evidence Base (EB)
+# Capability spec — Evidence search (EB)
 
 **The declarative spec — the §5 compile target.** Distilled from
 [backend-evidence-base-build-spec.md](../../sources/backend/backend-evidence-base-build-spec.md), now

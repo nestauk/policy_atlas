@@ -47,13 +47,15 @@ Slice-specific:
         the task index route; `/result` segment; tab locking unchanged.
 14. [ ] **V6 / I6** — the eighteen leaked literals route through `vocabulary.ts`; the
         literal grep is clean.
-15. [ ] **V7 / I7** — `docs/specs/system/vocabulary.md` exists and is indexed; data-model
+15. [ ] **V7 / I7** — `docs/specs/vocabulary.md` (A8 option 2) exists and is indexed; data-model
         and web-api specs updated; ADR 0031 decision 2 marked superseded; ADR 0036
         Accepted with rollback commands; `deferred.md` entries discharged; frozen sources
         and historical docs untouched (`git diff --stat -- docs/specs/sources docs/tasks/0[0-3]*`
         is empty except this task's folder and the three `JUMPBOX.md` link edits in
         `docs/tasks/030-rds-jumpbox/verification.md`, `033-organisations/plan.md` and
-        `033-organisations/verification.md` — V12).
+        `033-organisations/verification.md` — V12; the frozen definitions snapshot
+       `docs/specs/sources/vocabulary/policy-atlas-definitions.md` (A8) and the two
+       plan-only folders V12 deletes, `029-search-volume-cap` and `030-multi-round-search`).
 16. [ ] **V8 / I8** — the overlay copy table applied; the chat list shows on the Agent tab
         with exactly one "Task Agent" pinned first, marked by its label only (active planning
         row, else newest closed; older lineages read "Earlier plan"); no chat is labelled
@@ -62,7 +64,8 @@ Slice-specific:
 17. [ ] **Collision audit** ran before the sweep and every listed collision has a recorded
         resolution; the sweep script is committed under `scripts/` and re-runnable.
 18. [ ] **No behaviour change beyond the enumerated deltas** (routes and URLs · labels ·
-        trace grouping · sign-in landing) — no test assertion changed in meaning; the prompt
+        trace grouping · sign-in landing; **amended 2026-09-05** by the owner's build-time
+        requests — contract § Amendments) — no test assertion changed in meaning; the prompt
         diff is one-to-one word swaps only (R1) and `prompt_hashes.json` is re-pinned in the
         same commit; `uv.lock` and `pnpm-lock.yaml` unchanged.
 19. [ ] **V9 / I9** — planning turn, run start, steering continuation and chat turn share

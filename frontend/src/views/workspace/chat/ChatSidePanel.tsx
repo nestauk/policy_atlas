@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useArtefact, useConversations } from "../../../api/queries";
+import { useArtefact, useConversations, useTask } from "../../../api/queries";
 import { COPY } from "../../../lib/vocabulary";
 import { createInitialRunStreamState, useRunStream } from "../../../store";
 import { cn } from "../../../ui/brand/cn";
@@ -111,7 +111,9 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const draftOpen = activeConversationId === DRAFT_CHAT_ID;
   const artefact = useArtefact(taskId);
   const stream = useRunStream(taskId);
-  const chatsEnabled = hasResult(stream.run?.status);
+  const task = useTask(taskId);
+  // Either source may be behind (see `WorkspaceView`).
+  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
 
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before

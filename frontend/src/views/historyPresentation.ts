@@ -44,8 +44,13 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
   "steering.decision": { label: "Check-in", tone: "blue" },
   "steering.pause": { label: "Check-in", tone: "yellow" },
   "search.executed.grouped": { label: "Search", tone: "soft" },
-  "project.renamed": { label: TASK.one, tone: "soft" },
-  "project.archived": { label: TASK.one, tone: "soft" },
+  // The lifecycle kinds under both generations: rows written before task 038
+  // say `project.*`, and the log is append-only.
+  ...Object.fromEntries(
+    ["renamed", "archived", "shared_publicly", "unshared"].flatMap((kind) =>
+      [`task.${kind}`, `project.${kind}`].map((key) => [key, { label: TASK.one, tone: "soft" }]),
+    ),
+  ),
   "plan.approved": { label: "Plan", tone: "green" },
   "component.completed": { label: "Completed", tone: "green" },
   "component.failed": { label: "Failed", tone: "red" },

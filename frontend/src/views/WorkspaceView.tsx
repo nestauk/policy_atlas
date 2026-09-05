@@ -41,12 +41,21 @@ export function WorkspaceView() {
   const onTaskAgent = activeConversationId === null || isPlanningConversation(activeConversationId, rows);
   const chatId = onTaskAgent ? null : activeConversationId;
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
-  // Chats need a result to ask about.
-  const chatsEnabled = hasResult(stream.run?.status);
+  // Chats need a result to ask about. Either source may be behind: the task
+  // read model until its next refetch, the run stream until its replay
+  // reaches the final status frame.
+  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
   // The site footer opens only on a deliberate scroll past the conversation's
   // end (the other tabs reveal theirs at the end of their scroll pane), and
   // hides again on any scroll up — so the composer can rest at the bottom.
   const [footerOpen, setFooterOpen] = useState(false);
+  // A freshly mounted pane starts with its footer shut; the state follows it
+  // (state derived from the pane, reset during render).
+  const [footerPane, setFooterPane] = useState(chatId);
+  if (footerPane !== chatId) {
+    setFooterPane(chatId);
+    setFooterOpen(false);
+  }
   const hasRun = stream.run !== null;
   const [planOpen, setPlanOpen] = useState(false);
   const [planPlacement, setPlanPlacement] = useState<"center" | "side">("center");

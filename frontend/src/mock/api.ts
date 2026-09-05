@@ -773,7 +773,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
       emit(stageCompleted("appraise", "Appraising quality", { quality_checked: 31 }, nextSequence()));
       emit(stageStarted("characterise", "Characterising findings", "Extracting implementation conditions", nextSequence()));
       emit(stageCompleted("characterise", "Characterising findings", { findings: 34 }, nextSequence()));
-      emit(stageStarted("synthesise", "Synthesising the evidence", "Preparing a decision-ready evidence base", nextSequence()));
+      emit(stageStarted("synthesise", "Writing the report", "Preparing a decision-ready evidence base", nextSequence()));
       // The run genuinely parks at this boundary (028 pause salience: paused
       // must read distinct from executing on every tab) — an explicit
       // `run.status` frame, not just the pending check-in itself.
@@ -827,7 +827,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
           occurred_at: FRAME_TIME,
           sequence: nextSequence(),
         });
-        emit(stageFailed("synthesise", "Synthesising the evidence", "The write-up run hit an unrecoverable error.", nextSequence()));
+        emit(stageFailed("synthesise", "Writing the report", "The write-up run hit an unrecoverable error.", nextSequence()));
         finishRun("failed");
         emit(runStatus("failed", nextSequence()));
         controller.close();
@@ -842,7 +842,7 @@ function createMockEventStream(scenario: MockScenario): ReadableStream<Uint8Arra
         occurred_at: FRAME_TIME,
         sequence: nextSequence(),
       });
-      emit(stageCompleted("synthesise", "Synthesising the evidence", { cited: 12, sections: 2 }, nextSequence()));
+      emit(stageCompleted("synthesise", "Writing the report", { cited: 12, sections: 2 }, nextSequence()));
       finishRun("succeeded");
       emit(runStatus("succeeded", nextSequence()));
       controller.close();

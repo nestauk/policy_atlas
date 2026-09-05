@@ -618,7 +618,7 @@ check-in, and reconnect-mid-stream are the tested cases.
 
 `artefact.*` frames are durable presentation/progress records, not partial
 artefact reads or authoritative artefact content: whole-section prose is sent
-for live rendering, while the evidence-base artefact of record is committed
+for live rendering, while the report — the artefact of record — is committed
 only when synthesis completes. The skeleton's display `index` is the identity
 used by every artefact frame; it includes key findings first (although that
 section is generated last) and conclusions last. An empty key-findings pass

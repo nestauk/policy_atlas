@@ -17,7 +17,7 @@ from sqlalchemy.engine import Connection
 
 from policy_atlas.api import checkin_read
 from policy_atlas.api.lifecycle import both_generations
-from policy_atlas.api.readmodels.repository import decisions_page
+from policy_atlas.api.readmodels.repository import _source_reason_maps, decisions_page
 from policy_atlas.api.routers import sse
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, event_log
@@ -208,6 +208,8 @@ def test_pre_038_lifecycle_events_still_reach_both_read_paths(conn: Connection) 
     for event_type, payload in (
         ("project.renamed", {"name_from": "Before", "name_to": "After", "actor": "user"}),
         ("project.archived", {"actor": "user"}),
+        ("project.shared_publicly", {"actor": "user"}),
+        ("task.unshared", {"actor": "user"}),
     ):
         events.append(
             conn, task_id=task_id, run_id=run_id, event_type=event_type, payload=payload
@@ -216,13 +218,44 @@ def test_pre_038_lifecycle_events_still_reach_both_read_paths(conn: Connection) 
     summaries = {item.kind: item.summary for item in decisions_page(conn, task_id, 1, 50).data}
     assert summaries["project.renamed"] == "Renamed the task."
     assert summaries["project.archived"] == "Archived the task."
+    assert summaries["project.shared_publicly"] == "Made the task public."
+    assert summaries["task.unshared"] == "Made the task private."
 
     frames = sse._map_rows(conn, task_id=task_id, rows=_rows(conn, task_id), through=None)
     updates = [frame for frame in frames if frame["type"] == "task.updated"]
-    assert [frame.get("name") for frame in updates] == ["After", None]
-    assert [frame.get("status") for frame in updates] == [None, "archived"]
+    assert [frame.get("name") for frame in updates] == ["After", None, None, None]
+    assert [frame.get("status") for frame in updates] == [None, "archived", None, None]
     # The stored rows keep their words.
     stored = conn.execute(
         event_log.select().where(event_log.c.task_id == task_id)
     ).mappings().all()
-    assert {row["event_type"] for row in stored} == {"project.renamed", "project.archived"}
+    assert {row["event_type"] for row in stored} == {
+        "project.renamed",
+        "project.archived",
+        "project.shared_publicly",
+        "task.unshared",
+    }
+
+
+def test_pre_038_screen_reason_events_still_reach_the_source_reasons(conn: Connection) -> None:
+    """A ``source.screened`` payload keyed by the old snapshot id still yields its reason.
+
+    ``event_log`` payload keys are never rewritten; the one reader of this key
+    accepts both generations (038 review stack).
+    """
+    task_id, run_id = seed_task_and_run(conn)
+    tss_id = uuid.uuid4()
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=run_id,
+        event_type="source.screened",
+        payload={
+            "project_source_snapshot_id": str(tss_id),
+            "status": "relevant",
+            "reps": [{"decision": "relevant", "reason": "On topic."}],
+        },
+    )
+    screen_reasons, classification_reasons = _source_reason_maps(conn, task_id)
+    assert screen_reasons == {tss_id: "On topic."}
+    assert classification_reasons == {}

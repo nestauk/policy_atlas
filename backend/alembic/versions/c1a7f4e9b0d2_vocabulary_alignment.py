@@ -371,12 +371,28 @@ def _create_finding_reference_union(*, column: str) -> None:
     op.execute(_UNION_VIEW_SQL.format(column=column))
 
 
-def _rewrite_jsonb(table: str, old: str, new: str) -> None:
-    """Swap one canonical ``"key": "value"`` pair across a table's ``payload``."""
+def _rewrite_jsonb(table: str, old: str, new: str, column: str = "payload") -> None:
+    """Swap one canonical ``"key": "value"`` pair (or ``"key":``) across a JSONB column."""
     op.execute(
-        f"UPDATE {table} SET payload = replace(payload::text, '{old}', '{new}')::jsonb "
-        f"WHERE strpos(payload::text, '{old}') > 0"
+        f"UPDATE {table} SET {column} = replace({column}::text, '{old}', '{new}')::jsonb "
+        f"WHERE strpos({column}::text, '{old}') > 0"
     )
+
+
+# Two stored JSONB *keys* the identifier sweep renamed in code (038 review
+# stack): per-document selection entries and the synthesis provenance carry
+# the snapshot id under the old key. Rewritten both ways, like the values;
+# `event_log` payload keys are never rewritten (readers accept both).
+_JSONB_KEY_RENAMES: tuple[tuple[str, str, str, str], ...] = (
+    ("selection_result", "selected", '"pss_id":', '"tss_id":'),
+    ("selection_result", "excluded", '"pss_id":', '"tss_id":'),
+    (
+        "synthesis_result",
+        "synthesis_provenance",
+        '"selected_pss_ids":',
+        '"selected_tss_ids":',
+    ),
+)
 
 
 def upgrade() -> None:
@@ -399,6 +415,8 @@ def upgrade() -> None:
     op.create_check_constraint(
         "ck_capr_capability", "capability_run", "capability IN ('evidence_search')"
     )
+    for table, column, old, new in _JSONB_KEY_RENAMES:
+        _rewrite_jsonb(table, old, new, column=column)
     _create_finding_reference_union(column="task_id")
 
 
@@ -426,6 +444,8 @@ def downgrade() -> None:
             f'"steer_point": "{_NEW_STEER_POINT}"',
             f'"steer_point": "{_OLD_STEER_POINT}"',
         )
+    for table, column, old, new in _JSONB_KEY_RENAMES:
+        _rewrite_jsonb(table, new, old, column=column)
     _apply_step(
         _STEP2_TABLES, _STEP2_COLUMNS, _STEP2_CONSTRAINTS, _STEP2_INDEXES, reverse=True
     )

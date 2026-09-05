@@ -36,7 +36,7 @@ from policy_atlas.api.contract import (
     TickFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
-from policy_atlas.api.lifecycle import both_generations
+from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.api.routers._access import (
     accessible_task,
     may_read_task,
@@ -353,7 +353,7 @@ def _frames_for_row(
         plan_frame = _plan_frame(conn, task_id=task_id, payload=payload, persisted=persisted)
         return [plan_frame.model_dump(mode="json")] if plan_frame is not None else []
     # Both generations: pre-038 rows say `project.*` (task 038, contract V1).
-    if event_type in both_generations("renamed", "archived"):
+    if event_type in both_generations(*LIFECYCLE_EVENT_KINDS):
         task_frame = _task_frame(
             conn,
             task_id=task_id,
@@ -543,14 +543,20 @@ def _task_frame(
     payload: dict[str, Any],
     persisted: dict[str, Any],
 ) -> TaskUpdatedFrame:
-    """Project a lifecycle audit event without leaking its actor or old values."""
+    """Project a lifecycle audit event without leaking its actor or old values.
+
+    A sharing flip carries no row field the frame names, so it projects as a
+    bare ``task.updated`` (the client re-reads the task).
+    """
     del conn, task_id
     if event_type in both_generations("renamed"):
         name = payload.get("name_to")
         return TaskUpdatedFrame(
             type="task.updated", name=name if isinstance(name, str) else None, **persisted
         )
-    return TaskUpdatedFrame(type="task.updated", status="archived", **persisted)
+    if event_type in both_generations("archived"):
+        return TaskUpdatedFrame(type="task.updated", status="archived", **persisted)
+    return TaskUpdatedFrame(type="task.updated", **persisted)
 
 
 def _encode_frame(frame: dict[str, Any]) -> str:

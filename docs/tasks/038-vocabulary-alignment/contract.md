@@ -767,3 +767,27 @@ change · A10 exactly one Task Agent · A11 V11 seam pinned · A12 keep the live
 relevance annotator · A13 knip candidates enumerated with dispositions · A14
 keep `journey/presentation.ts` · A15 defect count, rubric 3/5/18 wording,
 phase isolation. Each is folded where it lands; this list is the index.
+
+## Amendments (owner requests during the build, 2026-09-05)
+
+Recorded by the review stack (step 7) from the build log; each is an owner
+request made on seeing the build, and each is a user-visible delta beyond the
+four this contract enumerates (rubric 18 amended to point here). Confirm at
+step 9.
+
+- **V8 as built:** the Agent tab is a two-column page — a collapsible
+  conversation sidebar (Task Agent pinned first, chats, New chat) and the
+  selected conversation in the main column via `?chat=`. The copy-table row
+  "overlay shown on the Agent tab too" is superseded: the overlay stays on
+  every other tab and is the sidebar folded (one list component); its tab
+  strip and library dialog are retired.
+- **Draft chats:** New chat and "Ask about this analysis" open `?chat=new`;
+  the row is created on the first message. New chat is disabled until the Task
+  has a result (`lifecycle.hasResult`).
+- **List scope default:** the Tasks and Projects lists open on **Mine** (UI
+  only; the API default stays `scope=all`).
+- **Motion pass** (easing tokens, press feedback, popover/tooltip/sheet/toast
+  entrances) and the **footer nudge** on the Agent tab (`useFooterReveal`).
+
+Evidence and gates per change: [verification.md](verification.md) § Phase 4
+follow-ons.

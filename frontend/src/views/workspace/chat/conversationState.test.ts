@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from "vitest";
 import { queryKeys } from "../../../api/queries";
 import {
   isPlanningConversation,
+  stashFirstMessage,
+  takeFirstMessage,
   PLANNING_TAB_ID,
   taskAgentConversationId,
   useActiveConversation,
@@ -122,5 +124,14 @@ describe("isPlanningConversation", () => {
     expect(isPlanningConversation("c1", rows)).toBe(false);
     expect(isPlanningConversation("p1", rows)).toBe(true);
     expect(isPlanningConversation(PLANNING_TAB_ID, rows)).toBe(true);
+  });
+});
+
+describe("first-message hand-off", () => {
+  it("hands the stashed message over exactly once", () => {
+    stashFirstMessage("c-1", "hello");
+    expect(takeFirstMessage("c-1")).toBe("hello");
+    expect(takeFirstMessage("c-1")).toBeNull();
+    expect(takeFirstMessage("c-2")).toBeNull();
   });
 });

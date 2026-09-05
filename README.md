@@ -4,7 +4,7 @@ An evidence-led policy-analysis workspace: capabilities run bounded, inspectable
 pipelines over an acquired evidence corpus and produce grounded artefacts - evidence
 syntheses whose significant claims carry citations, verbatim quotes and appraisal. 
 The v3.0 backend ships one capability,
-the **Evidence Base**: plan → acquire → screen → classify → appraise → ingest →
+**Evidence search**: plan → acquire → screen → classify → appraise → ingest →
 (characterise · select · extract · group, plan-selected) → synthesise.
 
 Product intent and system contracts live in [`docs/specs/`](docs/specs/index.md);

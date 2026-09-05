@@ -420,7 +420,7 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
     { stage: "classify", label: "Classifying evidence", blurb: "Labelling evidence types and settings." },
     { stage: "appraise", label: "Appraising quality", blurb: "Reviewing the strength of selected evidence." },
     { stage: "characterise", label: "Characterising findings", blurb: "Extracting implementation conditions." },
-    { stage: "synthesise", label: "Synthesising the evidence", blurb: "Preparing a decision-ready evidence base." },
+    { stage: "synthesise", label: "Writing the report", blurb: "Preparing a decision-ready evidence base." },
   ],
   ready: true,
 };

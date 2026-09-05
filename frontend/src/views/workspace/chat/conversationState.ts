@@ -21,7 +21,9 @@ export const DRAFT_CHAT_ID = "new";
 const firstMessages = new Map<string, string>();
 
 /** Hand the draft's first message to the chat that is about to mount under
- *  its real id; `takeFirstMessage` returns it once and forgets it. */
+ *  its real id; `takeFirstMessage` returns it once and forgets it. The chat
+ *  takes it one tick after mounting (see `ChatPane`), so a StrictMode
+ *  rehearsal — mount, cleanup, mount — sends it exactly once. */
 export function stashFirstMessage(conversationId: string, message: string) {
   firstMessages.set(conversationId, message);
 }

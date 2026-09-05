@@ -84,6 +84,20 @@ describe("mergeHistory", () => {
     expect(result[1].details).toBeUndefined();
   });
 
+  it("labels every lifecycle kind under both generations as the Task", () => {
+    const kinds = ["renamed", "archived", "shared_publicly", "unshared"].flatMap((kind) => [
+      `task.${kind}`,
+      `project.${kind}`,
+    ]);
+    const decisions = kinds.map((kind, index) => ({
+      sequence: index + 1,
+      occurred_at: "2026-07-28T09:00:00Z",
+      kind,
+      summary: "x",
+    }));
+    expect(mergeHistory(decisions, []).map((row) => row.category)).toEqual(kinds.map(() => "Task"));
+  });
+
   it("returns an empty array for empty inputs", () => {
     expect(mergeHistory([], [])).toEqual([]);
     expect(mergeHistory(undefined, undefined)).toEqual([]);

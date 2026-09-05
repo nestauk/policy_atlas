@@ -26,6 +26,9 @@ vi.mock("../../../api/queries", () => ({
     isSuccess: state.chatsResolved,
   }),
   useArtefact: () => ({ data: { sections: [{ title: "Key findings" }] } }),
+  // The result gate reads the task's latest run as well as the stream; the
+  // stream mock carries the run state these tests vary.
+  useTask: () => ({ data: undefined }),
 }));
 vi.mock("../../../store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../store")>()),

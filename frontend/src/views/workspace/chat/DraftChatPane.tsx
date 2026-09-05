@@ -39,7 +39,7 @@ export function DraftChatPane({
   onCreated: (conversationId: string) => void;
 }) {
   const { create } = useConversationMutations(taskId);
-  const [draft, setDraft] = useComposerDraft(DRAFT_CHAT_ID);
+  const [draft, setDraft] = useComposerDraft(`${DRAFT_CHAT_ID}:${taskId}`);
   const [submitting, setSubmitting] = useState(false);
   const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
 

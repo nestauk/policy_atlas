@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import type { TouchEvent, UIEvent, WheelEvent } from "react";
 
 /** Reaching the end is not asking for the footer. */
@@ -24,17 +24,12 @@ const HIDE_BEYOND = 120;
 export function useFooterReveal(onChange?: (open: boolean) => void) {
   const open = useRef(false);
   const overscroll = useRef(0);
-  const onChangeRef = useRef(onChange);
-  useEffect(() => {
-    onChangeRef.current = onChange;
-  }, [onChange]);
-
-  // Everything below reads refs only, so the handlers are stable by
-  // construction — no memoisation needed.
+  // The handlers are recreated each render and read refs, so `onChange` is
+  // always the current one — no memoisation, no indirection.
   const set = (next: boolean) => {
     if (next === open.current) return;
     open.current = next;
-    onChangeRef.current?.(next);
+    onChange?.(next);
   };
   const distanceFromEnd = (el: HTMLElement) => el.scrollHeight - el.scrollTop - el.clientHeight;
 

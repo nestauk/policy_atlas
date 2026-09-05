@@ -147,7 +147,7 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
     (7 tests, old value in → new value out through the real read paths).
   - **Flagged deviations (resolved within the contract's vocabulary):** (i) the
     contract named `checkin_read.py` and `continuation.py` as `canonical_actor`
-    sites; neither projects a *stored* actor (`continuation.py:991` constructs
+    sites; neither projects a *stored* actor (`continuation.py:993` constructs
     `authored_by="agent"` from a boolean) — the helper went to the three real
     projections instead. (ii) `_EVENT_KINDS` never included the two sharing
     kinds; adding them to the decisions read model would be a behaviour change,
@@ -334,7 +334,10 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
     `WorkspaceView` reveals the site footer under both columns only then,
     animated on `grid-template-rows`.
   - Tests: `ConversationList.test.tsx` (from the library tests; synthetic Task
-    Agent, draft row), `ChatSidePanel.test.tsx` rewritten (launcher opens the
+    Agent, draft row), `ChatSidePanel.test.tsx` rewritten (rubric 5: `ConversationTabs.test.tsx` is
+    deleted with the retired strip; its cases — row order, the pinned Task
+    Agent, close — live in `ChatSidePanel.test.tsx` and
+    `ConversationList.test.tsx`) (launcher opens the
     Task Agent, header/list toggle, draft, gating), `WorkspaceView.test.tsx`
     (shut-by-default, draft flow, gating, footer under both columns);
     `journey.spec.ts` follows (New chat disabled before the run; the chat
@@ -552,6 +555,7 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
 | Live Playwright check against `make dev` | pass | 4 passed — [live-check.md](live-check.md) |
 | `make fe-api-smoke` | pass | 3 passed (built frontend, real API, own DB: list · create · stub run over SSE) |
 | **`make verify` (step-6 exit, final tree: Agent-tab passes, Mine default, motion pass, footer nudge)** | **pass** | one uninterrupted run: okf 129/0 · backend **2520 passed** (8m01s) · infra 46 · audit-paths 116 files / 0 · prompt-guard 13 unchanged · font-guard · drift-check OK · frontend 75 files / **553 tests** · build OK. `pnpm e2e` 11 passed on this frontend, plus the live checks above. |
+| **`make verify` (step-7 exit, review-stack fixes R1–R28 applied)** | **pass** | one uninterrupted run: okf **136**/0 (seven concepts added at step 8) · backend **2522 passed** (8m16s; +2 tests) · mypy 305 files · infra 46 · audit-paths 116 / 0 · prompt-guard 13 unchanged · drift-check OK · frontend 75 files / **555 tests** · build OK. `pnpm e2e` **11 passed** on the same tree (the draft-chat leg exercises R7). Targeted: `test_migration_038.py` + `test_pre_038_vocabulary_compatibility.py` 10 passed on a reset test DB. |
 
 ## Checks beyond the build
 
@@ -636,7 +640,115 @@ backfill name left as data (→ deferred).
 
 ## Review findings
 
+Step 7 ran 2026-09-05 in a fresh conversation (lead = Fable 5.1, adjudicating
+only). Base for every lane: `origin/dev` `8626594f`; head `22b4bc12`.
+
+**Method.** The 55K-line diff is mostly the mechanical sweep, so the lead built
+a *swept baseline* — `origin/dev` with `scripts/rename_038.py --apply` (phases
+3 and 4, the module moves, the two Phase 4 pre-steps) in a throw-away worktree
+— and handed every lane the diff from that baseline to head (257 files, ~12.7K
+changed lines: the hand-authored delta only). The mechanical part was checked
+by construction (the tool's output equals head wherever no hand edit exists)
+and by the residual greps. The lead also ran a JSON-column audit on the
+migrated dev database (41 JSON columns, every key and value carrying a retired
+token, per table) — the audit that found the two stored keys below.
+
+**Lanes and cost.** Contract verifier (`contract-verifier`, Opus, ~203K) ·
+security lane (`agent-skills:security-auditor`, ~103K) · Codex adversarial
+(`codex-rescue` read-only, job `task-mtof3m09-07lvnd`, 15 min) ·
+`/code-review medium` (forked; cross-file tracer ~149K, adjudicator ~171K;
+the removed-behaviour and simplification angles were relaunched once after a
+session rate limit at 14:50 killed the first run). Reasoning-class spend ran
+about 2.5× the 250K guideline: a Tier 4 slice with a 55K-line diff, plus one
+rate-limit restart. `/simplify` not run separately: the code-review lane's
+simplification angle ran and its three cleanups were adjudicated below.
+
+### Findings, by lane (convergent ones first)
+
+| # | Finding | Lanes | Ruling |
+|---|---|---|---|
+| R1 | History tab keys only `project.renamed`/`project.archived`; post-038 rows fall to "Recorded" | verifier · Codex · code-review | **Fixed** — `historyPresentation.ts` keys all four lifecycle kinds under both generations; test added |
+| R2 | The two 409 `visibility_conflict` messages in `routers/tasks.py` inverted by the sweep ("leave the task out of the task"); the test pinned the wrong string | verifier · Codex · code-review | **Fixed** — dev wording restored, test corrected. Same defect class as the screen-sense prose (verification § Phase 3), missed in string literals |
+| R3 | Stale `POLICY_ATLAS_ORCHESTRATOR_*` overrides silently ignored | security (Low) · code-review | **Fixed** — `agent_backend._warn_stale_agent_env` logs the stale keys at import; test added |
+| R4 | Sharing kinds (`task.shared_publicly`/`unshared`, both generations) absent from `_EVENT_KINDS`, the SSE projector and the History map, although contract § Events names all four | Codex (P1) · verifier | **Fixed** — build deviation (ii) **contested**: the contract required it (A4 accepted). `_EVENT_KINDS`, the decision text ("Made the task public/private."), `_task_frame` (bare `task.updated`) and the History map take all four; compat test extended |
+| R5 | `selection_result.selected/excluded` key `pss_id` renamed to `tss_id` in five readers but never in data — pre-038 shortlists read empty, a paused run resuming at extract aborts; `synthesis_provenance.selected_pss_ids` likewise (no reader) | code-review (tracer) · lead DB audit (11/11 rows) | **Fixed** (owner-approved 2026-09-05) — the migration rewrites both keys forward and reverses them on downgrade: stored values 6 and 7 in the manifest and ADR 0036 § Rollback; the round-trip test seeds a pre-038 selection row and asserts both directions |
+| R6 | `_source_reason_maps` reads `task_source_snapshot_id` from `source.screened`/`classified` payloads; 3,682 dev-DB rows carry `project_source_snapshot_id` — every pre-038 source loses its reason | code-review · lead DB audit | **Fixed** — read-side fallback (event_log is never rewritten); compat test added. The other retired event-payload keys (`acquired_pss_by_verb`, `orchestrator_rule`, `preserve_*_evidence_base`) have no reader |
+| R7 | Draft chat's first message can be lost: `takeFirstMessage` is destructive and StrictMode's rehearsal cleanup aborts the first send | Codex (P1) | **Fixed** — the chat takes the message one tick after mounting and its cleanup cancels the timer, so the rehearsal sends nothing and the real mount sends once (an idempotent double-send under one client turn id was tried first and fought itself in the mock: e2e journey red). Covered by the journey e2e draft leg |
+| R8 | Draft composer text shared across Tasks (`useComposerDraft("new")`) | Codex | **Fixed** — key per Task |
+| R9 | "No chats before a result" gate missing on "Ask about this analysis"; and the gate read the SSE stream only, which is `null` until replay completes (New chat disabled beside a visible result; forever on a failed connect) | verifier · code-review | **Fixed** — gate on the artefact page too; every gate reads the task's `latest_run.status` OR the stream |
+| R10 | Footer state outlives the pane that opened it | Codex (P3) | **Fixed** — reset as derived state on pane change |
+| R11 | Escape in the rename input saved the edit | code-review | **Fixed** — Escape cancels; the following blur is ignored |
+| R12 | The planning pane's ResizeObserver re-pinned to the bottom on every frame of the footer's close transition, undoing the wheel-up that closed it | code-review | **Fixed** — pin only when the pane shrinks or content changes |
+| R13 | Catalog test flattened names across tables; a `task_id` anywhere satisfied every rename | Codex | **Fixed** — `(table, name)` pairs against the manifest's table map |
+| R14 | `scripts/schema_manifest.py` corrupts the manifest on a post-038 checkout | Codex | **Fixed** — refuses when `task` exists; usage documented |
+| R15 | `rename_038.py` re-sweeps an edited ledger-tracked file; the collision check sees symbols, not senses | Codex · code-review | **Declined as code** (the gitignored ledger means every fresh clone hits the looks-swept guard; the only exposed tree is the build's own checkout) — docstring corrected, deferred.md § Vocabulary warns |
+| R16 | Living docs still name the capability "Evidence Base" (README, package docstring, capability spec heading, `web-api.md` "evidence-base artefact of record") | Codex · verifier | **Fixed** — words only |
+| R17 | `.env.example` "orchestrate CLI" ×2 (outside § 3.4's grep paths) | verifier | **Fixed** |
+| R18 | Post-build owner requests (Agent-tab layout, drafts, result gate, Mine default, motion, footer nudge) are behaviour beyond rubric 18's enumerated deltas, recorded only in the build log; V8's overlay copy-table row superseded | verifier (High) | **Recorded** — contract § Amendments (owner, 2026-09-05) and rubric 18 amended; owner confirms at step 9 |
+| R19 | Rubric 15's grep clause fails on three authorised entries (A8 snapshot, two V12 folder deletions) and names `system/vocabulary.md` | verifier | **Fixed** — rubric text |
+| R20 | ADR 0035 carries no pointer to ADR 0036's amendment of decision 5; ADR 0036 § Rollback misstated the downgrade order | verifier | **Fixed** |
+| R21 | V11 comment names the wrong control; `router.state` is `@private` | security (Info) | **Fixed** — comment names `replaceState` + `replace` navigation; a one-line same-origin guard added; the private read stays (precedent) |
+| R22 | `decisions` `detail` keeps `decided_by: "orchestrator"` raw | Codex | **Declined** — `detail` is the audit payload verbatim; the top level is canonical and the frontend's detail allowlist never renders actors |
+| R23 | Closed planning rows are never listed, so `?chat=<planning uuid>` copied while open reads as a chat once the run closes it; tests fabricate a state the endpoint never returns | Codex | **Deferred** — folded into the existing "Earlier plan" owner call in deferred.md |
+| R24 | V9 does not cover the dev-only runtime agent CLI | Codex | **Declined** — outside V9's three sites (the build noted it); deferred.md entry |
+| R25 | Stage label `synthesise` "Synthesising the evidence" vs the server's "Writing the report" | code-review | **Fixed** — copy and mock fixtures |
+| R26 | `useFooterReveal` ref indirection dead; `ChatSidePanel` list toggle unmounts the pane (refetches) | code-review (cleanup) | Ref cut; the toggle unmount **declined** (rare action, correct behaviour) |
+| R27 | `ConversationTabs.test.tsx` deletion lacked a rubric-5 line; `capability_run.session_id` deferred entry built but unmarked; `continuation.py:991` → `:993` | verifier | **Fixed** — records |
+| R28 | A6's "no stored row carries the `orchestrator_v1` family id" holds for `prompt_version` rows only: 40 dev-DB `event_log` payloads carry `orchestrator_v1_watch` as watch-decision metadata; nothing reads it | lead DB audit | **Recorded** (manifest § Stored values) |
+
+Unique-to-one-lane findings that justified the lane: the security lane's env
+override (R3); Codex's draft-message race (R7), draft key (R8), catalog test
+(R13), generator guard (R14); the code-review tracer's stored keys (R5, R6)
+and the planning pane pin (R12); the verifier's scope record (R18) and the
+`.env.example` miss (R17). Convergent across families: R1, R2, R4, R16.
+
+### Flagged deviations, adjudicated
+
+Confirmed as-is: the `.dockerignore` counterpart · deterministic manifest sort
+· six FK rows to catalog names · `useCreateProject` in Phase 4 · string-level
+copy/prompt exemption · component prompt hashes moved by imports only (the
+lead re-read prompt-diff.md: every prose hunk is a one-to-one word swap; the
+two qualifier drops are in module docstrings) · `canonical_actor` at the three
+real projections · screen-sense restoration · Phase 3 without `drift-check` ·
+"Untitled project" left as data. **Contested:** sharing kinds not paired
+(R4) — the contract required it. **Noted:** the ops CLI flag collision was a
+contract stop condition resolved without escalation; the resolution was the
+contract's own wording, so it stands.
+
+**Fake-done check on the fixes applied here:** no test relaxed or deleted;
+one assertion corrected to the restored message (R2); every fix carries a
+test or a record; `git diff --stat -- backend/uv.lock frontend/pnpm-lock.yaml
+.github` stays empty.
+
 ## Rubric status
+
+After the review stack (fix commit on this branch):
+
+| # | Status | Note |
+|---|---|---|
+| 1 | met | contract + § Amendments |
+| 2 | met | final `make verify` row below |
+| 3 | met | the R5 migration change is owner-approved (2026-09-05, review stack) |
+| 4 | met | `drift-check` OK |
+| 5 | met | every deletion justified (R27 adds the last line); R2 corrects one assertion |
+| 6 | met | this file |
+| 7 | met | deferred.md § Vocabulary (+ R15, R23, R24) |
+| 8 | met | this section |
+| 9 | met | round-trip test now relation-exact and covers stored values 6–7 |
+| 10 | met | tenancy predicates byte-identical to the sweep (security lane) |
+| 11 | met | R16 closes the last capability-name hits |
+| 12 | met | R17 closes `.env.example`; residue as § 3.4 |
+| 13 | met | |
+| 14 | met | literal grep empty (verifier) |
+| 15 | met | as amended (R19); ADR 0035 pointer (R20) |
+| 16 | met | as amended (R18); one Task Agent, no "Planning" label |
+| 17 | met | |
+| 18 | met | as amended (R18); lockfiles unchanged; hashes re-pinned in `ff5c1703` |
+| 19 | met (code) / pending (staging session) | |
+| 20 | met | |
+| 21 | met (code) / pending (staging round trip) | security lane findings above |
+| 22 | met | knip and vulture re-run by the verifier on the final tree |
+| 23 | local half met / staging half pending | post-merge addendum (contract P11) |
 
 ## Intent & assumptions
 

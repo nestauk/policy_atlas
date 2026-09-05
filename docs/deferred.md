@@ -1718,7 +1718,8 @@ first-class vocabulary. What follows is what it deliberately left out.
   the cap) are the demand meter; a spike there is the trigger to reconsider.
 - **Transcript persistence / turn tables — re-homed to 025 (owner,
   2026-07-16).** 024 ships the anchors only: `session_id` on `capability_run`
-  (nullable), verbatim `user_text` on every steering event. Provider-side
+  (nullable — **populated since task 038**, V9: `session_id = task id` from the API run
+  start), verbatim `user_text` on every steering event. Provider-side
   conversation state (OpenAI Responses, Bedrock sessions) stays forbidden —
   the record lives in our store (018 standing constraint; audit/FOI/
   portability). 025's co-pilot Q&A needs persisted per-user sessions
@@ -2313,10 +2314,23 @@ deliberately left, each with its reason:
   Projects as chat context (meta-analysis); "chat more functional" as its own task.
 - **Open PRs #62 and #52** rebase with `scripts/rename_038.py --apply --phase {3,4}
   --step all` on their own pre-038 branch before merging `dev` (owner fork F5); the
-  script refuses a tree that already looks swept.
+  script refuses a tree that already looks swept. Never run it on a post-038 tree that
+  still carries its ledger (`scripts/.rename_038_state.json`, the build's own checkout):
+  a file edited since its sweep is re-swept whole, and the collision check sees symbols,
+  not senses — a file holding only Project vocabulary would be renamed on to Task. A
+  fresh clone has no ledger, so the guard fires (038 review stack, Codex).
 - **"Earlier plan" is unreachable in production (task 038 V8 build finding)** — closing a
   planning conversation sets `status = 'closed'` (`runtime/conversation_lifecycle.py`),
   and both library listings ask for `status=active|archived`, so older planning lineages
   are never returned today. The Task Agent selector and the "Earlier plan" chip are
-  correct whenever they are, and are exercised by tests only. Decide whether closed
-  planning rows should list (a backend filter change) — a one-line owner call.
+  correct whenever they are, and are exercised by tests only (the tests fabricate
+  `status: active` rows with a `closed_at`, a shape the filtered endpoint never returns).
+  Until closed rows list, a deep link `?chat=<planning uuid>` copied while the planning
+  row was open reads as an ordinary chat once the run closes it (`isPlanningConversation`
+  sees only listed rows). Decide whether closed planning rows should list (a backend
+  filter change) — a one-line owner call; it settles both (038 review stack, Codex).
+- **The runtime agent CLI (`python -m policy_atlas.runtime.agent`, dev-only) still
+  sessions its traces by conversation id** — it mints the conversation before the Task
+  exists, so V9's `session_id = task id` covers the API path only (planning turn, run
+  start, steering continuation, chat turn). Restructure if CLI traces ever need to group
+  with a Task (038 review stack, Codex).
