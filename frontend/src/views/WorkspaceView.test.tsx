@@ -192,8 +192,10 @@ describe("WorkspaceView — the Agent tab is two columns (038 V8, owner ruling 2
     await user.click(within(sidebar()).getByRole("button", { name: "Show chats" }));
     expect(within(sidebar()).getByRole("button", { name: "Cost barriers" })).toBeInTheDocument();
     await user.click(within(sidebar()).getByRole("button", { name: "Hide chats" }));
-    // The rail: no list rows, the Task Agent and New chat as icon buttons.
-    expect(within(sidebar()).queryByRole("button", { name: "Cost barriers" })).toBeNull();
+    // The rail: the Task Agent and New chat as icon buttons, the recent
+    // chats as glyph marks named by their title (owner request 2026-09-05)
+    // — no list rows.
+    expect(within(sidebar()).getByRole("button", { name: "Cost barriers" })).toBeInTheDocument();
     expect(within(sidebar()).getByRole("button", { name: "Task Agent" })).toHaveAttribute("aria-current", "true");
     expect(within(sidebar()).getByRole("button", { name: "New chat" })).toBeInTheDocument();
     // jsdom exposes no working localStorage here, so persistence is covered

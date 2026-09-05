@@ -416,6 +416,19 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   carries the param onto every tab link but the Agent tab's (that tab keeps
   its own default, the Task Agent); the shell applies it to the lifecycle
   bar. Pure-function test in `lifecycle.test.ts`.
+- **Recent chat marks and a new-reply dot on the rail (owner requests
+  2026-09-05, same session):** under the Task Agent mark the rail shows the
+  four newest chats as chat-glyph marks (one glyph for all — the owner
+  turned down initials; title as tooltip, `aria-current` on
+  the one on show; click opens it — in the main column on the Agent tab, in
+  the overlay elsewhere). A chat whose latest turn holds a reply the reader
+  has not had on screen carries a small dot ("— new reply" in its name);
+  `markChatSeen`/`isChatUnread` keep a per-browser stamp of the reply seen
+  (`localStorage`, try/catch), written whenever the chat is on show, and
+  the chat on show is never dotted. Limit: the dot appears when the list
+  next refetches (a tab move, a focus), not by push. Tests:
+  `ConversationRail.test.tsx`, `conversationState.test.ts` (marks and the
+  seen round trip with a stubbed storage), `WorkspaceView.test.tsx` updated.
 
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 

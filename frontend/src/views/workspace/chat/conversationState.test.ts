@@ -2,11 +2,14 @@ import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { queryKeys } from "../../../api/queries";
 import {
+  isChatUnread,
   isPlanningConversation,
+  markChatSeen,
+  recentChats,
   stashFirstMessage,
   takeFirstMessage,
   PLANNING_TAB_ID,
@@ -124,6 +127,46 @@ describe("isPlanningConversation", () => {
     expect(isPlanningConversation("c1", rows)).toBe(false);
     expect(isPlanningConversation("p1", rows)).toBe(true);
     expect(isPlanningConversation(PLANNING_TAB_ID, rows)).toBe(true);
+  });
+});
+
+describe("new-reply marks", () => {
+  // This jsdom exposes no working localStorage: stand one in for the marks.
+  const store = new Map<string, string>();
+  beforeEach(() => {
+    store.clear();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const chat = (id: string, reply: string | null, at = "2026-09-05T10:00:00Z") => ({
+    id,
+    kind: "chat" as const,
+    title: `Chat ${id}`,
+    latest_turn_preview: { at, user_message: "q", reply_snippet: reply },
+  });
+
+  it("dots a reply until it has been on screen, and clears it once seen", () => {
+    expect(isChatUnread(chat("c-1", null))).toBe(false); // no answer yet
+    const answered = chat("c-1", "An answer.");
+    expect(isChatUnread(answered)).toBe(true);
+    markChatSeen(answered);
+    expect(isChatUnread(answered)).toBe(false);
+    // A later reply is new again.
+    expect(isChatUnread(chat("c-1", "Another.", "2026-09-05T11:00:00Z"))).toBe(true);
+  });
+
+  it("lists the newest chats only, never dotting the one on show", () => {
+    const rows = [
+      { id: "p-1", kind: "planning" as const, title: "Planning", latest_turn_preview: null },
+      ...["c-1", "c-2", "c-3", "c-4", "c-5"].map((id) => chat(id, "reply")),
+    ];
+    const marks = recentChats(rows, "c-2");
+    expect(marks.map((mark) => mark.id)).toEqual(["c-1", "c-2", "c-3", "c-4"]);
+    expect(marks.map((mark) => mark.unread)).toEqual([true, false, true, true]);
   });
 });
 

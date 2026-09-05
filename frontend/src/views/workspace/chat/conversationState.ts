@@ -4,6 +4,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { components } from "../../../api/gen/types";
 import { queryKeys, useApiClient } from "../../../api/queries";
+import { RAIL_RECENT, type RailChat } from "./ConversationRail";
 
 type ConversationOut = components["schemas"]["ConversationOut"];
 type ConversationListPage = components["schemas"]["Page_ConversationListItemOut_"];
@@ -32,6 +33,59 @@ export function takeFirstMessage(conversationId: string): string | null {
   const message = firstMessages.get(conversationId) ?? null;
   firstMessages.delete(conversationId);
   return message;
+}
+
+/** Per browser: for each chat, the latest reply the reader has had on screen. */
+const SEEN_KEY = "policy-atlas:chat-seen";
+
+type ChatPreview = { at: string | null; reply_snippet: string | null } | null;
+type SeenRow = { id: string; latest_turn_preview: ChatPreview };
+
+/** The reply a chat currently holds, as one comparable stamp — `null` while
+ *  the latest turn has no answer yet. */
+function replyStamp(preview: ChatPreview): string | null {
+  return preview === null || preview.reply_snippet === null ? null : `${preview.at ?? ""}|reply`;
+}
+
+function readSeen(): Record<string, string> {
+  try {
+    const stored = JSON.parse(localStorage.getItem(SEEN_KEY) ?? "{}") as unknown;
+    return typeof stored === "object" && stored !== null ? (stored as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Record that the chat's current reply has been on screen (038 V8, owner
+ *  2026-09-05): the rail's "new reply" dot clears for it. */
+export function markChatSeen(row: SeenRow) {
+  const stamp = replyStamp(row.latest_turn_preview);
+  if (stamp === null) return;
+  try {
+    const seen = readSeen();
+    if (seen[row.id] === stamp) return;
+    localStorage.setItem(SEEN_KEY, JSON.stringify({ ...seen, [row.id]: stamp }));
+  } catch {
+    // Storage blocked: the dot simply never clears in this browser.
+  }
+}
+
+/** True when the chat holds a reply the reader has not had on screen. */
+export function isChatUnread(row: SeenRow): boolean {
+  const stamp = replyStamp(row.latest_turn_preview);
+  return stamp !== null && readSeen()[row.id] !== stamp;
+}
+
+/** The rail's recent chat marks: the newest chats, the one on show never
+ *  marked unread (its reply is being read). */
+export function recentChats(
+  rows: readonly (SeenRow & { kind: "planning" | "chat"; title: string })[],
+  shownId: string | null,
+): RailChat[] {
+  return rows
+    .filter((row) => row.kind === "chat")
+    .slice(0, RAIL_RECENT)
+    .map((row) => ({ id: row.id, title: row.title, unread: row.id !== shownId && isChatUnread(row) }));
 }
 
 /** The Task Agent: a Task's primary chat.

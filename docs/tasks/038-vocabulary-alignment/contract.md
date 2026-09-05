@@ -795,7 +795,8 @@ step 9.
   sidebar shuts to (`ConversationRail`), so one object carries the
   conversations on every tab; and the overlay keeps its open chat across the
   non-Agent tabs (the tab links carry `?chat=`; the Agent tab keeps its own
-  default).
+  default); the rail marks the four newest chats (one chat glyph each, the
+  title as tooltip) and dots one whose reply the reader has not yet seen.
 
 Evidence and gates per change: [verification.md](verification.md) § Phase 4
 follow-ons.

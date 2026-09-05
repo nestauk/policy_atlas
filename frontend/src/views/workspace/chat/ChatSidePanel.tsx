@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useArtefact, useConversations, useTask } from "../../../api/queries";
@@ -15,6 +15,8 @@ import { ConversationRail } from "./ConversationRail";
 import {
   DRAFT_CHAT_ID,
   isPlanningConversation,
+  markChatSeen,
+  recentChats,
   taskAgentConversationId,
   useActiveConversation,
 } from "./conversationState";
@@ -106,7 +108,8 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const panel = usePanelWidth();
   const navigate = useNavigate();
   const conversations = useConversations(taskId, { status: "active" });
-  const rows = conversations.data?.data ?? [];
+  const data = conversations.data?.data;
+  const rows = useMemo(() => data ?? [], [data]);
   const chatRows = rows.filter((row) => row.kind === "chat");
   const taskAgentId = taskAgentConversationId(rows);
   const planningOpen = isPlanningConversation(activeConversationId, rows);
@@ -116,6 +119,11 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const task = useTask(taskId);
   // Either source may be behind (see `WorkspaceView`).
   const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  // The chat on show has its reply on screen: clear its "new reply" mark.
+  useEffect(() => {
+    const shown = rows.find((row) => row.id === activeConversationId);
+    if (shown !== undefined) markChatSeen(shown);
+  }, [rows, activeConversationId]);
 
   const openLatestOrTaskAgent = () => {
     // The launcher's decision needs the chats list resolved first — before
@@ -137,6 +145,8 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
         chatsEnabled={chatsEnabled}
         onTaskAgent={false}
         onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
+        recent={recentChats(rows, null)}
+        onSelectChat={setActiveConversation}
         className="h-full w-12 flex-col border-r py-2"
       />
     );
