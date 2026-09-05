@@ -234,6 +234,43 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
   `"ProjectOut"` inside a string literal (copy-exempt file) → `"TaskOut"` by hand.
 - 4.2 (`fast-worker`): see below.
 
+- **Follow-on (owner ruling 2026-09-05, after seeing the build) — the Agent
+  tab is a two-column page.** The owner's intent for "the Agent tab hosts all
+  of a Task's chats in a sidebar" is a persistent sidebar with the conversation
+  list and the *selected* conversation in the main view — not the collapsible
+  overlay launcher the first cut left in place (5b judgment call 1, resolved the
+  other way). As built: `WorkspaceView` = `ConversationSidebar` (new; `aside
+  "Chats"`, New chat action + `ConversationList`, always visible, `lg:w-80`,
+  stacks above on narrow viewports) + main column = today's planning layout
+  (`PlanningPane` + `PlanDocument` rail) when the Task Agent is selected, else
+  `ChatPane` in the shared reading column with the rail shut. Selection is the
+  existing `?chat=` param (deep links and the other tabs' overlay share it;
+  choosing the Task Agent clears it; a planning id in the param reads as the
+  Task Agent, never a second thread). `ConversationList` is the list body
+  extracted verbatim from `ChatsLibrary`, which is now only the dialog frame —
+  one list component in two frames. The overlay is back to every tab but Agent
+  (`AppShell.showChatPanel` has `!inWorkspace` again); `planningInMainPane`,
+  `focusTaskAgent` and the launcher backstop were deleted. Owner-only mutation
+  gating unchanged (A9 test: a non-owner sees the same rows, read-only).
+- **Bug the always-on sidebar exposed (fixed, flagged):** `seedCreatedConversation`
+  wrote a newly created active conversation into every cached list under the
+  task's conversations key, the archived list included — invisible before
+  because nothing kept the archived list cached; now a `predicate` skips the
+  archived leg, with a unit guard. A behaviour fix, not a rename.
+- Tests: `WorkspaceView.test.tsx` (10: sidebar with one Task Agent first,
+  planning pane by default, chat swaps the main column and shuts the rail,
+  `?chat=` deep link, Task Agent restores and clears the param, planning id
+  reads as the Task Agent, New chat creates and opens, non-owner A9);
+  `AppShell.test.tsx` overlay never on the Agent tab, on the other task tabs,
+  never outside a task; `journey.spec.ts` step (b) drives the sidebar and a
+  chat round trip. Gates: typecheck clean · lint 0 errors · `pnpm test` 75 files
+  / 549 passed · build OK · `pnpm e2e` 11 passed (journey re-run 3× clean).
+- Open owner calls surfaced by the permanent sidebar: the pinned row shows
+  "Task Agent" as both name and chip (dropping the kind chip for planning rows
+  is one line); a brand-new chat is titled "New chat" under the "New chat"
+  action (inherited from the create title); the sidebar is fixed-width where
+  the overlay is resizable.
+
 ### Phase 6 — one Langfuse session per Task (V9, review commit e) — `fast-worker`
 
 - `routers/planning.py` planning turn, `chat_turns.py` chat turn and
@@ -406,7 +443,7 @@ decisions D1–D9 are defined in [contract.md](contract.md) and [plan.md](plan.m
 | `alembic upgrade head` on the dev DB (52 real Tasks) | pass | e7a1b5c3d9f2 → c1a7f4e9b0d2; counts under the new names match |
 | Live Playwright check against `make dev` | pass | 4 passed — [live-check.md](live-check.md) |
 | `make fe-api-smoke` | pass | 3 passed (built frontend, real API, own DB: list · create · stub run over SSE) |
-| **`make verify` (step-6 exit, complete tree)** | **pass** | okf 129/0 · backend **2520 passed** (8m33s) · infra 46 · audit-paths 116 files / 0 · prompt-guard 13 unchanged · font-guard · drift-check OK · frontend 75 files / **545 tests** · build OK. First run stopped at `audit-paths` because the Phase 8 `git mv JUMPBOX.md` was unstaged (the audit walks `git ls-files`); staged, the chain completed green. `pnpm e2e` 11 passed on this frontend (Phase 8 worker), plus the live checks above. |
+| **`make verify` (step-6 exit, complete tree incl. the Agent-tab follow-on)** | **pass** | one uninterrupted run: okf 129/0 · backend **2520 passed** (7m43s) · infra 46 · audit-paths 116 files / 0 · prompt-guard 13 unchanged · font-guard · drift-check OK · frontend 75 files / **549 tests** · build OK. (An earlier run stopped at `audit-paths` only because the Phase 8 `git mv JUMPBOX.md` was unstaged — the audit walks `git ls-files`.) `pnpm e2e` 11 passed on this frontend by the 5b worker, plus the live checks above. |
 
 ## Checks beyond the build
 
