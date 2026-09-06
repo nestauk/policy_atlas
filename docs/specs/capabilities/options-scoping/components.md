@@ -14,7 +14,7 @@ gating. Distilled from
 § Architecture stance, rulings 2–6, 9, 11, 12, 14). Shared tools and the findings schema are
 owned by [../../system/execution-orchestration.md](../../system/execution-orchestration.md) and
 [../../system/data-model.md](../../system/data-model.md); the EB components referenced below are
-specified in [../evidence-base/components.md](../evidence-base/components.md).
+specified in [../evidence-search/components.md](../evidence-search/components.md).
 
 ```
 plan ──▶ baseline ══gate══▶ retrieve ──▶ screen(stage 1) ──▶ mint ──▶ constrain ──▶ propose

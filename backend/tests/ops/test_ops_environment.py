@@ -182,8 +182,8 @@ def test_environment_falls_back_to_confirmation_when_there_is_nothing_to_sample(
     """
     # The test database is shared across the suite, so the empty-table state
     # has to be made rather than assumed. The `conn` fixture rolls it back, and
-    # nothing else needs clearing: the tenancy foreign keys on `project` and
-    # `portfolio` point at `organisation`, not at `app_user`.
+    # nothing else needs clearing: the tenancy foreign keys on `task` and
+    # `project` point at `organisation`, not at `app_user`.
     conn.execute(app_user.delete())
     with cognito() as (client, stubber):
         expect_environment(stubber)

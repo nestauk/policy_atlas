@@ -49,16 +49,6 @@ def _strip_trailing_structured_blob(prose: str) -> str:
     return prose
 
 
-def _sentence_around(prose: str, position: int) -> tuple[int, int]:
-    """Return the [start, end) sentence bounds containing ``position``."""
-    start = 0
-    for match in _SENTENCE_END_RE.finditer(prose, 0, position):
-        start = match.end()
-    end_match = _SENTENCE_END_RE.search(prose, position)
-    end = end_match.end() if end_match is not None else len(prose)
-    return start, end
-
-
 def _marker_anchor_sentence(prose: str, position: int, marker_len: int) -> tuple[int, int]:
     """Return the sentence ``[start, end)`` a marker at ``position`` anchors.
 

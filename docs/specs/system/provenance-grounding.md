@@ -95,7 +95,7 @@ the **coverage base** grades what it rests on — orthogonal, both required.
   record, an absence degrades to "not found in extracted / selected material," never corpus-level.
 
 The EB instance (and where this rule is most acute) is
-[../capabilities/evidence-base/provenance.md](../capabilities/evidence-base/provenance.md).
+[../capabilities/evidence-search/provenance.md](../capabilities/evidence-search/provenance.md).
 
 ## Patterns — the third assertion type
 
@@ -162,7 +162,7 @@ field**; whether/how the judge is calibrated is owned wholesale by the eval work
 source is faithfully reported but weakly evidenced; the reverse for a careful inference from
 strong sources). Document type (from `classify`) picks the yardstick. Modelled as **extensible
 typed dimensions + a rubric version**; the **rubric travels with each appraisal**. The type→tier
-rubric is **steerable, default-first** (orchestrator seeds a provisional default; user may
+rubric is **steerable, default-first** (Agent seeds a provisional default; user may
 inspect/adjust but needn't). **v3.0 = a single light pass** (cheap tier, all screened-in,
 document-type-based); ⏸ a fuller full-text second pass and ⏸ a relative-to-feasible tier are
 deferred. The axes combine **only at an aggregate roll-up** — itself ⏸ **deferred**. One

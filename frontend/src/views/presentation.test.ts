@@ -35,8 +35,8 @@ describe("decision presentation", () => {
   });
 });
 
-describe("project rename", () => {
-  it("cancel restores the original project name", () => {
-    expect(cancelledRenameState("Original project")).toEqual({ editing: false, draftName: "Original project" });
+describe("task rename", () => {
+  it("cancel restores the original task name", () => {
+    expect(cancelledRenameState("Original task")).toEqual({ editing: false, draftName: "Original task" });
   });
 });

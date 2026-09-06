@@ -25,7 +25,7 @@ instance of the trust contract). System contracts:
 [../../system/execution-orchestration.md](../../system/execution-orchestration.md) ·
 [../../system/plan-as-object.md](../../system/plan-as-object.md) ·
 [../../system/prompting.md](../../system/prompting.md). Sibling capability:
-[../evidence-base/](../evidence-base/capability.md).
+[../evidence-search/](../evidence-search/capability.md).
 
 Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 

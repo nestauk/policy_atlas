@@ -21,15 +21,14 @@ from policy_atlas.core.schema import (
     capability_run,
     conversation,
     evidence_scope,
-    orchestration_plan,
     planning_transcript,
+    task_plan,
 )
 from policy_atlas.runtime.conversation_lifecycle import (
     close_planning_conversation,
     ensure_active_planning_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.orchestration_plan import TIME_BANDS, OrchestrationPlan, compose
 from policy_atlas.runtime.planner import StubPlannerBackend
 from policy_atlas.runtime.planner_prompt import (
     PartChipWire,
@@ -38,7 +37,8 @@ from policy_atlas.runtime.planner_prompt import (
     PlanDraftWire,
     PlannerTurnWire,
 )
-from tests.api.resource_support import api_client, create_project
+from policy_atlas.runtime.task_plan import TIME_BANDS, TaskPlan, compose
+from tests.api.resource_support import api_client, create_task
 
 
 class CountingPlanner(StubPlannerBackend):
@@ -54,8 +54,10 @@ class CountingPlanner(StubPlannerBackend):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Record and delegate the deterministic planner turn."""
+        del conversation_id
         self.calls.append((turns, previous_draft))
         self.session_ids.append(session_id)
         return super().plan_turn(turns, previous_draft)
@@ -70,12 +72,15 @@ class FailOncePlanner(CountingPlanner):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Fail once, then use the ordinary deterministic reply."""
         if not self.calls:
             self.calls.append((turns, previous_draft))
             raise RuntimeError("planned test failure")
-        return super().plan_turn(turns, previous_draft, session_id=session_id)
+        return super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
 
 
 class PartPlanner(CountingPlanner):
@@ -91,9 +96,12 @@ class PartPlanner(CountingPlanner):
         previous_draft: dict[str, object] | None,
         *,
         session_id: uuid.UUID | None = None,
+        conversation_id: uuid.UUID | None = None,
     ) -> PlannerTurnWire:
         """Return the ordinary stub turn with the configured structured part."""
-        turn = super().plan_turn(turns, previous_draft, session_id=session_id)
+        turn = super().plan_turn(
+            turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+        )
         return turn.model_copy(update={"part": self.part})
 
 
@@ -104,7 +112,7 @@ def _reset_turn_locks() -> None:
 
 
 def _pending_values(
-    project_id: str,
+    task_id: str,
     *,
     client_turn_id: uuid.UUID,
     turn_index: int,
@@ -116,7 +124,7 @@ def _pending_values(
     """Build a direct transcript fixture row for retry-boundary tests."""
     return {
         "id": uuid.uuid4(),
-        "project_id": uuid.UUID(project_id),
+        "task_id": uuid.UUID(task_id),
         "conversation_id": conversation_id,
         "client_turn_id": client_turn_id,
         "turn_index": turn_index,
@@ -137,7 +145,7 @@ def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> 
         PlanDraftWire(search_effort="rapid", analysis_depth="standard"), ready=False
     )
     assert draft.time_band == TIME_BANDS[("rapid", "standard")]
-    plan = OrchestrationPlan(
+    plan = TaskPlan(
         title="Evidence review",
         question="What does the evidence show?",
         backend_scope="both",
@@ -180,16 +188,16 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
         _reset_turn_locks()
         duplicate = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
@@ -197,7 +205,7 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert first.json() == duplicate.json()
         assert len(stub.calls) == 1
 
-        transcript = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        transcript = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
         assert transcript.status_code == 200
         assert transcript.json()["pagination"] == {"page": 1, "page_size": 50, "total_items": 1}
         assert transcript.json()["data"][0]["turn_index"] == 0
@@ -206,7 +214,7 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert transcript.json()["data"][0]["conversation_id"] == conversation_id
 
         ready = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "A comparison of intervention options",
@@ -216,15 +224,16 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert ready.status_code == 200
         assert ready.json()["plan"]["ready"] is True
         assert ready.json()["conversation_id"] == conversation_id
-        assert stub.session_ids == [uuid.UUID(conversation_id), uuid.UUID(conversation_id)]
-        persisted = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids == [uuid.UUID(task_id), uuid.UUID(task_id)]
+        persisted = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert persisted.status_code == 200
         assert persisted.json()["status"] == "approved"
     with engine.connect() as conn:
         rows = (
             conn.execute(
                 select(planning_transcript)
-                .where(planning_transcript.c.project_id == uuid.UUID(project_id))
+                .where(planning_transcript.c.task_id == uuid.UUID(task_id))
                 .order_by(planning_transcript.c.turn_index)
             )
             .mappings()
@@ -236,8 +245,8 @@ def test_planning_turn_is_durable_idempotent_and_ready_turn_persists_plan(
         assert rows[1]["completed_at"] is not None
         assert (
             conn.execute(
-                select(orchestration_plan.c.plan_id, orchestration_plan.c.conversation_id).where(
-                    orchestration_plan.c.project_id == uuid.UUID(project_id)
+                select(task_plan.c.plan_id, task_plan.c.conversation_id).where(
+                    task_plan.c.task_id == uuid.UUID(task_id)
                 )
             ).one()
             .conversation_id
@@ -275,26 +284,26 @@ def test_planning_part_round_trips_and_replays_idempotently(engine: Engine, tmp_
     )
     stub = PartPlanner(part)
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
         replay = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "How can cities reduce heat risk?", "client_turn_id": turn_id},
         )
-        transcript = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        transcript = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
     assert first.status_code == replay.status_code == transcript.status_code == 200
     assert replay.json()["part"] == first.json()["part"]
     assert transcript.json()["data"][0]["part"] == first.json()["part"]
     with engine.connect() as conn:
         stored = conn.execute(
             select(planning_transcript.c.part, planning_transcript.c.response).where(
-                planning_transcript.c.project_id == uuid.UUID(project_id)
+                planning_transcript.c.task_id == uuid.UUID(task_id)
             )
         ).mappings().one()
     assert stored["part"] == first.json()["part"]
@@ -318,9 +327,9 @@ def test_planning_part_with_snake_case_option_id_is_kept(tmp_path: Path) -> None
         owner,
         _,
     ):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         response = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -405,9 +414,9 @@ def test_malformed_planning_part_degrades_to_prose_and_logs_once(
         owner,
         _,
     ):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         response = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -426,9 +435,9 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -436,7 +445,7 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
             },
         )
         approved = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
         )
@@ -445,7 +454,7 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
             conn.execute(
                 planning_transcript.insert().values(
                     id=uuid.uuid4(),
-                    project_id=uuid.UUID(project_id),
+                    task_id=uuid.UUID(task_id),
                     client_turn_id=uuid.uuid4(),
                     turn_index=2,
                     user_message="One more planning detail",
@@ -459,15 +468,15 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
                 )
             )
             approved_payload = conn.execute(
-                select(orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
-                .where(orchestration_plan.c.status == "approved")
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .where(task_plan.c.status == "approved")
             ).scalar_one()
         assert approved_payload["source_turn_index"] == 1
 
-        plan_after_newer_turn = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
-        transcript = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
-        stale_start = client.post(f"/api/v1/projects/{project_id}/runs", headers=owner, json={})
+        plan_after_newer_turn = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
+        transcript = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
+        stale_start = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
         assert plan_after_newer_turn.status_code == transcript.status_code == 200
         assert plan_after_newer_turn.json() == {
             "plan": first.json()["plan"],
@@ -482,18 +491,18 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         }
 
         reapproved = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Ready to proceed", "client_turn_id": str(uuid.uuid4())},
         )
         assert reapproved.status_code == 200
-        reapproved_plan = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        reapproved_plan = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert reapproved_plan.json()["status"] == "approved"
         with engine.connect() as conn:
             refreshed_payload = conn.execute(
-                select(orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
-                .where(orchestration_plan.c.status == "approved")
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .where(task_plan.c.status == "approved")
             ).scalar_one()
         assert refreshed_payload["source_turn_index"] == 3
 
@@ -501,16 +510,16 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         monkeypatch.setattr(
             runs_router,
             "_await_new_run",
-            lambda _engine, *, project_id, **_kwargs: RunOut(
+            lambda _engine, *, task_id, **_kwargs: RunOut(
                 capability_run_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 plan_id=uuid.uuid4(),
                 plan_version=2,
                 status="running",
                 started_at=datetime.now(UTC),
             ),
         )
-        restarted = client.post(f"/api/v1/projects/{project_id}/runs", headers=owner, json={})
+        restarted = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
         assert restarted.status_code == 201
 
 
@@ -521,9 +530,9 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -531,28 +540,28 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
             },
         )
         approved = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
         )
         assert first.status_code == approved.status_code == 200
         with engine.begin() as conn:
             payload = conn.execute(
-                select(orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
-                .where(orchestration_plan.c.status == "approved")
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .where(task_plan.c.status == "approved")
             ).scalar_one()
             payload.pop("source_turn_index")
             conn.execute(
-                orchestration_plan.update()
-                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
-                .where(orchestration_plan.c.status == "approved")
+                task_plan.update()
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .where(task_plan.c.status == "approved")
                 .values(payload=payload)
             )
             conn.execute(
                 planning_transcript.insert().values(
                     id=uuid.uuid4(),
-                    project_id=uuid.UUID(project_id),
+                    task_id=uuid.UUID(task_id),
                     client_turn_id=uuid.uuid4(),
                     turn_index=2,
                     user_message="A newer completed legacy turn",
@@ -565,22 +574,22 @@ def test_legacy_approved_plan_without_a_source_turn_index_stays_startable(
                     completed_at=datetime.now(UTC),
                 )
             )
-        plan = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner).json()
+        plan = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner).json()
         assert plan["status"] == "approved"
         monkeypatch.setattr(runs_router, "_dispatch_run", lambda *args, **kwargs: None)
         monkeypatch.setattr(
             runs_router,
             "_await_new_run",
-            lambda _engine, *, project_id, **_kwargs: RunOut(
+            lambda _engine, *, task_id, **_kwargs: RunOut(
                 capability_run_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 plan_id=uuid.uuid4(),
                 plan_version=1,
                 status="running",
                 started_at=datetime.now(UTC),
             ),
         )
-        started = client.post(f"/api/v1/projects/{project_id}/runs", headers=owner, json={})
+        started = client.post(f"/api/v1/tasks/{task_id}/runs", headers=owner, json={})
         assert started.status_code == 201
 
 
@@ -591,9 +600,9 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -602,7 +611,7 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         )
         assert first.status_code == 200
         _reset_turn_locks()
-        draft_after_restart = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        draft_after_restart = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert draft_after_restart.status_code == 200
         assert draft_after_restart.json() == {
             "plan": first.json()["plan"],
@@ -612,7 +621,7 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
 
         second_message = "A comparison of intervention options"
         second = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": second_message, "client_turn_id": str(uuid.uuid4())},
         )
@@ -621,7 +630,7 @@ def test_planning_rehydrates_after_restart_and_get_plan_reads_stored_draft(
         first_row = (
             conn.execute(
                 select(planning_transcript)
-                .where(planning_transcript.c.project_id == uuid.UUID(project_id))
+                .where(planning_transcript.c.task_id == uuid.UUID(task_id))
                 .where(planning_transcript.c.turn_index == 0)
             )
             .mappings()
@@ -643,15 +652,15 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
     _reset_turn_locks()
     stub = FailOncePlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         turn_id = str(uuid.uuid4())
         failed = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Recoverable planner failure", "client_turn_id": turn_id},
         )
         assert failed.status_code == 500
-        listed = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        listed = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
         assert listed.json()["data"] == [
             {
                 "turn_index": 0,
@@ -667,13 +676,13 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
             }
         ]
         retried = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Recoverable planner failure", "client_turn_id": turn_id},
         )
         assert retried.status_code == 200
         mismatch = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Different message", "client_turn_id": turn_id},
         )
@@ -686,7 +695,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 planning_transcript.insert(),
                 [
                     _pending_values(
-                        project_id,
+                        task_id,
                         client_turn_id=old_id,
                         turn_index=1,
                         message="old failed",
@@ -694,7 +703,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                         status="failed",
                     ),
                     _pending_values(
-                        project_id,
+                        task_id,
                         client_turn_id=latest_id,
                         turn_index=2,
                         message="latest failed",
@@ -704,7 +713,7 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 ],
             )
         stale = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "old failed", "client_turn_id": str(old_id)},
         )
@@ -719,16 +728,16 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, other):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         old_id = uuid.uuid4()
         with engine.begin() as conn:
             conversation_id = ensure_active_planning_conversation(
-                conn, project_id=uuid.UUID(project_id), now=datetime.now(UTC)
+                conn, task_id=uuid.UUID(task_id), now=datetime.now(UTC)
             )
             conn.execute(
                 planning_transcript.insert().values(
                     **_pending_values(
-                        project_id,
+                        task_id,
                         client_turn_id=old_id,
                         turn_index=0,
                         message="expired pending",
@@ -737,12 +746,12 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                     )
                 )
             )
-        old_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        old_read = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
         assert old_read.status_code == 200
         assert old_read.json()["data"][0]["status"] == "failed"
         assert old_read.json()["data"][0]["conversation_id"] == str(conversation_id)
         assert old_read.json()["data"][0]["completed_at"] is not None
-        other_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=other)
+        other_read = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=other)
         assert other_read.status_code == 404
 
         fresh_id = uuid.uuid4()
@@ -750,7 +759,7 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
             conn.execute(
                 planning_transcript.insert().values(
                     **_pending_values(
-                        project_id,
+                        task_id,
                         client_turn_id=fresh_id,
                         turn_index=1,
                         message="fresh pending",
@@ -760,7 +769,7 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
                 )
             )
         blocked = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "a distinct new turn", "client_turn_id": str(uuid.uuid4())},
         )
@@ -769,7 +778,7 @@ def test_pending_staleness_fresh_pending_and_transcript_ownership(
 
         # A fresh (in-window) pending row lists honestly as pending — the
         # crash-between-phases incomplete-turn render depends on it.
-        fresh_read = client.get(f"/api/v1/projects/{project_id}/planning-turns", headers=owner)
+        fresh_read = client.get(f"/api/v1/tasks/{task_id}/planning-turns", headers=owner)
         assert fresh_read.status_code == 200
         fresh_row = fresh_read.json()["data"][1]
         assert fresh_row["status"] == "pending"
@@ -782,14 +791,14 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _other):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         run_id = uuid.uuid4()
         scope_id = uuid.uuid4()
         with engine.begin() as conn:
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
-                    project_id=uuid.UUID(project_id),
+                    task_id=uuid.UUID(task_id),
                     intent="planning-router fence sweep",
                     context={},
                     created_at=datetime.now(UTC),
@@ -798,9 +807,9 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
             conn.execute(
                 capability_run.insert().values(
                     capability_run_id=run_id,
-                    project_id=uuid.UUID(project_id),
+                    task_id=uuid.UUID(task_id),
                     evidence_scope_id=scope_id,
-                    capability="evidence_base",
+                    capability="evidence_search",
                     plan_id=uuid.uuid4(),
                     plan_version=1,
                     status="paused",
@@ -811,7 +820,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
             )
         try:
             paused = client.post(
-                f"/api/v1/projects/{project_id}/planning-turns",
+                f"/api/v1/tasks/{task_id}/planning-turns",
                 headers=owner,
                 json={"message": "Steer this walk", "client_turn_id": str(uuid.uuid4())},
             )
@@ -825,7 +834,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
                     .values(status="running")
                 )
             running = client.post(
-                f"/api/v1/projects/{project_id}/planning-turns",
+                f"/api/v1/tasks/{task_id}/planning-turns",
                 headers=owner,
                 json={"message": "Steer this walk again", "client_turn_id": str(uuid.uuid4())},
             )
@@ -839,7 +848,7 @@ def test_planning_turn_409s_while_walk_active_or_parked(engine: Engine, tmp_path
                     .values(status="succeeded", ended_at=datetime.now(UTC))
                 )
             succeeded = client.post(
-                f"/api/v1/projects/{project_id}/planning-turns",
+                f"/api/v1/tasks/{task_id}/planning-turns",
                 headers=owner,
                 json={"message": "Replan now", "client_turn_id": str(uuid.uuid4())},
             )
@@ -862,7 +871,7 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
     class RunStartsMidPlanner(CountingPlanner):
         """Planner double that models a run starting during the LLM call."""
 
-        project_id: str | None = None
+        task_id: str | None = None
 
         def plan_turn(
             self,
@@ -870,15 +879,18 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
             previous_draft: dict[str, object] | None,
             *,
             session_id: uuid.UUID | None = None,
+            conversation_id: uuid.UUID | None = None,
         ) -> PlannerTurnWire:
-            wire = super().plan_turn(turns, previous_draft, session_id=session_id)
-            if wire.ready and self.project_id is not None:
+            wire = super().plan_turn(
+                turns, previous_draft, session_id=session_id, conversation_id=conversation_id
+            )
+            if wire.ready and self.task_id is not None:
                 scope_id = uuid.uuid4()
                 with engine.begin() as conn:
                     conn.execute(
                         evidence_scope.insert().values(
                             evidence_scope_id=scope_id,
-                            project_id=uuid.UUID(self.project_id),
+                            task_id=uuid.UUID(self.task_id),
                             intent="mid-call run start",
                             context={},
                             created_at=datetime.now(UTC),
@@ -887,9 +899,9 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
                     conn.execute(
                         capability_run.insert().values(
                             capability_run_id=uuid.uuid4(),
-                            project_id=uuid.UUID(self.project_id),
+                            task_id=uuid.UUID(self.task_id),
                             evidence_scope_id=scope_id,
-                            capability="evidence_base",
+                            capability="evidence_search",
                             plan_id=uuid.uuid4(),
                             plan_version=1,
                             status="running",
@@ -902,10 +914,10 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
 
     stub = RunStartsMidPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
-        stub.project_id = project_id
+        task_id = create_task(client, owner)
+        stub.task_id = task_id
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -915,7 +927,7 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
         assert first.status_code == 200
 
         conflicted = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Proceed with the full review.", "client_turn_id": str(uuid.uuid4())},
         )
@@ -924,14 +936,14 @@ def test_run_starting_mid_planner_call_fails_turn_and_persists_no_plan(
 
         with engine.begin() as conn:
             plans = conn.execute(
-                select(orchestration_plan.c.plan_id).where(
-                    orchestration_plan.c.project_id == uuid.UUID(project_id)
+                select(task_plan.c.plan_id).where(
+                    task_plan.c.task_id == uuid.UUID(task_id)
                 )
             ).all()
             assert plans == []
             last_status = conn.execute(
                 select(planning_transcript.c.status)
-                .where(planning_transcript.c.project_id == uuid.UUID(project_id))
+                .where(planning_transcript.c.task_id == uuid.UUID(task_id))
                 .order_by(planning_transcript.c.turn_index.desc())
                 .limit(1)
             ).scalar_one()
@@ -945,9 +957,9 @@ def test_closed_planning_conversation_creates_seeded_successor(
     _reset_turn_locks()
     stub = CountingPlanner()
     with api_client(tmp_path, {get_planner_backend: lambda: stub}) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         first = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "How can cities reduce heat risk?",
@@ -955,7 +967,7 @@ def test_closed_planning_conversation_creates_seeded_successor(
             },
         )
         approved = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={"message": "Compare intervention options", "client_turn_id": str(uuid.uuid4())},
         )
@@ -963,16 +975,16 @@ def test_closed_planning_conversation_creates_seeded_successor(
         predecessor_id = uuid.UUID(approved.json()["conversation_id"])
         with engine.begin() as conn:
             plan_payload = conn.execute(
-                select(orchestration_plan.c.payload)
-                .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
-                .where(orchestration_plan.c.status == "approved")
+                select(task_plan.c.payload)
+                .where(task_plan.c.task_id == uuid.UUID(task_id))
+                .where(task_plan.c.status == "approved")
             ).scalar_one()
             close_planning_conversation(
-                conn, project_id=uuid.UUID(project_id), closed_at=datetime.now(UTC)
+                conn, task_id=uuid.UUID(task_id), closed_at=datetime.now(UTC)
             )
 
         successor = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "Run it again with a narrower scope",
@@ -986,12 +998,13 @@ def test_closed_planning_conversation_creates_seeded_successor(
             {"role": "user", "text": "Run it again with a narrower scope"}
         ]
         assert stub.calls[-1][1] == seed_draft_from_executed_plan(
-            OrchestrationPlan.model_validate(plan_payload)
+            TaskPlan.model_validate(plan_payload)
         ).model_dump(mode="json")
-        assert stub.session_ids[-1] == successor_id
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids[-1] == uuid.UUID(task_id)
 
         follow_up = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=owner,
             json={
                 "message": "Keep the same evidence question",
@@ -1004,20 +1017,21 @@ def test_closed_planning_conversation_creates_seeded_successor(
             {"role": "planner", "text": successor.json()["reply"]},
             {"role": "user", "text": "Keep the same evidence question"},
         ]
-        assert stub.session_ids[-1] == successor_id
+        # task 038, V9: session_id groups by task, not by planning conversation.
+        assert stub.session_ids[-1] == uuid.UUID(task_id)
 
 
 def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
-    """Drive the stub planner to a ready approved plan and return the project id."""
-    project_id = create_project(client, owner)
+    """Drive the stub planner to a ready approved plan and return the task id."""
+    task_id = create_task(client, owner)
     first = client.post(
-        f"/api/v1/projects/{project_id}/planning-turns",
+        f"/api/v1/tasks/{task_id}/planning-turns",
         headers=owner,
         json={"message": "How can cities reduce heat risk?", "client_turn_id": str(uuid.uuid4())},
     )
     assert first.status_code == 200
     ready = client.post(
-        f"/api/v1/projects/{project_id}/planning-turns",
+        f"/api/v1/tasks/{task_id}/planning-turns",
         headers=owner,
         json={
             "message": "A comparison of intervention options",
@@ -1026,7 +1040,7 @@ def _approve_stub_plan(client: TestClient, owner: dict[str, str]) -> str:
     )
     assert ready.status_code == 200
     assert ready.json()["plan"]["ready"] is True
-    return project_id
+    return task_id
 
 
 def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path) -> None:
@@ -1037,12 +1051,12 @@ def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path)
         owner,
         other,
     ):
-        project_id = _approve_stub_plan(client, owner)
-        before = client.get(f"/api/v1/projects/{project_id}/plan", headers=owner)
+        task_id = _approve_stub_plan(client, owner)
+        before = client.get(f"/api/v1/tasks/{task_id}/plan", headers=owner)
         assert before.json()["plan"]["backend_scope"] == "both"
 
         patched = client.patch(
-            f"/api/v1/projects/{project_id}/plan",
+            f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
             json={"backend_scope": "academic_only"},
         )
@@ -1052,7 +1066,7 @@ def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path)
         assert patched.json()["version"] == before.json()["version"] + 1
 
         forbidden = client.patch(
-            f"/api/v1/projects/{project_id}/plan",
+            f"/api/v1/tasks/{task_id}/plan",
             headers=other,
             json={"backend_scope": "grey_lit_only"},
         )
@@ -1060,12 +1074,12 @@ def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path)
 
     with engine.connect() as conn:
         payload = conn.execute(
-            select(orchestration_plan.c.payload)
-            .where(orchestration_plan.c.project_id == uuid.UUID(project_id))
-            .where(orchestration_plan.c.status == "approved")
-            .order_by(orchestration_plan.c.version.desc())
+            select(task_plan.c.payload)
+            .where(task_plan.c.task_id == uuid.UUID(task_id))
+            .where(task_plan.c.status == "approved")
+            .order_by(task_plan.c.version.desc())
         ).scalar_one()
-    plan = OrchestrationPlan.model_validate(payload)
+    plan = TaskPlan.model_validate(payload)
     assert plan.backend_scope == "academic_only"
     acquire = next(step for step in compose(plan).steps if step.component == "acquire")
     filters = acquire.directive_delta.get("search", {}).get("filters", {})
@@ -1075,9 +1089,9 @@ def test_patch_plan_persists_academic_only_scope(engine: Engine, tmp_path: Path)
 def test_patch_plan_404s_without_a_plan(tmp_path: Path) -> None:
     _reset_turn_locks()
     with api_client(tmp_path) as (client, owner, _):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         response = client.patch(
-            f"/api/v1/projects/{project_id}/plan",
+            f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
             json={"backend_scope": "academic_only"},
         )
@@ -1091,9 +1105,9 @@ def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
         owner,
         _,
     ):
-        project_id = _approve_stub_plan(client, owner)
+        task_id = _approve_stub_plan(client, owner)
         response = client.patch(
-            f"/api/v1/projects/{project_id}/plan",
+            f"/api/v1/tasks/{task_id}/plan",
             headers=owner,
             json={"geography": "Not a real country"},
         )

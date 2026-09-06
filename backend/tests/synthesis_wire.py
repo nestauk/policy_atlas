@@ -11,8 +11,11 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
+    CaseStudyWire,
     ClaimWire,
+    IntroWire,
+    NoteWire,
     RepairItemWire,
     SectionProposalWire,
     SectionProseWire,
@@ -21,7 +24,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     SummaryJudgeWire,
     SummaryWire,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
+from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
 
 
 def empty_key_findings(_seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
@@ -117,6 +120,21 @@ class ScriptedSynthesisBackend:
 
     def write_key_findings(self, seed: dict[str, Any]) -> UsageResult[SectionProseWire]:
         return empty_key_findings(seed)
+
+    def write_case_studies(self, seed: dict[str, Any]) -> UsageResult[CaseStudyWire]:
+        """Absence-path case studies for section-focused scripted backends."""
+        del seed
+        return CaseStudyWire(cards=[]), None
+
+    def write_source_note(self, seed: dict[str, Any]) -> UsageResult[NoteWire]:
+        """Empty MRS note for section-focused scripted backends."""
+        del seed
+        return NoteWire(note=""), None
+
+    def write_full_report_intro(self, seed: dict[str, Any]) -> UsageResult[IntroWire]:
+        """Deterministic full-report intro for section-focused scripted backends."""
+        del seed
+        return IntroWire(intro=""), None
 
     def write_block_summary(self, seed: dict[str, Any]) -> UsageResult[SummaryWire]:
         """Return a deterministic summary for protocol completeness in test doubles."""

@@ -1,7 +1,6 @@
 import { NavLink, Outlet, useParams } from "react-router";
 
 import { useFunnel } from "../api/queries";
-import { useRunStream } from "../store";
 import { cn } from "../ui/brand/cn";
 import { SOURCES_LABELS } from "../lib/vocabulary";
 import { WIDE_PAGE_CLASS } from "./listPageChrome";
@@ -11,15 +10,14 @@ import { WIDE_PAGE_CLASS } from "./listPageChrome";
  * is a fourth tab present ONLY when the funnel reports a nonzero findings
  * count (rubric 24) — an analysis that never ran deep enough to extract
  * findings gets no tab to click into, not a disabled or empty one.
+ *
+ * Read-model freshness while a run is in progress comes from the
+ * shell-owned `RunStreamProvider`, not a per-layout stream mount.
  */
 export function SourcesLayout() {
-  const { projectId = "" } = useParams();
-  const funnel = useFunnel(projectId);
-  // Keep Sources read models live while a run is in progress — Plan and
-  // Results already mount the stream; without it here the list would stay
-  // stale until remount.
-  useRunStream(projectId);
-  const base = `/projects/${projectId}/sources`;
+  const { taskId = "" } = useParams();
+  const funnel = useFunnel(taskId);
+  const base = `/tasks/${taskId}/sources`;
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
   const tabs = [

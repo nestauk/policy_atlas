@@ -95,7 +95,7 @@ describe("connectEventStream — bearer auth, never a query-string token", () =>
     const getAccessToken = vi.fn(async () => "super-secret-token");
 
     const connection = connectEventStream({
-      projectId: "proj-1",
+      taskId: "proj-1",
       cursor: 0,
       fetchImpl: fetchMock,
       getAccessToken,
@@ -127,7 +127,7 @@ describe("connectEventStream — bearer auth, never a query-string token", () =>
     );
 
     const connection = connectEventStream({
-      projectId: "proj-1",
+      taskId: "proj-1",
       cursor: 5,
       fetchImpl: fetchMock,
       getAccessToken,
@@ -156,7 +156,7 @@ describe("connectEventStream — bearer auth, never a query-string token", () =>
     const onUnauthenticated = vi.fn();
 
     connectEventStream({
-      projectId: "proj-1",
+      taskId: "proj-1",
       cursor: 0,
       fetchImpl: fetchMock,
       getAccessToken,
@@ -178,7 +178,7 @@ describe("connectEventStream — bearer auth, never a query-string token", () =>
       const onError = vi.fn();
 
       connectEventStream({
-        projectId: "proj-1",
+        taskId: "proj-1",
         cursor: 0,
         fetchImpl: fetchMock,
         getAccessToken,
@@ -208,7 +208,7 @@ describe("connectEventStream — bearer auth, never a query-string token", () =>
     const onError = vi.fn();
 
     connectEventStream({
-      projectId: "proj-1",
+      taskId: "proj-1",
       cursor: 0,
       fetchImpl: fetchMock,
       getAccessToken,

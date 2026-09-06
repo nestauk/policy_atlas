@@ -7,7 +7,7 @@ import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { NewTaskView } from "./views/NewTaskView";
-import { PortfolioDetailView, PortfoliosView } from "./views/PortfoliosView";
+import { ProjectDetailView, ProjectsView } from "./views/ProjectsView";
 import { ShareView } from "./views/ShareView";
 import { SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
@@ -16,11 +16,12 @@ import { ThemesView } from "./views/ThemesView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { PrivacyView } from "./views/legal/PrivacyView";
 import { TermsView } from "./views/legal/TermsView";
+import { PublicTaskShell } from "./views/PublicTaskShell";
+import { SplashView } from "./views/splash/SplashView";
 import { NotFoundView } from "./ui/feedback/NotFoundView";
+import { RequireAuth } from "./routes/RequireAuth";
+import { StashAndSplashRedirect } from "./routes/StashAndSplashRedirect";
 
-// Lazy: `recharts` is a substantial dependency only the landscape route
-// needs — keeping it out of the main chunk means every other route (and
-// the initial page load) doesn't pay for it.
 const LandscapeView = lazy(() =>
   import("./views/LandscapeView").then((module) => ({ default: module.LandscapeView })),
 );
@@ -33,80 +34,112 @@ function LandscapeFallback() {
   );
 }
 
-/** UI state that names a thing is URL-addressable: views are routes, the
- * dossier and filters are search params — deep-linkable and refresh-safe. */
-export const router = createBrowserRouter([
+/** The Sources sub-tree, shared verbatim by the authenticated app and the
+ *  public task view (task 037) — same paths, same components. */
+const sourcesChildren = [
+  { index: true, element: <ThemesView /> },
   {
-    element: <AppShell />,
-    children: [
-      { path: "/", element: <TasksListView /> },
-      { path: "/new", element: <NewTaskView /> },
-      { path: "/portfolios", element: <PortfoliosView /> },
-      { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
-      { path: "/privacy", element: <PrivacyView /> },
-      { path: "/terms", element: <TermsView /> },
+    path: "landscape",
+    element: (
+      <Suspense fallback={<LandscapeFallback />}>
+        <LandscapeView />
+      </Suspense>
+    ),
+  },
+  { path: "all", element: <SourcesView /> },
+  { path: "findings", element: <FindingsView /> },
+];
 
-      // The task lifecycle: Plan · Results · Sources · Share · History.
-      // Every stage past Plan is gated on run state, so a locked stage is
-      // unreachable by URL as well as by click.
-      { path: "/projects/:projectId", element: <WorkspaceView /> },
+/** Logged-out marketing + legal routes (no AppShell), plus the public task
+ *  view (task 037): the same `/tasks/…` URLs render Result and Sources
+ *  for a public Task; anything else under the task redirects to Result,
+ *  and a non-public Task falls through to stash-and-splash inside
+ *  `PublicTaskShell`. */
+export const publicRouter = createBrowserRouter([
+  { path: "/", element: <SplashView /> },
+  { path: "/privacy", element: <PrivacyView /> },
+  { path: "/terms", element: <TermsView /> },
+  {
+    path: "/tasks/:taskId",
+    element: <PublicTaskShell />,
+    children: [
+      { index: true, element: <RedirectToPath suffix="/result" /> },
+      { path: "result", element: <ArtefactView /> },
+      { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
+      // `preserveOriginal` (task 037 review fix): this can fire on a
+      // read that was public when it resolved but is unshared before a
+      // stashed refetch settles — carry the original deep link so
+      // `StashAndSplashRedirect` never stashes the rewritten `/result`
+      // path instead of it.
+      { path: "*", element: <RedirectToPath suffix="/result" preserveOriginal /> },
+    ],
+  },
+  { path: "*", element: <StashAndSplashRedirect /> },
+]);
+
+/** Authenticated app routes behind RequireAuth + AppShell. */
+export const authenticatedRouter = createBrowserRouter([
+  {
+    element: <RequireAuth />,
+    children: [
       {
-        path: "/projects/:projectId/results",
-        element: (
-          <LifecycleRoute tab="results">
-            <ArtefactView />
-          </LifecycleRoute>
-        ),
-      },
-      {
-        path: "/projects/:projectId/sources",
-        element: (
-          <LifecycleRoute tab="sources">
-            <SourcesLayout />
-          </LifecycleRoute>
-        ),
+        element: <AppShell />,
         children: [
-          { index: true, element: <ThemesView /> },
+          { path: "/", element: <TasksListView /> },
+          { path: "/new", element: <NewTaskView /> },
+          { path: "/projects", element: <ProjectsView /> },
+          { path: "/projects/:projectId", element: <ProjectDetailView /> },
+          { path: "/privacy", element: <PrivacyView /> },
+          { path: "/terms", element: <TermsView /> },
+
           {
-            path: "landscape",
+            path: "/tasks/:taskId",
             element: (
-              <Suspense fallback={<LandscapeFallback />}>
-                <LandscapeView />
-              </Suspense>
+              // Agent is open at every run state; the wrapper exists for the
+              // public-leg gate (task 037) — a signed-in outsider on a
+              // public Task lands on Result, never the Agent tab.
+              <LifecycleRoute tab="agent">
+                <WorkspaceView />
+              </LifecycleRoute>
             ),
           },
-          { path: "all", element: <SourcesView /> },
-          { path: "findings", element: <FindingsView /> },
+          {
+            path: "/tasks/:taskId/result",
+            element: (
+              <LifecycleRoute tab="result">
+                <ArtefactView />
+              </LifecycleRoute>
+            ),
+          },
+          {
+            path: "/tasks/:taskId/sources",
+            element: (
+              <LifecycleRoute tab="sources">
+                <SourcesLayout />
+              </LifecycleRoute>
+            ),
+            children: sourcesChildren,
+          },
+          {
+            path: "/tasks/:taskId/share",
+            element: (
+              <LifecycleRoute tab="share">
+                <ShareView />
+              </LifecycleRoute>
+            ),
+          },
+          {
+            path: "/tasks/:taskId/history",
+            element: (
+              <LifecycleRoute tab="history">
+                <HistoryView />
+              </LifecycleRoute>
+            ),
+          },
+
+          { path: "*", element: <NotFoundView /> },
         ],
       },
-      {
-        path: "/projects/:projectId/share",
-        element: (
-          <LifecycleRoute tab="share">
-            <ShareView />
-          </LifecycleRoute>
-        ),
-      },
-      {
-        path: "/projects/:projectId/history",
-        element: (
-          <LifecycleRoute tab="history">
-            <HistoryView />
-          </LifecycleRoute>
-        ),
-      },
-
-      // Retired paths. Every URL that was bookmarkable before the reshape
-      // still resolves — a reorganisation is not a reason to break someone's
-      // saved link.
-      { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
-      { path: "/projects/:projectId/findings", element: <RedirectToPath suffix="/sources/findings" /> },
-      { path: "/projects/:projectId/landscape", element: <RedirectToPath suffix="/sources/landscape" /> },
-      { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
-
-      // Catch-all: an unknown URL still gets the app chrome and an honest
-      // "nothing here" view rather than a router error page.
-      { path: "*", element: <NotFoundView /> },
     ],
   },
 ]);

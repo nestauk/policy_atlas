@@ -32,12 +32,15 @@ test target — it's a separate `DATABASE_URL` with secrets-manager credentials.
 **The test DB is a shared resource — parallel-lane file fences must include it** (023, twice).
 Concurrent DB-backed pytest runs contaminate each other: an interrupted migration roundtrip leaves
 committed rows that break downgrades across *sessions* (conftest migrates but never wipes), and any
-ad-hoc run that commits (e.g. the manual orchestrate smoke) re-contaminates it. Symptoms:
+ad-hoc run that commits (e.g. the manual agent smoke) re-contaminates it. Symptoms:
 `CheckViolation` on downgrade in an apparently-clean session. Fix is `dropdb`+`createdb` (seconds);
 prevention is one-DB-user-at-a-time — a build lane's "fence" covers done-check resources, not just
 files. If parallel lanes become routine, see deferred.md's per-lane `DATABASE_URL` entry.
 Confirmed again at 033's build-open: a delegated agent ran pytest while the main suite was mid-run
-and the baseline showed 45 scattered failures. **The delegation brief must state the fence
+and the baseline showed 45 scattered failures. And again at 037's review phase: a background
+`make verify` raced a review lane's own pytest session — 72 failures, all
+`UndefinedTable: relation "project" does not exist` (the other session's conftest mid-recreate).
+Review lanes count as DB users too: sequence the verify run after the lanes, or fence it. **The delegation brief must state the fence
 explicitly** — "do not run pytest while another suite runs" — because the collision presents as
 dozens of unreproducible failures, not as an obvious lock error.
 

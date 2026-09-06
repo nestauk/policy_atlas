@@ -32,11 +32,12 @@ runs this phase; Tier 0/1 skip it). Templates: `docs/tasks/_templates/`.
 
 ## Step 1 — Contract
 
-First, point the repo at this slice: set `AGENTS.md` **Current phase** to `NNN-slug` (the
-slice you're *starting*). That pointer is repo orientation state — it **leads the next
-slice here**, it does not trail the finishing one; it ships in this slice's branch.
+The slice's identity lives in two places and nowhere else: the branch name
+`task/NNN-slug` and the `Status` line at the top of its `contract.md`. Do not write phase
+state into `AGENTS.md` (removed 2026-09-04: it duplicated both and was stale on `dev` after
+every merge). A fresh conversation re-grounds by reading `docs/tasks/<newest>/contract.md`.
 
-Then copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.md`. Read
+Copy `docs/tasks/_templates/contract.md` → `docs/tasks/NNN-slug/contract.md`. Read
 the specs it depends on *in depth*, not headings — if a spec looks wrong or incomplete,
 refine it first (§ Spec refinement).
 

@@ -14,7 +14,11 @@ from sqlalchemy.engine.url import make_url
 
 from policy_atlas.core.schema import artefact, block, planning_transcript, source_tag
 from tests.conftest import _alembic_cfg
-from tests.helpers import seed_project_and_run, seed_source
+from tests.core.legacy_catalog import (
+    legacy_table,
+    seed_legacy_source,
+    seed_legacy_task_and_run,
+)
 
 PRE_028_REVISION = "e9a7c3d1f6b4"
 
@@ -37,13 +41,18 @@ def test_028_migration_roundtrip_preserves_legacy_rows(
     try:
         command.upgrade(cfg, PRE_028_REVISION)
         with scratch.begin() as conn:
-            project_id, run_id = seed_project_and_run(conn)
-            _, pss_id = seed_source(conn, project_id)
+            # Every seed here runs BELOW revision c1a7f4e9b0d2, where the
+            # catalog still says `project_id` / `project_source_snapshot_id`,
+            # so the renamed tables are reflected (plan D9). The reads below
+            # and at head name only columns 038 does not rename, so they keep
+            # using core.schema's metadata.
+            task_id, run_id = seed_legacy_task_and_run(conn)
+            _, tss_id = seed_legacy_source(conn, task_id)
             now = datetime(2026, 8, 4, tzinfo=UTC)
             conn.execute(
-                artefact.insert().values(
+                legacy_table(conn, "artefact").insert().values(
                     artefact_id=artefact_id,
-                    project_id=project_id,
+                    project_id=task_id,
                     title="Legacy artefact",
                     created_at=now,
                 )
@@ -59,10 +68,10 @@ def test_028_migration_roundtrip_preserves_legacy_rows(
                 )
             )
             conn.execute(
-                source_tag.insert().values(
+                legacy_table(conn, "source_tag").insert().values(
                     source_tag_id=tag_id,
-                    project_id=project_id,
-                    project_source_snapshot_id=pss_id,
+                    project_id=task_id,
+                    project_source_snapshot_id=tss_id,
                     tag="Legacy theme",
                     tag_type="topic_theme",
                     asserted_by="characterise",
@@ -71,9 +80,9 @@ def test_028_migration_roundtrip_preserves_legacy_rows(
                 )
             )
             conn.execute(
-                planning_transcript.insert().values(
+                legacy_table(conn, "planning_transcript").insert().values(
                     id=transcript_id,
-                    project_id=project_id,
+                    project_id=task_id,
                     client_turn_id=uuid.uuid4(),
                     turn_index=0,
                     user_message="Legacy planning turn",

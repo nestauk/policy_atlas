@@ -11,7 +11,6 @@ import { cn } from "../brand/cn";
 
 export const Sheet = DialogPrimitive.Root;
 export const SheetTrigger = DialogPrimitive.Trigger;
-export const SheetClose = DialogPrimitive.Close;
 
 export function SheetContent({
   className,
@@ -27,12 +26,14 @@ export function SheetContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-navy/40 data-[state=open]:animate-in data-[state=open]:fade-in" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-navy/40 transition-opacity duration-200 ease-out starting:opacity-0" />
       <DialogPrimitive.Content
         className={cn(
           "fixed inset-y-0 z-50 flex w-full max-w-xl flex-col overflow-y-auto",
           "border-line-2 bg-paper shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
-          side === "right" ? "right-0 border-l" : "left-0 border-r",
+          // Slides in from its edge on the drawer curve; transform only.
+          "transition-transform duration-[260ms] ease-drawer",
+          side === "right" ? "right-0 border-l starting:translate-x-full" : "left-0 border-r starting:-translate-x-full",
           className,
         )}
         {...props}

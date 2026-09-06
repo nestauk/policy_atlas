@@ -1,4 +1,4 @@
-"""Authenticated replay-then-tail server-sent events for project activity."""
+"""Authenticated replay-then-tail server-sent events for task activity."""
 
 from __future__ import annotations
 
@@ -26,20 +26,21 @@ from policy_atlas.api.contract import (
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
-    ProjectUpdatedFrame,
     RunStatus,
     RunStatusFrame,
     StageCompletedFrame,
     StageFailedFrame,
     StageKey,
     StageStartedFrame,
+    TaskUpdatedFrame,
     TickFrame,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_settings
+from policy_atlas.api.lifecycle import LIFECYCLE_EVENT_KINDS, both_generations
 from policy_atlas.api.routers._access import (
-    accessible_project,
-    may_read_project,
-    readable_project_exists,
+    accessible_task,
+    may_read_task,
+    readable_task_exists,
     trace_admin_stream_read,
 )
 from policy_atlas.api.routers.planning import _draft_from_plan
@@ -57,13 +58,14 @@ from policy_atlas.api.stage_vocabulary import (
 )
 from policy_atlas.core import events
 from policy_atlas.core.liveness import Tick, tick_hub
-from policy_atlas.core.schema import event_log, orchestration_plan
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan
+from policy_atlas.core.schema import event_log, task_plan
+from policy_atlas.runtime import steering_events
+from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
 
 router = APIRouter(
-    prefix="/api/v1/projects",
+    prefix="/api/v1/tasks",
     tags=["events"],
     dependencies=[Depends(get_current_user)],
 )
@@ -71,36 +73,36 @@ router = APIRouter(
 def _snapshot(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user_id: str,
     cursor: int,
 ) -> tuple[int, list[dict[str, Any]]]:
     """Authorise then read a cursor-bounded durable backlog in one connection.
 
     This is also the **subscribe** half of contract § 3a's SSE trace grain:
-    the grade resolves through `accessible_project`, so a stream opened on the
-    admin leg emits exactly one `admin_read` line for the project row here,
+    the grade resolves through `accessible_task`, so a stream opened on the
+    admin leg emits exactly one `admin_read` line for the task row here,
     and the tail emits one `admin_stream_read` per re-authorised batch after
-    it. Nothing extra is logged for a caller who was entitled to the project
+    it. Nothing extra is logged for a caller who was entitled to the task
     anyway.
     """
     with engine.connect() as conn:
-        accessible_project(conn, project_id=project_id, user_id=user_id, write=False)
+        accessible_task(conn, task_id=task_id, user_id=user_id, write=False)
         snapshot = int(
             conn.execute(
                 select(func.coalesce(func.max(event_log.c.sequence), 0)).where(
-                    event_log.c.project_id == project_id
+                    event_log.c.task_id == task_id
                 )
             ).scalar_one()
         )
-        rows = _event_rows(conn, project_id=project_id, after=cursor, through=snapshot)
-        return snapshot, _map_rows(conn, project_id=project_id, rows=rows, through=snapshot)
+        rows = _event_rows(conn, task_id=task_id, after=cursor, through=snapshot)
+        return snapshot, _map_rows(conn, task_id=task_id, rows=rows, through=snapshot)
 
 
 def _tail(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user_id: str,
     after: int,
 ) -> tuple[int, list[dict[str, Any]]] | None:
@@ -108,7 +110,7 @@ def _tail(
 
     Contract § 5: the stream authorised once at ``_snapshot`` and then looped
     indefinitely, so none of this slice's four revocation events — de-enrolment,
-    a visibility flip, an i.4 portfolio cascade, an admin revoke — reached an
+    a visibility flip, an i.4 project cascade, an admin revoke — reached an
     already-open stream. The re-check happens **before** the batch is read, so a
     caller whose access has gone is never handed the events of the interval in
     which they lost it.
@@ -117,9 +119,9 @@ def _tail(
     first and reading second is two statements, and a revocation committing
     between them was still worth one batch of frames to the caller who had just
     lost access. So the event read is gated by
-    :func:`_access.readable_project_exists` — the same legs, expressed as a
+    :func:`_access.readable_task_exists` — the same legs, expressed as a
     predicate rather than a value — and the two do different jobs: the gate
-    makes the batch empty, ``may_read_project`` ends the response. Neither
+    makes the batch empty, ``may_read_task`` ends the response. Neither
     alone is the fix; the reason both exist is that the response must *close*,
     not merely go quiet.
 
@@ -130,12 +132,12 @@ def _tail(
     landed.
 
     **One trace line per admin-carried batch**, not per frame (contract
-    § 3a). `may_read_project` reports the leg in the same query that answers
+    § 3a). `may_read_task` reports the leg in the same query that answers
     the grade, so the line costs nothing beyond the call.
 
     Args:
         engine: Application engine; this runs in a worker thread.
-        project_id: The project being streamed.
+        task_id: The task being streamed.
         user_id: The caller's token subject, re-checked every batch.
         after: Exclusive lower bound on the durable sequence to read.
 
@@ -144,26 +146,26 @@ def _tail(
         caller's read grade has gone and the stream must close.
     """
     with engine.connect() as conn:
-        check = may_read_project(conn, project_id=project_id, user_id=user_id)
+        check = may_read_task(conn, task_id=task_id, user_id=user_id)
         if not check.allowed:
             return None
         if check.via_admin:
-            trace_admin_stream_read(user_id=user_id, project_id=project_id)
+            trace_admin_stream_read(user_id=user_id, task_id=task_id)
         rows = _event_rows(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             after=after,
             through=None,
-            guard=readable_project_exists(project_id, user_id),
+            guard=readable_task_exists(task_id, user_id),
         )
         last_sequence = rows[-1]["sequence"] if rows else after
-        return last_sequence, _map_rows(conn, project_id=project_id, rows=rows, through=None)
+        return last_sequence, _map_rows(conn, task_id=task_id, rows=rows, through=None)
 
 
 def _event_rows(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     after: int,
     through: int | None,
     guard: ColumnElement[bool] | None = None,
@@ -172,16 +174,16 @@ def _event_rows(
 
     Args:
         conn: Open database connection.
-        project_id: The project whose log is read.
+        task_id: The task whose log is read.
         after: Exclusive lower bound on the durable sequence.
         through: Inclusive upper bound, or ``None`` for "everything since".
         guard: An access predicate to AND into **this** statement, so the grade
             and the rows are decided together. The tail passes one (see
             :func:`_tail`); ``_snapshot`` does not, because it has just
-            resolved the row through ``accessible_project`` in the same
+            resolved the row through ``accessible_task`` in the same
             connection and nothing has been yielded yet.
     """
-    statement = select(event_log).where(event_log.c.project_id == project_id).where(
+    statement = select(event_log).where(event_log.c.task_id == task_id).where(
         event_log.c.sequence > after
     )
     if through is not None:
@@ -194,7 +196,7 @@ def _event_rows(
 def _map_rows(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     rows: Iterable[dict[str, Any]],
     through: int | None,
 ) -> list[dict[str, Any]]:
@@ -204,20 +206,20 @@ def _map_rows(
         return []
     # The full-history context exists solely for the decided-pause check, so
     # fetch it only when this batch carries a pause, and fetch decisions only.
-    # The previous unconditional after=0 read re-scanned the whole project log
+    # The previous unconditional after=0 read re-scanned the whole task log
     # (large JSONB payloads included) every poll interval per client, even
     # when idle (review finding backend-M1, 2026-07-21).
     decision_events: list[dict[str, Any]] = []
     if any(row["event_type"] == "steering.pause" for row in all_rows):
         decision_events = [
             row
-            for row in events.read(conn, project_id, event_types=["steering.decision"])
+            for row in events.read(conn, task_id, event_types=["steering.decision"])
             if through is None or row["sequence"] <= through
         ]
     frames: list[dict[str, Any]] = []
     for row in all_rows:
         frames.extend(
-            _frames_for_row(conn, project_id=project_id, row=row, all_events=decision_events)
+            _frames_for_row(conn, task_id=task_id, row=row, all_events=decision_events)
         )
     return frames
 
@@ -225,7 +227,7 @@ def _map_rows(
 def _frames_for_row(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     row: dict[str, Any],
     all_events: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -283,7 +285,7 @@ def _frames_for_row(
                 stage=stage,
                 label=label,
                 summary=_summary(payload),
-                seconds=_seconds(conn, project_id=project_id, row=row, payload=payload),
+                seconds=_seconds(conn, task_id=task_id, row=row, payload=payload),
                 **persisted,
             ).model_dump(mode="json")
         ]
@@ -345,20 +347,21 @@ def _frames_for_row(
         )
         return [checkin_frame.model_dump(mode="json")]
     if event_type == "steering.decision":
-        frames = _decision_frames(conn, project_id=project_id, payload=payload, persisted=persisted)
+        frames = _decision_frames(conn, task_id=task_id, payload=payload, persisted=persisted)
         return [frame.model_dump(mode="json") for frame in frames]
     if event_type == "plan.approved":
-        plan_frame = _plan_frame(conn, project_id=project_id, payload=payload, persisted=persisted)
+        plan_frame = _plan_frame(conn, task_id=task_id, payload=payload, persisted=persisted)
         return [plan_frame.model_dump(mode="json")] if plan_frame is not None else []
-    if event_type in {"project.renamed", "project.archived"}:
-        project_frame = _project_frame(
+    # Both generations: pre-038 rows say `project.*` (task 038, contract V1).
+    if event_type in both_generations(*LIFECYCLE_EVENT_KINDS):
+        task_frame = _task_frame(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             event_type=event_type,
             payload=payload,
             persisted=persisted,
         )
-        return [project_frame.model_dump(mode="json")]
+        return [task_frame.model_dump(mode="json")]
     return []
 
 
@@ -401,7 +404,7 @@ def _summary(payload: dict[str, Any]) -> dict[str, int | float | str]:
 def _seconds(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     row: dict[str, Any],
     payload: dict[str, Any],
 ) -> float | None:
@@ -414,7 +417,7 @@ def _seconds(
         return None
     timing = conn.execute(
         select(event_log.c.payload)
-        .where(event_log.c.project_id == project_id)
+        .where(event_log.c.task_id == task_id)
         .where(event_log.c.run_id == run_id)
         .where(event_log.c.event_type == "component.timing")
         .order_by(event_log.c.sequence.asc())
@@ -446,7 +449,7 @@ def _is_decided_pause(pause: dict[str, Any], all_events: list[dict[str, Any]]) -
 def _decision_frames(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     payload: dict[str, Any],
     persisted: dict[str, Any],
 ) -> list[CheckinResolvedFrame | PlanUpdatedFrame]:
@@ -458,7 +461,7 @@ def _decision_frames(
         capability_run_id = payload.get("capability_run_id")
         pause = conn.execute(
             select(event_log.c.event_id)
-            .where(event_log.c.project_id == project_id)
+            .where(event_log.c.task_id == task_id)
             .where(event_log.c.event_type == "steering.pause")
             .where(event_log.c.sequence < cast(int, persisted["sequence"]))
             .order_by(event_log.c.sequence.desc())
@@ -476,6 +479,8 @@ def _decision_frames(
     if check_in_id is None:
         return []
     response = payload.get("interpreted_action")
+    # Pre-038 rows carry the old actor word; the set below would drop them.
+    decided_by = steering_events.canonical_actor(payload.get("decided_by"))
     frame: list[CheckinResolvedFrame | PlanUpdatedFrame] = [
         CheckinResolvedFrame(
             type="checkin.resolved",
@@ -484,8 +489,8 @@ def _decision_frames(
                 response if isinstance(response, dict) else {"response": payload.get("response")}
             ),
             decided_by=(
-                payload.get("decided_by")
-                if payload.get("decided_by") in {"user", "orchestrator", "standing_default"}
+                cast(Any, decided_by)
+                if decided_by in {"user", "agent", "standing_default"}
                 else None
             ),
             **persisted,
@@ -499,7 +504,7 @@ def _decision_frames(
         if isinstance(version, int):
             plan_frame = _plan_frame(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 payload={"version": version + 1},
                 persisted=persisted,
             )
@@ -511,41 +516,47 @@ def _decision_frames(
 def _plan_frame(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     payload: dict[str, Any],
     persisted: dict[str, Any],
 ) -> PlanUpdatedFrame | None:
-    """Load the versioned plan row and project it through the public contract."""
+    """Load the versioned plan row and task it through the public contract."""
     version = payload.get("version")
     if not isinstance(version, int):
         return None
     row = conn.execute(
-        select(orchestration_plan)
-        .where(orchestration_plan.c.project_id == project_id)
-        .where(orchestration_plan.c.version == version)
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.version == version)
     ).mappings().one_or_none()
     if row is None or not isinstance(row["payload"], dict):
         return None
-    plan = _draft_from_plan(OrchestrationPlan.model_validate(row["payload"]))
+    plan = _draft_from_plan(TaskPlan.model_validate(row["payload"]))
     return PlanUpdatedFrame(type="plan.updated", plan=plan, version=version, **persisted)
 
 
-def _project_frame(
+def _task_frame(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     event_type: str,
     payload: dict[str, Any],
     persisted: dict[str, Any],
-) -> ProjectUpdatedFrame:
-    """Project a lifecycle audit event without leaking its actor or old values."""
-    del conn, project_id
-    if event_type == "project.renamed":
+) -> TaskUpdatedFrame:
+    """Project a lifecycle audit event without leaking its actor or old values.
+
+    A sharing flip carries no row field the frame names, so it projects as a
+    bare ``task.updated`` (the client re-reads the task).
+    """
+    del conn, task_id
+    if event_type in both_generations("renamed"):
         name = payload.get("name_to")
-        return ProjectUpdatedFrame(
-            type="project.updated", name=name if isinstance(name, str) else None, **persisted
+        return TaskUpdatedFrame(
+            type="task.updated", name=name if isinstance(name, str) else None, **persisted
         )
-    return ProjectUpdatedFrame(type="project.updated", status="archived", **persisted)
+    if event_type in both_generations("archived"):
+        return TaskUpdatedFrame(type="task.updated", status="archived", **persisted)
+    return TaskUpdatedFrame(type="task.updated", **persisted)
 
 
 def _encode_frame(frame: dict[str, Any]) -> str:
@@ -561,9 +572,9 @@ def _encode_tick(tick: Tick) -> str:
     return f"event: tick\ndata: {frame.model_dump_json()}\n\n"
 
 
-@router.get("/{project_id}/events")
+@router.get("/{task_id}/events")
 async def stream_events(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     settings: Annotated[Settings, Depends(get_settings)],
@@ -577,11 +588,11 @@ async def stream_events(
     frame of its iteration, ephemeral ticks included** — see the loop.
     """
     snapshot, replay = await anyio.to_thread.run_sync(
-        partial(_snapshot, engine, project_id=project_id, user_id=user.user_id, cursor=cursor)
+        partial(_snapshot, engine, task_id=task_id, user_id=user.user_id, cursor=cursor)
     )
 
     async def body() -> AsyncIterator[str]:
-        queue = await tick_hub.subscribe(project_id)
+        queue = await tick_hub.subscribe(task_id)
         next_sequence = max(snapshot + 1, cursor + 1)
         last_heartbeat = asyncio.get_running_loop().time()
         try:
@@ -598,8 +609,8 @@ async def stream_events(
                 except TimeoutError:
                     tick = None
                 # The tick is **held**, not yielded, until the tail has
-                # re-authorised. A tick carries the project's current stage and
-                # its progress note — project-derived content — so yielding it
+                # re-authorised. A tick carries the task's current stage and
+                # its progress note — task-derived content — so yielding it
                 # first handed a caller whose access had just gone one more
                 # frame about work they may no longer read. Re-authorisation is
                 # the first thing every iteration does; nothing is written to
@@ -609,7 +620,7 @@ async def stream_events(
                     partial(
                         _tail,
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         user_id=user.user_id,
                         after=next_sequence - 1,
                     )
@@ -619,7 +630,7 @@ async def stream_events(
                 # close; the protocol carries no error frame and inventing one
                 # here would be a new public frame type.
                 if batch is None:
-                    log.info("api.sse_revoked", project_id=str(project_id))
+                    log.info("api.sse_revoked", task_id=str(task_id))
                     return
                 last_sequence, tail = batch
                 # Order within the iteration is unchanged: the ephemeral tick
@@ -634,8 +645,8 @@ async def stream_events(
                     yield ": keep-alive\n\n"
                     last_heartbeat = now
         finally:
-            await tick_hub.unsubscribe(project_id, queue)
-            log.debug("api.sse_closed", project_id=str(project_id))
+            await tick_hub.unsubscribe(task_id, queue)
+            log.debug("api.sse_closed", task_id=str(task_id))
 
     return StreamingResponse(
         body(),

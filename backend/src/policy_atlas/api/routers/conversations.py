@@ -58,9 +58,9 @@ from policy_atlas.api.deps import (
     get_grounding_judge_backend,
 )
 from policy_atlas.api.routers._access import (
-    accessible_project,
+    accessible_task,
     admin_read_leg,
-    chat_mutable_project,
+    chat_mutable_task,
     own_chat_leg,
     own_conversation_leg,
     own_estate,
@@ -73,9 +73,9 @@ from policy_atlas.core.schema import (
     chat_turn,
     conversation,
     planning_transcript,
-    project,
+    task,
 )
-from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
+from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import ChatBackend
 
 log = structlog.get_logger()
@@ -86,8 +86,8 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-project_router = APIRouter(
-    prefix="/api/v1/projects",
+task_router = APIRouter(
+    prefix="/api/v1/tasks",
     tags=["conversations"],
     dependencies=[Depends(get_current_user)],
 )
@@ -101,7 +101,7 @@ _PREVIEW_MAX_CHARS = 240
 #: Label :func:`_graded_conversation`'s read path carries beside the row: did
 #: the creator/owner grade match on its own? ``False`` means the admin leg is
 #: what resolved the row, which is what the trace records. Mirrors
-#: ``_access._OWN_LEG`` for the project/portfolio helpers; kept as its own
+#: ``_access._OWN_LEG`` for the task/project helpers; kept as its own
 #: constant because the predicate it labels is this router's, not the shared
 #: estate one.
 _OWN_GRADE = "own_grade_matched"
@@ -116,7 +116,7 @@ def _conversation_out(row: RowMapping) -> ConversationOut:
     """Project a durable conversation row into the public read shape."""
     return ConversationOut(
         id=row["id"],
-        project_id=row["project_id"],
+        task_id=row["task_id"],
         kind=cast(ConversationKind, row["kind"]),
         title=row["title"],
         status=cast(ConversationStatus, row["status"]),
@@ -140,7 +140,7 @@ def _graded_conversation(
 
     A **chat** conversation is visible only to the colleague who created it,
     or — for the legacy pre-033 rows that carry no ``created_by`` — the
-    project owner (the same NULL disjunct :func:`list_conversations` applies
+    task owner (the same NULL disjunct :func:`list_conversations` applies
     to the listing). A **planning** conversation stays owner-only this phase
     (contract § 4); colleague-authored planning turns are a later slice.
 
@@ -159,9 +159,9 @@ def _graded_conversation(
     row exists.
 
     Note what the admin leg *replaces*: the whole conjunction, ``own_estate``
-    on the project included. That guard is the colleague's revocation lever
+    on the task included. That guard is the colleague's revocation lever
     (de-enrolment kills their chat), and an administrator is not reached by
-    it. The project's ``status == "active"`` filter and the archived-
+    it. The task's ``status == "active"`` filter and the archived-
     conversation filter are **not** replaced — they are not tenancy, and an
     administrator observes the same rows anyone else would.
 
@@ -190,32 +190,32 @@ def _graded_conversation(
             predicate.
     """
     own_grade = and_(
-        # The project must still be reachable by the caller: de-enrolment is a
-        # revocation event (contract § 5), so a creator's chat on a project
+        # The task must still be reachable by the caller: de-enrolment is a
+        # revocation event (contract § 5), so a creator's chat on a task
         # they can no longer read dies with the org leg. own_estate, not the
         # full read grade — the admin read arrives as its own leg below.
-        own_estate(project, user_id),
+        own_estate(task, user_id),
         or_(
             own_chat_leg(user_id),
             and_(
                 conversation.c.kind == "planning",
-                project.c.owner_user_id == user_id,
+                task.c.owner_user_id == user_id,
             ),
         ),
     )
     statement = (
         select(conversation)
-        .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
+        .select_from(conversation.join(task, conversation.c.task_id == task.c.task_id))
         .where(conversation.c.id == conversation_id)
-        .where(project.c.status == "active")
+        .where(task.c.status == "active")
     )
     if write:
         statement = statement.where(own_grade)
     else:
         # COALESCEd for the same reason `_access._own_leg_column` is: every
         # disjunct of `own_grade` compares a **nullable** column to the
-        # caller's subject (`project.owner_user_id`, `conversation.created_by`),
-        # so on a project with no owner the predicate is SQL NULL rather than
+        # caller's subject (`task.owner_user_id`, `conversation.created_by`),
+        # so on a task with no owner the predicate is SQL NULL rather than
         # FALSE — and `not row[_OWN_GRADE]` would then be deciding the trace on
         # `not None`. NULL and FALSE mean one thing here ("no grade the caller
         # held without `is_admin`"), so the column says so.
@@ -225,8 +225,8 @@ def _graded_conversation(
     if not include_archived:
         statement = statement.where(conversation.c.status != "archived")
     if for_update:
-        # of=conversation: the statement joins project, and a bare FOR UPDATE
-        # would lock the owner's project row on a creator's archive path —
+        # of=conversation: the statement joins task, and a bare FOR UPDATE
+        # would lock the owner's task row on a creator's archive path —
         # the exact lock contract § 4 forbids on colleague chat paths.
         statement = statement.with_for_update(of=conversation)
     row = conn.execute(statement).mappings().one_or_none()
@@ -317,21 +317,21 @@ def _chat_turn_out(row: RowMapping) -> ChatTurnOut:
 
 
 def _assert_entry_artefact(
-    conn: Connection, *, project_id: uuid.UUID, entry_artefact_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, entry_artefact_id: uuid.UUID
 ) -> None:
-    """Ensure an entry-context artefact belongs to the target project."""
+    """Ensure an entry-context artefact belongs to the target task."""
     exists = conn.execute(
         select(artefact.c.artefact_id)
         .where(artefact.c.artefact_id == entry_artefact_id)
-        .where(artefact.c.project_id == project_id)
+        .where(artefact.c.task_id == task_id)
     ).scalar_one_or_none()
     if exists is None:
         raise _not_found()
 
 
-@project_router.get("/{project_id}/conversations", response_model=Page[ConversationListItemOut])
+@task_router.get("/{task_id}/conversations", response_model=Page[ConversationListItemOut])
 def list_conversations(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     kind: ConversationKind | None = None,
@@ -341,9 +341,9 @@ def list_conversations(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[ConversationListItemOut]:
-    """List one readable project's conversations the caller created, newest first.
+    """List one readable task's conversations the caller created, newest first.
 
-    Read-graded on the project (owner or same-org colleague may open the
+    Read-graded on the task (owner or same-org colleague may open the
     library), but the conversation rows themselves are narrowed further: a
     colleague sees only the chats *they* created, never the owner's or
     another colleague's. The owner keeps seeing every legacy pre-033 row
@@ -352,14 +352,14 @@ def list_conversations(
 
     The filter is :func:`own_conversation_leg`, **not** its chat-narrowed
     sibling: this library lists both kinds, and the owner must keep seeing
-    their project's planning conversation here. A colleague never matches a
+    their task's planning conversation here. A colleague never matches a
     planning row anyway — planning conversations are minted by the runtime
-    and record no ``created_by``, so only the project owner reaches them
+    and record no ``created_by``, so only the task owner reaches them
     through the legacy disjunct.
     """
-    accessible_project(conn, project_id=project_id, user_id=user.user_id, write=False)
+    accessible_task(conn, task_id=task_id, user_id=user.user_id, write=False)
     where = [
-        conversation.c.project_id == project_id,
+        conversation.c.task_id == task_id,
         own_conversation_leg(user.user_id),
     ]
     if kind is not None:
@@ -368,7 +368,7 @@ def list_conversations(
         where.append(conversation.c.status != "archived")
     else:
         where.append(conversation.c.status == status_filter)
-    joined = conversation.join(project, conversation.c.project_id == project.c.project_id)
+    joined = conversation.join(task, conversation.c.task_id == task.c.task_id)
     total = conn.execute(
         select(func.count()).select_from(joined).where(*where)
     ).scalar_one()
@@ -392,13 +392,13 @@ def list_conversations(
     )
 
 
-@project_router.post(
-    "/{project_id}/conversations",
+@task_router.post(
+    "/{task_id}/conversations",
     response_model=ConversationOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_conversation(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     payload: ConversationCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
@@ -406,36 +406,36 @@ def create_conversation(
     """Create one active chat conversation with optional entry context.
 
     The first of the three mutations owner call (b) grants a same-org
-    colleague (contract § 4). The grade is :func:`chat_mutable_project` — the
-    owner or a colleague who can read the project, and never an admin.
+    colleague (contract § 4). The grade is :func:`chat_mutable_task` — the
+    owner or a colleague who can read the task, and never an admin.
 
     **This route can only ever mint a chat**, for anybody: ``kind`` is not a
     field on ``ConversationCreate`` (which forbids extras), it is written as
     the literal ``"chat"`` below, and planning conversations are minted
     exclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s
-    owner-graded project lock. So "a planning conversation can only ever be
-    created by the project owner" needs no branch here to hold — the shape of
+    owner-graded task lock. So "a planning conversation can only ever be
+    created by the task owner" needs no branch here to hold — the shape of
     the request body is what enforces it, and a body carrying ``kind`` is
     rejected 422 before this function runs.
 
-    **No project-row lock** (contract § 4). The lock this route used to take
+    **No task-row lock** (contract § 4). The lock this route used to take
     protected nothing a chat insert needs: the only uniqueness constraint on
     ``conversation`` is the partial index over ``kind = 'planning' AND status
     = 'active'``, which a chat row cannot collide with, and the insert itself
     carries a freshly minted primary key. Kept, it would have let any
     colleague block the owner's rename, archive and run-start.
     """
-    chat_mutable_project(conn, project_id=project_id, user_id=user.user_id)
+    chat_mutable_task(conn, task_id=task_id, user_id=user.user_id)
     if payload.entry_artefact_id is not None:
         _assert_entry_artefact(
-            conn, project_id=project_id, entry_artefact_id=payload.entry_artefact_id
+            conn, task_id=task_id, entry_artefact_id=payload.entry_artefact_id
         )
     now = datetime.now(UTC)
     conversation_id = uuid.uuid4()
     conn.execute(
         conversation.insert().values(
             id=conversation_id,
-            project_id=project_id,
+            task_id=task_id,
             kind="chat",
             title="New chat",
             entry_artefact_id=payload.entry_artefact_id,
@@ -491,7 +491,7 @@ def update_conversation(
     entry_artefact_id = changes.get("entry_artefact_id")
     if entry_artefact_id is not None:
         _assert_entry_artefact(
-            conn, project_id=row["project_id"], entry_artefact_id=entry_artefact_id
+            conn, task_id=row["task_id"], entry_artefact_id=entry_artefact_id
         )
     if changes:
         conn.execute(
@@ -680,10 +680,10 @@ async def create_chat_turn_stream(
     statement below, both 404 on failure:
 
     - :func:`own_chat_leg` — the conversation is a chat the caller created,
-      or a legacy pre-033 chat on a project they own. An owner cannot post
+      or a legacy pre-033 chat on a task they own. An owner cannot post
       into a colleague's chat and a colleague cannot post into the owner's.
-    - :func:`own_estate` on the project — the caller must still reach the
-      project as its owner or as a same-org colleague. This is the leg that
+    - :func:`own_estate` on the task — the caller must still reach the
+      task as its owner or as a same-org colleague. This is the leg that
       **dies on de-enrolment**: clearing a colleague's ``org_id`` takes their
       turn POST to 404 on the next request, even though they still match
       ``created_by``. Deliberately :func:`own_estate` rather than the full
@@ -691,7 +691,7 @@ async def create_chat_turn_stream(
 
     No lock is taken here. The reservation's lock lives one layer down, on the
     **conversation** row (``chat_turns._phase_one_turn``) — never on the
-    owner's project row.
+    owner's task row.
     """
     # Reservation happens before response headers. All authorization,
     # eligibility, idempotency, capacity and validation errors therefore use
@@ -699,29 +699,29 @@ async def create_chat_turn_stream(
     with engine.begin() as conn:
         row = (
             conn.execute(
-                select(conversation.c.project_id)
+                select(conversation.c.task_id)
                 .select_from(
-                    conversation.join(project, conversation.c.project_id == project.c.project_id)
+                    conversation.join(task, conversation.c.task_id == task.c.task_id)
                 )
                 .where(conversation.c.id == conversation_id)
-                .where(project.c.status == "active")
+                .where(task.c.status == "active")
                 .where(own_chat_leg(user.user_id))
-                .where(own_estate(project, user.user_id))
+                .where(own_estate(task, user.user_id))
             )
             .scalar_one_or_none()
         )
         if row is None:
             raise HTTPException(status_code=404, detail="resource not found")
-        project_id = row
+        task_id = row
         # The pending-row pre-check that used to live here read before the
-        # project row lock's serialization point (TOCTOU) and duplicated a
+        # task row lock's serialization point (TOCTOU) and duplicated a
         # check `_phase_one_turn` already makes correctly inside that lock —
         # dropped in favour of the single locked-and-swept check (security
         # review, 2026-08-11).
         try:
             phase_one = _phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id=user.user_id,
                 message=body.message,
@@ -752,7 +752,7 @@ async def create_chat_turn_stream(
         try:
             result = run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id=user.user_id,
                 message=body.message,
@@ -854,12 +854,12 @@ def cancel_chat_turn(
     The third colleague mutation (contract § 4): cancel **your own** turn,
     resolved through the same two conditions as the turn POST —
     :func:`own_chat_leg` on the conversation and :func:`own_estate` on the
-    project — so cancellation is isolated in both directions and dies with a
+    task — so cancellation is isolated in both directions and dies with a
     colleague's org leg.
 
-    One deliberate asymmetry with the POST: no ``project.status = 'active'``
+    One deliberate asymmetry with the POST: no ``task.status = 'active'``
     filter, which is the pre-033 behaviour preserved. Cancelling is a stop,
-    not a start; refusing it on an archived project would strand a pending
+    not a start; refusing it on an archived task would strand a pending
     row for the TTL sweep with no way for its author to close it.
 
     No lock: the write below is already a compare-and-set guarded on
@@ -872,12 +872,12 @@ def cancel_chat_turn(
                 .select_from(
                     chat_turn.join(
                         conversation, chat_turn.c.conversation_id == conversation.c.id
-                    ).join(project, conversation.c.project_id == project.c.project_id)
+                    ).join(task, conversation.c.task_id == task.c.task_id)
                 )
                 .where(chat_turn.c.id == turn_id)
                 .where(chat_turn.c.conversation_id == conversation_id)
                 .where(own_chat_leg(user.user_id))
-                .where(own_estate(project, user.user_id))
+                .where(own_estate(task, user.user_id))
             )
             .scalar_one_or_none()
         )
