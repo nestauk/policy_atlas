@@ -482,7 +482,7 @@ export function downloadFilename(title: string, extension: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
-  return `${slug || "evidence-base"}.${extension}`;
+  return `${slug || "report"}.${extension}`;
 }
 
 /** Trigger a client-side file download of UTF-8 text. */

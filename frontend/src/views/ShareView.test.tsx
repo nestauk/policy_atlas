@@ -11,24 +11,24 @@ import { ShareView } from "./ShareView";
 
 vi.mock("../api/queries", () => ({
   useMe: vi.fn(),
-  usePortfolios: vi.fn(),
-  useProject: vi.fn(),
+  useProjects: vi.fn(),
+  useTask: vi.fn(),
 }));
 
 vi.mock("../api/mutations", () => ({
-  useUpdateProject: vi.fn(),
+  useUpdateTask: vi.fn(),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function baseProject(overrides: Record<string, unknown> = {}) {
+function baseTask(overrides: Record<string, unknown> = {}) {
   return {
-    project_id: PROJECT_ID,
+    task_id: TASK_ID,
     name: "A task",
     visibility: "private",
     is_owner: true,
     is_public: false,
-    portfolio_ids: [],
+    project_ids: [],
     ...overrides,
   };
 }
@@ -36,9 +36,9 @@ function baseProject(overrides: Record<string, unknown> = {}) {
 function renderShare() {
   return render(
     <ToastProvider>
-      <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/share`]}>
+      <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/share`]}>
         <Routes>
-          <Route path="/projects/:projectId/share" element={<ShareView />} />
+          <Route path="/tasks/:taskId/share" element={<ShareView />} />
         </Routes>
       </MemoryRouter>
     </ToastProvider>,
@@ -51,18 +51,18 @@ beforeEach(() => {
       typeof queries.useMe
     >,
   );
-  vi.mocked(queries.usePortfolios).mockReturnValue(
-    { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.usePortfolios>,
+  vi.mocked(queries.useProjects).mockReturnValue(
+    { data: { data: [] }, isPending: false } as unknown as ReturnType<typeof queries.useProjects>,
   );
 });
 
 describe("ShareView — public link section (task 037, contract § R1)", () => {
   it("shows the Public link section to the owner", () => {
-    vi.mocked(queries.useProject).mockReturnValue(
-      { data: baseProject() } as unknown as ReturnType<typeof queries.useProject>,
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: baseTask() } as unknown as ReturnType<typeof queries.useTask>,
     );
-    vi.mocked(mutations.useUpdateProject).mockReturnValue(
-      { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
+    vi.mocked(mutations.useUpdateTask).mockReturnValue(
+      { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateTask>,
     );
 
     renderShare();
@@ -74,11 +74,11 @@ describe("ShareView — public link section (task 037, contract § R1)", () => {
   });
 
   it("hides the Public link section from a non-owner", () => {
-    vi.mocked(queries.useProject).mockReturnValue(
-      { data: baseProject({ is_owner: false }) } as unknown as ReturnType<typeof queries.useProject>,
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: baseTask({ is_owner: false }) } as unknown as ReturnType<typeof queries.useTask>,
     );
-    vi.mocked(mutations.useUpdateProject).mockReturnValue(
-      { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
+    vi.mocked(mutations.useUpdateTask).mockReturnValue(
+      { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateTask>,
     );
 
     renderShare();
@@ -87,12 +87,12 @@ describe("ShareView — public link section (task 037, contract § R1)", () => {
   });
 
   it("issues a PATCH {is_public: true} when the owner turns sharing on", async () => {
-    vi.mocked(queries.useProject).mockReturnValue(
-      { data: baseProject() } as unknown as ReturnType<typeof queries.useProject>,
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: baseTask() } as unknown as ReturnType<typeof queries.useTask>,
     );
     const mutate = vi.fn();
-    vi.mocked(mutations.useUpdateProject).mockReturnValue(
-      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
+    vi.mocked(mutations.useUpdateTask).mockReturnValue(
+      { mutate, isPending: false } as unknown as ReturnType<typeof mutations.useUpdateTask>,
     );
 
     const user = userEvent.setup();
@@ -103,11 +103,11 @@ describe("ShareView — public link section (task 037, contract § R1)", () => {
   });
 
   it("copies the public results URL when sharing is on", async () => {
-    vi.mocked(queries.useProject).mockReturnValue(
-      { data: baseProject({ is_public: true }) } as unknown as ReturnType<typeof queries.useProject>,
+    vi.mocked(queries.useTask).mockReturnValue(
+      { data: baseTask({ is_public: true }) } as unknown as ReturnType<typeof queries.useTask>,
     );
-    vi.mocked(mutations.useUpdateProject).mockReturnValue(
-      { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateProject>,
+    vi.mocked(mutations.useUpdateTask).mockReturnValue(
+      { mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof mutations.useUpdateTask>,
     );
 
     const user = userEvent.setup();
@@ -115,7 +115,7 @@ describe("ShareView — public link section (task 037, contract § R1)", () => {
     renderShare();
     await user.click(screen.getByRole("button", { name: PUBLIC_SHARE.copyLink }));
 
-    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`/projects/${PROJECT_ID}/results$`)));
+    expect(writeText).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`/tasks/${TASK_ID}/result$`)));
     expect(await screen.findByText(PUBLIC_SHARE.copied)).toBeInTheDocument();
   });
 });

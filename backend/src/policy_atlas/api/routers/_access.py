@@ -1,7 +1,7 @@
 """Graded row access for tenancy-aware routes (task 033).
 
-One helper per entity, replacing the owner-only ``owned_project`` /
-``owned_portfolio`` pair in ``_common``. Two grades:
+One helper per entity, replacing the owner-only ``owned_task`` /
+``owned_project`` pair in ``_common``. Two grades:
 
 - **read** = the owner leg (``owner_user_id`` matches the caller) *or* the
   same-org leg *or* the **admin leg** (contract § 3a: ``app_user.is_admin``,
@@ -15,7 +15,7 @@ One helper per entity, replacing the owner-only ``owned_project`` /
   not the owner gets **403 ``forbidden``**; a caller who fails the read grade
   gets the contract's indistinguishable **404**, byte-identical to an absent
   row (the BOLA rule, ``web-api.md`` § Auth boundary).
-- **colleague-mutation** (:func:`chat_mutable_project`) — the one documented
+- **colleague-mutation** (:func:`chat_mutable_task`) — the one documented
   exception to "write = owner only": the three chat mutations owner call (b)
   grants a same-org colleague. Read-shaped but deliberately admin-free, and
   it never takes a lock. See its docstring.
@@ -66,7 +66,7 @@ from sqlalchemy import (
 from sqlalchemy.engine import Connection, RowMapping
 from sqlalchemy.sql.elements import ColumnElement
 
-from policy_atlas.core.schema import app_user, conversation, portfolio, project
+from policy_atlas.core.schema import app_user, conversation, project, task
 
 log = structlog.get_logger()
 
@@ -127,16 +127,16 @@ class Access(NamedTuple):
 
     Attributes:
         row: The resolved entity row.
-        is_owner: Whether the owner leg matched. Callers project this
-            straight onto ``ProjectOut.is_owner`` / ``PortfolioOut.is_owner``
+        is_owner: Whether the owner leg matched. Callers task this
+            straight onto ``TaskOut.is_owner`` / ``ProjectOut.is_owner``
             and use it to decide read-only affordances.
         via_admin: Whether the **admin** leg is what reached this row — i.e.
             the caller would have been refused without ``is_admin``. Defaults
-            ``False`` so the admin-free helpers (:func:`chat_mutable_project`)
+            ``False`` so the admin-free helpers (:func:`chat_mutable_task`)
             construct unchanged. :func:`_resolve` has already emitted the
             trace line when this is true; the field exists so a caller can
             reason about the grade, not so each route can remember to log.
-        via_public: Whether the public leg reached this project. Public-leg
+        via_public: Whether the public leg reached this task. Public-leg
             responses are redacted and never emit an admin-read trace.
     """
 
@@ -149,12 +149,12 @@ class Access(NamedTuple):
 class ReadCheck(NamedTuple):
     """The boolean re-check's answer, plus which leg carried it.
 
-    :func:`may_read_project` returns this rather than a bare ``bool`` because
+    :func:`may_read_task` returns this rather than a bare ``bool`` because
     the SSE tail owes a trace line per re-authorisation the admin leg carried
     (contract § 3a) and must not ask a second question to find out.
 
     Attributes:
-        allowed: Whether the caller may still read the project.
+        allowed: Whether the caller may still read the task.
         via_admin: Whether the admin leg is what allowed it.
     """
 
@@ -187,7 +187,7 @@ def _same_org_leg(table: Table, user_id: str) -> ColumnElement[bool]:
     hold — see the module docstring.
 
     Args:
-        table: ``project`` or ``portfolio`` — both carry ``org_id`` and
+        table: ``task`` or ``project`` — both carry ``org_id`` and
             ``visibility``.
         user_id: The caller's token subject.
 
@@ -224,7 +224,7 @@ def admin_read_leg(user_id: str) -> ColumnElement[bool]:
     row: not its ``org_id``, not its ``visibility``, not its owner. That is
     the contract's "any row, any org, any visibility" written as SQL, and it
     is why the leg also reaches ``org_id IS NULL`` rows — including the
-    ``runtime/orchestrate.py`` rows that carry no owner at all (contract § 11
+    ``runtime/agent.py`` rows that carry no owner at all (contract § 11
     names this; the deferred "unreachable" posture is amended by it).
 
     What it does **not** do is bypass the archived/status filters. Those live
@@ -297,7 +297,7 @@ def trace_admin_read(*, kind: str, row_id: str, user_id: str) -> None:
     granted.
 
     Args:
-        kind: ``"project"``, ``"portfolio"`` or ``"conversation"``.
+        kind: ``"task"``, ``"project"`` or ``"conversation"``.
         row_id: The row's primary key, rendered.
         user_id: The administrator's token subject.
     """
@@ -336,7 +336,7 @@ def trace_admin_listing(
     Args:
         scoped: The resolver's answer — the line is emitted only when the
             admin leg is what widened this listing.
-        kind: ``"project"`` or ``"portfolio"``.
+        kind: ``"task"`` or ``"project"``.
         user_id: The administrator's token subject.
         scope: The requested scope, as the route received it.
         owner_email: The requested owner filter, or ``None``.
@@ -361,22 +361,22 @@ def trace_admin_listing(
     )
 
 
-def trace_admin_stream_read(*, user_id: str, project_id: uuid.UUID) -> None:
+def trace_admin_stream_read(*, user_id: str, task_id: uuid.UUID) -> None:
     """Record one SSE re-authorisation batch carried by the admin leg.
 
     **One line per batch, never one per frame** (contract § 3a). A stream is
     unbounded; a per-frame line would drown the trail it is meant to be. The
     *subscribe* is already covered — ``_snapshot`` resolves through
-    :func:`accessible_project`, so opening an admin-carried stream emits an
-    ordinary ``admin_read`` line for the project row, and this event covers
+    :func:`accessible_task`, so opening an admin-carried stream emits an
+    ordinary ``admin_read`` line for the task row, and this event covers
     only the tail's repeated re-checks.
 
     Args:
         user_id: The administrator's token subject.
-        project_id: The project being streamed.
+        task_id: The task being streamed.
     """
     log.info(
-        "admin_stream_read", user_id=user_id, kind="project", row_id=str(project_id)
+        "admin_stream_read", user_id=user_id, kind="task", row_id=str(task_id)
     )
 
 
@@ -389,12 +389,12 @@ def own_estate(table: Table, user_id: str) -> ColumnElement[bool]:
 
     - **``scope=mine`` is narrower still** (owner only) but shares this
       definition of the org leg, so there is one org leg in the codebase.
-    - **Derived counts** (contract § 8, last line: portfolio task counts
+    - **Derived counts** (contract § 8, last line: project task counts
       include only rows the caller may read *and* rows in the caller's own
-      org). An admin's portfolio card keeps showing their **own
+      org). An admin's project card keeps showing their **own
       organisation's** count rather than silently summing every
       organisation's members into one number.
-    - **The chat mutations** (:func:`chat_mutable_project`, and
+    - **The chat mutations** (:func:`chat_mutable_task`, and
       ``own_chat_leg``'s call sites): an admin is not a colleague and receives
       none of the three.
 
@@ -404,7 +404,7 @@ def own_estate(table: Table, user_id: str) -> ColumnElement[bool]:
     decided in the statement that already resolved the row.
 
     Args:
-        table: ``project`` or ``portfolio``.
+        table: ``task`` or ``project``.
         user_id: The caller's token subject.
 
     Returns:
@@ -418,16 +418,16 @@ def _own_leg_column(table: Table, user_id: str) -> ColumnElement[bool]:
 
     The ``COALESCE`` is not decoration. :func:`own_estate`'s owner disjunct is
     ``owner_user_id = :caller``, and ``owner_user_id`` is nullable — the
-    ``runtime/orchestrate.py`` CLI rows carry no owner at all (contract § 11).
+    ``runtime/agent.py`` CLI rows carry no owner at all (contract § 11).
     On such a row with ``org_id IS NULL`` the owner disjunct is SQL NULL and
     the org leg is ``FALSE``, so the whole predicate evaluates to **NULL**, not
     ``FALSE``. Three-valued logic then breaks the two readers of this column in
     different ways:
 
-    - :func:`may_read_project` selects it as the *only* column, so
+    - :func:`may_read_task` selects it as the *only* column, so
       ``scalar_one_or_none()`` read the NULL as "no row" and an
       administrator's open SSE stream closed as revoked on every
-      re-authorisation — while their plain ``GET`` on the same project
+      re-authorisation — while their plain ``GET`` on the same task
       succeeded, because :func:`_resolve` selects the row beside it.
     - :func:`_resolve` reads ``not row[_OWN_LEG]``, and ``not None`` is
       ``True`` — right on this row (nothing but the admin leg reaches an
@@ -438,7 +438,7 @@ def _own_leg_column(table: Table, user_id: str) -> ColumnElement[bool]:
     makes both readers correct by construction rather than by case analysis.
 
     Args:
-        table: ``project`` or ``portfolio``.
+        table: ``task`` or ``project``.
         user_id: The caller's token subject.
 
     Returns:
@@ -453,17 +453,17 @@ def own_conversation_leg(user_id: str) -> ColumnElement[bool]:
     The contract specifies this predicate **exactly**, because the obvious
     shorthand is wrong in a way that leaks: a bare ``created_by IS NULL``
     disjunct would hand every colleague every unattributed row. The NULL
-    disjunct is therefore conjoined with the project's ownership::
+    disjunct is therefore conjoined with the task's ownership::
 
-        created_by = :me OR (created_by IS NULL AND project.owner_user_id = :me)
+        created_by = :me OR (created_by IS NULL AND task.owner_user_id = :me)
 
     **A NULL ``created_by`` is not only a legacy state.** The migration
-    backfilled pre-033 rows from their project's owner, but
+    backfilled pre-033 rows from their task's owner, but
     ``runtime/conversation_lifecycle.ensure_active_planning_conversation``
     still inserts every planning conversation without the column — they are
     minted by the runtime rather than by a request, so there is no acting
     subject to record. So this disjunct is the live rule for planning
-    conversations (which is exactly how the owner reaches their own project's
+    conversations (which is exactly how the owner reaches their own task's
     planning lineage, and why no colleague ever can) and a legacy rule for
     chats, whose creator has been recorded since this slice.
     ``conversations.list_conversations`` states the same thing from the
@@ -474,20 +474,20 @@ def own_conversation_leg(user_id: str) -> ColumnElement[bool]:
     pending cap and its sweeper), so it has one definition and a drifted copy
     is not a thing that can exist.
 
-    Correlated to **both** ``conversation`` and ``project``: every caller must
+    Correlated to **both** ``conversation`` and ``task``: every caller must
     have joined the two, which they all do.
 
     Args:
         user_id: The caller's token subject.
 
     Returns:
-        A boolean predicate over the joined ``conversation``/``project`` pair.
+        A boolean predicate over the joined ``conversation``/``task`` pair.
     """
     return or_(
         conversation.c.created_by == user_id,
         and_(
             conversation.c.created_by.is_(None),
-            project.c.owner_user_id == user_id,
+            task.c.owner_user_id == user_id,
         ),
     )
 
@@ -502,13 +502,13 @@ def own_chat_leg(user_id: str) -> ColumnElement[bool]:
 
     The library listing deliberately uses the *un*-narrowed
     :func:`own_conversation_leg` instead — it lists both kinds, and the owner
-    must keep seeing their project's planning conversation there.
+    must keep seeing their task's planning conversation there.
 
     Args:
         user_id: The caller's token subject.
 
     Returns:
-        A boolean predicate over the joined ``conversation``/``project`` pair.
+        A boolean predicate over the joined ``conversation``/``task`` pair.
     """
     return and_(conversation.c.kind == "chat", own_conversation_leg(user_id))
 
@@ -517,8 +517,8 @@ def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
     """Disjoin every read leg: owner, same-org, and admin.
 
     **The one seam for a single row.** Row reads
-    (:func:`accessible_project`, :func:`accessible_portfolio`) and the SSE
-    tail's re-authorisation (:func:`may_read_project`) resolve through this
+    (:func:`accessible_task`, :func:`accessible_project`) and the SSE
+    tail's re-authorisation (:func:`may_read_task`) resolve through this
     function, so the admin leg attached to both by adding one disjunct here
     and nowhere else — and revoking ``is_admin`` withdraws it from both just
     as narrowly.
@@ -536,12 +536,12 @@ def _read_legs(table: Table, user_id: str) -> ColumnElement[bool]:
     return or_(own_estate(table, user_id), admin_read_leg(user_id))
 
 
-def may_read_project(
-    conn: Connection, *, project_id: uuid.UUID, user_id: str
+def may_read_task(
+    conn: Connection, *, task_id: uuid.UUID, user_id: str
 ) -> ReadCheck:
-    """Re-check the read grade on one project as a cheap boolean (contract § 5).
+    """Re-check the read grade on one task as a cheap boolean (contract § 5).
 
-    The SSE tail's re-authorisation. :func:`accessible_project` is the wrong
+    The SSE tail's re-authorisation. :func:`accessible_task` is the wrong
     shape for a loop that runs every poll interval — it selects the whole row,
     raises ``HTTPException`` to report a refusal, and applies the archived
     filter — so this is the same question asked as a boolean.
@@ -562,29 +562,29 @@ def may_read_project(
     calls it rather than this function emitting, because the batch — not the
     grade check — is the unit being recorded.
 
-    **No status filter, on purpose.** ``accessible_project`` excludes archived
+    **No status filter, on purpose.** ``accessible_task`` excludes archived
     rows because *opening* something archived is not a thing the API offers;
-    an already-open stream is different. The owner archiving their own project
-    emits a ``project.updated`` frame and must not have their own stream shot
+    an already-open stream is different. The owner archiving their own task
+    emits a ``task.updated`` frame and must not have their own stream shot
     out from under them by the same action. Only the tenancy legs revoke.
 
-    One query, one round trip: the project is found by primary key and the org
+    One query, one round trip: the task is found by primary key and the org
     leg's ``EXISTS`` probes ``app_user``'s primary key, so both sides are index
-    lookups and neither depends on the project's event volume.
+    lookups and neither depends on the task's event volume.
 
     Args:
         conn: Open database connection.
-        project_id: The project the open stream is bound to.
+        task_id: The task the open stream is bound to.
         user_id: The caller's token subject.
 
     Returns:
-        Whether the caller may still read this project, and which leg said so.
+        Whether the caller may still read this task, and which leg said so.
     """
     own_leg = conn.execute(
-        select(_own_leg_column(project, user_id))
-        .select_from(project)
-        .where(project.c.project_id == project_id)
-        .where(_read_legs(project, user_id))
+        select(_own_leg_column(task, user_id))
+        .select_from(task)
+        .where(task.c.task_id == task_id)
+        .where(_read_legs(task, user_id))
         .limit(1)
     ).scalar_one_or_none()
     if own_leg is None:
@@ -593,14 +593,14 @@ def may_read_project(
     # is why the miss is distinguished by ``is None`` and not by falsiness —
     # and why the column is COALESCEd (:func:`_own_leg_column`): an ownerless
     # row made the predicate NULL, which arrived here as ``is None`` and closed
-    # every administrator's stream on a project the same leg let them GET.
+    # every administrator's stream on a task the same leg let them GET.
     return ReadCheck(allowed=True, via_admin=not own_leg)
 
 
-def readable_project_exists(project_id: uuid.UUID, user_id: str) -> ColumnElement[bool]:
-    """The read grade on one project, as a predicate to AND into another select.
+def readable_task_exists(task_id: uuid.UUID, user_id: str) -> ColumnElement[bool]:
+    """The read grade on one task, as a predicate to AND into another select.
 
-    :func:`may_read_project` answers "may they still read it" as a *value*, and
+    :func:`may_read_task` answers "may they still read it" as a *value*, and
     a value is one statement behind whatever the caller does next. The SSE tail
     had exactly that gap: it authorised in one statement and read the event
     batch in a second, so a revocation committing between them still disclosed
@@ -609,22 +609,22 @@ def readable_project_exists(project_id: uuid.UUID, user_id: str) -> ColumnElemen
     cannot be read unless the grade holds at the moment they are read.
 
     Both are kept, and they are not redundant: this predicate makes a batch
-    empty, while :func:`may_read_project` is what ends the response. Resolving
+    empty, while :func:`may_read_task` is what ends the response. Resolving
     both through :func:`_read_legs` is what keeps them one rule.
 
     Args:
-        project_id: The project being streamed.
+        task_id: The task being streamed.
         user_id: The caller's token subject.
 
     Returns:
         A boolean predicate correlated to nothing, true only while the caller
-        holds a read leg on that project.
+        holds a read leg on that task.
     """
     return exists(
         select(literal_column("1"))
-        .select_from(project)
-        .where(project.c.project_id == project_id)
-        .where(_read_legs(project, user_id))
+        .select_from(task)
+        .where(task.c.task_id == task_id)
+        .where(_read_legs(task, user_id))
     )
 
 
@@ -663,7 +663,7 @@ def listing_scope(
     Args:
         conn: Open database connection — used only to ask whether the caller
             holds the flag, and only when ``scope`` can be widened by it.
-        table: ``project`` or ``portfolio``.
+        table: ``task`` or ``project``.
         user_id: The caller's token subject.
         scope: ``"all"`` (the default the route declares — owner ∪ the org's
             org-visible rows ∪, for an administrator, everything) or
@@ -673,7 +673,7 @@ def listing_scope(
             why the route owns the validation.
 
     Returns:
-        The predicate to AND with the listing's status/portfolio/owner
+        The predicate to AND with the listing's status/project/owner
         filters, and whether the admin leg widened it.
     """
     if scope == "mine":
@@ -730,7 +730,7 @@ def owner_email_filter(
 
     Args:
         conn: Open database connection.
-        table: ``project`` or ``portfolio``.
+        table: ``task`` or ``project``.
         user_id: The caller's token subject.
         owner_email: The requested owner's address, or ``None`` when the
             caller did not pass the filter.
@@ -768,7 +768,7 @@ def owner_email_filter(
 def creator_org_id(conn: Connection, user_id: str) -> uuid.UUID | None:
     """Return the organisation a newly created row should be stamped with.
 
-    Contract § 7: ``POST /projects`` and ``POST /portfolios`` stamp ``org_id``
+    Contract § 7: ``POST /tasks`` and ``POST /projects`` stamp ``org_id``
     from the creator's ``app_user.org_id`` — **NULL when the creator is
     unenrolled**, which is also what a caller with no ``app_user`` row gets.
     A NULL-``org_id`` row is reachable by its owner (and, from phase 8, an
@@ -863,7 +863,7 @@ def _resolve(
             kind=table.name, row_id=_row_identity(table, row), user_id=user_id
         )
     # Safe in Python: SQL has already decided visibility, and a NULL
-    # ``owner_user_id`` (the ``orchestrate.py`` rows) never equals a subject.
+    # ``owner_user_id`` (the ``agent.py`` rows) never equals a subject.
     is_owner = row["owner_user_id"] == user_id
     if write and not is_owner:
         # An administrator lands here on every mutation they attempt: the
@@ -873,53 +873,53 @@ def _resolve(
     return Access(row=row, is_owner=is_owner, via_admin=via_admin)
 
 
-def accessible_project(
+def accessible_task(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user_id: str,
     write: bool = False,
     include_archived: bool = False,
     for_update: bool = False,
 ) -> Access:
-    """Resolve one project under the caller's grade, or raise 404/403.
+    """Resolve one task under the caller's grade, or raise 404/403.
 
     Args:
         conn: Open database connection.
-        project_id: Requested project identity.
+        task_id: Requested task identity.
         user_id: The caller's token subject.
         write: Ask for the write grade (owner only). A caller who can read the
             row but does not own it gets 403 ``forbidden``.
-        include_archived: Whether an archived project can be observed.
-            Unchanged from ``owned_project``.
+        include_archived: Whether an archived task can be observed.
+            Unchanged from ``owned_task``.
         for_update: Take ``SELECT … FOR UPDATE`` on the row. **Write paths
             only** — passing it without ``write=True`` raises ``ValueError``,
             because a read-grade caller (a colleague holding their own chat)
-            locking the owner's project row would block the owner's own
+            locking the owner's task row would block the owner's own
             mutations for the length of their transaction (contract § 4).
             Phase 4 fixes this per call site from an explicit table; a call
             site does not inherit it.
 
     Returns:
-        The project row and whether the owner leg matched.
+        The task row and whether the owner leg matched.
 
     Raises:
         HTTPException: 404 for missing, archived or unreadable rows
             (indistinguishable); 403 when the row is readable but not
             writable.
     """
-    base = select(project).where(project.c.project_id == project_id)
+    base = select(task).where(task.c.task_id == task_id)
     if not include_archived:
-        base = base.where(project.c.status == "active")
+        base = base.where(task.c.status == "active")
     return _resolve(
-        conn, table=project, base=base, user_id=user_id, write=write, for_update=for_update
+        conn, table=task, base=base, user_id=user_id, write=write, for_update=for_update
     )
 
 
-def readable_or_public_project(
-    conn: Connection, *, project_id: uuid.UUID, user_id: str | None
+def readable_or_public_task(
+    conn: Connection, *, task_id: uuid.UUID, user_id: str | None
 ) -> Access:
-    """Resolve an active project through its read grade or the public leg.
+    """Resolve an active task through its read grade or the public leg.
 
     This is the only public-leg helper. Its callers are exclusively task
     037's eleven conditionally-public read routes; listings, cascades and all
@@ -927,22 +927,22 @@ def readable_or_public_project(
 
     Args:
         conn: Open database connection.
-        project_id: Requested project identity.
+        task_id: Requested task identity.
         user_id: The authenticated subject, or ``None`` for an anonymous
             request with no Authorization header.
 
     Returns:
-        The active project row, its owner status and the leg that served it.
+        The active task row, its owner status and the leg that served it.
 
     Raises:
         HTTPException: 404 when the row is absent, archived or unreadable.
     """
-    base = select(project).where(
-        project.c.project_id == project_id, project.c.status == "active"
+    base = select(task).where(
+        task.c.task_id == task_id, task.c.status == "active"
     )
     if user_id is None:
         row = (
-            conn.execute(base.where(project.c.is_public.is_(true())))
+            conn.execute(base.where(task.c.is_public.is_(true())))
             .mappings()
             .one_or_none()
         )
@@ -953,13 +953,13 @@ def readable_or_public_project(
     row = (
         conn.execute(
             base.add_columns(
-                _own_leg_column(project, user_id),
+                _own_leg_column(task, user_id),
                 admin_read_leg(user_id).label(_ADMIN_LEG),
             ).where(
                 or_(
-                    own_estate(project, user_id),
+                    own_estate(task, user_id),
                     admin_read_leg(user_id),
-                    project.c.is_public.is_(true()),
+                    task.c.is_public.is_(true()),
                 )
             )
         )
@@ -973,18 +973,18 @@ def readable_or_public_project(
     # Graded legs first (contract D4): an entitled admin keeps today's full
     # read — and its trace — even when the row happens to be public.
     if row[_ADMIN_LEG]:
-        trace_admin_read(kind="project", row_id=str(project_id), user_id=user_id)
+        trace_admin_read(kind="task", row_id=str(task_id), user_id=user_id)
         return Access(row=row, is_owner=False, via_admin=True)
     return Access(row=row, is_owner=False, via_public=True)
 
 
-def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: str) -> Access:
-    """Resolve one project under the **colleague-mutation** grade, or 404.
+def chat_mutable_task(conn: Connection, *, task_id: uuid.UUID, user_id: str) -> Access:
+    """Resolve one task under the **colleague-mutation** grade, or 404.
 
     The grade owner call (b) invented and contract § 4 spends on exactly three
     mutations — create a conversation, post a turn to your own conversation,
     cancel your own turn. It sits between the two grades
-    :func:`accessible_project` offers, and it exists as its own function for
+    :func:`accessible_task` offers, and it exists as its own function for
     one reason: it must **never** widen to the admin leg.
 
     - Wider than **write**, which is owner-only: a same-org colleague passes.
@@ -999,13 +999,60 @@ def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: st
       to disclose the row with.
 
     **No lock, ever, and no ``for_update`` parameter to pass one.** Contract
-    § 4: a colleague chat path that took ``FOR UPDATE`` on the owner's project
+    § 4: a colleague chat path that took ``FOR UPDATE`` on the owner's task
     row would block the owner's own rename, archive and run-start for the
     length of the colleague's transaction. The turn path locks the
     *conversation* row instead (``chat_turns._phase_one_turn``).
 
-    Archived projects are excluded, exactly as the retired ``owned_project``
+    Archived tasks are excluded, exactly as the retired ``owned_task``
     excluded them: a chat is a live conversation about live work.
+
+    Args:
+        conn: Open database connection.
+        task_id: Requested task identity.
+        user_id: The caller's token subject.
+
+    Returns:
+        The task row and whether the owner leg matched.
+
+    Raises:
+        HTTPException: 404 for a missing, archived or unreachable row. There
+            is no 403 on this grade — a caller who fails it is not told the
+            row exists.
+    """
+    row = conn.execute(
+        select(task)
+        .where(task.c.task_id == task_id)
+        .where(task.c.status == "active")
+        .where(own_estate(task, user_id))
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
+    return Access(row=row, is_owner=row["owner_user_id"] == user_id)
+
+
+def assignable_project(
+    conn: Connection, *, project_id: uuid.UUID, user_id: str
+) -> Access:
+    """Resolve one project as an assignment target, or 404.
+
+    The **colleague-mutation** grade (:func:`own_estate` — owner ∪ same-org,
+    **never** the admin leg), on a project: a same-org colleague may add
+    their own task to an org-visible project they did not create (owner
+    ruling 2026-08-27, from staging live testing). Like
+    :func:`chat_mutable_task`, it exists as its own function so it can
+    never widen to the admin leg — an administrator is not a colleague, and
+    an assignment through the admin leg would be the admin-write escape the
+    contract bars. An out-of-organisation administrator gets the same 404 as
+    everyone this grade refuses: there is no read grade here to disclose the
+    row with.
+
+    **Locked** (``FOR UPDATE``), unlike the chat grade: the assignment path
+    reads the project's ``visibility``/``org_id`` and writes them onto the
+    member, so a cascade committing between that read and the write would
+    leave the member carrying a stale value. A project row lock is brief
+    (one PATCH transaction) and blocks only the cascade and other
+    assignments, not the owner's task operations.
 
     Args:
         conn: Open database connection.
@@ -1016,60 +1063,13 @@ def chat_mutable_project(conn: Connection, *, project_id: uuid.UUID, user_id: st
         The project row and whether the owner leg matched.
 
     Raises:
-        HTTPException: 404 for a missing, archived or unreachable row. There
-            is no 403 on this grade — a caller who fails it is not told the
-            row exists.
-    """
-    row = conn.execute(
-        select(project)
-        .where(project.c.project_id == project_id)
-        .where(project.c.status == "active")
-        .where(own_estate(project, user_id))
-    ).mappings().one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail=NOT_FOUND_DETAIL)
-    return Access(row=row, is_owner=row["owner_user_id"] == user_id)
-
-
-def assignable_portfolio(
-    conn: Connection, *, portfolio_id: uuid.UUID, user_id: str
-) -> Access:
-    """Resolve one portfolio as an assignment target, or 404.
-
-    The **colleague-mutation** grade (:func:`own_estate` — owner ∪ same-org,
-    **never** the admin leg), on a portfolio: a same-org colleague may add
-    their own task to an org-visible portfolio they did not create (owner
-    ruling 2026-08-27, from staging live testing). Like
-    :func:`chat_mutable_project`, it exists as its own function so it can
-    never widen to the admin leg — an administrator is not a colleague, and
-    an assignment through the admin leg would be the admin-write escape the
-    contract bars. An out-of-organisation administrator gets the same 404 as
-    everyone this grade refuses: there is no read grade here to disclose the
-    row with.
-
-    **Locked** (``FOR UPDATE``), unlike the chat grade: the assignment path
-    reads the portfolio's ``visibility``/``org_id`` and writes them onto the
-    member, so a cascade committing between that read and the write would
-    leave the member carrying a stale value. A portfolio row lock is brief
-    (one PATCH transaction) and blocks only the cascade and other
-    assignments, not the owner's project operations.
-
-    Args:
-        conn: Open database connection.
-        portfolio_id: Requested portfolio identity.
-        user_id: The caller's token subject.
-
-    Returns:
-        The portfolio row and whether the owner leg matched.
-
-    Raises:
         HTTPException: 404 for a missing or unreachable row. There is no 403
             on this grade — a caller who fails it is not told the row exists.
     """
     row = conn.execute(
-        select(portfolio)
-        .where(portfolio.c.portfolio_id == portfolio_id)
-        .where(own_estate(portfolio, user_id))
+        select(project)
+        .where(project.c.project_id == project_id)
+        .where(own_estate(project, user_id))
         .with_for_update()
     ).mappings().one_or_none()
     if row is None:
@@ -1077,36 +1077,36 @@ def assignable_portfolio(
     return Access(row=row, is_owner=row["owner_user_id"] == user_id)
 
 
-def accessible_portfolio(
+def accessible_project(
     conn: Connection,
     *,
-    portfolio_id: uuid.UUID,
+    project_id: uuid.UUID,
     user_id: str,
     write: bool = False,
     for_update: bool = False,
 ) -> Access:
-    """Resolve one portfolio under the caller's grade, or raise 404/403.
+    """Resolve one project under the caller's grade, or raise 404/403.
 
-    Mirrors :func:`accessible_project` minus the archived leg: ``portfolio``
+    Mirrors :func:`accessible_task` minus the archived leg: ``project``
     has no ``status`` column, so there is nothing to widen.
 
     Args:
         conn: Open database connection.
-        portfolio_id: Requested portfolio identity.
+        project_id: Requested project identity.
         user_id: The caller's token subject.
         write: Ask for the write grade (owner only).
         for_update: Take ``SELECT … FOR UPDATE`` on the row. Write paths only,
-            on the same terms as :func:`accessible_project`.
+            on the same terms as :func:`accessible_task`.
 
     Returns:
-        The portfolio row and whether the owner leg matched.
+        The project row and whether the owner leg matched.
 
     Raises:
         HTTPException: 404 for missing or unreadable rows
             (indistinguishable); 403 when the row is readable but not
             writable.
     """
-    base = select(portfolio).where(portfolio.c.portfolio_id == portfolio_id)
+    base = select(project).where(project.c.project_id == project_id)
     return _resolve(
-        conn, table=portfolio, base=base, user_id=user_id, write=write, for_update=for_update
+        conn, table=project, base=base, user_id=user_id, write=write, for_update=for_update
     )

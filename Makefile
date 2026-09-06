@@ -1,6 +1,6 @@
 .PHONY: setup dev dev-seed test test-fast typecheck lint build verify verify-fast okf-validate audit audit-paths prompt-guard frontend-install openapi-sync drift-check font-guard frontend-verify fe-api-smoke deploy-build-guard-test infra-setup deploy-check deploy-update deploy-bootstrap
 
-# Root orchestrator (025 A.2 monorepo hoist): the Python project lives in
+# Root Makefile (025 A.2 monorepo hoist): the Python project lives in
 # backend/; this Makefile owns the shared db service + the root-level gates
 # (OKF conformance, cross-tree path audit) and delegates everything else so
 # every pre-hoist target name keeps working unchanged from repo root.
@@ -39,7 +39,7 @@ setup:
 #     make the environment guard's account leg a tautology;
 #   - the targets only map VAR names to flag names and forward. The CLI's own
 #     parser is the sole grammar authority: mutually exclusive pairs
-#     (EMAIL/SUB, PROJECT/PORTFOLIO) are forwarded as given and ITS refusal is
+#     (EMAIL/SUB, TASK/PROJECT) are forwarded as given and ITS refusal is
 #     the error you see;
 #   - backend/tests/ops/test_make_wrappers.py dry-runs every target and parses the
 #     assembled argv with the real parser, so Makefile↔CLI drift fails `make
@@ -69,7 +69,7 @@ user-resync:
 user-de-enrol:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) user de-enrol $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 rows-assign:
-	@$(call ops-require,ENV ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) rows assign $(if $(PROJECT),--project "$(PROJECT)") $(if $(PORTFOLIO),--portfolio "$(PORTFOLIO)") --org "$(ORG)"
+	@$(call ops-require,ENV ORG) scripts/ops_run.sh $(ENV) $(OPS_COMMON) rows assign $(if $(TASK),--task "$(TASK)") $(if $(PROJECT),--project "$(PROJECT)") --org "$(ORG)"
 admin-grant:
 	@$(call ops-require,ENV) scripts/ops_run.sh $(ENV) $(OPS_COMMON) admin grant $(if $(EMAIL),--email "$(EMAIL)") $(if $(SUB),--sub "$(SUB)")
 admin-revoke:

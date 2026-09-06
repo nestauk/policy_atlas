@@ -2,7 +2,7 @@
 
 `create_app` is what uvicorn calls directly in the container (`--factory`), so
 it is the one place `configure_logging()` must run before anything else can
-log — `runtime/orchestrate.py`'s `main()` only covers the local CLI path.
+log — `runtime/agent.py`'s `main()` only covers the local CLI path.
 """
 
 from __future__ import annotations

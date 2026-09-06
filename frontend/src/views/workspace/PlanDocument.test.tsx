@@ -20,7 +20,7 @@ vi.mock("../../api/mutations", () => ({
   usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 const PANEL_LABELS = ["Research question", "Settings", "Search filters", "Screening rules"];
 
@@ -91,7 +91,7 @@ function renderPlan(onOverlayChange = vi.fn(), overlay = {}) {
   return render(
     <TooltipProvider delayDuration={0}>
       <PlanDocument
-        projectId={PROJECT_ID}
+        taskId={TASK_ID}
         onClose={vi.fn()}
         overlay={overlay}
         onOverlayChange={onOverlayChange}
@@ -215,7 +215,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           onClose={vi.fn()}
           overlay={{}}
           onOverlayChange={onOverlayChange}
@@ -238,7 +238,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           onClose={onClose}
           overlay={{}}
           onOverlayChange={vi.fn()}
@@ -256,7 +256,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           placement="center"
           onClose={vi.fn()}
           onDock={onDock}
@@ -275,7 +275,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           placement="side"
           onClose={vi.fn()}
           onDock={vi.fn()}
@@ -293,7 +293,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           placement="center"
           onClose={vi.fn()}
           onDock={vi.fn()}
@@ -314,7 +314,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           placement="center"
           onClose={vi.fn()}
           onDock={vi.fn()}
@@ -336,7 +336,7 @@ describe("PlanDocument", () => {
     render(
       <TooltipProvider delayDuration={0}>
         <PlanDocument
-          projectId={PROJECT_ID}
+          taskId={TASK_ID}
           readOnly
           onClose={vi.fn()}
           overlay={{}}

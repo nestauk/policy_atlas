@@ -10,9 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
-from policy_atlas.core.schema import capability_run, orchestration_plan, runs
-from policy_atlas.runtime.orchestration_plan import ComposedChain, OrchestrationPlan, compose
+from policy_atlas.core.schema import capability_run, runs, task_plan
 from policy_atlas.runtime.steering import PausePoint, pause_points
+from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ class ContinuationState:
     """
 
     capability_run_id: uuid.UUID
-    plan: OrchestrationPlan
+    plan: TaskPlan
     plan_id: uuid.UUID
     plan_version: int
     plan_row_id: uuid.UUID | None
@@ -88,7 +88,7 @@ class ContinuationState:
 def build(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     capability_run_id: uuid.UUID,
 ) -> ContinuationState:
     """Build a continuation state using only persisted plan, run, and event rows.
@@ -98,7 +98,7 @@ def build(
 
     Args:
         engine: Engine used for read-only durable reconstruction.
-        project_id: Project owning the parked run.
+        task_id: Task owning the parked run.
         capability_run_id: Parked capability-run identity.
 
     Returns:
@@ -120,7 +120,7 @@ def build(
     with engine.connect() as conn:
         cap_row = conn.execute(
             select(capability_run)
-            .where(capability_run.c.project_id == project_id)
+            .where(capability_run.c.task_id == task_id)
             .where(capability_run.c.capability_run_id == capability_run_id)
         ).one_or_none()
         if cap_row is None:
@@ -131,26 +131,26 @@ def build(
         # any turn while a walk is running or parked — so no unrelated plan
         # can become latest-approved between park and continuation.
         plan_row = conn.execute(
-            select(orchestration_plan)
-            .where(orchestration_plan.c.project_id == project_id)
-            .where(orchestration_plan.c.status == "approved")
-            .order_by(orchestration_plan.c.version.desc())
+            select(task_plan)
+            .where(task_plan.c.task_id == task_id)
+            .where(task_plan.c.status == "approved")
+            .order_by(task_plan.c.version.desc())
         ).first()
         if plan_row is None:
-            raise LookupError("parked walk has no approved orchestration plan")
-        event_rows = events.read(conn, project_id)
+            raise LookupError("parked walk has no approved task plan")
+        event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)
             for row in conn.execute(
                 select(runs)
-                .where(runs.c.project_id == project_id)
+                .where(runs.c.task_id == task_id)
                 .where(runs.c.capability_run_id == capability_run_id)
             )
         ]
 
     cap = dict(cap_row._mapping)
     plan_data = dict(plan_row._mapping)
-    plan = OrchestrationPlan.model_validate(plan_data["payload"])
+    plan = TaskPlan.model_validate(plan_data["payload"])
     chain = compose(plan)
     scoped_events = [
         entry

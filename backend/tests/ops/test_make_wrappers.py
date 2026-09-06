@@ -72,7 +72,7 @@ def test_every_wrapper_assembles_argv_the_real_parser_accepts() -> None:
         "user-resync": dict(ENV="staging", EMAIL="a@b.org"),
         "user-de-enrol": dict(ENV="staging", SUB="sub-1234"),
         "rows-assign": dict(
-            ENV="staging", PORTFOLIO="1cf9db6a-1111-4222-8333-444455556666", ORG="An Org"
+            ENV="staging", TASK="1cf9db6a-1111-4222-8333-444455556666", ORG="An Org"
         ),
         "admin-grant": dict(ENV="staging", EMAIL="a@b.org"),
         "admin-revoke": dict(ENV="prod", SUB="sub-1234"),

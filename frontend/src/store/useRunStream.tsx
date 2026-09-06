@@ -21,21 +21,21 @@ import type { RunStreamState } from "./types";
 export const RUN_STREAM_INVALIDATE_DEBOUNCE_MS = 300;
 
 interface RunStreamContextValue {
-  projectId: string;
+  taskId: string;
   state: RunStreamState;
 }
 
 const RunStreamContext = createContext<RunStreamContextValue | null>(null);
 
 /**
- * Own the project's SSE connection at the task shell so Plan / Results /
+ * Own the task's SSE connection at the task shell so Plan / Results /
  * Sources / History / Share share one replay-then-tail stream instead of
  * each leaf remount reconnecting from `cursor=0` (and storming read-model
  * invalidations mid-replay).
  *
  * Args:
- *   projectId: The open task. Changing it resets the reducer and opens a
- *     fresh connection for the new project.
+ *   taskId: The open task. Changing it resets the reducer and opens a
+ *     fresh connection for the new task.
  *   connect: Whether to open the SSE connection at all. `false` for the
  *     public task view (task 037): the events route is not on the public
  *     read surface, so the provider stays mounted (the views' `useRunStream`
@@ -44,42 +44,42 @@ const RunStreamContext = createContext<RunStreamContextValue | null>(null);
  *   children: Shell chrome and the routed task view.
  */
 export function RunStreamProvider({
-  projectId,
+  taskId,
   connect = true,
   children,
 }: {
-  projectId: string;
+  taskId: string;
   connect?: boolean;
   children: ReactNode;
 }) {
-  const state = useRunStreamConnection(projectId, connect);
+  const state = useRunStreamConnection(taskId, connect);
   return (
-    <RunStreamContext.Provider value={{ projectId, state }}>
+    <RunStreamContext.Provider value={{ taskId, state }}>
       {children}
     </RunStreamContext.Provider>
   );
 }
 
 /**
- * Read the shell-owned run stream for this project.
+ * Read the shell-owned run stream for this task.
  *
  * Args:
- *   projectId: Must match the surrounding `RunStreamProvider`.
+ *   taskId: Must match the surrounding `RunStreamProvider`.
  *
  * Returns:
- *   The live reducer state for the project's event stream.
+ *   The live reducer state for the task's event stream.
  *
  * Raises:
- *   Error when called outside a provider, or for a different project id.
+ *   Error when called outside a provider, or for a different task id.
  */
-export function useRunStream(projectId: string): RunStreamState {
+export function useRunStream(taskId: string): RunStreamState {
   const ctx = useContext(RunStreamContext);
   if (ctx === null) {
     throw new Error("useRunStream must be used within a RunStreamProvider");
   }
-  if (ctx.projectId !== projectId) {
+  if (ctx.taskId !== taskId) {
     throw new Error(
-      `useRunStream(${projectId}) does not match RunStreamProvider(${ctx.projectId})`,
+      `useRunStream(${taskId}) does not match RunStreamProvider(${ctx.taskId})`,
     );
   }
   return ctx.state;
@@ -91,19 +91,19 @@ export function useRunStream(projectId: string): RunStreamState {
  * fresh mount/reconnect always starts from `cursor=0` — the reducer's replay
  * idempotence is what makes that safe.
  */
-function useRunStreamConnection(projectId: string, connect: boolean): RunStreamState {
+function useRunStreamConnection(taskId: string, connect: boolean): RunStreamState {
   const auth = useAuth();
   const queryClient = useQueryClient();
 
   const [state, setState] = useState<RunStreamState>(createInitialRunStreamState);
 
-  // Reset the store when `projectId` changes, following React's documented
+  // Reset the store when `taskId` changes, following React's documented
   // "adjust state during render" pattern rather than an effect — this runs
   // synchronously during render (before paint) exactly when the state on
-  // hand no longer belongs to the current project.
-  const [stateProjectId, setStateProjectId] = useState(projectId);
-  if (stateProjectId !== projectId) {
-    setStateProjectId(projectId);
+  // hand no longer belongs to the current task.
+  const [stateTaskId, setStateTaskId] = useState(taskId);
+  if (stateTaskId !== taskId) {
+    setStateTaskId(taskId);
     setState(createInitialRunStreamState());
   }
 
@@ -111,15 +111,15 @@ function useRunStreamConnection(projectId: string, connect: boolean): RunStreamS
     if (!connect) return undefined;
     // Guards against a frame from THIS effect's connection landing after
     // its cleanup has run but before the closure is torn down — without
-    // this, such a frame would fold into the next project's already-reset
-    // state (a stale-connection race at the project-switch boundary).
+    // this, such a frame would fold into the next task's already-reset
+    // state (a stale-connection race at the task-switch boundary).
     let closed = false;
     let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
 
     const flushInvalidate = () => {
       invalidateTimer = null;
       void queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === "projects" && query.queryKey[1] === projectId,
+        predicate: (query) => query.queryKey[0] === "tasks" && query.queryKey[1] === taskId,
       });
     };
 
@@ -129,7 +129,7 @@ function useRunStreamConnection(projectId: string, connect: boolean): RunStreamS
     };
 
     const connection = connectEventStream({
-      projectId,
+      taskId,
       getAccessToken: (forceRefresh) => auth.getAccessToken(forceRefresh),
       onUnauthenticated: () => auth.onUnauthenticated(),
       onConnected: () => {
@@ -158,7 +158,7 @@ function useRunStreamConnection(projectId: string, connect: boolean): RunStreamS
       if (invalidateTimer !== null) clearTimeout(invalidateTimer);
       connection.close();
     };
-  }, [projectId, auth, queryClient, connect]);
+  }, [taskId, auth, queryClient, connect]);
 
   return state;
 }

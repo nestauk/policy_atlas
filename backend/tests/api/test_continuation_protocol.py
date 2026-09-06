@@ -24,11 +24,11 @@ from policy_atlas.api.continuation import (
 )
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, characterisation_result, event_log
-from policy_atlas.runtime.orchestrator_backend import StubOrchestratorBackend
-from policy_atlas.runtime.orchestrator_prompt import RouterCompileWire, RouterFragmentWire
+from policy_atlas.runtime.agent_backend import StubAgentBackend
+from policy_atlas.runtime.agent_prompt import RouterCompileWire, RouterFragmentWire
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
 from policy_atlas.runtime.steering import SteeringAdjustmentError
-from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_project
+from tests.runtime.test_runner import _base_plan, _cleanup, _runner_backends, _seed_task
 from tests.runtime.test_steering import _insert_plan_row
 
 
@@ -71,14 +71,14 @@ class _ParkAtIO:
 
 
 class _ParkAtP2IO:
-    """Park the P2 evidence-base check-in after its theme map has been written."""
+    """Park the P2 evidence-search check-in after its theme map has been written."""
 
     def check_in(self, component: str, payload: dict[str, Any]) -> None:
         del component, payload
 
     def pause(self, point: dict[str, Any], render: str) -> Any:
         del render
-        if point.get("steer_point") == "evidence_base_coverage":
+        if point.get("steer_point") == "evidence_search_coverage":
             raise WalkParked()
         from policy_atlas.runtime.steering import Continue
 
@@ -86,13 +86,13 @@ class _ParkAtP2IO:
 
 
 def _park_walk(engine: Engine) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
-    """Seed and park one scripted walk, returning project/scope/run/check-in ids."""
-    project_id, scope_id = _seed_project(engine)
+    """Seed and park one scripted walk, returning task/scope/run/check-in ids."""
+    task_id, scope_id = _seed_task(engine)
     plan = _base_plan(steering_mode="frequent", search_effort="standard")
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -106,10 +106,10 @@ def _park_walk(engine: Engine) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UU
     with engine.connect() as conn:
         pause = next(
             entry
-            for entry in reversed(events.read(conn, project_id))
+            for entry in reversed(events.read(conn, task_id))
             if entry["event_type"] == "steering.pause"
         )
-    return project_id, scope_id, outcome.capability_run_id, pause["event_id"]
+    return task_id, scope_id, outcome.capability_run_id, pause["event_id"]
 
 
 def _continue_response() -> dict[str, Any]:
@@ -119,31 +119,31 @@ def _continue_response() -> dict[str, Any]:
 
 def test_steering_round_trip_through_real_continuation_seam(engine: Engine) -> None:
     """A durable answer/claim/resume completes the original capability walk."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
         answer = answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response=_continue_response(),
             actor="user-1",
         )
         assert answer.continuation_requested is True
         claim = claim_continuation(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         )
         assert claim is not None
         outcome = execute_continuation(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             backends=_runner_backends(),
             io=NullIO(),
         )
         assert outcome.status == "succeeded"
         with engine.connect() as conn:
-            log = events.read(conn, project_id)
+            log = events.read(conn, task_id)
             status = conn.execute(
                 select(capability_run.c.status).where(
                     capability_run.c.capability_run_id == capability_run_id
@@ -158,14 +158,14 @@ def test_steering_round_trip_through_real_continuation_seam(engine: Engine) -> N
         assert [entry["event_type"] for entry in log].count("continuation.claimed") == 1
         assert status == "succeeded"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_double_answer_barrier_allows_exactly_one_decision(engine: Engine) -> None:
-    """Project-row locking turns two simultaneous answers into one answer and one 409."""
-    project_id: uuid.UUID | None = None
+    """Task-row locking turns two simultaneous answers into one answer and one 409."""
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
         barrier = threading.Barrier(2)
 
         def answer() -> str:
@@ -174,7 +174,7 @@ def test_double_answer_barrier_allows_exactly_one_decision(engine: Engine) -> No
             try:
                 answer_check_in(
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     check_in_id=check_in_id,
                     response=_continue_response(),
                     actor="user-1",
@@ -188,21 +188,21 @@ def test_double_answer_barrier_allows_exactly_one_decision(engine: Engine) -> No
             outcomes = sorted(future.result() for future in futures)
         assert outcomes == ["accepted", "already_answered"]
         with engine.connect() as conn:
-            log = events.read(conn, project_id)
+            log = events.read(conn, task_id)
         assert [entry["event_type"] for entry in log].count("steering.decision") == 1
         assert [entry["event_type"] for entry in log].count("continuation.requested") == 1
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_crash_before_claim_drains_then_resumes(engine: Engine) -> None:
     """An answer committed before a crash remains redispatchable on startup."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
         answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response=_continue_response(),
             actor="user-1",
@@ -210,18 +210,18 @@ def test_crash_before_claim_drains_then_resumes(engine: Engine) -> None:
         report = startup_sweep(engine)
         assert [claim.capability_run_id for claim in report.redispatch] == [capability_run_id]
         assert claim_continuation(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         ) is not None
         outcome = execute_continuation(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             backends=_runner_backends(),
             io=NullIO(),
         )
         assert outcome.status == "succeeded"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_crash_after_claim_is_reexecuted_not_interrupted(engine: Engine) -> None:
@@ -233,25 +233,25 @@ def test_crash_after_claim_is_reexecuted_not_interrupted(engine: Engine) -> None
     classifies it for direct re-execution; the contract's "a crash between
     answer and execution loses nothing" covers the claim→execute window too.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
         answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response=_continue_response(),
             actor="user-1",
         )
         assert claim_continuation(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         ) is not None
         report = startup_sweep(engine)
         assert report.interrupted_capability_run_ids == ()
         assert report.redispatch == ()
         assert [claim.capability_run_id for claim in report.reexecute] == [capability_run_id]
         with engine.connect() as conn:
-            log = events.read(conn, project_id)
+            log = events.read(conn, task_id)
             status = conn.execute(
                 select(capability_run.c.status).where(
                     capability_run.c.capability_run_id == capability_run_id
@@ -262,30 +262,30 @@ def test_crash_after_claim_is_reexecuted_not_interrupted(engine: Engine) -> None
         assert [entry["event_type"] for entry in log].count("run.interrupted") == 0
         outcome = execute_continuation(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             backends=_runner_backends(),
             io=NullIO(),
         )
         assert outcome.status == "succeeded"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_crash_mid_execution_after_claim_is_interrupted(engine: Engine) -> None:
     """Post-claim component progress means mid-execution death → honest interruption."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
         answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response=_continue_response(),
             actor="user-1",
         )
         assert claim_continuation(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         ) is not None
         # Simulate the executor having started a component before dying: any
         # run-attached non-continuation event after the claim counts as progress
@@ -293,12 +293,12 @@ def test_crash_mid_execution_after_claim_is_interrupted(engine: Engine) -> None:
         with engine.begin() as conn:
             attachment = next(
                 row["run_id"]
-                for row in reversed(events.read(conn, project_id))
+                for row in reversed(events.read(conn, task_id))
                 if row["run_id"] is not None
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=attachment,
                 event_type="run.started",
                 payload={"component": "acquire"},
@@ -314,68 +314,68 @@ def test_crash_mid_execution_after_claim_is_interrupted(engine: Engine) -> None:
             ).scalar_one()
         assert status == "interrupted"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_orphan_sweep_double_boot_is_idempotent(engine: Engine) -> None:
     """The second startup sweep appends no additional interruption event."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
         answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response=_continue_response(),
             actor="user-1",
         )
         assert claim_continuation(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         ) is not None
         # Mark real progress so both boots see a mid-execution death.
         with engine.begin() as conn:
             attachment = next(
                 row["run_id"]
-                for row in reversed(events.read(conn, project_id))
+                for row in reversed(events.read(conn, task_id))
                 if row["run_id"] is not None
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=attachment,
                 event_type="run.started",
                 payload={"component": "acquire"},
             )
         first = startup_sweep(engine)
         with engine.connect() as conn:
-            first_count = len(events.read(conn, project_id))
+            first_count = len(events.read(conn, task_id))
         second = startup_sweep(engine)
         with engine.connect() as conn:
-            second_count = len(events.read(conn, project_id))
+            second_count = len(events.read(conn, task_id))
         assert first.interrupted_capability_run_ids == (capability_run_id,)
         assert second.interrupted_capability_run_ids == ()
         assert second.reexecute == ()
         assert first_count == second_count
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_parked_answers_reject_replays_and_invalid_options(engine: Engine) -> None:
     """A parked pause accepts its first answer and fail-closes invalid/replayed input."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
         with pytest.raises(InvalidResponseError):
             answer_check_in(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=check_in_id,
                 response={"kind": "option", "option_id": "not-offered"},
                 actor="user-1",
             )
         answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response=_continue_response(),
             actor="user-1",
@@ -383,20 +383,20 @@ def test_parked_answers_reject_replays_and_invalid_options(engine: Engine) -> No
         with pytest.raises(AlreadyAnsweredError):
             answer_check_in(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=check_in_id,
                 response=_continue_response(),
                 actor="user-1",
             )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_tampered_authored_option_is_refused_before_a_decision(engine: Engine) -> None:
     """Apply-time validation refuses a corrupted durable authored delta loudly."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, _capability_run_id, check_in_id = _park_walk(engine)
         with engine.begin() as conn:
             payload = conn.execute(
                 select(event_log.c.payload).where(event_log.c.event_id == check_in_id)
@@ -418,7 +418,7 @@ def test_tampered_authored_option_is_refused_before_a_decision(engine: Engine) -
         with pytest.raises(InvalidResponseError, match="authored option refused") as exc_info:
             answer_check_in(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=check_in_id,
                 response={"kind": "option", "option_id": "suggested_tampered"},
                 actor="user-1",
@@ -427,26 +427,26 @@ def test_tampered_authored_option_is_refused_before_a_decision(engine: Engine) -
         with engine.connect() as conn:
             decisions = [
                 row
-                for row in events.read(conn, project_id)
+                for row in events.read(conn, task_id)
                 if row["event_type"] == "steering.decision"
             ]
         assert decisions == []
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_theme_renames_are_p2_only_and_roll_back_with_a_failed_intent(
     engine: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """P2 rename validation is unique and its write shares the answer transaction."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent", search_effort="standard")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -460,12 +460,12 @@ def test_theme_renames_are_p2_only_and_roll_back_with_a_failed_intent(
         with engine.begin() as conn:
             pause = next(
                 row
-                for row in reversed(events.read(conn, project_id))
+                for row in reversed(events.read(conn, task_id))
                 if row["event_type"] == "steering.pause"
             )
             characterisation_id = conn.execute(
                 select(characterisation_result.c.characterisation_id)
-                .where(characterisation_result.c.project_id == project_id)
+                .where(characterisation_result.c.task_id == task_id)
                 .order_by(characterisation_result.c.created_at.desc())
                 .limit(1)
             ).scalar_one()
@@ -482,7 +482,7 @@ def test_theme_renames_are_p2_only_and_roll_back_with_a_failed_intent(
         with pytest.raises(InvalidResponseError, match="intent persistence sentinel"):
             answer_check_in(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=pause["event_id"],
                 response={
                     "kind": "option",
@@ -512,36 +512,36 @@ def test_theme_renames_are_p2_only_and_roll_back_with_a_failed_intent(
                         {"theme_id": theme_id, "name": "Again"},
                     ]
                 },
-                {"steer_point": "evidence_base_coverage"},
+                {"steer_point": "evidence_search_coverage"},
             )
         with pytest.raises(InvalidResponseError, match="bounded plain text"):
             continuation._theme_renames(
                 {"renames": [{"theme_id": theme_id, "name": "x" * 201}]},
-                {"steer_point": "evidence_base_coverage"},
+                {"steer_point": "evidence_search_coverage"},
             )
         with pytest.raises(InvalidResponseError, match="bounded plain text"):
             continuation._theme_renames(
                 {"renames": [{"theme_id": theme_id, "name": "After\x00"}]},
-                {"steer_point": "evidence_base_coverage"},
+                {"steer_point": "evidence_search_coverage"},
             )
         assert continuation._theme_renames(
             {"renames": [{"theme_id": theme_id, "name": "x" * 200}]},
-            {"steer_point": "evidence_base_coverage"},
+            {"steer_point": "evidence_search_coverage"},
         ) == [(theme_id, "x" * 200)]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_disallowed_segment_reentry_fails_closed_at_confirmation(engine: Engine) -> None:
     """An additive free-text fragment is refused where the pause did not offer re-entry."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent", search_effort="standard")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -554,11 +554,11 @@ def test_disallowed_segment_reentry_fails_closed_at_confirmation(engine: Engine)
         with engine.connect() as conn:
             pause = next(
                 entry
-                for entry in reversed(events.read(conn, project_id))
+                for entry in reversed(events.read(conn, task_id))
                 if entry["event_type"] == "steering.pause"
             )
         assert pause["payload"]["segment_reentry_allowed"] is False
-        orchestrator = StubOrchestratorBackend(
+        agent = StubAgentBackend(
             route_responses=RouterCompileWire(
                 fragments=[
                     RouterFragmentWire(
@@ -574,22 +574,22 @@ def test_disallowed_segment_reentry_fails_closed_at_confirmation(engine: Engine)
         )
         compiled = compile_free_text(
             engine,
-            orchestrator,
-            project_id=project_id,
+            agent,
+            task_id=task_id,
             check_in_id=pause["event_id"],
             text="search again",
         )
         with pytest.raises(InvalidResponseError):
             confirm_free_text(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 check_in_id=pause["event_id"],
                 confirm_token=compiled.confirm_token,
                 apply=True,
                 actor="user-1",
             )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_sweep_survives_running_walk_with_no_attachment(engine: Engine) -> None:
@@ -599,9 +599,9 @@ def test_sweep_survives_running_walk_with_no_attachment(engine: Engine) -> None:
     subsequent API start failed until manual DB surgery (review finding
     backend-M3, 2026-07-21). It now interrupts with a null attachment.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         orphan_id = uuid.uuid4()
         with engine.begin() as conn:
             from datetime import UTC, datetime
@@ -609,9 +609,9 @@ def test_sweep_survives_running_walk_with_no_attachment(engine: Engine) -> None:
             conn.execute(
                 capability_run.insert().values(
                     capability_run_id=orphan_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     evidence_scope_id=scope_id,
-                    capability="evidence_base",
+                    capability="evidence_search",
                     plan_id=uuid.uuid4(),
                     plan_version=1,
                     status="running",
@@ -620,7 +620,7 @@ def test_sweep_survives_running_walk_with_no_attachment(engine: Engine) -> None:
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=None,
                 event_type="run.opened",
                 payload={"capability_run_id": str(orphan_id)},
@@ -633,25 +633,25 @@ def test_sweep_survives_running_walk_with_no_attachment(engine: Engine) -> None:
                     capability_run.c.capability_run_id == orphan_id
                 )
             ).scalar_one()
-            log_rows = events.read(conn, project_id)
+            log_rows = events.read(conn, task_id)
         assert status == "interrupted"
         interruptions = [row for row in log_rows if row["event_type"] == "run.interrupted"]
         assert len(interruptions) == 1
         assert interruptions[0]["run_id"] is None
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
     """API abort mirrors the runner path: run.finished(aborted) + plan abandoned."""
-    from policy_atlas.core.schema import orchestration_plan
+    from policy_atlas.core.schema import task_plan
 
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
+        task_id, _scope_id, capability_run_id, check_in_id = _park_walk(engine)
         answer_check_in(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             check_in_id=check_in_id,
             response={"kind": "option", "option_id": "abort"},
             actor="user-1",
@@ -662,12 +662,12 @@ def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
                     capability_run.c.capability_run_id == capability_run_id
                 )
             ).scalar_one()
-            log_rows = events.read(conn, project_id)
+            log_rows = events.read(conn, task_id)
             plan_statuses = [
                 row[0]
                 for row in conn.execute(
-                    select(orchestration_plan.c.status).where(
-                        orchestration_plan.c.project_id == project_id
+                    select(task_plan.c.status).where(
+                        task_plan.c.task_id == task_id
                     )
                 )
             ]
@@ -684,7 +684,7 @@ def test_abort_emits_terminal_event_and_abandons_plan(engine: Engine) -> None:
         # sees the terminal transition (review findings adv-M5/codex-5).
         assert "abandoned" in plan_statuses
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_event_sequence_allocation_survives_concurrent_writers(engine: Engine) -> None:
@@ -694,9 +694,9 @@ def test_event_sequence_allocation_survives_concurrent_writers(engine: Engine) -
     the collision into a re-read instead of a failed transaction (review
     findings backend-M2/codex-6, 2026-07-21).
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, _scope_id = _seed_project(engine)
+        task_id, _scope_id = _seed_task(engine)
         barrier = threading.Barrier(2)
         errors: list[Exception] = []
 
@@ -707,9 +707,9 @@ def test_event_sequence_allocation_survives_concurrent_writers(engine: Engine) -
                         barrier.wait(timeout=10)
                         events.append(
                             conn,
-                            project_id=project_id,
+                            task_id=task_id,
                             run_id=None,
-                            event_type="project.renamed",
+                            event_type="task.renamed",
                             payload={"tag": tag, "index": index},
                         )
             except Exception as exc:  # pragma: no cover - failure reporting
@@ -721,10 +721,10 @@ def test_event_sequence_allocation_survives_concurrent_writers(engine: Engine) -
                 future.result(timeout=60)
         assert errors == []
         with engine.connect() as conn:
-            rows = events.read(conn, project_id)
+            rows = events.read(conn, task_id)
         sequences = [row["sequence"] for row in rows]
         assert len(rows) == 40
         assert sequences == sorted(sequences)
         assert len(set(sequences)) == 40
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)

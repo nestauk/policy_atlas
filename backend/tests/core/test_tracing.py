@@ -10,30 +10,37 @@ from typing import Any, cast
 
 from policy_atlas.core import tracing
 from policy_atlas.core.usage import TokenUsage, UsageResult
-from policy_atlas.evidence_base.assess.classify import _ClassifyDoc, _run_classification_calls
-from policy_atlas.evidence_base.assess.classify_prompt import ClassifyEnvelopePayload, ClassifyWire
-from policy_atlas.evidence_base.assess.screen import _run_stage1_reps, _run_stage2_reps, _Stage1Doc
-from policy_atlas.evidence_base.assess.screen_prompt import (
+from policy_atlas.evidence_search.assess.classify import _ClassifyDoc, _run_classification_calls
+from policy_atlas.evidence_search.assess.classify_prompt import (
+    ClassifyEnvelopePayload,
+    ClassifyWire,
+)
+from policy_atlas.evidence_search.assess.screen import (
+    _run_stage1_reps,
+    _run_stage2_reps,
+    _Stage1Doc,
+)
+from policy_atlas.evidence_search.assess.screen_prompt import (
     ScreenEnvelopePayload,
     ScreenFullTextPayload,
     ScreenRepWire,
 )
-from policy_atlas.evidence_base.clustering_engine import (
+from policy_atlas.evidence_search.clustering_engine import (
     CallBudget,
     ClusteringPolicy,
     ClusterLabel,
     ClusterUnit,
 )
-from policy_atlas.evidence_base.clustering_engine import (
+from policy_atlas.evidence_search.clustering_engine import (
     run_first_assignment_round as engine_run_first_assignment_round,
 )
-from policy_atlas.evidence_base.corpus.ranking import RankedDoc
-from policy_atlas.evidence_base.corpus.select import SelectionCandidate, _rerank_infos, _SignalDoc
-from policy_atlas.evidence_base.corpus.theme_grouping import GroupingDoc
-from policy_atlas.evidence_base.extract.extract import _Doc, _iof_profile, _run_windows
-from policy_atlas.evidence_base.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
-from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
-from policy_atlas.evidence_base.extract.iof_records import ExtractionWindowPayload
+from policy_atlas.evidence_search.corpus.ranking import RankedDoc
+from policy_atlas.evidence_search.corpus.select import SelectionCandidate, _rerank_infos, _SignalDoc
+from policy_atlas.evidence_search.corpus.theme_grouping import GroupingDoc
+from policy_atlas.evidence_search.extract.extract import _Doc, _iof_profile, _run_windows
+from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_search.extract.iof_records import ExtractionWindowPayload
 
 _WORKER_CONTEXT: contextvars.ContextVar[str] = contextvars.ContextVar(
     "worker_context", default="missing"
@@ -69,7 +76,7 @@ class _ContextExtractionBackend:
 def test_extract_window_fanout_propagates_context() -> None:
     backend = _ContextExtractionBackend()
     doc = _Doc(
-        pss_id=uuid.uuid4(),
+        tss_id=uuid.uuid4(),
         text_basis="abstract_only",
         envelope_snapshot_id=uuid.uuid4(),
         full_text_snapshot_id=None,
@@ -79,7 +86,7 @@ def test_extract_window_fanout_propagates_context() -> None:
         extractable=True,
         window_payloads=[
             ExtractionWindowPayload(
-                pss_id="pss",
+                tss_id="tss",
                 window_index=0,
                 title="Title",
                 abstract="Abstract",
@@ -178,12 +185,12 @@ class _ContextScreeningBackend:
 def test_screening_fanouts_propagate_context() -> None:
     backend = _ContextScreeningBackend()
     stage1_doc = _Stage1Doc(
-        pss_id=uuid.uuid4(),
+        tss_id=uuid.uuid4(),
         source_snapshot_id=uuid.uuid4(),
         metadata={},
         basis="title_abstract",
         payload=ScreenEnvelopePayload(
-            pss_id="pss",
+            tss_id="tss",
             title="Title",
             abstract="Abstract",
             abstract_source=None,
@@ -191,7 +198,7 @@ def test_screening_fanouts_propagate_context() -> None:
         ),
     )
     stage2_payload = ScreenFullTextPayload(
-        pss_id="pss",
+        tss_id="tss",
         title="Title",
         intent="Intent",
         window_index=0,
@@ -233,11 +240,11 @@ def test_classify_fanout_propagates_context() -> None:
     backend = _ContextClassificationBackend()
     docs = [
         _ClassifyDoc(
-            pss_id=uuid.uuid4(),
+            tss_id=uuid.uuid4(),
             source_snapshot_id=uuid.uuid4(),
             metadata={},
             payload=ClassifyEnvelopePayload(
-                pss_id="pss",
+                tss_id="tss",
                 title="Title",
                 abstract="Abstract",
                 priors={},
@@ -330,17 +337,17 @@ class _ContextRankingBackend:
         ], None
 
 
-def _signal_doc(pss_id: uuid.UUID) -> _SignalDoc:
-    from policy_atlas.evidence_base.corpus.characterise import ScreenedSource
+def _signal_doc(tss_id: uuid.UUID) -> _SignalDoc:
+    from policy_atlas.evidence_search.corpus.characterise import ScreenedSource
 
     source = ScreenedSource(
-        pss_id=pss_id,
+        tss_id=tss_id,
         source_snapshot_id=uuid.uuid4(),
         full_text_snapshot_id=None,
         origin="upload",
         full_text_status="not_requested",
         full_text_error=None,
-        metadata={"title": f"Doc {pss_id}"},
+        metadata={"title": f"Doc {tss_id}"},
         source_locator="doc.txt",
         text_basis="abstract_only",
         screen_basis="title_abstract",
@@ -362,7 +369,7 @@ def _signal_doc(pss_id: uuid.UUID) -> _SignalDoc:
 def test_select_rerank_fanout_propagates_context() -> None:
     backend = _ContextRankingBackend()
     contested_ids = [uuid.uuid4(), uuid.uuid4()]
-    signal_docs = {pss_id: _signal_doc(pss_id) for pss_id in contested_ids}
+    signal_docs = {tss_id: _signal_doc(tss_id) for tss_id in contested_ids}
 
     token = _WORKER_CONTEXT.set("select-context")
     try:

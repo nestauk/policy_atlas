@@ -26,9 +26,15 @@ export function Tooltip({
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
           sideOffset={6}
+          collisionPadding={8}
           className={cn(
-            "z-50 max-w-sm border border-line-2 bg-paper px-3 py-2",
-            "text-meta text-ink shadow-[0_10px_30px_rgba(15,41,74,0.14)]",
+            // A tight paper card; caption scale, navy ink. Tooltips that
+            // originate from an edge (the conversation rail) add the
+            // system's 2px blue leading rule via `className`; ones that
+            // sit in running text (citations) stay plain.
+            "z-50 max-w-xs border border-line-2 bg-paper px-2.5 py-1.5",
+            "text-caption leading-snug text-navy shadow-[0_4px_16px_rgba(15,41,74,0.12)]",
+            "origin-[var(--radix-tooltip-content-transform-origin)] transition-[opacity,transform] duration-[125ms] ease-out-strong starting:scale-[0.97] starting:opacity-0",
             className,
           )}
           {...props}

@@ -39,8 +39,8 @@ _CONFLICT_CODES = {
     # 028 strand 3: the approved plan predates the newest completed planning
     # turn — review the demoted draft, re-approve, then start.
     "plan_stale",
-    # Task 033 § 6 (i.5): a project in a portfolio carries that portfolio's
-    # visibility, so setting the project's own visibility has no honest
+    # Task 033 § 6 (i.5): a task in a project carries that project's
+    # visibility, so setting the task's own visibility has no honest
     # answer — the two ways out are changing the Project's visibility and
     # leaving the Task out of the Project.
     "visibility_conflict",
@@ -105,7 +105,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # The container starts uvicorn against create_app directly (backend
     # Makefile's `dev` target and the deployed image both use
     # `uvicorn ... --factory`), so this is the deployed entrypoint —
-    # runtime/orchestrate.py's main() only covers the local CLI path. Must
+    # runtime/agent.py's main() only covers the local CLI path. Must
     # run before anything below can log.
     configure_logging()
     app_settings = settings if settings is not None else load_settings()
@@ -137,7 +137,7 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
         The admin trace is the only control the privileged read has while the
         privacy notice stands unedited (task 033 § 3a, § 12), and until this
         existed an `admin_read` line carried a row id and nothing about the
-        request that produced it — so opening a project card and reading a
+        request that produced it — so opening a task card and reading a
         colleague's whole chat transcript were indistinguishable in the log.
         Two `admin_read` lines with the same `kind` and `row_id` are still two
         different actions, and this is what says which.
@@ -202,28 +202,28 @@ def create_app(*, settings: Settings | None = None, routers: Iterable[APIRouter]
     # Imported here so resource routers can use ApiConflict without an import
     # cycle during module initialisation.
     from policy_atlas.api.routers.check_ins import router as check_ins_router
-    from policy_atlas.api.routers.conversations import (
-        project_router as project_conversations_router,
-    )
     from policy_atlas.api.routers.conversations import router as conversations_router
+    from policy_atlas.api.routers.conversations import (
+        task_router as task_conversations_router,
+    )
     from policy_atlas.api.routers.me import router as me_router
     from policy_atlas.api.routers.planning import router as planning_router
-    from policy_atlas.api.routers.portfolios import router as portfolios_router
-    from policy_atlas.api.routers.projects import (
-        public_read_router as projects_public_read_router,
-    )
     from policy_atlas.api.routers.projects import router as projects_router
     from policy_atlas.api.routers.read_models import router as read_models_router
     from policy_atlas.api.routers.runs import router as runs_router
     from policy_atlas.api.routers.sse import router as sse_router
+    from policy_atlas.api.routers.tasks import (
+        public_read_router as tasks_public_read_router,
+    )
+    from policy_atlas.api.routers.tasks import router as tasks_router
     from policy_atlas.api.routers.waitlist import router as waitlist_router
 
     for router in (
         me_router,
+        tasks_router,
+        tasks_public_read_router,
         projects_router,
-        projects_public_read_router,
-        portfolios_router,
-        project_conversations_router,
+        task_conversations_router,
         planning_router,
         runs_router,
         check_ins_router,
@@ -301,7 +301,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                 executor.submit(
                     _claim_and_execute,
                     engine,
-                    candidate.project_id,
+                    candidate.task_id,
                     candidate.capability_run_id,
                     claim_first=True,
                 )
@@ -311,7 +311,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
                 executor.submit(
                     _claim_and_execute,
                     engine,
-                    candidate.project_id,
+                    candidate.task_id,
                     candidate.capability_run_id,
                     claim_first=False,
                 )
@@ -325,7 +325,7 @@ def _lifespan(settings: Settings) -> Callable[[FastAPI], AbstractAsyncContextMan
 
 
 def _claim_and_execute(
-    engine: Engine, project_id: Any, capability_run_id: Any, *, claim_first: bool
+    engine: Engine, task_id: Any, capability_run_id: Any, *, claim_first: bool
 ) -> None:
     """Claim (unless pre-claimed) and execute one durable continuation.
 
@@ -334,34 +334,34 @@ def _claim_and_execute(
     bundle and NullIO — a redispatched real continuation executed against
     deterministic stubs and auto-continued every subsequent pause).
     """
-    from policy_atlas.api.deps import get_orchestrator_backend, get_runner_backends
+    from policy_atlas.api.deps import get_agent_backend, get_runner_backends
     from policy_atlas.api.run_io import ParkIO
 
     try:
         if claim_first:
             claim = continuation.claim_continuation(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 capability_run_id=capability_run_id,
             )
             if claim is None:
                 return
         continuation.execute_continuation(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             capability_run_id=capability_run_id,
             backends=get_runner_backends(),
             io=ParkIO(),
-            orchestrator=get_orchestrator_backend(),
+            agent=get_agent_backend(),
         )
     except Exception:
         log.exception(
             "continuation.startup_dispatch_failed",
-            project_id=str(project_id),
+            task_id=str(task_id),
             capability_run_id=str(capability_run_id),
         )
         continuation.mark_interrupted_best_effort(
-            engine, project_id=project_id, capability_run_id=capability_run_id
+            engine, task_id=task_id, capability_run_id=capability_run_id
         )
 
 

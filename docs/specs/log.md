@@ -21,7 +21,7 @@
   `iof_v3` rider — deliberate, pre-ground-truth, nothing else riding the bump). Storage
   stays parallel tables; the cross-kind UNION read view is a Slice C seam. ICF is its
   own fingerprint domain — its arrival never invalidates IOF memos. Task 021, ADR 0017.
-* **Update**: [capabilities/evidence-base/components.md](capabilities/evidence-base/components.md)
+* **Update**: [capabilities/evidence-search/components.md](capabilities/evidence-search/components.md)
   §7/§8/§9 — extract runs ICF as a second plan-visible profile alongside IOF through the
   same component (`profiles` directive, fail-closed compile, default both at deep,
   IOF-only expressible); `group`'s membership reach spans both finding kinds via the
@@ -44,7 +44,7 @@
   was considered and declined (drifts; provenance already records surface versions).
 
 ## 2026-07-11
-* **Update**: [EB capability § Output structure](capabilities/evidence-base/capability.md) and
+* **Update**: [EB capability § Output structure](capabilities/evidence-search/capability.md) and
   [provenance-grounding § Summaries](system/provenance-grounding.md) — the "what did it
   conclude" front door split into **two distinct grounded blocks, never merged** (owner
   refinement 2026-07-10; task 018, ADR 0015): the **key-findings block** (headline evidence
@@ -69,8 +69,8 @@
   always *live*. The routing-rule table gains the Unattended column; unanticipated substance
   residuals resolve proceed-and-flag as `unconfigured_default`, the loudest flag class.
   Approved with the 017 contract per the spec-refinement flow.
-* **Update**: [EB components](capabilities/evidence-base/components.md) (opening chain
-  statement + §9) and [EB capability](capabilities/evidence-base/capability.md) (component
+* **Update**: [EB components](capabilities/evidence-search/components.md) (opening chain
+  statement + §9) and [EB capability](capabilities/evidence-search/capability.md) (component
   skeleton) — **the mandatory EB spine** (task 016, user call at the contract gate
   2026-07-09; ADR 0013): every EB run executes acquire(`search`) → screen → classify →
   appraise → ingest(fetch) → synthesise; characterise · select · extract · group · stage-2
@@ -80,7 +80,7 @@
   unreachable-by-composition and `no_groundable_substrate` narrows to the genuinely empty
   corpus (no references AND screened-in count zero). Approved with the 016 contract
   (rev 2.2 + amendments, 2026-07-09) per the spec-refinement flow.
-* **Update**: [EB components §4](capabilities/evidence-base/components.md) — as-enacted
+* **Update**: [EB components §4](capabilities/evidence-search/components.md) — as-enacted
   note on the flag-not-drop failure path (016 contract rev 2.5, user call): the
   unfetchable document's substrate IS its envelope abstract chunks (chunked + embedded at
   acquire), joining grounded retrieval as labelled substrate with `text_basis` carried on
@@ -91,7 +91,7 @@
   spec's intent.
 
 ## 2026-07-08
-* **Update**: [EB components §2](capabilities/evidence-base/components.md) — screen refined
+* **Update**: [EB components §2](capabilities/evidence-search/components.md) — screen refined
   to its v3.0 **two-stage realisation of the one component** (stage-parameterised via the
   plan directive; the thoroughness gradation selects): stage 1 metadata (fail-open,
   title-only exclusion needs consensus unanimity) always; stage 2 windowed full-text
@@ -100,7 +100,7 @@
   `full_text`; failures never block retry. Tiered content peek noted as largely superseded.
   Approved with the task 014 contract (rev 1.10, 2026-07-08) per the spec-refinement flow;
   ADR 0011.
-* **Update**: [EB components §9](capabilities/evidence-base/components.md) — `search_chunks`
+* **Update**: [EB components §9](capabilities/evidence-search/components.md) — `search_chunks`
   described as its staged pipeline (task 013 contract rev 7.5): content-only hybrid
   relevance → arithmetic soft priors (selection prior + fail-closed directive boosts over
   columns/tags/appraisal tier, re-weight-never-exclude — the surface the future
@@ -109,8 +109,8 @@
   lands, per the retrieval contract's inference-trust-boundary line) → caps.
 * **Coherence pass** (task 013 gate, pre-adversarial-review; fresh-context audit, 18
   findings, no semantic changes): superseded same-gate wording reconciled to the amended
-  state across [EB capability](capabilities/evidence-base/capability.md) and
-  [EB components](capabilities/evidence-base/components.md) — "artefact needs at least
+  state across [EB capability](capabilities/evidence-search/capability.md) and
+  [EB components](capabilities/evidence-search/components.md) — "artefact needs at least
   characterise's content" → **≥ 1 groundable substrate** (all upstream references
   optional); the selected-set/corpus-wide chunk-grounding binary → **screened-in corpus
   with the selection as a soft prior**, only corpus-scale retrieval (beyond the in-memory
@@ -121,7 +121,7 @@
   the main structure; ADR 0010 retitled "…and substrate-conditional grounding"; the
   round-by-round decision trail is retained in the task-013 contract's revision history);
   cross-references updated everywhere.
-* **Update**: [EB components §9](capabilities/evidence-base/components.md) — the unified
+* **Update**: [EB components §9](capabilities/evidence-search/components.md) — the unified
   interpretive-shape claim type renamed **cluster claims → theme claims** (task 013 gate,
   user call: policy-maker-facing vocabulary, and the more spec-aligned word — the
   provenance ladder's soft grade is "thematic clustering", group's component is
@@ -133,8 +133,8 @@
   line (descriptive spread, never a weighted verdict, until the ⏸ consensus seam).
 
 ## 2026-07-07
-* **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
-  §9](capabilities/evidence-base/components.md) — the **intent-led synthesis refinement**
+* **Update**: [EB capability](capabilities/evidence-search/capability.md), [EB components
+  §9](capabilities/evidence-search/components.md) — the **intent-led synthesis refinement**
   ([ADR 0010](../adr/0010-intent-led-synthesis-sections.md); task 013 contract gate, second
   round, after an independent deep-reasoner interrogation): deep synthesis is structured as
   **intent-led sections** (bounded section proposal over intent + group summaries; fail-closed
@@ -183,8 +183,8 @@
   separate single-call judge surface (maker ≠ checker at the surface level) — and the
   verify loop's rewrite step is explicit (judge rationales → one reword-down regeneration
   → one re-judge; `REPAIR_ROUND_CAP` = 1, plan-pinned).
-* **Update**: [EB capability](capabilities/evidence-base/capability.md), [EB components
-  §§5/6/9](capabilities/evidence-base/components.md),
+* **Update**: [EB capability](capabilities/evidence-search/capability.md), [EB components
+  §§5/6/9](capabilities/evidence-search/components.md),
   [execution-orchestration.md](system/execution-orchestration.md) — the **terminus
   refinement** (task 013 flow-back, user-decided at the contract gate): (1) the
   **capability-composes rule** — every capability sub-agent composes its own artefact at its
@@ -209,19 +209,19 @@
   spec-refinement flow.
 
 ## 2026-07-06
-* **Update**: [EB components §6](capabilities/evidence-base/components.md) — select
+* **Update**: [EB components §6](capabilities/evidence-search/components.md) — select
   realisation refined: *procedure* → *procedure with an optional bounded generative rerank* of
   within-stratum ordering (stratification, breadth floor, budget arithmetic and must-includes
   stay code-side; schema-constrained per-doc scores + reasons; scores order, never exclude;
   per-doc fallback to the deterministic composite). `unclustered` named a first-class stratum
   (folding in what §5's counted-unclustered already implied). Approved with the task 010
   contract per the spec-refinement flow (rev 3).
-* **Update**: [EB components §5](capabilities/evidence-base/components.md) — clarified
+* **Update**: [EB components §5](capabilities/evidence-search/components.md) — clarified
   content-vs-artefact: characterise produces the landscape *content* (run-scoped
   characterisation record + topic/theme tags); the single EB artefact is composed once at the
   run terminus by the orchestrator (artefact composition is a recorded seam). Approved with
   the task 009 contract per the spec-refinement flow (decision 7).
-* **Update**: [EB components §5](capabilities/evidence-base/components.md) — thematic
+* **Update**: [EB components §5](capabilities/evidence-search/components.md) — thematic
   mechanism clarified to the bounded two-stage LLM grouping (discover over all
   titles+abstracts, batched assignment against the fixed theme list; code-enforced
   exhaustiveness; counted `unclustered`; run-local memberships; embedding-based clustering
@@ -248,18 +248,18 @@
   (per-commit approval in Frequent/Moderate; every commit recorded; Minimal's guarantee triple;
   arch §5), cross-referenced from
   [execution-orchestration.md](system/execution-orchestration.md).
-* **Update**: [EB components §4](capabilities/evidence-base/components.md) — clarified v3.0
+* **Update**: [EB components §4](capabilities/evidence-search/components.md) — clarified v3.0
   Tier-0 ingestion scope: fetch → parse → segment; vectorisation deferred to the slice where
   vectors are first read, with the eager-and-uniform discipline restated (not weakened) for
   when the embed seam lands. Approved with the task 008 contract per the spec-refinement flow
   (decision 1).
-* **Update**: [EB components §1](capabilities/evidence-base/components.md) — clarified v3.0
+* **Update**: [EB components §1](capabilities/evidence-search/components.md) — clarified v3.0
   acquire-time snapshotting: acquire snapshots the metadata envelope as text-in-hand
   (`text_basis="abstract_only"`); full-text fetch + Tier-0 ingestion remain post-screen.
   Approved with the task 007 contract per the spec-refinement flow.
 
 ## 2026-07-03
-* **Update**: [EB components §4](capabilities/evidence-base/components.md) — clarified v3.0
+* **Update**: [EB components §4](capabilities/evidence-search/components.md) — clarified v3.0
   appraisal coverage: the light pass scores classified evidence types; Non-evidence and Unknown
   are skipped-and-counted (Unknown re-enters via the deferred full-text resolution seam).
   Approved with the task 006 contract per the spec-refinement flow.

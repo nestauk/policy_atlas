@@ -65,43 +65,43 @@ waitlist_entry = Table(
     UniqueConstraint("email", name="uq_waitlist_entry_email"),
 )
 
-portfolio = Table(
-    "portfolio",
+project = Table(
+    "project",
     metadata,
-    Column("portfolio_id", UUID(as_uuid=True), primary_key=True),
+    Column("project_id", UUID(as_uuid=True), primary_key=True),
     Column("owner_user_id", Text, nullable=True),
     Column("name", Text, nullable=False),
     Column("description", Text, nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
-    CheckConstraint("visibility IN ('org', 'private')", name="ck_portfolio_visibility"),
-    Index("ix_portfolio_org_visibility", "org_id", "visibility"),
+    CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
+    Index("ix_project_org_visibility", "org_id", "visibility"),
 )
 
-portfolio_membership = Table(
-    "portfolio_membership",
+project_membership = Table(
+    "project_membership",
     metadata,
-    Column(
-        "portfolio_id",
-        UUID(as_uuid=True),
-        ForeignKey("portfolio.portfolio_id"),
-        primary_key=True,
-    ),
     Column(
         "project_id",
         UUID(as_uuid=True),
         ForeignKey("project.project_id"),
         primary_key=True,
     ),
+    Column(
+        "task_id",
+        UUID(as_uuid=True),
+        ForeignKey("task.task_id"),
+        primary_key=True,
+    ),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    Index("ix_portfolio_membership_project_id", "project_id"),
+    Index("ix_project_membership_task_id", "task_id"),
 )
 
-project = Table(
-    "project",
+task = Table(
+    "task",
     metadata,
-    Column("project_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), primary_key=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("name", Text, nullable=False),
     Column("question", Text, nullable=True),
@@ -112,20 +112,20 @@ project = Table(
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
     Column("is_public", Boolean, nullable=False, server_default=text("false")),
-    CheckConstraint("status IN ('active', 'archived')", name="ck_project_status"),
+    CheckConstraint("status IN ('active', 'archived')", name="ck_task_status"),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",
-        name="ck_project_archived_at",
+        name="ck_task_archived_at",
     ),
-    CheckConstraint("visibility IN ('org', 'private')", name="ck_project_visibility"),
-    Index("ix_project_org_visibility_status", "org_id", "visibility", "status"),
+    CheckConstraint("visibility IN ('org', 'private')", name="ck_task_visibility"),
+    Index("ix_task_org_visibility_status", "org_id", "visibility", "status"),
 )
 
 artefact = Table(
     "artefact",
     metadata,
     Column("artefact_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("capability_run_id", UUID(as_uuid=True), nullable=True),
     Column("title", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -135,11 +135,11 @@ artefact = Table(
         "summary_status IN ('pending', 'verified', 'failed')",
         name="ck_artefact_summary_status",
     ),
-    UniqueConstraint("artefact_id", "project_id", name="uq_artefact_id_project"),
+    UniqueConstraint("artefact_id", "task_id", name="uq_artefact_id_task"),
     ForeignKeyConstraint(
-        ["capability_run_id", "project_id"],
-        ["capability_run.capability_run_id", "capability_run.project_id"],
-        name="fk_artefact_capability_run_project",
+        ["capability_run_id", "task_id"],
+        ["capability_run.capability_run_id", "capability_run.task_id"],
+        name="fk_artefact_capability_run_task",
         match="SIMPLE",
     ),
 )
@@ -148,7 +148,7 @@ conversation = Table(
     "conversation",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("kind", Text, nullable=False),
     Column("title", Text, nullable=False),
     Column("entry_artefact_id", UUID(as_uuid=True), nullable=True),
@@ -157,12 +157,12 @@ conversation = Table(
     Column("closed_at", DateTime(timezone=True), nullable=True),
     Column("archived_at", DateTime(timezone=True), nullable=True),
     # The author's `sub`. Nullable because rows predating task 033 have no
-    # recorded author — those belong to the project owner (the legacy disjunct).
+    # recorded author — those belong to the task owner (the legacy disjunct).
     Column("created_by", Text, nullable=True),
     ForeignKeyConstraint(
-        ["entry_artefact_id", "project_id"],
-        ["artefact.artefact_id", "artefact.project_id"],
-        name="fk_conversation_entry_artefact_project",
+        ["entry_artefact_id", "task_id"],
+        ["artefact.artefact_id", "artefact.task_id"],
+        name="fk_conversation_entry_artefact_task",
         match="SIMPLE",
     ),
     CheckConstraint("kind IN ('planning', 'chat')", name="ck_conversation_kind"),
@@ -179,7 +179,7 @@ conversation = Table(
     ),
     Index(
         "uq_conversation_one_active_planning",
-        "project_id",
+        "task_id",
         unique=True,
         postgresql_where=text("kind = 'planning' AND status = 'active'"),
     ),
@@ -238,7 +238,7 @@ runs = Table(
     "runs",
     metadata,
     Column("run_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("status", Text, nullable=False),  # running → succeeded/failed
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True), nullable=True),
@@ -246,15 +246,15 @@ runs = Table(
     # the composite FK below binds only once it's set (MATCH SIMPLE, per
     # synthesis_result's optional-reference precedent).
     Column("capability_run_id", UUID(as_uuid=True), nullable=True),
-    # Composite unique so event_log can FK on (run_id, project_id) and prevent cross-project events.
-    UniqueConstraint("run_id", "project_id", name="uq_runs_run_project"),
-    # Cross-project FK guard, per the synthesis-result/orchestration-plan
+    # Composite unique so event_log can FK on (run_id, task_id) and prevent cross-task events.
+    UniqueConstraint("run_id", "task_id", name="uq_runs_run_task"),
+    # Cross-task FK guard, per the synthesis-result/task-plan
     # precedent: NULL capability_run_id skips the check (MATCH SIMPLE), so the
     # guard binds only once a run is actually attributed to a walk.
     ForeignKeyConstraint(
-        ["capability_run_id", "project_id"],
-        ["capability_run.capability_run_id", "capability_run.project_id"],
-        name="fk_runs_capability_run_project",
+        ["capability_run_id", "task_id"],
+        ["capability_run.capability_run_id", "capability_run.task_id"],
+        name="fk_runs_capability_run_task",
     ),
     # Deferred: persisting plan/config on the run (compiled config travels in plan.compiled event)
 )
@@ -263,23 +263,23 @@ event_log = Table(
     "event_log",
     metadata,
     Column("event_id", UUID(as_uuid=True), primary_key=True),
-    # Nullable for project lifecycle audit events; steering events retain their
+    # Nullable for task lifecycle audit events; steering events retain their
     # own non-null attachment invariant at their emission seam.
     Column("run_id", UUID(as_uuid=True), nullable=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("sequence", BigInteger, nullable=False),
     Column("event_type", Text, nullable=False),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
     Column("payload", JSONB, nullable=False),
-    # Composite FK: event_log(run_id, project_id) → runs(run_id, project_id)
-    # Prevents appending a run from project B into project A's audit log.
+    # Composite FK: event_log(run_id, task_id) → runs(run_id, task_id)
+    # Prevents appending a run from task B into task A's audit log.
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_event_log_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_event_log_run_task",
     ),
-    # Ordering key: (project_id, sequence) — not occurred_at (ties/clock skew)
-    UniqueConstraint("project_id", "sequence", name="uq_event_log_project_sequence"),
+    # Ordering key: (task_id, sequence) — not occurred_at (ties/clock skew)
+    UniqueConstraint("task_id", "sequence", name="uq_event_log_task_sequence"),
 )
 
 # --- Corpus / source model (task 003) ---
@@ -293,14 +293,14 @@ source_snapshot = Table(
     Column("source_locator", Text, nullable=False),
     Column("metadata", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # No project_id — identity is content, not project.
+    # No task_id — identity is content, not task.
 )
 
-project_source_snapshot = Table(
-    "project_source_snapshot",
+task_source_snapshot = Table(
+    "task_source_snapshot",
     metadata,
-    Column("project_source_snapshot_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), primary_key=True),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column(
         "source_snapshot_id",
         UUID(as_uuid=True),
@@ -318,40 +318,40 @@ project_source_snapshot = Table(
     Column(
         "full_text_snapshot_id",
         UUID(as_uuid=True),
-        ForeignKey("source_snapshot.source_snapshot_id", name="fk_pss_full_text_snapshot"),
+        ForeignKey("source_snapshot.source_snapshot_id", name="fk_tss_full_text_snapshot"),
         nullable=True,
     ),
     Column("full_text_status", Text, nullable=False, server_default="not_attempted"),
     Column("full_text_error", Text, nullable=True),
-    UniqueConstraint("project_id", "source_snapshot_id", name="uq_project_source_snapshot"),
+    UniqueConstraint("task_id", "source_snapshot_id", name="uq_task_source_snapshot"),
     # Composite unique target for source_screening_result FK
-    UniqueConstraint("project_source_snapshot_id", "project_id", name="uq_pss_id_project"),
+    UniqueConstraint("task_source_snapshot_id", "task_id", name="uq_tss_id_task"),
     CheckConstraint(
         "full_text_status IN ('not_attempted', 'ingested', 'fetch_failed', 'parse_failed')",
-        name="ck_pss_full_text_status",
+        name="ck_tss_full_text_status",
     ),
     CheckConstraint(
         "(full_text_status = 'ingested') = (full_text_snapshot_id IS NOT NULL)",
-        name="ck_pss_full_text_consistent",
+        name="ck_tss_full_text_consistent",
     ),
     CheckConstraint(
         "(full_text_status IN ('fetch_failed', 'parse_failed')) = (full_text_error IS NOT NULL)",
-        name="ck_pss_full_text_error_presence",
+        name="ck_tss_full_text_error_presence",
     ),
 )
 
 
-def pss_owns_snapshot(snapshot_id: ColumnElement[uuid.UUID] | uuid.UUID) -> ColumnElement[bool]:
+def tss_owns_snapshot(snapshot_id: ColumnElement[uuid.UUID] | uuid.UUID) -> ColumnElement[bool]:
     """Return the corpus-ownership predicate for one candidate snapshot id.
 
     True when ``snapshot_id`` is either the envelope (``source_snapshot_id``)
     or the full-text (``full_text_snapshot_id``) snapshot linked by a
-    ``project_source_snapshot`` row — the "does this chunk/snapshot belong to
-    this project" predicate that was hand-written at five call sites across
+    ``task_source_snapshot`` row — the "does this chunk/snapshot belong to
+    this task" predicate that was hand-written at five call sites across
     the API layer (task 029 delta-review). ``snapshot_id`` may be a column
     expression (e.g. ``chunk.c.source_snapshot_id``) or a bound scalar — both
-    compare correctly against ``project_source_snapshot``'s two snapshot
-    columns. Callers still add their own ``project_id`` scoping; this returns
+    compare correctly against ``task_source_snapshot``'s two snapshot
+    columns. Callers still add their own ``task_id`` scoping; this returns
     only the ownership half of the predicate, suitable for a ``.join()``
     on-clause or a ``.where()``.
 
@@ -359,11 +359,11 @@ def pss_owns_snapshot(snapshot_id: ColumnElement[uuid.UUID] | uuid.UUID) -> Colu
         snapshot_id: The candidate snapshot id/column to test ownership for.
 
     Returns:
-        A SQLAlchemy boolean clause: ``pss.source_snapshot_id == snapshot_id
-        OR pss.full_text_snapshot_id == snapshot_id``.
+        A SQLAlchemy boolean clause: ``tss.source_snapshot_id == snapshot_id
+        OR tss.full_text_snapshot_id == snapshot_id``.
     """
-    return (project_source_snapshot.c.source_snapshot_id == snapshot_id) | (
-        project_source_snapshot.c.full_text_snapshot_id == snapshot_id
+    return (task_source_snapshot.c.source_snapshot_id == snapshot_id) | (
+        task_source_snapshot.c.full_text_snapshot_id == snapshot_id
     )
 
 
@@ -408,12 +408,12 @@ evidence_scope = Table(
     "evidence_scope",
     metadata,
     Column("evidence_scope_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("intent", Text, nullable=False),
     Column("context", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     # Composite unique target for source_screening_result FK
-    UniqueConstraint("evidence_scope_id", "project_id", name="uq_evidence_scope_id_project"),
+    UniqueConstraint("evidence_scope_id", "task_id", name="uq_evidence_scope_id_task"),
 )
 
 source_screening_result = Table(
@@ -421,8 +421,8 @@ source_screening_result = Table(
     metadata,
     Column("source_screening_result_id", UUID(as_uuid=True), primary_key=True),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
-    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
-    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("task_id", UUID(as_uuid=True), nullable=False),
     Column("screened_by_run_id", UUID(as_uuid=True), nullable=False),
     Column("status", Text, nullable=False),
     Column("screen_basis", Text, nullable=True),
@@ -437,24 +437,24 @@ source_screening_result = Table(
     # effective-screen read rule orders generation DESC, stage DESC.
     Column("screen_generation", Integer, nullable=False, server_default="0"),
     Column("screened_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards: all three parents must share the same project_id
+    # Cross-task FK guards: all three parents must share the same task_id
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_ssr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_ssr_scope_task",
     ),
     ForeignKeyConstraint(
-        ["project_source_snapshot_id", "project_id"],
+        ["task_source_snapshot_id", "task_id"],
         [
-            "project_source_snapshot.project_source_snapshot_id",
-            "project_source_snapshot.project_id",
+            "task_source_snapshot.task_source_snapshot_id",
+            "task_source_snapshot.task_id",
         ],
-        name="fk_ssr_pss_project",
+        name="fk_ssr_tss_task",
     ),
     ForeignKeyConstraint(
-        ["screened_by_run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_ssr_run_project",
+        ["screened_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_ssr_run_task",
     ),
     # Partial unique (task 014, replacing the uq_ssr_scope_source constraint;
     # widened task 024 decision 7b to admit generation supersession): at most
@@ -464,7 +464,7 @@ source_screening_result = Table(
     # generations rather than colliding with them.
     Index(
         "uq_ssr_scope_source_stage",
-        "evidence_scope_id", "project_source_snapshot_id", "screen_stage",
+        "evidence_scope_id", "task_source_snapshot_id", "screen_stage",
         "screen_generation",
         unique=True,
         postgresql_where=text("status != 'failed'"),
@@ -521,32 +521,32 @@ source_classification_result = Table(
     metadata,
     Column("source_classification_result_id", UUID(as_uuid=True), primary_key=True),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
-    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
-    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("task_id", UUID(as_uuid=True), nullable=False),
     Column("classified_by_run_id", UUID(as_uuid=True), nullable=False),
     Column("primary_evidence_type", Text, nullable=False),
     Column("classified_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards: all three parents must share the same project_id
+    # Cross-task FK guards: all three parents must share the same task_id
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_scr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_scr_scope_task",
     ),
     ForeignKeyConstraint(
-        ["project_source_snapshot_id", "project_id"],
+        ["task_source_snapshot_id", "task_id"],
         [
-            "project_source_snapshot.project_source_snapshot_id",
-            "project_source_snapshot.project_id",
+            "task_source_snapshot.task_source_snapshot_id",
+            "task_source_snapshot.task_id",
         ],
-        name="fk_scr_pss_project",
+        name="fk_scr_tss_task",
     ),
     ForeignKeyConstraint(
-        ["classified_by_run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_scr_run_project",
+        ["classified_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_scr_run_task",
     ),
     UniqueConstraint(
-        "evidence_scope_id", "project_source_snapshot_id",
+        "evidence_scope_id", "task_source_snapshot_id",
         name="uq_scr_scope_source",
     ),
     # open_tags retired in task 009 (decision 10) — source_tag is the single tag home.
@@ -566,37 +566,37 @@ source_appraisal_result = Table(
     metadata,
     Column("source_appraisal_result_id", UUID(as_uuid=True), primary_key=True),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
-    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
-    Column("project_id", UUID(as_uuid=True), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("task_id", UUID(as_uuid=True), nullable=False),
     Column("appraised_by_run_id", UUID(as_uuid=True), nullable=False),
     Column("quality_score", SmallInteger, nullable=False),  # 1..5, 5 = strongest (v2 rating)
     Column("rubric_version", Text, nullable=False),  # provenance travels with each appraisal
     Column("appraised_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards: all three parents must share the same project_id.
+    # Cross-task FK guards: all three parents must share the same task_id.
     # Deliberately no FK to source_classification_result — the "only classified rows are
     # appraised" invariant lives in the read path (appraise_sources selects from it);
     # a FK would harden the schema against the recorded re-run relaxation seams
     # (see docs/deferred.md).
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_sar_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_sar_scope_task",
     ),
     ForeignKeyConstraint(
-        ["project_source_snapshot_id", "project_id"],
+        ["task_source_snapshot_id", "task_id"],
         [
-            "project_source_snapshot.project_source_snapshot_id",
-            "project_source_snapshot.project_id",
+            "task_source_snapshot.task_source_snapshot_id",
+            "task_source_snapshot.task_id",
         ],
-        name="fk_sar_pss_project",
+        name="fk_sar_tss_task",
     ),
     ForeignKeyConstraint(
-        ["appraised_by_run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_sar_run_project",
+        ["appraised_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_sar_run_task",
     ),
     UniqueConstraint(
-        "evidence_scope_id", "project_source_snapshot_id",
+        "evidence_scope_id", "task_source_snapshot_id",
         name="uq_sar_scope_source",
     ),
     CheckConstraint("quality_score BETWEEN 1 AND 5", name="ck_sar_quality_score"),
@@ -610,7 +610,7 @@ search_coverage_record = Table(
     metadata,
     Column("search_coverage_record_id", UUID(as_uuid=True), primary_key=True),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
-    Column("project_id", UUID(as_uuid=True), nullable=False),  # denormalized; cross-project guard
+    Column("task_id", UUID(as_uuid=True), nullable=False),  # denormalized; cross-task guard
     Column("acquired_by_run_id", UUID(as_uuid=True), nullable=False),
     # [{"backend": ..., "trust_class": ..., "mode": ...}, ...] — the search-space boundary
     Column("backends", JSONB, nullable=False),
@@ -620,14 +620,14 @@ search_coverage_record = Table(
     Column("verdict_origin", Text, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_scov_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_scov_scope_task",
     ),
     ForeignKeyConstraint(
-        ["acquired_by_run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_scov_run_project",
+        ["acquired_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_scov_run_task",
     ),
     UniqueConstraint("acquired_by_run_id", name="uq_scov_run"),  # one record per acquire run
     # 'saturated' deliberately absent — saturation-based stopping is a deferred seam (spec).
@@ -682,7 +682,7 @@ characterisation_result = Table(
     "characterisation_result",
     metadata,
     Column("characterisation_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
     # Required keys (test-asserted): prompt_version, discovery_model, assignment_model,
@@ -693,16 +693,16 @@ characterisation_result = Table(
     # design (capability.md): memberships never promote to canonical corpus state.
     Column("themes", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards, per the screening-result precedent.
+    # Cross-task FK guards, per the screening-result precedent.
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_char_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_char_scope_task",
     ),
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_char_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_char_run_task",
     ),
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_char_scope_run"),
 )
@@ -716,7 +716,7 @@ selection_result = Table(
     "selection_result",
     metadata,
     Column("selection_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
     Column("strategy", Text, nullable=False),
@@ -725,7 +725,7 @@ selection_result = Table(
     # effective weights, signal availability; under llm_rerank_v1 additionally
     # prompt_version, model, batch_size, retry/fallback counts.
     Column("selection_provenance", JSONB, nullable=False),
-    # Per doc: pss id, stratum, signal scores (+ llm score/reason where ranked),
+    # Per doc: tss id, stratum, signal scores (+ llm score/reason where ranked),
     # text_basis, reason (must_include | breadth_floor | ranked).
     Column("selected", JSONB, nullable=False),
     # Per stratum: counts by reason class + notable flagged exclusions;
@@ -734,16 +734,16 @@ selection_result = Table(
     Column("excluded", JSONB, nullable=False),
     Column("flags", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards, per the characterisation-result precedent.
+    # Cross-task FK guards, per the characterisation-result precedent.
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_selr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_selr_scope_task",
     ),
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_selr_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_selr_run_task",
     ),
     # Run-local by design: same-run re-execution is a loud error, retry = new run.
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_selr_scope_run"),
@@ -763,8 +763,8 @@ source_tag = Table(
     "source_tag",
     metadata,
     Column("source_tag_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
-    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("tag", Text, nullable=False),
     Column("tag_type", Text, nullable=False),
     # Assertion provenance: provider-curated ("openalex", "overton"), provider-LLM
@@ -775,20 +775,20 @@ source_tag = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("theme_id", UUID(as_uuid=True), nullable=True),
     ForeignKeyConstraint(
-        ["project_source_snapshot_id", "project_id"],
+        ["task_source_snapshot_id", "task_id"],
         [
-            "project_source_snapshot.project_source_snapshot_id",
-            "project_source_snapshot.project_id",
+            "task_source_snapshot.task_source_snapshot_id",
+            "task_source_snapshot.task_id",
         ],
-        name="fk_stag_pss_project",
+        name="fk_stag_tss_task",
     ),
     ForeignKeyConstraint(
-        ["created_by_run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_stag_run_project",
+        ["created_by_run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_stag_run_task",
     ),
     UniqueConstraint(
-        "project_source_snapshot_id", "tag_type", "tag", "asserted_by",
+        "task_source_snapshot_id", "tag_type", "tag", "asserted_by",
         name="uq_source_tag_assertion",
     ),
     CheckConstraint(
@@ -854,17 +854,17 @@ source_extraction_record = Table(
     "source_extraction_record",
     metadata,
     Column("extraction_record_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
-    # The extracted snapshot: the selected pss's full_text_snapshot_id (basis
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    # The extracted snapshot: the selected tss's full_text_snapshot_id (basis
     # full_text) or its envelope snapshot (basis abstract_only). source_snapshot
-    # is content-keyed/shared, so the cross-project guard rides the pss link.
+    # is content-keyed/shared, so the cross-task guard rides the tss link.
     Column(
         "source_snapshot_id",
         UUID(as_uuid=True),
         ForeignKey("source_snapshot.source_snapshot_id"),
         nullable=False,
     ),
-    Column("project_source_snapshot_id", UUID(as_uuid=True), nullable=False),
+    Column("task_source_snapshot_id", UUID(as_uuid=True), nullable=False),
     Column("extraction_fingerprint", Text, nullable=False),
     Column("status", Text, nullable=False),
     Column("basis", Text, nullable=False),
@@ -876,28 +876,28 @@ source_extraction_record = Table(
     Column("finding_count", Integer, nullable=False, server_default="0"),
     Column("run_id", UUID(as_uuid=True), nullable=False),  # creating run; assertion provenance
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards, per the screening-result precedent.
+    # Cross-task FK guards, per the screening-result precedent.
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_ser_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_ser_run_task",
     ),
     ForeignKeyConstraint(
-        ["project_source_snapshot_id", "project_id"],
+        ["task_source_snapshot_id", "task_id"],
         [
-            "project_source_snapshot.project_source_snapshot_id",
-            "project_source_snapshot.project_id",
+            "task_source_snapshot.task_source_snapshot_id",
+            "task_source_snapshot.task_id",
         ],
-        name="fk_ser_pss_project",
+        name="fk_ser_tss_task",
     ),
-    # Composite unique target for the finding table's cross-project FK guard
-    # (the uq_pss_id_project / uq_runs_run_project parent pattern).
-    UniqueConstraint("extraction_record_id", "project_id", name="uq_ser_id_project"),
+    # Composite unique target for the finding table's cross-task FK guard
+    # (the uq_tss_id_task / uq_runs_run_task parent pattern).
+    UniqueConstraint("extraction_record_id", "task_id", name="uq_ser_id_task"),
     # The memo key: partial unique over the two success states only, so a failed
     # attempt never blocks its own retry (contract rev 1.5).
     Index(
         "uq_ser_memo",
-        "project_id",
+        "task_id",
         "source_snapshot_id",
         "extraction_fingerprint",
         unique=True,
@@ -910,7 +910,7 @@ source_extraction_record = Table(
         f"({_SER_EVIDENCE_TYPES_SQL_LIST})",
         name="ck_ser_evidence_type",
     ),
-    # Failure is never silent: failed ⟺ reason-coded (the pss full-text precedent).
+    # Failure is never silent: failed ⟺ reason-coded (the tss full-text precedent).
     CheckConstraint(
         "(status = 'extraction_failed') = (error IS NOT NULL)",
         name="ck_ser_error_presence",
@@ -921,7 +921,7 @@ intervention_outcome_finding = Table(
     "intervention_outcome_finding",
     metadata,
     Column("finding_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("extraction_record_id", UUID(as_uuid=True), nullable=False),
     # Source-named references — never canonical entities (data-model findings layer).
     Column("intervention", Text, nullable=False),
@@ -948,12 +948,12 @@ intervention_outcome_finding = Table(
     Column("grounding", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
-        ["extraction_record_id", "project_id"],
+        ["extraction_record_id", "task_id"],
         [
             "source_extraction_record.extraction_record_id",
-            "source_extraction_record.project_id",
+            "source_extraction_record.task_id",
         ],
-        name="fk_iof_record_project",
+        name="fk_iof_record_task",
     ),
     CheckConstraint(f"effect_direction IN ({_EFFECT_DIRECTIONS_SQL})", name="ck_iof_direction"),
     CheckConstraint(
@@ -977,7 +977,7 @@ implementation_context_finding = Table(
     "implementation_context_finding",
     metadata,
     Column("finding_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("extraction_record_id", UUID(as_uuid=True), nullable=False),
     # One implementation-context claim about a named intervention, grounded in one source.
     Column("context_type", Text, nullable=False),
@@ -1001,12 +1001,12 @@ implementation_context_finding = Table(
     Column("grounding", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
-        ["extraction_record_id", "project_id"],
+        ["extraction_record_id", "task_id"],
         [
             "source_extraction_record.extraction_record_id",
-            "source_extraction_record.project_id",
+            "source_extraction_record.task_id",
         ],
-        name="fk_icf_record_project",
+        name="fk_icf_record_task",
     ),
     CheckConstraint(f"context_type IN ({_CONTEXT_TYPES_SQL})", name="ck_icf_context_type"),
     CheckConstraint(
@@ -1031,7 +1031,7 @@ finding_reference_union = Table(
     Column("finding_id", UUID(as_uuid=True)),
     Column("kind", Text),
     Column("extraction_record_id", UUID(as_uuid=True)),
-    Column("project_id", UUID(as_uuid=True)),
+    Column("task_id", UUID(as_uuid=True)),
     Column("intervention", Text),
     Column("outcome", Text),
     Column("population", Text),
@@ -1044,14 +1044,14 @@ extraction_result = Table(
     "extraction_result",
     metadata,
     Column("extraction_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
     Column("selection_run_id", UUID(as_uuid=True), nullable=False),  # the executed reference
     # Fingerprint + full component map: profile, schema, prompt, model, mode,
     # field rules, verifier, window params, max output tokens, retry cap, pass count.
     Column("extraction_provenance", JSONB, nullable=False),
-    # Per doc: pss id, status, basis, finding count, fresh|reused, error reason.
+    # Per doc: tss id, status, basis, finding count, fresh|reused, error reason.
     Column("docs", JSONB, nullable=False),
     # Base ladder: selected, extracted, no_findings, failed, fresh, reused,
     # findings total, quote_unverified, basis shares.
@@ -1059,14 +1059,14 @@ extraction_result = Table(
     Column("flags", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_exr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_exr_scope_task",
     ),
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_exr_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_exr_run_task",
     ),
     # The executed selection must exist for this scope (targets uq_selr_scope_run),
     # so a roll-up can never reference a selection that was never written.
@@ -1094,7 +1094,7 @@ grouping_result = Table(
     "grouping_result",
     metadata,
     Column("grouping_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
     Column("extraction_run_id", UUID(as_uuid=True), nullable=False),  # the executed reference
@@ -1111,16 +1111,16 @@ grouping_result = Table(
     Column("counts", JSONB, nullable=False),
     Column("flags", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards, per the extraction-result precedent.
+    # Cross-task FK guards, per the extraction-result precedent.
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_grr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_grr_scope_task",
     ),
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_grr_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_grr_run_task",
     ),
     # The executed extraction must exist for this scope (targets uq_exr_scope_run),
     # so a grouping can never reference an extraction that was never written.
@@ -1139,7 +1139,7 @@ synthesis_result = Table(
     "synthesis_result",
     metadata,
     Column("synthesis_result_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("run_id", UUID(as_uuid=True), nullable=False),
     # Resolved references (all optional — substrate-conditional, contract decision 2).
@@ -1171,16 +1171,16 @@ synthesis_result = Table(
     Column("counts", JSONB, nullable=False),
     Column("flags", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
-    # Cross-project FK guards, per the grouping-result precedent.
+    # Cross-task FK guards, per the grouping-result precedent.
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_synr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_synr_scope_task",
     ),
     ForeignKeyConstraint(
-        ["run_id", "project_id"],
-        ["runs.run_id", "runs.project_id"],
-        name="fk_synr_run_project",
+        ["run_id", "task_id"],
+        ["runs.run_id", "runs.task_id"],
+        name="fk_synr_run_task",
     ),
     # Each resolved reference must exist for this scope (targets the parents'
     # (evidence_scope_id, run_id) uniques), so a roll-up can never reference an
@@ -1209,38 +1209,38 @@ synthesis_result = Table(
     UniqueConstraint("evidence_scope_id", "run_id", name="uq_synr_scope_run"),
 )
 
-# --- Orchestration plan (task 017) ---
+# --- Task plan (task 017) ---
 
-orchestration_plan = Table(
-    "orchestration_plan",
+task_plan = Table(
+    "plan",
     metadata,
     Column("plan_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("conversation_id", UUID(as_uuid=True), ForeignKey("conversation.id"), nullable=True),
     # NULLABLE — resolved at approval time; the composite FK below binds only
     # once it's set (MATCH SIMPLE, per synthesis_result's optional references).
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=True),
     Column("version", Integer, nullable=False),  # 1..n; amendments append rows
     Column("status", Text, nullable=False),  # proposed|approved|superseded|abandoned
-    Column("payload", JSONB, nullable=False),  # the validated OrchestrationPlan dump
+    Column("payload", JSONB, nullable=False),  # the validated TaskPlan dump
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("created_by", Text, nullable=False),  # 'user'|'planner' attribution
     Column("approved_at", DateTime(timezone=True), nullable=True),
-    # Cross-project FK guard, per the synthesis-result precedent: NULL
+    # Cross-task FK guard, per the synthesis-result precedent: NULL
     # evidence_scope_id skips the check (MATCH SIMPLE), so the guard binds
     # only once a scope is actually resolved.
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_oplan_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_plan_scope_task",
     ),
-    # One plan lineage per project in v1 — amendments append new-version rows.
-    UniqueConstraint("project_id", "version", name="uq_oplan_project_version"),
+    # One plan lineage per task in v1 — amendments append new-version rows.
+    UniqueConstraint("task_id", "version", name="uq_plan_task_version"),
     CheckConstraint(
         "status IN ('proposed', 'approved', 'superseded', 'abandoned')",
-        name="ck_oplan_status",
+        name="ck_plan_status",
     ),
-    CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_oplan_payload_object"),
+    CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_plan_payload_object"),
 )
 
 # --- Durable planning transcript (task 027) ---
@@ -1249,7 +1249,7 @@ planning_transcript = Table(
     "planning_transcript",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("conversation_id", UUID(as_uuid=True), ForeignKey("conversation.id"), nullable=True),
     Column("client_turn_id", UUID(as_uuid=True), nullable=False),
     # This is the transcript's ordering coordinate. ``created_at`` remains
@@ -1266,8 +1266,8 @@ planning_transcript = Table(
     Column("status", Text, nullable=False),  # pending|completed|failed
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("completed_at", DateTime(timezone=True), nullable=True),
-    UniqueConstraint("project_id", "client_turn_id", name="uq_ptr_project_client_turn"),
-    UniqueConstraint("project_id", "turn_index", name="uq_ptr_project_turn_index"),
+    UniqueConstraint("task_id", "client_turn_id", name="uq_ptr_task_client_turn"),
+    UniqueConstraint("task_id", "turn_index", name="uq_ptr_task_turn_index"),
     CheckConstraint(
         "status IN ('pending', 'completed', 'failed')", name="ck_ptr_status"
     ),
@@ -1277,7 +1277,7 @@ planning_transcript = Table(
 # --- Capability run (task 024) ---
 #
 # The steering-surface walk entity (contract decision 2): one row per
-# orchestrated capability walk (v1: 'evidence_base' only), carrying the
+# planned capability walk (v1: 'evidence_search' only), carrying the
 # approved plan identity at walk open and the walk's terminal status.
 # `runs.capability_run_id` (nullable, MATCH SIMPLE) attributes each
 # component run to the walk it executed within. Deliberately not modelled:
@@ -1287,7 +1287,7 @@ capability_run = Table(
     "capability_run",
     metadata,
     Column("capability_run_id", UUID(as_uuid=True), primary_key=True),
-    Column("project_id", UUID(as_uuid=True), ForeignKey("project.project_id"), nullable=False),
+    Column("task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
     Column("evidence_scope_id", UUID(as_uuid=True), nullable=False),
     Column("capability", Text, nullable=False),
     # The approved plan identity at walk open.
@@ -1301,15 +1301,15 @@ capability_run = Table(
     Column("session_id", UUID(as_uuid=True), nullable=True),
     Column("started_at", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True), nullable=True),
-    # Cross-project FK guard, per the selection-result precedent.
+    # Cross-task FK guard, per the selection-result precedent.
     ForeignKeyConstraint(
-        ["evidence_scope_id", "project_id"],
-        ["evidence_scope.evidence_scope_id", "evidence_scope.project_id"],
-        name="fk_capr_scope_project",
+        ["evidence_scope_id", "task_id"],
+        ["evidence_scope.evidence_scope_id", "evidence_scope.task_id"],
+        name="fk_capr_scope_task",
     ),
     # Composite-FK target for runs.capability_run_id.
-    UniqueConstraint("capability_run_id", "project_id", name="uq_capr_id_project"),
-    CheckConstraint("capability IN ('evidence_base')", name="ck_capr_capability"),
+    UniqueConstraint("capability_run_id", "task_id", name="uq_capr_id_task"),
+    CheckConstraint("capability IN ('evidence_search')", name="ck_capr_capability"),
     CheckConstraint(
         "status IN ('running', 'paused', 'succeeded', 'degraded', 'failed', "
         "'aborted', 'interrupted')",

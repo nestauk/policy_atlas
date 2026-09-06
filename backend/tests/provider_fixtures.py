@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from policy_atlas.evidence_base.sourcing.acquire import BackendCaps, _normalize_doi
+from policy_atlas.evidence_search.sourcing.acquire import BackendCaps, _normalize_doi
 
 _DATA_DIR = Path(__file__).resolve().parent / "data" / "provider_records"
 

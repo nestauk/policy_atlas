@@ -1,4 +1,9 @@
-"""Owner-scoped project lifecycle resource routes."""
+"""Owner-scoped project routes — the named grouping above the task row.
+
+Since task 038 the screen word and the code word agree: this row is a **Project**
+and a `task` row is a **Task**. A project carries a name, a description and an owner;
+its task count is derived per request rather than cached on the row.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +11,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-import structlog
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import delete, func, select, update
-from sqlalchemy.engine import Connection
+from sqlalchemy import case, func, select, update
+from sqlalchemy.engine import Connection, RowMapping
 
-from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
@@ -21,31 +24,22 @@ from policy_atlas.api.contract import (
     ProjectCreate,
     ProjectOut,
     ProjectUpdate,
+    Visibility,
 )
-from policy_atlas.api.deps import get_conn, get_current_user, get_optional_user
+from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.identity import owner_display_for
-from policy_atlas.api.lifecycle import archive_project, rename_project
 from policy_atlas.api.routers._access import (
     OWNER_EMAIL_MAX,
     accessible_project,
-    assignable_portfolio,
+    accessible_task,
     creator_org_id,
     listing_scope,
+    own_estate,
     owner_email_filter,
-    readable_or_public_project,
     trace_admin_listing,
 )
-from policy_atlas.api.routers._common import memberships_for_projects, project_out
-from policy_atlas.core import events
-from policy_atlas.core.schema import (
-    app_user,
-    capability_run,
-    portfolio,
-    portfolio_membership,
-    project,
-)
-
-log = structlog.get_logger()
+from policy_atlas.api.routers._common import resolve_owner_display
+from policy_atlas.core.schema import app_user, project, project_membership, task
 
 router = APIRouter(
     prefix="/api/v1/projects",
@@ -53,42 +47,182 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-public_read_router = APIRouter(prefix="/api/v1/projects", tags=["projects"])
+
+#: The only columns `PATCH /api/v1/projects/{id}` may write **by splat**.
+#: Explicitly **not** `visibility`: contract § 6, i.4 makes
+#: :func:`_cascade_visibility` its sole writer. `ProjectUpdate` now carries
+#: the field — the route routes it to the cascade by name — and this list is
+#: what guarantees the generic path can never carry it to the column instead.
+#: Asserted structurally by
+#: `test_project_visibility_never_reaches_the_column_through_the_splat`.
+_PATCHABLE_COLUMNS = ("name", "description")
+
+
+def _cascade_visibility(
+    conn: Connection,
+    *,
+    project_id: uuid.UUID,
+    org_id: uuid.UUID | None,
+    visibility: Visibility,
+) -> None:
+    """Set a project's visibility and carry every member task with it.
+
+    Contract § 6, i.4 — **the only writer of `project.visibility`**, and
+    the reason `PATCH /api/v1/projects/{id}` may accept the field at all.
+    Two statements in the request's single transaction (`deps.get_conn`), so
+    no reader ever observes a project and its members disagreeing.
+
+    **Both invariant fields are written, not just `visibility`.** A visibility
+    change does not move a row between organisations, and members already
+    match their project's `org_id` — i.1 inherits it, the assignment path
+    syncs it, and enrolment moves a person's rows as one set. So the `org_id`
+    write is a no-op on every row the API itself produced. It is written
+    anyway, deliberately: if a member ever *does* mismatch — an operator
+    assignment, a pre-invariant row, a future path that forgets — the choice
+    is between self-healing it here and leaving an exposed row in place while
+    the property test reports it after the fact. "Every member follows its
+    project" is the rule, so the cascade makes both fields true rather than
+    half of them.
+
+    **Archived members are included** (contract § 6, i.4). They are excluded
+    from the derived task count, not from the row's visibility: an archived
+    Task is still readable by whoever may read it, so leaving it behind would
+    keep exactly the rows nobody is looking at readable by the organisation
+    after the owner made the Project private.
+
+    Args:
+        conn: Open database connection, inside the request transaction.
+        project_id: The project whose visibility is changing.
+        org_id: That project's organisation — what members are synced to.
+        visibility: The new visibility for the project. Each member is then
+            **recomputed, not assigned**: membership is many-to-many
+            (ADR 0032), and a member is org-visible if *any* project it is
+            in is org-visible, private otherwise (owner ruling 2026-08-27).
+            With a single membership that collapses to "the member follows
+            its project", the pre-0032 behaviour; a member shared with an
+            org-visible project stays org-visible when this one goes
+            private.
+    """
+    conn.execute(
+        update(project)
+        .where(project.c.project_id == project_id)
+        .values(visibility=visibility)
+    )
+    member_ids = select(project_membership.c.task_id).where(
+        project_membership.c.project_id == project_id
+    )
+    # The project row is written first, so this EXISTS reads the new value
+    # along with every other membership the member holds.
+    in_any_org_project = (
+        select(project_membership.c.task_id)
+        .select_from(
+            project_membership.join(
+                project,
+                project.c.project_id == project_membership.c.project_id,
+            )
+        )
+        .where(project_membership.c.task_id == task.c.task_id)
+        .where(project.c.visibility == "org")
+        .exists()
+    )
+    # No status filter, on purpose: archived members follow too.
+    conn.execute(
+        update(task)
+        .where(task.c.task_id.in_(member_ids))
+        .values(
+            visibility=case((in_any_org_project, "org"), else_="private"),
+            org_id=org_id,
+            updated_at=datetime.now(UTC),
+        )
+    )
+
+
+def _task_counts(
+    conn: Connection, project_ids: list[uuid.UUID], *, user_id: str
+) -> dict[uuid.UUID, int]:
+    """Count each project's active, caller-visible members in one query.
+
+    Counted unconditionally before task 033, which would have shown a
+    colleague the true size of a Project whose private Tasks they cannot
+    open. Contract § 8: the count includes only rows the caller may read
+    **and** rows in the caller's own organisation — :func:`own_estate`, which
+    is the read grade minus the admin leg, so an administrator's card keeps
+    showing their own organisation's count rather than a cross-organisation
+    sum.
+
+    Args:
+        conn: Open database connection.
+        project_ids: The projects to count for.
+        user_id: The calling subject — the count is per-caller.
+
+    Returns:
+        Counts by project id; projects with no visible member are absent.
+    """
+    if not project_ids:
+        return {}
+    rows = conn.execute(
+        select(project_membership.c.project_id, func.count())
+        .select_from(
+            project_membership.join(
+                task,
+                task.c.task_id == project_membership.c.task_id,
+            )
+        )
+        .where(project_membership.c.project_id.in_(project_ids))
+        .where(task.c.status == "active")
+        .where(own_estate(task, user_id))
+        .group_by(project_membership.c.project_id)
+    ).all()
+    return {row[0]: int(row[1]) for row in rows}
+
+
+def _project_out(
+    row: RowMapping, task_count: int, *, user_id: str, owner_display: str | None
+) -> ProjectOut:
+    """Project one project row into its public contract shape for one caller.
+
+    Args:
+        row: The project row.
+        task_count: The caller-visible member count.
+        user_id: The calling subject, for `is_owner`.
+        owner_display: How to name the owner — never an email.
+
+    Returns:
+        The public project shape.
+    """
+    return ProjectOut(
+        project_id=row["project_id"],
+        name=row["name"],
+        description=row["description"],
+        created_at=row["created_at"],
+        task_count=task_count,
+        visibility=row["visibility"],
+        is_owner=row["owner_user_id"] == user_id,
+        owner_display=owner_display,
+    )
 
 
 @router.get("", response_model=Page[ProjectOut])
 def list_projects(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
-    status_filter: Annotated[
-        Literal["active", "archived", "all"], Query(alias="status")
-    ] = "active",
     scope: Annotated[Literal["all", "mine"], Query()] = "all",
-    portfolio_id: Annotated[uuid.UUID | None, Query()] = None,
     owner_email: Annotated[str | None, Query(max_length=OWNER_EMAIL_MAX)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[ProjectOut]:
-    """List the projects the caller may see, with derived latest-run state.
+    """List the projects the caller may see, with a derived task count.
 
     Args:
         user: The authenticated caller.
         conn: Open database connection.
-        status_filter: `active` (default), `archived` or `all`.
         scope: `all` (default) — the caller's own rows plus their
             organisation's org-visible rows, and for an administrator every
-            row in every organisation — or `mine` for owner-only, the
-            pre-033 behaviour. **The default is `all`**: a `mine` default
-            would hide the whole feature behind a switcher.
-        portfolio_id: Narrow to one portfolio's members. Server-side because
-            `PortfolioDetailView` filtered the default 50-row global page
-            client-side and would silently under-report once the visible
-            estate spans an organisation.
+            row in every organisation — or `mine` for owner-only.
         owner_email: Narrow to one owner's rows. **Administrators only**; any
             other caller gets 422 `validation_error`, as does a value longer
-            than `OWNER_EMAIL_MAX` or one carrying no `@` — the value is
-            logged verbatim on the admin trace, so it is bounded and shaped at
-            the boundary rather than in the log.
+            than `OWNER_EMAIL_MAX` or one carrying no `@` — see
+            `tasks.list_tasks`.
         page: 1-indexed page number.
         page_size: Rows per page, server-capped.
 
@@ -103,32 +237,21 @@ def list_projects(
         scoped.predicate,
         owner_email_filter(conn, project, user_id=user.user_id, owner_email=owner_email),
     ]
-    if status_filter != "all":
-        where.append(project.c.status == status_filter)
-    if portfolio_id is not None:
-        where.append(
-            project.c.project_id.in_(
-                select(portfolio_membership.c.project_id).where(
-                    portfolio_membership.c.portfolio_id == portfolio_id
-                )
-            )
-        )
     total = conn.execute(select(func.count()).select_from(project).where(*where)).scalar_one()
-    # One join, not one lookup per row: `owner_display` on a 200-row page
-    # would otherwise be 200 extra round trips.
     rows = conn.execute(
         select(*project.c, app_user.c.display_name.label("owner_display_name"))
         .select_from(
             project.outerjoin(app_user, app_user.c.user_id == project.c.owner_user_id)
         )
         .where(*where)
-        .order_by(project.c.updated_at.desc(), project.c.project_id.desc())
+        .order_by(project.c.created_at.desc(), project.c.project_id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).mappings().all()
+    counts = _task_counts(conn, [row["project_id"] for row in rows], user_id=user.user_id)
     # One line per cross-organisation request (contract § 3a), emitted after
-    # the page is known so it can carry the row count — including the zero
-    # that an `owner_email` search matching nobody produces.
+    # the page is known so it can carry the row count — including the zero an
+    # `owner_email` search matching nobody produces.
     trace_admin_listing(
         scoped,
         kind="project",
@@ -140,17 +263,15 @@ def list_projects(
         row_count=len(rows),
         total_items=int(total),
     )
-    memberships = memberships_for_projects(conn, [row["project_id"] for row in rows])
     return Page(
         data=[
-            project_out(
-                conn,
+            _project_out(
                 row,
+                counts.get(row["project_id"], 0),
                 user_id=user.user_id,
                 owner_display=owner_display_for(
                     row["owner_user_id"], row["owner_display_name"]
                 ),
-                portfolio_ids=memberships[row["project_id"]],
             )
             for row in rows
         ],
@@ -164,47 +285,100 @@ def create_project(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ProjectOut:
-    """Create one active project owned by the authenticated subject.
+    """Create one project owned by the authenticated subject.
 
-    Stamps the creator's organisation onto the row (contract § 7) — NULL when
-    the creator is unenrolled, which leaves the row reachable by its owner
-    alone. `visibility` takes the column default `private` (owner amendment
-    2026-08-26 — new work is unshared until its owner deliberately shares it).
+    With `from_task_id` (contract § 6, i.1) the new project inherits that
+    task's `visibility` **and** organisation and takes it as its first
+    member, all in the request's single transaction — so the invariant "a
+    task in a project matches its project on both" holds from the
+    moment the row exists rather than being repaired afterwards.
+
+    The source task resolves under the **write** grade, not a read grade.
+    Under a read grade a same-org colleague — or, once the admin leg lands, an
+    administrator — could pull a row they do not own into a project and
+    change its visibility, which is the concrete admin-write escape the
+    contract names.
+
+    Without `from_task_id`, the project is empty and its organisation is
+    stamped from the creator (contract § 7).
+
+    Args:
+        payload: The create body.
+        user: The authenticated caller.
+        conn: Open database connection.
+
+    Returns:
+        The created project.
+
+    Raises:
+        HTTPException: 404 when `from_task_id` names a task the caller
+            cannot read, 403 when they can read it but do not own it.
     """
-    now = datetime.now(UTC)
     project_id = uuid.uuid4()
-    conn.execute(
-        project.insert().values(
-            project_id=project_id,
-            name=payload.name,
-            question=payload.question,
-            status="active",
-            owner_user_id=user.user_id,
-            created_at=now,
-            updated_at=now,
-            archived_at=None,
-            org_id=creator_org_id(conn, user.user_id),
+    source = (
+        accessible_task(
+            conn,
+            task_id=payload.from_task_id,
+            user_id=user.user_id,
+            write=True,
+            for_update=True,
         )
+        if payload.from_task_id is not None
+        else None
     )
-    row = conn.execute(select(project).where(project.c.project_id == project_id)).mappings().one()
-    return project_out(conn, row, user_id=user.user_id)
+    org_id = source.row["org_id"] if source is not None else creator_org_id(conn, user.user_id)
+    values: dict[str, object] = {
+        "project_id": project_id,
+        "owner_user_id": user.user_id,
+        "name": payload.name,
+        "description": payload.description,
+        "created_at": datetime.now(UTC),
+        "org_id": org_id,
+    }
+    if source is not None:
+        values["visibility"] = source.row["visibility"]
+    conn.execute(project.insert().values(**values))
+    if source is not None:
+        conn.execute(
+            project_membership.insert().values(
+                project_id=project_id,
+                task_id=source.row["task_id"],
+                created_at=datetime.now(UTC),
+            )
+        )
+        conn.execute(
+            update(task)
+            .where(task.c.task_id == source.row["task_id"])
+            .values(updated_at=datetime.now(UTC))
+        )
+    row = conn.execute(
+        select(project).where(project.c.project_id == project_id)
+    ).mappings().one()
+    return _project_out(
+        row,
+        1 if source is not None else 0,
+        user_id=user.user_id,
+        owner_display=resolve_owner_display(conn, user.user_id),
+    )
 
 
-@public_read_router.get("/{project_id}", response_model=ProjectOut)
+@router.get("/{project_id}", response_model=ProjectOut)
 def get_project(
     project_id: uuid.UUID,
-    user: Annotated[AuthenticatedUser | None, Depends(get_optional_user)],
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ProjectOut:
-    """Return one active project through its graded or redacted public leg."""
-    access = readable_or_public_project(
-        conn, project_id=project_id, user_id=None if user is None else user.user_id
+    """Return one project readable by the caller (owner or same-org colleague)."""
+    access = accessible_project(
+        conn, project_id=project_id, user_id=user.user_id, write=False
     )
-    if access.via_public:
-        return project_out(
-            conn, access.row, user_id=user.user_id if user else "", access="public"
-        )
-    return project_out(conn, access.row, user_id=user.user_id if user else "")
+    counts = _task_counts(conn, [project_id], user_id=user.user_id)
+    return _project_out(
+        access.row,
+        counts.get(project_id, 0),
+        user_id=user.user_id,
+        owner_display=resolve_owner_display(conn, access.row["owner_user_id"]),
+    )
 
 
 @router.patch("/{project_id}", response_model=ProjectOut)
@@ -216,221 +390,77 @@ def update_project(
 ) -> ProjectOut:
     """Apply the supplied project fields without changing omitted fields.
 
-    Resolves under the **write** grade (contract § 3: write is owner-only), so
-    a same-org colleague who can now *see* this row in their listing gets 403
-    `forbidden` here rather than the 404 that would claim the row does not
-    exist — they are already looking at it.
+    **Two code paths, not one.** `name` and `description` are written by an
+    explicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off
+    the model **by name** and routed to :func:`_cascade_visibility`, and never
+    joins the splat. Contract § 6, i.4 makes the cascade the only writer of
+    `project.visibility`; a blind `.values(**changes)` hands the column to
+    whatever field a later slice adds to `ProjectUpdate`, and the failure it
+    produces is silent — the owner sets a Project private, the UI agrees, and
+    its Tasks stay readable by the whole organisation. The field now exists on
+    the model, so the allow-list is the thing keeping that true.
 
-    Three of the invariant's six paths run here (contract § 6). Setting
-    `visibility` on a project that belongs to a portfolio is **i.5**, refused
-    409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
-    member becomes org-visible if **any** named portfolio is org-visible and
-    private otherwise (owner ruling 2026-08-27), promotion and demotion being
-    the same rule read in two directions; a set spanning two organisations is
-    refused 409, since a row carries one `org_id`. Targets resolve under the
-    **colleague-mutation** grade (owner ∪ same-org org-visible, never the
-    admin leg — owner ruling 2026-08-27): a colleague may add their own task
-    to an org-visible portfolio they did not create. Setting it to `[]` (or
-    `null`) is **i.6** — the row leaves with the visibility and organisation
-    it had.
+    `payload.visibility is not None` **is** "the caller supplied it": the
+    model refuses an explicit null, so the absent value and the None value are
+    the same state.
+
+    **Owner-only, like every other write** (contract § 3): the route resolves
+    through the write grade, so a same-org colleague gets 403 and an
+    administrator — whose leg is a *read* leg — never reaches the cascade
+    however wide their read becomes.
+
+    The row is locked (`for_update`) because the cascade and the assignment
+    path in `tasks.py` write overlapping rows: without it, an assignment
+    that read this project's visibility a moment before the cascade
+    committed would write the stale value onto the task it is assigning and
+    leave an org-visible row inside a private Project.
 
     Args:
         project_id: The project to update.
-        payload: The partial update. A body carrying both `visibility` and
-            `portfolio_ids` was already rejected 422 by the model.
+        payload: The partial update. Supplying `visibility` runs the cascade.
         user: The authenticated caller.
         conn: Open database connection.
 
     Returns:
-        The updated project.
+        The updated project. Its `task_count` is the caller-visible active
+        member count — see the note below on what the outcome copy may claim.
 
     Raises:
-        HTTPException: 404 when the row is unreadable, 403 when it is
+        HTTPException: 404 when the project is unreadable, 403 when it is
             readable but not owned.
-        ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
-            project that belongs to a portfolio.
     """
     access = accessible_project(
         conn, project_id=project_id, user_id=user.user_id, write=True, for_update=True
     )
-    changes = payload.model_dump(exclude_unset=True)
-    if "visibility" in changes:
-        # i.5, enforced against the row already loaded. A project in a
-        # portfolio carries that portfolio's visibility, so the only honest
-        # answers are "change the Project's visibility" and "leave the Task
-        # out of the Project" — never a silent write that the cascade would
-        # contradict. The cascade itself, and the property over i.1-i.6,
-        # land with the invariant.
-        in_portfolio = conn.execute(
-            select(func.count())
-            .select_from(portfolio_membership)
-            .where(portfolio_membership.c.project_id == project_id)
-        ).scalar_one()
-        if int(in_portfolio) > 0:
-            raise ApiConflict(
-                "visibility_conflict",
-                "this task follows its project's visibility — change the project's "
-                "visibility, or leave the task out of the project",
-            )
+    supplied = payload.model_dump(exclude_unset=True)
+    changes = {field: supplied[field] for field in _PATCHABLE_COLUMNS if field in supplied}
+    if changes:
         conn.execute(
             update(project)
             .where(project.c.project_id == project_id)
-            .values(visibility=changes["visibility"], updated_at=datetime.now(UTC))
+            .values(**changes)
         )
-    # Orthogonal to visibility/portfolio membership (D1, contract § Design
-    # decisions) — no interaction with the 409/422 rules above. Only a real
-    # flip writes anything: a no-op PATCH (same value) writes neither the
-    # column nor the audit event.
-    if "is_public" in changes and bool(access.row["is_public"]) != changes["is_public"]:
-        conn.execute(
-            update(project)
-            .where(project.c.project_id == project_id)
-            .values(is_public=changes["is_public"], updated_at=datetime.now(UTC))
-        )
-        event_type = "project.shared_publicly" if changes["is_public"] else "project.unshared"
-        events.append(
+    if payload.visibility is not None:
+        _cascade_visibility(
             conn,
             project_id=project_id,
-            run_id=None,
-            event_type=event_type,
-            payload={"actor": user.user_id},
+            org_id=access.row["org_id"],
+            visibility=payload.visibility,
         )
-        log.info(event_type, project_id=str(project_id), actor=user.user_id)
-    if "name" in changes:
-        rename_project(conn, project_id, changes.pop("name"), user.user_id)
-    if "question" in changes:
-        conn.execute(
-            update(project)
-            .where(project.c.project_id == project_id)
-            .values(question=changes["question"], updated_at=datetime.now(UTC))
-        )
-    assigned_ids: list[uuid.UUID] | None = None
-    if "portfolio_ids" in changes:
-        assigned_ids = list(dict.fromkeys(changes["portfolio_ids"] or []))
-        # NEW targets resolve under the colleague-mutation grade (owner ∪
-        # same-org org-visible, never the admin leg — owner ruling
-        # 2026-08-27): a colleague may add their own task to an org-visible
-        # portfolio they did not create. A portfolio outside that estate
-        # must be as invisible here as it is on its own route, or PATCH
-        # becomes an existence oracle for someone else's rows. A portfolio
-        # the task is ALREADY in is kept without re-resolving the grade:
-        # the body is replace-all, so re-checking would lock the owner out
-        # of editing their own membership set the moment a colleague's
-        # portfolio they had joined went private. Its row is still loaded
-        # and locked, because the visibility derivation below reads it.
-        #
-        # Locked either way, so a cascade running on the same portfolio
-        # cannot commit between this read and the write below and leave the
-        # assigned row carrying the old visibility — which is precisely an
-        # org-visible row inside a private Project. Both paths lock the
-        # portfolio row before writing, and the cascade's member UPDATE
-        # takes row locks on the members it carries. The one interleaving
-        # that can deadlock is a re-assign of a project *into the portfolio
-        # it is already in* racing that portfolio's cascade; Postgres
-        # aborts one side, and the request is a no-op the caller can
-        # repeat.
-        current_ids = {
-            membership_row[0]
-            for membership_row in conn.execute(
-                select(portfolio_membership.c.portfolio_id).where(
-                    portfolio_membership.c.project_id == project_id
-                )
-            ).all()
-        }
-        group_rows = [
-            conn.execute(
-                select(portfolio)
-                .where(portfolio.c.portfolio_id == target)
-                .with_for_update()
-            ).mappings().one()
-            if target in current_ids
-            else assignable_portfolio(
-                conn, portfolio_id=target, user_id=user.user_id
-            ).row
-            for target in assigned_ids
-        ]
-        now = datetime.now(UTC)
-        assignment: dict[str, object] = {"updated_at": now}
-        if group_rows:
-            # i.2 (promotion) and i.3 (demotion) are one rule, not two
-            # branches: the member is org-visible if **any** of its portfolios
-            # is org-visible, private otherwise (owner ruling 2026-08-27 on
-            # the ADR 0032 merge). Organisation is different — a row carries
-            # exactly one `org_id`, so a set spanning two organisations has
-            # no honest answer and is refused rather than picking a winner.
-            org_ids = {group_row["org_id"] for group_row in group_rows}
-            if len(org_ids) > 1:
-                raise ApiConflict(
-                    "visibility_conflict",
-                    "these projects belong to different organisations — a task "
-                    "can only join projects in one organisation",
-                )
-            assignment["visibility"] = (
-                "org"
-                if any(group_row["visibility"] == "org" for group_row in group_rows)
-                else "private"
-            )
-            assignment["org_id"] = org_ids.pop()
-        # i.6, the empty-list case: clearing every membership writes neither
-        # field. The row keeps the visibility and organisation it had inside
-        # its portfolios — leaving is not a way to change either, and a row
-        # that was org-visible does not become private by being taken out.
-        conn.execute(
-            delete(portfolio_membership).where(
-                portfolio_membership.c.project_id == project_id
-            )
-        )
-        if assigned_ids:
-            conn.execute(
-                portfolio_membership.insert(),
-                [
-                    {
-                        "portfolio_id": target,
-                        "project_id": project_id,
-                        "created_at": now,
-                    }
-                    for target in assigned_ids
-                ],
-            )
-        conn.execute(
-            update(project).where(project.c.project_id == project_id).values(**assignment)
-        )
-    row = conn.execute(select(project).where(project.c.project_id == project_id)).mappings().one()
-    return project_out(conn, row, user_id=user.user_id, portfolio_ids=assigned_ids)
-
-
-@router.post("/{project_id}/archive", response_model=ProjectOut)
-def archive_project_route(
-    project_id: uuid.UUID,
-    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
-    conn: Annotated[Connection, Depends(get_conn)],
-) -> ProjectOut:
-    """Soft-delete a project unless its latest walk is active or parked."""
-    accessible_project(
-        conn,
-        project_id=project_id,
-        user_id=user.user_id,
-        write=True,
-        include_archived=True,
-        for_update=True,
-    )
-    latest = conn.execute(
-        select(capability_run.c.status)
-        .where(capability_run.c.project_id == project_id)
-        .order_by(capability_run.c.started_at.desc(), capability_run.c.capability_run_id.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-    if latest in {"running", "paused"}:
-        raise ApiConflict("run_active", "the latest run is still active")
-    # A run admitted but not yet inserted is invisible to the row check above —
-    # consult the in-process dispatch reservation or archive can win that window
-    # and the run executes against a hidden project (review finding codex-9).
-    from policy_atlas.api.routers.runs import dispatch_reserved
-
-    if dispatch_reserved(project_id):
-        raise ApiConflict("run_active", "the latest run is still active")
-    archive_project(conn, project_id, user.user_id)
-    refreshed = conn.execute(
+    row = conn.execute(
         select(project).where(project.c.project_id == project_id)
     ).mappings().one()
-    return project_out(conn, refreshed, user_id=user.user_id)
+    # The i.4 outcome number. Defined through the **caller's readable set**
+    # (`_task_counts` is per-caller: read grade minus admin, active only), not
+    # through "how many rows the cascade touched" — the outcome copy must
+    # never name rows the reader cannot see. Since colleague assignment
+    # (owner ruling 2026-08-27) a member may be owned by a same-org
+    # colleague, so the two genuinely differ: the count names the members
+    # this owner can read, which is the honest number for the copy.
+    counts = _task_counts(conn, [project_id], user_id=user.user_id)
+    return _project_out(
+        row,
+        counts.get(project_id, 0),
+        user_id=user.user_id,
+        owner_display=resolve_owner_display(conn, row["owner_user_id"]),
+    )

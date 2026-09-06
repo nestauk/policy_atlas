@@ -6,6 +6,7 @@ from typing import Any
 
 from policy_atlas.api.contract import CheckInOption, CheckInOut, CheckInTrigger
 from policy_atlas.api.stage_vocabulary import stage_for_payload
+from policy_atlas.runtime.task_plan import canonical_steer_point
 
 
 def _render(payload: dict[str, Any]) -> str:
@@ -63,7 +64,7 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
         render=_render(payload),
         options=options,
         triggers=triggers,
-        bundle=_project_bundle(payload),
+        bundle=_task_bundle(payload),
         segment_reentry_allowed=payload.get("segment_reentry_allowed") is True,
         rerun_component=(
             payload.get("rerun_component")
@@ -76,10 +77,12 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
     )
 
 
-def _project_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
+def _task_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Project only the owner-approved display fields from a durable bundle."""
     bundle = payload.get("bundle")
-    point = payload.get("steer_point")
+    # Pause records are never rewritten, so a pre-038 record still carries
+    # the old P2 steer-point id (task 038, contract A3).
+    point = canonical_steer_point(payload.get("steer_point"))
     if not isinstance(bundle, dict) or not isinstance(point, str):
         return None
     if point == "search_review":
@@ -90,7 +93,7 @@ def _project_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
             if isinstance(bundle.get("sample_titles"), list)
             else [],
         }
-    if point == "evidence_base_coverage":
+    if point == "evidence_search_coverage":
         themes = bundle.get("themes")
         return {"themes": themes if isinstance(themes, list) else []}
     if point == "deepening_selection":

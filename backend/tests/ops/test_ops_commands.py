@@ -24,16 +24,16 @@ from structlog.testing import capture_logs
 from policy_atlas.core.schema import (
     app_user,
     organisation,
-    portfolio,
-    portfolio_membership,
     project,
+    project_membership,
+    task,
 )
 from policy_atlas.ops import commands
 from policy_atlas.ops.errors import OpsError
 from tests.api.org_support import (
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     ops_enrol,
     seeded,
     unique_email,
@@ -57,18 +57,18 @@ def _org(conn: Connection, name: str = "Org") -> commands.Organisation:
     return commands.Organisation(org_id=org_id, name=resolved)
 
 
-def _project_row(conn: Connection, project_id: uuid.UUID) -> Any:
+def _task_row(conn: Connection, task_id: uuid.UUID) -> Any:
     return conn.execute(
-        select(project.c.org_id, project.c.visibility, project.c.updated_at).where(
-            project.c.project_id == project_id
+        select(task.c.org_id, task.c.visibility, task.c.updated_at).where(
+            task.c.task_id == task_id
         )
     ).one()
 
 
-def _portfolio_row(conn: Connection, portfolio_id: uuid.UUID) -> Any:
+def _project_row(conn: Connection, project_id: uuid.UUID) -> Any:
     return conn.execute(
-        select(portfolio.c.org_id, portfolio.c.visibility).where(
-            portfolio.c.portfolio_id == portfolio_id
+        select(project.c.org_id, project.c.visibility).where(
+            project.c.project_id == project_id
         )
     ).one()
 
@@ -322,10 +322,10 @@ def test_user_enrol_moves_every_owned_row_private_and_reports_the_counts(
     org = _org(conn)
     sub = fresh_sub()
     email = unique_email("mover")
-    portfolio_id = make_portfolio(conn, owner_user_id=sub, visibility="org")
-    member = make_project(conn, owner_user_id=sub, visibility="org", portfolio_id=portfolio_id)
-    loose = make_project(conn, owner_user_id=sub, visibility="org")
-    stranger = make_project(conn, owner_user_id=fresh_sub("other"), visibility="org")
+    project_id = make_project(conn, owner_user_id=sub, visibility="org")
+    member = make_task(conn, owner_user_id=sub, visibility="org", project_id=project_id)
+    loose = make_task(conn, owner_user_id=sub, visibility="org")
+    stranger = make_task(conn, owner_user_id=fresh_sub("other"), visibility="org")
 
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
@@ -333,14 +333,14 @@ def test_user_enrol_moves_every_owned_row_private_and_reports_the_counts(
             conn, client, pool_id=POOL_ID, email=email, display_name="Mover", org=org
         )
 
-    assert (enrolment.projects_moved, enrolment.portfolios_moved) == (2, 1)
-    assert "moved 2 project(s), 1 portfolio(s), all private" in enrolment.summary()
+    assert (enrolment.tasks_moved, enrolment.projects_moved) == (2, 1)
+    assert "moved 2 task(s), 1 project(s), all private" in enrolment.summary()
     for row_id in (member, loose):
-        row = _project_row(conn, row_id)
+        row = _task_row(conn, row_id)
         assert (row.org_id, row.visibility) == (org.org_id, "private")
-    assert _portfolio_row(conn, portfolio_id) == (org.org_id, "private")
+    assert _project_row(conn, project_id) == (org.org_id, "private")
     # (d) still holds for the database at large: nobody else's row moved.
-    assert _project_row(conn, stranger)[:2] == (None, "org")
+    assert _task_row(conn, stranger)[:2] == (None, "org")
 
 
 def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
@@ -349,8 +349,8 @@ def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
     """An org move cuts cross-owner membership links, and says so.
 
     Colleague assignment (owner ruling 2026-08-27) lets a colleague's task sit
-    in someone else's portfolio. When either person's rows move organisation,
-    those links would leave a member and a portfolio disagreeing on `org_id`,
+    in someone else's project. When either person's rows move organisation,
+    those links would leave a member and a project disagreeing on `org_id`,
     so the move severs them — both directions — and reports the count. The
     rows on each side keep the visibility and organisation the move gives
     them; only the links go.
@@ -359,21 +359,21 @@ def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
     mover = fresh_sub()
     email = unique_email("severed")
     colleague = fresh_sub("colleague")
-    movers_portfolio = make_portfolio(conn, owner_user_id=mover, visibility="org")
-    movers_task = make_project(conn, owner_user_id=mover, visibility="org")
-    colleagues_portfolio = make_portfolio(conn, owner_user_id=colleague, visibility="org")
-    colleagues_task = make_project(
-        conn, owner_user_id=colleague, visibility="org", portfolio_id=movers_portfolio
+    movers_project = make_project(conn, owner_user_id=mover, visibility="org")
+    movers_task = make_task(conn, owner_user_id=mover, visibility="org")
+    colleagues_project = make_project(conn, owner_user_id=colleague, visibility="org")
+    colleagues_task = make_task(
+        conn, owner_user_id=colleague, visibility="org", project_id=movers_project
     )
-    # The mover's task sits in the colleague's portfolio; the colleague's task
-    # sits in the mover's portfolio; the mover's own pairing must survive.
+    # The mover's task sits in the colleague's project; the colleague's task
+    # sits in the mover's project; the mover's own pairing must survive.
     conn.execute(
-        portfolio_membership.insert().values(
-            portfolio_id=colleagues_portfolio, project_id=movers_task, created_at=now()
+        project_membership.insert().values(
+            project_id=colleagues_project, task_id=movers_task, created_at=now()
         )
     )
-    own_link = make_project(
-        conn, owner_user_id=mover, visibility="org", portfolio_id=movers_portfolio
+    own_link = make_task(
+        conn, owner_user_id=mover, visibility="org", project_id=movers_project
     )
 
     with cognito() as (client, stubber):
@@ -385,14 +385,14 @@ def test_user_enrol_severs_memberships_linking_their_rows_to_colleagues_rows(
     assert enrolment.memberships_severed == 2
     assert "cut 2 membership(s)" in enrolment.summary()
     remaining = {
-        (row.portfolio_id, row.project_id)
-        for row in conn.execute(select(portfolio_membership)).all()
+        (row.project_id, row.task_id)
+        for row in conn.execute(select(project_membership)).all()
     }
-    assert (movers_portfolio, own_link) in remaining
-    assert (movers_portfolio, colleagues_task) not in remaining
-    assert (colleagues_portfolio, movers_task) not in remaining
+    assert (movers_project, own_link) in remaining
+    assert (movers_project, colleagues_task) not in remaining
+    assert (colleagues_project, movers_task) not in remaining
     # The colleague's rows did not move; they just lost the links.
-    assert _project_row(conn, colleagues_task)[:2] == (None, "org")
+    assert _task_row(conn, colleagues_task)[:2] == (None, "org")
 
 
 def test_user_enrol_is_one_transaction_and_moves_nothing_when_the_move_fails(
@@ -401,16 +401,16 @@ def test_user_enrol_is_one_transaction_and_moves_nothing_when_the_move_fails(
     """Rubric 29's "in one transaction": the upsert rolls back with the move.
 
     The failure is injected at the module's ``update`` symbol on its **second**
-    call — so the ``app_user`` upsert has landed and the project stamp has
-    landed, and only the portfolio stamp fails. If the three writes were not one
+    call — so the ``app_user`` upsert has landed and the task stamp has
+    landed, and only the project stamp fails. If the three writes were not one
     unit, the person would be left enrolled with half their estate moved, which
     is the exact state owner call (j) chose the single transaction to prevent.
     """
     org = _org(conn)
     sub = fresh_sub()
     email = unique_email("atomic")
-    portfolio_id = make_portfolio(conn, owner_user_id=sub, visibility="org")
     project_id = make_project(conn, owner_user_id=sub, visibility="org")
+    task_id = make_task(conn, owner_user_id=sub, visibility="org")
 
     calls = {"n": 0}
 
@@ -431,8 +431,8 @@ def test_user_enrol_is_one_transaction_and_moves_nothing_when_the_move_fails(
             savepoint.rollback()
 
     assert _user_row(conn, sub) is None
-    assert _project_row(conn, project_id)[:2] == (None, "org")
-    assert _portfolio_row(conn, portfolio_id) == (None, "org")
+    assert _task_row(conn, task_id)[:2] == (None, "org")
+    assert _project_row(conn, project_id) == (None, "org")
 
 
 def test_re_enrolment_into_a_second_organisation_re_privatises_a_shared_row(
@@ -443,7 +443,7 @@ def test_re_enrolment_into_a_second_organisation_re_privatises_a_shared_row(
     second = _org(conn, "Second")
     sub = fresh_sub()
     email = unique_email("rejoiner")
-    project_id = make_project(conn, owner_user_id=sub, visibility="org")
+    task_id = make_task(conn, owner_user_id=sub, visibility="org")
 
     with cognito() as (client, stubber):
         expect_lookup(stubber, email=email, sub=sub)
@@ -452,7 +452,7 @@ def test_re_enrolment_into_a_second_organisation_re_privatises_a_shared_row(
         )
         # The person opts the row back into their organisation, deliberately.
         conn.execute(
-            update(project).where(project.c.project_id == project_id).values(visibility="org")
+            update(task).where(task.c.task_id == task_id).values(visibility="org")
         )
         expect_lookup(stubber, email=email, sub=sub)
         again = commands.enrol_user(
@@ -461,7 +461,7 @@ def test_re_enrolment_into_a_second_organisation_re_privatises_a_shared_row(
 
     assert again.created is False
     assert "re-enrolled" in again.summary()
-    assert _project_row(conn, project_id)[:2] == (second.org_id, "private")
+    assert _task_row(conn, task_id)[:2] == (second.org_id, "private")
 
 
 def test_user_enrol_refuses_when_the_stored_address_is_a_different_one(
@@ -604,20 +604,20 @@ def test_de_enrol_clears_the_organisation_on_every_row_they_own(conn: Connection
     sub = fresh_sub()
     email = unique_email("leaver")
     ops_enrol(conn, user_id=sub, org_id=org.org_id, email=email, is_admin=True)
-    portfolio_id = make_portfolio(conn, owner_user_id=sub, org_id=org.org_id, visibility="org")
-    project_id = make_project(
-        conn, owner_user_id=sub, org_id=org.org_id, visibility="org", portfolio_id=portfolio_id
+    project_id = make_project(conn, owner_user_id=sub, org_id=org.org_id, visibility="org")
+    task_id = make_task(
+        conn, owner_user_id=sub, org_id=org.org_id, visibility="org", project_id=project_id
     )
 
     result = commands.de_enrol_user(conn, email=email)
 
-    assert (result.projects_cleared, result.portfolios_cleared) == (1, 1)
+    assert (result.tasks_cleared, result.projects_cleared) == (1, 1)
     assert result.admin_revoked is True
     row = _user_row(conn, sub)
     assert (row.org_id, row.email, row.is_admin) == (None, None, False)
     # visibility is untouched: the NULL-org rule already hides these rows.
-    assert _project_row(conn, project_id)[:2] == (None, "org")
-    assert _portfolio_row(conn, portfolio_id) == (None, "org")
+    assert _task_row(conn, task_id)[:2] == (None, "org")
+    assert _project_row(conn, project_id) == (None, "org")
 
 
 def test_de_enrol_refuses_a_second_time(conn: Connection) -> None:
@@ -642,48 +642,48 @@ def test_de_enrol_refuses_an_ambiguous_address(conn: Connection) -> None:
 # --- rows assign -------------------------------------------------------------
 
 
-def test_rows_assign_moves_a_portfolio_and_every_member_together(conn: Connection) -> None:
+def test_rows_assign_moves_a_project_and_every_member_together(conn: Connection) -> None:
     """Contract § 9 via § 6: there is no assigning half a membership."""
     org = _org(conn)
     owner = fresh_sub()
-    portfolio_id = make_portfolio(conn, owner_user_id=owner, visibility="private")
+    project_id = make_project(conn, owner_user_id=owner, visibility="private")
     members = [
-        make_project(conn, owner_user_id=owner, visibility="org", portfolio_id=portfolio_id),
-        make_project(
+        make_task(conn, owner_user_id=owner, visibility="org", project_id=project_id),
+        make_task(
             conn,
             owner_user_id=owner,
             visibility="org",
-            portfolio_id=portfolio_id,
+            project_id=project_id,
             status="archived",
         ),
     ]
 
-    assignment = commands.assign_rows(conn, org=org, portfolio_id=portfolio_id)
+    assignment = commands.assign_rows(conn, org=org, project_id=project_id)
 
-    assert (assignment.portfolios_moved, assignment.projects_moved) == (1, 2)
-    assert _portfolio_row(conn, portfolio_id) == (org.org_id, "private")
+    assert (assignment.projects_moved, assignment.tasks_moved) == (1, 2)
+    assert _project_row(conn, project_id) == (org.org_id, "private")
     for member in members:  # archived members follow too
-        assert _project_row(conn, member)[:2] == (org.org_id, "private")
+        assert _task_row(conn, member)[:2] == (org.org_id, "private")
 
 
-def test_rows_assign_of_a_member_project_moves_its_portfolio_and_siblings(
+def test_rows_assign_of_a_member_task_moves_its_project_and_siblings(
     conn: Connection,
 ) -> None:
-    """The closed set: assigning a member cannot leave its portfolio behind."""
+    """The closed set: assigning a member cannot leave its project behind."""
     org = _org(conn)
     owner = fresh_sub()
-    portfolio_id = make_portfolio(conn, owner_user_id=owner, visibility="org")
-    named = make_project(conn, owner_user_id=owner, portfolio_id=portfolio_id)
-    sibling = make_project(conn, owner_user_id=owner, portfolio_id=portfolio_id)
+    project_id = make_project(conn, owner_user_id=owner, visibility="org")
+    named = make_task(conn, owner_user_id=owner, project_id=project_id)
+    sibling = make_task(conn, owner_user_id=owner, project_id=project_id)
 
-    assignment = commands.assign_rows(conn, org=org, project_id=named)
+    assignment = commands.assign_rows(conn, org=org, task_id=named)
 
     assert assignment.followed_membership is True
-    assert assignment.projects_moved == 2
+    assert assignment.tasks_moved == 2
     assert "moved together" in assignment.summary()
-    assert _portfolio_row(conn, portfolio_id) == (org.org_id, "private")
+    assert _project_row(conn, project_id) == (org.org_id, "private")
     for row_id in (named, sibling):
-        assert _project_row(conn, row_id)[:2] == (org.org_id, "private")
+        assert _task_row(conn, row_id)[:2] == (org.org_id, "private")
 
 
 def test_rows_assign_privatises_the_rows_it_moves(conn: Connection) -> None:
@@ -700,26 +700,26 @@ def test_rows_assign_privatises_the_rows_it_moves(conn: Connection) -> None:
     """
     org = _org(conn)
     owner = fresh_sub()
-    project_id = make_project(conn, owner_user_id=owner, visibility="org")
-    other = make_project(conn, owner_user_id=owner, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, visibility="org")
+    other = make_task(conn, owner_user_id=owner, visibility="org")
 
-    assignment = commands.assign_rows(conn, org=org, project_id=project_id)
+    assignment = commands.assign_rows(conn, org=org, task_id=task_id)
 
-    assert (assignment.projects_moved, assignment.portfolios_moved) == (1, 0)
+    assert (assignment.tasks_moved, assignment.projects_moved) == (1, 0)
     assert assignment.privatised is True
     assert "all private" in assignment.summary()
     assert org.name in assignment.summary()
-    assert _project_row(conn, project_id)[:2] == (org.org_id, "private")
+    assert _task_row(conn, task_id)[:2] == (org.org_id, "private")
     # (d) still holds: only the named row moved, and nothing else was privatised.
-    assert _project_row(conn, other)[:2] == (None, "org")
+    assert _task_row(conn, other)[:2] == (None, "org")
 
 
-def test_rows_assign_of_an_org_visible_portfolio_across_organisations_arrives_private(
+def test_rows_assign_of_an_org_visible_project_across_organisations_arrives_private(
     conn: Connection,
 ) -> None:
     """The cross-org case: work shared with A does not arrive shared with B.
 
-    Same rule as re-enrolment, reached the other way. The portfolio was
+    Same rule as re-enrolment, reached the other way. The project was
     deliberately shared inside its first organisation; assigning it to a second
     is an operator act, and carrying that share across would disclose a whole
     back catalogue to an audience nobody chose.
@@ -727,22 +727,22 @@ def test_rows_assign_of_an_org_visible_portfolio_across_organisations_arrives_pr
     first = _org(conn, "First")
     second = _org(conn, "Second")
     owner = fresh_sub()
-    portfolio_id = make_portfolio(
+    project_id = make_project(
         conn, owner_user_id=owner, org_id=first.org_id, visibility="org"
     )
-    member = make_project(
+    member = make_task(
         conn,
         owner_user_id=owner,
         org_id=first.org_id,
         visibility="org",
-        portfolio_id=portfolio_id,
+        project_id=project_id,
     )
 
-    assignment = commands.assign_rows(conn, org=second, portfolio_id=portfolio_id)
+    assignment = commands.assign_rows(conn, org=second, project_id=project_id)
 
     assert assignment.privatised is True
-    assert _portfolio_row(conn, portfolio_id) == (second.org_id, "private")
-    assert _project_row(conn, member)[:2] == (second.org_id, "private")
+    assert _project_row(conn, project_id) == (second.org_id, "private")
+    assert _task_row(conn, member)[:2] == (second.org_id, "private")
 
 
 def test_rows_assign_into_the_organisation_a_row_is_already_in_keeps_its_visibility(
@@ -752,27 +752,27 @@ def test_rows_assign_into_the_organisation_a_row_is_already_in_keeps_its_visibil
 
     A no-op assignment changes nobody's audience, so flipping ``visibility``
     would be a gratuitous edit to a choice the owner made. What it still does is
-    the ``i.4`` repair: the member takes its portfolio's visibility.
+    the ``i.4`` repair: the member takes its project's visibility.
     """
     org = _org(conn)
     owner = fresh_sub()
-    portfolio_id = make_portfolio(
+    project_id = make_project(
         conn, owner_user_id=owner, org_id=org.org_id, visibility="org"
     )
-    member = make_project(
+    member = make_task(
         conn,
         owner_user_id=owner,
         org_id=org.org_id,
         visibility="private",
-        portfolio_id=portfolio_id,
+        project_id=project_id,
     )
 
-    assignment = commands.assign_rows(conn, org=org, portfolio_id=portfolio_id)
+    assignment = commands.assign_rows(conn, org=org, project_id=project_id)
 
     assert assignment.privatised is False
     assert "all private" not in assignment.summary()
-    assert _portfolio_row(conn, portfolio_id) == (org.org_id, "org")
-    assert _project_row(conn, member)[:2] == (org.org_id, "org")
+    assert _project_row(conn, project_id) == (org.org_id, "org")
+    assert _task_row(conn, member)[:2] == (org.org_id, "org")
 
 
 def test_rows_assign_refuses_without_exactly_one_target(conn: Connection) -> None:

@@ -27,12 +27,11 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
     characterisation_result,
-    orchestration_plan,
     runs,
     source_screening_result,
+    task_plan,
 )
 from policy_atlas.runtime import harness, steering_events
-from policy_atlas.runtime.orchestration_plan import OrchestrationPlan, compose
 from policy_atlas.runtime.runner import (
     NullIO,
     _run_segment_reentry,
@@ -46,8 +45,9 @@ from policy_atlas.runtime.steering import (
     SteeringResponse,
     apply_segment_reentry,
 )
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
-from tests.runtime.test_steering import ScriptedIO, _cleanup_project, _insert_plan_row
+from policy_atlas.runtime.task_plan import TaskPlan, compose
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
+from tests.runtime.test_steering import ScriptedIO, _cleanup_task, _insert_plan_row
 
 # The re-walked segment at an after-characterise boundary in the deep chain.
 _SEGMENT = [
@@ -96,11 +96,11 @@ class _BoundaryIO:
         return Continue()
 
 
-def _plan_compiled(engine: Engine, project_id: uuid.UUID) -> list[dict[str, Any]]:
+def _plan_compiled(engine: Engine, task_id: uuid.UUID) -> list[dict[str, Any]]:
     with engine.connect() as conn:
         return [
             entry
-            for entry in events.read(conn, project_id)
+            for entry in events.read(conn, task_id)
             if entry["event_type"] == "plan.compiled"
         ]
 
@@ -119,11 +119,11 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
     is reprocessed; a new additive plan version + decision land; the boundary is
     re-presented once; the reference moves to the re-walk characterise; every new
     run threads the capability_run."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = _BoundaryIO(
             boundary_component="characterise",
             boundary_responses=[
@@ -133,7 +133,7 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -146,7 +146,7 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
         # The walk completed through synthesise.
         assert [step.component for step in outcome.steps][-1] == "synthesise"
 
-        compiled = _plan_compiled(engine, project_id)
+        compiled = _plan_compiled(engine, task_id)
         runs_by_component = _runs_by_component(compiled)
 
         # Every segment component ran twice (original + re-walk) with fresh ids.
@@ -163,15 +163,15 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
         with engine.connect() as conn:
             stage1_rows = conn.execute(
                 select(func.count()).select_from(source_screening_result).where(
-                    source_screening_result.c.project_id == project_id,
+                    source_screening_result.c.task_id == task_id,
                     source_screening_result.c.screen_stage == 1,
                 )
             ).scalar_one()
             stage1_docs = conn.execute(
                 select(
-                    func.count(func.distinct(source_screening_result.c.project_source_snapshot_id))
+                    func.count(func.distinct(source_screening_result.c.task_source_snapshot_id))
                 ).where(
-                    source_screening_result.c.project_id == project_id,
+                    source_screening_result.c.task_id == task_id,
                     source_screening_result.c.screen_stage == 1,
                 )
             ).scalar_one()
@@ -181,12 +181,12 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
         with engine.connect() as conn:
             plan_rows = conn.execute(
                 select(
-                    orchestration_plan.c.version,
-                    orchestration_plan.c.status,
-                    orchestration_plan.c.created_by,
+                    task_plan.c.version,
+                    task_plan.c.status,
+                    task_plan.c.created_by,
                 )
-                .where(orchestration_plan.c.project_id == project_id)
-                .order_by(orchestration_plan.c.version)
+                .where(task_plan.c.task_id == task_id)
+                .order_by(task_plan.c.version)
             ).all()
         assert [(r.version, r.status, r.created_by) for r in plan_rows] == [
             (1, "superseded", "planner"),
@@ -197,7 +197,7 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
         with engine.connect() as conn:
             additive = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_DECISION
                 and entry["payload"].get("rerun_mode") == "additive"
             ]
@@ -231,14 +231,14 @@ def test_segment_reentry_happy_path_re_walks_segment_and_reenters_once(
         with engine.connect() as conn:
             capability_run_ids = (
                 conn.execute(
-                    select(runs.c.capability_run_id).where(runs.c.project_id == project_id)
+                    select(runs.c.capability_run_id).where(runs.c.task_id == task_id)
                 )
                 .scalars()
                 .all()
             )
         assert set(capability_run_ids) == {outcome.capability_run_id}
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_segment_reentry_second_request_at_reentry_boundary_rejected(
@@ -246,11 +246,11 @@ def test_segment_reentry_second_request_at_reentry_boundary_rejected(
 ) -> None:
     """A second ReEnterSegment at the re-presented boundary is rejected (one
     re-entry cycle per boundary); Continue then proceeds and the walk completes."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = _BoundaryIO(
             boundary_component="characterise",
             boundary_responses=[
@@ -264,7 +264,7 @@ def test_segment_reentry_second_request_at_reentry_boundary_rejected(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -278,13 +278,13 @@ def test_segment_reentry_second_request_at_reentry_boundary_rejected(
         with engine.connect() as conn:
             rejected = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_REJECTED
                 and entry["payload"].get("component") == "characterise"
             ]
             additive = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_DECISION
                 and entry["payload"].get("rerun_mode") == "additive"
             ]
@@ -293,10 +293,10 @@ def test_segment_reentry_second_request_at_reentry_boundary_rejected(
         assert len(rejected) == 1
         assert "not available" in rejected[0]["payload"]["reason"]
         # Still only one re-walk: characterise ran twice, not three times.
-        runs_by_component = _runs_by_component(_plan_compiled(engine, project_id))
+        runs_by_component = _runs_by_component(_plan_compiled(engine, task_id))
         assert len(runs_by_component["characterise"]) == 2
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_segment_reentry_rejected_at_before_component_boundary(engine: Engine) -> None:
@@ -304,13 +304,13 @@ def test_segment_reentry_rejected_at_before_component_boundary(engine: Engine) -
     additively re-run the run-scoped select/extract/group, so a ReEnterSegment at
     moderate's before_synthesise pause is rejected (Task 15b narrows the old
     'all before_component' rule — P2 now ALLOWS segment re-entry)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         # Moderate mode pauses at deepening_selection (after select) and
         # before_synthesise; drive the before_synthesise pause.
         plan = _base_plan(steering_mode="moderate")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
 
         class _BeforeSynthIO:
             def __init__(self) -> None:
@@ -339,7 +339,7 @@ def test_segment_reentry_rejected_at_before_component_boundary(engine: Engine) -
         io = _BeforeSynthIO()
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -353,28 +353,28 @@ def test_segment_reentry_rejected_at_before_component_boundary(engine: Engine) -
         with engine.connect() as conn:
             rejected = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_REJECTED
                 and entry["payload"].get("boundary") == "before_component"
             ]
             additive = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_DECISION
                 and entry["payload"].get("rerun_mode") == "additive"
             ]
         assert len(rejected) == 1
         assert additive == []
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def _boundary_state(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
-    plan: OrchestrationPlan,
+    plan: TaskPlan,
     plan_id: uuid.UUID,
 ) -> tuple[Any, dict[str, uuid.UUID], _SteeringState, set[str]]:
     """Walk a plan to completion, then reconstruct the state at the after-
@@ -382,7 +382,7 @@ def _boundary_state(
     segment-re-walk tests."""
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -414,13 +414,13 @@ def test_segment_reentry_spine_failure_mid_segment_degrades_and_does_not_reenter
 ) -> None:
     """A spine-component (screen) failure mid re-walk ends the run and never
     re-enters the boundary — normal component-failure semantics."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state, completed = _boundary_state(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
 
         def failing_screen(*args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -434,7 +434,7 @@ def test_segment_reentry_spine_failure_mid_segment_degrades_and_does_not_reenter
         result = _run_segment_reentry(
             engine,
             NullIO(),
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             state=state,
             segment_start="acquire",
@@ -459,7 +459,7 @@ def test_segment_reentry_spine_failure_mid_segment_degrades_and_does_not_reenter
         assert [o.component for o in step_outcomes][-1] == "screen_abstract"
         assert step_outcomes[-1].status == "failed"
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_segment_reentry_invariant_rejects_completed_component_after_boundary(
@@ -468,13 +468,13 @@ def test_segment_reentry_invariant_rejects_completed_component_after_boundary(
     """Downstream-invalidation guard (point 6): a boundary pause means nothing
     beyond it ran, so a completed component after the boundary is a bug — asserted,
     not handled."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome, successful_runs, state, completed = _boundary_state(
-            engine, project_id=project_id, scope_id=scope_id, plan=plan, plan_id=plan_id
+            engine, task_id=task_id, scope_id=scope_id, plan=plan, plan_id=plan_id
         )
         # "select" sits after the characterise boundary — an impossible completed set.
         bad_completed = completed | {"select"}
@@ -482,7 +482,7 @@ def test_segment_reentry_invariant_rejects_completed_component_after_boundary(
             _run_segment_reentry(
                 engine,
                 NullIO(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 state=state,
                 segment_start="acquire",
@@ -498,67 +498,67 @@ def test_segment_reentry_invariant_rejects_completed_component_after_boundary(
                 capability_run_id=outcome.capability_run_id,
             )
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_apply_segment_reentry_rejects_unshipped_segment_start(engine: Engine) -> None:
     """Fail-closed: only ``acquire`` is a shipped re-entry segment."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         with engine.begin() as conn:
             plan_row = conn.execute(
-                select(orchestration_plan).where(orchestration_plan.c.plan_id == plan_id)
+                select(task_plan).where(task_plan.c.plan_id == plan_id)
             ).one()
             with pytest.raises(SteeringAdjustmentError, match="not shipped"):
                 apply_segment_reentry(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     plan_row=plan_row,
                     plan=plan,
                     segment_start="classify",
                     directive_deltas={},
                 )
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_apply_segment_reentry_rejects_malformed_amendment(engine: Engine) -> None:
     """Fail-closed: each amendment delta validates through the component parser
     (an empty B1 guidance list is malformed)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         with engine.begin() as conn:
             plan_row = conn.execute(
-                select(orchestration_plan).where(orchestration_plan.c.plan_id == plan_id)
+                select(task_plan).where(task_plan.c.plan_id == plan_id)
             ).one()
             with pytest.raises(SteeringAdjustmentError):
                 apply_segment_reentry(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     plan_row=plan_row,
                     plan=plan,
                     segment_start="acquire",
                     directive_deltas={"acquire": {"search": {"guidance": []}}},
                 )
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_no_new_characterisation_row_leak_and_both_persist(engine: Engine) -> None:
     """Union coverage at the row grain: after an additive re-entry both the
     original and re-walk characterisation rows persist (replacement-never-deletes
     holds for the re-walked outputs too)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan(steering_mode="frequent")
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = _BoundaryIO(
             boundary_component="characterise",
             boundary_responses=[
@@ -567,7 +567,7 @@ def test_no_new_characterisation_row_leak_and_both_persist(engine: Engine) -> No
         )
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -577,13 +577,13 @@ def test_no_new_characterisation_row_leak_and_both_persist(engine: Engine) -> No
             io=io,
         )
         assert outcome.status == "succeeded"
-        runs_by_component = _runs_by_component(_plan_compiled(engine, project_id))
+        runs_by_component = _runs_by_component(_plan_compiled(engine, task_id))
         char_runs = set(runs_by_component["characterise"])
         with engine.connect() as conn:
             row_runs = set(
                 conn.execute(
                     select(characterisation_result.c.run_id).where(
-                        characterisation_result.c.project_id == project_id
+                        characterisation_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -593,7 +593,7 @@ def test_no_new_characterisation_row_leak_and_both_persist(engine: Engine) -> No
         assert char_runs == row_runs
         assert len(row_runs) == 2
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --- P2 (before select) segment re-entry (Task 15b) ------------------------
@@ -605,14 +605,14 @@ def test_p2_segment_reentry_re_presents_once_and_second_request_rejected(
     """At P2 an additive re-search re-walks acquire→characterise and re-presents
     P2 once; a second ReEnterSegment on the re-presentation is rejected (the
     one-cycle rule), then Continue proceeds into select."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        plan = _base_plan()  # moderate: P2 (evidence_base_coverage) pauses
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        task_id, scope_id = _seed_task(engine)
+        plan = _base_plan()  # moderate: P2 (evidence_search_coverage) pauses
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO(
             by_steer_point={
-                "evidence_base_coverage": [
+                "evidence_search_coverage": [
                     ReEnterSegment(segment_start="acquire", directive_deltas=_AMENDMENT),
                     ReEnterSegment(segment_start="acquire", directive_deltas=_AMENDMENT),
                     Continue(),
@@ -622,7 +622,7 @@ def test_p2_segment_reentry_re_presents_once_and_second_request_rejected(
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -636,13 +636,13 @@ def test_p2_segment_reentry_re_presents_once_and_second_request_rejected(
         with engine.connect() as conn:
             additive = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_DECISION
                 and entry["payload"].get("rerun_mode") == "additive"
             ]
             rejected = [
                 entry
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_REJECTED
                 and entry["payload"].get("boundary") == "before_component"
             ]
@@ -652,24 +652,24 @@ def test_p2_segment_reentry_re_presents_once_and_second_request_rejected(
         assert len(rejected) == 1
         assert "not available" in rejected[0]["payload"]["reason"]
         # characterise re-walked once (original + one re-walk), not twice.
-        runs_by_component = _runs_by_component(_plan_compiled(engine, project_id))
+        runs_by_component = _runs_by_component(_plan_compiled(engine, task_id))
         assert len(runs_by_component["characterise"]) == 2
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_p2_criteria_rescreen_writes_new_generation(engine: Engine) -> None:
     """A P2 criteria re-screen rides the segment-re-entry path with a screening
     amendment: the acquire→characterise re-walk re-screens abstracts at new
     criteria, minting a fresh screen generation (supersession, ADR 0022)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _base_plan()  # moderate: P2 pauses
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         io = ScriptedIO(
             by_steer_point={
-                "evidence_base_coverage": [
+                "evidence_search_coverage": [
                     ReEnterSegment(
                         segment_start="acquire",
                         directive_deltas={
@@ -687,7 +687,7 @@ def test_p2_criteria_rescreen_writes_new_generation(engine: Engine) -> None:
 
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -702,7 +702,7 @@ def test_p2_criteria_rescreen_writes_new_generation(engine: Engine) -> None:
             generations = set(
                 conn.execute(
                     select(source_screening_result.c.screen_generation).where(
-                        source_screening_result.c.project_id == project_id
+                        source_screening_result.c.task_id == task_id
                     )
                 )
                 .scalars()
@@ -712,4 +712,4 @@ def test_p2_criteria_rescreen_writes_new_generation(engine: Engine) -> None:
         assert 0 in generations
         assert max(generations) >= 1
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)

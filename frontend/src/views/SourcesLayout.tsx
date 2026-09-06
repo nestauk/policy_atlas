@@ -15,9 +15,9 @@ import { WIDE_PAGE_CLASS } from "./listPageChrome";
  * shell-owned `RunStreamProvider`, not a per-layout stream mount.
  */
 export function SourcesLayout() {
-  const { projectId = "" } = useParams();
-  const funnel = useFunnel(projectId);
-  const base = `/projects/${projectId}/sources`;
+  const { taskId = "" } = useParams();
+  const funnel = useFunnel(taskId);
+  const base = `/tasks/${taskId}/sources`;
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
   const tabs = [

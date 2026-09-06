@@ -21,46 +21,46 @@ from fastapi.routing import APIRoute
 from sqlalchemy.engine import Engine
 
 from policy_atlas.api.app import create_app
-from policy_atlas.api.contract import PAGE_SIZE_DEFAULT, ProjectOut
+from policy_atlas.api.contract import PAGE_SIZE_DEFAULT, TaskOut
 from policy_atlas.api.dev_issuer import init
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, evidence_scope
-from tests.api.resource_support import api_client, create_project
+from tests.api.resource_support import api_client, create_task
 
 # Routes that intentionally sit outside the bearer-token boundary: process
-# liveness/readiness probes, checked before any orchestration or auth I/O.
+# liveness/readiness probes, checked before any agent or auth I/O.
 # `/api/v1/waitlist` is the splash-page Request-access intake — the first
 # intentional public write. Health probes sit outside `/api/v1`.
 _UNAUTHENTICATED_ALLOWLIST = frozenset({"/healthz", "/readyz", "/api/v1/waitlist"})
 
 # These GET routes are conditionally public: absent Authorization gets an
-# indistinguishable 404 unless the requested active project has is_public.
+# indistinguishable 404 unless the requested active task has is_public.
 _CONDITIONALLY_PUBLIC_GETS = frozenset(
     {
-        "/api/v1/projects/{project_id}",
-        "/api/v1/projects/{project_id}/funnel",
-        "/api/v1/projects/{project_id}/landscape",
-        "/api/v1/projects/{project_id}/groups",
-        "/api/v1/projects/{project_id}/evidence",
-        "/api/v1/projects/{project_id}/findings",
-        "/api/v1/projects/{project_id}/sources/{source_id}",
-        "/api/v1/projects/{project_id}/artefact",
-        "/api/v1/projects/{project_id}/coverage",
-        "/api/v1/projects/{project_id}/citations/{citation_key}/context",
-        "/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+        "/api/v1/tasks/{task_id}",
+        "/api/v1/tasks/{task_id}/funnel",
+        "/api/v1/tasks/{task_id}/landscape",
+        "/api/v1/tasks/{task_id}/groups",
+        "/api/v1/tasks/{task_id}/evidence",
+        "/api/v1/tasks/{task_id}/findings",
+        "/api/v1/tasks/{task_id}/sources/{source_id}",
+        "/api/v1/tasks/{task_id}/artefact",
+        "/api/v1/tasks/{task_id}/coverage",
+        "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
+        "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
     }
 )
 
-# The public routes that must 200 on an empty public project. Derived by
+# The public routes that must 200 on an empty public task. Derived by
 # subtracting the detail routes that legitimately 404 while their derived
 # data is absent, so a route added to the surface lands here by default.
 _PUBLIC_STRUCTURAL_GETS = _CONDITIONALLY_PUBLIC_GETS - frozenset(
     {
-        "/api/v1/projects/{project_id}/sources/{source_id}",
-        "/api/v1/projects/{project_id}/artefact",
-        "/api/v1/projects/{project_id}/coverage",
-        "/api/v1/projects/{project_id}/citations/{citation_key}/context",
-        "/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+        "/api/v1/tasks/{task_id}/sources/{source_id}",
+        "/api/v1/tasks/{task_id}/artefact",
+        "/api/v1/tasks/{task_id}/coverage",
+        "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
+        "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
     }
 )
 
@@ -71,8 +71,8 @@ def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) 
     """List routes return exactly `{data, pagination:{page, page_size, total_items}}`."""
     del engine  # forces the session migration fixture before any request hits the DB
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = create_project(client, owner)
-        listed = client.get("/api/v1/projects", headers=owner)
+        task_id = create_task(client, owner)
+        listed = client.get("/api/v1/tasks", headers=owner)
         assert listed.status_code == 200
         body = listed.json()
         assert set(body) == {"data", "pagination"}
@@ -80,21 +80,21 @@ def test_pagination_envelope_shape_and_defaults(engine: Engine, tmp_path: Path) 
         assert body["pagination"]["page"] == 1
         assert body["pagination"]["page_size"] == PAGE_SIZE_DEFAULT
         assert body["pagination"]["total_items"] == 1
-        assert body["data"][0]["project_id"] == project_id
+        assert body["data"][0]["task_id"] == task_id
 
 
 def test_pagination_respects_page_size_across_pages(tmp_path: Path) -> None:
-    """`page_size` is honoured: three projects paged at two yield 2 then 1."""
+    """`page_size` is honoured: three tasks paged at two yield 2 then 1."""
     with api_client(tmp_path) as (client, owner, _other):
         for _ in range(3):
-            create_project(client, owner)
+            create_task(client, owner)
 
-        first = client.get("/api/v1/projects?page=1&page_size=2", headers=owner)
+        first = client.get("/api/v1/tasks?page=1&page_size=2", headers=owner)
         assert first.status_code == 200
         assert first.json()["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
         assert len(first.json()["data"]) == 2
 
-        second = client.get("/api/v1/projects?page=2&page_size=2", headers=owner)
+        second = client.get("/api/v1/tasks?page=2&page_size=2", headers=owner)
         assert second.status_code == 200
         assert second.json()["pagination"] == {"page": 2, "page_size": 2, "total_items": 3}
         assert len(second.json()["data"]) == 1
@@ -103,7 +103,7 @@ def test_pagination_respects_page_size_across_pages(tmp_path: Path) -> None:
 def test_pagination_rejects_page_size_over_the_server_cap(tmp_path: Path) -> None:
     """A `page_size` above the 200 cap is a 422 `validation_error` envelope."""
     with api_client(tmp_path) as (client, owner, _other):
-        response = client.get("/api/v1/projects?page_size=201", headers=owner)
+        response = client.get("/api/v1/tasks?page_size=201", headers=owner)
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
 
@@ -168,16 +168,16 @@ def _fill_path_params(path_template: str) -> str:
     return re.sub(r"\{[^}]+\}", lambda _: str(uuid.uuid4()), path_template)
 
 
-def _fill_non_project_path_params(path_template: str) -> str:
-    """Replace every path param except `{project_id}` with a dummy UUID.
+def _fill_non_task_path_params(path_template: str) -> str:
+    """Replace every path param except `{task_id}` with a dummy UUID.
 
-    Leaves the `{project_id}` placeholder intact so the caller can format it
-    separately with an absent-vs-cross-owner project id.
+    Leaves the `{task_id}` placeholder intact so the caller can format it
+    separately with an absent-vs-cross-owner task id.
     """
 
     def _replace(match: re.Match[str]) -> str:
         token = match.group(0)
-        return token if token == "{project_id}" else str(uuid.uuid4())
+        return token if token == "{task_id}" else str(uuid.uuid4())
 
     return re.sub(r"\{[^}]+\}", _replace, path_template)
 
@@ -187,17 +187,17 @@ _UNAUTHENTICATED_CASES = _api_v1_route_cases()
 
 def test_unauthenticated_sweep_keeps_non_public_routes() -> None:
     """The History endpoint remains in the always-401 conformance class."""
-    assert ("GET", "/api/v1/projects/{project_id}/decisions") in _UNAUTHENTICATED_CASES
+    assert ("GET", "/api/v1/tasks/{task_id}/decisions") in _UNAUTHENTICATED_CASES
 
 # The signed-in cross-owner sweep must cover the conditionally-public GETs
-# too: against a *private* project, a signed-in outsider still gets the
+# too: against a *private* task, a signed-in outsider still gets the
 # byte-identical 404 (task 033's tenancy pin — the 037 public leg must not
 # have weakened it). `_UNAUTHENTICATED_CASES` excludes them by design, so
 # they are added back here explicitly.
-_PROJECT_SCOPED_GET_CASES = [
+_TASK_SCOPED_GET_CASES = [
     (method, path)
     for method, path in _UNAUTHENTICATED_CASES
-    if method == "GET" and "{project_id}" in path
+    if method == "GET" and "{task_id}" in path
 ] + [("GET", path) for path in sorted(_CONDITIONALLY_PUBLIC_GETS)]
 
 
@@ -229,27 +229,27 @@ def test_every_api_v1_route_is_unauthenticated_without_a_token(
 
 
 @pytest.mark.parametrize("path_template", sorted(_CONDITIONALLY_PUBLIC_GETS))
-def test_conditionally_public_gets_hide_private_and_unknown_projects_and_open_public_ones(
+def test_conditionally_public_gets_hide_private_and_unknown_tasks_and_open_public_ones(
     tmp_path: Path, path_template: str
 ) -> None:
-    """Public GETs are tokenless only for active shared projects, never 401."""
-    templated = _fill_non_project_path_params(path_template)
+    """Public GETs are tokenless only for active shared tasks, never 401."""
+    templated = _fill_non_task_path_params(path_template)
     if path_template.endswith("/chunks/{chunk_id}/context"):
         templated = f"{templated}?quote=excerpt"
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = create_project(client, owner)
-        private = client.get(templated.format(project_id=project_id))
-        unknown = client.get(templated.format(project_id=uuid.uuid4()))
+        task_id = create_task(client, owner)
+        private = client.get(templated.format(task_id=task_id))
+        unknown = client.get(templated.format(task_id=uuid.uuid4()))
 
         assert private.status_code == unknown.status_code == 404, path_template
         assert private.content == unknown.content, path_template
         assert private.json()["error"]["code"] == "not_found"
 
         shared = client.patch(
-            f"/api/v1/projects/{project_id}", headers=owner, json={"is_public": True}
+            f"/api/v1/tasks/{task_id}", headers=owner, json={"is_public": True}
         )
         assert shared.status_code == 200, shared.text
-        response = client.get(templated.format(project_id=project_id))
+        response = client.get(templated.format(task_id=task_id))
         assert response.status_code in {200, 404}, (path_template, response.text)
         if path_template in _PUBLIC_STRUCTURAL_GETS:
             assert response.status_code == 200, (path_template, response.text)
@@ -257,25 +257,25 @@ def test_conditionally_public_gets_hide_private_and_unknown_projects_and_open_pu
 
 @pytest.mark.parametrize(
     "path_template",
-    [path for _, path in _PROJECT_SCOPED_GET_CASES],
-    ids=[path for _, path in _PROJECT_SCOPED_GET_CASES],
+    [path for _, path in _TASK_SCOPED_GET_CASES],
+    ids=[path for _, path in _TASK_SCOPED_GET_CASES],
 )
-def test_project_scoped_get_routes_hide_ownership_with_byte_identical_404(
+def test_task_scoped_get_routes_hide_ownership_with_byte_identical_404(
     tmp_path: Path, path_template: str
 ) -> None:
-    """404 `not_found` hides ownership on every project-scoped GET route.
+    """404 `not_found` hides ownership on every task-scoped GET route.
 
-    Non-GET routes under `/api/v1/projects/{project_id}...` are skipped here
-    (see `_PROJECT_SCOPED_GET_CASES`): their absent/foreign-project 404s are
+    Non-GET routes under `/api/v1/tasks/{task_id}...` are skipped here
+    (see `_TASK_SCOPED_GET_CASES`): their absent/foreign-task 404s are
     covered by mutation-path tests elsewhere (e.g. the archive conflict test
     below), not by this byte-identical read sweep.
     """
-    templated = _fill_non_project_path_params(path_template)
+    templated = _fill_non_task_path_params(path_template)
     with api_client(tmp_path) as (client, owner, other):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
 
-        never_existed = client.get(templated.format(project_id=uuid.uuid4()), headers=other)
-        cross_owner = client.get(templated.format(project_id=project_id), headers=other)
+        never_existed = client.get(templated.format(task_id=uuid.uuid4()), headers=other)
+        cross_owner = client.get(templated.format(task_id=task_id), headers=other)
 
         assert never_existed.status_code == cross_owner.status_code == 404, (
             f"{path_template}: expected 404/404, got "
@@ -288,7 +288,7 @@ def test_project_scoped_get_routes_hide_ownership_with_byte_identical_404(
 def test_validation_error_details_carry_loc_and_type(tmp_path: Path) -> None:
     """422 `validation_error` preserves a `details` list keyed by `loc`/`type`."""
     with api_client(tmp_path) as (client, owner, _other):
-        response = client.get("/api/v1/projects?page_size=201", headers=owner)
+        response = client.get("/api/v1/tasks?page_size=201", headers=owner)
         assert response.status_code == 422
         error = response.json()["error"]
         assert error["code"] == "validation_error"
@@ -302,16 +302,16 @@ def test_validation_error_details_carry_loc_and_type(tmp_path: Path) -> None:
 def test_archive_while_a_run_is_active_is_run_active_conflict(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """409 `run_active`: archiving a project with a running capability_run row conflicts."""
+    """409 `run_active`: archiving a task with a running capability_run row conflicts."""
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = create_project(client, owner)
+        task_id = create_task(client, owner)
         run_id = uuid.uuid4()
         with engine.begin() as conn:
             scope_id = uuid.uuid4()
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
-                    project_id=uuid.UUID(project_id),
+                    task_id=uuid.UUID(task_id),
                     intent="conformance sweep",
                     context={},
                     created_at=datetime.now(UTC),
@@ -320,9 +320,9 @@ def test_archive_while_a_run_is_active_is_run_active_conflict(
             conn.execute(
                 capability_run.insert().values(
                     capability_run_id=run_id,
-                    project_id=uuid.UUID(project_id),
+                    task_id=uuid.UUID(task_id),
                     evidence_scope_id=scope_id,
-                    capability="evidence_base",
+                    capability="evidence_search",
                     plan_id=uuid.uuid4(),
                     plan_version=1,
                     status="running",
@@ -332,7 +332,7 @@ def test_archive_while_a_run_is_active_is_run_active_conflict(
                 )
             )
         try:
-            response = client.post(f"/api/v1/projects/{project_id}/archive", headers=owner)
+            response = client.post(f"/api/v1/tasks/{task_id}/archive", headers=owner)
             assert response.status_code == 409
             assert response.json()["error"]["code"] == "run_active"
         finally:
@@ -351,7 +351,7 @@ def test_archive_while_a_run_is_active_is_run_active_conflict(
 
 _SEGMENT_RE = re.compile(r"^[a-z0-9_-]+$")
 _PROPERTY_RE = re.compile(r"^[a-z][a-z0-9_]*$")
-_LEAKED_NAMES = ("policy_atlas", "runner", "orchestrate", "harness")
+_LEAKED_NAMES = ("policy_atlas", "runner", "agent", "harness")
 
 
 def _built_openapi_schema(tmp_path: Path) -> dict[str, Any]:
@@ -405,10 +405,10 @@ def test_no_internal_module_names_leak_into_paths_or_schema_names(tmp_path: Path
 # --- response_model whitelist spot check -------------------------------------
 
 
-def test_get_project_response_contains_only_project_out_fields(tmp_path: Path) -> None:
-    """`GET` a project and assert no ORM leakage beyond the `ProjectOut` field set."""
+def test_get_task_response_contains_only_task_out_fields(tmp_path: Path) -> None:
+    """`GET` a task and assert no ORM leakage beyond the `TaskOut` field set."""
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = create_project(client, owner)
-        response = client.get(f"/api/v1/projects/{project_id}", headers=owner)
+        task_id = create_task(client, owner)
+        response = client.get(f"/api/v1/tasks/{task_id}", headers=owner)
         assert response.status_code == 200
-        assert set(response.json()) == set(ProjectOut.model_fields)
+        assert set(response.json()) == set(TaskOut.model_fields)

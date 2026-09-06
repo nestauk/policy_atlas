@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { MOCK_PROJECT_ID, mockProject } from "../src/mock/fixtures";
+import { MOCK_TASK_ID, mockTask } from "../src/mock/fixtures";
 
 /**
  * The 028 eye-check, made mechanical where it can be.
@@ -51,8 +51,8 @@ test.describe("type scale, checked on the rendered page", () => {
 
   test("no sentence renders below the 16px floor", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("link", { name: mockProject.name }).click();
-    await expect(page).toHaveURL(new RegExp(`/projects/${MOCK_PROJECT_ID}`));
+    await page.getByRole("link", { name: mockTask.name }).click();
+    await expect(page).toHaveURL(new RegExp(`/tasks/${MOCK_TASK_ID}`));
 
     // A "sentence" heuristic that will not fight the design: a leaf element
     // whose own text is long enough and contains a space run typical of

@@ -9,7 +9,7 @@ import { StashAndSplashRedirect } from "./routes/StashAndSplashRedirect";
 import { RedirectToPath } from "./views/LifecycleRoute";
 import { PublicTaskShell } from "./views/PublicTaskShell";
 
-vi.mock("./api/queries", () => ({ useProject: vi.fn() }));
+vi.mock("./api/queries", () => ({ useTask: vi.fn() }));
 vi.mock("./auth", () => ({
   useAuth: () => ({
     user: null,
@@ -22,17 +22,17 @@ vi.mock("./auth", () => ({
 }));
 vi.mock("./api/sse", () => ({ connectEventStream: () => ({ close: vi.fn() }) }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-const PUBLIC_PROJECT = {
-  project_id: PROJECT_ID,
+const PUBLIC_TASK = {
+  task_id: TASK_ID,
   name: "Shared evidence review",
   access: "public",
   is_owner: false,
   latest_run: null,
 };
 
-/** The same shape as `publicRouter`'s `/projects/:projectId` block in
+/** The same shape as `publicRouter`'s `/tasks/:taskId` block in
  *  `routes.tsx`, with lightweight leaf elements — this test is about the
  *  wildcard redirect and the stash-and-splash fallback, not the real views. */
 function buildPublicRouter(initialPath: string) {
@@ -40,13 +40,13 @@ function buildPublicRouter(initialPath: string) {
     [
       { path: "/", element: <div>splash probe</div> },
       {
-        path: "/projects/:projectId",
+        path: "/tasks/:taskId",
         element: <PublicTaskShell />,
         children: [
-          { index: true, element: <RedirectToPath suffix="/results" /> },
-          { path: "results", element: <div>results probe</div> },
+          { index: true, element: <RedirectToPath suffix="/result" /> },
+          { path: "result", element: <div>results probe</div> },
           { path: "sources", element: <div>sources probe</div> },
-          { path: "*", element: <RedirectToPath suffix="/results" preserveOriginal /> },
+          { path: "*", element: <RedirectToPath suffix="/result" preserveOriginal /> },
         ],
       },
       { path: "*", element: <StashAndSplashRedirect /> },
@@ -57,7 +57,7 @@ function buildPublicRouter(initialPath: string) {
 
 describe("publicRouter's wildcard redirect must not rewrite the stashed return URL (task 037 review fix)", () => {
   // The failure needs two steps that a single render cannot span (a
-  // `useProject` refetch settling is a plain re-render, and React Router
+  // `useTask` refetch settling is a plain re-render, and React Router
   // memoises matched route elements), so the property is pinned in halves:
   // the wildcard redirect carries the original path in router state, and
   // the stash prefers that state over the rewritten URL.
@@ -65,21 +65,21 @@ describe("publicRouter's wildcard redirect must not rewrite the stashed return U
     // Stale-but-still-public cached data (a task that WAS public and got
     // unshared) resolves the query immediately with `access: "public"` —
     // Outlet renders, the wildcard child matches `/share` and fires its
-    // client-side redirect to `/results`, carrying the original path.
-    vi.mocked(queries.useProject).mockReturnValue({
+    // client-side redirect to `/result`, carrying the original path.
+    vi.mocked(queries.useTask).mockReturnValue({
       isPending: false,
-      data: PUBLIC_PROJECT,
-    } as unknown as ReturnType<typeof queries.useProject>);
+      data: PUBLIC_TASK,
+    } as unknown as ReturnType<typeof queries.useTask>);
 
-    const router = buildPublicRouter(`/projects/${PROJECT_ID}/share`);
+    const router = buildPublicRouter(`/tasks/${TASK_ID}/share`);
     render(
       <QueryClientProvider client={new QueryClient()}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
     await waitFor(() => expect(screen.getByText("results probe")).toBeInTheDocument());
-    expect(router.state.location.pathname).toBe(`/projects/${PROJECT_ID}/results`);
-    expect(router.state.location.state).toEqual({ from: `/projects/${PROJECT_ID}/share` });
+    expect(router.state.location.pathname).toBe(`/tasks/${TASK_ID}/result`);
+    expect(router.state.location.state).toEqual({ from: `/tasks/${TASK_ID}/share` });
   });
 
   it("the stash prefers the preserved original over the rewritten URL", () => {
@@ -87,28 +87,28 @@ describe("publicRouter's wildcard redirect must not rewrite the stashed return U
     const router = createMemoryRouter([{ path: "*", element: <StashAndSplashRedirect /> }], {
       initialEntries: [
         {
-          pathname: `/projects/${PROJECT_ID}/results`,
-          state: { from: `/projects/${PROJECT_ID}/share` },
+          pathname: `/tasks/${TASK_ID}/result`,
+          state: { from: `/tasks/${TASK_ID}/share` },
         },
       ],
     });
     render(<RouterProvider router={router} />);
-    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/projects/${PROJECT_ID}/share`);
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/share`);
   });
 
   it("still stashes the plain current URL when there is no preserved original (unaffected paths)", () => {
     sessionStorage.clear();
-    vi.mocked(queries.useProject).mockReturnValue({
+    vi.mocked(queries.useTask).mockReturnValue({
       isPending: false,
       data: undefined,
-    } as unknown as ReturnType<typeof queries.useProject>);
+    } as unknown as ReturnType<typeof queries.useTask>);
 
-    const router = buildPublicRouter(`/projects/${PROJECT_ID}/results`);
+    const router = buildPublicRouter(`/tasks/${TASK_ID}/result`);
     render(
       <QueryClientProvider client={new QueryClient()}>
         <RouterProvider router={router} />
       </QueryClientProvider>,
     );
-    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/projects/${PROJECT_ID}/results`);
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/result`);
   });
 });

@@ -21,7 +21,8 @@ one with a server page-size cap · PATCH partial updates · snake_case JSON ·
 typed discriminated unions for SSE/check-in variants · Hyrum hygiene
 (internal names surface only as pinned `stage` keys) · `/api/v1` is a
 namespace; evolution is additive-only, removals via documented deprecation
-here — never a parallel version.
+here — never a parallel version. One recorded break: the task 038 rename
+(§ Deprecations, ADR 0036).
 
 ## Auth boundary
 
@@ -40,18 +41,18 @@ unauthenticated (splash-page Request access). Health probes
 
 **Conditionally-public reads (task 037, ADR 0035).** Exactly eleven GET
 routes accept a request with **no `Authorization` header**:
-`GET /projects/{id}` plus the read-model routes `funnel` · `landscape` ·
+`GET /tasks/{id}` plus the read-model routes `funnel` · `landscape` ·
 `groups` · `evidence` · `findings` · `sources/{source_id}` · `artefact` ·
 `coverage` · `citations/{citation_key}/context` ·
 `chunks/{chunk_id}/context`. Anonymous means the raw header is absent —
 a present header that does not authenticate (bad token, wrong scheme,
 malformed value) is still 401. The anonymous read succeeds only when the
-project has `is_public = true` and `status = 'active'`; anything else is
+task has `is_public = true` and `status = 'active'`; anything else is
 the standard indistinguishable 404. Signed-in callers keep the graded
 read first and fall back to the same public check, so a public row is
 readable by any authenticated user too — in the **redacted shape**
 (`access = "public"`, see § Projects). `is_public` plays no part in
-listings, portfolio reads, or the colleague and admin legs; a read
+listings, project reads, or the colleague and admin legs; a read
 served by the public check is not an admin read and is never traced as
 one. `decisions` (History) stays behind the bearer token. The
 conformance suite pins this three-class boundary (always-401 ·
@@ -67,7 +68,7 @@ helper with **three read legs and one write grade**:
   visibility, read-only, traced — see below).
 - **write** = **owner only**, with exactly one exception: the three chat
   mutations a same-org colleague holds (create a chat on a readable
-  project, post a turn to their own conversation, cancel their own turn).
+  task, post a turn to their own conversation, cancel their own turn).
   An admin is not a colleague and holds none of them.
 - **The NULL rule:** a row with `org_id IS NULL` is reachable by its owner
   and an admin only; a caller with NULL `org_id` matches no org leg. The
@@ -87,7 +88,7 @@ never clobbers ops-set fields; ops enrolment is the deliberate
 
 Listing filters: `scope=all|mine` (default `all` = owner ∪ org-visible;
 for an admin, `all` spans every organisation) on both listings ·
-`portfolio_id` on `GET /projects` · `owner_email` on both listings,
+`project_id` on `GET /tasks` · `owner_email` on both listings,
 admin-only — a non-admin passing it gets 422 `validation_error`, as does
 any value over 254 characters or without an `@` (the value is logged
 verbatim into the audit line, so it is bounded and shape-checked first).
@@ -113,22 +114,22 @@ Mapping: 400 `malformed` · 401 `unauthenticated` · **403 `forbidden`**
 409 `run_active` | `already_answered` | `capacity` |
 `planning_turn_in_progress` | `chat_turn_in_progress` | `stale_turn` |
 `no_completed_run` | `plan_stale` | **`visibility_conflict`** (setting a
-project's visibility while it is in a portfolio — change the portfolio's
-visibility, or leave the project out of it) | **`already_registered`**
+task's visibility while it is in a project — change the project's
+visibility, or leave the task out of it) | **`already_registered`**
 (waitlist email already present) · 422 `validation_error`
 (Pydantic detail list under `details`, assert on `loc`/`type` not `msg`;
 also the code for a non-admin passing `owner_email` and for a PATCH body
-carrying both `visibility` and `portfolio_ids` — not a third semantic) ·
+carrying both `visibility` and `project_ids` — not a third semantic) ·
 429 `chat_capacity`
 (a distinct code from the 409 run-capacity bound — too many in-flight chat
 turns, never a run-slot conflict) · 500 `internal` (opaque).
 
 ## Pagination
 
-Unbounded lists (projects, evidence/sources, findings, decisions) return
+Unbounded lists (tasks, evidence/sources, findings, decisions) return
 `{"data": [...], "pagination": {"page": n, "page_size": n,
 "total_items": n}}`; `page_size` default 50, **server cap 200**
-(`Query(le=200)`). Offset pagination is deliberate at per-project scale;
+(`Query(le=200)`). Offset pagination is deliberate at per-task scale;
 the additive migration path is an opaque `cursor` param alongside (never a
 breaking reshape). Bounded structural reads (plan, funnel, landscape,
 artefact, groups) are whole-object.
@@ -148,51 +149,53 @@ Splash-page **Request access** intake. Public — no bearer token.
   `waitlist_entry` table directly. Enrolment into Cognito remains the ops
   CLI path (task 033), not an auto-promote from this table.
 
-### Projects
+### Tasks
 
-- `GET /api/v1/projects` — paginated, tenancy-scoped (`scope=all|mine`,
+- `GET /api/v1/tasks` — paginated, tenancy-scoped (`scope=all|mine`,
   default `all` = own ∪ same-org org-visible; admin `all` spans every
   organisation), `status=active` by default (`?status=archived|all` to
-  widen); `portfolio_id` filters to one portfolio's members; `owner_email`
+  widen); `project_id` filters to one project's members; `owner_email`
   is admin-only. Each item carries the derived `latest_run` read model
   (`capability_run_id`, `status`, `started_at`, `ended_at`) — **run state
-  is never cached on the project row**; the landing card derives
+  is never cached on the task row**; the landing card derives
   running/paused/complete/interrupted from it.
-- `POST /api/v1/projects` `{name, question?}` → 201 project, stamped with
+- `POST /api/v1/tasks` `{name, question?}` → 201 task, stamped with
   the creator's `org_id` (NULL for an unenrolled creator) and
   `visibility='private'` (the column default — new work is unshared until
   its owner shares it; owner amendment 2026-08-26).
-- `GET /api/v1/projects/{id}` → project (read grade, or the public leg —
+- `GET /api/v1/tasks/{id}` → task (read grade, or the public leg —
   § Auth boundary). A public-leg read returns the **redacted shape**:
   `access = "public"`, `is_owner = false`, `owner_display = null`,
-  `portfolio_ids = []`; graded reads carry `access = "full"`.
-- `PATCH /api/v1/projects/{id}` `{name?, question?, visibility?,
+  `project_ids = []`; graded reads carry `access = "full"`.
+- `PATCH /api/v1/tasks/{id}` `{name?, question?, visibility?,
   is_public?}` — partial, owner-only; rename emits a transactional
-  `project.renamed` audit event. `visibility` on a project in a portfolio
+  `task.renamed` audit event. `visibility` on a task in a project
   is 409 `visibility_conflict`; a body carrying both `visibility` and
-  `portfolio_ids` is 422 (the two orderings differ). An explicit
+  `project_ids` is 422 (the two orderings differ). An explicit
   `null` on a NOT NULL column (`name`, `visibility`, `is_public` — here
-  and on `PATCH /portfolios/{id}`) is 422 rather than a 500; nulls that
-  mean something (`question`, `description`, `portfolio_ids`) still work.
-  `is_public` (task 037) is orthogonal to `visibility` and to portfolio
+  and on `PATCH /projects/{id}`) is 422 rather than a 500; nulls that
+  mean something (`question`, `description`, `project_ids`) still work.
+  `is_public` (task 037) is orthogonal to `visibility` and to project
   membership — no cascade, no conflict rule; a real flip emits
-  `project.shared_publicly` / `project.unshared` in the same
+  `task.shared_publicly` / `task.unshared` in the same
   transaction, and a same-value PATCH emits nothing. Turning it off (or
   archiving) revokes anonymous access on the next request — the public
   leg is a row check, not a token.
-- `POST /api/v1/projects/{id}/archive` → idempotent archive (soft-delete:
-  hidden from default listings, rows retained; `project.archived` audit
+- `POST /api/v1/tasks/{id}/archive` → idempotent archive (soft-delete:
+  hidden from default listings, rows retained; `task.archived` audit
   event on first archive only). 409 `run_active` while a run is executing
   or parked. There is no hard delete.
 
-**Vocabulary (task 032, ADR 0031).** On screen a `project` row is a **Task**
-and a `portfolio` row is a **Project**. The API keeps the code words; only the
-UI translates, from one shared module. Nothing below the project row was
-re-parented.
+**Vocabulary (task 032, ADR 0031; task 038, ADR 0036).** A `task` row is a
+**Task** and a `project` row is a **Project** — on screen, on the wire and in
+the schema alike since task 038 (until then the rows were `project` and
+`portfolio` and only the UI translated). `frontend/src/lib/vocabulary.ts`
+remains the one place screen copy is maintained. Nothing below the task row
+was re-parented.
 
-Additive fields on the project read shape:
-`portfolio_ids` (the portfolios this task belongs to; empty list is
-unassigned — a normal state; a task may belong to many portfolios,
+Additive fields on the task read shape:
+`project_ids` (the projects this task belongs to; empty list is
+unassigned — a normal state; a task may belong to many projects,
 ADR 0032), `source_count` (Included sources — funnel `relevant` — or `null`
 when no run exists. `null` and `0` differ: `null` means the question has not
 been asked, `0` means a run asked and none are Included), and — task 033 —
@@ -204,82 +207,82 @@ caller-relative): `"public"` marks a read served by the public leg and
 therefore redacted — it is the one bit the frontend uses to render the
 two-tab public view instead of the full shell.
 
-### Portfolios
+### Projects
 
-A portfolio is a named grouping **above** the project. It holds no plan, no
+A project is a named grouping **above** the task. It holds no plan, no
 run and no evidence of its own, and carries a name, a description and an owner
 — no status, no lifecycle, no cached counts (ADR 0031).
 
-- `GET /api/v1/portfolios` — paginated, tenancy-scoped (`scope`,
-  `owner_email` — same semantics as projects). Each item carries a
+- `GET /api/v1/projects` — paginated, tenancy-scoped (`scope`,
+  `owner_email` — same semantics as tasks). Each item carries a
   `task_count` **derived per read** from members the caller can read in
   their own estate (owner ∪ same-org; never the admin leg), plus the same
-  three 033 read fields as projects (`visibility`, `is_owner`,
+  three 033 read fields as tasks (`visibility`, `is_owner`,
   `owner_display`).
-- `POST /api/v1/portfolios` `{name, description?, from_project_id?}` →
-  201 portfolio, stamped with the creator's `org_id`. `from_project_id`
-  (task 033, amending ADR 0031 decision 4) resolves the source project
-  under the **write** grade; the new portfolio inherits that project's
+- `POST /api/v1/projects` `{name, description?, from_project_id?}` →
+  201 project, stamped with the creator's `org_id`. `from_project_id`
+  (task 033, amending ADR 0031 decision 4) resolves the source task
+  under the **write** grade; the new project inherits that task's
   `visibility` and `org_id` and takes it as its first member, in one
   transaction.
-- `GET /api/v1/portfolios/{id}` → portfolio with its derived `task_count`
+- `GET /api/v1/projects/{id}` → project with its derived `task_count`
   (read grade).
-- `PATCH /api/v1/portfolios/{id}` `{name?, description?, visibility?}` —
-  partial, owner-only. `visibility` runs **the cascade**: the portfolio and
-  every member project (archived included) take the new value together, in
+- `PATCH /api/v1/projects/{id}` `{name?, description?, visibility?}` —
+  partial, owner-only. `visibility` runs **the cascade**: the project and
+  every member task (archived included) take the new value together, in
   one transaction. The cascade is the only writer of
-  `portfolio.visibility`; each member is **recomputed**, not assigned — a
-  task is org-visible iff *any* portfolio it is in is org-visible (owner
-  ruling 2026-08-27), so a member shared with an org-visible portfolio
+  `project.visibility`; each member is **recomputed**, not assigned — a
+  task is org-visible iff *any* project it is in is org-visible (owner
+  ruling 2026-08-27), so a member shared with an org-visible project
   stays org-visible when this one goes private.
-- `PATCH /api/v1/projects/{id}` accepts `portfolio_ids` (replace-all). Omit
-  to leave membership unchanged; `[]` (or `null`) unassigns every portfolio;
+- `PATCH /api/v1/tasks/{id}` accepts `project_ids` (replace-all). Omit
+  to leave membership unchanged; `[]` (or `null`) unassigns every project;
   a list replaces the set. Each id must resolve under the **write** grade
   (404 unreadable, 403 readable-not-owned) before anything is written —
   otherwise the route would be an existence oracle for another owner's rows.
-  The task becomes org-visible if any named portfolio is org-visible,
+  The task becomes org-visible if any named project is org-visible,
   private otherwise; a set spanning two organisations is refused 409 (a row
   carries one `org_id`). Newly added ids resolve under the
   **colleague-mutation** grade (owner ∪ same-org org-visible, never the
   admin leg — owner ruling 2026-08-27): a colleague may add their own task
-  to an org-visible portfolio they did not create; anything outside that
+  to an org-visible project they did not create; anything outside that
   estate is 404 before any write. Ids the task already belongs to are kept
   without re-resolution, so a membership that later went private never
   locks the owner out of editing their own set. Rename and membership
-  writes are not `run_active` conflicts; they serialize on the project row
+  writes are not `run_active` conflicts; they serialize on the task row
   lock.
 
 **The visibility/org invariant (task 033, owner call (i); generalised to
-many-to-many membership — owner ruling 2026-08-27).** A project in one or
-more portfolios is **org-visible iff any of those portfolios is
-org-visible**, private otherwise, and carries their `org_id` (its portfolios
-span one organisation; a cross-organisation set is refused). A project with
+many-to-many membership — owner ruling 2026-08-27).** A task in one or
+more projects is **org-visible iff any of those projects is
+org-visible**, private otherwise, and carries their `org_id` (its projects
+span one organisation; a cross-organisation set is refused). A task with
 no membership is unconstrained. Deterministic, no prompts: assignment and
 the cascade both recompute the member across its whole membership set
 (promotion or demotion alike); removal changes neither field. The invariant
 spans three tables, so it is enforced in the write paths and pinned by a
 property test — no CHECK can express it.
 
-Tenancy scoping matches projects exactly: an unknown portfolio and an
-unreadable one are the same indistinguishable 404. There is no portfolio
+Tenancy scoping matches tasks exactly: an unknown project and an
+unreadable one are the same indistinguishable 404. There is no project
 archive route and no `archived_at` on the row; both land together if archiving
 is wanted (`docs/deferred.md` § Task lifecycle IA).
 
 ### Planning turns
 
-- `POST /api/v1/projects/{id}/planning-turns`
+- `POST /api/v1/tasks/{id}/planning-turns`
   `{message, client_turn_id}` → `{reply, plan, suggestions[]}` — one real
-  planner turn. Every turn is durable in the per-project
+  planner turn. Every turn is durable in the per-task
   `planning_transcript`: its monotonic `turn_index`, assigned when the user
   message is received, is the conversation ordering coordinate;
   `created_at` is display metadata only. `message` caps at 10 000 characters
   (turns are durable and rehydrated into every later planner call). The short
-  first transaction follows the owner/run-active gate **under the project row
+  first transaction follows the owner/run-active gate **under the task row
   lock** and creates a `pending` row; the LLM call runs outside any
   transaction (I2); a second transaction writes its reply, raw planner-state
   snapshot, projected response and suggestions as `completed`. When the turn
   approves a plan, that second transaction re-checks the run fence under the
-  project row lock (a run that started during the planner call fails the turn
+  task row lock (a run that started during the planner call fails the turn
   with 409 `run_active` — no plan lands under a live walk) and then persists
   the plan, atomically. Planner failure marks the row `failed`; a process
   crash between phases leaves an honest `pending` row.
@@ -290,100 +293,100 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   message, or a non-latest unfinished retry, → 409 `stale_turn`. A new id
   while a `pending` row is younger than ten minutes → 409
   `planning_turn_in_progress`; reading after ten minutes terminally marks the
-  pending row `failed`. The process-local per-project turn lock remains a
+  pending row `failed`. The process-local per-task turn lock remains a
   belt-and-braces concurrency guard under the one-instance posture.
-  A turn while the project's walk is running or parked → 409 `run_active`:
+  A turn while the task's walk is running or parked → 409 `run_active`:
   steering is the sanctioned mid-run plan channel, and the fence guarantees
   the latest-approved plan is always the active walk's own lineage
   (review adjudication, 2026-07-21).
-  The draft `plan` mirrors `OrchestrationPlan` field-by-field with every
+  The draft `plan` mirrors `TaskPlan` field-by-field with every
   field optional while drafting + `steps[]` + `ready`. Planner context
   rehydrates from completed rows in `turn_index` order (each contributes the
   user message then planner reply); the raw `planner_state` from the latest
   completed row becomes `previous_draft`. Stored HTTP projections are never
   fed back to the planner. A fresh tracing session id per request is correct:
   conversation quality depends solely on that durable composition.
-- `GET /api/v1/projects/{id}/plan` → the current plan (draft or approved,
+- `GET /api/v1/tasks/{id}/plan` → the current plan (draft or approved,
   with `version`/`status`), whole-object. It returns the approved plan when
   one exists; otherwise the latest completed transcript row's stored
   `response.plan` without recomputation. It is 404 only when neither exists,
   so drafts survive API restarts.
-- `PATCH /api/v1/projects/{id}/plan` → typed edits to the current plan
+- `PATCH /api/v1/tasks/{id}/plan` → typed edits to the current plan
   (`question`, `backend_scope`, `search_effort`, `analysis_depth`,
   `steering_mode`, `screening_criteria`, `published_after`/`published_before`,
   `geography`). Omitted fields stay as they are; an empty date or geography
   string clears that constraint. The merged result is re-validated as an
-  executable `OrchestrationPlan` and persisted as a new approved version
+  executable `TaskPlan` and persisted as a new approved version
   (the previous approved row is superseded), with `source_turn_index` set to
   the latest completed planning turn so `POST /runs` is not `plan_stale`.
   409 `run_active` while a walk is running or paused; 404 when there is no
   plan to edit; 422 when the merged plan is not executable. This is the
   document-edit path — it does not go through the planner.
-- `GET /api/v1/projects/{id}/planning-turns` → the owner-scoped durable
+- `GET /api/v1/tasks/{id}/planning-turns` → the owner-scoped durable
   transcript in ascending `turn_index`, paginated in the standard
   `{data, pagination}` envelope. Each row exposes `turn_index`,
   `client_turn_id` (the caller's own idempotency key, returned so a
   reloaded client can retry its incomplete latest turn), `user_message`,
   `reply`, `suggestions`, `status`, `created_at` and
   `completed_at`; pending and failed rows remain visibly incomplete. There
-  is no backfill: projects predating the table simply have zero turns.
+  is no backfill: tasks predating the table simply have zero turns.
 
 ### Conversations
 
-A **conversation** is `kind ∈ planning | chat`. A project holds **one active
-planning conversation** at a time (created with the project or on its first
+A **conversation** is `kind ∈ planning | chat`. A task holds **one active
+planning conversation** at a time (created with the task or on its first
 planning turn; the existing `/planning-turns` and `/plan` endpoints below
 operate on it and additively expose `conversation_id` — paths and semantics
 are unchanged) plus **many chats** (Claude-Projects-style follow-up threads,
-user-created, project-scoped, answering across every artefact in the
-project — an entry artefact is context, never a scope fence). Chats are
+user-created, task-scoped, answering across every artefact in the
+task — an entry artefact is context, never a scope fence). Chats are
 **read-only**: they never mutate a plan, never start a run, never write an
 artefact — a question needing new evidence hands off to the planning
 conversation as a typed affordance, never a plan mutation from chat.
 
 **Grades (task 033).** Conversations carry `created_by` (the author's
-`sub`; NULL on pre-033 rows, which belong to the project owner — the
+`sub`; NULL on pre-033 rows, which belong to the task owner — the
 legacy disjunct `created_by = :me OR (created_by IS NULL AND
-owner_user_id = :me)`). A same-org colleague who can read the project
+owner_user_id = :me)`). A same-org colleague who can read the task
 holds exactly three mutations: create a **chat** conversation, post a turn
 to **their own** conversation, cancel **their own** turn. On the
 conversation-id routes a chat resolves for its creator only and a planning
-conversation for the project owner only — anyone else, colleague included,
+conversation for the task owner only — anyone else, colleague included,
 gets **404**, never 403 (the row's existence is not theirs to learn; this
 is what closes the `GET /{cid}/turns` transcript deep link). An admin may
 read `GET /{cid}` and `GET /{cid}/turns` (traced) and write nothing here.
-The creator's access dies with the project's read grade: de-enrolment or a
+The creator's access dies with the task's read grade: de-enrolment or a
 visibility flip revokes their own chats too. The per-user pending-turn cap
 and its stale-turn sweeper are keyed to the acting user (`created_by`),
-not the project owner. Unknown, unreachable, and — except where noted —
+not the task owner. Unknown, unreachable, and — except where noted —
 archived conversations are the same 404.
 
-- `GET /projects/{id}/conversations?kind=&status=` — the library read model
-  (project read grade + the own-chats filter: each caller sees the
+- `GET /tasks/{id}/conversations?kind=&status=` — the library read model
+  (task read grade + the own-chats filter: each caller sees the
   conversations *they* created, plus legacy NULL rows if they own the
-  project), both kinds, newest first, standard `{data, pagination}`
+  task), both kinds, newest first, standard `{data, pagination}`
   envelope; each row carries a `latest_turn_preview` (bounded snippet of
   its most recent chat or planning turn, from whichever turn table its
   `kind` reads). Default listing excludes archived rows; `status=archived`
   is the one filter that lists the caller's own archived chats (planning
   conversations are never archived).
-- `GET /conversations/{cid}` → `ConversationOut` (`id`, `project_id`, `kind`,
+- `GET /conversations/{cid}` → `ConversationOut` (`id`, `task_id`, `kind`,
   `title`, `status`, `entry_artefact_id`, `created_at`, `closed_at`,
   `archived_at`) — the deep-link resolver. An archived conversation is 404
   here (as on every route below except the list above and unarchive);
   unarchiving is the one call that resolves it back into reach.
-- `POST /projects/{id}/conversations` `{entry_artefact_id?}` → 201 chat
+- `POST /tasks/{id}/conversations` `{entry_artefact_id?}` → 201 chat
   conversation with `created_by = sub`, titled `"New chat"` until its first
   turn (kind is always `chat` — planning conversations are
   lifecycle-created, never minted by hand; the request model has no `kind`
   field, so asking for one is 422 by construction). Granted to owner and
-  same-org colleague alike on a readable project; takes no lock on the
-  project row. `entry_artefact_id` must name an artefact belonging to the
-  same project, else 404.
+  same-org colleague alike on a readable task; takes no lock on the
+  task row. `entry_artefact_id` must name an artefact belonging to the
+  same task, else 404.
 - `PATCH /conversations/{cid}` `{title?, entry_artefact_id?}` — chats only
   (422 on a planning conversation); partial, an explicit `null`
   `entry_artefact_id` clears the entry-context chip; a replacement artefact
-  is project-guarded the same as at creation.
+  is task-guarded the same as at creation.
 - `POST /conversations/{cid}/archive` / `.../unarchive` — chats only (422 on
   planning), idempotent either direction.
 - `GET /conversations/{cid}/turns` — an active owned chat's durable turns,
@@ -426,8 +429,8 @@ archived conversations are the same 404.
   non-latest turn) · 409 `chat_turn_in_progress` (a new `client_turn_id`
   while this conversation already has a `pending` row; a `pending` row older
   than ten minutes is first terminally expired to `failed`) · 409
-  `no_completed_run` (the project has never finished a run) · 409
-  `run_active` (the project's walk is currently `running` or `paused` —
+  `no_completed_run` (the task has never finished a run) · 409
+  `run_active` (the task's walk is currently `running` or `paused` —
   finish or park it first) · 429 `chat_capacity` (an owner-wide in-flight
   chat-turn cap, distinct from the run-slot `capacity` code). A generated
   answer is also capped by a fixed output-token ceiling.
@@ -437,7 +440,7 @@ archived conversations are the same 404.
   generation, persists whatever prose has streamed so far as `cancelled`,
   and returns the turn's honest current status (already-terminal is a
   no-op read, not an error).
-- `GET /projects/{id}/chunks/{chunk_id}/context?quote=` — the chat-citation
+- `GET /tasks/{id}/chunks/{chunk_id}/context?quote=` — the chat-citation
   hover/click read: the same clamped context-window shape as the artefact
   citation-context read above (including short edge-only `previous`/`next`
   snippets), resolved from a chat citation's durable chunk id plus its quote
@@ -448,19 +451,19 @@ archived conversations are the same 404.
 
 ### Runs
 
-- `POST /api/v1/projects/{id}/runs` `{}` → 201 run — creates the
+- `POST /api/v1/tasks/{id}/runs` `{}` → 201 run — creates the
   `capability_run` and dispatches the walk off the event loop. Guarded by
-  the per-project Postgres row lock: a second active run → 409
+  the per-task Postgres row lock: a second active run → 409
   `run_active`; at the executing-walk bound → 409 `capacity` (parked runs
   hold no slot). 400 if no approved-ready plan.
-- `GET /api/v1/projects/{id}/runs` → paginated list (newest first;
+- `GET /api/v1/tasks/{id}/runs` → paginated list (newest first;
   standard `{data, pagination}` envelope — runs accumulate);
   `GET .../runs/{run_id}` → one. Status ∈ `running | paused | succeeded |
   degraded | failed | aborted | interrupted`.
 
 ### Check-ins (steering)
 
-- `GET /api/v1/projects/{id}/check-ins?status=pending` — **pending is
+- `GET /api/v1/tasks/{id}/check-ins?status=pending` — **pending is
   derived AND answerable**: the `steering.pause` of the latest run without
   its decision, and only while that walk's status is `paused` (a walk the
   orphan sweep interrupted never presents an unanswerable card); at most
@@ -472,11 +475,11 @@ archived conversations are the same 404.
   supplied `options[]` (`{id, label, description, requires_user_input,
   suggested}`), `triggers[]`, and the affordance flags
   (`segment_reentry_allowed`, `rerun_component`).
-- `POST /api/v1/projects/{id}/check-ins/{check_in_id}/response` — one per
-  check-in; a second → 409 `already_answered` (per-project lock; barrier-
+- `POST /api/v1/tasks/{id}/check-ins/{check_in_id}/response` — one per
+  check-in; a second → 409 `already_answered` (per-task lock; barrier-
   tested). Body is a tagged union on `kind`:
   - `{"kind": "option", "option_id": ..., "params"?: {...}}` — canonical
-    or authored option (authored picks apply orchestrator attribution).
+    or authored option (authored picks apply Agent attribution).
   - `{"kind": "free_text", "text": ...}` → **202 with the compiled
     fan-out render + `confirm_token`** (router confirm gate — nothing
     applies unconfirmed; ~half of live free-text steers mis-compiled
@@ -495,7 +498,7 @@ archived conversations are the same 404.
   never surfaces (B2′ relevance-emphasis is in-scope steering and arrives
   as ordinary options).
 
-### Read models (read-grade GETs under `/api/v1/projects/{id}/…` — task 033: owner, same-org colleague, or admin)
+### Read models (read-grade GETs under `/api/v1/tasks/{id}/…` — task 033: owner, same-org colleague, or admin)
 
 `funnel` · `landscape` (distributions over the screened-in set only) ·
 `groups` · `evidence` (paginated source list with status ladder) ·
@@ -547,10 +550,10 @@ The C.2 additions add collection filters to `evidence` and `findings`, on
 top of the existing `page`/`page_size`. All filter params are optional,
 repeatable where noted, and combinable; every filtered response's
 `total_items` is collection-true — it reflects the filtered collection,
-never the unfiltered project total or the returned page's length.
-Evidence status is still derived server-side in Python project-wide before
+never the unfiltered task total or the returned page's length.
+Evidence status is still derived server-side in Python task-wide before
 filtering and paging (the `funnel_out` precedent — bounded to one
-project's rows).
+task's rows).
 
 - `GET .../evidence`: `status` (repeatable; any evidence status ladder
   value, plus the aggregate shortcut `Included` = the 7 ladder positions
@@ -568,7 +571,7 @@ project's rows).
 
 ### SSE
 
-`GET /api/v1/projects/{id}/events?cursor=<sequence>` — fetch-stream with
+`GET /api/v1/tasks/{id}/events?cursor=<sequence>` — fetch-stream with
 bearer auth (native `EventSource` cannot send headers). Replay-then-tail
 with an atomic cutoff: backlog is read to a snapshotted max `event_log`
 sequence, the live tail subscribes from `sequence+1` in the same
@@ -583,8 +586,8 @@ grade, and the tail re-authorises through the same predicate on every poll
 (batches and heartbeats alike), **before** reading the batch — a caller who
 loses access mid-stream never receives that interval's events and the
 stream closes as a normal end, no error frame. Revocation events that
-close an open stream: de-enrolment, a visibility flip on the project, a
-portfolio cascade privatising the member, and admin revoke. The owner's
+close an open stream: de-enrolment, a visibility flip on the task, a
+project cascade privatising the member, and admin revoke. The owner's
 stream never revokes, and archiving does not close it (archived filtering
 is not tenancy).
 
@@ -602,7 +605,7 @@ Frame vocabulary (discriminated union, `type` names are contract):
 | `checkin.pending` | the full check-in resource | `steering.pause` |
 | `checkin.resolved` | `{check_in_id, response, decided_by}` | `steering.decision` |
 | `plan.updated` | `{plan, version}` | plan row supersession |
-| `project.updated` | `{name?, question?, status?}` | lifecycle audit events |
+| `task.updated` | `{name?, question?, status?}` | lifecycle audit events |
 | `tick` | `{stage?, note, ephemeral: true}` | **ephemeral channel** — never persisted, never state-bearing, no `id:` |
 
 `stage` keys are the pinned stable component vocabulary (`acquire`,
@@ -615,7 +618,7 @@ check-in, and reconnect-mid-stream are the tested cases.
 
 `artefact.*` frames are durable presentation/progress records, not partial
 artefact reads or authoritative artefact content: whole-section prose is sent
-for live rendering, while the evidence-base artefact of record is committed
+for live rendering, while the report — the artefact of record — is committed
 only when synthesis completes. The skeleton's display `index` is the identity
 used by every artefact frame; it includes key findings first (although that
 section is generated last) and conclusions last. An empty key-findings pass
@@ -651,6 +654,17 @@ honestly, never silently).
 
 ## Deprecations
 
-None. (Additive changes append here with dates; removals require a
-documented deprecation window and never break the generated client within
-`/api/v1`.)
+Additive changes append here with dates; removals require a documented
+deprecation window and never break the generated client within `/api/v1`.
+
+- **2026-09-05 — task 038 (ADR 0036), the one break without a window.**
+  `/api/v1/projects/**` (the Task) → `/api/v1/tasks/**`; `/api/v1/portfolios/**`
+  → `/api/v1/projects/**` (the Project); schemas `Project*` → `Task*`,
+  `Portfolio*` → `Project*`; fields `project_id` → `task_id`, `portfolio_id(s)`
+  → `project_id(s)`, `from_project_id` → `from_task_id`; SSE frame
+  `project.updated` → `task.updated`; wire literal `decided_by`/`authored_by`
+  `orchestrator` → `agent` (old stored values read back as `agent`). No
+  redirects (owner fork F3): the only consumers are this repo's frontend and
+  e2e, regenerated from the same OpenAPI document in the same commit; public
+  share links copied before the deploy are regenerated. Rollback: ADR 0036
+  § Rollback.

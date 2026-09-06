@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "../auth/AuthContext";
 import type { AuthApi } from "../auth/types";
-import { useChatTurns, useMe, useProject } from "./queries";
+import { useChatTurns, useMe, useTask } from "./queries";
 
 const conversationId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -167,7 +167,7 @@ describe("useMe", () => {
   });
 });
 
-describe("useProject", () => {
+describe("useTask", () => {
   it("does not retry a 404 (task 037: an anonymous read must fail fast, not after ~7s of retries)", async () => {
     const fetchMock = vi.fn(
       async () =>
@@ -178,7 +178,7 @@ describe("useProject", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useProject(conversationId), { wrapper: wrapper() });
+    const { result } = renderHook(() => useTask(conversationId), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

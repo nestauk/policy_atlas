@@ -39,7 +39,7 @@ def test_me_provisions_an_unenrolled_caller_with_the_sub_rendering(
         }
 
 
-def test_me_projects_an_enrolled_caller_with_their_organisation(
+def test_me_tasks_an_enrolled_caller_with_their_organisation(
     engine: Engine, tmp_path: Path
 ) -> None:
     """An enrolled caller sees their ops-set name, own email and organisation."""

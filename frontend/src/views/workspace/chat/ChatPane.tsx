@@ -1,26 +1,48 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import { useConversation } from "../../../api/queries";
 import { useChatConversation } from "../../../store";
+import { cn } from "../../../ui/brand/cn";
+import { LIFECYCLE_PAGE_CLASS } from "../../listPageChrome";
 import { ChatComposer } from "./ChatComposer";
+import { ChatEmptyState, starterQuestions } from "./ChatEmptyState";
 import { ChatMessages } from "./ChatMessages";
 import { ContextBar } from "./ContextBar";
+import { JumpToEnd } from "./JumpToEnd";
+import { takeFirstMessage } from "./conversationState";
+import { useFooterReveal } from "./useFooterReveal";
+import { usePinToBottom } from "./usePinToBottom";
 
-/** Compose one URL-addressable chat conversation in the workspace rail.
+/** Compose one URL-addressable chat conversation — in the overlay, or wide
+ *  in the Agent tab's main column.
  *
  * Args:
- *   props: Conversation identity, optional starter section titles, and hand-off.
+ *   props: Conversation identity, optional starter section titles, the
+ *     hand-off to the planning thread, `wide` for the Agent tab's reading
+ *     column, and `onAtBottomChange`, reporting the reader's deliberate
+ *     scroll past the transcript's end so the tab can reveal the footer.
  *
  * Returns:
  *   A transcript, context bar, and composer.
  */
-export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpenPlanning }: { projectId: string; conversationId: string; sectionTitles?: string[]; onOpenPlanning: () => void }) {
+export function ChatPane({
+  taskId,
+  conversationId,
+  sectionTitles = [],
+  onOpenPlanning,
+  wide = false,
+  onAtBottomChange,
+}: {
+  taskId: string;
+  conversationId: string;
+  sectionTitles?: string[];
+  onOpenPlanning: () => void;
+  wide?: boolean;
+  onAtBottomChange?: (atBottom: boolean) => void;
+}) {
   const conversation = useConversation(conversationId);
   const chat = useChatConversation(conversationId);
-  const starterQuestions = useMemo(
-    () => sectionTitles.slice(0, 3).map((title) => `Tell me more about "${title}"`),
-    [sectionTitles],
-  );
+  const starters = useMemo(() => starterQuestions(sectionTitles), [sectionTitles]);
   const durableRows = chat.rows.filter(
     (row): row is Extract<(typeof chat.rows)[number], { id: string }> => "id" in row,
   );
@@ -51,44 +73,77 @@ export function ChatPane({ projectId, conversationId, sectionTitles = [], onOpen
     );
     if (row !== undefined) void chat.cancelTurn(row.id);
   };
+
+  // A draft chat hands its first message over as it becomes this chat (038
+  // V8): send it once, on mount under the new id. `sendTurn` is the store's
+  // stable callback for this conversation, so the effect keys on it honestly.
+  const { sendTurn } = chat;
+  // Deferred one tick: a StrictMode rehearsal (mount → cleanup → mount) would
+  // otherwise start a send its own cleanup aborts and leave nothing for the
+  // real mount; the cleanup here cancels the timer before anything is taken.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const first = takeFirstMessage(conversationId);
+      if (first !== null) void sendTurn(first).catch(() => undefined);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [conversationId, sendTurn]);
+
+  const footer = useFooterReveal(onAtBottomChange);
+  // A chat opens at its end and stays there as turns stream in (owner,
+  // 2026-09-05); a reader who scrolls up is left alone.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const pin = usePinToBottom(scrollRef, contentRef, conversationId);
+
   const empty = !chat.isPending && chat.rows.length === 0;
+  const column = wide ? LIFECYCLE_PAGE_CLASS : "px-4";
   return (
     <section aria-label="Chat" className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {empty ? (
-          <div className="space-y-2 py-8">
-            <p className="text-body text-grey">
-              {conversation.isError ? "This chat couldn't be opened." : "Ask about the evidence."}
-            </p>
-            {!conversation.isError &&
-              starterQuestions.map((question) => (
-                <button
-                  key={question}
-                  type="button"
-                  onClick={() => send(question)}
-                  className="block text-left text-meta font-semibold text-blue hover:underline"
-                >
-                  {question}
-                </button>
-              ))}
-          </div>
-        ) : (
-          <ChatMessages projectId={projectId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
-        )}
+      {/* `relative` for the jump-to-end pill, which floats over the region's bottom edge. */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scrollRef}
+        onScroll={(event) => {
+          pin.onScroll(event);
+          footer.onScroll(event);
+        }}
+        onWheel={footer.onWheel}
+        onTouchStart={footer.onTouchStart}
+        onTouchMove={footer.onTouchMove}
+        className="min-h-0 flex-1 overflow-y-auto py-4 [scrollbar-gutter:stable]"
+      >
+        <div ref={contentRef} className={cn("w-full", column)}>
+          {empty ? (
+            <ChatEmptyState
+              message={conversation.isError ? "This chat couldn't be opened." : "Ask about the evidence."}
+              questions={conversation.isError ? [] : starters}
+              onAsk={send}
+            />
+          ) : (
+            <ChatMessages taskId={taskId} rows={chat.rows} onOpenPlanning={onOpenPlanning} onRetry={retry} />
+          )}
+        </div>
       </div>
-      <ContextBar
-        projectId={projectId}
-        conversationId={conversationId}
-        entryArtefactId={conversation.data?.entry_artefact_id ?? null}
-      />
-      <div className="border-t border-line p-4">
-        <ChatComposer
+      <JumpToEnd visible={!pin.atEnd} onClick={pin.jumpToEnd} />
+      </div>
+      <div className={cn("w-full", column)}>
+        <ContextBar
+          taskId={taskId}
           conversationId={conversationId}
-          isStreaming={chat.isStreaming}
-          disabledReason={disabledReason}
-          onSend={send}
-          onStop={() => void cancel()}
+          entryArtefactId={conversation.data?.entry_artefact_id ?? null}
         />
+      </div>
+      <div className="border-t border-line">
+        <div className={cn("w-full py-4", column)}>
+          <ChatComposer
+            conversationId={conversationId}
+            isStreaming={chat.isStreaming}
+            disabledReason={disabledReason}
+            onSend={send}
+            onStop={() => void cancel()}
+          />
+        </div>
       </div>
     </section>
   );

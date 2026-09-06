@@ -11,7 +11,6 @@ import * as queries from "../../api/queries";
 import { createInitialRunStreamState } from "../../store";
 import type { PlanningThreadDecision, PlanningThreadRun, PlanningThreadTurn } from "../../store";
 import { ToastProvider } from "../../ui/radix/Toast";
-import { SITE_DISCLAIMER } from "../AppFooter";
 import { Composer, PlanningPane, planningComposerPlaceholder, presentRunDecisions, threadInputs } from "./PlanningPane";
 
 type CheckInOut = components["schemas"]["CheckInOut"];
@@ -61,7 +60,7 @@ function turn(index: number, createdAt: string): PlanningThreadTurn {
 function run(id: string, startedAt: string, endedAt: string | null): PlanningThreadRun {
   return {
     capability_run_id: id,
-    project_id: "p1",
+    task_id: "p1",
     plan_id: `plan-${id}`,
     plan_version: 1,
     status: endedAt === null ? "running" : "succeeded",
@@ -103,8 +102,8 @@ describe("presentRunDecisions", () => {
     const entries: PlanningThreadDecision[] = [
       { kind: "search.executed", sequence: 1, occurred_at: "2026-07-28T10:00:00Z", summary: "Executed a search query." },
       { kind: "search.executed", sequence: 2, occurred_at: "2026-07-28T10:00:01Z", summary: "Executed a search query." },
-      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-base step.", detail: { component: "screen_full" } },
-      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-base step.", detail: { component: "unknown" } },
+      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-search step.", detail: { component: "screen_full" } },
+      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-search step.", detail: { component: "unknown" } },
     ];
 
     expect(presentRunDecisions(entries, [])).toEqual([
@@ -136,7 +135,7 @@ describe("Composer", () => {
     const user = userEvent.setup();
     const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
 
-    await user.click(screen.getByLabelText("Message the planner"));
+    await user.click(screen.getByLabelText("Message the Task Agent"));
     await user.keyboard("{Enter}");
 
     expect(onSubmit).toHaveBeenCalledOnce();
@@ -147,7 +146,7 @@ describe("Composer", () => {
     const user = userEvent.setup();
     const { onSubmit, onChange } = renderComposer({ value: "Map school-meal evidence." });
 
-    await user.click(screen.getByLabelText("Message the planner"));
+    await user.click(screen.getByLabelText("Message the Task Agent"));
     await user.keyboard("{Shift>}{Enter}{/Shift}");
 
     expect(onSubmit).not.toHaveBeenCalled();
@@ -161,7 +160,7 @@ describe("Composer", () => {
       placeholder: "Replanning unlocks when this run finishes.",
     });
 
-    const textarea = screen.getByLabelText("Message the planner");
+    const textarea = screen.getByLabelText("Message the Task Agent");
     expect(textarea).toBeDisabled();
     expect(textarea).toHaveAttribute("placeholder", "Replanning unlocks when this run finishes.");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
@@ -197,19 +196,19 @@ describe("planningComposerPlaceholder", () => {
 
   it("names the owner-only limit for a non-owner regardless of run state (task 033 phase 10c, rubric 37)", () => {
     expect(planningComposerPlaceholder(undefined, false, false)).toBe(
-      "Steering is limited to the project owner.",
+      "Steering is limited to the task owner.",
     );
     expect(planningComposerPlaceholder("running", false, false)).toBe(
-      "Steering is limited to the project owner.",
+      "Steering is limited to the task owner.",
     );
     expect(planningComposerPlaceholder("failed", true, false)).toBe(
-      "Steering is limited to the project owner.",
+      "Steering is limited to the task owner.",
     );
   });
 });
 
 describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 11 / rubric 37)", () => {
-  const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+  const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
   function readyTurn(): PlanningThreadTurn {
     return {
@@ -290,7 +289,7 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
       <MemoryRouter>
         <ToastProvider>
           <PlanningPane
-            projectId={PROJECT_ID}
+            taskId={TASK_ID}
             runStatus={undefined}
             stream={createInitialRunStreamState()}
             isOwner={false}
@@ -303,21 +302,10 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
 
   it("disables the composer with the owner-only placeholder", () => {
     renderPane();
-    const textarea = screen.getByLabelText("Message the planner");
+    const textarea = screen.getByLabelText("Message the Task Agent");
     expect(textarea).toBeDisabled();
-    expect(textarea).toHaveAttribute("placeholder", "Steering is limited to the project owner.");
+    expect(textarea).toHaveAttribute("placeholder", "Steering is limited to the task owner.");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-  });
-
-  it("puts the site footer under the composer, visible when scrolled to the bottom", () => {
-    renderPane();
-    const footer = screen.getByRole("contentinfo");
-    const composer = screen.getByLabelText("Message the planner");
-    expect(footer).toHaveTextContent(SITE_DISCLAIMER);
-    // Under the composer: composer precedes footer in document order.
-    expect(composer.compareDocumentPosition(footer)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    // Short threads start at the bottom, so the reveal wrapper is open.
-    expect(footer.parentElement).not.toHaveAttribute("aria-hidden", "true");
   });
 
   it("hides Start search from the plan-ready card but keeps Review the plan", () => {
@@ -336,6 +324,6 @@ describe("PlanningPane — non-owner read-only (task 033 phase 10c, contract § 
     renderPane({ isOwner: true, stream: { ...createInitialRunStreamState(), pendingCheckIn: checkIn() } });
     expect(screen.getByText("Waiting on your input")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start search" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Message the planner")).not.toBeDisabled();
+    expect(screen.getByLabelText("Message the Task Agent")).not.toBeDisabled();
   });
 });

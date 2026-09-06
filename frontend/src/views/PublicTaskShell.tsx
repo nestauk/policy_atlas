@@ -1,14 +1,14 @@
 import { useLayoutEffect } from "react";
 import { Outlet, useLocation, useNavigate, useParams } from "react-router";
 
-import { useProject } from "../api/queries";
+import { useTask } from "../api/queries";
 import { useAuth } from "../auth";
 import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
 import { LifecycleBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink } from "../ui/brand/Nav";
-import { COPY } from "../lib/vocabulary";
+import { COPY, TASK } from "../lib/vocabulary";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
 import { RunStreamProvider } from "../store";
 import { ToastProvider } from "../ui/radix/Toast";
@@ -22,7 +22,7 @@ import { StashAndSplashRedirect } from "../routes/StashAndSplashRedirect";
  * Layout for a public (link-shared) Task opened without signing in —
  * task 037. Same URL as the app; only Results and Sources render, behind
  * the backend's public read leg. A Task that is not public (or unknown,
- * or archived) 404s on the tokenless project read and falls through to
+ * or archived) 404s on the tokenless task read and falls through to
  * the existing stash-and-splash behaviour, so a private link looks
  * exactly like it did before this slice.
  *
@@ -31,8 +31,8 @@ import { StashAndSplashRedirect } from "../routes/StashAndSplashRedirect";
  * views — the page issues only public-surface requests.
  */
 export function PublicTaskShell() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,18 +45,18 @@ export function PublicTaskShell() {
     return () => document.documentElement.classList.remove("overflow-hidden");
   }, []);
 
-  if (project.isPending) {
+  if (task.isPending) {
     return (
       <p role="status" className="text-meta text-grey">
         Loading…
       </p>
     );
   }
-  if (project.data === undefined) {
+  if (task.data === undefined) {
     return <StashAndSplashRedirect />;
   }
 
-  const base = `/projects/${projectId}`;
+  const base = `/tasks/${taskId}`;
 
   const onSignIn = () => {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
@@ -73,7 +73,7 @@ export function PublicTaskShell() {
     <ToastProvider>
       <TooltipProvider delayDuration={200}>
         <PublicViewProvider value={true}>
-          <RunStreamProvider projectId={projectId} connect={false}>
+          <RunStreamProvider taskId={taskId} connect={false}>
             <div className="flex h-svh w-full min-w-0 max-w-full flex-col overflow-hidden">
               <NavBar aria-label="App" className="shrink-0">
                 <NavHomeLink />
@@ -81,10 +81,10 @@ export function PublicTaskShell() {
                   Sign in
                 </Button>
               </NavBar>
-              <NavBar aria-label="Task" className="shrink-0 bg-ground">
+              <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-lead font-semibold text-navy">
-                    {scrub(project.data.name)}
+                    {scrub(task.data.name)}
                   </span>
                 </div>
                 <LifecycleBar hint={COPY.lockedHint} items={publicLifecycleTabs(base)} />

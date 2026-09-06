@@ -9,19 +9,19 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.api.routers import sse
 from policy_atlas.core import events
-from policy_atlas.core.schema import artefact, project, runs
+from policy_atlas.core.schema import artefact, runs, task
 from policy_atlas.runtime.progress import ProgressEmitter
-from tests.helpers import delete_project_data, now
+from tests.helpers import delete_task_data, now
 
 
 def _seed_run(engine: Engine) -> tuple[uuid.UUID, uuid.UUID]:
-    project_id = uuid.uuid4()
+    task_id = uuid.uuid4()
     run_id = uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
-            project.insert().values(
-                project_id=project_id,
-                name="Progress test project",
+            task.insert().values(
+                task_id=task_id,
+                name="Progress test task",
                 status="active",
                 created_at=now(),
                 updated_at=now(),
@@ -30,28 +30,28 @@ def _seed_run(engine: Engine) -> tuple[uuid.UUID, uuid.UUID]:
         conn.execute(
             runs.insert().values(
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 status="running",
                 started_at=now(),
             )
         )
-    return project_id, run_id
+    return task_id, run_id
 
 
-def _cleanup(engine: Engine, project_id: uuid.UUID | None) -> None:
-    if project_id is None:
+def _cleanup(engine: Engine, task_id: uuid.UUID | None) -> None:
+    if task_id is None:
         return
     with engine.begin() as conn:
-        delete_project_data(conn, project_id)
+        delete_task_data(conn, task_id)
 
 
 def test_progress_emitter_uses_display_order_and_closes_empty_key_findings(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, run_id = _seed_run(engine)
-        emitter = ProgressEmitter(engine, project_id=project_id, run_id=run_id)
+        task_id, run_id = _seed_run(engine)
+        emitter = ProgressEmitter(engine, task_id=task_id, run_id=run_id)
         emitter.emit_skeleton(
             [
                 {"title": "Evidence", "focus": "What the evidence says"},
@@ -66,8 +66,8 @@ def test_progress_emitter_uses_display_order_and_closes_empty_key_findings(
         emitter.key_findings_completed(prose="")
 
         with engine.connect() as conn:
-            rows = sse._event_rows(conn, project_id=project_id, after=0, through=None)
-            frames = sse._map_rows(conn, project_id=project_id, rows=rows, through=None)
+            rows = sse._event_rows(conn, task_id=task_id, after=0, through=None)
+            frames = sse._map_rows(conn, task_id=task_id, rows=rows, through=None)
         assert frames[0]["type"] == "artefact.skeleton"
         assert frames[0]["sections"] == [
             {"index": 0, "title": "Key findings", "focus": "The report's headline claims."},
@@ -87,9 +87,9 @@ def test_progress_emitter_uses_display_order_and_closes_empty_key_findings(
         # A cursor after the skeleton is a reconnect mid-synthesis: replay
         # carries exactly the events already completed, including their prose.
         with engine.connect() as conn:
-            replay_rows = sse._event_rows(conn, project_id=project_id, after=1, through=None)
+            replay_rows = sse._event_rows(conn, task_id=task_id, after=1, through=None)
             replay = sse._map_rows(
-                conn, project_id=project_id, rows=replay_rows, through=None
+                conn, task_id=task_id, rows=replay_rows, through=None
             )
         completed = [frame for frame in replay if frame["type"] == "artefact.section_completed"]
         assert [(frame["index"], frame["prose"]) for frame in completed] == [
@@ -98,17 +98,17 @@ def test_progress_emitter_uses_display_order_and_closes_empty_key_findings(
             (0, ""),
         ]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
     engine: Engine,
 ) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     held = None
     try:
-        project_id, run_id = _seed_run(engine)
-        emitter = ProgressEmitter(engine, project_id=project_id, run_id=run_id)
+        task_id, run_id = _seed_run(engine)
+        emitter = ProgressEmitter(engine, task_id=task_id, run_id=run_id)
         emitter.emit_skeleton([{"title": "Evidence", "focus": "What changed"}])
 
         held = engine.connect()
@@ -116,7 +116,7 @@ def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
         held.execute(
             artefact.insert().values(
                 artefact_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 title="Uncommitted artefact",
                 created_at=now(),
             )
@@ -139,7 +139,7 @@ def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
         worker.join()
         assert failures == []
         with engine.connect() as conn:
-            progress_events = events.read(conn, project_id)
+            progress_events = events.read(conn, task_id)
         assert [event["event_type"] for event in progress_events] == [
             "artefact.skeleton",
             "artefact.section_started",
@@ -152,7 +152,7 @@ def test_progress_emitter_does_not_block_on_open_synthesis_like_transaction(
         if held is not None:
             held.rollback()
             held.close()
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_progress_emitter_has_no_case_studies_stream_surface() -> None:
@@ -163,10 +163,10 @@ def test_progress_emitter_has_no_case_studies_stream_surface() -> None:
 
 def test_progress_emitter_failure_degrades_without_raising(engine: Engine) -> None:
     """ADR 0027 decision 5: a presentation append can never fail the walk."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, run_id = _seed_run(engine)
-        emitter = ProgressEmitter(engine, project_id=project_id, run_id=run_id)
+        task_id, run_id = _seed_run(engine)
+        emitter = ProgressEmitter(engine, task_id=task_id, run_id=run_id)
         emitter.emit_skeleton([{"title": "Evidence", "focus": "What the evidence says"}])
 
         # Skeleton drift (an index the skeleton never had) degrades quietly.
@@ -176,15 +176,15 @@ def test_progress_emitter_failure_degrades_without_raising(engine: Engine) -> No
         emitter.key_findings_completed(prose="never recorded")
 
         with engine.begin() as conn:
-            recorded = [entry["event_type"] for entry in events.read(conn, project_id)]
+            recorded = [entry["event_type"] for entry in events.read(conn, task_id)]
         assert recorded == ["artefact.skeleton"]
 
         # A DB failure on append (FK-less run id) also degrades instead of raising.
-        fresh = ProgressEmitter(engine, project_id=project_id, run_id=uuid.uuid4())
+        fresh = ProgressEmitter(engine, task_id=task_id, run_id=uuid.uuid4())
         fresh.emit_skeleton([{"title": "Evidence", "focus": "What the evidence says"}])
         with engine.begin() as conn:
-            assert [entry["event_type"] for entry in events.read(conn, project_id)] == [
+            assert [entry["event_type"] for entry in events.read(conn, task_id)] == [
                 "artefact.skeleton"
             ]
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)

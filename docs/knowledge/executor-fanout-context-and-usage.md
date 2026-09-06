@@ -12,7 +12,7 @@ Every traced/LLM call submitted to a `ThreadPoolExecutor` goes through
 `tracing.submit_with_context` (`contextvars.copy_context()` at submit). One mechanism
 carries **both** telemetry planes: the OTel/Langfuse span context (per-doc generations
 nest under the component root instead of minting detached root traces) and structlog's
-`bound_contextvars` (`project_id`/`run_id`/`component` on every worker log line).
+`bound_contextvars` (`task_id`/`run_id`/`component` on every worker log line).
 
 `UsageAccumulator` is **not** thread-safe. The fan-out pattern that keeps it serial:
 workers *return* their usage payloads; the submitting thread accumulates them in input

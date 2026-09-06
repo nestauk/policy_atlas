@@ -50,3 +50,11 @@ docs/tasks/*/evidence/
 
 # Cursor plans
 .cursor/plans
+
+# Local plugin runtime state (impeccable): never committed
+.cursor/hooks.json
+.github/hooks/
+.impeccable/
+
+# Task 038 sweep state (per checkout, not a review artefact)
+scripts/.rename_038_state.json

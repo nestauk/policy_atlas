@@ -1,8 +1,8 @@
 ---
 type: Runbook
-title: Orchestrate is the one check vehicle — the stub smoke is automated in the suite; the manual command is for ad-hoc and live checks
-description: Skeleton is retired (023). The zero-egress full-chain check is test_full_stub_end_to_end_mints_artefact (in make verify, self-cleaning); the manual orchestrate command exists for ad-hoc demos and the live-check form only — it commits rows, so ad-hoc runs against a shared DB need a reset afterwards.
-tags: [smoke, orchestrate, stub, testing, zero-egress, runbook]
+title: Agent is the one check vehicle — the stub smoke is automated in the suite; the manual command is for ad-hoc and live checks
+description: Skeleton is retired (023). The zero-egress full-chain check is test_full_stub_end_to_end_mints_artefact (in make verify, self-cleaning); the manual agent command exists for ad-hoc demos and the live-check form only — it commits rows, so ad-hoc runs against a shared DB need a reset afterwards.
+tags: [smoke, agent, stub, testing, zero-egress, runbook]
 timestamp: 2026-07-14
 ---
 
@@ -10,13 +10,13 @@ timestamp: 2026-07-14
 
 The walking-skeleton CLI was retired in task 023 (owner ruling, 2026-07-14): its stub
 smoke role was already covered by the suite, and its live-check role belongs to the
-product CLI. From 023 on, **`orchestrate` is the one check vehicle**, in two forms:
+product CLI. From 023 on, **`agent` is the one check vehicle**, in two forms:
 
 **1. The automated gate (the default — nothing to run by hand).**
-`tests/runtime/test_orchestrate.py::test_full_stub_end_to_end_mints_artefact` drives the
+`tests/runtime/test_agent.py::test_full_stub_end_to_end_mints_artefact` drives the
 identical scripted flow (intent · suggestion pick · `approve` · two steer-point
 continues) through `main()` with an injected console, asserts the artefact is minted,
-and **cleans up its committed rows** (`delete_project_data` in a `finally`). It runs
+and **cleans up its committed rows** (`delete_task_data` in a `finally`). It runs
 inside `make verify` — every full gate already executes the smoke. A slice needs no
 separate manual smoke step; `verification.md` cites this test. (The runner-level
 `test_full_stub_chain_commits_each_step_and_checks_in` covers the same chain below the
@@ -28,7 +28,7 @@ CLI.)
 printf 'What works to reduce childhood obesity?\n1\napprove\n1\n1\n' \
   | env -u OPENAI_API_KEY \
     DATABASE_URL="postgresql+psycopg://policy_atlas:policy_atlas@localhost:5432/policy_atlas_test" \
-    uv run python -m policy_atlas.runtime.orchestrate
+    uv run python -m policy_atlas.runtime.agent
 ```
 
 - No `OPENAI_API_KEY` ⇒ stub mode: `StubPlannerBackend` + empty search backends (the

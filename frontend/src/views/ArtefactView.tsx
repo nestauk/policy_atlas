@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
+import { useApiClient, useArtefact, useConversations, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   cardEvidenceMeta,
@@ -26,6 +26,8 @@ import { ArtefactDownload } from "./ArtefactDownload";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
+import { COPY } from "../lib/vocabulary";
+import { hasResult } from "./lifecycle";
 import { hasTerminalPartialLiveArtefact, useRunStream } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { Card } from "../ui/brand/Card";
@@ -50,7 +52,7 @@ import {
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
 import { SourceDossierBody } from "./SourcesView";
-import { addOpenChatTab, useActiveConversation, useConversationMutations } from "./workspace/chat/conversationState";
+import { useActiveConversation } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
 type GapOut = components["schemas"]["GapOut"];
@@ -284,15 +286,15 @@ export function ChipWithTooltip({
 }
 
 /** Fetch one citation's clamped chunk context on demand (the click rung). */
-function useChunkContext(projectId: string, citationId: string | null) {
+function useChunkContext(taskId: string, citationId: string | null) {
   const client = useApiClient();
   return useQuery({
     enabled: citationId !== null,
-    queryKey: ["projects", projectId, "chunk-context", citationId],
+    queryKey: ["tasks", taskId, "chunk-context", citationId],
     queryFn: async () => {
       const { data, error } = await client.GET(
-        "/api/v1/projects/{project_id}/citations/{citation_key}/context",
-        { params: { path: { project_id: projectId, citation_key: citationId ?? "" } } },
+        "/api/v1/tasks/{task_id}/citations/{citation_key}/context",
+        { params: { path: { task_id: taskId, citation_key: citationId ?? "" } } },
       );
       if (data === undefined) throw error;
       return data;
@@ -406,15 +408,15 @@ export function AppraisalChip({ label, evidenceType }: { label: string; evidence
 /** One citation's provenance block in the claim panel (demo CitationContext):
  *  the reader's tier + appraisal chips over the shared block. */
 function CitationContext({
-  projectId,
+  taskId,
   citation,
   onOpenDossier,
 }: {
-  projectId: string;
+  taskId: string;
   citation: CitationOut;
   onOpenDossier: (title: string) => void;
 }) {
-  const context = useChunkContext(projectId, citation.citation_id);
+  const context = useChunkContext(taskId, citation.citation_id);
   const tier = citation.grounding_tier ?? null;
   return (
     <CitationProvenanceBlock
@@ -502,12 +504,12 @@ export function ProvenanceSheet({
  *  type explainer, and every citation's highlighted source passage — over
  *  the shared ProvenanceSheet shell. */
 function ClaimPanel({
-  projectId,
+  taskId,
   claim,
   onClose,
   onOpenDossier,
 }: {
-  projectId: string;
+  taskId: string;
   claim: ClaimLike | null;
   onClose: () => void;
   onOpenDossier: (title: string) => void;
@@ -591,7 +593,7 @@ function ClaimPanel({
                 <p className="mt-0.5 text-caption">
                   <Link
                     className="font-semibold text-blue hover:underline"
-                    to={`/projects/${projectId}/sources/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
+                    to={`/tasks/${taskId}/sources/findings?facet=${encodeURIComponent(item.facet)}&group=${encodeURIComponent(item.name)}`}
                     onClick={onClose}
                   >
                     See the findings in this theme
@@ -625,7 +627,7 @@ function ClaimPanel({
       {(claim.citations ?? []).map((citation) => (
         <CitationContext
           key={citation.citation_id}
-          projectId={projectId}
+          taskId={taskId}
           citation={citation}
           onOpenDossier={onOpenDossier}
         />
@@ -780,7 +782,7 @@ function ClaimSpan({
   );
 }
 
-export type SpanSegment<C> = { kind: "plain"; text: string } | { kind: "claim"; text: string; claim: C };
+type SpanSegment<C> = { kind: "plain"; text: string } | { kind: "claim"; text: string; claim: C };
 
 /**
  * Split `prose` into plain/claim segments by each claim's `[start, end)`
@@ -1025,25 +1027,25 @@ export function AnnotatedProse({
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function SourceDossier({
-  projectId,
+  taskId,
   sourceRef,
   onClose,
 }: {
-  projectId: string;
+  taskId: string;
   /** A source id (citations carry one) or a display title (references,
    *  theme members — the legacy title-keyed path). */
   sourceRef: string;
   onClose: () => void;
 }) {
   const byId = UUID_RE.test(sourceRef);
-  const evidence = useEvidence(projectId, { page_size: 200 });
+  const evidence = useEvidence(taskId, { page_size: 200 });
   const source = byId
     ? evidence.data?.data.find((item) => item.source_id === sourceRef)
     : evidence.data?.data.find((item) => item.title === sourceRef);
   const sourceId = byId ? sourceRef : (source?.source_id ?? null);
-  const dossier = useSourceDossier(projectId, sourceId);
+  const dossier = useSourceDossier(taskId, sourceId);
   const findings = useFindings(
-    projectId,
+    taskId,
     sourceId !== null ? { page_size: 200, source_id: sourceId } : undefined,
   );
   return (
@@ -1083,8 +1085,8 @@ export function SourceDossier({
  * failed write still take the live view.
  *
  * Args:
- *   stream: Live SSE state for the project's current run.
- *   latestRun: The project's persisted latest-run read model, if loaded.
+ *   stream: Live SSE state for the task's current run.
+ *   latestRun: The task's persisted latest-run read model, if loaded.
  *
  * Returns:
  *   True when `LiveArtefactBody` should render.
@@ -1126,7 +1128,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
           <p className="font-bold">This run ended before the write-up completed.</p>
           <p className="mt-0.5">
             The sections below are drafted text from the interrupted run — not the checked
-            evidence base. Citations were never attached. Start a fresh run to produce the full
+            report. Citations were never attached. Start a fresh run to produce the full
             artefact.
           </p>
         </div>
@@ -1299,27 +1301,26 @@ function MostRelevantSources({
  *  (?source=… — deep-linkable, refresh-safe), and the live streaming state
  *  while synthesis writes. */
 export function ArtefactView() {
-  const { projectId = "" } = useParams();
+  const { taskId = "" } = useParams();
   const isPublicView = usePublicView();
-  const project = useProject(projectId);
-  const artefact = useArtefact(projectId);
+  const task = useTask(taskId);
+  const artefact = useArtefact(taskId);
   // The public view (task 037) must issue only public-surface requests:
   // conversations stay unfetched and the chat affordance below is hidden.
   const chats = useConversations(
-    projectId,
+    taskId,
     { kind: "chat", status: "active" },
     { enabled: !isPublicView },
   );
-  const { create } = useConversationMutations(projectId);
   // Cited-scoped distributions for the facts strip: study types and years
   // count what the report CITES, not the whole included corpus (owner,
   // 2026-08-05); the durable coverage_snapshot keeps the corpus-wide counts.
-  const citedLandscape = useLandscape(projectId, "cited");
-  const stream = useRunStream(projectId);
+  const citedLandscape = useLandscape(taskId, "cited");
+  const stream = useRunStream(taskId);
   const [searchParams, setSearchParams] = useSearchParams();
   const dossierSource = searchParams.get("source");
   const [detailClaim, setDetailClaim] = useState<ClaimLike | null>(null);
-  useDocumentTitle(project.data?.name, "Evidence base");
+  useDocumentTitle(task.data?.name, "Report");
 
   const openDossier = (title: string) => {
     setSearchParams((current) => {
@@ -1335,24 +1336,25 @@ export function ArtefactView() {
       return next;
     });
   };
-  const { setActiveConversation } = useActiveConversation();
-  const askAboutAnalysis = async () => {
+  const { setActiveConversation, openDraftChat } = useActiveConversation();
+  // Chats need a result to ask about (038 V8) — the same gate as New chat.
+  const chatsEnabled = hasResult(task.data?.latest_run?.status) || hasResult(stream.run?.status);
+  const askAboutAnalysis = () => {
     // The open artefact is the chat's entry context (a chip and provenance
-    // fact, never a scope fence); reuse a blank chat already carrying it.
+    // fact, never a scope fence); reuse a blank chat already carrying it,
+    // else open a DRAFT beside the artefact (rev 3.4) — the row is created
+    // on the first message, never before (038 V8).
     const artefactId = artefact.data?.artefact_id ?? null;
     const blank = chats.data?.data.find(
       (chat) => chat.title === "New chat" && chat.entry_artefact_id === artefactId,
     );
-    const conversation = blank ?? await create(artefactId);
-    // Open the side panel HERE (rev 3.4): questions arise while reading, so
-    // the chat lands beside the artefact instead of navigating away.
-    addOpenChatTab(projectId, conversation.id);
-    setActiveConversation(conversation.id);
+    if (blank !== undefined) return setActiveConversation(blank.id);
+    openDraftChat(artefactId);
   };
 
   if (artefact.isPending) {
     return (
-      <main aria-busy="true" aria-label="Loading the evidence base" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
+      <main aria-busy="true" aria-label="Loading the report" className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="mb-4 h-24 animate-pulse border border-line bg-paper-2" />
         ))}
@@ -1370,7 +1372,7 @@ export function ArtefactView() {
       return (
         <main className={`${LIFECYCLE_PAGE_CLASS} py-10`}>
           <Card role="alert" className="p-8 text-center text-body text-navy">
-            The evidence base couldn't be loaded.{" "}
+            The report couldn't be loaded.{" "}
             <button
               type="button"
               className="cursor-pointer font-bold text-blue hover:underline"
@@ -1387,7 +1389,7 @@ export function ArtefactView() {
   if (artefact.isError || artefact.data === undefined || artefact.data === null) {
     // No committed artefact: show the in-progress skeleton when sections are
     // streaming (or streamed before a bad ending) — otherwise the empty state.
-    if (showLiveArtefact(stream, project.data?.latest_run)) {
+    if (showLiveArtefact(stream, task.data?.latest_run)) {
       return <LiveArtefactBody stream={stream} />;
     }
     return (
@@ -1410,7 +1412,7 @@ export function ArtefactView() {
   // hiding that behind the old artefact would be dishonest (live-check
   // adjudication, 2026-07-29). A new run or a fresh mount clears it. Replay
   // of a finished succeeded run must not flash through this view.
-  if (showLiveArtefact(stream, project.data?.latest_run)) {
+  if (showLiveArtefact(stream, task.data?.latest_run)) {
     return <LiveArtefactBody stream={stream} />;
   }
 
@@ -1450,7 +1452,7 @@ export function ArtefactView() {
     snapshotCells.push([
       "Sources",
       `${snapshot.source_count} cited out of ${snapshot.included} included`,
-      `/projects/${projectId}/sources/all?cited=true`,
+      `/tasks/${taskId}/sources/all?cited=true`,
     ]);
   }
   if (shownTypes.length > 0) {
@@ -1472,7 +1474,7 @@ export function ArtefactView() {
   // the artefact read model carries no timestamp of its own. There is
   // deliberately no author line: the backend has no author for an artefact,
   // and inventing one would have the report assert something nobody wrote.
-  const lastUpdated = project.data?.latest_run?.ended_at;
+  const lastUpdated = task.data?.latest_run?.ended_at;
   if (lastUpdated != null) {
     snapshotCells.push(["Last updated", new Date(lastUpdated).toLocaleDateString(), null]);
   }
@@ -1510,7 +1512,7 @@ export function ArtefactView() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-              Evidence base
+              Report
             </p>
             <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
               {scrub(data.title)}
@@ -1546,8 +1548,10 @@ export function ArtefactView() {
         {!isPublicView && (
           <button
             type="button"
-            onClick={() => void askAboutAnalysis()}
-            className="print-hide mt-3 text-caption font-bold text-blue hover:underline"
+            onClick={askAboutAnalysis}
+            disabled={!chatsEnabled}
+            title={chatsEnabled ? undefined : COPY.newChatUnavailable}
+            className="print-hide mt-3 text-caption font-bold text-blue hover:underline disabled:text-grey disabled:no-underline"
           >
             Ask about this analysis
           </button>
@@ -1615,7 +1619,7 @@ export function ArtefactView() {
             />
           )}
 
-          <GatheredSection projectId={projectId} id="gathered" />
+          <GatheredSection taskId={taskId} id="gathered" />
         </FullReportExpandProvider>
       ) : (
         <>
@@ -1625,12 +1629,12 @@ export function ArtefactView() {
               onOpenReference={openDossier}
             />
           )}
-          <GatheredSection projectId={projectId} id="gathered" />
+          <GatheredSection taskId={taskId} id="gathered" />
         </>
       )}
 
       <ClaimPanel
-        projectId={projectId}
+        taskId={taskId}
         claim={detailClaim}
         onClose={() => setDetailClaim(null)}
         onOpenDossier={(title) => {
@@ -1640,7 +1644,7 @@ export function ArtefactView() {
       />
 
       {dossierSource !== null && (
-        <SourceDossier projectId={projectId} sourceRef={dossierSource} onClose={closeDossier} />
+        <SourceDossier taskId={taskId} sourceRef={dossierSource} onClose={closeDossier} />
       )}
       </main>
     </div>

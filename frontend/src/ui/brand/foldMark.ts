@@ -5,8 +5,8 @@
  * product logo matches the design-site mark.
  */
 
-export type Corner = "TL" | "TR" | "BR" | "BL";
-export type Point = readonly [number, number];
+type Corner = "TL" | "TR" | "BR" | "BL";
+type Point = readonly [number, number];
 
 export interface FoldPath {
   d: string;
@@ -14,25 +14,25 @@ export interface FoldPath {
 }
 
 /** Half-size of the unrotated square in the logo viewBox. */
-export const H = 75;
+const H = 75;
 
-export const MID: readonly Point[] = [
+const MID: readonly Point[] = [
   [-H, 0],
   [0, -H],
   [H, 0],
   [0, H],
 ];
 
-export const CORNERS: readonly Corner[] = ["TL", "TR", "BR", "BL"];
+const CORNERS: readonly Corner[] = ["TL", "TR", "BR", "BL"];
 
-export const OUTER: Record<Corner, Point> = {
+const OUTER: Record<Corner, Point> = {
   TL: [-H, -H],
   TR: [H, -H],
   BR: [H, H],
   BL: [-H, H],
 };
 
-export const ALL: readonly Corner[] = ["TL", "TR", "BR", "BL"];
+const ALL: readonly Corner[] = ["TL", "TR", "BR", "BL"];
 
 /** CSS size of the header / nav mark — same box for animated and static. */
 export const BRAND_MARK_SIZE = 17;
@@ -46,13 +46,13 @@ export const BRAND_MARK_VIEWBOX = "-85 -85 170 170";
 
 /** App hero blue (`--color-blue`); prototype used `#0000F5`. */
 export const BLUE = "#0000ff";
-export const SAND = "#ECC77F";
-export const TEAL = "#6FBFA7";
-export const SALMON = "#F09B80";
-export const PINK = "#E8B9C8";
+const SAND = "#ECC77F";
+const TEAL = "#6FBFA7";
+const SALMON = "#F09B80";
+const PINK = "#E8B9C8";
 
 /** One animation keyframe: folded corners, base rotation degrees, sheet colour. */
-export type FoldFrame = readonly [readonly Corner[], number, string];
+type FoldFrame = readonly [readonly Corner[], number, string];
 
 /**
  * Thirty-six frames. Index 4 is the static product logo ("frame 5" in the
@@ -268,7 +268,7 @@ export function splashFoldFrames(
   ];
 }
 
-export interface SplashPathsResult {
+interface SplashPathsResult {
   paths: FoldPath[];
   frameIndex: number;
   degrees: number;

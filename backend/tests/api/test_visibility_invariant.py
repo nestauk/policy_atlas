@@ -1,9 +1,9 @@
 """The visibility and organisation invariant, i.1-i.6 (contract § 6, owner call (i)).
 
-**A `project` with portfolio memberships is org-visible iff *any* portfolio
-it is in is org-visible, and carries its portfolios' `org_id` (one
+**A `task` with project memberships is org-visible iff *any* project
+it is in is org-visible, and carries its projects' `org_id` (one
 organisation across the set — owner ruling 2026-08-27, on the ADR 0032
-merge). A project in no portfolio is unconstrained.**
+merge). A task in no project is unconstrained.**
 
 The invariant spans two tables, so no CHECK can express it: enforcement is the
 write paths plus the property at the bottom of this file. Every case here
@@ -12,13 +12,13 @@ does, not about what a helper returns.
 
 The six paths and where each is enforced:
 
-- **i.1** `POST /portfolios {from_project_id}` — `portfolios.create_portfolio`.
+- **i.1** `POST /projects {from_task_id}` — `projects.create_project`.
   Pinned in `test_tenancy_api_surface.py`, where the create surface lives.
-- **i.2 / i.3** assignment — `projects.update_project`, here.
-- **i.4** the cascade — `portfolios._cascade_visibility`, here.
-- **i.5** setting a member's visibility → 409 — `projects.update_project`.
+- **i.2 / i.3** assignment — `tasks.update_task`, here.
+- **i.4** the cascade — `projects._cascade_visibility`, here.
+- **i.5** setting a member's visibility → 409 — `tasks.update_task`.
   Pinned in `test_tenancy_api_surface.py` alongside the both-fields 422.
-- **i.6** removal — `projects.update_project`, here.
+- **i.6** removal — `tasks.update_task`, here.
 """
 
 from __future__ import annotations
@@ -34,16 +34,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.engine import Engine
 
-from policy_atlas.api.routers.portfolios import _PATCHABLE_COLUMNS
-from policy_atlas.core.schema import portfolio as portfolio_table
-from policy_atlas.core.schema import portfolio_membership as membership_table
+from policy_atlas.api.routers.projects import _PATCHABLE_COLUMNS
 from policy_atlas.core.schema import project as project_table
+from policy_atlas.core.schema import project_membership as membership_table
+from policy_atlas.core.schema import task as task_table
 from policy_atlas.ops import commands as ops_commands
 from tests.api.org_support import (
     Principal,
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     ops_enrol,
     seeded,
     tenancy_client,
@@ -52,48 +52,48 @@ from tests.api.org_support import (
 from tests.ops.support import POOL_ID, cognito, expect_lookup
 
 
-def _row(engine: Engine, project_id: uuid.UUID | str) -> Any:
-    """Read one project's invariant-bearing fields straight from the database.
+def _row(engine: Engine, task_id: uuid.UUID | str) -> Any:
+    """Read one task's invariant-bearing fields straight from the database.
 
-    ``portfolio_ids`` is derived from ``portfolio_membership`` (ADR 0032) —
+    ``project_ids`` is derived from ``project_membership`` (ADR 0032) —
     the singular column is gone.
     """
     with seeded(engine) as conn:
         row = dict(conn.execute(
             select(
-                project_table.c.visibility,
-                project_table.c.org_id,
-                project_table.c.status,
-            ).where(project_table.c.project_id == uuid.UUID(str(project_id)))
+                task_table.c.visibility,
+                task_table.c.org_id,
+                task_table.c.status,
+            ).where(task_table.c.task_id == uuid.UUID(str(task_id)))
         ).mappings().one())
-        row["portfolio_ids"] = [
+        row["project_ids"] = [
             membership[0]
             for membership in conn.execute(
-                select(membership_table.c.portfolio_id)
-                .where(membership_table.c.project_id == uuid.UUID(str(project_id)))
-                .order_by(membership_table.c.created_at, membership_table.c.portfolio_id)
+                select(membership_table.c.project_id)
+                .where(membership_table.c.task_id == uuid.UUID(str(task_id)))
+                .order_by(membership_table.c.created_at, membership_table.c.project_id)
             ).all()
         ]
         return row
 
 
-def _portfolio_row(engine: Engine, portfolio_id: uuid.UUID | str) -> Any:
-    """Read one portfolio's invariant-bearing fields straight from the database."""
+def _project_row(engine: Engine, project_id: uuid.UUID | str) -> Any:
+    """Read one project's invariant-bearing fields straight from the database."""
     with seeded(engine) as conn:
         return conn.execute(
-            select(portfolio_table.c.visibility, portfolio_table.c.org_id).where(
-                portfolio_table.c.portfolio_id == uuid.UUID(str(portfolio_id))
+            select(project_table.c.visibility, project_table.c.org_id).where(
+                project_table.c.project_id == uuid.UUID(str(project_id))
             )
         ).mappings().one()
 
 
 def _members(engine: Engine, owner_user_id: str) -> list[Any]:
-    """Return every portfolio member one owner has, each flagged for breach.
+    """Return every project member one owner has, each flagged for breach.
 
     One row per member, aggregated over the member's whole membership set,
     because the rule is derived across it (owner ruling 2026-08-27, on the
-    ADR 0032 merge): a member is org-visible iff **any** portfolio it is in
-    is org-visible, and its `org_id` matches every portfolio it is in.
+    ADR 0032 merge): a member is org-visible iff **any** project it is in
+    is org-visible, and its `org_id` matches every project it is in.
 
     The breach test is computed **in SQL** (`IS DISTINCT FROM` for the
     nullable organisation), for the same reason the access legs are: two
@@ -107,45 +107,45 @@ def _members(engine: Engine, owner_user_id: str) -> list[Any]:
         owner_user_id: The owner whose estate the invariant is asserted over.
 
     Returns:
-        One mapping per member project, carrying both sides of the comparison
+        One mapping per member task, carrying both sides of the comparison
         and a `breached` flag, so a failure names the offending row.
     """
     derived_visibility = case(
-        (func.bool_or(portfolio_table.c.visibility == "org"), "org"),
+        (func.bool_or(project_table.c.visibility == "org"), "org"),
         else_="private",
     )
     org_mismatch = func.bool_or(
-        portfolio_table.c.org_id.is_distinct_from(project_table.c.org_id)
+        project_table.c.org_id.is_distinct_from(task_table.c.org_id)
     )
     with seeded(engine) as conn:
         return list(
             conn.execute(
                 select(
-                    project_table.c.project_id,
-                    project_table.c.status,
-                    project_table.c.visibility.label("member_visibility"),
+                    task_table.c.task_id,
+                    task_table.c.status,
+                    task_table.c.visibility.label("member_visibility"),
                     derived_visibility.label("derived_visibility"),
-                    project_table.c.org_id.label("member_org"),
+                    task_table.c.org_id.label("member_org"),
                     or_(
-                        project_table.c.visibility != derived_visibility,
+                        task_table.c.visibility != derived_visibility,
                         org_mismatch,
                     ).label("breached"),
                 )
                 .select_from(
-                    project_table.join(
+                    task_table.join(
                         membership_table,
-                        project_table.c.project_id == membership_table.c.project_id,
+                        task_table.c.task_id == membership_table.c.task_id,
                     ).join(
-                        portfolio_table,
-                        membership_table.c.portfolio_id == portfolio_table.c.portfolio_id,
+                        project_table,
+                        membership_table.c.project_id == project_table.c.project_id,
                     )
                 )
-                .where(project_table.c.owner_user_id == owner_user_id)
+                .where(task_table.c.owner_user_id == owner_user_id)
                 .group_by(
-                    project_table.c.project_id,
-                    project_table.c.status,
-                    project_table.c.visibility,
-                    project_table.c.org_id,
+                    task_table.c.task_id,
+                    task_table.c.status,
+                    task_table.c.visibility,
+                    task_table.c.org_id,
                 )
             ).mappings()
         )
@@ -169,10 +169,10 @@ def _enrolled_owner(
 # --- i.2 and i.3: assignment (the same rule in two directions) ----------------
 
 
-def test_assigning_a_private_project_to_an_org_portfolio_promotes_it(
+def test_assigning_a_private_task_to_an_org_project_promotes_it(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """i.2. The member follows the portfolio, and the response says so.
+    """i.2. The member follows the project, and the response says so.
 
     Silent by design and not silent in effect: the response carries the
     resulting `visibility`, so a direct API caller and the screen observe the
@@ -181,15 +181,15 @@ def test_assigning_a_private_project_to_an_org_portfolio_promotes_it(
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"project_ids": [str(group)]}
         )
 
         assert response.status_code == 200, response.text
@@ -200,71 +200,71 @@ def test_assigning_a_private_project_to_an_org_portfolio_promotes_it(
         assert _breaches(engine, owner.user_id) == []
 
 
-def test_any_org_visible_portfolio_makes_the_member_org_visible(
+def test_any_org_visible_project_makes_the_member_org_visible(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Owner ruling 2026-08-27: with many memberships, org-visible wins.
 
-    A task assigned to one org-visible and one private portfolio is
-    org-visible. Making the org-visible portfolio private then recomputes the
-    member across its whole set — both portfolios now private, so it goes
+    A task assigned to one org-visible and one private project is
+    org-visible. Making the org-visible project private then recomputes the
+    member across its whole set — both projects now private, so it goes
     private with them, not before.
     """
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            shared = make_portfolio(
+            shared = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            quiet = make_portfolio(
+            quiet = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
         assigned = client.patch(
-            f"/api/v1/projects/{row}",
+            f"/api/v1/tasks/{row}",
             headers=owner.headers,
-            json={"portfolio_ids": [str(shared), str(quiet)]},
+            json={"project_ids": [str(shared), str(quiet)]},
         )
         assert assigned.status_code == 200, assigned.text
         assert assigned.json()["visibility"] == "org"
         assert _breaches(engine, owner.user_id) == []
 
-        # The private portfolio's cascade cannot demote a member the
-        # org-visible portfolio still carries.
+        # The private project's cascade cannot demote a member the
+        # org-visible project still carries.
         renamed_private = client.patch(
-            f"/api/v1/portfolios/{quiet}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/projects/{quiet}", headers=owner.headers, json={"visibility": "private"}
         )
         assert renamed_private.status_code == 200, renamed_private.text
         assert _row(engine, row)["visibility"] == "org"
 
-        # Once the last org-visible portfolio goes private, the member follows.
+        # Once the last org-visible project goes private, the member follows.
         demoted = client.patch(
-            f"/api/v1/portfolios/{shared}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/projects/{shared}", headers=owner.headers, json={"visibility": "private"}
         )
         assert demoted.status_code == 200, demoted.text
         assert _row(engine, row)["visibility"] == "private"
         assert _breaches(engine, owner.user_id) == []
 
 
-def test_assigning_an_org_project_to_a_private_portfolio_demotes_it(
+def test_assigning_an_org_task_to_a_private_project_demotes_it(
     engine: Engine, tmp_path: Path
 ) -> None:
     """i.3, the non-exposing direction — same rule, read the other way."""
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"project_ids": [str(group)]}
         )
 
         assert response.status_code == 200, response.text
@@ -273,13 +273,13 @@ def test_assigning_an_org_project_to_a_private_portfolio_demotes_it(
         assert _breaches(engine, owner.user_id) == []
 
 
-def test_assignment_carries_the_portfolios_organisation_not_only_its_visibility(
+def test_assignment_carries_the_projects_organisation_not_only_its_visibility(
     engine: Engine, tmp_path: Path
 ) -> None:
     """The `org_id` half of the invariant, which rev 2.0 of the contract missed.
 
-    A member matching on `visibility` alone lets a project stamped to
-    organisation A sit inside a portfolio stamped to organisation B, where
+    A member matching on `visibility` alone lets a task stamped to
+    organisation A sit inside a project stamped to organisation B, where
     B's members read and count it. The row shape permits that pairing (an
     operator assignment, a pre-invariant row); the assignment path must not.
     """
@@ -287,17 +287,17 @@ def test_assignment_carries_the_portfolios_organisation_not_only_its_visibility(
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
             elsewhere = make_org(conn, name="Elsewhere")
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             # Stamped to another organisation, as only an operator or a
             # pre-invariant row could be.
-            row = make_project(
+            row = make_task(
                 conn, owner_user_id=owner.user_id, org_id=elsewhere, visibility="org"
             )
 
         response = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"project_ids": [str(group)]}
         )
 
         assert response.status_code == 200, response.text
@@ -308,7 +308,7 @@ def test_assignment_carries_the_portfolios_organisation_not_only_its_visibility(
 # --- i.6: removal -------------------------------------------------------------
 
 
-def test_removing_a_project_from_a_portfolio_changes_neither_field(
+def test_removing_a_task_from_a_project_changes_neither_field(
     engine: Engine, tmp_path: Path
 ) -> None:
     """i.6. Leaving is not a way to change visibility or organisation.
@@ -322,36 +322,36 @@ def test_removing_a_project_from_a_portfolio_changes_neither_field(
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            shared_group = make_portfolio(
+            shared_group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            secret_group = make_portfolio(
+            secret_group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
-            shared_member = make_project(
+            shared_member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=shared_group,
+                project_id=shared_group,
             )
-            secret_member = make_project(
+            secret_member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="private",
-                portfolio_id=secret_group,
+                project_id=secret_group,
             )
 
         for member, expected in ((shared_member, "org"), (secret_member, "private")):
             response = client.patch(
-                f"/api/v1/projects/{member}", headers=owner.headers, json={"portfolio_ids": []}
+                f"/api/v1/tasks/{member}", headers=owner.headers, json={"project_ids": []}
             )
             assert response.status_code == 200, response.text
-            assert response.json()["portfolio_ids"] == []
+            assert response.json()["project_ids"] == []
             assert response.json()["visibility"] == expected
             stored = _row(engine, member)
-            assert stored["portfolio_ids"] == []
+            assert stored["project_ids"] == []
             assert stored["visibility"] == expected
             assert stored["org_id"] == org_id
 
@@ -362,7 +362,7 @@ def test_removing_a_project_from_a_portfolio_changes_neither_field(
 def test_the_cascade_carries_every_member_including_archived_ones(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """i.4. `PATCH /portfolios/{id}` with `visibility` is the cascade.
+    """i.4. `PATCH /projects/{id}` with `visibility` is the cascade.
 
     Archived members are included (contract § 6). They are excluded from the
     derived task count, not from the row's visibility — leaving them behind
@@ -372,41 +372,41 @@ def test_the_cascade_carries_every_member_including_archived_ones(
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            active_member = make_project(
+            active_member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
-            archived_member = make_project(
+            archived_member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
                 status="archived",
-                portfolio_id=group,
+                project_id=group,
             )
-            loose = make_project(
+            loose = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         response = client.patch(
-            f"/api/v1/portfolios/{group}",
+            f"/api/v1/projects/{group}",
             headers=owner.headers,
             json={"visibility": "private"},
         )
 
         assert response.status_code == 200, response.text
         assert response.json()["visibility"] == "private"
-        assert _portfolio_row(engine, group)["visibility"] == "private"
+        assert _project_row(engine, group)["visibility"] == "private"
         assert _row(engine, active_member)["visibility"] == "private"
         assert _row(engine, archived_member)["visibility"] == "private"
         assert _row(engine, archived_member)["status"] == "archived"
-        # A project in no portfolio is unconstrained: the cascade is bounded
+        # A task in no project is unconstrained: the cascade is bounded
         # by membership, not by the owner's estate.
         assert _row(engine, loose)["visibility"] == "org"
         assert _breaches(engine, owner.user_id) == []
@@ -421,34 +421,34 @@ def test_the_cascade_reports_the_member_count_the_caller_can_see(
     10b). It is derived per caller — read grade minus the admin leg, active
     rows only — so it can never name rows the reader cannot see. For this
     route the two coincide bar archived members: the write grade means the
-    caller owns the portfolio, and a portfolio's members are always owned by
+    caller owns the project, and a project's members are always owned by
     its owner (032), so the owner reads every one of them.
     """
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             for _ in range(2):
-                make_project(
+                make_task(
                     conn,
                     owner_user_id=owner.user_id,
                     org_id=org_id,
                     visibility="org",
-                    portfolio_id=group,
+                    project_id=group,
                 )
-            make_project(
+            make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
                 status="archived",
-                portfolio_id=group,
+                project_id=group,
             )
 
         response = client.patch(
-            f"/api/v1/portfolios/{group}",
+            f"/api/v1/projects/{group}",
             headers=owner.headers,
             json={"visibility": "private"},
         )
@@ -475,27 +475,27 @@ def test_the_cascade_repairs_a_member_stamped_to_another_organisation(
     mismatch (an operator assignment, a pre-invariant row) is a row the wrong
     organisation can reach, and the choice is between repairing it in the
     write path the owner just ran and leaving it in place for the property
-    test to report afterwards. "Every member follows its portfolio" is the
+    test to report afterwards. "Every member follows its project" is the
     rule; the cascade makes both halves of it true.
     """
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
             elsewhere = make_org(conn, name="Elsewhere")
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            stray = make_project(
+            stray = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=elsewhere,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
         assert _breaches(engine, owner.user_id) != []
 
         response = client.patch(
-            f"/api/v1/portfolios/{group}",
+            f"/api/v1/projects/{group}",
             headers=owner.headers,
             json={"visibility": "private"},
         )
@@ -537,20 +537,20 @@ def test_the_cascade_is_refused_to_a_colleague_and_to_an_administrator(
                 display_name="Support",
                 is_admin=True,
             )
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            member = make_project(
+            member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
 
         refusals = {
             caller.user_id: client.patch(
-                f"/api/v1/portfolios/{group}",
+                f"/api/v1/projects/{group}",
                 headers=caller.headers,
                 json={"visibility": "private"},
             )
@@ -562,7 +562,7 @@ def test_the_cascade_is_refused_to_a_colleague_and_to_an_administrator(
         assert refusals[admin.user_id].status_code == 403
         assert refusals[admin.user_id].json()["error"]["code"] == "forbidden"
         assert refusals[outsider.user_id].status_code == 404
-        assert _portfolio_row(engine, group)["visibility"] == "org"
+        assert _project_row(engine, group)["visibility"] == "org"
         assert _row(engine, member)["visibility"] == "org"
 
 
@@ -572,9 +572,9 @@ def test_the_cascade_is_refused_to_an_out_of_organisation_administrator(
     """Rubric 25, re-asserted through the admin leg itself (phase 6 handoff).
 
     The previous case seeded the administrator *inside* the organisation, so
-    the org leg could have been what reached the portfolio and the refusal
+    the org leg could have been what reached the project and the refusal
     proved nothing about `is_admin`. Here the administrator is enrolled
-    elsewhere and the portfolio is **private**, so every other leg is closed:
+    elsewhere and the project is **private**, so every other leg is closed:
     the admin leg is the only thing that reaches the row, and the answer is
     still 403 `forbidden`, not 200.
 
@@ -593,48 +593,48 @@ def test_the_cascade_is_refused_to_an_out_of_organisation_administrator(
                 display_name="Support",
                 is_admin=True,
             )
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
-            member = make_project(
+            member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="private",
-                portfolio_id=group,
+                project_id=group,
             )
 
         # Reachable: the leg really does open the row for reading.
         assert (
-            client.get(f"/api/v1/portfolios/{group}", headers=admin.headers).status_code
+            client.get(f"/api/v1/projects/{group}", headers=admin.headers).status_code
             == 200
         )
 
         refusal = client.patch(
-            f"/api/v1/portfolios/{group}",
+            f"/api/v1/projects/{group}",
             headers=admin.headers,
             json={"visibility": "org"},
         )
 
         assert refusal.status_code == 403
         assert refusal.json()["error"]["code"] == "forbidden"
-        assert _portfolio_row(engine, group)["visibility"] == "private"
+        assert _project_row(engine, group)["visibility"] == "private"
         assert _row(engine, member)["visibility"] == "private"
 
 
-def test_portfolio_visibility_never_reaches_the_column_through_the_splat(
+def test_project_visibility_never_reaches_the_column_through_the_splat(
     engine: Engine, tmp_path: Path
 ) -> None:
     """Rubric 24. Structural, then observable.
 
     Structural: `visibility` is not in the route's patchable column list, so
-    the `.values(**changes)` splat cannot carry it however `PortfolioUpdate`
+    the `.values(**changes)` splat cannot carry it however `ProjectUpdate`
     grows. The field now exists on that model, which is exactly when this
     assertion starts earning its keep.
 
     Observable: a body carrying both a rename and a visibility change applies
     both, and **the member follows**. If the field had reached the column
-    through the splat the portfolio would have flipped alone — the silent
+    through the splat the project would have flipped alone — the silent
     failure i.4 exists to prevent, and the one a column-level assertion alone
     could not tell apart.
     """
@@ -643,19 +643,19 @@ def test_portfolio_visibility_never_reaches_the_column_through_the_splat(
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            member = make_project(
+            member = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
 
         response = client.patch(
-            f"/api/v1/portfolios/{group}",
+            f"/api/v1/projects/{group}",
             headers=owner.headers,
             json={"name": "Renamed", "visibility": "private"},
         )
@@ -666,7 +666,7 @@ def test_portfolio_visibility_never_reaches_the_column_through_the_splat(
         assert _row(engine, member)["visibility"] == "private"
 
 
-def test_portfolio_patch_refuses_an_explicit_null_visibility(
+def test_project_patch_refuses_an_explicit_null_visibility(
     engine: Engine, tmp_path: Path
 ) -> None:
     """`{"visibility": null}` is 422, not "leave it unchanged".
@@ -679,17 +679,17 @@ def test_portfolio_patch_refuses_an_explicit_null_visibility(
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         response = client.patch(
-            f"/api/v1/portfolios/{group}", headers=owner.headers, json={"visibility": None}
+            f"/api/v1/projects/{group}", headers=owner.headers, json={"visibility": None}
         )
 
         assert response.status_code == 422
         assert response.json()["error"]["code"] == "validation_error"
-        assert _portfolio_row(engine, group)["visibility"] == "org"
+        assert _project_row(engine, group)["visibility"] == "org"
 
 
 # --- the i.5-then-i.2 loop (rubric 23) ----------------------------------------
@@ -719,38 +719,38 @@ def test_the_i5_then_i2_loop_ends_org_visible(engine: Engine, tmp_path: Path) ->
     with tenancy_client(tmp_path, count=1) as (client, (owner,)):
         org_id = _enrolled_owner(engine, owner)
         with seeded(engine) as conn:
-            group = make_portfolio(
+            group = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            row = make_project(
+            row = make_task(
                 conn,
                 owner_user_id=owner.user_id,
                 org_id=org_id,
                 visibility="org",
-                portfolio_id=group,
+                project_id=group,
             )
 
         blocked = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"visibility": "private"}
         )
         assert blocked.status_code == 409
         assert blocked.json()["error"]["code"] == "visibility_conflict"
         assert "leave the task out of the project" in blocked.json()["error"]["message"].lower()
 
         removed = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": []}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"project_ids": []}
         )
         assert removed.status_code == 200
         assert removed.json()["visibility"] == "org"
 
         privatised = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"visibility": "private"}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"visibility": "private"}
         )
         assert privatised.status_code == 200
         assert privatised.json()["visibility"] == "private"
 
         readded = client.patch(
-            f"/api/v1/projects/{row}", headers=owner.headers, json={"portfolio_ids": [str(group)]}
+            f"/api/v1/tasks/{row}", headers=owner.headers, json={"project_ids": [str(group)]}
         )
 
         assert readded.status_code == 200, readded.text
@@ -766,47 +766,47 @@ def test_the_i5_then_i2_loop_ends_org_visible(engine: Engine, tmp_path: Path) ->
 #:
 #: The operator moves are not decoration. With one organisation, every row and
 #: every creator stamp carries the same `org_id`, so
-#: `project.org_id IS DISTINCT FROM portfolio.org_id` can never be true and the
+#: `task.org_id IS DISTINCT FROM project.org_id` can never be true and the
 #: `org_id` half of the invariant is asserted over a condition that cannot
 #: arise — the walk passes whatever the write paths do with that column.
 #: `ops_reenrol` moves the owner between two organisations with the real
-#: `user enrol`, and `ops_assign_portfolio` moves one portfolio into the
+#: `user enrol`, and `ops_assign_project` moves one project into the
 #: organisation the owner is *not* in with the real `rows assign`. The second is
 #: what actually splits the estate across two organisations, which is the only
 #: state in which an API write path that forgot the column can be caught.
 _OPERATIONS = (
+    "create_task",
     "create_project",
-    "create_portfolio",
-    "create_portfolio_from_project",  # i.1
+    "create_project_from_task",  # i.1
     "assign",  # i.2 / i.3
     "remove",  # i.6
     "cascade",  # i.4
-    "set_visibility",  # i.5 when the row is in a portfolio, a plain set otherwise
+    "set_visibility",  # i.5 when the row is in a project, a plain set otherwise
     "ops_reenrol",  # the operator moves the person, and their whole estate
-    "ops_assign_portfolio",  # the operator moves one portfolio, and only that
+    "ops_assign_project",  # the operator moves one project, and only that
 )
 
 #: How often each operation is drawn. Uniform for the API paths; the operator
 #: ones are weighted, and the weights are the interesting part.
 #:
 #: A re-enrolment gathers the owner's *whole* estate into one organisation, so
-#: it ends the split state an `ops_assign_portfolio` created. Drawing the two at
+#: it ends the split state an `ops_assign_project` created. Drawing the two at
 #: the same rate leaves the estate split for only a handful of steps at a time,
-#: and the interleaving that matters — an `assign` landing on a portfolio the
+#: and the interleaving that matters — an `assign` landing on a project the
 #: operator moved — then depends on a coincidence inside a short window. Making
 #: re-enrolment the rarer event is both truer to life (people change
 #: organisation far less often than rows get reassigned) and what keeps the
 #: two-organisation state standing long enough for the API paths to be tested
 #: inside it. `cross_org_assignments` is the assertion that this worked.
 _WEIGHTS = {
-    "create_project": 3,
-    "create_portfolio": 1,
-    "create_portfolio_from_project": 2,
+    "create_task": 3,
+    "create_project": 1,
+    "create_project_from_task": 2,
     "assign": 6,
     "remove": 2,
     "cascade": 3,
     "set_visibility": 2,
-    "ops_assign_portfolio": 3,
+    "ops_assign_project": 3,
     "ops_reenrol": 1,
 }
 
@@ -827,22 +827,22 @@ class _Estate:
     """Everything the walk draws from and mutates, in one place.
 
     Attributes:
+        tasks: Pool of task ids, extended in place by the creates.
         projects: Pool of project ids, extended in place by the creates.
-        portfolios: Pool of portfolio ids, extended in place by the creates.
         organisations: The two organisations the walk moves rows between.
         email: The owner's stored address — `user enrol` resolves by it.
         enrolled_in: Index into `organisations`: where the owner is *now*.
         re_enrolments: How many operator re-enrolments have happened, for the
             non-vacuity assertion.
-        cross_org_assignments: How many `assign` steps put a project into a
-            portfolio **stamped to a different organisation**. This is the
+        cross_org_assignments: How many `assign` steps put a task into a
+            project **stamped to a different organisation**. This is the
             counter that decides whether the `org_id` half of the invariant was
             tested at all: it is the only step at which a write path that
             carried `visibility` alone would leave a breach behind.
     """
 
+    tasks: list[str]
     projects: list[str]
-    portfolios: list[str]
     organisations: tuple[ops_commands.Organisation, ops_commands.Organisation]
     email: str
     enrolled_in: int = 0
@@ -855,19 +855,19 @@ class _Estate:
 
 
 def _organisations_of(engine: Engine, owner_user_id: str) -> set[uuid.UUID | None]:
-    """Every distinct `org_id` across one owner's projects and portfolios."""
+    """Every distinct `org_id` across one owner's tasks and projects."""
     with seeded(engine) as conn:
+        tasks = conn.execute(
+            select(task_table.c.org_id).where(
+                task_table.c.owner_user_id == owner_user_id
+            )
+        ).scalars()
         projects = conn.execute(
             select(project_table.c.org_id).where(
                 project_table.c.owner_user_id == owner_user_id
             )
         ).scalars()
-        portfolios = conn.execute(
-            select(portfolio_table.c.org_id).where(
-                portfolio_table.c.owner_user_id == owner_user_id
-            )
-        ).scalars()
-        return set(projects) | set(portfolios)
+        return set(tasks) | set(projects)
 
 
 def _walk_step(
@@ -901,64 +901,64 @@ def _walk_step(
         estate: The walk's pools and membership state, mutated in place.
     """
     headers = owner.headers
+    if operation == "create_task":
+        response = client.post(
+            "/api/v1/tasks", headers=headers, json={"name": f"walk task {step}"}
+        )
+        assert response.status_code == 201, response.text
+        estate.tasks.append(response.json()["task_id"])
+        return
     if operation == "create_project":
         response = client.post(
-            "/api/v1/projects", headers=headers, json={"name": f"walk task {step}"}
+            "/api/v1/projects", headers=headers, json={"name": f"walk group {step}"}
         )
         assert response.status_code == 201, response.text
         estate.projects.append(response.json()["project_id"])
         return
-    if operation == "create_portfolio":
+    if operation == "create_project_from_task":
         response = client.post(
-            "/api/v1/portfolios", headers=headers, json={"name": f"walk group {step}"}
-        )
-        assert response.status_code == 201, response.text
-        estate.portfolios.append(response.json()["portfolio_id"])
-        return
-    if operation == "create_portfolio_from_project":
-        response = client.post(
-            "/api/v1/portfolios",
+            "/api/v1/projects",
             headers=headers,
             json={
                 "name": f"walk seeded {step}",
-                "from_project_id": rng.choice(estate.projects),
+                "from_task_id": rng.choice(estate.tasks),
             },
         )
         assert response.status_code == 201, response.text
-        estate.portfolios.append(response.json()["portfolio_id"])
+        estate.projects.append(response.json()["project_id"])
         return
     if operation == "assign":
-        moving, into = rng.choice(estate.projects), rng.choice(estate.portfolios)
+        moving, into = rng.choice(estate.tasks), rng.choice(estate.projects)
         # Read both organisations *before* the write, and count the case the
         # `org_id` conjunct of the breach query exists for. Counted rather than
         # forced: the walk stays a walk, and the count is asserted at the end so
         # a change that made this state unreachable fails loudly instead of
         # quietly going back to testing one field.
-        if _row(engine, moving)["org_id"] != _portfolio_row(engine, into)["org_id"]:
+        if _row(engine, moving)["org_id"] != _project_row(engine, into)["org_id"]:
             estate.cross_org_assignments += 1
         response = client.patch(
-            f"/api/v1/projects/{moving}",
+            f"/api/v1/tasks/{moving}",
             headers=headers,
-            json={"portfolio_ids": [into]},
+            json={"project_ids": [into]},
         )
         assert response.status_code == 200, response.text
         return
     if operation == "remove":
         response = client.patch(
-            f"/api/v1/projects/{rng.choice(estate.projects)}",
+            f"/api/v1/tasks/{rng.choice(estate.tasks)}",
             headers=headers,
-            json={"portfolio_ids": []},
+            json={"project_ids": []},
         )
         assert response.status_code == 200, response.text
         return
     if operation == "cascade":
         response = client.patch(
-            f"/api/v1/portfolios/{rng.choice(estate.portfolios)}",
+            f"/api/v1/projects/{rng.choice(estate.projects)}",
             headers=headers,
             json={"visibility": rng.choice(("org", "private"))},
         )
         # Never a 409: each member is recomputed across its whole membership
-        # set (org-visible iff any portfolio it is in is org-visible — owner
+        # set (org-visible iff any project it is in is org-visible — owner
         # ruling 2026-08-27), so the cascade always has an answer.
         assert response.status_code == 200, response.text
         return
@@ -983,30 +983,30 @@ def _walk_step(
         assert enrolment.created is False
         estate.re_enrolments += 1
         return
-    if operation == "ops_assign_portfolio":
-        # Deliberately the organisation the owner is NOT in: one portfolio and
-        # its members move, the owner's loose projects do not, and the estate
+    if operation == "ops_assign_project":
+        # Deliberately the organisation the owner is NOT in: one project and
+        # its members move, the owner's loose tasks do not, and the estate
         # is now split across two organisations. That is the state the `org_id`
         # half of the invariant is about.
         with seeded(engine) as conn:
             ops_commands.assign_rows(
                 conn,
                 org=estate.elsewhere(),
-                portfolio_id=uuid.UUID(rng.choice(estate.portfolios)),
+                project_id=uuid.UUID(rng.choice(estate.projects)),
             )
         return
-    target = rng.choice(estate.projects)
+    target = rng.choice(estate.tasks)
     # i.5 is a statement about the row's state, so the expectation is read
     # from the database rather than modelled in the test: a shadow copy of
     # the state machine could agree with a broken implementation.
-    in_portfolio = _row(engine, target)["portfolio_ids"] != []
+    in_project = _row(engine, target)["project_ids"] != []
     response = client.patch(
-        f"/api/v1/projects/{target}",
+        f"/api/v1/tasks/{target}",
         headers=headers,
         json={"visibility": rng.choice(("org", "private"))},
     )
-    assert response.status_code == (409 if in_portfolio else 200), response.text
-    if in_portfolio:
+    assert response.status_code == (409 if in_project else 200), response.text
+    if in_project:
         assert response.json()["error"]["code"] == "visibility_conflict"
 
 
@@ -1016,11 +1016,11 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
     """Rubric 22: the property over i.1-i.6, on **both** fields.
 
     Not six examples. A fixed-seed walk over every operation, asserting after
-    *every single one* that each of the owner's projects with a `portfolio_id`
-    matches its portfolio on `visibility` and on `org_id`. Interleavings the
-    examples above never reach — a cascade landing on a portfolio whose member
+    *every single one* that each of the owner's tasks with a `project_id`
+    matches its project on `visibility` and on `org_id`. Interleavings the
+    examples above never reach — a cascade landing on a project whose member
     arrived from i.1, a removal between two assignments, a create-from that
-    steals a member out of another portfolio — are what this covers, and they
+    steals a member out of another project — are what this covers, and they
     are where an invariant written as six independent write paths breaks.
 
     **Two organisations, not one, and operator moves in the operation set.**
@@ -1028,11 +1028,11 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
     dead: every row and every creator stamp carries the same value, so
     `IS DISTINCT FROM` cannot be true however the write paths behave, and the
     half of the invariant rev 2.0 of the contract missed goes back to being
-    unasserted. `ops_assign_portfolio` splits the estate across the two
+    unasserted. `ops_assign_project` splits the estate across the two
     organisations and `ops_reenrol` re-gathers it, so assignment and cascade
-    keep meeting members and portfolios that really are in different
+    keep meeting members and projects that really are in different
     organisations. The mutation check for this is deleting
-    `assignment["org_id"] = group.row["org_id"]` from `projects.update_project`:
+    `assignment["org_id"] = group.row["org_id"]` from `tasks.update_task`:
     the walk fails.
 
     Deterministic rather than generative: `hypothesis` is not a dependency
@@ -1047,9 +1047,9 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
         with seeded(engine) as conn:
             elsewhere_id = make_org(conn, name="Walk Elsewhere")
             estate = _Estate(
-                projects=[
+                tasks=[
                     str(
-                        make_project(
+                        make_task(
                             conn,
                             owner_user_id=owner.user_id,
                             org_id=org_id,
@@ -1058,9 +1058,9 @@ def test_the_invariant_holds_after_every_operation_in_a_deterministic_walk(
                     )
                     for visibility in ("org", "private", "org")
                 ],
-                portfolios=[
+                projects=[
                     str(
-                        make_portfolio(
+                        make_project(
                             conn,
                             owner_user_id=owner.user_id,
                             org_id=org_id,

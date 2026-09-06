@@ -5,14 +5,14 @@ import type { components } from "../api/gen/types";
 type RunStatus = components["schemas"]["LatestRun"]["status"];
 
 /** The five task-level stages, in the order a task runs through them. */
-export const LIFECYCLE_TABS = ["plan", "results", "sources", "share", "history"] as const;
+export const LIFECYCLE_TABS = ["agent", "result", "sources", "share", "history"] as const;
 
 export type LifecycleTab = (typeof LIFECYCLE_TABS)[number];
 
-/** Path suffix for each tab, relative to `/projects/:projectId`. */
+/** Path suffix for each tab, relative to `/tasks/:taskId`. */
 const TAB_PATHS: Record<LifecycleTab, string> = {
-  plan: "",
-  results: "/results",
+  agent: "",
+  result: "/result",
   sources: "/sources",
   share: "/share",
   history: "/history",
@@ -33,7 +33,7 @@ const TAB_PATHS: Record<LifecycleTab, string> = {
  * locked after a failed run — a partial write-up is still on Plan.
  */
 function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[] {
-  if (status === null || status === undefined) return ["plan", "share"];
+  if (status === null || status === undefined) return ["agent", "share"];
   switch (status) {
     case "running":
     case "paused":
@@ -43,8 +43,15 @@ function openTabs(status: RunStatus | null | undefined): readonly LifecycleTab[]
     case "failed":
     case "aborted":
     case "interrupted":
-      return ["plan", "sources", "share", "history"];
+      return ["agent", "sources", "share", "history"];
   }
+}
+
+/** Whether the task has a result to ask about: the run finished with a
+ *  report (038 V8 — chats are offered only then; a run still writing is not
+ *  a result yet, even though the Result tab already opens for it). */
+export function hasResult(status: RunStatus | null | undefined): boolean {
+  return status === "succeeded" || status === "degraded";
 }
 
 /** Whether one lifecycle tab can be opened at this run state. */
@@ -64,11 +71,26 @@ export function lifecycleTabs(base: string, status: RunStatus | null | undefined
 }
 
 /**
+ * Carry the Agent overlay's open chat (`?chat=`) onto the tab links, so a
+ * move between tabs keeps the panel as it was (owner, 2026-09-05). The
+ * Agent tab keeps its own default — the Task Agent — and never inherits it.
+ */
+export function withChat<T extends { tab: LifecycleTab; to: string }>(
+  items: T[],
+  chat: string | null,
+): T[] {
+  if (chat === null) return items;
+  return items.map((item) =>
+    item.tab === "agent" ? item : { ...item, to: `${item.to}?chat=${encodeURIComponent(chat)}` },
+  );
+}
+
+/**
  * The two tabs the public (link-shared) task view exposes — task 037.
  * One list, shared with `LifecycleRoute`'s public gate so the nav and the
  * gate cannot drift apart.
  */
-export const PUBLIC_TABS: readonly LifecycleTab[] = ["results", "sources"];
+export const PUBLIC_TABS: readonly LifecycleTab[] = ["result", "sources"];
 
 /**
  * The public tab set as nav items. Both stay open regardless of run state:
@@ -91,7 +113,7 @@ export function publicLifecycleTabs(base: string) {
  * opens what the reader came for, and everything else opens the plan, which
  * is the only stage guaranteed to have something in it.
  */
-export function taskDestination(projectId: string, status: RunStatus | null | undefined): string {
-  const base = `/projects/${projectId}`;
-  return status === "succeeded" ? `${base}/results` : base;
+export function taskDestination(taskId: string, status: RunStatus | null | undefined): string {
+  const base = `/tasks/${taskId}`;
+  return status === "succeeded" ? `${base}/result` : base;
 }

@@ -24,12 +24,12 @@ from policy_atlas.core.schema import (
     block,
     conversation,
     event_log,
-    project,
-    project_source_snapshot,
     runs,
     source_screening_result,
     source_snapshot,
     source_tag,
+    task,
+    task_source_snapshot,
 )
 from policy_atlas.core.schema import (
     chunk as chunk_table,
@@ -38,41 +38,42 @@ from policy_atlas.core.schema import (
     citation as citation_table,
 )
 from policy_atlas.core.tags import insert_source_tags
-from policy_atlas.evidence_base.extract import iof_prompt
-from policy_atlas.evidence_base.extract.iof_records import EffectBasis
-from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
+from policy_atlas.evidence_search.extract import iof_prompt
+from policy_atlas.evidence_search.extract.iof_records import EffectBasis
+from tests.core.legacy_catalog import legacy_table
+from tests.helpers import now, seed_scope, seed_source, seed_task_and_run
 
 
 def test_all_fourteen_tables_exist(conn: Connection) -> None:
     inspector = inspect(conn)
     tables = set(inspector.get_table_names())
     expected = {
-        "project", "artefact", "block", "addressable_unit", "annotation", "runs", "event_log",
-        "source_snapshot", "project_source_snapshot", "chunk", "citation",
+        "task", "artefact", "block", "addressable_unit", "annotation", "runs", "event_log",
+        "source_snapshot", "task_source_snapshot", "chunk", "citation",
         "evidence_scope", "source_screening_result", "source_classification_result",
     }
     assert expected <= tables
 
 
-def test_event_log_unique_project_sequence(conn: Connection) -> None:
+def test_event_log_unique_task_sequence(conn: Connection) -> None:
     pid = uuid.uuid4()
     rid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(runs.insert().values(
-        run_id=rid, project_id=pid, status="running", started_at=now()
+        run_id=rid, task_id=pid, status="running", started_at=now()
     ))
 
     conn.execute(event_log.insert().values(
-        event_id=uuid.uuid4(), run_id=rid, project_id=pid,
+        event_id=uuid.uuid4(), run_id=rid, task_id=pid,
         sequence=1, event_type="run.started", occurred_at=now(), payload={},
     ))
-    with pytest.raises(Exception, match="uq_event_log_project_sequence"):
+    with pytest.raises(Exception, match="uq_event_log_task_sequence"):
         conn.execute(event_log.insert().values(
-            event_id=uuid.uuid4(), run_id=rid, project_id=pid,
+            event_id=uuid.uuid4(), run_id=rid, task_id=pid,
             sequence=1, event_type="duplicate", occurred_at=now(), payload={},
         ))
 
@@ -96,12 +97,12 @@ def test_block_version_defaults_to_one(conn: Connection) -> None:
     aid = uuid.uuid4()
     bid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(artefact.insert().values(
-        artefact_id=aid, project_id=pid, title="t", created_at=now()
+        artefact_id=aid, task_id=pid, title="t", created_at=now()
     ))
     conn.execute(block.insert().values(
         block_id=bid, artefact_id=aid, content="c", content_hash="h", created_at=now(),
@@ -116,12 +117,12 @@ def test_annotation_composite_fk_rejects_mismatch(conn: Connection) -> None:
     aid = uuid.uuid4()
     bid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(artefact.insert().values(
-        artefact_id=aid, project_id=pid, title="t", created_at=now()
+        artefact_id=aid, task_id=pid, title="t", created_at=now()
     ))
     conn.execute(block.insert().values(
         block_id=bid, artefact_id=aid, version=1,
@@ -172,12 +173,12 @@ def test_citation_chunk_fk_fails_with_phantom_chunk_id(conn: Connection) -> None
     bid = uuid.uuid4()
     uid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(artefact.insert().values(
-        artefact_id=aid, project_id=pid, title="t", created_at=now()
+        artefact_id=aid, task_id=pid, title="t", created_at=now()
     ))
     conn.execute(block.insert().values(
         block_id=bid, artefact_id=aid, version=1,
@@ -222,33 +223,37 @@ def test_chunk_unique_snapshot_sequence_constraint(conn: Connection) -> None:
         ))
 
 
-def test_project_source_snapshot_unique_constraint(conn: Connection) -> None:
-    """(project_id, source_snapshot_id) must be unique in project_source_snapshot."""
+def test_task_source_snapshot_unique_constraint(conn: Connection) -> None:
+    """(task_id, source_snapshot_id) must be unique in task_source_snapshot."""
     pid = uuid.uuid4()
     sid, _ = _seed_snapshot(conn)
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
-    conn.execute(project_source_snapshot.insert().values(
-        project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
+    conn.execute(task_source_snapshot.insert().values(
+        task_source_snapshot_id=uuid.uuid4(), task_id=pid, source_snapshot_id=sid,
         origin="uploaded", run_id=None, ingested_at=now(),
     ))
-    with pytest.raises(Exception, match="uq_project_source_snapshot"):
-        conn.execute(project_source_snapshot.insert().values(
-            project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
+    with pytest.raises(Exception, match="uq_task_source_snapshot"):
+        conn.execute(task_source_snapshot.insert().values(
+            task_source_snapshot_id=uuid.uuid4(), task_id=pid, source_snapshot_id=sid,
             origin="uploaded", run_id=None, ingested_at=now(),
         ))
 
 
-def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
-    """``b3c7d914e0a2`` (the portfolio layer) downgrades and upgrades cleanly.
+def test_migration_roundtrip_project_layer(engine: Engine) -> None:
+    """``b3c7d914e0a2`` (the Project layer) downgrades and upgrades cleanly.
 
     Targets the revision by id rather than ``-1`` so the assertions cannot
     silently start exercising a different migration when the next one lands.
     Runs on its own connection for the same reason as the round-trip below, and
     leaves the database back at head.
+
+    Below the 038 revision the catalog still spells the Project ``portfolio``
+    and the Task ``project`` (plan D9), so the downgraded assertions name those;
+    the head-side assertions name the post-rename catalog.
     """
     cfg = AlembicConfig("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
@@ -262,14 +267,14 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
     command.upgrade(cfg, "head")
     with engine.connect() as up_conn:
         inspector = inspect(up_conn)
-        assert "portfolio" in inspector.get_table_names()
-        assert "portfolio_membership" in inspector.get_table_names()
+        assert "project" in inspector.get_table_names()
+        assert "project_membership" in inspector.get_table_names()
         # `org_id` and `visibility` join the set because this upgrades to *head*,
         # which now includes 033's tenancy migrations as well as the membership
         # layer — the equality is kept (it is what catches an unintended column)
-        # and the two columns 033 adds to `portfolio` are named explicitly.
-        assert {c["name"] for c in inspector.get_columns("portfolio")} == {
-            "portfolio_id",
+        # and the two columns 033 adds to `project` are named explicitly.
+        assert {c["name"] for c in inspector.get_columns("project")} == {
+            "project_id",
             "owner_user_id",
             "name",
             "description",
@@ -277,32 +282,43 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
             "org_id",
             "visibility",
         }
-        assert {c["name"] for c in inspector.get_columns("portfolio_membership")} == {
-            "portfolio_id",
+        assert {c["name"] for c in inspector.get_columns("project_membership")} == {
             "project_id",
+            "task_id",
             "created_at",
         }
-        assert "portfolio_id" not in {c["name"] for c in inspector.get_columns("project")}
+        assert "project_id" not in {c["name"] for c in inspector.get_columns("task")}
 
 
-def _seed_pre_033_project_and_conversation(
+def _seed_pre_033_task_and_conversation(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     conversation_id: uuid.UUID,
     owner_user_id: str | None,
     created_by: str | None = None,
+    legacy: bool = False,
 ) -> None:
-    """Commit one project and one chat conversation on it.
+    """Commit one task and one chat conversation on it.
 
     Committed rather than held in a transaction because alembic runs the
     migration on a connection of its own and cannot see an uncommitted row.
     ``created_by`` is omitted entirely when None so the same helper seeds at the
     pre-033 revision, where the column does not exist.
+
+    Args:
+        engine: Engine to open the seed transaction on.
+        task_id: Task to create.
+        conversation_id: Chat conversation to create on it.
+        owner_user_id: Task owner, or ``None`` for an unowned CLI row.
+        created_by: Chat author, omitted entirely when ``None``.
+        legacy: Seed BELOW revision c1a7f4e9b0d2, where the Task table is
+            ``project`` and the key column ``project_id`` (plan D9).
     """
+    task_key = "project_id" if legacy else "task_id"
     values: dict[str, object] = {
         "id": conversation_id,
-        "project_id": project_id,
+        task_key: task_id,
         "kind": "chat",
         "title": "Chat",
         "entry_artefact_id": None,
@@ -314,24 +330,26 @@ def _seed_pre_033_project_and_conversation(
     if created_by is not None:
         values["created_by"] = created_by
     with engine.begin() as seed_conn:
-        seed_conn.execute(project.insert().values(
-            project_id=project_id,
-            created_at=now(),
-            name="Tenancy migration fixture",
-            status="active",
-            updated_at=now(),
-            owner_user_id=owner_user_id,
-        ))
-        seed_conn.execute(conversation.insert().values(**values))
+        tasks = legacy_table(seed_conn, "project") if legacy else task
+        conversations = legacy_table(seed_conn, "conversation") if legacy else conversation
+        seed_conn.execute(tasks.insert().values(**{
+            task_key: task_id,
+            "created_at": now(),
+            "name": "Tenancy migration fixture",
+            "status": "active",
+            "updated_at": now(),
+            "owner_user_id": owner_user_id,
+        }))
+        seed_conn.execute(conversations.insert().values(**values))
 
 
-def _delete_seeded_rows(engine: Engine, *project_ids: uuid.UUID) -> None:
+def _delete_seeded_rows(engine: Engine, *task_ids: uuid.UUID) -> None:
     """Remove committed fixture rows — these tests write outside ``conn``."""
     with engine.begin() as cleanup_conn:
         cleanup_conn.execute(
-            conversation.delete().where(conversation.c.project_id.in_(project_ids))
+            conversation.delete().where(conversation.c.task_id.in_(task_ids))
         )
-        cleanup_conn.execute(project.delete().where(project.c.project_id.in_(project_ids)))
+        cleanup_conn.execute(task.delete().where(task.c.task_id.in_(task_ids)))
 
 
 def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
@@ -339,7 +357,7 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
 
     Down to ``b3c7d914e0a2`` and back by revision id rather than ``-1``, so the
     assertions cannot silently start exercising a later migration. Seeds two
-    projects at the pre-033 revision — one owned, one not — because the backfill
+    tasks at the pre-033 revision — one owned, one not — because the backfill
     must attribute the first conversation and leave the second's author unknown.
     Always leaves the database at head with the fixture rows removed.
     """
@@ -347,9 +365,9 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
     cfg.set_main_option("sqlalchemy.url", os.environ["DATABASE_URL"])
 
     owner = f"sub-owner-{uuid.uuid4()}"
-    owned_project_id = uuid.uuid4()
+    owned_task_id = uuid.uuid4()
     owned_conversation_id = uuid.uuid4()
-    unowned_project_id = uuid.uuid4()
+    unowned_task_id = uuid.uuid4()
     unowned_conversation_id = uuid.uuid4()
 
     command.downgrade(cfg, "b3c7d914e0a2")
@@ -358,6 +376,8 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
             inspector = inspect(down_conn)
             assert "organisation" not in inspector.get_table_names()
             assert "app_user" not in inspector.get_table_names()
+            # Below the 038 revision the two entities are `project` (the Task)
+            # and `portfolio` (the Project).
             for table in ("project", "portfolio"):
                 columns = {c["name"] for c in inspector.get_columns(table)}
                 assert "org_id" not in columns
@@ -366,18 +386,20 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
                 c["name"] for c in inspector.get_columns("conversation")
             }
 
-        _seed_pre_033_project_and_conversation(
+        _seed_pre_033_task_and_conversation(
             engine,
-            project_id=owned_project_id,
+            task_id=owned_task_id,
             conversation_id=owned_conversation_id,
             owner_user_id=owner,
+            legacy=True,
         )
-        # A `runtime/orchestrate.py` CLI row: no owner, so no author to infer.
-        _seed_pre_033_project_and_conversation(
+        # A `runtime/agent.py` CLI row: no owner, so no author to infer.
+        _seed_pre_033_task_and_conversation(
             engine,
-            project_id=unowned_project_id,
+            task_id=unowned_task_id,
             conversation_id=unowned_conversation_id,
             owner_user_id=None,
+            legacy=True,
         )
     finally:
         command.upgrade(cfg, "head")
@@ -386,30 +408,30 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
         with engine.connect() as up_conn:
             inspector = inspect(up_conn)
             assert {"organisation", "app_user"} <= set(inspector.get_table_names())
-            for table in ("project", "portfolio"):
+            for table in ("task", "project"):
                 columns = {c["name"] for c in inspector.get_columns(table)}
                 assert {"org_id", "visibility"} <= columns
             assert "created_by" in {
                 c["name"] for c in inspector.get_columns("conversation")
             }
-            assert "ix_project_org_visibility_status" in {
-                ix["name"] for ix in inspector.get_indexes("project")
+            assert "ix_task_org_visibility_status" in {
+                ix["name"] for ix in inspector.get_indexes("task")
             }
-            assert "ix_portfolio_org_visibility" in {
-                ix["name"] for ix in inspector.get_indexes("portfolio")
+            assert "ix_project_org_visibility" in {
+                ix["name"] for ix in inspector.get_indexes("project")
             }
             # Task 037: is_public lands on head, additive, orthogonal to
             # visibility — asserted here rather than a dedicated round-trip
             # test since it shares this test's downgrade/upgrade bracket.
             assert "is_public" in {
-                c["name"] for c in inspector.get_columns("project")
+                c["name"] for c in inspector.get_columns("task")
             }
 
             # Existing rows arrive with no organisation. `org_id IS NULL` matches
             # no org leg, so 'org' on them is an inert default — the dark launch.
             existing = up_conn.execute(
-                select(project.c.org_id, project.c.visibility).where(
-                    project.c.project_id == owned_project_id
+                select(task.c.org_id, task.c.visibility).where(
+                    task.c.task_id == owned_task_id
                 )
             ).one()
             assert existing.org_id is None
@@ -428,7 +450,7 @@ def test_migration_roundtrip_organisation_tenancy(engine: Engine) -> None:
             assert authors[owned_conversation_id] == owner
             assert authors[unowned_conversation_id] is None
     finally:
-        _delete_seeded_rows(engine, owned_project_id, unowned_project_id)
+        _delete_seeded_rows(engine, owned_task_id, unowned_task_id)
 
 
 def test_the_tenancy_migrations_lock_timeout_cannot_outlive_the_migration() -> None:
@@ -476,11 +498,11 @@ def test_the_tenancy_migrations_lock_timeout_cannot_outlive_the_migration() -> N
 def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engine) -> None:
     """Evidence for the documented rollback exposure (contract § Rollback posture).
 
-    A colleague's chat on someone else's project survives the 033 downgrade, but
+    A colleague's chat on someone else's task survives the 033 downgrade, but
     the schema stops recording who wrote it — and pre-033 code lists *every*
-    conversation on a project to that project's owner. So a rollback after
+    conversation on a task to that task's owner. So a rollback after
     adoption hands the owner a colleague's private chat. Re-upgrading does not
-    undo it either: the backfill can only attribute the row to the project owner,
+    undo it either: the backfill can only attribute the row to the task owner,
     which is the wrong person. This is why the posture is roll forward, not back;
     rubric 32 requires the exposure proved rather than asserted.
     """
@@ -489,12 +511,12 @@ def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engin
 
     owner = f"sub-owner-{uuid.uuid4()}"
     colleague = f"sub-colleague-{uuid.uuid4()}"
-    project_id = uuid.uuid4()
+    task_id = uuid.uuid4()
     conversation_id = uuid.uuid4()
 
-    _seed_pre_033_project_and_conversation(
+    _seed_pre_033_task_and_conversation(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         conversation_id=conversation_id,
         owner_user_id=owner,
         created_by=colleague,
@@ -507,10 +529,11 @@ def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engin
                 assert "created_by" not in {
                     c["name"] for c in inspector.get_columns("conversation")
                 }
-                # The pre-033 per-project listing predicate, verbatim: ownership of
-                # the project is the only filter, so the colleague's chat is in it.
+                # The pre-033 per-task listing predicate, verbatim: ownership of
+                # the task is the only filter, so the colleague's chat is in it.
                 visible_to_owner = down_conn.execute(
                     text(
+                        # Below the 038 revision the Task table is `project`.
                         "SELECT c.id FROM conversation c "
                         "JOIN project p ON p.project_id = c.project_id "
                         "WHERE p.owner_user_id = :owner"
@@ -530,7 +553,7 @@ def test_downgrade_erases_chat_authorship_exposing_colleague_chats(engine: Engin
             assert restored == owner
             assert restored != colleague
     finally:
-        _delete_seeded_rows(engine, project_id)
+        _delete_seeded_rows(engine, task_id)
 
 
 def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> None:
@@ -562,16 +585,16 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             cols = {c["name"] for c in inspector.get_columns("source_screening_result")}
             assert "screen_stage" in cols
 
-            pid, rid = seed_project_and_run(verify_conn)
+            pid, rid = seed_task_and_run(verify_conn)
             scope_id = seed_scope(verify_conn, pid)
-            _, pss_id = seed_source(verify_conn, pid)
+            _, tss_id = seed_source(verify_conn, pid)
 
             # ck_ssr_basis admits 'full_text' (a stage-2 row).
             verify_conn.execute(source_screening_result.insert().values(
                 source_screening_result_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_source_snapshot_id=pss_id,
-                project_id=pid,
+                task_source_snapshot_id=tss_id,
+                task_id=pid,
                 screened_by_run_id=rid,
                 status="relevant",
                 screen_basis="full_text",
@@ -586,8 +609,8 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
                 verify_conn.execute(source_screening_result.insert().values(
                     source_screening_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=pid,
+                    task_source_snapshot_id=tss_id,
+                    task_id=pid,
                     screened_by_run_id=rid,
                     status="not_relevant",
                     screen_basis="full_text",
@@ -600,8 +623,8 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             verify_conn.execute(source_screening_result.insert().values(
                 source_screening_result_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_source_snapshot_id=pss_id,
-                project_id=pid,
+                task_source_snapshot_id=tss_id,
+                task_id=pid,
                 screened_by_run_id=rid,
                 status="failed",
                 screen_basis=None,
@@ -613,15 +636,15 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             # ck_stag_tag_type admits 'methodological_structural'.
             insert_source_tags(
                 verify_conn,
-                project_id=pid,
+                task_id=pid,
                 run_id=rid,
                 now=now(),
-                assertions=[(pss_id, "rct", "test")],
+                assertions=[(tss_id, "rct", "test")],
                 tag_type=METHODOLOGICAL_STRUCTURAL,
             )
             tag_row = verify_conn.execute(
                 select(source_tag.c.tag_type).where(
-                    source_tag.c.project_source_snapshot_id == pss_id
+                    source_tag.c.task_source_snapshot_id == tss_id
                 )
             ).one()
             assert tag_row.tag_type == METHODOLOGICAL_STRUCTURAL

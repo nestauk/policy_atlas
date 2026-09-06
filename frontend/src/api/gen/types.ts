@@ -70,10 +70,10 @@ export interface paths {
          *     statement below, both 404 on failure:
          *
          *     - :func:`own_chat_leg` — the conversation is a chat the caller created,
-         *       or a legacy pre-033 chat on a project they own. An owner cannot post
+         *       or a legacy pre-033 chat on a task they own. An owner cannot post
          *       into a colleague's chat and a colleague cannot post into the owner's.
-         *     - :func:`own_estate` on the project — the caller must still reach the
-         *       project as its owner or as a same-org colleague. This is the leg that
+         *     - :func:`own_estate` on the task — the caller must still reach the
+         *       task as its owner or as a same-org colleague. This is the leg that
          *       **dies on de-enrolment**: clearing a colleague's ``org_id`` takes their
          *       turn POST to 404 on the next request, even though they still match
          *       ``created_by``. Deliberately :func:`own_estate` rather than the full
@@ -81,7 +81,7 @@ export interface paths {
          *
          *     No lock is taken here. The reservation's lock lives one layer down, on the
          *     **conversation** row (``chat_turns._phase_one_turn``) — never on the
-         *     owner's project row.
+         *     owner's task row.
          */
         post: operations["create_chat_turn_stream_api_v1_conversations__conversation_id__turns_post"];
         delete?: never;
@@ -106,12 +106,12 @@ export interface paths {
          *     The third colleague mutation (contract § 4): cancel **your own** turn,
          *     resolved through the same two conditions as the turn POST —
          *     :func:`own_chat_leg` on the conversation and :func:`own_estate` on the
-         *     project — so cancellation is isolated in both directions and dies with a
+         *     task — so cancellation is isolated in both directions and dies with a
          *     colleague's org leg.
          *
-         *     One deliberate asymmetry with the POST: no ``project.status = 'active'``
+         *     One deliberate asymmetry with the POST: no ``task.status = 'active'``
          *     filter, which is the pre-033 behaviour preserved. Cancelling is a stop,
-         *     not a start; refusing it on an archived project would strand a pending
+         *     not a start; refusing it on an archived task would strand a pending
          *     row for the TTL sweep with no way for its author to close it.
          *
          *     No lock: the write below is already a compare-and-set guarded on
@@ -177,7 +177,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/portfolios": {
+    "/api/v1/projects": {
         parameters: {
             query?: never;
             header?: never;
@@ -185,8 +185,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Portfolios
-         * @description List the portfolios the caller may see, with a derived task count.
+         * List Projects
+         * @description List the projects the caller may see, with a derived task count.
          *
          *     Args:
          *         user: The authenticated caller.
@@ -197,148 +197,7 @@ export interface paths {
          *         owner_email: Narrow to one owner's rows. **Administrators only**; any
          *             other caller gets 422 `validation_error`, as does a value longer
          *             than `OWNER_EMAIL_MAX` or one carrying no `@` — see
-         *             `projects.list_projects`.
-         *         page: 1-indexed page number.
-         *         page_size: Rows per page, server-capped.
-         *
-         *     Returns:
-         *         One page of portfolios.
-         *
-         *     Raises:
-         *         HTTPException: 422 when a non-administrator passes `owner_email`.
-         */
-        get: operations["list_portfolios_api_v1_portfolios_get"];
-        put?: never;
-        /**
-         * Create Portfolio
-         * @description Create one portfolio owned by the authenticated subject.
-         *
-         *     With `from_project_id` (contract § 6, i.1) the new portfolio inherits that
-         *     project's `visibility` **and** organisation and takes it as its first
-         *     member, all in the request's single transaction — so the invariant "a
-         *     project in a portfolio matches its portfolio on both" holds from the
-         *     moment the row exists rather than being repaired afterwards.
-         *
-         *     The source project resolves under the **write** grade, not a read grade.
-         *     Under a read grade a same-org colleague — or, once the admin leg lands, an
-         *     administrator — could pull a row they do not own into a portfolio and
-         *     change its visibility, which is the concrete admin-write escape the
-         *     contract names.
-         *
-         *     Without `from_project_id`, the portfolio is empty and its organisation is
-         *     stamped from the creator (contract § 7).
-         *
-         *     Args:
-         *         payload: The create body.
-         *         user: The authenticated caller.
-         *         conn: Open database connection.
-         *
-         *     Returns:
-         *         The created portfolio.
-         *
-         *     Raises:
-         *         HTTPException: 404 when `from_project_id` names a project the caller
-         *             cannot read, 403 when they can read it but do not own it.
-         */
-        post: operations["create_portfolio_api_v1_portfolios_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/portfolios/{portfolio_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Portfolio
-         * @description Return one portfolio readable by the caller (owner or same-org colleague).
-         */
-        get: operations["get_portfolio_api_v1_portfolios__portfolio_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Update Portfolio
-         * @description Apply the supplied portfolio fields without changing omitted fields.
-         *
-         *     **Two code paths, not one.** `name` and `description` are written by an
-         *     explicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off
-         *     the model **by name** and routed to :func:`_cascade_visibility`, and never
-         *     joins the splat. Contract § 6, i.4 makes the cascade the only writer of
-         *     `portfolio.visibility`; a blind `.values(**changes)` hands the column to
-         *     whatever field a later slice adds to `PortfolioUpdate`, and the failure it
-         *     produces is silent — the owner sets a Project private, the UI agrees, and
-         *     its Tasks stay readable by the whole organisation. The field now exists on
-         *     the model, so the allow-list is the thing keeping that true.
-         *
-         *     `payload.visibility is not None` **is** "the caller supplied it": the
-         *     model refuses an explicit null, so the absent value and the None value are
-         *     the same state.
-         *
-         *     **Owner-only, like every other write** (contract § 3): the route resolves
-         *     through the write grade, so a same-org colleague gets 403 and an
-         *     administrator — whose leg is a *read* leg — never reaches the cascade
-         *     however wide their read becomes.
-         *
-         *     The row is locked (`for_update`) because the cascade and the assignment
-         *     path in `projects.py` write overlapping rows: without it, an assignment
-         *     that read this portfolio's visibility a moment before the cascade
-         *     committed would write the stale value onto the project it is assigning and
-         *     leave an org-visible row inside a private Project.
-         *
-         *     Args:
-         *         portfolio_id: The portfolio to update.
-         *         payload: The partial update. Supplying `visibility` runs the cascade.
-         *         user: The authenticated caller.
-         *         conn: Open database connection.
-         *
-         *     Returns:
-         *         The updated portfolio. Its `task_count` is the caller-visible active
-         *         member count — see the note below on what the outcome copy may claim.
-         *
-         *     Raises:
-         *         HTTPException: 404 when the portfolio is unreadable, 403 when it is
-         *             readable but not owned.
-         */
-        patch: operations["update_portfolio_api_v1_portfolios__portfolio_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/projects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Projects
-         * @description List the projects the caller may see, with derived latest-run state.
-         *
-         *     Args:
-         *         user: The authenticated caller.
-         *         conn: Open database connection.
-         *         status_filter: `active` (default), `archived` or `all`.
-         *         scope: `all` (default) — the caller's own rows plus their
-         *             organisation's org-visible rows, and for an administrator every
-         *             row in every organisation — or `mine` for owner-only, the
-         *             pre-033 behaviour. **The default is `all`**: a `mine` default
-         *             would hide the whole feature behind a switcher.
-         *         portfolio_id: Narrow to one portfolio's members. Server-side because
-         *             `PortfolioDetailView` filtered the default 50-row global page
-         *             client-side and would silently under-report once the visible
-         *             estate spans an organisation.
-         *         owner_email: Narrow to one owner's rows. **Administrators only**; any
-         *             other caller gets 422 `validation_error`, as does a value longer
-         *             than `OWNER_EMAIL_MAX` or one carrying no `@` — the value is
-         *             logged verbatim on the admin trace, so it is bounded and shaped at
-         *             the boundary rather than in the log.
+         *             `tasks.list_tasks`.
          *         page: 1-indexed page number.
          *         page_size: Rows per page, server-capped.
          *
@@ -352,12 +211,34 @@ export interface paths {
         put?: never;
         /**
          * Create Project
-         * @description Create one active project owned by the authenticated subject.
+         * @description Create one project owned by the authenticated subject.
          *
-         *     Stamps the creator's organisation onto the row (contract § 7) — NULL when
-         *     the creator is unenrolled, which leaves the row reachable by its owner
-         *     alone. `visibility` takes the column default `private` (owner amendment
-         *     2026-08-26 — new work is unshared until its owner deliberately shares it).
+         *     With `from_task_id` (contract § 6, i.1) the new project inherits that
+         *     task's `visibility` **and** organisation and takes it as its first
+         *     member, all in the request's single transaction — so the invariant "a
+         *     task in a project matches its project on both" holds from the
+         *     moment the row exists rather than being repaired afterwards.
+         *
+         *     The source task resolves under the **write** grade, not a read grade.
+         *     Under a read grade a same-org colleague — or, once the admin leg lands, an
+         *     administrator — could pull a row they do not own into a project and
+         *     change its visibility, which is the concrete admin-write escape the
+         *     contract names.
+         *
+         *     Without `from_task_id`, the project is empty and its organisation is
+         *     stamped from the creator (contract § 7).
+         *
+         *     Args:
+         *         payload: The create body.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The created project.
+         *
+         *     Raises:
+         *         HTTPException: 404 when `from_task_id` names a task the caller
+         *             cannot read, 403 when they can read it but do not own it.
          */
         post: operations["create_project_api_v1_projects_post"];
         delete?: never;
@@ -375,7 +256,7 @@ export interface paths {
         };
         /**
          * Get Project
-         * @description Return one active project through its graded or redacted public leg.
+         * @description Return one project readable by the caller (owner or same-org colleague).
          */
         get: operations["get_project_api_v1_projects__project_id__get"];
         put?: never;
@@ -387,44 +268,163 @@ export interface paths {
          * Update Project
          * @description Apply the supplied project fields without changing omitted fields.
          *
+         *     **Two code paths, not one.** `name` and `description` are written by an
+         *     explicit allow-list splat (`_PATCHABLE_COLUMNS`); `visibility` is read off
+         *     the model **by name** and routed to :func:`_cascade_visibility`, and never
+         *     joins the splat. Contract § 6, i.4 makes the cascade the only writer of
+         *     `project.visibility`; a blind `.values(**changes)` hands the column to
+         *     whatever field a later slice adds to `ProjectUpdate`, and the failure it
+         *     produces is silent — the owner sets a Project private, the UI agrees, and
+         *     its Tasks stay readable by the whole organisation. The field now exists on
+         *     the model, so the allow-list is the thing keeping that true.
+         *
+         *     `payload.visibility is not None` **is** "the caller supplied it": the
+         *     model refuses an explicit null, so the absent value and the None value are
+         *     the same state.
+         *
+         *     **Owner-only, like every other write** (contract § 3): the route resolves
+         *     through the write grade, so a same-org colleague gets 403 and an
+         *     administrator — whose leg is a *read* leg — never reaches the cascade
+         *     however wide their read becomes.
+         *
+         *     The row is locked (`for_update`) because the cascade and the assignment
+         *     path in `tasks.py` write overlapping rows: without it, an assignment
+         *     that read this project's visibility a moment before the cascade
+         *     committed would write the stale value onto the task it is assigning and
+         *     leave an org-visible row inside a private Project.
+         *
+         *     Args:
+         *         project_id: The project to update.
+         *         payload: The partial update. Supplying `visibility` runs the cascade.
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *
+         *     Returns:
+         *         The updated project. Its `task_count` is the caller-visible active
+         *         member count — see the note below on what the outcome copy may claim.
+         *
+         *     Raises:
+         *         HTTPException: 404 when the project is unreadable, 403 when it is
+         *             readable but not owned.
+         */
+        patch: operations["update_project_api_v1_projects__project_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tasks
+         * @description List the tasks the caller may see, with derived latest-run state.
+         *
+         *     Args:
+         *         user: The authenticated caller.
+         *         conn: Open database connection.
+         *         status_filter: `active` (default), `archived` or `all`.
+         *         scope: `all` (default) — the caller's own rows plus their
+         *             organisation's org-visible rows, and for an administrator every
+         *             row in every organisation — or `mine` for owner-only, the
+         *             pre-033 behaviour. **The default is `all`**: a `mine` default
+         *             would hide the whole feature behind a switcher.
+         *         project_id: Narrow to one project's members. Server-side because
+         *             `ProjectDetailView` filtered the default 50-row global page
+         *             client-side and would silently under-report once the visible
+         *             estate spans an organisation.
+         *         owner_email: Narrow to one owner's rows. **Administrators only**; any
+         *             other caller gets 422 `validation_error`, as does a value longer
+         *             than `OWNER_EMAIL_MAX` or one carrying no `@` — the value is
+         *             logged verbatim on the admin trace, so it is bounded and shaped at
+         *             the boundary rather than in the log.
+         *         page: 1-indexed page number.
+         *         page_size: Rows per page, server-capped.
+         *
+         *     Returns:
+         *         One page of tasks.
+         *
+         *     Raises:
+         *         HTTPException: 422 when a non-administrator passes `owner_email`.
+         */
+        get: operations["list_tasks_api_v1_tasks_get"];
+        put?: never;
+        /**
+         * Create Task
+         * @description Create one active task owned by the authenticated subject.
+         *
+         *     Stamps the creator's organisation onto the row (contract § 7) — NULL when
+         *     the creator is unenrolled, which leaves the row reachable by its owner
+         *     alone. `visibility` takes the column default `private` (owner amendment
+         *     2026-08-26 — new work is unshared until its owner deliberately shares it).
+         */
+        post: operations["create_task_api_v1_tasks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Task
+         * @description Return one active task through its graded or redacted public leg.
+         */
+        get: operations["get_task_api_v1_tasks__task_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Task
+         * @description Apply the supplied task fields without changing omitted fields.
+         *
          *     Resolves under the **write** grade (contract § 3: write is owner-only), so
          *     a same-org colleague who can now *see* this row in their listing gets 403
          *     `forbidden` here rather than the 404 that would claim the row does not
          *     exist — they are already looking at it.
          *
          *     Three of the invariant's six paths run here (contract § 6). Setting
-         *     `visibility` on a project that belongs to a portfolio is **i.5**, refused
-         *     409. Setting `portfolio_ids` to a non-empty set is **i.2/i.3** — the
-         *     member becomes org-visible if **any** named portfolio is org-visible and
+         *     `visibility` on a task that belongs to a project is **i.5**, refused
+         *     409. Setting `project_ids` to a non-empty set is **i.2/i.3** — the
+         *     member becomes org-visible if **any** named project is org-visible and
          *     private otherwise (owner ruling 2026-08-27), promotion and demotion being
          *     the same rule read in two directions; a set spanning two organisations is
          *     refused 409, since a row carries one `org_id`. Targets resolve under the
          *     **colleague-mutation** grade (owner ∪ same-org org-visible, never the
          *     admin leg — owner ruling 2026-08-27): a colleague may add their own task
-         *     to an org-visible portfolio they did not create. Setting it to `[]` (or
+         *     to an org-visible project they did not create. Setting it to `[]` (or
          *     `null`) is **i.6** — the row leaves with the visibility and organisation
          *     it had.
          *
          *     Args:
-         *         project_id: The project to update.
+         *         task_id: The task to update.
          *         payload: The partial update. A body carrying both `visibility` and
-         *             `portfolio_ids` was already rejected 422 by the model.
+         *             `project_ids` was already rejected 422 by the model.
          *         user: The authenticated caller.
          *         conn: Open database connection.
          *
          *     Returns:
-         *         The updated project.
+         *         The updated task.
          *
          *     Raises:
          *         HTTPException: 404 when the row is unreadable, 403 when it is
          *             readable but not owned.
          *         ApiConflict: 409 `visibility_conflict` when setting `visibility` on a
-         *             project that belongs to a portfolio.
+         *             task that belongs to a project.
          */
-        patch: operations["update_project_api_v1_projects__project_id__patch"];
+        patch: operations["update_task_api_v1_tasks__task_id__patch"];
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/archive": {
+    "/api/v1/tasks/{task_id}/archive": {
         parameters: {
             query?: never;
             header?: never;
@@ -434,17 +434,17 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Archive Project Route
-         * @description Soft-delete a project unless its latest walk is active or parked.
+         * Archive Task Route
+         * @description Soft-delete a task unless its latest walk is active or parked.
          */
-        post: operations["archive_project_route_api_v1_projects__project_id__archive_post"];
+        post: operations["archive_task_route_api_v1_tasks__task_id__archive_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/artefact": {
+    "/api/v1/tasks/{task_id}/artefact": {
         parameters: {
             query?: never;
             header?: never;
@@ -455,7 +455,7 @@ export interface paths {
          * Artefact
          * @description Return the latest persisted synthesis artefact or a shaped absence.
          */
-        get: operations["artefact_api_v1_projects__project_id__artefact_get"];
+        get: operations["artefact_api_v1_tasks__task_id__artefact_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -464,7 +464,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/check-ins": {
+    "/api/v1/tasks/{task_id}/check-ins": {
         parameters: {
             query?: never;
             header?: never;
@@ -475,10 +475,10 @@ export interface paths {
          * List Check Ins
          * @description Return a latest pending card or the durable steering history projection.
          *
-         *     Paginated (rubric item 17 — check-ins accumulate over a project's life);
+         *     Paginated (rubric item 17 — check-ins accumulate over a task's life);
          *     the pending view is at most one card by construction.
          */
-        get: operations["list_check_ins_api_v1_projects__project_id__check_ins_get"];
+        get: operations["list_check_ins_api_v1_tasks__task_id__check_ins_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -487,7 +487,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/check-ins/{check_in_id}/response": {
+    "/api/v1/tasks/{task_id}/check-ins/{check_in_id}/response": {
         parameters: {
             query?: never;
             header?: never;
@@ -500,14 +500,14 @@ export interface paths {
          * Respond To Check In
          * @description Compile or durably answer one check-in, dispatching continuations after commit.
          */
-        post: operations["respond_to_check_in_api_v1_projects__project_id__check_ins__check_in_id__response_post"];
+        post: operations["respond_to_check_in_api_v1_tasks__task_id__check_ins__check_in_id__response_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/chunks/{chunk_id}/context": {
+    "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context": {
         parameters: {
             query?: never;
             header?: never;
@@ -524,7 +524,7 @@ export interface paths {
          *     ``quote`` is validated AFTER ownership so cross-owner and unknown ids stay
          *     404-indistinguishable (the conformance sweep's byte-identical rule).
          */
-        get: operations["chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get"];
+        get: operations["chat_chunk_context_api_v1_tasks__task_id__chunks__chunk_id__context_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -533,7 +533,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/citations/{citation_key}/context": {
+    "/api/v1/tasks/{task_id}/citations/{citation_key}/context": {
         parameters: {
             query?: never;
             header?: never;
@@ -544,7 +544,7 @@ export interface paths {
          * Chunk Context
          * @description Return a clamped context window for an artefact citation id.
          */
-        get: operations["chunk_context_api_v1_projects__project_id__citations__citation_key__context_get"];
+        get: operations["chunk_context_api_v1_tasks__task_id__citations__citation_key__context_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -553,7 +553,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/conversations": {
+    "/api/v1/tasks/{task_id}/conversations": {
         parameters: {
             query?: never;
             header?: never;
@@ -562,9 +562,9 @@ export interface paths {
         };
         /**
          * List Conversations
-         * @description List one readable project's conversations the caller created, newest first.
+         * @description List one readable task's conversations the caller created, newest first.
          *
-         *     Read-graded on the project (owner or same-org colleague may open the
+         *     Read-graded on the task (owner or same-org colleague may open the
          *     library), but the conversation rows themselves are narrowed further: a
          *     colleague sees only the chats *they* created, never the owner's or
          *     another colleague's. The owner keeps seeing every legacy pre-033 row
@@ -573,45 +573,45 @@ export interface paths {
          *
          *     The filter is :func:`own_conversation_leg`, **not** its chat-narrowed
          *     sibling: this library lists both kinds, and the owner must keep seeing
-         *     their project's planning conversation here. A colleague never matches a
+         *     their task's planning conversation here. A colleague never matches a
          *     planning row anyway — planning conversations are minted by the runtime
-         *     and record no ``created_by``, so only the project owner reaches them
+         *     and record no ``created_by``, so only the task owner reaches them
          *     through the legacy disjunct.
          */
-        get: operations["list_conversations_api_v1_projects__project_id__conversations_get"];
+        get: operations["list_conversations_api_v1_tasks__task_id__conversations_get"];
         put?: never;
         /**
          * Create Conversation
          * @description Create one active chat conversation with optional entry context.
          *
          *     The first of the three mutations owner call (b) grants a same-org
-         *     colleague (contract § 4). The grade is :func:`chat_mutable_project` — the
-         *     owner or a colleague who can read the project, and never an admin.
+         *     colleague (contract § 4). The grade is :func:`chat_mutable_task` — the
+         *     owner or a colleague who can read the task, and never an admin.
          *
          *     **This route can only ever mint a chat**, for anybody: ``kind`` is not a
          *     field on ``ConversationCreate`` (which forbids extras), it is written as
          *     the literal ``"chat"`` below, and planning conversations are minted
          *     exclusively by ``runtime.conversation_lifecycle`` under ``planning.py``'s
-         *     owner-graded project lock. So "a planning conversation can only ever be
-         *     created by the project owner" needs no branch here to hold — the shape of
+         *     owner-graded task lock. So "a planning conversation can only ever be
+         *     created by the task owner" needs no branch here to hold — the shape of
          *     the request body is what enforces it, and a body carrying ``kind`` is
          *     rejected 422 before this function runs.
          *
-         *     **No project-row lock** (contract § 4). The lock this route used to take
+         *     **No task-row lock** (contract § 4). The lock this route used to take
          *     protected nothing a chat insert needs: the only uniqueness constraint on
          *     ``conversation`` is the partial index over ``kind = 'planning' AND status
          *     = 'active'``, which a chat row cannot collide with, and the insert itself
          *     carries a freshly minted primary key. Kept, it would have let any
          *     colleague block the owner's rename, archive and run-start.
          */
-        post: operations["create_conversation_api_v1_projects__project_id__conversations_post"];
+        post: operations["create_conversation_api_v1_tasks__task_id__conversations_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/coverage": {
+    "/api/v1/tasks/{task_id}/coverage": {
         parameters: {
             query?: never;
             header?: never;
@@ -622,7 +622,7 @@ export interface paths {
          * Coverage
          * @description Return the composed latest search coverage statement.
          */
-        get: operations["coverage_api_v1_projects__project_id__coverage_get"];
+        get: operations["coverage_api_v1_tasks__task_id__coverage_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -631,7 +631,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/decisions": {
+    "/api/v1/tasks/{task_id}/decisions": {
         parameters: {
             query?: never;
             header?: never;
@@ -642,7 +642,7 @@ export interface paths {
          * Decisions
          * @description Return the allowlisted audit and steering decision history.
          */
-        get: operations["decisions_api_v1_projects__project_id__decisions_get"];
+        get: operations["decisions_api_v1_tasks__task_id__decisions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -651,7 +651,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/events": {
+    "/api/v1/tasks/{task_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -667,7 +667,7 @@ export interface paths {
          *     caller's access is gone (contract § 5). **Re-authorisation precedes every
          *     frame of its iteration, ephemeral ticks included** — see the loop.
          */
-        get: operations["stream_events_api_v1_projects__project_id__events_get"];
+        get: operations["stream_events_api_v1_tasks__task_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -676,7 +676,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/evidence": {
+    "/api/v1/tasks/{task_id}/evidence": {
         parameters: {
             query?: never;
             header?: never;
@@ -687,7 +687,7 @@ export interface paths {
          * Evidence
          * @description Return a bounded page from the evidence status ladder, optionally filtered.
          */
-        get: operations["evidence_api_v1_projects__project_id__evidence_get"];
+        get: operations["evidence_api_v1_tasks__task_id__evidence_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -696,7 +696,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/findings": {
+    "/api/v1/tasks/{task_id}/findings": {
         parameters: {
             query?: never;
             header?: never;
@@ -707,7 +707,7 @@ export interface paths {
          * Findings
          * @description Return a bounded page of IOF and ICF findings, optionally filtered.
          */
-        get: operations["findings_api_v1_projects__project_id__findings_get"];
+        get: operations["findings_api_v1_tasks__task_id__findings_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -716,7 +716,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/funnel": {
+    "/api/v1/tasks/{task_id}/funnel": {
         parameters: {
             query?: never;
             header?: never;
@@ -727,7 +727,7 @@ export interface paths {
          * Funnel
          * @description Return the durable acquisition-to-citation funnel.
          */
-        get: operations["funnel_api_v1_projects__project_id__funnel_get"];
+        get: operations["funnel_api_v1_tasks__task_id__funnel_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -736,7 +736,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/groups": {
+    "/api/v1/tasks/{task_id}/groups": {
         parameters: {
             query?: never;
             header?: never;
@@ -747,7 +747,7 @@ export interface paths {
          * Groups
          * @description Return the latest grouping facets and residual counts.
          */
-        get: operations["groups_api_v1_projects__project_id__groups_get"];
+        get: operations["groups_api_v1_tasks__task_id__groups_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -756,7 +756,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/landscape": {
+    "/api/v1/tasks/{task_id}/landscape": {
         parameters: {
             query?: never;
             header?: never;
@@ -767,7 +767,7 @@ export interface paths {
          * Landscape
          * @description Return screened-in-only or cited-only landscape distributions.
          */
-        get: operations["landscape_api_v1_projects__project_id__landscape_get"];
+        get: operations["landscape_api_v1_tasks__task_id__landscape_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -776,7 +776,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/plan": {
+    "/api/v1/tasks/{task_id}/plan": {
         parameters: {
             query?: never;
             header?: never;
@@ -790,7 +790,7 @@ export interface paths {
          *     Owner-only sweep, for the reason :func:`list_planning_turns` states: a
          *     colleague's or an administrator's read must not write the owner's rows.
          */
-        get: operations["get_plan_api_v1_projects__project_id__plan_get"];
+        get: operations["get_plan_api_v1_tasks__task_id__plan_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -800,10 +800,10 @@ export interface paths {
          * Patch Plan
          * @description Apply typed edits to the current plan and persist a new approved version.
          */
-        patch: operations["patch_plan_api_v1_projects__project_id__plan_patch"];
+        patch: operations["patch_plan_api_v1_tasks__task_id__plan_patch"];
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/planning-turns": {
+    "/api/v1/tasks/{task_id}/planning-turns": {
         parameters: {
             query?: never;
             header?: never;
@@ -823,20 +823,20 @@ export interface paths {
          *     owner's own GET sweeps, and every mutating planning path sweeps under the
          *     write grade before it does anything.
          */
-        get: operations["list_planning_turns_api_v1_projects__project_id__planning_turns_get"];
+        get: operations["list_planning_turns_api_v1_tasks__task_id__planning_turns_get"];
         put?: never;
         /**
          * Create Planning Turn
-         * @description Advance one project's durable planner conversation once per client turn id.
+         * @description Advance one task's durable planner conversation once per client turn id.
          */
-        post: operations["create_planning_turn_api_v1_projects__project_id__planning_turns_post"];
+        post: operations["create_planning_turn_api_v1_tasks__task_id__planning_turns_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/runs": {
+    "/api/v1/tasks/{task_id}/runs": {
         parameters: {
             query?: never;
             header?: never;
@@ -845,22 +845,22 @@ export interface paths {
         };
         /**
          * List Runs
-         * @description List a project's walks from newest to oldest (paginated — runs accumulate).
+         * @description List a task's walks from newest to oldest (paginated — runs accumulate).
          */
-        get: operations["list_runs_api_v1_projects__project_id__runs_get"];
+        get: operations["list_runs_api_v1_tasks__task_id__runs_get"];
         put?: never;
         /**
          * Create Run
          * @description Dispatch an approved plan off the request path and return its walk row.
          */
-        post: operations["create_run_api_v1_projects__project_id__runs_post"];
+        post: operations["create_run_api_v1_tasks__task_id__runs_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/runs/{run_id}": {
+    "/api/v1/tasks/{task_id}/runs/{run_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -869,9 +869,9 @@ export interface paths {
         };
         /**
          * Get Run
-         * @description Return one readable project's capability run, or the opaque 404.
+         * @description Return one readable task's capability run, or the opaque 404.
          */
-        get: operations["get_run_api_v1_projects__project_id__runs__run_id__get"];
+        get: operations["get_run_api_v1_tasks__task_id__runs__run_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -880,7 +880,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/projects/{project_id}/sources/{source_id}": {
+    "/api/v1/tasks/{task_id}/sources/{source_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -891,7 +891,7 @@ export interface paths {
          * Source Dossier
          * @description Return one owner-scoped source dossier or an indistinguishable 404.
          */
-        get: operations["source_dossier_api_v1_projects__project_id__sources__source_id__get"];
+        get: operations["source_dossier_api_v1_tasks__task_id__sources__source_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1435,7 +1435,7 @@ export interface components {
              * Decided By
              * @default null
              */
-            decided_by: ("user" | "orchestrator" | "standing_default") | null;
+            decided_by: ("user" | "agent" | "standing_default") | null;
             /**
              * Occurred At
              * Format: date-time
@@ -1495,7 +1495,7 @@ export interface components {
          *         citation_id: Durable citation identity — the key for the
          *             chunk-context endpoint (`GET .../citations/{citation_id}/context`).
          *         n: Reference number (matches a `ReferenceOut.n`).
-         *         source_id: The cited document's project source identity, when the
+         *         source_id: The cited document's task source identity, when the
          *             citation resolves to one (joins to the sources/dossier surface).
          *         source_title: Cited source's title (envelope metadata).
          *         quote: The quoted span from the source.
@@ -1597,7 +1597,7 @@ export interface components {
          * @description Inbound body for creating a follow-up chat conversation.
          *
          *     Args:
-         *         entry_artefact_id: Optional project-local artefact used as entry context.
+         *         entry_artefact_id: Optional task-local artefact used as entry context.
          */
         ConversationCreate: {
             /** Entry Artefact Id */
@@ -1634,15 +1634,15 @@ export interface components {
             kind: "planning" | "chat";
             latest_turn_preview: components["schemas"]["LatestTurnPreviewOut"] | null;
             /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-            /**
              * Status
              * @enum {string}
              */
             status: "active" | "closed" | "archived";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
             /** Title */
             title: string;
         };
@@ -1652,11 +1652,11 @@ export interface components {
          *
          *     Args:
          *         id: Conversation identity.
-         *         project_id: Owning project identity.
+         *         task_id: Owning task identity.
          *         kind: Whether this is a planning conversation or a follow-up chat.
          *         title: User-visible conversation title.
          *         status: Current conversation lifecycle status.
-         *         entry_artefact_id: Optional project-local entry-context artefact.
+         *         entry_artefact_id: Optional task-local entry-context artefact.
          *         created_at: When the conversation was created.
          *         closed_at: When it closed, if applicable.
          *         archived_at: When it was archived, if applicable.
@@ -1684,15 +1684,15 @@ export interface components {
              */
             kind: "planning" | "chat";
             /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-            /**
              * Status
              * @enum {string}
              */
             status: "active" | "closed" | "archived";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
             /** Title */
             title: string;
         };
@@ -1705,7 +1705,7 @@ export interface components {
          *
          *     Args:
          *         title: Replacement user-visible chat title.
-         *         entry_artefact_id: Replacement project-local entry context, or null to clear it.
+         *         entry_artefact_id: Replacement task-local entry context, or null to clear it.
          */
         ConversationUpdate: {
             /** Entry Artefact Id */
@@ -1744,7 +1744,7 @@ export interface components {
          * CoverageBackendDetailOut
          * @description Post-run source counts for one public backend.
          *
-         *     ``relevant`` is deliberately project-wide in C.1; per-query relevance
+         *     ``relevant`` is deliberately task-wide in C.1; per-query relevance
          *     was not recorded and is therefore absent.
          */
         CoverageBackendDetailOut: {
@@ -1829,7 +1829,7 @@ export interface components {
          */
         DecisionOut: {
             /** Decided By */
-            decided_by?: ("user" | "orchestrator" | "standing_default") | null;
+            decided_by?: ("user" | "agent" | "standing_default") | null;
             /** Detail */
             detail?: {
                 [key: string]: unknown;
@@ -2304,10 +2304,10 @@ export interface components {
         };
         /**
          * LatestRun
-         * @description The derived latest-run read model carried on a project.
+         * @description The derived latest-run read model carried on a task.
          *
          *     Args:
-         *         capability_run_id: Identity of the project's most recent run.
+         *         capability_run_id: Identity of the task's most recent run.
          *         status: That run's current status.
          *         started_at: When that run started executing.
          *         ended_at: When that run reached a terminal status, or `None` while
@@ -2386,7 +2386,7 @@ export interface components {
          * @description A grounded one-liner note for a top cited source.
          *
          *     Args:
-         *         source_id: The project source identity.
+         *         source_id: The task source identity.
          *         note: One-sentence note restating only supplied evidence.
          */
         MostRelevantNoteOut: {
@@ -2499,12 +2499,6 @@ export interface components {
             data: components["schemas"]["PlanningTranscriptTurnOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
-        /** Page[PortfolioOut] */
-        Page_PortfolioOut_: {
-            /** Data */
-            data: components["schemas"]["PortfolioOut"][];
-            pagination: components["schemas"]["PageMeta"];
-        };
         /** Page[ProjectOut] */
         Page_ProjectOut_: {
             /** Data */
@@ -2515,6 +2509,12 @@ export interface components {
         Page_RunOut_: {
             /** Data */
             data: components["schemas"]["RunOut"][];
+            pagination: components["schemas"]["PageMeta"];
+        };
+        /** Page[TaskOut] */
+        Page_TaskOut_: {
+            /** Data */
+            data: components["schemas"]["TaskOut"][];
             pagination: components["schemas"]["PageMeta"];
         };
         /**
@@ -2588,9 +2588,9 @@ export interface components {
         };
         /**
          * PlanDraft
-         * @description Draft or approved orchestration plan, as surfaced to the client.
+         * @description Draft or approved task plan, as surfaced to the client.
          *
-         *     Mirrors the runtime `OrchestrationPlan` field-by-field. Every field
+         *     Mirrors the runtime `TaskPlan` field-by-field. Every field
          *     except `steps`/`ready` may be `None`/absent while drafting.
          *
          *     Args:
@@ -2602,7 +2602,7 @@ export interface components {
          *         scope_constraints: Optional recency and publisher-geography constraints.
          *         search_effort: Acquisition effort rung.
          *         analysis_depth: Analysis component and budget rung.
-         *         components: Discretionary orchestration components only.
+         *         components: Discretionary plan components only.
          *         component_rationale: Visible intent-fit rationale keyed by
          *             discretionary component.
          *         grouping_facets: Optional grouping facets, valid only when `group`
@@ -2713,7 +2713,7 @@ export interface components {
         };
         /**
          * PlanOut
-         * @description Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.
+         * @description Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.
          *
          *     Args:
          *         plan: The current plan (draft or approved).
@@ -2729,7 +2729,7 @@ export interface components {
         };
         /**
          * PlanPatchIn
-         * @description Inbound body for `PATCH /api/v1/projects/{id}/plan`.
+         * @description Inbound body for `PATCH /api/v1/tasks/{id}/plan`.
          *
          *     Omitted fields stay as they are. An empty string on a date or geography
          *     field clears that constraint. The merged result must still be a valid
@@ -2816,7 +2816,7 @@ export interface components {
          * @description One durable planning-transcript turn shown in chronological order.
          *
          *     Args:
-         *         turn_index: Monotonic per-project conversation coordinate.
+         *         turn_index: Monotonic per-task conversation coordinate.
          *         conversation_id: Owning planning conversation, absent only on legacy rows.
          *         client_turn_id: The caller's idempotency key for this turn — returned
          *             so a reloaded client can retry its own incomplete latest turn.
@@ -2860,7 +2860,7 @@ export interface components {
         };
         /**
          * PlanningTurnCreate
-         * @description Inbound body for `POST /api/v1/projects/{id}/planning-turns`.
+         * @description Inbound body for `POST /api/v1/tasks/{id}/planning-turns`.
          *
          *     Args:
          *         message: The user's chat message for this planner turn.
@@ -2900,120 +2900,6 @@ export interface components {
             suggestions?: string[];
         };
         /**
-         * PortfolioCreate
-         * @description Inbound body for `POST /api/v1/portfolios`.
-         *
-         *     Args:
-         *         name: Portfolio display name, 1-200 characters. Outer whitespace is
-         *             stripped before the length constraint is applied.
-         *         description: Optional free-text description.
-         *         from_project_id: Seed the new portfolio from an existing project the
-         *             caller **owns**: the portfolio inherits that project's
-         *             `visibility` and organisation and takes it as its first member,
-         *             in one transaction (contract § 6, i.1). Omit to create an empty
-         *             portfolio. This amends ADR 0031 decision 4 ("assignment is a
-         *             PATCH, not a field on create"); ADR 0033 records the amendment.
-         */
-        PortfolioCreate: {
-            /** Description */
-            description?: string | null;
-            /** From Project Id */
-            from_project_id?: string | null;
-            /** Name */
-            name: string;
-        };
-        /**
-         * PortfolioOut
-         * @description A portfolio resource.
-         *
-         *     Args:
-         *         portfolio_id: The portfolio's identity.
-         *         name: Current display name.
-         *         description: Current description, or `None` if not set.
-         *         created_at: When the portfolio was created.
-         *         task_count: How many active projects **the caller may read, in the
-         *             caller's own organisation** are assigned to this portfolio,
-         *             derived per request and never cached on the row (contract § 8).
-         *             A colleague's private member is not counted, and an
-         *             administrator's count stays their own organisation's count rather
-         *             than a cross-organisation sum.
-         *         visibility: How widely the row is shared (task 033). `org` where the
-         *             organisation may read it, `private` where only its owner may.
-         *         is_owner: Whether the *calling* user owns this row. Per-caller, not a
-         *             property of the row.
-         *         owner_display: How to name the row's owner — the owner's display
-         *             name, or a rendering derived from their subject when they have no
-         *             identity row yet. **Never an email** (contract § 3b). `None` when
-         *             the row has no owner at all.
-         */
-        PortfolioOut: {
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Description */
-            description?: string | null;
-            /** Is Owner */
-            is_owner: boolean;
-            /** Name */
-            name: string;
-            /** Owner Display */
-            owner_display: string | null;
-            /**
-             * Portfolio Id
-             * Format: uuid
-             */
-            portfolio_id: string;
-            /** Task Count */
-            task_count: number;
-            /**
-             * Visibility
-             * @enum {string}
-             */
-            visibility: "org" | "private";
-        };
-        /**
-         * PortfolioUpdate
-         * @description Inbound body for `PATCH /api/v1/portfolios/{id}` (partial update).
-         *
-         *     Args:
-         *         name: New display name, when renaming. Omit to leave unchanged; an
-         *             explicit `null` is refused 422 (the column is NOT NULL).
-         *         description: New description, when changing it, or an explicit `null`
-         *             to clear it. Omit to leave unchanged.
-         *         visibility: How widely to share this portfolio **and every project
-         *             assigned to it** — supplying it runs the i.4 cascade, not a field
-         *             write (contract § 6). Owner-only. Omit to leave unchanged; an
-         *             explicit `null` is refused 422, because there is no such thing as
-         *             "no visibility" (the column is NOT NULL) and silently ignoring it
-         *             would give one request shape two outcomes.
-         *
-         *     Note:
-         *         The field arrives here **with** the cascade and never without it
-         *         (contract § 6, i.4: the cascade is the only writer of
-         *         `portfolio.visibility`, because a portfolio's visibility change must
-         *         carry every member with it). The route keeps it out of its patchable
-         *         column list and routes it explicitly, so no splat can ever hand the
-         *         column to this field: an owner setting a Project private and leaving
-         *         its Tasks readable by the whole organisation is not a state this
-         *         route can produce.
-         *
-         *         Unlike `ProjectUpdate`, no pairing is rejected: `name`, `description`
-         *         and `visibility` are independent writes with no ordering between
-         *         them, so one body carrying all three has exactly one outcome. The
-         *         pairing `ProjectUpdate` refuses is ambiguous for the opposite reason —
-         *         there `visibility` and `portfolio_id` fight over the same column.
-         */
-        PortfolioUpdate: {
-            /** Description */
-            description?: string | null;
-            /** Name */
-            name?: string | null;
-            /** Visibility */
-            visibility?: ("org" | "private") | null;
-        };
-        /**
          * ProgressEvent
          * @description A user-facing read-tool activity emitted before that tool runs.
          */
@@ -3033,15 +2919,22 @@ export interface components {
          *
          *     Args:
          *         name: Project display name, 1-200 characters. Outer whitespace is
-         *             stripped before the length constraint is applied
-         *             (`str_strip_whitespace`).
-         *         question: Optional initial evidence question.
+         *             stripped before the length constraint is applied.
+         *         description: Optional free-text description.
+         *         from_task_id: Seed the new project from an existing task the
+         *             caller **owns**: the project inherits that task's
+         *             `visibility` and organisation and takes it as its first member,
+         *             in one transaction (contract § 6, i.1). Omit to create an empty
+         *             project. This amends ADR 0031 decision 4 ("assignment is a
+         *             PATCH, not a field on create"); ADR 0033 records the amendment.
          */
         ProjectCreate: {
+            /** Description */
+            description?: string | null;
+            /** From Task Id */
+            from_task_id?: string | null;
             /** Name */
             name: string;
-            /** Question */
-            question?: string | null;
         };
         /**
          * ProjectOut
@@ -3050,81 +2943,44 @@ export interface components {
          *     Args:
          *         project_id: The project's identity.
          *         name: Current display name.
-         *         question: Current evidence question, or `None` if not yet set.
-         *         status: Lifecycle status (`active` unless archived; no hard delete).
+         *         description: Current description, or `None` if not set.
          *         created_at: When the project was created.
-         *         updated_at: When the project row was last written.
-         *         archived_at: When the project was archived, or `None` if active.
-         *         latest_run: The derived latest-run read model, or `None` before any
-         *             run has been created.
-         *         portfolio_ids: Portfolios this project belongs to. Empty means
-         *             unassigned, which is a normal state, not an error.
-         *         source_count: How many Included sources this project has (funnel
-         *             `relevant`), or `None` when no run has started. `None` and `0`
-         *             differ: `None` means the question has not been asked yet, `0`
-         *             means a run asked and none are Included.
+         *         task_count: How many active tasks **the caller may read, in the
+         *             caller's own organisation** are assigned to this project,
+         *             derived per request and never cached on the row (contract § 8).
+         *             A colleague's private member is not counted, and an
+         *             administrator's count stays their own organisation's count rather
+         *             than a cross-organisation sum.
          *         visibility: How widely the row is shared (task 033). `org` where the
          *             organisation may read it, `private` where only its owner may.
          *         is_owner: Whether the *calling* user owns this row. Per-caller, not a
-         *             property of the row: the same project is `true` for its owner and
-         *             `false` for a colleague reading it. Every read-only affordance on
-         *             screen keys off this.
+         *             property of the row.
          *         owner_display: How to name the row's owner — the owner's display
          *             name, or a rendering derived from their subject when they have no
          *             identity row yet. **Never an email** (contract § 3b). `None` when
-         *             the row has no owner at all (the CLI-created rows), leaving the
-         *             placeholder glyph to the frontend.
-         *         is_public: Whether the owner has turned public sharing on for this
-         *             row (task 037). A property of the row, not the caller.
-         *         access: **Caller-relative**, not a property of the row: `"public"`
-         *             means this read was served by the public leg and the shape is
-         *             redacted (`owner_display = None`, `portfolio_ids = []`,
-         *             `is_owner = False`); a graded read (owner, colleague or admin)
-         *             always says `"full"`.
+         *             the row has no owner at all.
          */
         ProjectOut: {
-            /**
-             * Access
-             * @enum {string}
-             */
-            access: "full" | "public";
-            /** Archived At */
-            archived_at?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Description */
+            description?: string | null;
             /** Is Owner */
             is_owner: boolean;
-            /** Is Public */
-            is_public: boolean;
-            latest_run?: components["schemas"]["LatestRun"] | null;
             /** Name */
             name: string;
             /** Owner Display */
             owner_display: string | null;
-            /** Portfolio Ids */
-            portfolio_ids?: string[];
             /**
              * Project Id
              * Format: uuid
              */
             project_id: string;
-            /** Question */
-            question?: string | null;
-            /** Source Count */
-            source_count?: number | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "active" | "archived";
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
+            /** Task Count */
+            task_count: number;
             /**
              * Visibility
              * @enum {string}
@@ -3136,71 +2992,40 @@ export interface components {
          * @description Inbound body for `PATCH /api/v1/projects/{id}` (partial update).
          *
          *     Args:
-         *         name: New display name, when renaming. Omit to leave unchanged.
-         *         question: New evidence question, when changing it. Omit to leave
-         *             unchanged.
-         *         portfolio_ids: Portfolios to assign this project to. Omit to leave
-         *             membership unchanged; `[]` unassigns every portfolio; a list
-         *             replaces the set.
-         *         visibility: How widely to share this project. Owner-only. Omit to
-         *             leave unchanged; an explicit `null` is refused 422. Cannot be
-         *             combined with `portfolio_ids` in one body — see
-         *             :meth:`reject_visibility_with_portfolio`.
-         *         is_public: Owner-only public-sharing flag (task 037). Omit to leave
-         *             unchanged; an explicit `null` is refused 422 — see
-         *             :meth:`reject_nulls_without_meaning`.
+         *         name: New display name, when renaming. Omit to leave unchanged; an
+         *             explicit `null` is refused 422 (the column is NOT NULL).
+         *         description: New description, when changing it, or an explicit `null`
+         *             to clear it. Omit to leave unchanged.
+         *         visibility: How widely to share this project **and every task
+         *             assigned to it** — supplying it runs the i.4 cascade, not a field
+         *             write (contract § 6). Owner-only. Omit to leave unchanged; an
+         *             explicit `null` is refused 422, because there is no such thing as
+         *             "no visibility" (the column is NOT NULL) and silently ignoring it
+         *             would give one request shape two outcomes.
          *
          *     Note:
-         *         `name`, `visibility` and `is_public` back NOT NULL columns, so an
-         *         explicit `null` on any of them is refused rather than treated as
-         *         "unchanged" — see :meth:`reject_nulls_without_meaning`. `question`
-         *         and `portfolio_ids` are not: null clears the question, and null on
-         *         `portfolio_ids` is read as `[]` (unassign every portfolio).
+         *         The field arrives here **with** the cascade and never without it
+         *         (contract § 6, i.4: the cascade is the only writer of
+         *         `project.visibility`, because a project's visibility change must
+         *         carry every member with it). The route keeps it out of its patchable
+         *         column list and routes it explicitly, so no splat can ever hand the
+         *         column to this field: an owner setting a Project private and leaving
+         *         its Tasks readable by the whole organisation is not a state this
+         *         route can produce.
+         *
+         *         Unlike `TaskUpdate`, no pairing is rejected: `name`, `description`
+         *         and `visibility` are independent writes with no ordering between
+         *         them, so one body carrying all three has exactly one outcome. The
+         *         pairing `TaskUpdate` refuses is ambiguous for the opposite reason —
+         *         there `visibility` and `project_id` fight over the same column.
          */
         ProjectUpdate: {
-            /** Is Public */
-            is_public?: boolean | null;
+            /** Description */
+            description?: string | null;
             /** Name */
             name?: string | null;
-            /** Portfolio Ids */
-            portfolio_ids?: string[] | null;
-            /** Question */
-            question?: string | null;
             /** Visibility */
             visibility?: ("org" | "private") | null;
-        };
-        /**
-         * ProjectUpdatedFrame
-         * @description A lifecycle audit event (rename, archive).
-         */
-        ProjectUpdatedFrame: {
-            /**
-             * Name
-             * @default null
-             */
-            name: string | null;
-            /**
-             * Occurred At
-             * Format: date-time
-             */
-            occurred_at: string;
-            /**
-             * Question
-             * @default null
-             */
-            question: string | null;
-            /** Sequence */
-            sequence: number;
-            /**
-             * Status
-             * @default null
-             */
-            status: ("active" | "archived") | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "project.updated";
         };
         /**
          * ReferenceOut
@@ -3227,9 +3052,9 @@ export interface components {
         };
         /**
          * RunCreate
-         * @description Inbound body for `POST /api/v1/projects/{id}/runs`.
+         * @description Inbound body for `POST /api/v1/tasks/{id}/runs`.
          *
-         *     The run is created from the project's current approved-ready plan; the
+         *     The run is created from the task's current approved-ready plan; the
          *     request body carries no fields. `extra="forbid"` rejects any body at
          *     all beyond `{}`.
          */
@@ -3240,7 +3065,7 @@ export interface components {
          *
          *     Args:
          *         capability_run_id: The run's identity.
-         *         project_id: Owning project.
+         *         task_id: Owning task.
          *         plan_id: Identity of the plan the run executes.
          *         plan_version: Plan version current at run creation.
          *         status: Current run status.
@@ -3264,11 +3089,6 @@ export interface components {
             /** Plan Version */
             plan_version: number;
             /**
-             * Project Id
-             * Format: uuid
-             */
-            project_id: string;
-            /**
              * Started At
              * Format: date-time
              */
@@ -3278,6 +3098,11 @@ export interface components {
              * @enum {string}
              */
             status: "running" | "paused" | "succeeded" | "degraded" | "failed" | "aborted" | "interrupted";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
         };
         /**
          * RunStatusFrame
@@ -3465,7 +3290,7 @@ export interface components {
             /** Tag Type */
             tag_type: string;
         };
-        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["ProjectUpdatedFrame"] | components["schemas"]["TickFrame"];
+        SseFrame: components["schemas"]["RunStatusFrame"] | components["schemas"]["StageStartedFrame"] | components["schemas"]["StageCompletedFrame"] | components["schemas"]["StageFailedFrame"] | components["schemas"]["ArtefactSkeletonFrame"] | components["schemas"]["ArtefactSectionStartedFrame"] | components["schemas"]["ArtefactSectionCompletedFrame"] | components["schemas"]["CheckinPendingFrame"] | components["schemas"]["CheckinResolvedFrame"] | components["schemas"]["PlanUpdatedFrame"] | components["schemas"]["TaskUpdatedFrame"] | components["schemas"]["TickFrame"];
         /**
          * StageCompletedFrame
          * @description A component reached its terminal (successful) outcome.
@@ -3557,6 +3382,181 @@ export interface components {
             type: "stage.started";
         };
         /**
+         * TaskCreate
+         * @description Inbound body for `POST /api/v1/tasks`.
+         *
+         *     Args:
+         *         name: Task display name, 1-200 characters. Outer whitespace is
+         *             stripped before the length constraint is applied
+         *             (`str_strip_whitespace`).
+         *         question: Optional initial evidence question.
+         */
+        TaskCreate: {
+            /** Name */
+            name: string;
+            /** Question */
+            question?: string | null;
+        };
+        /**
+         * TaskOut
+         * @description A task resource.
+         *
+         *     Args:
+         *         task_id: The task's identity.
+         *         name: Current display name.
+         *         question: Current evidence question, or `None` if not yet set.
+         *         status: Lifecycle status (`active` unless archived; no hard delete).
+         *         created_at: When the task was created.
+         *         updated_at: When the task row was last written.
+         *         archived_at: When the task was archived, or `None` if active.
+         *         latest_run: The derived latest-run read model, or `None` before any
+         *             run has been created.
+         *         project_ids: Projects this task belongs to. Empty means
+         *             unassigned, which is a normal state, not an error.
+         *         source_count: How many Included sources this task has (funnel
+         *             `relevant`), or `None` when no run has started. `None` and `0`
+         *             differ: `None` means the question has not been asked yet, `0`
+         *             means a run asked and none are Included.
+         *         visibility: How widely the row is shared (task 033). `org` where the
+         *             organisation may read it, `private` where only its owner may.
+         *         is_owner: Whether the *calling* user owns this row. Per-caller, not a
+         *             property of the row: the same task is `true` for its owner and
+         *             `false` for a colleague reading it. Every read-only affordance on
+         *             screen keys off this.
+         *         owner_display: How to name the row's owner — the owner's display
+         *             name, or a rendering derived from their subject when they have no
+         *             identity row yet. **Never an email** (contract § 3b). `None` when
+         *             the row has no owner at all (the CLI-created rows), leaving the
+         *             placeholder glyph to the frontend.
+         *         is_public: Whether the owner has turned public sharing on for this
+         *             row (task 037). A property of the row, not the caller.
+         *         access: **Caller-relative**, not a property of the row: `"public"`
+         *             means this read was served by the public leg and the shape is
+         *             redacted (`owner_display = None`, `project_ids = []`,
+         *             `is_owner = False`); a graded read (owner, colleague or admin)
+         *             always says `"full"`.
+         */
+        TaskOut: {
+            /**
+             * Access
+             * @enum {string}
+             */
+            access: "full" | "public";
+            /** Archived At */
+            archived_at?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Is Owner */
+            is_owner: boolean;
+            /** Is Public */
+            is_public: boolean;
+            latest_run?: components["schemas"]["LatestRun"] | null;
+            /** Name */
+            name: string;
+            /** Owner Display */
+            owner_display: string | null;
+            /** Project Ids */
+            project_ids?: string[];
+            /** Question */
+            question?: string | null;
+            /** Source Count */
+            source_count?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "archived";
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Visibility
+             * @enum {string}
+             */
+            visibility: "org" | "private";
+        };
+        /**
+         * TaskUpdate
+         * @description Inbound body for `PATCH /api/v1/tasks/{id}` (partial update).
+         *
+         *     Args:
+         *         name: New display name, when renaming. Omit to leave unchanged.
+         *         question: New evidence question, when changing it. Omit to leave
+         *             unchanged.
+         *         project_ids: Projects to assign this task to. Omit to leave
+         *             membership unchanged; `[]` unassigns every project; a list
+         *             replaces the set.
+         *         visibility: How widely to share this task. Owner-only. Omit to
+         *             leave unchanged; an explicit `null` is refused 422. Cannot be
+         *             combined with `project_ids` in one body — see
+         *             :meth:`reject_visibility_with_project`.
+         *         is_public: Owner-only public-sharing flag (task 037). Omit to leave
+         *             unchanged; an explicit `null` is refused 422 — see
+         *             :meth:`reject_nulls_without_meaning`.
+         *
+         *     Note:
+         *         `name`, `visibility` and `is_public` back NOT NULL columns, so an
+         *         explicit `null` on any of them is refused rather than treated as
+         *         "unchanged" — see :meth:`reject_nulls_without_meaning`. `question`
+         *         and `project_ids` are not: null clears the question, and null on
+         *         `project_ids` is read as `[]` (unassign every project).
+         */
+        TaskUpdate: {
+            /** Is Public */
+            is_public?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Project Ids */
+            project_ids?: string[] | null;
+            /** Question */
+            question?: string | null;
+            /** Visibility */
+            visibility?: ("org" | "private") | null;
+        };
+        /**
+         * TaskUpdatedFrame
+         * @description A lifecycle audit event (rename, archive).
+         */
+        TaskUpdatedFrame: {
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /**
+             * Question
+             * @default null
+             */
+            question: string | null;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Status
+             * @default null
+             */
+            status: ("active" | "archived") | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "task.updated";
+        };
+        /**
          * ThemeOut
          * @description One landscape theme.
          *
@@ -3624,7 +3624,7 @@ export interface components {
          * @description One source contributing to a theme or grouping reference.
          *
          *     Args:
-         *         source_id: The project's source identity.
+         *         source_id: The task's source identity.
          *         title: Display title of the source.
          */
         ThemeSourceOut: {
@@ -3990,145 +3990,10 @@ export interface operations {
             };
         };
     };
-    list_portfolios_api_v1_portfolios_get: {
-        parameters: {
-            query?: {
-                scope?: "all" | "mine";
-                owner_email?: string | null;
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Page_PortfolioOut_"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_portfolio_api_v1_portfolios_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PortfolioCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_portfolio_api_v1_portfolios__portfolio_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                portfolio_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_portfolio_api_v1_portfolios__portfolio_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                portfolio_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PortfolioUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioOut"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_projects_api_v1_projects_get: {
         parameters: {
             query?: {
-                status?: "active" | "archived" | "all";
                 scope?: "all" | "mine";
-                portfolio_id?: string | null;
                 owner_email?: string | null;
                 page?: number;
                 page_size?: number;
@@ -4258,13 +4123,18 @@ export interface operations {
             };
         };
     };
-    archive_project_route_api_v1_projects__project_id__archive_post: {
+    list_tasks_api_v1_tasks_get: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                project_id: string;
+            query?: {
+                status?: "active" | "archived" | "all";
+                scope?: "all" | "mine";
+                project_id?: string | null;
+                owner_email?: string | null;
+                page?: number;
+                page_size?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -4275,7 +4145,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectOut"];
+                    "application/json": components["schemas"]["Page_TaskOut_"];
                 };
             };
             /** @description Validation Error */
@@ -4289,12 +4159,142 @@ export interface operations {
             };
         };
     };
-    artefact_api_v1_projects__project_id__artefact_get: {
+    create_task_api_v1_tasks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_task_api_v1_tasks__task_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_task_api_v1_tasks__task_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_task_route_api_v1_tasks__task_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    artefact_api_v1_tasks__task_id__artefact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4320,7 +4320,7 @@ export interface operations {
             };
         };
     };
-    list_check_ins_api_v1_projects__project_id__check_ins_get: {
+    list_check_ins_api_v1_tasks__task_id__check_ins_get: {
         parameters: {
             query?: {
                 status?: "pending" | "all";
@@ -4329,7 +4329,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4355,12 +4355,12 @@ export interface operations {
             };
         };
     };
-    respond_to_check_in_api_v1_projects__project_id__check_ins__check_in_id__response_post: {
+    respond_to_check_in_api_v1_tasks__task_id__check_ins__check_in_id__response_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
                 check_in_id: string;
             };
             cookie?: never;
@@ -4391,14 +4391,14 @@ export interface operations {
             };
         };
     };
-    chat_chunk_context_api_v1_projects__project_id__chunks__chunk_id__context_get: {
+    chat_chunk_context_api_v1_tasks__task_id__chunks__chunk_id__context_get: {
         parameters: {
             query?: {
                 quote?: string | null;
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
                 chunk_id: string;
             };
             cookie?: never;
@@ -4425,12 +4425,12 @@ export interface operations {
             };
         };
     };
-    chunk_context_api_v1_projects__project_id__citations__citation_key__context_get: {
+    chunk_context_api_v1_tasks__task_id__citations__citation_key__context_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
                 citation_key: string;
             };
             cookie?: never;
@@ -4457,7 +4457,7 @@ export interface operations {
             };
         };
     };
-    list_conversations_api_v1_projects__project_id__conversations_get: {
+    list_conversations_api_v1_tasks__task_id__conversations_get: {
         parameters: {
             query?: {
                 kind?: ("planning" | "chat") | null;
@@ -4467,7 +4467,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4493,12 +4493,12 @@ export interface operations {
             };
         };
     };
-    create_conversation_api_v1_projects__project_id__conversations_post: {
+    create_conversation_api_v1_tasks__task_id__conversations_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4528,12 +4528,12 @@ export interface operations {
             };
         };
     };
-    coverage_api_v1_projects__project_id__coverage_get: {
+    coverage_api_v1_tasks__task_id__coverage_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4559,7 +4559,7 @@ export interface operations {
             };
         };
     };
-    decisions_api_v1_projects__project_id__decisions_get: {
+    decisions_api_v1_tasks__task_id__decisions_get: {
         parameters: {
             query?: {
                 page?: number;
@@ -4567,7 +4567,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4593,14 +4593,14 @@ export interface operations {
             };
         };
     };
-    stream_events_api_v1_projects__project_id__events_get: {
+    stream_events_api_v1_tasks__task_id__events_get: {
         parameters: {
             query?: {
                 cursor?: number;
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4626,7 +4626,7 @@ export interface operations {
             };
         };
     };
-    evidence_api_v1_projects__project_id__evidence_get: {
+    evidence_api_v1_tasks__task_id__evidence_get: {
         parameters: {
             query?: {
                 page?: number;
@@ -4644,7 +4644,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4670,7 +4670,7 @@ export interface operations {
             };
         };
     };
-    findings_api_v1_projects__project_id__findings_get: {
+    findings_api_v1_tasks__task_id__findings_get: {
         parameters: {
             query?: {
                 page?: number;
@@ -4683,7 +4683,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4709,12 +4709,12 @@ export interface operations {
             };
         };
     };
-    funnel_api_v1_projects__project_id__funnel_get: {
+    funnel_api_v1_tasks__task_id__funnel_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4740,12 +4740,12 @@ export interface operations {
             };
         };
     };
-    groups_api_v1_projects__project_id__groups_get: {
+    groups_api_v1_tasks__task_id__groups_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4771,14 +4771,14 @@ export interface operations {
             };
         };
     };
-    landscape_api_v1_projects__project_id__landscape_get: {
+    landscape_api_v1_tasks__task_id__landscape_get: {
         parameters: {
             query?: {
                 scope?: "cited" | null;
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4804,12 +4804,12 @@ export interface operations {
             };
         };
     };
-    get_plan_api_v1_projects__project_id__plan_get: {
+    get_plan_api_v1_tasks__task_id__plan_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4835,12 +4835,12 @@ export interface operations {
             };
         };
     };
-    patch_plan_api_v1_projects__project_id__plan_patch: {
+    patch_plan_api_v1_tasks__task_id__plan_patch: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4870,7 +4870,7 @@ export interface operations {
             };
         };
     };
-    list_planning_turns_api_v1_projects__project_id__planning_turns_get: {
+    list_planning_turns_api_v1_tasks__task_id__planning_turns_get: {
         parameters: {
             query?: {
                 page?: number;
@@ -4878,7 +4878,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4904,12 +4904,12 @@ export interface operations {
             };
         };
     };
-    create_planning_turn_api_v1_projects__project_id__planning_turns_post: {
+    create_planning_turn_api_v1_tasks__task_id__planning_turns_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4939,7 +4939,7 @@ export interface operations {
             };
         };
     };
-    list_runs_api_v1_projects__project_id__runs_get: {
+    list_runs_api_v1_tasks__task_id__runs_get: {
         parameters: {
             query?: {
                 page?: number;
@@ -4947,7 +4947,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -4973,12 +4973,12 @@ export interface operations {
             };
         };
     };
-    create_run_api_v1_projects__project_id__runs_post: {
+    create_run_api_v1_tasks__task_id__runs_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
             };
             cookie?: never;
         };
@@ -5008,12 +5008,12 @@ export interface operations {
             };
         };
     };
-    get_run_api_v1_projects__project_id__runs__run_id__get: {
+    get_run_api_v1_tasks__task_id__runs__run_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
                 run_id: string;
             };
             cookie?: never;
@@ -5040,12 +5040,12 @@ export interface operations {
             };
         };
     };
-    source_dossier_api_v1_projects__project_id__sources__source_id__get: {
+    source_dossier_api_v1_tasks__task_id__sources__source_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                project_id: string;
+                task_id: string;
                 source_id: string;
             };
             cookie?: never;

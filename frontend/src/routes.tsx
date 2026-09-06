@@ -7,7 +7,7 @@ import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { NewTaskView } from "./views/NewTaskView";
-import { PortfolioDetailView, PortfoliosView } from "./views/PortfoliosView";
+import { ProjectDetailView, ProjectsView } from "./views/ProjectsView";
 import { ShareView } from "./views/ShareView";
 import { SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
@@ -51,8 +51,8 @@ const sourcesChildren = [
 ];
 
 /** Logged-out marketing + legal routes (no AppShell), plus the public task
- *  view (task 037): the same `/projects/…` URLs render Results and Sources
- *  for a public Task; anything else under the task redirects to Results,
+ *  view (task 037): the same `/tasks/…` URLs render Result and Sources
+ *  for a public Task; anything else under the task redirects to Result,
  *  and a non-public Task falls through to stash-and-splash inside
  *  `PublicTaskShell`. */
 export const publicRouter = createBrowserRouter([
@@ -60,18 +60,18 @@ export const publicRouter = createBrowserRouter([
   { path: "/privacy", element: <PrivacyView /> },
   { path: "/terms", element: <TermsView /> },
   {
-    path: "/projects/:projectId",
+    path: "/tasks/:taskId",
     element: <PublicTaskShell />,
     children: [
-      { index: true, element: <RedirectToPath suffix="/results" /> },
-      { path: "results", element: <ArtefactView /> },
+      { index: true, element: <RedirectToPath suffix="/result" /> },
+      { path: "result", element: <ArtefactView /> },
       { path: "sources", element: <SourcesLayout />, children: sourcesChildren },
       // `preserveOriginal` (task 037 review fix): this can fire on a
       // read that was public when it resolved but is unshared before a
       // stashed refetch settles — carry the original deep link so
-      // `StashAndSplashRedirect` never stashes the rewritten `/results`
+      // `StashAndSplashRedirect` never stashes the rewritten `/result`
       // path instead of it.
-      { path: "*", element: <RedirectToPath suffix="/results" preserveOriginal /> },
+      { path: "*", element: <RedirectToPath suffix="/result" preserveOriginal /> },
     ],
   },
   { path: "*", element: <StashAndSplashRedirect /> },
@@ -87,32 +87,32 @@ export const authenticatedRouter = createBrowserRouter([
         children: [
           { path: "/", element: <TasksListView /> },
           { path: "/new", element: <NewTaskView /> },
-          { path: "/portfolios", element: <PortfoliosView /> },
-          { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
+          { path: "/projects", element: <ProjectsView /> },
+          { path: "/projects/:projectId", element: <ProjectDetailView /> },
           { path: "/privacy", element: <PrivacyView /> },
           { path: "/terms", element: <TermsView /> },
 
           {
-            path: "/projects/:projectId",
+            path: "/tasks/:taskId",
             element: (
-              // Plan is open at every run state; the wrapper exists for the
+              // Agent is open at every run state; the wrapper exists for the
               // public-leg gate (task 037) — a signed-in outsider on a
-              // public Task lands on Results, never the Plan.
-              <LifecycleRoute tab="plan">
+              // public Task lands on Result, never the Agent tab.
+              <LifecycleRoute tab="agent">
                 <WorkspaceView />
               </LifecycleRoute>
             ),
           },
           {
-            path: "/projects/:projectId/results",
+            path: "/tasks/:taskId/result",
             element: (
-              <LifecycleRoute tab="results">
+              <LifecycleRoute tab="result">
                 <ArtefactView />
               </LifecycleRoute>
             ),
           },
           {
-            path: "/projects/:projectId/sources",
+            path: "/tasks/:taskId/sources",
             element: (
               <LifecycleRoute tab="sources">
                 <SourcesLayout />
@@ -121,7 +121,7 @@ export const authenticatedRouter = createBrowserRouter([
             children: sourcesChildren,
           },
           {
-            path: "/projects/:projectId/share",
+            path: "/tasks/:taskId/share",
             element: (
               <LifecycleRoute tab="share">
                 <ShareView />
@@ -129,24 +129,13 @@ export const authenticatedRouter = createBrowserRouter([
             ),
           },
           {
-            path: "/projects/:projectId/history",
+            path: "/tasks/:taskId/history",
             element: (
               <LifecycleRoute tab="history">
                 <HistoryView />
               </LifecycleRoute>
             ),
           },
-
-          { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
-          {
-            path: "/projects/:projectId/findings",
-            element: <RedirectToPath suffix="/sources/findings" />,
-          },
-          {
-            path: "/projects/:projectId/landscape",
-            element: <RedirectToPath suffix="/sources/landscape" />,
-          },
-          { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
 
           { path: "*", element: <NotFoundView /> },
         ],

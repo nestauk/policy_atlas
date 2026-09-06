@@ -22,12 +22,12 @@ from policy_atlas.api.contract import (
     OptionResponse,
     Page,
     PageMeta,
-    PortfolioUpdate,
-    ProjectCreate,
-    ProjectOut,
     ProjectUpdate,
     RunCreate,
     SseFrame,
+    TaskCreate,
+    TaskOut,
+    TaskUpdate,
 )
 from policy_atlas.api.contract.sse import (
     ArtefactSectionCompletedFrame,
@@ -36,11 +36,11 @@ from policy_atlas.api.contract.sse import (
     CheckinPendingFrame,
     CheckinResolvedFrame,
     PlanUpdatedFrame,
-    ProjectUpdatedFrame,
     RunStatusFrame,
     StageCompletedFrame,
     StageFailedFrame,
     StageStartedFrame,
+    TaskUpdatedFrame,
     TickFrame,
 )
 
@@ -105,29 +105,29 @@ def test_option_response_extra_field_rejected() -> None:
 # --- inbound extra="forbid" ---------------------------------------------------
 
 
-def test_project_create_extra_field_raises() -> None:
-    """An extra field on `ProjectCreate` (inbound) raises."""
+def test_task_create_extra_field_raises() -> None:
+    """An extra field on `TaskCreate` (inbound) raises."""
     with pytest.raises(ValidationError):
-        ProjectCreate.model_validate({"name": "A project", "not_a_field": 1})
+        TaskCreate.model_validate({"name": "A task", "not_a_field": 1})
 
 
-def test_project_create_strips_and_bounds_name() -> None:
+def test_task_create_strips_and_bounds_name() -> None:
     """`name` is stripped of outer whitespace, then bounded 1-200 chars."""
-    model = ProjectCreate.model_validate({"name": "  My Project  "})
-    assert model.name == "My Project"
+    model = TaskCreate.model_validate({"name": "  My Task  "})
+    assert model.name == "My Task"
     with pytest.raises(ValidationError):
-        ProjectCreate.model_validate({"name": "   "})
+        TaskCreate.model_validate({"name": "   "})
     with pytest.raises(ValidationError):
-        ProjectCreate.model_validate({"name": "x" * 201})
+        TaskCreate.model_validate({"name": "x" * 201})
 
 
-def test_project_update_is_all_optional_and_forbids_extra() -> None:
-    """`ProjectUpdate` accepts an empty patch body but rejects unknown fields."""
-    model = ProjectUpdate.model_validate({})
+def test_task_update_is_all_optional_and_forbids_extra() -> None:
+    """`TaskUpdate` accepts an empty patch body but rejects unknown fields."""
+    model = TaskUpdate.model_validate({})
     assert model.name is None
     assert model.question is None
     with pytest.raises(ValidationError):
-        ProjectUpdate.model_validate({"unexpected": "field"})
+        TaskUpdate.model_validate({"unexpected": "field"})
 
 
 def test_an_update_body_refuses_an_explicit_null_on_a_not_null_column() -> None:
@@ -144,27 +144,27 @@ def test_an_update_body_refuses_an_explicit_null_on_a_not_null_column() -> None:
     """
     for body in ({"name": None}, {"visibility": None}):
         with pytest.raises(ValidationError):
-            ProjectUpdate.model_validate(body)
+            TaskUpdate.model_validate(body)
         with pytest.raises(ValidationError):
-            PortfolioUpdate.model_validate(body)
+            ProjectUpdate.model_validate(body)
 
 
 def test_an_update_body_keeps_the_nulls_that_mean_something() -> None:
     """The guard is per-field: `null` is a real instruction on three of them.
 
-    `portfolio_ids: null` is contract § 6's i.6 — take the Task out of every
+    `project_ids: null` is contract § 6's i.6 — take the Task out of every
     Project (read as `[]`) — and `question` / `description` are nullable
     columns that a null clears. A blanket "no nulls in a PATCH body" rule
     would have removed all three capabilities to fix two crashes.
     """
-    unassigned = ProjectUpdate.model_validate({"portfolio_ids": None})
-    assert "portfolio_ids" in unassigned.model_fields_set
-    assert unassigned.portfolio_ids is None
+    unassigned = TaskUpdate.model_validate({"project_ids": None})
+    assert "project_ids" in unassigned.model_fields_set
+    assert unassigned.project_ids is None
 
-    cleared = ProjectUpdate.model_validate({"question": None})
+    cleared = TaskUpdate.model_validate({"question": None})
     assert "question" in cleared.model_fields_set
 
-    described = PortfolioUpdate.model_validate({"description": None})
+    described = ProjectUpdate.model_validate({"description": None})
     assert "description" in described.model_fields_set
 
 
@@ -178,15 +178,15 @@ def test_run_create_forbids_any_body() -> None:
 # --- pagination ---------------------------------------------------------------
 
 
-def test_page_of_project_out_serialises() -> None:
-    """`Page[ProjectOut]` round-trips a list of projects with pagination meta."""
+def test_page_of_task_out_serialises() -> None:
+    """`Page[TaskOut]` round-trips a list of tasks with pagination meta."""
 
-    class ProjectPage(BaseModel):
-        page: Page[ProjectOut]
+    class TaskPage(BaseModel):
+        page: Page[TaskOut]
 
-    project = ProjectOut(
-        project_id=uuid.uuid4(),
-        name="A project",
+    task = TaskOut(
+        task_id=uuid.uuid4(),
+        name="A task",
         question=None,
         status="active",
         created_at=_now(),
@@ -204,19 +204,19 @@ def test_page_of_project_out_serialises() -> None:
         is_public=False,
         access="full",
     )
-    wrapper = ProjectPage(
-        page=Page[ProjectOut](
-            data=[project],
+    wrapper = TaskPage(
+        page=Page[TaskOut](
+            data=[task],
             pagination=PageMeta(page=1, page_size=50, total_items=1),
         )
     )
     dumped = wrapper.model_dump(mode="json")
-    assert dumped["page"]["data"][0]["name"] == "A project"
+    assert dumped["page"]["data"][0]["name"] == "A task"
     assert dumped["page"]["pagination"]["total_items"] == 1
 
     # Round-trip back through validation.
-    restored = ProjectPage.model_validate(dumped)
-    assert restored.page.data[0].project_id == project.project_id
+    restored = TaskPage.model_validate(dumped)
+    assert restored.page.data[0].task_id == task.task_id
 
 
 def test_page_size_max_enforced_on_page_meta() -> None:
@@ -398,17 +398,17 @@ def test_plan_updated_frame_discriminates() -> None:
     assert model.plan.title == "Draft title"
 
 
-def test_project_updated_frame_discriminates() -> None:
-    """`type: "project.updated"` deserialises to `ProjectUpdatedFrame`."""
+def test_task_updated_frame_discriminates() -> None:
+    """`type: "task.updated"` deserialises to `TaskUpdatedFrame`."""
     model = _adapter().validate_python(
         {
-            "type": "project.updated",
+            "type": "task.updated",
             "sequence": 8,
             "occurred_at": _now().isoformat(),
-            "name": "Renamed project",
+            "name": "Renamed task",
         }
     )
-    assert isinstance(model, ProjectUpdatedFrame)
+    assert isinstance(model, TaskUpdatedFrame)
 
 
 def test_tick_frame_discriminates_and_has_no_sequence() -> None:

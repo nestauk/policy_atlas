@@ -1,7 +1,7 @@
 """Planning-turn and plan-draft contract.
 
-`PlanDraft` mirrors the runtime `OrchestrationPlan`
-(`policy_atlas.runtime.orchestration_plan`) field-by-field, but this package
+`PlanDraft` mirrors the runtime `TaskPlan`
+(`policy_atlas.runtime.task_plan`) field-by-field, but this package
 never imports that module — the contract is standalone. The enum
 vocabularies below (`BackendScope`, `SearchEffort`, `AnalysisDepth`,
 `SteeringMode`, `GroupingFacet`, `ExtractProfile`,
@@ -21,21 +21,21 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-#: Search backend scope. Mirrors `orchestration_plan.BackendScope`.
+#: Search backend scope. Mirrors `task_plan.BackendScope`.
 PLANNING_MESSAGE_MAX = 10_000
 
 BackendScope = Literal["academic_only", "grey_lit_only", "both"]
 
-#: Acquisition effort rung. Mirrors `orchestration_plan.SearchEffort`.
+#: Acquisition effort rung. Mirrors `task_plan.SearchEffort`.
 SearchEffort = Literal["rapid", "standard", "deep"]
 
-#: Analysis component/budget rung. Mirrors `orchestration_plan.AnalysisDepth`.
+#: Analysis component/budget rung. Mirrors `task_plan.AnalysisDepth`.
 AnalysisDepth = Literal["landscape", "standard", "deep"]
 
-#: Finding profile short name. Mirrors `orchestration_plan.ExtractProfile`.
+#: Finding profile short name. Mirrors `task_plan.ExtractProfile`.
 ExtractProfile = Literal["iof", "icf"]
 
-#: Discretionary chain component. Mirrors `orchestration_plan.DiscretionaryComponent`.
+#: Discretionary chain component. Mirrors `task_plan.DiscretionaryComponent`.
 DiscretionaryComponent = Literal[
     "characterise",
     "screen_full",
@@ -44,7 +44,7 @@ DiscretionaryComponent = Literal[
     "group",
 ]
 
-#: Grouping facet. Mirrors `orchestration_plan.GroupingFacet`.
+#: Grouping facet. Mirrors `task_plan.GroupingFacet`.
 GroupingFacet = Literal[
     "intervention",
     "outcome",
@@ -54,7 +54,7 @@ GroupingFacet = Literal[
     "mechanism_theme",
 ]
 
-#: Steering mode. Mirrors `orchestration_plan.SteeringMode`.
+#: Steering mode. Mirrors `task_plan.SteeringMode`.
 SteeringMode = Literal["frequent", "moderate", "minimal", "unattended"]
 
 # Mirrors ``sse.StageKey`` without importing it: the SSE module itself carries
@@ -73,7 +73,7 @@ PlanStageKey = Literal[
 ]
 
 #: Country-group membership provenance. Mirrors
-#: `orchestration_plan.CountryGroupAuthorship`.
+#: `task_plan.CountryGroupAuthorship`.
 CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
 
 
@@ -127,9 +127,9 @@ class PlanStep(BaseModel):
 
 
 class PlanDraft(BaseModel):
-    """Draft or approved orchestration plan, as surfaced to the client.
+    """Draft or approved task plan, as surfaced to the client.
 
-    Mirrors the runtime `OrchestrationPlan` field-by-field. Every field
+    Mirrors the runtime `TaskPlan` field-by-field. Every field
     except `steps`/`ready` may be `None`/absent while drafting.
 
     Args:
@@ -141,7 +141,7 @@ class PlanDraft(BaseModel):
         scope_constraints: Optional recency and publisher-geography constraints.
         search_effort: Acquisition effort rung.
         analysis_depth: Analysis component and budget rung.
-        components: Discretionary orchestration components only.
+        components: Discretionary plan components only.
         component_rationale: Visible intent-fit rationale keyed by
             discretionary component.
         grouping_facets: Optional grouping facets, valid only when `group`
@@ -180,7 +180,7 @@ class PlanDraft(BaseModel):
 
 
 class PlanningTurnCreate(BaseModel):
-    """Inbound body for `POST /api/v1/projects/{id}/planning-turns`.
+    """Inbound body for `POST /api/v1/tasks/{id}/planning-turns`.
 
     Args:
         message: The user's chat message for this planner turn.
@@ -273,7 +273,7 @@ class PlanningTranscriptTurnOut(BaseModel):
     """One durable planning-transcript turn shown in chronological order.
 
     Args:
-        turn_index: Monotonic per-project conversation coordinate.
+        turn_index: Monotonic per-task conversation coordinate.
         conversation_id: Owning planning conversation, absent only on legacy rows.
         client_turn_id: The caller's idempotency key for this turn — returned
             so a reloaded client can retry its own incomplete latest turn.
@@ -299,7 +299,7 @@ class PlanningTranscriptTurnOut(BaseModel):
 
 
 class PlanOut(BaseModel):
-    """Response body for `GET`/`PATCH /api/v1/projects/{id}/plan`.
+    """Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.
 
     Args:
         plan: The current plan (draft or approved).
@@ -313,7 +313,7 @@ class PlanOut(BaseModel):
 
 
 class PlanPatchIn(BaseModel):
-    """Inbound body for `PATCH /api/v1/projects/{id}/plan`.
+    """Inbound body for `PATCH /api/v1/tasks/{id}/plan`.
 
     Omitted fields stay as they are. An empty string on a date or geography
     field clears that constraint. The merged result must still be a valid

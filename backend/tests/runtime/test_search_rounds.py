@@ -15,12 +15,12 @@ from sqlalchemy import select
 from sqlalchemy.engine import Engine
 
 from policy_atlas.core.schema import search_coverage_record
-from policy_atlas.evidence_base.sourcing.acquire import BackendCaps
-from policy_atlas.evidence_base.sourcing.search_loop import DEPTH_CONSTANTS
+from policy_atlas.evidence_search.sourcing.acquire import BackendCaps
+from policy_atlas.evidence_search.sourcing.search_loop import DEPTH_CONSTANTS
 from policy_atlas.runtime import steering_bundles
 from policy_atlas.runtime.runner import NullIO, RunnerBackends, run_plan
 from tests.helpers import oa_record
-from tests.runtime.test_runner import _base_plan, _cleanup, _seed_project
+from tests.runtime.test_runner import _base_plan, _cleanup, _seed_task
 
 
 class ScriptableSearchBackend:
@@ -76,12 +76,12 @@ class ScriptableSearchBackend:
         raise NotImplementedError("caps.has_doi_lookup=False")
 
 
-def _coverage_rows(engine: Engine, project_id: uuid.UUID) -> list[Any]:
+def _coverage_rows(engine: Engine, task_id: uuid.UUID) -> list[Any]:
     with engine.connect() as conn:
         return list(
             conn.execute(
                 select(search_coverage_record)
-                .where(search_coverage_record.c.project_id == project_id)
+                .where(search_coverage_record.c.task_id == task_id)
                 .order_by(search_coverage_record.c.created_at)
             )
         )
@@ -99,13 +99,13 @@ def _spine_plan(**overrides: Any) -> Any:
 
 
 def _run(
-    engine: Engine, project_id: uuid.UUID, scope_id: uuid.UUID, **plan_overrides: Any
+    engine: Engine, task_id: uuid.UUID, scope_id: uuid.UUID, **plan_overrides: Any
 ) -> Any:
     plan = _spine_plan(**plan_overrides)
     backend = ScriptableSearchBackend()
     return run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=uuid.uuid4(),
@@ -124,10 +124,10 @@ def _search_steps(outcome: Any) -> list[str]:
 
 
 def test_deep_runs_three_rounds_and_stops_budget_exhausted(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        outcome = _run(engine, project_id, scope_id, search_effort="deep")
+        task_id, scope_id = _seed_task(engine)
+        outcome = _run(engine, task_id, scope_id, search_effort="deep")
 
         assert outcome.status in ("succeeded", "degraded")
         assert all(
@@ -140,7 +140,7 @@ def test_deep_runs_three_rounds_and_stops_budget_exhausted(engine: Engine) -> No
             "acquire", "screen_abstract",
             "acquire", "screen_abstract",
         ]
-        rows = _coverage_rows(engine, project_id)
+        rows = _coverage_rows(engine, task_id)
         assert len(rows) == DEPTH_CONSTANTS["deep"]["round_cap"] == 3
         # Earlier rounds keep their own stop condition; the loop-level stop
         # lands on the final round's row. Yield stayed healthy and the corpus
@@ -149,15 +149,15 @@ def test_deep_runs_three_rounds_and_stops_budget_exhausted(engine: Engine) -> No
             "completed", "completed", "budget_exhausted",
         ]
     finally:
-        if project_id is not None:
-            _cleanup(engine, project_id)
+        if task_id is not None:
+            _cleanup(engine, task_id)
 
 
 def test_standard_runs_two_rounds(engine: Engine) -> None:
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        outcome = _run(engine, project_id, scope_id, search_effort="standard")
+        task_id, scope_id = _seed_task(engine)
+        outcome = _run(engine, task_id, scope_id, search_effort="standard")
 
         assert outcome.status in ("succeeded", "degraded")
         assert all(
@@ -169,21 +169,21 @@ def test_standard_runs_two_rounds(engine: Engine) -> None:
             "acquire", "screen_abstract",
             "acquire", "screen_abstract",
         ]
-        rows = _coverage_rows(engine, project_id)
+        rows = _coverage_rows(engine, task_id)
         assert len(rows) == DEPTH_CONSTANTS["standard"]["round_cap"] == 2
         assert rows[-1].stop_condition == "budget_exhausted"
     finally:
-        if project_id is not None:
-            _cleanup(engine, project_id)
+        if task_id is not None:
+            _cleanup(engine, task_id)
 
 
 def test_rapid_runs_one_round_and_coverage_stays_completed(engine: Engine) -> None:
     """Rapid never enters the gate: one round, and its coverage row keeps
     acquire's own honest stop condition — no loop overlay is ever written."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        outcome = _run(engine, project_id, scope_id, search_effort="rapid")
+        task_id, scope_id = _seed_task(engine)
+        outcome = _run(engine, task_id, scope_id, search_effort="rapid")
 
         assert outcome.status in ("succeeded", "degraded")
         assert all(
@@ -192,12 +192,12 @@ def test_rapid_runs_one_round_and_coverage_stays_completed(engine: Engine) -> No
             if step.component in ("acquire", "screen_abstract")
         )
         assert _search_steps(outcome) == ["acquire", "screen_abstract"]
-        rows = _coverage_rows(engine, project_id)
+        rows = _coverage_rows(engine, task_id)
         assert len(rows) == 1
         assert rows[0].stop_condition == "completed"
     finally:
-        if project_id is not None:
-            _cleanup(engine, project_id)
+        if task_id is not None:
+            _cleanup(engine, task_id)
 
 
 def test_zero_yield_round_short_circuits_before_the_round_cap(engine: Engine) -> None:
@@ -205,16 +205,16 @@ def test_zero_yield_round_short_circuits_before_the_round_cap(engine: Engine) ->
     round 2 — searching harder stopped paying, so round 3 is never bought.
     Round 1's yield (30 confident-relevant) keeps the corpus above
     THIN_CONFIDENT_RELEVANT, so the raw condition is reported un-overlaid."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _spine_plan(search_effort="deep")
         # Same 10 records every call: round 1 acquires all 10, round 2
         # dedups to zero new -> screened 0 -> short_circuit.
         backend = ScriptableSearchBackend(per_call=10, replay=True)
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -233,12 +233,12 @@ def test_zero_yield_round_short_circuits_before_the_round_cap(engine: Engine) ->
             "acquire", "screen_abstract",
             "acquire", "screen_abstract",
         ]
-        rows = _coverage_rows(engine, project_id)
+        rows = _coverage_rows(engine, task_id)
         assert len(rows) == 2
         assert rows[-1].stop_condition == "short_circuit"
     finally:
-        if project_id is not None:
-            _cleanup(engine, project_id)
+        if task_id is not None:
+            _cleanup(engine, task_id)
 
 
 def test_thin_corpus_overlays_re_searched_still_thin(engine: Engine) -> None:
@@ -246,15 +246,15 @@ def test_thin_corpus_overlays_re_searched_still_thin(engine: Engine) -> None:
     documents, the final row reports 're_searched_still_thin' — the honesty
     overlay re-keyed from the removed stop target to the constant that
     actually means thin."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         plan = _spine_plan(search_effort="deep")
         # Same 2 records every call: 2 confident-relevant docs total < 8.
         backend = ScriptableSearchBackend(per_call=2, replay=True)
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=uuid.uuid4(),
@@ -264,11 +264,11 @@ def test_thin_corpus_overlays_re_searched_still_thin(engine: Engine) -> None:
         )
 
         assert outcome.status in ("succeeded", "degraded")
-        rows = _coverage_rows(engine, project_id)
+        rows = _coverage_rows(engine, task_id)
         assert rows[-1].stop_condition == "re_searched_still_thin"
     finally:
-        if project_id is not None:
-            _cleanup(engine, project_id)
+        if task_id is not None:
+            _cleanup(engine, task_id)
 
 
 def test_p1_at_round_two_reports_only_that_round(engine: Engine) -> None:
@@ -279,24 +279,24 @@ def test_p1_at_round_two_reports_only_that_round(engine: Engine) -> None:
     *second* acquire round, the card must show that round's counts and that
     round's queries — not round 1's, and not both rounds'.
     """
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        outcome = _run(engine, project_id, scope_id, search_effort="standard")
+        task_id, scope_id = _seed_task(engine)
+        outcome = _run(engine, task_id, scope_id, search_effort="standard")
         assert outcome.status in ("succeeded", "degraded")
 
-        rows = _coverage_rows(engine, project_id)
+        rows = _coverage_rows(engine, task_id)
         assert len(rows) == 2, "the fixture must really run two acquire rounds"
         round_one, round_two = (row.acquired_by_run_id for row in rows)
         assert round_one != round_two
 
         with engine.connect() as conn:
             first = steering_bundles.p1_bundle(
-                conn, project_id=project_id, evidence_scope_id=scope_id,
+                conn, task_id=task_id, evidence_scope_id=scope_id,
                 acquire_run_id=round_one,
             )
             second = steering_bundles.p1_bundle(
-                conn, project_id=project_id, evidence_scope_id=scope_id,
+                conn, task_id=task_id, evidence_scope_id=scope_id,
                 acquire_run_id=round_two,
             )
 
@@ -307,7 +307,7 @@ def test_p1_at_round_two_reports_only_that_round(engine: Engine) -> None:
         # which doubles this sum.
         with engine.connect() as conn:
             every_round, _ = steering_bundles._executed_queries(
-                conn, project_id=project_id, evidence_scope_id=scope_id
+                conn, task_id=task_id, evidence_scope_id=scope_id
             )
         assert first["queries"] and second["queries"]
         assert len(first["queries"]) + len(second["queries"]) == len(every_round)
@@ -317,5 +317,5 @@ def test_p1_at_round_two_reports_only_that_round(engine: Engine) -> None:
         assert second["backends"], "round 2 acquired new records, so the line must not be empty"
         assert sum(entry["count"] for entry in second["backends"]) > 0
     finally:
-        if project_id is not None:
-            _cleanup(engine, project_id)
+        if task_id is not None:
+            _cleanup(engine, task_id)

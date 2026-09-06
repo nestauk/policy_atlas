@@ -17,6 +17,15 @@ describe("ChatComposer", () => {
     expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
   });
 
+  it("keeps its own id and label, never the Task Agent's (038 V8)", () => {
+    // The Agent overlay now renders beside the Task Agent's own pane, so a
+    // shared `planning-message` id would be two elements on one page — and
+    // a chat is a chat, not the Task Agent.
+    render(<ChatComposer conversationId="c1" isStreaming={false} onSend={vi.fn()} onStop={vi.fn()} />);
+    expect(screen.getByLabelText("Message the Agent")).toHaveAttribute("id", "chat-message-c1");
+    expect(screen.queryByLabelText("Message the Task Agent")).toBeNull();
+  });
+
   it("shows a fence reason and disables sending without submitting", async () => {
     const onSend = vi.fn();
     render(<ChatComposer conversationId="c1" isStreaming={false} disabledReason="A turn is already pending." onSend={onSend} onStop={vi.fn()} />);
