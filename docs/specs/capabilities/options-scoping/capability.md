@@ -1,7 +1,7 @@
 ---
 type: Capability spec
 title: Options Scoping (OS)
-description: The declarative options-scoping spec — the second v3.0 capability, an instance of the capability framework that reuses the Evidence Base's machinery in its own pipeline.
+description: The declarative options-scoping spec — the second v3.0 capability, an instance of the capability framework that reuses the Evidence search's machinery in its own pipeline.
 tags: [capability, options-scoping, compile-target]
 timestamp: 2026-09-04
 ---
@@ -15,7 +15,7 @@ owner-agreed concept of 2026-09-01/02 and the wireframe-round rulings of 2026-09
 ([ADR 0002](../../../adr/0002-spec-governance.md)). OS is an **instance** of the capability
 framework: the Tier-0 substrate, the retrieval contract, the findings layer, the grounding tiers
 and the plan object are owned by the system contracts and only **referenced** here; the
-Evidence Base's components are **reused** where named, never re-derived. This spec holds what is
+Evidence search's components are **reused** where named, never re-derived. This spec holds what is
 **specific to OS**.
 
 Companion files: [components.md](components.md) (the skeleton) · [trust.md](trust.md) (OS's

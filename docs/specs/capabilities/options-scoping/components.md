@@ -1,14 +1,14 @@
 ---
 type: Capability spec
 title: Options Scoping — component skeleton
-description: The OS components — declared I/O, what each reuses from the Evidence Base, realisation and gating — with the three depths and two gates made structural.
+description: The OS components — declared I/O, what each reuses from the Evidence search, realisation and gating — with the three depths and two gates made structural.
 tags: [capability, options-scoping, components]
 timestamp: 2026-09-04
 ---
 
 # Options Scoping — component skeleton
 
-The components, their declared I/O, what each reuses from the Evidence Base, realisation and
+The components, their declared I/O, what each reuses from the Evidence search, realisation and
 gating. Distilled from
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (§ Shape,
 § Architecture stance, rulings 2–6, 9, 11, 12, 14). Shared tools and the findings schema are
