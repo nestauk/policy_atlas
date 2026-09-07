@@ -11,7 +11,7 @@ timestamp: 2026-09-07
 The components, their origin in the Evidence search (EB), their declared I/O, realisation and
 gating. Distilled from
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (§ Shape,
-§ Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–42). Shared tools
+§ Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–43). Shared tools
 and the findings schema are owned by
 [../../system/execution-orchestration.md](../../system/execution-orchestration.md) and
 [../../system/data-model.md](../../system/data-model.md); the EB components referenced below are
