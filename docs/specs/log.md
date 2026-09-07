@@ -1,5 +1,20 @@
 # Spec update log
 
+## 2026-09-07 (boards redrawn)
+* **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction
+  ([source README](sources/options-scoping/README.md); readable boards under
+  `sources/options-scoping/boards/`, bundled canvas page rebuilt). Every board now carries the
+  task's tabs (Agent · Result · Sources · Share · History) with the plan in the Agent tab; the
+  report is the Result, in a provisional form from the longlist stage (new board 3c) and an
+  assessed form (board 6, the assessed table embedded); the longlist shows a variant option, the
+  evidence-scope constraint's "no in-scope evidence" state and a source-quality profile per option;
+  the grid's rows are primary lever types; the shortlist is a provisional allocation of reading
+  effort; transferability works from three context sources with the weakest leg deciding; Sources
+  states what was read at which depth; the sense-check is a rapid entry branch. Page 2's
+  alternatives are marked superseded. The product-surface source note in
+  [capability.md](capabilities/options-scoping/capability.md) updated to match. Rulings still win
+  over boards where they differ.
+
 ## 2026-09-07 (later)
 * **Update**: Options scoping, third review pass and its rulings (concept rulings 30–40): the
   component skeleton rebuilt on the Evidence search spine as is (classify and appraise at longlist

@@ -1,7 +1,7 @@
 ---
 type: Frozen design source
-title: Options scoping — concept and wireframes (2026-09-03)
-description: The frozen origin for the options-scoping capability — the owner-agreed concept with its rulings, and the wireframe canvas the rulings were made on.
+title: Options scoping — concept and wireframes (2026-09-03; boards redrawn 2026-09-07)
+description: The frozen origin for the options-scoping capability — the owner-agreed concept with its rulings (1–44), and the wireframe canvas, redrawn to those rulings on 2026-09-07.
 tags: [source, options-scoping, ux, frozen]
 timestamp: 2026-09-04
 ---
@@ -18,7 +18,7 @@ record the decision.
 
 | File | What it is | How to use it |
 |---|---|---|
-| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02 and the fourteen wireframe-round rulings of 2026-09-03. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
+| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
 | [options-scoping-wireframes.html](options-scoping-wireframes.html) | The wireframe canvas as a bundled, viewable page (the same content as the live canvas linked from the concept). | Product intent only: screens, copy, states and interaction patterns. Never a schema or contract source. |
 | [boards/](boards/) | The readable source of every board on the canvas — one `.dc.html` per board plus `canvas.json` for layout and titles. | Read these rather than the bundled page. Each board is plain HTML with inline styles. |
 
@@ -30,12 +30,13 @@ boards and the second page holds two structural alternatives and one behaviour s
 
 The journey, by board title:
 
-1. Ask · 2. Plan, agreed in dialogue · 3. Baseline, the run pauses for plan confirmation ·
-4. Longlist, list view (and 4b, an option before assessment) · 5. Longlist, grid view (and 5b,
-the shortlist before assessment) · 6. Shortlist, assessed, with the summary above the table ·
-6b. Sources, what was searched · 7. Option profile, every section open (7b after a full evidence
-search; 7c the full report as an evidence-base task; 7d the tasks list) · 8. Sense-check one
-option, rapid.
+1. Ask: job and depth, no default depth · 2. Plan, agreed in dialogue, in the Agent tab · 3. Baseline,
+with what is contested; the run pauses · 4. Longlist, list view (and 4b, an option before assessment
+with its source-quality profile) · 3c. Report, provisional: the Result from the longlist stage ·
+5. Longlist, grid view: rows are primary lever types · 5b. Longlist, shortlist view · 6. Report,
+assessed: the Result, with the assessed table embedded · 6b. Sources: what was read at which depth ·
+7. Option profile, every section open (7b after a full evidence search; 7c the child report; 7d the
+tasks list) · 8. Sense-check one option, rapid.
 
 The sample question throughout is reducing the number of 16 to 24 year olds who are not in
 education, employment or training. **Every figure, study count, quotation and named source on
@@ -52,9 +53,17 @@ It is **not** a contract. It contains outputs the backend does not yet produce, 
 numbers, and chat turns written to show behaviour rather than transcribed from a run. Where a
 board and the concept's rulings differ, the rulings win.
 
-**Review round, 2026-09-07.** An adversarial product review led to the concept's last section
-("Review-round rulings"). Boards 4, 5, 5b, 6, 6b and 8 predate it and are known to differ from
-it (an exclusion for an evidence-scope constraint; theme rows and a coverage note on the grid;
-"compared against doing nothing" and factor counts on the assessed table; "no full text
-searched" on Sources; the rapid sense-check without its pause). Until they are redrawn, the
-rulings win over the boards.
+**Review round, 2026-09-07.** An adversarial product review led to the concept's last sections
+("Review-round rulings" and "Pass-3 rulings", rulings 15–44). The boards were **redrawn to those
+rulings on 2026-09-07** at the owner's direction: the task's tabs (Agent · Result · Sources · Share ·
+History) with the plan in the Agent tab; the report as the Result, in a provisional form from the
+longlist stage (3c) and an assessed form (6), with Baseline and Longlist as working views; a variant
+option with its own search; three kinds of constraint, the evidence-scope kind never excluding an
+option; a source-quality profile per option before assessment, never "how sure"; grid rows as primary
+lever types with ambition as a tag "as described, not measured"; the proposal as a provisional
+allocation of reading effort; the do-nothing band as the situation the options would change; each
+effect with its own comparator, population and period; transferability from three context sources
+with the weakest leg deciding and no factor fractions; Sources stating what was read at which depth,
+set aside and not read under the cap; the sense-check as a rapid entry branch with questions to put to
+the department. Page 2's structural alternatives are kept for reference and marked superseded. Where
+a board and a ruling still differ, the ruling wins.

@@ -8,8 +8,7 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
-  <style>
-  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  <style>  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
   .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
   a { color:#0000ff; } a:hover { color:#0f294a; }
   h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
@@ -99,16 +98,18 @@
       <div style="display:flex; flex-direction:column; gap:10px;">
         <span class="note" style="font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">Scoping job</span>
         <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px;">
-          <div style="border:2px solid #0000ff; background:#ececff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Explore the option space</strong><span class="note">Build a longlist, screen it, propose a shortlist.</span></div>
-          <div style="border:1px solid #c9c9ce; background:#ffffff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Sense-check one option</strong><span class="note">Start from a named option and see what sits next to it.</span></div>
+          <div style="border:2px solid #0000ff; background:#ececff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Explore the option space</strong><span class="note">Build a longlist, propose a shortlist, assess it, write the report.</span></div>
+          <div style="border:1px solid #c9c9ce; background:#ffffff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Sense-check one option</strong><span class="note">Start from a named option, assess it, and see what sits next to it.</span></div>
         </div>
       </div>
       <div style="display:flex; flex-direction:column; gap:10px;">
         <span class="note" style="font-weight:700; letter-spacing:0.06em; text-transform:uppercase;">Depth</span>
-        <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:12px;">
-          <div style="border:1px solid #c9c9ce; background:#ffffff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Rapid</strong><span class="note">Suggestion-heavy, quick grounding. Minutes.</span></div>
-          <div style="border:2px solid #0000ff; background:#ececff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Standard</strong><span class="note">Mini evidence search per option. Longer.</span></div>
+        <div style="display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px;">
+          <div style="border:1px solid #c9c9ce; background:#ffffff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Rapid</strong><span class="note">Fewer documents read per option. Minutes.</span></div>
+          <div style="border:1px solid #c9c9ce; background:#ffffff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Standard</strong><span class="note">Full text read for the documents each option relies on. Under an hour.</span></div>
+          <div style="border:1px solid #c9c9ce; background:#ffffff; padding:14px 16px; display:flex; flex-direction:column; gap:4px;"><strong style="color:#0f294a;">Deep</strong><span class="note">More documents read per option. Longer.</span></div>
         </div>
+        <span class="note">Depth is asked every time. There is no default; you can also set it in the plan.</span>
       </div>
       <div style="display:flex; align-items:center; gap:16px;"><span class="btn blue">Start scoping</span><span class="note">Nothing runs until you confirm the plan in the next step.</span></div>
     </div>

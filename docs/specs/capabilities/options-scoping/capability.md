@@ -387,8 +387,8 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   working views reachable from it and from the run's progress. The chat is always the left
   column; the right column holds the current content and opens wide for the longlist, the grid
   and the profiles. ("Assessment" is a state the shortlist is in, not a place.) The grid view's
-  rows are the fixed lever types (ruling 20). The boards predate the review round; where they
-  differ from rulings 15–40, the rulings win (source README).
+  rows are the fixed lever types (ruling 20). The boards were redrawn to rulings 15–44 on
+  2026-09-07; where a board and a ruling still differ, the ruling wins (source README).
 - ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
   document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints
   (each with when it is checked) · Plan steps · Check-ins, an Edit action per section, and one

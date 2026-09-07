@@ -8,8 +8,7 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
-  <style>
-  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  <style>  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
   .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
   a { color:#0000ff; } a:hover { color:#0f294a; }
   h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
@@ -83,7 +82,7 @@
   .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
 </style>
 </helmet>
-<div class="board" style="--h:960px; height:960px;">
+<div class="board" style="--h:1300px; height:1300px;">
   <div class="nav">
     <span class="mark">Policy Atlas</span>
     <span class="item ">New</span>
@@ -91,23 +90,25 @@
     <span class="item">Projects</span>
   </div>
   <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
-  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Plan</span><span style="padding:12px 0; ">Results</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Agent</span><span style="padding:12px 0; ">Result</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav>
   <div class="main">
-    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">How much of this is from the academic corpus?</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">For the longlist, 412 documents passed the screen: 268 academic and 144 grey literature from Overton. The baseline is almost all grey literature and official statistics, which is expected. The assessed options draw on 44 studies between them, and each option page lists its own.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask about the sources…</div><span class="btn blue">Send</span></div></div>
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">How much of this is from the academic corpus?</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">For the longlist, 412 documents passed the screen: 268 academic and 144 grey literature from Overton, 96 of them inherited from your evidence search. The baseline is almost all grey literature and statistical releases, which is expected. The assessed options draw on 38 documents read in full between them; each profile lists its own, and what was not read under the cap.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask about the sources…</div><span class="btn blue">Send</span></div></div>
     <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden;" class="prose">
-      <div style="display:flex; gap:24px; border-bottom:1px solid #d4d4d8; margin:-24px -40px 20px; padding:0 40px; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">What was searched</span><span style="padding:12px 0;">All sources</span><span style="padding:12px 0;">By option</span></div>
+      <div style="display:flex; gap:24px; border-bottom:1px solid #d4d4d8; margin:-24px -40px 20px; padding:0 40px; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">What was searched</span><span style="padding:12px 0;">All sources</span><span style="padding:12px 0;">By option</span><span style="padding:12px 0;">Set aside</span></div>
       <h2 style="font-size:24px; margin-bottom:12px;">What was searched</h2>
-      <p>This scoping claims breadth, not exhaustiveness. Everything below is what the run actually read.</p>
+      <p>This scoping claims breadth, not exhaustiveness, and its breadth is bounded by the evidence scope you set. Everything below is what the run retrieved, read, set aside or left unread.</p>
       <h3>Evidence base</h3>
-      <p>1,240 candidate documents retrieved for the plan; 412 passed the title-and-abstract screen. 2005 to 2026, English language. No full-text screening at this stage.</p>
-      <h3>Grey literature</h3>
-      <p>Overton: 144 policy documents from 11 countries among the screened set. The baseline used 9 sources: two official statistics releases, six grey-literature reports, one verified web page.</p>
-      <h3>Web</h3>
-      <p>5 verified links, used for case studies only. A web case study never raises an evidence-strength rating.</p>
-      <h3>Screens applied</h3>
-      <p>No benefit cuts or sanctions · OECD evidence only · relevant to the outcomes · distinct · in scope. Low cost per participant is checked after the assessment.</p>
+      <p>1,240 candidate documents retrieved from OpenAlex and Overton for the plan, 96 of them inherited from your evidence search and re-screened against this plan. 412 passed the title-and-abstract screen: 268 academic, 144 grey literature. 2005 to 2026, English language.</p>
+      <h3>What was read, and how deeply</h3>
+      <p>Screening and the longlist read titles and abstracts only; every abstract that passed was read for the interventions it names. The assessment read the <strong>full text of 38 documents</strong>, the ones the seven profiles rely on, capped at twelve per option. Six documents had no obtainable full text and support abstract-level claims only, labelled as such in the profiles. Every claim in the report carries the depth of what was read.</p>
+      <h3>Set aside as outside the evidence scope</h3>
+      <p>23 documents were retrieved and set aside under "OECD evidence only": their study settings are outside the OECD. They are counted here, never used as support, and never a reason to exclude an option. <a href="#">Listed under Set aside</a>.</p>
+      <h3>Not read under the cap</h3>
+      <p>19 documents that mention an assessed option were not read: 11 on wage subsidies, 5 on caseworker support, 3 on the youth guarantee. They are listed by option; a full evidence search reads them and confirms the set.</p>
+      <h3>Constraints applied</h3>
+      <p>No benefit cuts or sanctions, on the options at the longlist: one excluded. OECD evidence only, on the documents at retrieval and screening: 23 set aside. Low cost per participant, on the assessed options: unresolved for five, breaks for one. Default screens: relevant to the outcomes · distinct · in scope.</p>
       <h3>Not searched</h3>
-      <p>The cost of careers guidance. The effect of apprenticeship incentives on the NEET rate. Full text of any document; that belongs to a full evidence search.</p>
+      <p>Live official statistics and departmental pages: the baseline reaches only what Overton and OpenAlex hold. The open web. No document found on the cost of careers guidance, or on the effect of apprenticeship incentives on the NEET rate.</p>
     </div>
   </div>
 </div>

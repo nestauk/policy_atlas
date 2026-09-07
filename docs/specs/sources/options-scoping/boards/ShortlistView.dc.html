@@ -8,8 +8,7 @@
 <x-dc>
 <helmet>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
-  <style>
-  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  <style>  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
   .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
   a { color:#0000ff; } a:hover { color:#0f294a; }
   h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
@@ -83,7 +82,7 @@
   .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
 </style>
 </helmet>
-<div class="board" style="--h:900px; height:900px;">
+<div class="board" style="--h:1040px; height:1040px;">
   <div class="nav">
     <span class="mark">Policy Atlas</span>
     <span class="item ">New</span>
@@ -91,23 +90,25 @@
     <span class="item">Projects</span>
   </div>
   <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
-  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Plan</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Results</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav><nav aria-label="Results" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; ">Longlist</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Shortlist</span></nav>
+  <nav aria-label="Task" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Agent</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Result</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span></nav><nav aria-label="Result views" style="display:flex; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Report</span><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Longlist</span></nav>
   <div class="main">
-    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Six on the shortlist, compared against doing nothing, covering five of six themes. Each line says why it is there. Remove any, add from the grid or the list, and say assess when the set is right: about twelve minutes for seven.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Assess these seven.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Add, remove, or ask for a per-axis sort…</div><span class="btn blue">Send</span></div></div>
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Seven on the shortlist: five proposed, two added by you. Each line says why it is there; none of the reasons is a verdict. The options kept but not proposed are listed underneath by theme, and the report will list them as not assessed. Say assess when the set is right: about fifteen minutes for seven.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Assess these seven.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Add, remove, or ask for a sort…</div><span class="btn blue">Send</span></div></div>
     <div class="rail">
-      <div class="head"><span style="text-transform:none; letter-spacing:0; font-weight:400; color:#646363;">The shortlist so far, with the reason for each place</span><span style="color:#0000ff">6 on the shortlist + do nothing · 5 of 6 themes · not yet assessed</span></div>
+      <div class="head"><span><span class="m" style="white-space:nowrap;">View: <a href="#">List</a> · <a href="#">Grid</a> · <span style="color:#0f294a; font-weight:600;">Shortlist</span></span></span><span style="color:#0000ff">7 on the shortlist · 5 proposed, 2 added by you · not yet assessed</span></div>
       <div style="flex:1; background:#ffffff; padding:12px 20px; overflow:hidden;">
-        <p class="m" style="margin:4px 0 8px;">The options on the shortlist so far and why each is there. Nothing has been assessed yet.</p>
+        <p class="m" style="margin:4px 0 8px;">A provisional allocation of reading effort: one place per lever type present among the kept options. Each reason names one axis. Nothing has been assessed.</p>
         <div class="list">
-          <div class="row"><span class="t"><strong>Do nothing.</strong> <span class="m">The reference every option is compared against. <a href="#">Open baseline</a></span></span></div>
-          <div class="row"><span class="t"><strong>Youth guarantee.</strong> <span class="m">Regulation, structural. Added by you. Breaks "No benefit cuts or sanctions"; to be assessed without sanctions.</span></span><a href="#">Remove</a></div>
-          <div class="row"><span class="t"><strong>Intensive one-to-one caseworker support.</strong> <span class="m">Programmes, structural. Added by you; it was also the coverage pick, with the most studies in its theme (15).</span></span><a href="#">Remove</a></div>
-          <div class="row"><span class="t"><strong>Paid work experience with employer placement.</strong> <span class="m">Programmes, incremental. Added by you as a second place in the theme.</span></span><a href="#">Remove</a></div>
-          <div class="row"><span class="t"><strong>Wage subsidies for employers hiring young people.</strong> <span class="m">Financial, incremental. Proposed: the only surviving option in its theme.</span></span><a href="#">Remove</a></div>
-          <div class="row"><span class="t"><strong>Structured careers guidance with follow-up.</strong> <span class="m">Information, do minimum. Proposed: the only option in its theme, included despite thin evidence (3 studies).</span></span><a href="#">Remove</a></div>
-          <div class="row"><span class="t"><strong>Apprenticeship incentives paid to small employers.</strong> <span class="m">Market, incremental. Proposed: the only option in its theme.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Do nothing.</strong> <span class="m">The situation these options would change. <a href="#">Open baseline</a></span></span></div>
+          <div class="row"><span class="t"><strong>Youth guarantee.</strong> <span class="m">Provide a service, touches regulate. Added by you. Breaks "No benefit cuts or sanctions"; stays because you added it.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Youth guarantee without sanctions.</strong> <span class="m">Provide a service. Added by you; a variant of Youth guarantee, assessed on its own evidence.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Intensive one-to-one caseworker support.</strong> <span class="m">Provide a service. Proposed by Policy Atlas: widest implementation record of the four options of its type, in five countries.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Wage subsidies for employers hiring young people.</strong> <span class="m">Subsidise. Proposed by Policy Atlas: distinct from the other two subsidy options, it pays employers rather than redirecting funds.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Structured careers guidance with follow-up.</strong> <span class="m">Inform. Proposed by Policy Atlas: only option of its lever type. Thin evidence, three documents, which is a reason to assess it, not to skip it.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Enforce the raising-of-participation-age duty.</strong> <span class="m">Enforce existing powers. Proposed by Policy Atlas: only option of its lever type.</span></span><a href="#">Remove</a></div>
+          <div class="row"><span class="t"><strong>Joint commissioning across services.</strong> <span class="m">Change who runs the system. Proposed by Policy Atlas: distinct, the only option that changes who commissions.</span></span><a href="#">Remove</a></div>
         </div>
-        <div style="display:flex; gap:8px; margin-top:14px; align-items:center;"><span class="btn ghost sm">From the excluded</span><span class="btn blue sm">Assess these 7 · about 12 min</span><span class="note">Organisational has no place yet: its two included options both have thin evidence.</span></div>
+        <p class="m" style="margin:16px 0 4px;"><strong style="color:#0f294a;">Kept, not proposed, by theme.</strong> Financial: SME apprenticeship incentives · Levy ring-fence for under-25s · Conditional cash transfers (no in-scope evidence). Programmes: Paid work experience · Youth Hubs · Employment support in mental health care. Organisational: NEET tracking and data-sharing.</p>
+        <div style="display:flex; gap:8px; margin-top:14px; align-items:center;"><span class="btn ghost sm">From the excluded</span><span class="btn blue sm">Assess these 7 · about 15 min</span><span class="note">Regulate: no dedicated option; touched by the Youth guarantee package. Tax or charge, devolve: none on the longlist.</span></div>
       </div>
     </div>
   </div>
