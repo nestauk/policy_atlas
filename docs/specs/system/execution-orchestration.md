@@ -85,7 +85,10 @@ them.**
   scoping task spawns as a child task). *(Owner ruling 2026-09-07; the earlier rule "a
   capability never runs another's component" is withdrawn — see
   [capabilities/options-scoping/components.md](../capabilities/options-scoping/components.md)
-  § Reuse rule.)*
+  § Reuse rule.)* *(Seam recorded 2026-09-07: a shared **reading-budget / evidence-eligibility**
+  mechanism — which sources a component may read for a given claim, under what cap, with
+  omissions represented — is needed by options scoping's ⟨assess⟩ and belongs here or in the
+  retrieval contract rather than in one capability's spec; OS ruling 42.)*
 - **Gradation vs distinct operation — the I/O test**: only intensity/depth varies (same I/O
   shape) → a **gradation** (a plan parameter; a named bundle = a "mode"); I/O shape differs,
   output consumed inside → a **component**; I/O shape differs, output is a standalone artefact →

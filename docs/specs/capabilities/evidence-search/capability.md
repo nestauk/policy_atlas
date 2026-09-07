@@ -52,7 +52,13 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
 - Narrow, single-intervention deep analysis is **out of EB** → the **Impact** capability (⏸).
 - **Precise option resolution is out of EB** — EB groups interventions *descriptively*
   (corpus-grounded thematic clusters); resolving them into named, comparable options is
-  decision-relative → a future **Options Assessment** (⏸).
+  decision-relative → the **Options scoping** capability
+  ([../options-scoping/](../options-scoping/capability.md)). **One declared widening (owner,
+  2026-09-07, OS ruling 41):** when an Evidence search task is spawned by a scoping task as its
+  "full evidence search" and written with the **option-profile template**, its report carries
+  that profile's judgement cells (how sure, transferability and conditions, key assumption),
+  computed with the parent's user context under the OS trust rules. Outside that case the
+  evidence-descriptive rule stands.
 - EB may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
   future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is

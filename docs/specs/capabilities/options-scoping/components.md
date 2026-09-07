@@ -11,7 +11,7 @@ timestamp: 2026-09-07
 The components, their origin in the Evidence search (EB), their declared I/O, realisation and
 gating. Distilled from
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (§ Shape,
-§ Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–40). Shared tools
+§ Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–42). Shared tools
 and the findings schema are owned by
 [../../system/execution-orchestration.md](../../system/execution-orchestration.md) and
 [../../system/data-model.md](../../system/data-model.md); the EB components referenced below are
@@ -72,7 +72,7 @@ across capabilities (ruling 40).
 | 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — spike before the longlist contract |
 | 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
 | 8 | propose | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
-| 9 | extract | EB, **modified** — light field set | per-document countable cells for a shortlisted option: direction, outcome family, magnitude with comparator and period, design, setting, trial identifier; **skipped for documents whose full findings were inherited** | per-source fan-out | inside ⟨assess⟩ only |
+| 9 | extract | EB, **modified** — 🟡 light field profile (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it) | per-document countable cells for a shortlisted option over the read set; inherited findings reused at finding grain (ruling 35) | per-source fan-out | inside ⟨assess⟩ only; field set and independence method are spike 2 |
 | 10 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (provisional and assessed forms; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
@@ -99,8 +99,10 @@ across capabilities (ruling 40).
   requirements a finding satisfies for the specified option and the same source snapshot, fills
   or labels the rest, and reconciles profile, version and coverage before counting (ruling 35).
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are
-  re-screened and re-pass classify/appraise if their rubric version differs; inherited rows take
-  the fait-accompli path like any suggestion. ✅ The run acquires beyond the inherited set; the
+  re-screened (🟡 proposal: they re-pass classify/appraise when the rubric or classifier version
+  differs — not yet ruled; the shared cache-validity rules decide); inherited rows take the
+  fait-accompli path like any suggestion. Uploaded source snapshots are task-private in the data
+  model, so a Link alone does not carry them — the inheritance contract must name what crosses. ✅ The run acquires beyond the inherited set; the
   Sources tab states inherited versus added. Fallback if a contract must trim: question and
   documents only. Kept as its own component so the inherited-versus-added accounting has one
   owner (owner, 2026-09-07).
@@ -277,14 +279,40 @@ across capabilities (ruling 40).
 
 ## ⟨full run⟩ — the boundary with EB (ruling 9)
 
-- **In:** one shortlisted option. **Out:** a new Evidence search task seeded from the option, with
-  the option-profile sections as its synthesis template; on completion the scoping profile
-  re-reads its cells from the report, tagged *full run*, and keeps the scoping-pass version in
-  History.
+- **In:** one shortlisted option and the scoping task's user context. **Out:** a new Evidence
+  search task seeded from the option, with the option-profile sections as its synthesis template;
+  its report **computes the profile's judgement cells** (how sure, transferability and
+  conditions, key assumption) under the OS trust rules carried by the template (ruling 41); on
+  completion the scoping profile mirrors those cells, tagged *full run*, and keeps the
+  scoping-pass version in History.
 - ✅ The child task is listed under the parent, linked both ways, and shares its project and
-  visibility. ✅ The user's stated context stays with the scoping task, so a transferability cap
-  caused by unstated context survives the full run until the plan says otherwise. ✅ Stage-2
-  full-text confirmation, `select` and full extraction happen here, not in scoping.
+  visibility. ✅ The user's stated context is owned by the scoping task and passed to the child as
+  input, so a transferability cap caused by unstated context survives the full run until the plan
+  says otherwise. ✅ Stage-2 full-text confirmation, `select` and full extraction happen here, not
+  in scoping. ✅ This is the one place the Evidence search's evidence-descriptive boundary is
+  widened, and only for the profile-template case (see the EB capability spec § Scope boundaries).
+
+## Open interfaces (from the third review pass; no ruling needed, to be settled at contract)
+
+- **Intervention mentions.** The *requirement* — a per-document list of the interventions an
+  abstract names, with unknown/none and multiple-mention semantics — is settled (ruling 31). The
+  *method* is not: a new structured output of the shared screen (a schema, prompt, validation and
+  consumer change) or a separate cheap pass. Study geography must come from the abstract, never
+  inferred from publication metadata.
+- **Classify at option level.** Non-evidence and Unknown documents are skipped-and-counted by the
+  EB; the source-quality profile must show them as such rather than hide them, and the full-text
+  resolution of Unknown stays deferred.
+- **Extract's selection dependency.** The EB deep chain extracts a `select`ed subset; OS supplies a
+  capped read set instead. Either `extract` accepts an explicit source set, or the dependency is
+  generalised.
+- **Synthesise substrates.** The report and profile templates read new substrate kinds: option
+  membership, relations, countable aggregates, context legs and constraint states. These need
+  declared claim types under the provenance contract, not only a template.
+- **Baseline backends.** Official statistics and supplementary web acquisition must use declared
+  backends; open-web search is still a system seam.
+- **Shared seams recorded for the system contracts** (ruling 42): reading budget and evidence
+  eligibility; source-quality policy distinct from evidence-scope constraints; durable option
+  identity and relations across runs.
 
 ## export (Share seam)
 

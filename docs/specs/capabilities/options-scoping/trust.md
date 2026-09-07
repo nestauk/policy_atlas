@@ -130,9 +130,10 @@ supported sentence, and the sentence is what gets copied into advice.
   factors say; prior use somewhere satisfies one leg only. **No factor fractions anywhere.**
   The cap reason is always shown. Calibrated language, not a number. ✅ **No numeric fit score,
   no dampening**; the two V2 scoring mechanisms do not fold in.
-- ✅ The user's context lives with the scoping task, so a cap caused by unstated context
-  survives a full evidence search until the plan says otherwise. The cell is a first-class eval
-  axis (calibration).
+- ✅ The user's context lives with the scoping task and is passed to a child full evidence search
+  as input; the child report computes the verdict under these same rules (ruling 41), so a cap
+  caused by unstated context survives until the plan says otherwise. The cell is a first-class
+  eval axis (calibration).
 
 ## Reasoned guesses: interpretation in the shortlisting stage
 

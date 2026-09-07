@@ -717,3 +717,31 @@ until then the rulings win over the boards.
     type per option · ambition tag tier-4 · light extraction + reading as the shape to spike ·
     trust boundary between propositions · corpus claims by denominator · closing elements
     unlabelled) are canonical as rulings, recorded here from the review pack's decision sheet.
+41. **The child report carries the verdicts** (sharpens ruling 9). The full evidence search stays a
+    child Evidence search task with its own report, Sources and History. Written with the
+    option-profile template, that report **computes the profile's judgement cells itself** — how
+    sure, the transferability verdict and its conditions, the key assumption — with the parent
+    scoping task's **user context passed in as input**, so a cap set by unstated context
+    persists. The scoping profile mirrors those cells, tagged *full run*, and keeps the
+    scoping-pass version in History. This **widens the Evidence search's declared output
+    boundary** for the profile-template case only; the OS trust rules (weakest leg, three context
+    sources, applicability, no factor fractions) travel with the template. Rejected: the child
+    supplying evidence only with scoping recomputing; a single report with no child task.
+42. **Spikes, eval refinements and shared seams (from the third review pass).** The spikes before
+    any contract, in this order: **1** advice and commissioning on live asks (does the ruled
+    journey improve what officials write or commission, against a progressive account with the
+    same evidence); **2** evidence attribution and confidence (mention vs support; documents vs
+    independent evidence; inherited availability vs compatibility); **3** option-grain construction
+    and selection stability (mentions and findings → options, packages, variants; does relabelling
+    a primary lever move places without changing substance); **4** local-condition adjudication
+    (applicable rule vs aggregate; report vs commitment); **5** balanced reading within a real
+    budget (whole-run time to a usable qualified result; what a tighter cap loses); **6** a
+    specification-level contract trace of one inherited question and one edited variant through
+    every component. The original two spikes are 3 and 5. Eval refinements: user-requested sorts
+    are choices with selection effects and are evaluated for what they discourage, not only for
+    guess accuracy; a newcomer's inclusion is not a success criterion — the test is whether they
+    recognise an omission or an unsupported transfer after the baseline. Shared seams recorded for
+    the system contracts: a reading-budget and evidence-eligibility mechanism (execution /
+    retrieval); source-quality policy kept distinct from evidence-scope constraints in the plan
+    vocabulary (policy flags, never deletes); durable option identity and relations across runs
+    (data model — a run-local cluster id is not enough).

@@ -12,7 +12,7 @@ timestamp: 2026-09-07
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (the
 owner-agreed concept of 2026-09-01/02, the wireframe-round rulings of 2026-09-03 and the
 review-round rulings of 2026-09-07, hereafter "concept § Shape", "concept ruling N"; the
-review-round rulings 15–40 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
+review-round rulings 15–42 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
 ([ADR 0002](../../../adr/0002-spec-governance.md)). OS is an **instance** of the capability
 framework: the Tier-0 substrate, the retrieval contract, the findings layer, the grounding tiers
 and the plan object are owned by the system contracts and only **referenced** here; the
@@ -255,11 +255,15 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   **shortlist assembly record** (each place, its reason, who filled it) and the Sources statement
   of what was searched; it claims breadth, never exhaustiveness. The author's own steer is
   written outside Atlas.
-- ✅ **The full evidence search mints its own EB task** (ruling 9): seeded from the option,
+- ✅ **The full evidence search mints its own EB task** (rulings 9, 41): seeded from the option,
   synthesis template = the option-profile sections, listed under the parent scoping task and
-  linked both ways, sharing its project and visibility. The scoping profile then **reads its
-  cells from that report** ("full run"), keeps the scoping-pass version in History, and keeps the
-  user's context with scoping (so a transferability cap set by unstated context survives).
+  linked both ways, sharing its project and visibility. The child report, written with that
+  template and given the scoping task's user context as input, **computes the profile's
+  judgement cells itself** (how sure, transferability and its conditions, the key assumption)
+  under the OS trust rules; the scoping profile **mirrors them** ("full run"), keeps the
+  scoping-pass version in History, and the context stays owned by scoping (so a cap set by
+  unstated context survives). This widens the Evidence search's declared output boundary for the
+  profile-template case only.
 
 ### The sense-check branch (ruling 25)
 
@@ -417,7 +421,10 @@ contracts:
   source inspection sustain the exact claims used, including any variant and comparator; did the
   official return for the next revision without operator help. The live set includes an
   evidence-dense question, thin-evidence structural questions, at least one official new to the
-  domain, and at least one continuation from an Evidence search.
+  domain, and at least one continuation from an Evidence search. A newcomer's inclusion is not a
+  success criterion: the test is whether they recognise an omission or an unsupported transfer
+  after the baseline (ruling 42). User-requested sorts (guesses, tiers) are evaluated for what
+  they discourage from assessment, not only for guess accuracy.
 - **Option recall** against longlists in historical business cases and impact assessments — a
   floor, not a target, since those longlists are documented as narrow; expert-built reference
   longlists are needed too.
@@ -428,8 +435,15 @@ contracts:
 - **Screening-reason quality**; **transferability-judgment calibration** (the transferability
   cell is a first-class eval axis); **effect-cell fidelity** against the studies;
   **guess-versus-evidence agreement** for the reasoned guesses (ruling 12).
+- ✅ **Spikes before any contract, in order** (ruling 42): 1 advice and commissioning on live asks ·
+  2 evidence attribution and confidence · 3 option-grain construction and selection stability ·
+  4 local-condition adjudication · 5 balanced reading within a real budget · 6 a
+  specification-level contract trace of one inherited question and one edited variant. Each names
+  the question it answers and the result that would change the design (`pass3-answer.md` § 5 in
+  the review pack).
 - ✅ This spec carries **no build-order guidance** (ruling 28): slicing into tasks is a
-  contract-time decision and the initial build is expected to be several tasks.
+  contract-time decision and the initial build is expected to be several tasks. A spike order is
+  not a build order.
 
 ## Open decisions and deferred seams
 

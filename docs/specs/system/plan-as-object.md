@@ -81,7 +81,10 @@ A plan-level declared constraint expressing the **evidentiary standard** (e.g. "
 statistics and peer-reviewed evaluations only"). Two faces:
 - **Acquisition face — already covered**: which backends / **trust classes** may be searched
   (existing `search` machinery; open-web behind its seam). Bundles an existing capability, no new
-  mechanism.
+  mechanism. *(Options scoping adds a third, distinct thing — an **evidence-scope constraint**
+  such as "OECD evidence only", checked at retrieval and screening — which is neither the
+  acquisition face nor the citable-quality policy and must never be compiled into either; OS
+  ruling 23, seam recorded 2026-09-07.)*
 - **Use face — the new bit: a grounding standard, not a retrieval boundary**. The agent may
   still **retrieve and read** any in-corpus source (never penned in), but the policy sets the
   **appraisal tier** (source *quality*, **not** the grounding/inference tier) a source must meet

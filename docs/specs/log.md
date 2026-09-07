@@ -14,6 +14,15 @@
   withdrawing "a capability never runs another's component"); the depth "relative nudge" section of
   [plan-as-object](system/plan-as-object.md) carries an as-enacted note (rapid / standard / deep is
   user-chosen in the shipped product).
+* **Update** (same day, closing the pass-3 ledger): OS concept rulings 41–42 — the child full
+  evidence search's report carries the profile's judgement cells (a declared widening of the
+  Evidence search's evidence-descriptive boundary, recorded in
+  [evidence-search/capability.md](capabilities/evidence-search/capability.md) § Scope boundaries);
+  six ordered spikes before any contract; eval refinements; an open-interfaces list in
+  [options-scoping/components.md](capabilities/options-scoping/components.md). Seam notes added to
+  [plan-as-object](system/plan-as-object.md) (evidence-scope constraint ≠ source policy),
+  [data-model](system/data-model.md) (durable option identity) and
+  [execution-orchestration](system/execution-orchestration.md) (reading budget / eligibility).
 
 ## 2026-09-07
 * **Update**: Options scoping review round. A two-pass adversarial product review of the concept

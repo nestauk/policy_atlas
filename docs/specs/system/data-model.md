@@ -283,6 +283,12 @@ historical state.**
 *(Folded here for the first pass; may split into its own contract when reruns-with-dependencies
 land. arch §3.5–§3.6.)*
 
+*(Seam recorded 2026-09-07 for options scoping: an **option** with its specified design and its
+*variant of* / *part of* relations, a user's shortlist choices and a child-task dependency must
+survive reruns and deltas. EB clusters are run-local and addressable-unit ids change on substantive
+regeneration, so a durable option identity is a data-model addition to be drafted with the first OS
+contract; OS ruling 42.)*
+
 - **Three grains:** **block** = capture grain (own version chain; summary co-versions);
   **artefact** = snapshot grain (lock-on-advance freezes a named immutable binding of block
   versions; supersede-by-rerun mints the next, prior retained); **task** = living
