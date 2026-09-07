@@ -617,8 +617,8 @@ until then the rulings win over the boards.
     two machines at option grain). The three depths are **compositions**, not components:
     ⟨baseline⟩ = spine + synthesise(baseline); ⟨assess⟩ = [acquire if thin] + extract(light) +
     synthesise(profile), "how sure" being the roll-up of tiers already computed; ⟨full run⟩ =
-    the whole EB chain as a child task. `inherit` stays a component of its own; `propose` is the
-    only component with no EB ancestor. Export is a Share seam.
+    the whole EB chain as a child task. `inherit` stays a component of its own; `shortlist` (named `propose` until 2026-09-07) is
+    the only component with no EB ancestor. Export is a Share seam.
 31. **A document is not an option; inherit findings too (owner, 2026-09-07).** The EB's
     characterise assigns each document to one theme. That will not work for options off the
     shelf: documents discuss bundles, name several interventions, and systematic reviews cover

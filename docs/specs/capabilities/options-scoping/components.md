@@ -23,7 +23,7 @@ capabilities and combined into gradations of one
 Evidence search component, possibly parameterised), **EB modified** (a variation: a new object,
 template or field set) or **new**, and every "new" is justified. The EB's mandatory spine —
 acquire, screen, classify, appraise, ingest — runs **as is** at longlist depth; OS adds three
-variations (plan slots, `longlist`, `constrain`) and two new components (`inherit`, `propose`).
+variations (plan slots, `longlist`, `constrain`) and two new components (`inherit`, `shortlist`).
 The three depths of ruling 3 are **compositions** of these components, not components themselves.
 Honesty about what "reuse" means (pass-3 review): by the execution contract's I/O test, `longlist`
 and `constrain` are OS components in their own right, **built on the shared EB engines** (the
@@ -38,14 +38,14 @@ across capabilities (ruling 40).
 
 ```
 [0 inherit] ─▶ 1 plan ──▶ ⟨baseline⟩ ══gate: confirm plan against baseline══▶
-   2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest) ─▶ 10 extract(abstract) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 propose
+   2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest) ─▶ 10 extract(abstract) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 shortlist
                                        (the EB spine as is, then the longlist; runs over every option)
    ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 11 synthesise(report, assessed) ─▶ export (Share seam)
                                      └──▶ ⟨full run⟩ per option = the whole EB chain as a child task (user-triggered)
 ```
 
 - ✅ **Two gates are structural, not discretionary.** Nothing after the baseline runs until the
-  user confirms the plan against it; nothing after `propose` runs until the user says assess
+  user confirms the plan against it; nothing after `shortlist` runs until the user says assess
   (rulings 2, 3). Re-runs after a plan change apply deltas (❓ granularity, concept open
   question 7).
 - ✅ **The spine runs over every option; ⟨assess⟩ runs over the shortlist only.** This is the cost
@@ -73,7 +73,7 @@ across capabilities (ruling 40).
 | 5 | appraise | is EB | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
 | 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — spike before the longlist contract |
 | 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
-| 8 | propose | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
+| 8 | shortlist | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
 | 9 | select | is EB (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
 | 10 | extract | is EB, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are spike 2 |
 | 11 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (provisional and assessed forms; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
@@ -83,7 +83,7 @@ across capabilities (ruling 40).
 | Composition | Made of | Runs |
 |---|---|---|
 | ⟨baseline⟩ | acquire (Overton and OpenAlex only in v1, grey-literature-weighted source policy; the coverage statement names live official statistics and departmental pages as not searched — ruling 43) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
-| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → propose → synthesise(**report**, provisional) | over every option |
+| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → shortlist → synthesise(**report**, provisional) | over every option |
 | ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest → extract(abstract)] → **select** (the scoping read-set strategy: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions — rulings 38, 43) → extract(**light**) over the selected set (inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
 | ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task** seeded from the option with the profile template; the scoping profile re-reads its cells from the report | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
@@ -204,9 +204,12 @@ across capabilities (ruling 40).
   coverage denominator. ✅ Fallible by design, so every judgment is shown and reversible (*Include
   again*), and every exclusion is kept with its reason as institutional memory. ✅ Reasoned guesses
   are capped reasoning claims: a flag and a user-requested sort, never a screen and **never an
-  input to `propose`** (rulings 12, 19; [trust.md](trust.md)).
+  input to `shortlist`** (rulings 12, 19; [trust.md](trust.md)).
 
-## 8 — propose (new)
+## 8 — shortlist (new)
+
+The shortlisting component (renamed from `propose`, owner 2026-09-07, to pair with `longlist`); its
+output is still called *the proposal* — the proposed shortlist the user adds to and removes from.
 
 - **In:** the included options with coverage and relations; the user's additions. **Out:** the
   proposed shortlist — **one place per primary lever type present among the kept options**
@@ -229,7 +232,7 @@ across capabilities (ruling 40).
   pre-ticked, each with its reason (standard) (rulings 25, 37; ❓ similarity measure = open
   question 10). ✅ "Most promising"
   only after assessment, as per-axis sorts on comparable axes and conditional recommendations on
-  those axes; before assessment `propose` describes coverage and gaps only.
+  those axes; before assessment `shortlist` describes coverage and gaps only.
 - **Why new:** nothing in the EB selects a representative set over a fixed taxonomy; EB `select`
   picks documents for extraction by strategy, not options for coverage.
 
