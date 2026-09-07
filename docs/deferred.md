@@ -28,6 +28,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options Assessment** consumes EB output + the findings layer to resolve descriptive
   intervention clusters into named, comparable options — the decision-relative step EB explicitly
   leaves out.
+- **Orientation / domain primer** (owner, 2026-09-07, options-scoping review round): a
+  question-to-primer capability for users new to a domain — problem framing, rival diagnoses,
+  institutions, terms, the levers in use — routed by the product shell and linkable from
+  Options scoping. For now scoping's baseline gains a "what is contested" element instead
+  (concept ruling 24). Owner wants this on the table when the next capabilities are chosen.
+- **Options scoping: "Assess all kept options"** (owner, 2026-09-07): a whole-longlist
+  assessment action beside "Assess these N". Deferred on inference cost; revisit after live
+  runs show what a standard run costs (concept ruling 19).
 - **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
   018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
   capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed

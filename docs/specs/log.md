@@ -1,5 +1,20 @@
 # Spec update log
 
+## 2026-09-07
+* **Update**: Options scoping review round. A two-pass adversarial product review of the concept
+  and wireframes (blind proposal, then comparison) produced eleven findings; the owner ruled on
+  all of them in one session (decision sheet in the gitignored review pack). Rulings 15–29 appended
+  to the frozen concept as "Review-round rulings"; the three OS specs re-distilled
+  ([capability](capabilities/options-scoping/capability.md) ·
+  [components](capabilities/options-scoping/components.md) ·
+  [trust](capabilities/options-scoping/trust.md)). Headlines: variants are linked options with
+  their own assessment; claim depth follows reading depth; the do-nothing band is a starting
+  point, not a comparison; transferability context is typed retrieved / stated / planned and the
+  weakest leg decides; guesses never feed the shortlist proposal; coverage anchors on lever types;
+  a scoping task may start from an Evidence search task; evidence-scope constraints never exclude
+  options; sense-check is an entry branch and rapid/standard are depth settings; no build-order
+  guidance in the spec. Two deferred seams added to `docs/deferred.md`.
+
 ## 2026-09-04
 * **Creation**: Distilled the Options Scoping capability spec ([capability](capabilities/options-scoping/capability.md)
   · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md))

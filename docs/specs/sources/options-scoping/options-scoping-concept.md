@@ -8,9 +8,10 @@ timestamp: 2026-09-03
 
 # Policy Atlas v3 — Options Scoping Capability: Concept
 
-> **Status:** frozen origin ([ADR 0002](../../../adr/0002-spec-governance.md)) as of 2026-09-04.
-> Concept agreed with owner 2026-09-01; wireframe-round rulings appended 2026-09-03 (last
-> section). The declarative spec distilled from it lives in
+> **Status:** frozen origin ([ADR 0002](../../../adr/0002-spec-governance.md)) as of 2026-09-04,
+> reopened in PR #63 for the review round. Concept agreed with owner 2026-09-01; wireframe-round
+> rulings appended 2026-09-03; **review-round rulings appended 2026-09-07** (last section, which
+> wins over everything above it where they differ). The declarative spec distilled from it lives in
 > [../../capabilities/options-scoping/](../../capabilities/options-scoping/capability.md); change
 > the spec, not this file. Task contracts (035 onward) consume the spec.
 >
@@ -25,8 +26,12 @@ timestamp: 2026-09-03
 - **Outcome:** a user asks a policy question and gets a structured, transparently screened
   set of intervention options — each with mechanism, evidence strength, transferability,
   and real-world case studies — as an editable first version, not a finished document.
-- **User:** policy officials scoping options early (departmental longlist work) and central
-  teams sense-checking an emerging idea (No. 10 job). Broaden the option set beyond
+- **User:** analysts and policy officials building the options case early (departmental
+  longlist work) and senior officials and decision makers choosing between options or
+  sense-checking an emerging idea (No. 10 job). The two jobs carry equal weight (owner,
+  2026-09-07; a primary-author / senior-reader hierarchy was considered and rejected).
+  Users differ independently of role in how well they know the domain and in whether they
+  have already run an Evidence search on it (ruling 22, 24). Broaden the option set beyond
   familiar approaches; cure parochialism with international evidence.
 - **Why "scoping", not "appraisal":** this capability alone cannot carry appraisal depth.
   Full appraisal is a future combination of many capabilities.
@@ -34,6 +39,11 @@ timestamp: 2026-09-03
   requirement, not a nice-to-have.
 - **Where it strikes:** the early longlist moment — where real appraisals fail (NAO:
   narrow option sets, missing counterfactuals, post-hoc justification).
+- **No composite scores or rankings** is a **product boundary**, justified by what
+  single-number ranking does to incentives (Green Book Review 2020) and by the trust
+  principle below. It is not a Treasury prohibition: the Green Book 2026 *recommends* the
+  options framework filter rather than mandating it and permits facilitated multi-criteria
+  analysis at longlist stage (corrected 2026-09-07 after the review round checked the source).
 
 ## Shape
 
@@ -233,8 +243,10 @@ Applies to every scoping surface, not just the profile.
 ## Architecture stance
 
 Scoping reuses EB components (retrieval, appraisal, synthesis profiles) in **its own
-pipeline** — it never orchestrates full EB runs per option. It may optionally read
-existing EB corpuses (bracketed: meta-analysis territory, possibly its own capability).
+pipeline** — it never orchestrates full EB runs per option. A scoping task may **start
+from an existing Evidence search task** and reuse its question, documents and report as
+inputs (ruling 22; un-bracketed 2026-09-07). Meta-analysis across several corpora remains
+deferred territory, possibly its own capability.
 Borrow from `stakeholder_atlas` ToC prototype: assumption schema (load-bearing,
 strength), failure pathways, link verification. A shortlisted option seeds a ToC session
 (dotted-line consumer; separate capability).
@@ -262,7 +274,10 @@ you" assessment (future applicability capability) · full baseline analysis · e
 impact assessment (reported distributional effects only) · composite scores/rankings ·
 collaborative rating (v1 single-user; data model anticipates multiple raters) ·
 org-level institutional memory (v1 workspace-level) · visual ToC editor · deep mode ·
-meta-analysis over EB corpuses · meeting-speed latency.
+meta-analysis over EB corpuses · meeting-speed latency · **"Assess all kept options"** (a
+whole-longlist assessment action; deferred 2026-09-07 on inference cost, revisit after live
+runs) · an **orientation / domain-primer capability** for users new to a domain (deferred
+2026-09-07 as a likely separate future capability; see `docs/deferred.md`).
 
 ## Open questions for the contract stage
 
@@ -273,10 +288,15 @@ meta-analysis over EB corpuses · meeting-speed latency.
    non-health entries** (refineries, insolvency, regional disparities, R&D talent,
    digital infrastructure, waste management, university finances, small boats);
    transferability-judgment calibration; screening-reason quality. Shapes build order;
-   sketch before committing.
+   sketch before committing. **Updated 2026-09-07 (ruling 27):** the primary measure is
+   four behavioural tests on live asks; recall against historical longlists is a floor.
+   The V2 query log has 246 records but 208 distinct titles — dedupe before use, and treat
+   its categories as descriptions, not validated jobs.
 2. **Mini evidence search spec** — which EB components at what depth, and the cost
    envelope (a standard run ≈ N options × one mini search; per-run price target
-   constrains N and depth).
+   constrains N and depth). **Partly resolved 2026-09-07 (ruling 16):** the mini search
+   reads the full text of the documents it relies on, capped per option; extraction vs
+   retrieval-augmented reading over those texts stays open.
 3. **Rapid-mode latency budget** — a number, and how much grounding fits inside it.
 4. **Option minting mechanics** — clustering, overlap/dedup, target longlist size.
 5. **Taxonomy source** — curated asset vs prompt-internal (Green Book solution dimension
@@ -437,3 +457,138 @@ consume these alongside the sections above; where they sharpen an earlier ruling
 
 Open question 8 (product surface) is largely answered by rulings 1, 2 and 9; the remaining
 part is the entry point from the product's front door.
+
+## Review-round rulings (owner, 2026-09-07)
+
+Made after a two-pass adversarial product review of this concept and the wireframes (blind
+proposal first, then comparison; review pack and both answers in
+`docs/research-and-development/options-scoping-review/`, gitignored; the ruled decision sheet is
+`decision-sheet.md` there). These rulings win over every earlier section, including the
+wireframe-round rulings, where they differ. Boards 4, 5, 5b, 6, 6b and 8 need redrawing to match;
+until then the rulings win over the boards.
+
+15. **Option relations: variant of, part of.** An option has a *specified design*: the
+    features that define it (for a youth guarantee: the offer, the deadline, the obligation).
+    When the user modifies an option's design ("assess it without sanctions"), the
+    modification becomes **its own option**, added by you, linked **variant of** its parent,
+    and it gets its own mini search with the variant as the intent. The parent's evidence
+    appears in the variant's profile only as *related evidence for a different design*; it
+    never appears in the variant's assessed row or in the summary. A variant with no
+    matching implementations shows honest empty cells. Options can also be linked **part
+    of** (a package and its ingredients). Related options are shown together on the
+    longlist, and the shortlist proposal never fills two places with a package and its own
+    ingredient without saying so. Screens and constraint checks apply to the specified
+    design, so "most implementations attach a sanction" is a fact about the parent, not a
+    finding against the sanction-free variant.
+16. **Claim depth follows reading depth.** Screening stays title-and-abstract (ruling 3).
+    The **mini evidence search reads the full text of the documents it relies on**, capped
+    per option (the cost lever is depth, not coverage). Every claim carries the depth of
+    what was read — abstract or full text — and a section may not assert what the read
+    material does not support. Abstracts are quotable anywhere in a profile, as Evidence
+    search reports already do; a document with no obtainable full text supports
+    abstract-level claims and is labelled as such. "Scoping pass" therefore means: screened
+    on titles and abstracts, full text read for the documents cited, document set not
+    confirmed. The Sources tab says exactly that (board 6b's "no full text searched" was
+    wrong).
+17. **The do-nothing band is the starting point, not a comparison.** Scoping never
+    forecasts, so it never compares an option against the UK baseline; that is the Green
+    Book's shortlist appraisal, which this capability does not perform. The band above the
+    assessed table is reworded as *the situation these options would change*, never
+    "compared against doing nothing"; its key assumption stays inside it, labelled as
+    reasoning. **Summary rules:** no superlatives across options; each effect stated with its
+    own comparator, population and period; conditional recommendations only on axes that
+    are comparable across options — evidence strength, where tried, cost as reported —
+    never magnitude or direction. Direction tallies are per option within one outcome
+    family and are not sortable across options; the **direction-consensus sort is dropped**.
+    Sorts: evidence strength, study count.
+18. **Transferability: three context sources, the weakest leg decides.** The Factor |
+    Evidence says | Your context | Basis table takes three kinds of context entry:
+    **retrieved** (from the baseline or the assessment, cited, tagged with the geography it
+    applies to and counted only where that matches the target unit), **stated by you** (a
+    fact about the present) and **planned by you** (a commitment). Only the first two can
+    lift a cap; a commitment becomes a named condition of a conditional verdict
+    ("Conditional on: local delivery funded"). The verdict word is set by the **weakest
+    leg**; an unknown or absent dealbreaker caps the verdict on its own whatever the other
+    factors say. **No factor fractions anywhere** ("4 of 5 present" is gone). Prior use
+    somewhere satisfies one leg only. This replaces "only user-stated facts count" (too
+    strict once the baseline has retrieved context) and the count-based ceiling rule.
+19. **Assessment allocation is debiased; three depths stay.** Reasoned guesses (ruling 12)
+    **never feed the shortlist proposal or any pre-assessment recommendation**; they are a
+    flag and a sort the user asks for. Study count alone is never a place reason. "Thin
+    evidence" is a reason to assess, never to skip. The summary and the export list every
+    kept option that was not assessed, by theme, so omissions are explicit. A whole-longlist
+    "Assess all kept options" action is deferred (inference cost).
+20. **Coverage is anchored on lever types; the grid is re-anchored; ambition is a tag.**
+    The shortlist proposal fills **one place per fixed lever type present among the kept
+    options** (ruling 11's curated list), each with its named axis; typically four to seven
+    places, the user removes if over. Generated themes group the longlist and label the
+    grid but **do not earn places**; a single-option theme gets no automatic place unless
+    its lever type is otherwise uncovered (themes are generated and a singleton may be a
+    clustering artefact). The grid view's **rows are lever types**. **Ambition** survives
+    only as a per-option descriptive tag with a one-line justification, shown as the grid's
+    columns and labelled "as described, not measured"; the proposal warns when every place
+    shares one band (the all-incremental shortlist is the NAO failure). Board 5b's
+    "Organisational has no place: both options thin" broke ruling 6 and is withdrawn.
+21. **The handoff carries the whole record; resume from the analysis.** Export (ruling 14)
+    additionally bundles the **full longlist with states and reasons** and the **shortlist
+    assembly record** (each place, its reason, who filled it). The summary gains a fixed
+    closing element, **"What needs deciding or commissioning next"**, generated from the
+    unresolved differences, the unassessed options and the conditions verdicts rest on; the
+    author's own steer is written outside Atlas (ruling 14's no-editing stands). Principle:
+    the user **resumes from the current analysis, never by replaying the chat**; the
+    conversation stays available throughout and remains the spine for steering.
+22. **A scoping task may start from an Evidence search task** (a Link). Its question seeds
+    the plan. Its screened documents enter the pool and are **re-screened against the
+    scoping plan** (the old screen had a different intent). Its report's interventions and
+    themes enter the longlist as suggestions labelled "from your evidence search" through the
+    fait-accompli path, so nothing is trusted because it was found before. The run retrieves
+    beyond the inherited set; the Sources tab states inherited versus added. Fallback if a
+    contract must trim: question and documents only.
+23. **Three kinds of constraint.** Ruling 12's two kinds gain a third: **evidence-scope**
+    constraints ("OECD evidence only"), checked at retrieval and screening, which can
+    **never exclude an option**; an option whose only example falls outside the evidence
+    scope stays on the longlist marked "no in-scope evidence". When a user's sentence is
+    ambiguous between evidence scope and option scope the agent asks ("only evidence from
+    OECD countries, or only options tried in OECD countries?"). Screen findings that rest on
+    the corpus are cited like any claim. (Board 4's exclusion of the cash-transfer option
+    was wrong under this ruling.)
+24. **The baseline gains "what is contested."** Its structure adds the rival explanations of
+    the problem and the disagreements between sources. The pause after the baseline is
+    explicitly a place to **question the baseline in chat** before confirming, and the copy
+    says so. No orientation stage is added; the first live test includes at least one
+    official new to the domain, and a separate orientation / domain-primer capability is
+    noted as likely future work (`docs/deferred.md`).
+25. **Sense-check is an entry branch; rapid and standard are depth settings.** Depth governs
+    retrieval breadth and documents read per option, and applies to both branches; the two
+    were previously conflated. **Rapid sense-check:** short plan (the agent infers problem,
+    target unit, outcome and place from the named option, the user confirms); light baseline,
+    still paused, one beat; neighbours generated at **metadata depth only**, as context
+    (parent and variants, same lever type, lever types the idea does not touch); the proposal
+    through the "Assess these N" gate is **the named option alone**; one mini search at
+    rapid depth; the option's **profile is the primary surface**; one extra output element,
+    **"questions to put to the department"**, generated like ruling 21's closing element;
+    export = profile, neighbour list, questions. **Standard sense-check:** the same, but the
+    proposal is the named option **plus its most similar neighbours**, pre-ticked, confirmed
+    with one action; each assessed at standard depth; the assessed table sits under the
+    profile as the comparison. The user can widen at any point (add a neighbour, assess it,
+    or switch to exploring the space) within the same task. Board 8 is redrawn as the rapid
+    version, honouring the pause.
+26. **Effect-cell vote-count rules.** "Report, don't compute" still involves choices, so
+    they are fixed: one vote per independent study; direction defined per outcome family;
+    statistical significance never counted; disagreement shown as the discord flag. Banding
+    stays open question 9.
+27. **Evaluation frame.** The primary measure for open question 1 is four behavioural tests
+    on live asks: did a materially different option or a decisive question enter the team's
+    next piece of advice; did the author and the receiving senior correctly read what was
+    supported, inferred and unassessed; did source inspection sustain the exact claims used,
+    including any variant and comparator; did the official return for the next revision
+    without operator help. Recall against historical longlists stays as a floor.
+28. **Scope and slicing.** This concept and the spec describe the **whole capability**. They
+    carry **no build-order guidance**; cutting it into tasks is a contract-time decision and
+    the initial build is expected to be several tasks. The review's "smallest testable
+    version" (`pass2-answer.md` §10) is an input to that decision, not a ruling.
+29. **Considered and rejected.** A primary-author / senior-reader hierarchy (the two jobs
+    keep equal weight); dropping the transferability verdict word in favour of an
+    argument-only cell; removing the do-nothing band; assessing every kept option by default;
+    treating evidence restrictions as plan Settings rather than a constraint kind.
+

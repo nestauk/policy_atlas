@@ -51,3 +51,10 @@ language.
 It is **not** a contract. It contains outputs the backend does not yet produce, invented
 numbers, and chat turns written to show behaviour rather than transcribed from a run. Where a
 board and the concept's rulings differ, the rulings win.
+
+**Review round, 2026-09-07.** An adversarial product review led to the concept's last section
+("Review-round rulings"). Boards 4, 5, 5b, 6, 6b and 8 predate it and are known to differ from
+it (an exclusion for an evidence-scope constraint; theme rows and a coverage note on the grid;
+"compared against doing nothing" and factor counts on the assessed table; "no full text
+searched" on Sources; the rapid sense-check without its pause). Until they are redrawn, the
+rulings win over the boards.
