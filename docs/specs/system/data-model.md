@@ -283,11 +283,21 @@ historical state.**
 *(Folded here for the first pass; may split into its own contract when reruns-with-dependencies
 land. arch §3.5–§3.6.)*
 
-*(Seam recorded 2026-09-07 for options scoping: an **option** with its specified design and its
-*variant of* / *part of* relations, a user's shortlist choices and a child-task dependency must
-survive reruns and deltas. EB clusters are run-local and addressable-unit ids change on substantive
-regeneration, so a durable option identity is a data-model addition to be drafted with the first OS
-contract; OS ruling 42.)*
+### The option entity (declared 2026-09-07 for options scoping; OS ruling 44)
+
+EB clusters are run-local and addressable-unit ids change on substantive regeneration; neither can
+carry a user's shortlist choice, a variant's link to its parent or a child task's dependency across
+re-runs. So an **option** is a **task-scoped entity with a stable id** for the life of the task:
+- a **specified design**, versioned — a substantive user edit mints a new design version; a
+  *variant* is a **new option** linked to its parent, never a new version of it;
+- typed relations **variant of** / **part of** between option ids;
+- **state records** against the id: included · excluded (with the constraint) · on the shortlist
+  (proposed by Policy Atlas / added by you) · assessed (scoping pass / full run);
+- **membership records** against the id and a design version: the intervention mentions and the
+  findings that belong to it (also the validated set behind its pattern claims);
+- a link to the child Evidence search task a full run mints.
+Matching a regenerated option to an existing id after a plan change (deltas, not restarts) is
+**open** — OS open question 7 — and is a labelled judgement or a user confirmation, never silent.
 
 - **Three grains:** **block** = capture grain (own version chain; summary co-versions);
   **artefact** = snapshot grain (lock-on-advance freezes a named immutable binding of block

@@ -763,3 +763,16 @@ until then the rulings win over the boards.
     feature exists; when it does, uploads do not cross a Link automatically. Options scoping
     therefore uses `extract` with two profiles (abstract; light full-text) and `select` with one
     new strategy, and adds no sibling component for any of them.
+44. **System-contract seams (owner, 2026-09-07).** Of the three seams ruling 42 recorded: (1) the
+    **reading budget and evidence eligibility** mechanism is **left open** for the first assessment
+    contract, with its analysis recorded in the review pack — the read set (documents, before
+    reading) and eligibility (findings, after reading) are different grains; the extraction
+    profiles must record the *intervention as implemented*; a per-option finding-grain membership
+    record is the candidate eligibility mechanism and doubles as the pattern-claim set. (2) The
+    **evidence-scope constraint's place in the plan contract** is **left open** for the longlist
+    contract; the candidate is a third face enforced at the screen (out-of-scope documents
+    retrieved, set aside with the reason, counted, shown on Sources; never support, never
+    exclude); a hard retrieval boundary is the wrong shape. (3) **Durable option identity is
+    declared now** in the data model: an option is a task-scoped entity with a stable id, a
+    versioned specified design, typed relations, state and membership records and a child-task
+    link; re-run matching stays open question 7.

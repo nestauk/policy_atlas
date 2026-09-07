@@ -30,6 +30,11 @@
   [provenance-grounding](system/provenance-grounding.md); baseline on Overton + OpenAlex only;
   uploads deferred. [evidence-search/components.md](capabilities/evidence-search/components.md) § 6
   notes the second `select` strategy.
+* **Update** (same day): OS concept ruling 44 — the option entity declared in
+  [data-model](system/data-model.md) (task-scoped stable id, versioned specified design, typed
+  relations, state and membership records, child-task link; re-run matching open); the reading
+  budget / eligibility and evidence-scope seams left open with their candidates recorded in the
+  review pack.
 
 ## 2026-09-07
 * **Update**: Options scoping review round. A two-pass adversarial product review of the concept

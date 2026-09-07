@@ -12,7 +12,7 @@ timestamp: 2026-09-07
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (the
 owner-agreed concept of 2026-09-01/02, the wireframe-round rulings of 2026-09-03 and the
 review-round rulings of 2026-09-07, hereafter "concept § Shape", "concept ruling N"; the
-review-round rulings 15–43 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
+review-round rulings 15–44 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
 ([ADR 0002](../../../adr/0002-spec-governance.md)). OS is an **instance** of the capability
 framework: the Tier-0 substrate, the retrieval contract, the findings layer, the grounding tiers
 and the plan object are owned by the system contracts and only **referenced** here; the
