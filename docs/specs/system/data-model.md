@@ -285,9 +285,12 @@ land. arch §3.5–§3.6.)*
 
 ### The option entity (declared 2026-09-07 for options scoping; OS ruling 44)
 
-EB clusters are run-local and addressable-unit ids change on substantive regeneration; neither can
-carry a user's shortlist choice, a variant's link to its parent or a child task's dependency across
-re-runs. So an **option** is a **task-scoped entity with a stable id** for the life of the task:
+EB clusters are persisted per run (`characterisation_result` holds each run's themes and
+memberships as JSON; `source_tag` rows carry the theme label per document) but are deliberately
+**never promoted to canonical, queryable state**: there is no theme table, memberships belong to the
+run that computed them, and a re-run replaces rather than matches them, so a cluster has no identity
+across runs. Addressable-unit ids change on substantive regeneration. Neither can carry a user's
+shortlist choice, a variant's link to its parent or a child task's dependency across re-runs. So an **option** is a **task-scoped entity with a stable id** for the life of the task:
 - a **specified design**, versioned — a substantive user edit mints a new design version; a
   *variant* is a **new option** linked to its parent, never a new version of it;
 - typed relations **variant of** / **part of** between option ids;
