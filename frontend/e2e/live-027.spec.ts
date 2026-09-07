@@ -25,7 +25,7 @@ function log(message: string) {
 
 async function apiStatus(page: Page): Promise<number> {
   try {
-    const response = await page.request.get(`${API}/api/v1/projects`, {
+    const response = await page.request.get(`${API}/api/v1/tasks`, {
       headers: { Authorization: `Bearer ${process.env.LIVE_TOKEN ?? ""}` },
       timeout: 2_000,
     });
@@ -139,20 +139,20 @@ async function answerCheckIn(page: Page) {
   throw new Error("no answerable check-in option found");
 }
 
-let projectUrl = "";
+let taskUrl = "";
 
 test.describe.serial("task 027 live check", () => {
   test("1 · landing rename/archive", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("button", { name: "New project" }).first()).toBeVisible({
+    await expect(page.getByRole("button", { name: "New task" }).first()).toBeVisible({
       timeout: 60_000,
     });
 
-    // A disposable project to archive.
-    await page.getByRole("button", { name: "New project" }).first().click();
+    // A disposable task to archive.
+    await page.getByRole("button", { name: "New task" }).first().click();
     await page.getByLabel("Project name").fill("027 archive me");
-    await page.getByRole("button", { name: "Create project" }).click();
-    await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+    await page.getByRole("button", { name: "Create task" }).click();
+    await expect(page).toHaveURL(/\/tasks\/[^/]+$/);
     await page.goto("/");
 
     // Rename: cancel restores, save applies.
@@ -169,7 +169,7 @@ test.describe.serial("task 027 live check", () => {
     await expect(page.getByText("027 renamed then archived")).toBeVisible({ timeout: 15_000 });
 
     // Archive: two-step confirm, archive vocabulary.
-    await page.getByRole("button", { name: "Archive project" }).first().click();
+    await page.getByRole("button", { name: "Archive task" }).first().click();
     await expect(page.getByText(/Confirm to archive/)).toBeVisible();
     await page.getByRole("button", { name: "Confirm archive" }).click();
     await expect(page.getByText("027 renamed then archived")).toHaveCount(0, { timeout: 15_000 });
@@ -178,11 +178,11 @@ test.describe.serial("task 027 live check", () => {
 
   test("2 · planning, restart mid-planning, durable thread + idempotent retry", async ({ page }) => {
     await page.goto("/");
-    await page.getByRole("button", { name: "New project" }).first().click();
+    await page.getByRole("button", { name: "New task" }).first().click();
     await page.getByLabel("Project name").fill("027 live check");
-    await page.getByRole("button", { name: "Create project" }).click();
-    await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-    projectUrl = page.url();
+    await page.getByRole("button", { name: "Create task" }).click();
+    await expect(page).toHaveURL(/\/tasks\/[^/]+$/);
+    taskUrl = page.url();
 
     await plannerTurn(
       page,
@@ -209,16 +209,16 @@ test.describe.serial("task 027 live check", () => {
     // Idempotent replay of the FIRST turn's client id, via the API directly:
     // fish the durable row out and re-POST its client_turn_id + message.
     const token = process.env.LIVE_TOKEN ?? "";
-    const projectId = new URL(projectUrl).pathname.split("/").at(-1) ?? "";
+    const taskId = new URL(taskUrl).pathname.split("/").at(-1) ?? "";
     const turnsResponse = await page.request.get(
-      `${API}/api/v1/projects/${projectId}/planning-turns`,
+      `${API}/api/v1/tasks/${taskId}/planning-turns`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
     expect(turnsResponse.status()).toBe(200);
     const turns = (await turnsResponse.json()).data as Array<Record<string, unknown>>;
     expect(turns.length).toBeGreaterThan(0);
     const first = turns[0];
-    const retry = await page.request.post(`${API}/api/v1/projects/${projectId}/planning-turns`, {
+    const retry = await page.request.post(`${API}/api/v1/tasks/${taskId}/planning-turns`, {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       data: { message: first.user_message, client_turn_id: first.client_turn_id },
     });
@@ -247,7 +247,7 @@ test.describe.serial("task 027 live check", () => {
     page,
   }) => {
     test.setTimeout(45 * 60 * 1000);
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await page.getByRole("button", { name: /Start(ing…)? the analysis/ }).click();
     log("run 1 started");
     await expect(page.getByRole("list", { name: "Stage timeline" })).toBeVisible({
@@ -327,7 +327,7 @@ test.describe.serial("task 027 live check", () => {
           await shot(page, "11-live-after-reload");
           streamedChecked = true;
         }
-        await page.goto(projectUrl);
+        await page.goto(taskUrl);
         continue;
       }
 
@@ -345,10 +345,10 @@ test.describe.serial("task 027 live check", () => {
   });
 
   test("4 · evidence base, findings both kinds, sources filters", async ({ page }) => {
-    await page.goto(projectUrl.replace(/\/?$/, "/evidence-base"));
+    await page.goto(taskUrl.replace(/\/?$/, "/evidence-search"));
     // If that path 404s the nav link is the source of truth.
     if (await page.getByText(/nothing here/i).isVisible().catch(() => false)) {
-      await page.goto(projectUrl);
+      await page.goto(taskUrl);
       await page.getByRole("link", { name: /evidence base/i }).first().click();
     }
     await expect(page.getByText("Evidence base").first()).toBeVisible({ timeout: 60_000 });
@@ -369,7 +369,7 @@ test.describe.serial("task 027 live check", () => {
     }
 
     // Findings: kind filter + expansions.
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await page.getByRole("link", { name: /findings/i }).first().click();
     await expect(page.getByRole("button", { name: "All kinds" })).toBeVisible({ timeout: 30_000 });
     const iofFilter = page.getByRole("button", { name: "Intervention–outcome" });
@@ -397,7 +397,7 @@ test.describe.serial("task 027 live check", () => {
     }
 
     // Sources: server-side filter is URL-addressable and collection-true.
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await page.getByRole("link", { name: /sources/i }).first().click();
     await expect(page).toHaveURL(/\/sources/);
     const statusFilter = page.getByRole("button", { name: /screened out|included/i }).first();
@@ -413,7 +413,7 @@ test.describe.serial("task 027 live check", () => {
     page,
   }) => {
     test.setTimeout(45 * 60 * 1000);
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
 
     // Replan to unattended so run 2 flows straight to synthesise.
     await plannerTurn(
@@ -436,7 +436,7 @@ test.describe.serial("task 027 live check", () => {
     await expect(page.getByText(/analysing|running/i).first()).toBeVisible({ timeout: 60_000 });
     log("hygiene: landing card shows the live running state");
     await shot(page, "21-landing-live-status");
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
 
     // Wait for synthesise to start writing, then kill the API mid-write.
     await expect(page.getByText("Writing the evidence base").first()).toBeVisible({
@@ -463,7 +463,7 @@ test.describe.serial("task 027 live check", () => {
     ).toBeVisible({ timeout: 120_000 });
     await shot(page, "23-terminal-partial");
 
-    await page.goto(projectUrl);
+    await page.goto(taskUrl);
     await expect(
       page.getByText(/interrupted|wasn't completed|didn't finish/i).first(),
     ).toBeVisible({ timeout: 60_000 });

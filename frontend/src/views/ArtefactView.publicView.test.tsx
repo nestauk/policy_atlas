@@ -16,7 +16,7 @@ vi.mock("../store", () => ({
   hasTerminalPartialLiveArtefact: () => false,
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 function auth(): AuthApi {
   return {
@@ -34,7 +34,7 @@ function jsonResponse(body: unknown) {
 }
 
 const PROJECT = {
-  project_id: PROJECT_ID,
+  task_id: TASK_ID,
   name: "Shared evidence review",
   access: "public",
   is_owner: false,
@@ -65,10 +65,10 @@ function renderPublicArtefact() {
       "http://localhost:3000",
     );
     requestedPaths.push(url.pathname);
-    if (url.pathname === `/api/v1/projects/${PROJECT_ID}`) return jsonResponse(PROJECT);
-    if (url.pathname === `/api/v1/projects/${PROJECT_ID}/artefact`) return jsonResponse(ARTEFACT);
-    if (url.pathname === `/api/v1/projects/${PROJECT_ID}/landscape`) return jsonResponse(LANDSCAPE);
-    if (url.pathname === `/api/v1/projects/${PROJECT_ID}/funnel`) return jsonResponse(FUNNEL);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}`) return jsonResponse(PROJECT);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/artefact`) return jsonResponse(ARTEFACT);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/landscape`) return jsonResponse(LANDSCAPE);
+    if (url.pathname === `/api/v1/tasks/${TASK_ID}/funnel`) return jsonResponse(FUNNEL);
     return jsonResponse({});
   });
   vi.stubGlobal("fetch", fetchMock);
@@ -77,10 +77,10 @@ function renderPublicArtefact() {
   render(
     <AuthContext.Provider value={auth()}>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[`/projects/${PROJECT_ID}/results`]}>
+        <MemoryRouter initialEntries={[`/tasks/${TASK_ID}/results`]}>
           <Routes>
             <Route
-              path="/projects/:projectId/results"
+              path="/tasks/:taskId/results"
               element={
                 <PublicViewProvider value={true}>
                   <ArtefactView />

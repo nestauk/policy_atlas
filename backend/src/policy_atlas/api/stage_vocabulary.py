@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.api.contract import StageKey
-from policy_atlas.runtime.orchestration_plan import registry_component_for
+from policy_atlas.runtime.task_plan import registry_component_for
 
 STAGE_PRESENTATION: dict[StageKey, tuple[str, str]] = {
     "acquire": ("Searching sources", "Queries out to academic and policy databases."),

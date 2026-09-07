@@ -22,14 +22,14 @@ from langfuse import Langfuse, propagate_attributes
 from policy_atlas.core import embeddings
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.usage import UsageResult, usage_metadata
-from policy_atlas.evidence_base.corpus import theme_grouping
-from policy_atlas.evidence_base.corpus.theme_grouping import (
+from policy_atlas.evidence_search.corpus import theme_grouping
+from policy_atlas.evidence_search.corpus.theme_grouping import (
     GroupingDoc,
     Theme,
     ThemeGroupingBackend,
 )
-from policy_atlas.evidence_base.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
-from policy_atlas.evidence_base.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
+from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
+from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 
 _ObservationType = Literal["embedding", "generation", "span"]
 
@@ -338,7 +338,7 @@ def component_span(
     client: Langfuse | None,
     *,
     run_id: uuid.UUID,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     component: str,
     session_id: uuid.UUID | None = None,
 ) -> Iterator[Any]:
@@ -347,7 +347,7 @@ def component_span(
     Args:
         client: Langfuse client, or ``None`` for no-op tracing.
         run_id: Current run id.
-        project_id: Current project id.
+        task_id: Current task id.
         component: Component name.
         session_id: Optional Langfuse session id shared across one conversation.
 
@@ -365,7 +365,7 @@ def component_span(
         _session_scope(session_id),
         _observation(client, name=f"run:{component}:{run_id}", as_type="span") as run_span,
     ):
-        run_span.update(metadata={"project_id": str(project_id), "run_id": str(run_id)})
+        run_span.update(metadata={"task_id": str(task_id), "run_id": str(run_id)})
         with _observation(
             client,
             name=f"component:{component}",

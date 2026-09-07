@@ -287,7 +287,7 @@ function PlanChrome({
  * a planner round-trip on every field would rewrite the whole plan.
  */
 export function PlanDocument({
-  projectId,
+  taskId,
   placement = "side",
   runActive = false,
   readOnly = false,
@@ -297,7 +297,7 @@ export function PlanDocument({
   overlay,
   onOverlayChange,
 }: {
-  projectId: string;
+  taskId: string;
   /** Centre overlay vs docked side panel. */
   placement?: "center" | "side";
   runActive?: boolean;
@@ -309,11 +309,11 @@ export function PlanDocument({
   overlay: PlanOverlay;
   onOverlayChange: (overlay: PlanOverlay) => void;
 }) {
-  const planQuery = usePlan(projectId);
+  const planQuery = usePlan(taskId);
   const draft = planQuery.data?.plan;
   const { start, discardAndStart, startNotice, canDiscard, disabled: startDisabled, label: startLabel } =
     usePlanStart({
-      projectId,
+      taskId,
       overlay,
       runActive,
       onStarted,

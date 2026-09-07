@@ -8,14 +8,14 @@ import { Chip } from "../ui/brand/Chip";
 import { taskStatus } from "./landingPresentation";
 import { taskListRowGridClass, taskListRowGridClassWithOwner } from "./listPageChrome";
 
-type LatestRun = components["schemas"]["ProjectOut"]["latest_run"];
+type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
 type TaskListRowProps = {
   to: string;
   name: string;
   capabilityKey?: string | null;
-  portfolioName?: string | null;
-  showProjectPrefix?: boolean;
+  projectName?: string | null;
+  showTaskPrefix?: boolean;
   sourceCount?: number | null;
   updatedAt?: string | null;
   latestRun?: LatestRun;
@@ -26,13 +26,13 @@ type TaskListRowProps = {
   ownerlessLabel?: string;
 };
 
-/** One task row: name (optional project prefix), capability, aligned status, [owner], sources, date. */
+/** One task row: name (optional task prefix), capability, aligned status, [owner], sources, date. */
 export function TaskListRow({
   to,
   name,
   capabilityKey,
-  portfolioName,
-  showProjectPrefix = false,
+  projectName,
+  showTaskPrefix = false,
   sourceCount,
   updatedAt,
   latestRun,
@@ -41,9 +41,9 @@ export function TaskListRow({
 }: TaskListRowProps) {
   const status = taskStatus(latestRun);
   const safeName = scrub(name);
-  const safePortfolio = portfolioName != null ? scrub(portfolioName) : null;
+  const safeProject = projectName != null ? scrub(projectName) : null;
   const ariaLabel =
-    showProjectPrefix && safePortfolio != null ? `${safePortfolio}, ${safeName}` : safeName;
+    showTaskPrefix && safeProject != null ? `${safeProject}, ${safeName}` : safeName;
   const showOwner = ownerDisplay !== undefined;
 
   return (
@@ -53,9 +53,9 @@ export function TaskListRow({
       className={`${showOwner ? taskListRowGridClassWithOwner : taskListRowGridClass} px-4 py-3.5 no-underline hover:bg-blue-tint-2`}
     >
       <span className="min-w-0 truncate text-body">
-        {showProjectPrefix && safePortfolio != null && (
+        {showTaskPrefix && safeProject != null && (
           <>
-            <span className="font-normal text-grey">{safePortfolio}</span>
+            <span className="font-normal text-grey">{safeProject}</span>
             <span aria-hidden="true" className="mx-1.5 font-normal text-line-2">
               /
             </span>

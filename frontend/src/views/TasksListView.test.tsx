@@ -8,16 +8,16 @@ import { TasksListView } from "./TasksListView";
 
 vi.mock("../api/queries", () => ({
   useMe: vi.fn(),
+  useTasks: vi.fn(),
   useProjects: vi.fn(),
-  usePortfolios: vi.fn(),
 }));
 
 const ROW = {
-  project_id: "task-1",
+  task_id: "task-1",
   name: "Healthier childhoods",
   updated_at: "2026-07-21T09:00:00Z",
   latest_run: null,
-  portfolio_id: null,
+  project_id: null,
   source_count: 4,
   is_owner: true,
   owner_display: "Ada Lovelace",
@@ -32,21 +32,21 @@ function renderView() {
 }
 
 beforeEach(() => {
-  vi.mocked(queries.usePortfolios).mockReturnValue(
-    { data: { data: [] } } as unknown as ReturnType<typeof queries.usePortfolios>,
-  );
   vi.mocked(queries.useProjects).mockReturnValue(
+    { data: { data: [] } } as unknown as ReturnType<typeof queries.useProjects>,
+  );
+  vi.mocked(queries.useTasks).mockReturnValue(
     {
       data: { data: [ROW] },
       isPending: false,
       isError: false,
       refetch: vi.fn(),
-    } as unknown as ReturnType<typeof queries.useProjects>,
+    } as unknown as ReturnType<typeof queries.useTasks>,
   );
 });
 
 describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, rubric 14 dark launch)", () => {
-  it("hides the switcher, and calls useProjects with no scope, when /me has no organisation", () => {
+  it("hides the switcher, and calls useTasks with no scope, when /me has no organisation", () => {
     vi.mocked(queries.useMe).mockReturnValue(
       { data: { user_id: "u1", display_name: "Ada Lovelace", organisation: null, is_admin: false } } as unknown as ReturnType<
         typeof queries.useMe
@@ -54,7 +54,7 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
     );
     renderView();
     expect(screen.queryByRole("tablist", { name: "Scope" })).not.toBeInTheDocument();
-    expect(queries.useProjects).toHaveBeenCalledWith(undefined);
+    expect(queries.useTasks).toHaveBeenCalledWith(undefined);
     // Byte-identical to today: no owner column either, even though the
     // row carries `owner_display` now.
     expect(screen.queryByText("Ada Lovelace")).not.toBeInTheDocument();
@@ -73,11 +73,11 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
     );
     const user = userEvent.setup();
     renderView();
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "all" });
+    expect(queries.useTasks).toHaveBeenCalledWith({ scope: "all" });
     expect(screen.getByRole("tab", { name: "Organisation" })).toHaveAttribute("aria-selected", "true");
 
     await user.click(screen.getByRole("tab", { name: "Mine" }));
-    expect(queries.useProjects).toHaveBeenCalledWith({ scope: "mine" });
+    expect(queries.useTasks).toHaveBeenCalledWith({ scope: "mine" });
   });
 
   it("shows the owner column once enrolled, even on the caller's own row", () => {
@@ -136,13 +136,13 @@ describe("TasksListView — the Organisation/Mine switcher (task 033 phase 10b, 
         },
       } as unknown as ReturnType<typeof queries.useMe>,
     );
-    vi.mocked(queries.useProjects).mockReturnValue(
+    vi.mocked(queries.useTasks).mockReturnValue(
       {
-        data: { data: [{ ...ROW, project_id: "orphan-1", is_owner: false, owner_display: null }] },
+        data: { data: [{ ...ROW, task_id: "orphan-1", is_owner: false, owner_display: null }] },
         isPending: false,
         isError: false,
         refetch: vi.fn(),
-      } as unknown as ReturnType<typeof queries.useProjects>,
+      } as unknown as ReturnType<typeof queries.useTasks>,
     );
     renderView();
     expect(screen.getByText("No organisation")).toBeInTheDocument();

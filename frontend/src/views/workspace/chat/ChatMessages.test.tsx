@@ -36,7 +36,7 @@ function renderChat(rows: ChatConversationRow[], props: { onOpenPlanning?: () =>
   return render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ChatMessages projectId="p1" rows={rows} onOpenPlanning={props.onOpenPlanning ?? vi.fn()} onRetry={props.onRetry ?? vi.fn()} />
+        <ChatMessages taskId="p1" rows={rows} onOpenPlanning={props.onOpenPlanning ?? vi.fn()} onRetry={props.onRetry ?? vi.fn()} />
       </TooltipProvider>
     </QueryClientProvider>,
   );

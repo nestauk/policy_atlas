@@ -21,7 +21,7 @@ vi.mock("./conversationState", async (importOriginal) => {
   return {
     ...actual,
     openChatTabs: () => state.tabIds,
-    addOpenChatTab: (_projectId: string, id: string) => {
+    addOpenChatTab: (_taskId: string, id: string) => {
       state.tabIds = [...state.tabIds.filter((value) => value !== id), id];
     },
     removeOpenChatTab: vi.fn(),
@@ -44,7 +44,7 @@ describe("ConversationTabs", () => {
 
   it("renders planning, reuses the open blank-chat path, and archives a tab", async () => {
     const user = userEvent.setup();
-    render(<ConversationTabs projectId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
+    render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Planning" })).toBeInTheDocument();
     expect(screen.getByText("Barriers")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "New chat" }));
@@ -56,7 +56,7 @@ describe("ConversationTabs", () => {
   it("selects an open tab and opens the chats library", async () => {
     const onOpenLibrary = vi.fn();
     const user = userEvent.setup();
-    render(<ConversationTabs projectId="p1" planningClosed={false} onOpenLibrary={onOpenLibrary} />);
+    render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={onOpenLibrary} />);
     await user.click(screen.getByRole("button", { name: "Barriers" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith("c1");
     await user.click(screen.getByRole("button", { name: "Chats" }));
@@ -65,7 +65,7 @@ describe("ConversationTabs", () => {
 
   it("selects the planning conversation when the Planning tab is clicked", async () => {
     const user = userEvent.setup();
-    render(<ConversationTabs projectId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
+    render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: "Planning" }));
     expect(state.setActiveConversation).toHaveBeenCalledWith("p1");
   });
@@ -73,7 +73,7 @@ describe("ConversationTabs", () => {
   it("shows a New chat tab for an active follow-up that is not yet in the list", () => {
     state.activeConversationId = "c-new";
     state.tabIds = [];
-    render(<ConversationTabs projectId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
+    render(<ConversationTabs taskId="p1" planningClosed={false} onOpenLibrary={vi.fn()} />);
     expect(screen.getByText("New chat")).toBeInTheDocument();
   });
 });

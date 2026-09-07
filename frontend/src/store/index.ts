@@ -30,7 +30,7 @@ export type {
   LiveSection,
   PlanDraft,
   PlanState,
-  ProjectSummary,
+  TaskSummary,
   ResolvedDecision,
   RunRef,
   RunStatus,

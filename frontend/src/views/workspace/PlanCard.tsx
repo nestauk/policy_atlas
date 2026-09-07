@@ -17,7 +17,7 @@ type PlanDraft = components["schemas"]["PlanDraft"];
  * `VisibilityControl` established, not a disabled button that would error).
  */
 export function PlanCard({
-  projectId,
+  taskId,
   runActive,
   started = false,
   isOwner,
@@ -26,7 +26,7 @@ export function PlanCard({
   onOverlayApplied,
   onDiscardOverlay,
 }: {
-  projectId: string;
+  taskId: string;
   runActive: boolean;
   started?: boolean;
   isOwner: boolean;
@@ -35,9 +35,9 @@ export function PlanCard({
   onOverlayApplied?: () => void;
   onDiscardOverlay?: () => void;
 }) {
-  const planQuery = usePlan(projectId);
+  const planQuery = usePlan(taskId);
   const { start, discardAndStart, startNotice, canDiscard, disabled, label } = usePlanStart({
-    projectId,
+    taskId,
     overlay,
     runActive,
     onStarted: onOverlayApplied,

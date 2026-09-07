@@ -1,11 +1,11 @@
 import type { components } from "../api/gen/types";
 import { Button } from "../ui/brand/Button";
 
-type Visibility = components["schemas"]["ProjectOut"]["visibility"];
+type Visibility = components["schemas"]["TaskOut"]["visibility"];
 
 /**
  * The one binding visibility-outcome line (contract § 11, rubric 41 —
- * lead-owned copy, stated not asked). A portfolio cascade appends how many
+ * lead-owned copy, stated not asked). A project cascade appends how many
  * Tasks follow, singular-correct; a plain Task change has no count.
  */
 export function visibilityOutcomeLine(next: Visibility, taskCount?: number): string {

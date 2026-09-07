@@ -7,7 +7,7 @@ import { WorkspaceView } from "./WorkspaceView";
 
 /**
  * The URL leg (task 033 phase 10c, contract § 11 / rubric 37): the Plan
- * route (`/projects/:projectId`) is never wrapped in `LifecycleRoute` — it's
+ * route (`/tasks/:taskId`) is never wrapped in `LifecycleRoute` — it's
  * open at every run state — so `is_owner` reaching its children is the ONLY
  * defence against a non-owner reaching a mutation surface by address. This
  * mocks `PlanningPane` and `PlanDocument` (both independently, thoroughly
@@ -16,14 +16,14 @@ import { WorkspaceView } from "./WorkspaceView";
  * only the wiring: navigating here does not redirect, and `WorkspaceView`
  * threads ownership into both.
  */
-const projectState = vi.hoisted(() => ({ isOwner: true }));
+const taskState = vi.hoisted(() => ({ isOwner: true }));
 
 vi.mock("../api/queries", () => ({
-  useProject: () => ({
+  useTask: () => ({
     data: {
-      project_id: "11111111-1111-1111-1111-111111111111",
-      name: "Acme project",
-      is_owner: projectState.isOwner,
+      task_id: "11111111-1111-1111-1111-111111111111",
+      name: "Acme task",
+      is_owner: taskState.isOwner,
       latest_run: null,
     },
     isError: false,
@@ -51,9 +51,9 @@ vi.mock("./workspace/PlanDocument", () => ({
 
 function renderAtPlanRoute() {
   return render(
-    <MemoryRouter initialEntries={["/projects/11111111-1111-1111-1111-111111111111"]}>
+    <MemoryRouter initialEntries={["/tasks/11111111-1111-1111-1111-111111111111"]}>
       <Routes>
-        <Route path="/projects/:projectId" element={<WorkspaceView />} />
+        <Route path="/tasks/:taskId" element={<WorkspaceView />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -61,13 +61,13 @@ function renderAtPlanRoute() {
 
 describe("WorkspaceView — the URL leg (task 033 phase 10c, contract § 11 / rubric 37)", () => {
   it("owner: reaches the Plan route with the mutation surface live, no redirect", () => {
-    projectState.isOwner = true;
+    taskState.isOwner = true;
     renderAtPlanRoute();
     expect(screen.getByTestId("planning-pane-is-owner")).toHaveTextContent("true");
   });
 
   it("non-owner: reaches the SAME route by address (not redirected) with the read-only variant", async () => {
-    projectState.isOwner = false;
+    taskState.isOwner = false;
     const user = userEvent.setup();
     renderAtPlanRoute();
     // Reachable, not bounced to an error page or elsewhere — `LifecycleRoute`

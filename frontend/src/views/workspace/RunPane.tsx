@@ -18,20 +18,20 @@ import { JourneyPane } from "./journey/JourneyPane";
  * established rather than left clickable to a 403.
  */
 export function RunPane({
-  projectId,
+  taskId,
   stream,
   isOwner,
 }: {
-  projectId: string;
+  taskId: string;
   stream: RunStreamState;
   isOwner: boolean;
 }) {
-  const startRun = useStartRun(projectId);
-  const plan = usePlan(projectId);
-  const funnel = useFunnel(projectId);
-  const coverage = useCoverage(projectId);
-  const groups = useGroups(projectId);
-  const landscape = useLandscape(projectId);
+  const startRun = useStartRun(taskId);
+  const plan = usePlan(taskId);
+  const funnel = useFunnel(taskId);
+  const coverage = useCoverage(taskId);
+  const groups = useGroups(taskId);
+  const landscape = useLandscape(taskId);
   const runStatus = stream.run?.status;
 
   return (
@@ -48,7 +48,7 @@ export function RunPane({
       ) : (
         <div className="flex-1 overflow-hidden">
           <JourneyPane
-            projectId={projectId}
+            taskId={taskId}
             stream={stream}
             plan={stream.plan?.plan ?? plan.data?.plan ?? null}
             funnel={funnel.data}

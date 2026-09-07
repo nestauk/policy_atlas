@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.synthesis.synthesis_backend import (
+from policy_atlas.evidence_search.synthesis.synthesis_backend import (
     CaseStudyWire,
     ClaimWire,
     IntroWire,
@@ -24,7 +24,7 @@ from policy_atlas.evidence_base.synthesis.synthesis_backend import (
     SummaryJudgeWire,
     SummaryWire,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import ToolExchange
+from policy_atlas.evidence_search.synthesis.synthesis_tools import ToolExchange
 
 
 def empty_key_findings(_seed: dict[str, Any]) -> UsageResult[SectionProseWire]:

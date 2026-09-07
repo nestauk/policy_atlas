@@ -27,7 +27,7 @@ vi.mock("./journey/JourneyPane", () => ({
   JourneyPane: ({ terminal }: { terminal?: React.ReactNode }) => <div>{terminal}</div>,
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 function baseStream(status: "interrupted" | "failed"): RunStreamState {
   return {
@@ -45,7 +45,7 @@ function baseStream(status: "interrupted" | "failed"): RunStreamState {
     pendingCheckIn: null,
     decisions: [],
     plan: null,
-    project: {},
+    task: {},
     liveSections: {},
     liveness: {},
   } as unknown as RunStreamState;
@@ -53,23 +53,23 @@ function baseStream(status: "interrupted" | "failed"): RunStreamState {
 
 describe("RunPane — non-owner read-only (task 033 phase 10c, contract § 11 / rubric 37)", () => {
   it("owner: shows Start a fresh run after an interruption", () => {
-    render(<RunPane projectId={PROJECT_ID} stream={baseStream("interrupted")} isOwner />);
+    render(<RunPane taskId={TASK_ID} stream={baseStream("interrupted")} isOwner />);
     expect(screen.getByRole("button", { name: "Start a fresh run" })).toBeInTheDocument();
   });
 
   it("non-owner: hides Start a fresh run after an interruption", () => {
-    render(<RunPane projectId={PROJECT_ID} stream={baseStream("interrupted")} isOwner={false} />);
+    render(<RunPane taskId={TASK_ID} stream={baseStream("interrupted")} isOwner={false} />);
     expect(screen.queryByRole("button", { name: "Start a fresh run" })).not.toBeInTheDocument();
   });
 
   it("owner: shows Start a fresh run after a failure", () => {
-    render(<RunPane projectId={PROJECT_ID} stream={baseStream("failed")} isOwner />);
+    render(<RunPane taskId={TASK_ID} stream={baseStream("failed")} isOwner />);
     expect(screen.getByRole("button", { name: "Start a fresh run" })).toBeInTheDocument();
     expect(screen.getByText(/You can start a fresh run\./)).toBeInTheDocument();
   });
 
   it("non-owner: hides Start a fresh run after a failure, without inviting a click that would 403", () => {
-    render(<RunPane projectId={PROJECT_ID} stream={baseStream("failed")} isOwner={false} />);
+    render(<RunPane taskId={TASK_ID} stream={baseStream("failed")} isOwner={false} />);
     expect(screen.queryByRole("button", { name: "Start a fresh run" })).not.toBeInTheDocument();
     expect(screen.queryByText(/You can start a fresh run\./)).not.toBeInTheDocument();
     expect(screen.getByText(/Whatever completed is kept and readable\./)).toBeInTheDocument();

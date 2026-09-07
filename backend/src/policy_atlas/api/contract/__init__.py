@@ -4,7 +4,7 @@ Canonical source of truth for `/api/v1` shapes (spec
 `docs/specs/system/web-api.md`) — OpenAPI is generated from these models,
 the TypeScript client from the OpenAPI document. This package is
 dependency-free beyond `pydantic`/`uuid`/`datetime`/`typing`: it never
-imports `policy_atlas.runtime` or `policy_atlas.evidence_base`.
+imports `policy_atlas.runtime` or `policy_atlas.evidence_search`.
 """
 
 from __future__ import annotations
@@ -72,19 +72,19 @@ from .planning import (
     SearchEffort,
     SteeringMode,
 )
-from .portfolios import (
-    PORTFOLIO_NAME_MAX,
-    PortfolioCreate,
-    PortfolioOut,
-    PortfolioUpdate,
-)
 from .projects import (
     PROJECT_NAME_MAX,
-    LatestRun,
     ProjectCreate,
     ProjectOut,
-    ProjectStatus,
     ProjectUpdate,
+)
+from .tasks import (
+    TASK_NAME_MAX,
+    LatestRun,
+    TaskCreate,
+    TaskOut,
+    TaskStatus,
+    TaskUpdate,
 )
 from .read_models import (
     EVIDENCE_STATUS_INCLUDED,
@@ -139,7 +139,7 @@ from .sse import (
     CheckinResolvedFrame,
     DecidedBy,
     PlanUpdatedFrame,
-    ProjectUpdatedFrame,
+    TaskUpdatedFrame,
     RunStatusFrame,
     SseFrame,
     StageCompletedFrame,
@@ -163,8 +163,8 @@ __all__ = [
     "CHAT_MESSAGE_MAX",
     "PAGE_SIZE_DEFAULT",
     "PAGE_SIZE_MAX",
-    "PORTFOLIO_NAME_MAX",
     "PROJECT_NAME_MAX",
+    "TASK_NAME_MAX",
     "STAGE_KEYS",
     "ArtefactSectionCompletedFrame",
     "ArtefactSectionSkeleton",
@@ -255,14 +255,14 @@ __all__ = [
     "PlanningTranscriptTurnOut",
     "PlanningTurnCreate",
     "PlanningTurnOut",
-    "PortfolioCreate",
-    "PortfolioOut",
-    "PortfolioUpdate",
     "ProjectCreate",
     "ProjectOut",
-    "ProjectStatus",
     "ProjectUpdate",
-    "ProjectUpdatedFrame",
+    "TaskCreate",
+    "TaskOut",
+    "TaskStatus",
+    "TaskUpdate",
+    "TaskUpdatedFrame",
     "ProgressEvent",
     "ReferenceOut",
     "RunCreate",

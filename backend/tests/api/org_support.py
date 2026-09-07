@@ -38,9 +38,9 @@ from policy_atlas.core.schema import (
     app_user,
     conversation,
     organisation,
-    portfolio,
-    portfolio_membership,
     project,
+    project_membership,
+    task,
 )
 from tests.helpers import now
 
@@ -49,7 +49,7 @@ class Principal(NamedTuple):
     """One signed-in caller: their token subject and their bearer header.
 
     Route-level tenancy tests need the *subject* as well as the header,
-    because the fixtures they seed (`app_user` rows, owned projects) are keyed
+    because the fixtures they seed (`app_user` rows, owned tasks) are keyed
     on it. ``resource_support.api_client`` keeps its subjects private and
     hands back two opaque header dicts, which is right for owner-scoped tests
     and not enough here.
@@ -188,7 +188,7 @@ def ops_set_admin(conn: Connection, *, user_id: str, is_admin: bool) -> None:
 def make_conversation(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     kind: str = "chat",
     created_by: str | None = None,
     status: str = "active",
@@ -201,7 +201,7 @@ def make_conversation(
 
     Args:
         conn: Open database connection.
-        project_id: The project the conversation belongs to.
+        task_id: The task the conversation belongs to.
         kind: `chat` or `planning`.
         created_by: The authoring subject, or `None` for a legacy row.
         status: `active`, `closed` or `archived`.
@@ -215,7 +215,7 @@ def make_conversation(
     conn.execute(
         conversation.insert().values(
             id=conversation_id,
-            project_id=project_id,
+            task_id=task_id,
             kind=kind,
             title=title,
             entry_artefact_id=None,
@@ -300,22 +300,22 @@ def unregistered_user() -> str:
     return f"user-{uuid.uuid4()}"
 
 
-def make_project(
+def make_task(
     conn: Connection,
     *,
     owner_user_id: str | None,
     org_id: uuid.UUID | None = None,
     visibility: str = "org",
     status: str = "active",
-    portfolio_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
     name: str = "Task",
 ) -> uuid.UUID:
-    """Insert one project row (and its portfolio membership) and return its id."""
-    project_id = uuid.uuid4()
+    """Insert one task row (and its project membership) and return its id."""
+    task_id = uuid.uuid4()
     moment = now()
     conn.execute(
-        project.insert().values(
-            project_id=project_id,
+        task.insert().values(
+            task_id=task_id,
             created_at=moment,
             updated_at=moment,
             archived_at=moment if status == "archived" else None,
@@ -327,30 +327,30 @@ def make_project(
             visibility=visibility,
         )
     )
-    if portfolio_id is not None:
+    if project_id is not None:
         conn.execute(
-            portfolio_membership.insert().values(
-                portfolio_id=portfolio_id,
+            project_membership.insert().values(
                 project_id=project_id,
+                task_id=task_id,
                 created_at=moment,
             )
         )
-    return project_id
+    return task_id
 
 
-def make_portfolio(
+def make_project(
     conn: Connection,
     *,
     owner_user_id: str | None,
     org_id: uuid.UUID | None = None,
     visibility: str = "org",
-    name: str = "Project",
+    name: str = "Task",
 ) -> uuid.UUID:
-    """Insert one portfolio row and return its id."""
-    portfolio_id = uuid.uuid4()
+    """Insert one project row and return its id."""
+    project_id = uuid.uuid4()
     conn.execute(
-        portfolio.insert().values(
-            portfolio_id=portfolio_id,
+        project.insert().values(
+            project_id=project_id,
             owner_user_id=owner_user_id,
             name=name,
             description=None,
@@ -359,4 +359,4 @@ def make_portfolio(
             visibility=visibility,
         )
     )
-    return portfolio_id
+    return project_id

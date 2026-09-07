@@ -10,20 +10,20 @@ import { taskDestination } from "./lifecycle";
 import { listNewButtonClass } from "./listPageChrome";
 import { TaskListRow } from "./TaskListRow";
 
-type LatestRun = components["schemas"]["ProjectOut"]["latest_run"];
+type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 
 export type TaskListItem = {
-  project_id: string;
+  task_id: string;
   name: string;
   updated_at: string;
   latest_run?: LatestRun;
-  portfolio_ids?: string[];
+  project_ids?: string[];
   source_count?: number | null;
   is_owner?: boolean;
   owner_display?: string | null;
 };
 
-function portfolioPrefix(
+function projectPrefix(
   ids: readonly string[] | undefined,
   names?: ReadonlyMap<string, string>,
 ): string {
@@ -33,13 +33,13 @@ function portfolioPrefix(
 
 function FindTask({
   rows,
-  portfolioNames,
-  showProjectPrefix,
+  projectNames,
+  showTaskPrefix,
   onClose,
 }: {
   rows: readonly TaskListItem[];
-  portfolioNames?: ReadonlyMap<string, string>;
-  showProjectPrefix?: boolean;
+  projectNames?: ReadonlyMap<string, string>;
+  showTaskPrefix?: boolean;
   onClose: () => void;
 }) {
   const [term, setTerm] = useState("");
@@ -49,9 +49,9 @@ function FindTask({
     needle === ""
       ? rows
       : rows.filter((row) => {
-          const portfolio =
-            showProjectPrefix ? portfolioPrefix(row.portfolio_ids, portfolioNames) : "";
-          const haystack = `${portfolio} ${row.name}`.toLowerCase();
+          const project =
+            showTaskPrefix ? projectPrefix(row.project_ids, projectNames) : "";
+          const haystack = `${project} ${row.name}`.toLowerCase();
           return haystack.includes(needle);
         });
 
@@ -91,18 +91,18 @@ function FindTask({
           <li className="px-1 py-3 text-body text-grey">Nothing matches “{scrub(term)}”.</li>
         )}
         {matches.map((row) => {
-          const portfolioName = showProjectPrefix
-            ? portfolioPrefix(row.portfolio_ids, portfolioNames) || null
+          const projectName = showTaskPrefix
+            ? projectPrefix(row.project_ids, projectNames) || null
             : null;
           const label =
-            portfolioName != null ? `${portfolioName} / ${row.name}` : row.name;
+            projectName != null ? `${projectName} / ${row.name}` : row.name;
           return (
-            <li key={row.project_id}>
+            <li key={row.task_id}>
               <button
                 type="button"
                 onClick={() => {
                   onClose();
-                  void navigate(taskDestination(row.project_id, row.latest_run?.status));
+                  void navigate(taskDestination(row.task_id, row.latest_run?.status));
                 }}
                 className="w-full cursor-pointer border-b border-line px-1 py-2.5 text-left text-body text-navy last:border-b-0 hover:bg-blue-tint-2 focus-visible:outline-2 focus-visible:outline-blue"
               >
@@ -116,16 +116,16 @@ function FindTask({
   );
 }
 
-/** Find-a-task and New-task controls shared by Tasks and project-detail headers. */
+/** Find-a-task and New-task controls shared by Tasks and task-detail headers. */
 export function TaskListActions({
   rows,
-  portfolioNames,
-  showProjectPrefix = false,
+  projectNames,
+  showTaskPrefix = false,
   newTaskHref,
 }: {
   rows: readonly TaskListItem[];
-  portfolioNames?: ReadonlyMap<string, string>;
-  showProjectPrefix?: boolean;
+  projectNames?: ReadonlyMap<string, string>;
+  showTaskPrefix?: boolean;
   newTaskHref: string;
 }) {
   const [finding, setFinding] = useState(false);
@@ -147,8 +147,8 @@ export function TaskListActions({
       {finding && (
         <FindTask
           rows={rows}
-          portfolioNames={portfolioNames}
-          showProjectPrefix={showProjectPrefix}
+          projectNames={projectNames}
+          showTaskPrefix={showTaskPrefix}
           onClose={() => setFinding(false)}
         />
       )}
@@ -158,8 +158,8 @@ export function TaskListActions({
 
 type TaskListPanelProps = {
   rows: readonly TaskListItem[];
-  portfolioNames?: ReadonlyMap<string, string>;
-  showProjectPrefix?: boolean;
+  projectNames?: ReadonlyMap<string, string>;
+  showTaskPrefix?: boolean;
   isPending?: boolean;
   isError?: boolean;
   onRetry?: () => void;
@@ -174,8 +174,8 @@ type TaskListPanelProps = {
 /** Shared task list body: loading, empty, and rows. */
 export function TaskListPanel({
   rows,
-  portfolioNames,
-  showProjectPrefix = false,
+  projectNames,
+  showTaskPrefix = false,
   isPending = false,
   isError = false,
   onRetry,
@@ -215,14 +215,14 @@ export function TaskListPanel({
   return (
     <ul role="list" className="border border-line-2 bg-paper">
       {rows.map((row) => (
-        <li key={row.project_id} className="border-b border-line last:border-b-0">
+        <li key={row.task_id} className="border-b border-line last:border-b-0">
           <TaskListRow
-            to={taskDestination(row.project_id, row.latest_run?.status)}
+            to={taskDestination(row.task_id, row.latest_run?.status)}
             name={row.name}
-            portfolioName={
-              showProjectPrefix ? portfolioPrefix(row.portfolio_ids, portfolioNames) || null : null
+            projectName={
+              showTaskPrefix ? projectPrefix(row.project_ids, projectNames) || null : null
             }
-            showProjectPrefix={showProjectPrefix}
+            showTaskPrefix={showTaskPrefix}
             sourceCount={row.source_count}
             updatedAt={row.updated_at}
             latestRun={row.latest_run}

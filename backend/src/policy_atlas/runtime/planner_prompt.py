@@ -32,7 +32,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 # screening criterion (origin filters cannot see setting; junk otherwise
 # still gets in). Spoken chip; publisher/author origin still not the same
 # as study setting. Succeeds planner_v9.
-# The router and watch moments live in orchestrator_prompt.py.
+# The router and watch moments live in agent_prompt.py.
 PLANNER_PROMPT_VERSION = "planner_v11"
 
 # Default screening criterion when the OECD source-origin default applies.

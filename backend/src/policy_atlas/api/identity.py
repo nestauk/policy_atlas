@@ -15,7 +15,7 @@ exactly two rungs, and the second one is derived from the token subject:
    row appears only when ``GET /api/v1/me`` first runs.
 
 There is no third rung. A row whose ``owner_user_id`` is ``NULL`` (the
-``runtime/orchestrate.py`` CLI rows, which an admin can see per contract § 11)
+``runtime/agent.py`` CLI rows, which an admin can see per contract § 11)
 has no person to name at all, and :func:`owner_display_for` returns ``None`` —
 the API says "no owner" rather than inventing a placeholder. Choosing the
 placeholder glyph is a rendering decision and belongs to the frontend.

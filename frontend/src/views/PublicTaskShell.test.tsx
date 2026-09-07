@@ -7,7 +7,7 @@ import * as queries from "../api/queries";
 import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
 import { PublicTaskShell } from "./PublicTaskShell";
 
-vi.mock("../api/queries", () => ({ useProject: vi.fn() }));
+vi.mock("../api/queries", () => ({ useTask: vi.fn() }));
 
 vi.mock("../auth", () => ({
   useAuth: () => ({
@@ -28,26 +28,26 @@ vi.mock("../api/sse", () => ({
   connectEventStream: sseState.connect,
 }));
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
-function mockProject(
+function mockTask(
   data: Record<string, unknown> | undefined,
   { pending = false } = {},
 ) {
-  vi.mocked(queries.useProject).mockReturnValue({
+  vi.mocked(queries.useTask).mockReturnValue({
     isPending: pending,
     data,
-  } as unknown as ReturnType<typeof queries.useProject>);
+  } as unknown as ReturnType<typeof queries.useTask>);
 }
 
-const PUBLIC_PROJECT = {
-  project_id: PROJECT_ID,
+const PUBLIC_TASK = {
+  task_id: TASK_ID,
   name: "Shared evidence review",
   access: "public",
   is_public: true,
   is_owner: false,
   owner_display: null,
-  portfolio_ids: [],
+  project_ids: [],
   latest_run: null,
 };
 
@@ -58,7 +58,7 @@ function renderShell(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/" element={<div>splash probe</div>} />
-          <Route path="/projects/:projectId" element={<PublicTaskShell />}>
+          <Route path="/tasks/:taskId" element={<PublicTaskShell />}>
             <Route path="results" element={<div>results probe</div>} />
             <Route path="sources" element={<div>sources probe</div>} />
           </Route>
@@ -74,22 +74,22 @@ beforeEach(() => {
 });
 
 describe("PublicTaskShell — the public task view (task 037)", () => {
-  it("shows a loading state while the tokenless project read is pending", () => {
-    mockProject(undefined, { pending: true });
-    renderShell(`/projects/${PROJECT_ID}/results`);
+  it("shows a loading state while the tokenless task read is pending", () => {
+    mockTask(undefined, { pending: true });
+    renderShell(`/tasks/${TASK_ID}/results`);
     expect(screen.getByRole("status")).toHaveTextContent("Loading…");
   });
 
   it("keeps stash-and-splash for a Task that is not public — same as before the slice", () => {
-    mockProject(undefined);
-    renderShell(`/projects/${PROJECT_ID}/results`);
+    mockTask(undefined);
+    renderShell(`/tasks/${TASK_ID}/results`);
     expect(screen.getByText("splash probe")).toBeInTheDocument();
-    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/projects/${PROJECT_ID}/results`);
+    expect(sessionStorage.getItem(AUTH_RETURN_TO_KEY)).toBe(`/tasks/${TASK_ID}/results`);
   });
 
   it("renders the two-tab shell around a public Task's Results", () => {
-    mockProject(PUBLIC_PROJECT);
-    renderShell(`/projects/${PROJECT_ID}/results`);
+    mockTask(PUBLIC_TASK);
+    renderShell(`/tasks/${TASK_ID}/results`);
     expect(screen.getByText("Shared evidence review")).toBeInTheDocument();
     expect(screen.getByText("results probe")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeInTheDocument();
@@ -99,8 +99,8 @@ describe("PublicTaskShell — the public task view (task 037)", () => {
   });
 
   it("never opens the run event stream — the events route is not public", () => {
-    mockProject(PUBLIC_PROJECT);
-    renderShell(`/projects/${PROJECT_ID}/results`);
+    mockTask(PUBLIC_TASK);
+    renderShell(`/tasks/${TASK_ID}/results`);
     expect(sseState.connect).not.toHaveBeenCalled();
   });
 });

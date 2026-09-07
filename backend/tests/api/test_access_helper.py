@@ -1,6 +1,6 @@
 """Tenancy grades on the graded access helper (task 033, contract § 3).
 
-Helper-level: every case calls ``accessible_project`` / ``accessible_portfolio``
+Helper-level: every case calls ``accessible_task`` / ``accessible_project``
 directly against seeded rows. Route-level enforcement arrives in phase 4, when
 the 19 call sites adopt the helper; nothing here goes through a router.
 """
@@ -20,16 +20,16 @@ from policy_atlas.api.routers._access import (
     FORBIDDEN_DETAIL,
     NOT_FOUND_DETAIL,
     _read_legs,
-    accessible_portfolio,
     accessible_project,
+    accessible_task,
     listing_scope,
-    may_read_project,
+    may_read_task,
 )
-from policy_atlas.core.schema import app_user, project
+from policy_atlas.core.schema import app_user, task
 from tests.api.org_support import (
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     make_user,
     unregistered_user,
 )
@@ -65,17 +65,17 @@ def test_two_unenrolled_callers_cannot_see_each_others_null_org_rows(conn: Conne
     """
     enrolled_nowhere = make_user(conn, org_id=None)
     never_provisioned = unregistered_user()
-    theirs = make_project(conn, owner_user_id=enrolled_nowhere, org_id=None)
-    others = make_project(conn, owner_user_id=never_provisioned, org_id=None)
+    theirs = make_task(conn, owner_user_id=enrolled_nowhere, org_id=None)
+    others = make_task(conn, owner_user_id=never_provisioned, org_id=None)
 
-    assert accessible_project(conn, project_id=theirs, user_id=enrolled_nowhere).is_owner
-    assert accessible_project(conn, project_id=others, user_id=never_provisioned).is_owner
+    assert accessible_task(conn, task_id=theirs, user_id=enrolled_nowhere).is_owner
+    assert accessible_task(conn, task_id=others, user_id=never_provisioned).is_owner
 
     with pytest.raises(HTTPException) as first:
-        accessible_project(conn, project_id=others, user_id=enrolled_nowhere)
+        accessible_task(conn, task_id=others, user_id=enrolled_nowhere)
     assert first.value.status_code == 404
     with pytest.raises(HTTPException) as second:
-        accessible_project(conn, project_id=theirs, user_id=never_provisioned)
+        accessible_task(conn, task_id=theirs, user_id=never_provisioned)
     assert second.value.status_code == 404
 
 
@@ -84,10 +84,10 @@ def test_unenrolled_caller_cannot_read_an_org_row(conn: Connection) -> None:
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     outsider = make_user(conn, org_id=None)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_id, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_id, visibility="org")
 
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=project_id, user_id=outsider)
+        accessible_task(conn, task_id=task_id, user_id=outsider)
     assert refused.value.status_code == 404
 
 
@@ -98,17 +98,17 @@ def test_org_read_leg_is_a_correlated_sql_predicate(conn: Connection) -> None:
     equated to the row's ``org_id`` inside the database, which is what makes
     the NULL rule hold.
     """
-    compiled = str(select(project).where(_read_legs(project, "caller")).compile(conn))
-    assert "project.owner_user_id = %(owner_user_id_1)s" in compiled
-    assert "project.org_id IS NOT NULL" in compiled
-    assert "project.visibility = %(visibility_1)s" in compiled
+    compiled = str(select(task).where(_read_legs(task, "caller")).compile(conn))
+    assert "task.owner_user_id = %(owner_user_id_1)s" in compiled
+    assert "task.org_id IS NOT NULL" in compiled
+    assert "task.visibility = %(visibility_1)s" in compiled
     # The org membership test is an EXISTS correlated back to the row's own
     # `org_id`, so the equality is against a non-NULL value in SQL. `app_user`
-    # is the subquery's only FROM — the outer `project` is correlated out, not
+    # is the subquery's only FROM — the outer `task` is correlated out, not
     # re-selected, which would have turned the leg into a cross join.
     assert "EXISTS (SELECT 1 \nFROM app_user \nWHERE" in compiled
     assert (
-        "app_user.user_id = %(user_id_1)s::VARCHAR AND app_user.org_id = project.org_id"
+        "app_user.user_id = %(user_id_1)s::VARCHAR AND app_user.org_id = task.org_id"
         in compiled
     )
 
@@ -116,15 +116,15 @@ def test_org_read_leg_is_a_correlated_sql_predicate(conn: Connection) -> None:
 # --- The read grade --------------------------------------------------------
 
 
-def test_same_org_colleague_reads_an_org_visible_project(conn: Connection) -> None:
+def test_same_org_colleague_reads_an_org_visible_task(conn: Connection) -> None:
     """Two enrolled colleagues, one shared row: the org leg grants the read."""
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     colleague = make_user(conn, org_id=org_id)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_id, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_id, visibility="org")
 
-    access = accessible_project(conn, project_id=project_id, user_id=colleague)
-    assert access.row["project_id"] == project_id
+    access = accessible_task(conn, task_id=task_id, user_id=colleague)
+    assert access.row["task_id"] == task_id
     assert access.is_owner is False
 
 
@@ -134,25 +134,25 @@ def test_cross_org_caller_gets_an_indistinguishable_404(conn: Connection) -> Non
     org_b = make_org(conn, name="B")
     owner = make_user(conn, org_id=org_b)
     outsider = make_user(conn, org_id=org_a)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_b, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_b, visibility="org")
 
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=project_id, user_id=outsider)
+        accessible_task(conn, task_id=task_id, user_id=outsider)
     with pytest.raises(HTTPException) as absent:
-        accessible_project(conn, project_id=uuid.uuid4(), user_id=outsider)
+        accessible_task(conn, task_id=uuid.uuid4(), user_id=outsider)
     assert refused.value.status_code == absent.value.status_code == 404
     assert refused.value.detail == absent.value.detail == NOT_FOUND_DETAIL
 
 
-def test_private_project_is_hidden_from_the_organisation(conn: Connection) -> None:
+def test_private_task_is_hidden_from_the_organisation(conn: Connection) -> None:
     """``visibility='private'`` withholds the row from an enrolled colleague."""
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     colleague = make_user(conn, org_id=org_id)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_id, visibility="private")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_id, visibility="private")
 
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=project_id, user_id=colleague)
+        accessible_task(conn, task_id=task_id, user_id=colleague)
     assert refused.value.status_code == 404
 
 
@@ -161,43 +161,43 @@ def test_owner_reads_and_writes_regardless_of_org_and_visibility(conn: Connectio
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     shapes = (
-        make_project(conn, owner_user_id=owner, org_id=org_id, visibility="org"),
-        make_project(conn, owner_user_id=owner, org_id=org_id, visibility="private"),
-        make_project(conn, owner_user_id=owner, org_id=None, visibility="org"),
-        make_project(conn, owner_user_id=owner, org_id=None, visibility="private"),
+        make_task(conn, owner_user_id=owner, org_id=org_id, visibility="org"),
+        make_task(conn, owner_user_id=owner, org_id=org_id, visibility="private"),
+        make_task(conn, owner_user_id=owner, org_id=None, visibility="org"),
+        make_task(conn, owner_user_id=owner, org_id=None, visibility="private"),
     )
-    for project_id in shapes:
-        assert accessible_project(conn, project_id=project_id, user_id=owner).is_owner
-        assert accessible_project(conn, project_id=project_id, user_id=owner, write=True).is_owner
+    for task_id in shapes:
+        assert accessible_task(conn, task_id=task_id, user_id=owner).is_owner
+        assert accessible_task(conn, task_id=task_id, user_id=owner, write=True).is_owner
 
 
 def test_ownerless_rows_stay_unreachable(conn: Connection) -> None:
-    """``orchestrate.py`` rows carry ``owner_user_id=NULL`` and belong to nobody.
+    """``agent.py`` rows carry ``owner_user_id=NULL`` and belong to nobody.
 
     A NULL owner must not match a caller through the owner leg, and a NULL
     ``org_id`` must not match through the org leg — a row unreachable before
     this slice stays unreachable after it.
     """
     caller = make_user(conn, org_id=None)
-    project_id = make_project(conn, owner_user_id=None, org_id=None)
+    task_id = make_task(conn, owner_user_id=None, org_id=None)
 
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=project_id, user_id=caller)
+        accessible_task(conn, task_id=task_id, user_id=caller)
     assert refused.value.status_code == 404
 
 
-def test_the_two_read_checks_agree_on_a_project_that_has_no_owner_at_all(
+def test_the_two_read_checks_agree_on_a_task_that_has_no_owner_at_all(
     conn: Connection,
 ) -> None:
-    """``accessible_project`` and ``may_read_project`` are one grade, or nothing works.
+    """``accessible_task`` and ``may_read_task`` are one grade, or nothing works.
 
     An administrator reaches an ownerless, organisation-less row through the
     admin leg and nothing else (contract § 11). Both readers select
     ``own_estate`` as a boolean beside their answer — and on this row every
     disjunct of it compares a NULL column, so the predicate is **SQL NULL**.
-    That reached `may_read_project`'s ``scalar_one_or_none()`` as "no row" and
+    That reached `may_read_task`'s ``scalar_one_or_none()`` as "no row" and
     the administrator's stream closed as revoked on its first
-    re-authorisation, while their ``GET`` on the same project succeeded.
+    re-authorisation, while their ``GET`` on the same task succeeded.
 
     Asserted as an agreement between the two rather than as one value, because
     a divergence is the defect: the SSE tail exists to ask the same question
@@ -208,18 +208,18 @@ def test_the_two_read_checks_agree_on_a_project_that_has_no_owner_at_all(
     conn.execute(
         update(app_user).where(app_user.c.user_id == admin).values(is_admin=True)
     )
-    ownerless = make_project(conn, owner_user_id=None, org_id=None)
+    ownerless = make_task(conn, owner_user_id=None, org_id=None)
 
-    direct = accessible_project(conn, project_id=ownerless, user_id=admin)
+    direct = accessible_task(conn, task_id=ownerless, user_id=admin)
     assert direct.via_admin is True
     assert direct.is_owner is False
 
-    recheck = may_read_project(conn, project_id=ownerless, user_id=admin)
+    recheck = may_read_task(conn, task_id=ownerless, user_id=admin)
     assert recheck.allowed is True
     assert recheck.via_admin is True
 
 
-def test_a_caller_without_the_flag_still_cannot_read_an_ownerless_project(
+def test_a_caller_without_the_flag_still_cannot_read_an_ownerless_task(
     conn: Connection,
 ) -> None:
     """The COALESCE that fixed the check above widened nothing.
@@ -230,11 +230,11 @@ def test_a_caller_without_the_flag_still_cannot_read_an_ownerless_project(
     direct read does.
     """
     caller = make_user(conn, org_id=make_org(conn))
-    ownerless = make_project(conn, owner_user_id=None, org_id=None)
+    ownerless = make_task(conn, owner_user_id=None, org_id=None)
 
-    assert may_read_project(conn, project_id=ownerless, user_id=caller) == (False, False)
+    assert may_read_task(conn, task_id=ownerless, user_id=caller) == (False, False)
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=ownerless, user_id=caller)
+        accessible_task(conn, task_id=ownerless, user_id=caller)
     assert refused.value.status_code == 404
 
 
@@ -264,14 +264,14 @@ def test_a_listings_predicate_and_its_audit_decision_come_from_one_flag_read(
     colleague = make_user(conn, org_id=org_id)
 
     recorded = _statements(conn)
-    admin_scope = listing_scope(conn, project, user_id=admin, scope="all")
+    admin_scope = listing_scope(conn, task, user_id=admin, scope="all")
     assert admin_scope.via_admin is True
     assert len(recorded) == 1, recorded
     assert "is_admin" in recorded[0]
     assert str(admin_scope.predicate.compile(conn)) == "true"
 
     recorded.clear()
-    plain_scope = listing_scope(conn, project, user_id=colleague, scope="all")
+    plain_scope = listing_scope(conn, task, user_id=colleague, scope="all")
     assert plain_scope.via_admin is False
     assert len(recorded) == 1, recorded
     assert "is_admin" not in str(plain_scope.predicate.compile(conn))
@@ -279,7 +279,7 @@ def test_a_listings_predicate_and_its_audit_decision_come_from_one_flag_read(
     # `scope=mine` still costs no query at all: the owner column cannot be
     # widened by the flag, so there is nothing to ask.
     recorded.clear()
-    mine = listing_scope(conn, project, user_id=admin, scope="mine")
+    mine = listing_scope(conn, task, user_id=admin, scope="mine")
     assert mine.via_admin is False
     assert recorded == []
 
@@ -296,11 +296,11 @@ def test_same_org_colleague_is_refused_the_write_grade(conn: Connection) -> None
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     colleague = make_user(conn, org_id=org_id)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_id, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_id, visibility="org")
 
-    assert accessible_project(conn, project_id=project_id, user_id=colleague).is_owner is False
+    assert accessible_task(conn, task_id=task_id, user_id=colleague).is_owner is False
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=project_id, user_id=colleague, write=True)
+        accessible_task(conn, task_id=task_id, user_id=colleague, write=True)
     assert refused.value.status_code == 403
     assert refused.value.detail == FORBIDDEN_DETAIL
 
@@ -311,37 +311,37 @@ def test_unreadable_row_stays_404_under_the_write_grade(conn: Connection) -> Non
     org_b = make_org(conn, name="B")
     owner = make_user(conn, org_id=org_b)
     outsider = make_user(conn, org_id=org_a)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_b, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_b, visibility="org")
 
     with pytest.raises(HTTPException) as refused:
-        accessible_project(conn, project_id=project_id, user_id=outsider, write=True)
+        accessible_task(conn, task_id=task_id, user_id=outsider, write=True)
     assert refused.value.status_code == 404
 
 
-# --- Archived rows: unchanged from ``owned_project`` -----------------------
+# --- Archived rows: unchanged from ``owned_task`` -----------------------
 
 
-def test_archived_project_needs_include_archived_for_owner_and_colleague(
+def test_archived_task_needs_include_archived_for_owner_and_colleague(
     conn: Connection,
 ) -> None:
     """The status leg is orthogonal to tenancy and behaves exactly as today."""
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     colleague = make_user(conn, org_id=org_id)
-    project_id = make_project(
+    task_id = make_task(
         conn, owner_user_id=owner, org_id=org_id, visibility="org", status="archived"
     )
 
     for caller in (owner, colleague):
         with pytest.raises(HTTPException) as hidden:
-            accessible_project(conn, project_id=project_id, user_id=caller)
+            accessible_task(conn, task_id=task_id, user_id=caller)
         assert hidden.value.status_code == 404
-        access = accessible_project(
-            conn, project_id=project_id, user_id=caller, include_archived=True
+        access = accessible_task(
+            conn, task_id=task_id, user_id=caller, include_archived=True
         )
-        assert access.row["project_id"] == project_id
-    assert accessible_project(
-        conn, project_id=project_id, user_id=owner, include_archived=True, write=True
+        assert access.row["task_id"] == task_id
+    assert accessible_task(
+        conn, task_id=task_id, user_id=owner, include_archived=True, write=True
     ).is_owner
 
 
@@ -356,14 +356,14 @@ def test_for_update_without_the_write_grade_is_a_programming_error(conn: Connect
     Phase 4 fixes ``for_update`` per call site from an explicit table.
     """
     owner = make_user(conn, org_id=None)
-    project_id = make_project(conn, owner_user_id=owner, org_id=None)
+    task_id = make_task(conn, owner_user_id=owner, org_id=None)
 
     with pytest.raises(ValueError, match="write-path lock"):
-        accessible_project(conn, project_id=project_id, user_id=owner, for_update=True)
+        accessible_task(conn, task_id=task_id, user_id=owner, for_update=True)
     with pytest.raises(ValueError, match="write-path lock"):
-        accessible_portfolio(
+        accessible_project(
             conn,
-            portfolio_id=make_portfolio(conn, owner_user_id=owner),
+            project_id=make_project(conn, owner_user_id=owner),
             user_id=owner,
             for_update=True,
         )
@@ -380,33 +380,33 @@ def test_locking_can_only_ever_land_on_the_callers_own_row(conn: Connection) -> 
     org_id = make_org(conn)
     owner = make_user(conn, org_id=org_id)
     colleague = make_user(conn, org_id=org_id)
-    project_id = make_project(conn, owner_user_id=owner, org_id=org_id, visibility="org")
+    task_id = make_task(conn, owner_user_id=owner, org_id=org_id, visibility="org")
 
     issued = _statements(conn)
-    assert accessible_project(
-        conn, project_id=project_id, user_id=owner, write=True, for_update=True
+    assert accessible_task(
+        conn, task_id=task_id, user_id=owner, write=True, for_update=True
     ).is_owner
     assert len(issued) == 1
     assert "FOR UPDATE" in issued[0]
 
     with pytest.raises(HTTPException) as refused:
-        accessible_project(
-            conn, project_id=project_id, user_id=colleague, write=True, for_update=True
+        accessible_task(
+            conn, task_id=task_id, user_id=colleague, write=True, for_update=True
         )
     assert refused.value.status_code == 403
 
     locking = [statement for statement in issued if "FOR UPDATE" in statement]
     assert len(locking) == 2
     for statement in locking:
-        assert "project.owner_user_id = %(owner_user_id_1)s" in statement
+        assert "task.owner_user_id = %(owner_user_id_1)s" in statement
         assert "EXISTS" not in statement
 
 
-# --- Portfolio mirror ------------------------------------------------------
+# --- Project mirror ------------------------------------------------------
 
 
-def test_portfolio_mirrors_the_project_grades(conn: Connection) -> None:
-    """Owner call (e): ``portfolio`` takes the same tenancy grades as ``project``."""
+def test_project_mirrors_the_task_grades(conn: Connection) -> None:
+    """Owner call (e): ``project`` takes the same tenancy grades as ``task``."""
     org_a = make_org(conn, name="A")
     org_b = make_org(conn, name="B")
     owner = make_user(conn, org_id=org_a)
@@ -414,14 +414,14 @@ def test_portfolio_mirrors_the_project_grades(conn: Connection) -> None:
     outsider = make_user(conn, org_id=org_b)
     unenrolled = make_user(conn, org_id=None)
 
-    shared = make_portfolio(conn, owner_user_id=owner, org_id=org_a, visibility="org")
-    private = make_portfolio(conn, owner_user_id=owner, org_id=org_a, visibility="private")
-    unstamped = make_portfolio(conn, owner_user_id=unenrolled, org_id=None)
+    shared = make_project(conn, owner_user_id=owner, org_id=org_a, visibility="org")
+    private = make_project(conn, owner_user_id=owner, org_id=org_a, visibility="private")
+    unstamped = make_project(conn, owner_user_id=unenrolled, org_id=None)
 
-    assert accessible_portfolio(conn, portfolio_id=shared, user_id=owner).is_owner
-    assert accessible_portfolio(conn, portfolio_id=shared, user_id=colleague).is_owner is False
+    assert accessible_project(conn, project_id=shared, user_id=owner).is_owner
+    assert accessible_project(conn, project_id=shared, user_id=colleague).is_owner is False
     with pytest.raises(HTTPException) as write_refused:
-        accessible_portfolio(conn, portfolio_id=shared, user_id=colleague, write=True)
+        accessible_project(conn, project_id=shared, user_id=colleague, write=True)
     assert write_refused.value.status_code == 403
 
     for hidden_id, caller in (
@@ -431,22 +431,22 @@ def test_portfolio_mirrors_the_project_grades(conn: Connection) -> None:
         (unstamped, colleague),
     ):
         with pytest.raises(HTTPException) as refused:
-            accessible_portfolio(conn, portfolio_id=hidden_id, user_id=caller)
+            accessible_project(conn, project_id=hidden_id, user_id=caller)
         assert refused.value.status_code == 404
         assert refused.value.detail == NOT_FOUND_DETAIL
 
 
-def test_two_unenrolled_callers_cannot_see_each_others_null_org_portfolios(
+def test_two_unenrolled_callers_cannot_see_each_others_null_org_projects(
     conn: Connection,
 ) -> None:
-    """The NULL rule again, on the portfolio leg."""
+    """The NULL rule again, on the project leg."""
     first = make_user(conn, org_id=None)
     second = unregistered_user()
-    theirs = make_portfolio(conn, owner_user_id=first, org_id=None)
+    theirs = make_project(conn, owner_user_id=first, org_id=None)
 
-    assert accessible_portfolio(conn, portfolio_id=theirs, user_id=first).is_owner
+    assert accessible_project(conn, project_id=theirs, user_id=first).is_owner
     with pytest.raises(HTTPException) as refused:
-        accessible_portfolio(conn, portfolio_id=theirs, user_id=second)
+        accessible_project(conn, project_id=theirs, user_id=second)
     assert refused.value.status_code == 404
 
 
