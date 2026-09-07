@@ -57,8 +57,8 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   from the current analysis, never by replaying the chat** (ruling 21).
 - ✅ **Vocabulary.** Themes (the higher level) → Options (the actionable level) → constituent
   interventions and their documents. An option has a **specified design**; options relate as
-  **variant of** and **part of** (ruling 15). Coverage is counted over the fixed **lever
-  types**, not over themes (ruling 20). Green Book words in the product: longlist, shortlist, do
+  **variant of** and **part of** (ruling 15). Every option has one **primary lever type** and may
+  touch others; coverage is counted over primary lever types, not over themes (ruling 20). Green Book words in the product: longlist, shortlist, do
   nothing, do minimum. "Lever family", "annex", "thread", "pin", "set aside", "promote", "frame"
   never appear user-facing (concept § Vocabulary; rulings 5, 8, 13; the shell is "Plan").
 - ✅ **Rigidity:** structured — a fixed stage order with two hard gates (below), user
@@ -116,12 +116,20 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   support; abstracts are quotable anywhere; a document with no obtainable full text supports
   abstract-level claims and is labelled so. "Scoping pass" = screened on titles and abstracts,
   full text read for the documents cited, document set not confirmed.
-- ❓ Whether assessment cells come from the EB's per-document extraction or from
-  retrieval-augmented reading over the read texts is an **implementation decision**
-  (concept open question 2, part-resolved; spike before the assessment task is contracted).
+- 🟡 **Assessment shape to spike** (concept open question 2, owner 2026-09-07). The countable
+  cells (direction per study, magnitude with its comparator and period, study design, setting)
+  come from a **light per-document extraction** — a small field set, not the EB's full schema —
+  run as a parallel fan-out over the capped set so latency is close to one document's, not the
+  sum. The narrative sections (mechanism, case studies, what it would take, moderator quotes)
+  come from **retrieval-augmented reading** over the read texts. The stage-1 screen's structured
+  fields give an abstract-level strip before any full text is read. The per-option document cap
+  is the latency lever; the spike before the assessment contract measures whether the light
+  extraction fits the rapid budget at that cap. ❓ How "one vote per independent study" detects
+  several papers on one trial is open (a trial or registration identifier in the light
+  extraction is the candidate).
 - ✅ **Depth settings and entry branches are orthogonal** (ruling 25). *Rapid* and *standard*
-  govern retrieval breadth and documents read per option, and apply to both branches; the
-  sense-check branch defaults to rapid. Deep (per-option stress-testing, mechanism-analogy
+  govern retrieval breadth and documents read per option, and apply to both branches; **the plan
+  asks for depth every time, in both branches; there is no default** (owner, 2026-09-07). Deep (per-option stress-testing, mechanism-analogy
   search) ⏸ later. ❓ The rapid latency budget is a number the contract must set (concept open
   question 3).
 - ✅ **Cost lever.** If a standard run is too expensive the cut is depth, not coverage: a lighter
@@ -157,8 +165,9 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   and ministerial additions, and a linked Evidence search report's interventions labelled "from
   your evidence search", ruling 22). Every entrant gets the same treatment — the fait-accompli
   fix (concept § Shape 2). **A user modification of an option's design becomes a new option,
-  variant of its parent, with its own mini search** (ruling 15); packages and ingredients are
-  linked part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
+  variant of its parent, with its own mini search** (ruling 15); which edits count as a design
+  change is the agent's judgement, stated in the chat, with no fixed rule (owner, 2026-09-07);
+  packages and ingredients are linked part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
   target longlist size — are open question 4.
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
   metadata as options complete. Hard screens = the user's session constraints of the
@@ -176,9 +185,12 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   ambiguous between the kinds. Screen findings that rest on the corpus are cited.
 - ✅ **Shortlist assembly is separate from screening** (rulings 6, 19, 20). The proposed
   shortlist is a **representative coverage of the decision space, not a top-N**: **one place per
-  fixed lever type present among the kept options**, each picked on a **single named axis stated
-  in its reason**. Themes group the longlist and label the grid but do not earn places; a
-  single-option theme gets no automatic place unless its lever type is otherwise uncovered.
+  primary lever type present among the kept options**, each picked on a **single named axis stated
+  in its reason**. An option's secondary lever types do not fill places but do shape the gap
+  message ("Regulate: no dedicated option; touched by the youth guarantee package") (owner,
+  2026-09-07). Themes group the longlist and label the grid but do not earn places; a
+  single-option theme gets no automatic place unless its primary lever type is otherwise
+  uncovered.
   Pre-assessment reasons are limited to what metadata knows (distinctness, "widest
   implementation record", "only option of its lever type", "thin evidence"); **study count alone
   is never a reason**, **reasoned guesses never feed the proposal**, and thin evidence is a
@@ -186,9 +198,10 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   without saying so, and warns when every place shares one ambition band. "Strongest evidence"
   arrives with the assessment as a sort. A place is filled in one of two ways — **proposed by
   Policy Atlas** with its reason, or **added by you**; when the user adds, PA advises on
-  coverage gaps and never removes. "Most promising" is served honestly: per-axis sorts on
-  comparable axes and **conditional recommendations** on those axes only; fused orderings are
-  permanently out.
+  coverage gaps and never removes. "Most promising" is served honestly and **only after
+  assessment**: per-axis sorts on comparable axes and **conditional recommendations** on those
+  axes only. Before assessment the agent describes coverage and gaps and makes no "if your
+  priority is X" statements (owner, 2026-09-07). Fused orderings are permanently out.
 - ✅ **One shortlist action, plain words** (ruling 5). *Add to shortlist* is available from the
   moment an option exists (longlist row, option page, grid); *Remove from shortlist* reverses it;
   *Exclude* and *Include again* are the user's screening actions. An option the user added keeps
@@ -226,7 +239,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   same lever type, and the lever types the idea does not touch. Secondary on the page.
 - ✅ **Proposal through the gate.** Rapid: the named option alone. Standard: the named option
   **plus its most similar neighbours**, pre-ticked, one confirmation. Each assessed at the
-  chosen depth.
+  chosen depth. ❓ The similarity measure is an implementation decision (open question 10).
 - ✅ **Primary surface = the named option's profile.** In standard the assessed table sits under
   it as the comparison. One extra output element: **"questions to put to the department"**,
   generated like the summary's closing element. Export = profile, neighbour list, questions.
@@ -250,8 +263,10 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   stated outcomes it is for, its relations (variant of · part of), and its state (on the
   shortlist · suggested · from your evidence search · added by you · excluded with the
   constraint · no in-scope evidence). Two views: list (for judging each option) and grid
-  (**lever type × ambition**, for judging the set; ambition is a per-option descriptive tag with
-  a one-line justification, labelled "as described, not measured", ruling 20). A click opens a
+  (**primary lever type × ambition**, for judging the set; ambition is a per-option tag with a
+  one-line justification, labelled "as described, not measured" and carried as a **tier-4
+  reasoning claim** since no evidence has been read when it is assigned, ruling 20; owner
+  2026-09-07). A click opens a
   light **option-before-assessment** page: what it is for · what the evidence base holds so far ·
   screens and guesses · where it came from.
 - ✅ **Shortlist.** One list at two stages: before assessment, the places with their reasons and
@@ -278,7 +293,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   practice (design variants observed across implementations) · Case studies (each with what they
   did, what happened, what made it work or not, and what to watch for; typed by source tier) ·
   Transferability working (the Factor | Evidence says | Your context | Basis table, with
-  context entries typed retrieved · stated by you · planned by you, ruling 18) ·
+  context entries typed retrieved · stated by you · planned by you; a retrieved fact at a
+  containing geography counts unless a more local fact contradicts it, ruling 18) ·
   Assumptions (load-bearing, strength, the key one) · What it would take (implementation
   requirements, reported costs, time to impact, distributional notes — provenance-carrying, no
   analysis). Next steps: run a full evidence search · start a theory of change (⏸ consumer) ·
@@ -288,7 +304,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   workhorse and the USP)**, and supplementary verified web links (gap-filler, lowest tier). A
   case study never silently raises an evidence-strength rating (concept § Case-study sourcing).
 - ✅ **Sources tab**: what was searched (the coverage statement: documents retrieved and passed,
-  grey literature, web, screens applied, not searched) · all sources · sources by option.
+  inherited versus added (ruling 22), grey literature, web, screens applied, what was read at
+  which depth (ruling 16), not searched) · all sources · sources by option.
 - ✅ **Density rule.** Never all layers at once; collapsed headers carry their takeaways; detail
   on demand. Applies to every scoping surface (concept § Option click-through).
 
@@ -356,12 +373,14 @@ contracts:
 
 ## Open decisions and deferred seams
 
-❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search
-mechanics and cost envelope (extraction vs retrieval-augmented reading over the full texts read;
-the reading rule itself is settled, ruling 16) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
+❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search cost
+envelope and the light-extraction-plus-reading shape to spike (reading rule settled, ruling 16;
+study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
 · 6 baseline generation and grey-literature sourcing · 7 iteration mechanics and versioning ·
 8 the entry point from the product's front door (the rest of the product surface is settled) ·
-9 magnitude banding (requires its own eval before any band reaches users).
+9 magnitude banding (requires its own eval before any band reaches users) · 10 the similarity
+measure behind "most similar neighbours" in the standard sense-check (settle when that task is
+contracted).
 
 ⏸ Deferred: deep mode · the applicability capability · critical review · the Theory-of-Change
 session · collaborative rating · org-level memory · meta-analysis across several corpora ·

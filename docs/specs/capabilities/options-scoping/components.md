@@ -48,20 +48,27 @@ neighbours (standard).
 **Universal core, ambient to every component:** `search`, `retrieve`, `lookup`, `appraise`,
 `produce-grounded-block`, `escalate`, `clarify`.
 
-| # | Component | Centres on | Reuses from EB | Realisation | Gating |
-|---|---|---|---|---|---|
-| 0 | inherit | seed the plan, pool and longlist from a linked Evidence search task | the task's plan object, screened set and report findings (Links) | procedure | optional; user chooses the task |
-| 1 | plan | the scaffolded planning conversation → plan object | the plan object and plan document (system § plan-as-object; EB plan UI) | agent (lead-authored prompt) | mandatory; gate: confirm |
-| 2 | baseline | grey-literature + official-statistics retrieval → "Do nothing" profile incl. what is contested | `search` (Overton, web), `produce-grounded-block` | procedure + agent | mandatory; **run pauses after**; user may question it in chat |
-| 3 | retrieve | `search` over the evidence base for the plan | acquire | procedure | mandatory |
-| 4 | screen | stage-1 title-and-abstract consensus screen, plan as intent | screen (stage 1 only; **no stage 2 in OS**) | per-doc fan-out | mandatory |
-| 5 | mint | cluster screened interventions into options with a specified design; name themes; map to lever types; add taxonomy, inherited and user suggestions; link variant-of / part-of | cluster / group (theming machinery) | procedure + agent | mandatory |
-| 6 | constrain | scope-shaped screens on metadata and the specified design; evidence-scope constraints applied at retrieval/screen, never excluding; reasoned guesses for after-assessment constraints | — | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
-| 7 | propose | one place per lever type present, one named reason per place; guesses and study count excluded as reasons; ambition-band and package/ingredient warnings; unassessed list | — | procedure + agent | mandatory; user adds/removes on top |
-| 8 | assess | the mini evidence search per shortlisted option (full text of cited documents, capped) → verdict strip + profile sections; variants assessed on their own design | appraise; extract **or** retrieval-augmented reading (❓); `produce-grounded-block` | per-option fan-out | **gate: "Assess these N"**; shortlist only |
-| 9 | summarise | the summary above the assessed table (no superlatives, own comparators) + "What needs deciding or commissioning next" (+ "questions to put to the department" in the sense-check branch) | `produce-grounded-block` | agent | after assess |
-| 10 | export | the Export bundle (summary · table · profiles · baseline · full longlist with states and reasons · shortlist assembly record · what was searched) | Share/export seam (arch §10, no contract yet) | procedure | user-triggered |
-| 11 | ramp | spawn an EB task from one option with the profile-shaped synthesis template; re-read the profile from the report | the whole EB spine + synthesis profile | orchestration | user-triggered, per option |
+**Reuse rule (owner, 2026-09-07).** Components are discrete so they can be shared across
+capabilities and combined into gradations of one ([vocabulary.md § Components](../../vocabulary.md)).
+Every OS component is therefore marked **is EB** (an Evidence search component, possibly with
+parameters), **EB modified** (a variation of one: a new template, object or field set) or **new**,
+and every "new" is justified. Only `inherit` and `propose` are new; `constrain` is the EB screen
+pointed at options rather than documents.
+
+| # | Component | Origin | Centres on | Reuses from EB | Realisation | Gating |
+|---|---|---|---|---|---|---|
+| 0 | inherit | **new** — no EB analogue; a thin procedure over Links | seed the plan, pool and longlist from a linked Evidence search task | the task's plan object, screened set and report findings (Links) | procedure | optional; user chooses the task |
+| 1 | plan | EB modified — scoping slots (target unit, three constraint kinds, branch, depth) | the scaffolded planning conversation → plan object | the plan object and plan document (system § plan-as-object; EB plan UI) | agent (lead-authored prompt) | mandatory; gate: confirm |
+| 2 | baseline | EB modified — acquire with a grey-literature/official-statistics source policy + synthesise with the baseline template | grey-literature + official-statistics retrieval → "Do nothing" profile incl. what is contested | `search` (Overton, web), `produce-grounded-block` | procedure + agent | mandatory; **run pauses after**; user may question it in chat |
+| 3 | retrieve | is EB (acquire) | `search` over the evidence base for the plan | acquire | procedure | mandatory |
+| 4 | screen | is EB (stage 1 only; 🟡 structured fields returned) | stage-1 title-and-abstract consensus screen, plan as intent | screen (stage 1 only; **no stage 2 in OS**) | per-doc fan-out | mandatory |
+| 5 | mint | EB modified — group/cluster with option aggregation, primary + secondary lever types, relations, ambition tag | cluster screened interventions into options with a specified design; name themes; assign one primary lever type per option (others secondary); ambition tag as a tier-4 reasoning claim; add taxonomy, inherited and user suggestions; link variant-of / part-of | cluster / group (theming machinery) | procedure + agent | mandatory |
+| 6 | constrain | EB modified — the screen's per-item judgment with object = option, criteria = constraints | scope-shaped screens on metadata and the specified design; evidence-scope constraints applied at retrieval/screen, never excluding; reasoned guesses for after-assessment constraints | — | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
+| 7 | propose | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason per place; secondary types shape gap messages; guesses and study count excluded as reasons; ambition-band and package/ingredient warnings; unassessed list | — | procedure + agent | mandatory; user adds/removes on top |
+| 8 | assess | EB modified — appraise as is; extract with a light field set; grounded reading with the profile template | the mini evidence search per shortlisted option (full text of cited documents, capped) → verdict strip + profile sections; variants assessed on their own design | appraise; light per-document extract for the countable cells + retrieval-augmented reading for the narrative sections (🟡, spike); `produce-grounded-block` | per-option fan-out | **gate: "Assess these N"**; shortlist only |
+| 9 | summarise | EB modified — synthesise with the summary template | the summary above the assessed table (no superlatives, own comparators) + "What needs deciding or commissioning next" (+ "questions to put to the department" in the sense-check branch) | `produce-grounded-block` | agent | after assess |
+| 10 | export | is EB (Share/export seam) | the Export bundle (summary · table · profiles · baseline · full longlist with states and reasons · shortlist assembly record · what was searched) | Share/export seam (arch §10, no contract yet) | procedure | user-triggered |
+| 11 | ramp | is EB (the whole spine) | spawn an EB task from one option with the profile-shaped synthesis template; re-read the profile from the report | the whole EB spine + synthesis profile | orchestration | user-triggered, per option |
 
 ## 0 — inherit (optional; ruling 22)
 
@@ -83,8 +90,9 @@ neighbours (standard).
   *checked at longlist* or *checked after assessment*) · plan steps · check-ins (ruling 1, 12).
 - ✅ Branches on the two jobs: *explore the option space* vs *sense-check one option* (ruling 25:
   the latter seeds the working set with one option as added by you with its specified design,
-  infers problem, target unit, outcome and place for the user to confirm, and defaults to rapid
-  depth). Depth (rapid / standard) is a plan setting orthogonal to the branch. ✅ The plan is a plan object in the
+  infers problem, target unit, outcome and place for the user to confirm). Depth (rapid /
+  standard) is a plan setting orthogonal to the branch; the plan asks for it every time, no
+  default. ✅ The plan is a plan object in the
   system sense ([plan-as-object](../../system/plan-as-object.md)) and compiles to the run
   configuration; ❓ the scaffolding chat as a shared component with EB (open question 8).
 - ✅ Prompt-bearing: lead-authored under [prompting.md](../../system/prompting.md).
@@ -95,7 +103,8 @@ neighbours (standard).
   nothing changes · who is affected · what is already changing · **what is contested** · cost of
   inaction · key assumption · sources), every statement provenance-carrying; "not found" stated
   as such. Retrieved baseline facts are available to `assess` as *retrieved* context, tagged
-  with their geography (ruling 18).
+  with their geography; a containing geography counts unless a more local fact contradicts it
+  (ruling 18).
 - ✅ Reported facts only; the tool does not forecast; the key assumption is a labelled
   reasoning claim (tier 4). ✅ The run **pauses** after this component until the plan is
   confirmed against it; the pause is explicitly a place to question the baseline in chat
@@ -121,8 +130,9 @@ neighbours (standard).
 
 - **In:** the screened pool; the lever-type taxonomy; inherited, user and ministerial additions.
   **Out:** the longlist — options (name, one-sentence description, **specified design**,
-  constituent interventions with their documents, stated outcomes served, metadata, ambition
-  tag with a one-line justification, relations *variant of* / *part of*) grouped into generated
+  constituent interventions with their documents, stated outcomes served, metadata, **one
+  primary lever type** and any secondary ones, an ambition tag with a one-line justification
+  carried as a tier-4 reasoning claim, relations *variant of* / *part of*) grouped into generated
   themes, each theme mapped to lever type(s) with a one-line "what it does".
 - ✅ Bottom-up: interventions cluster into options (an option is an actionable aggregate of
   related interventions; drill-down shows the constituents) using the EB's theming machinery.
@@ -156,19 +166,21 @@ neighbours (standard).
 ## 7 — propose
 
 - **In:** the included options with metadata and relations; the user's additions. **Out:** the
-  proposed shortlist — **one place per fixed lever type present among the kept options**
+  proposed shortlist — **one place per primary lever type present among the kept options**
   (ruling 20), each with one named reason from what metadata knows (distinctness, widest
-  implementation record, only option of its lever type, thin evidence); the list of kept
-  options not proposed, by theme; warnings when every place shares one ambition band or when a
-  package and its own ingredient would both take places.
+  implementation record, only option of its lever type, thin evidence); gap messages in which
+  secondary lever types are named ("Regulate: no dedicated option; touched by the youth
+  guarantee package"); the list of kept options not proposed, by theme; warnings when every place
+  shares one ambition band or when a package and its own ingredient would both take places.
 - ✅ Never a top-N; never a fused score; **study count alone is never a reason; reasoned guesses
   are not inputs** (ruling 19); thin evidence is a reason to assess. ✅ Themes group but do not
   earn places; a singleton theme is proposed only if its lever type is otherwise uncovered.
   ✅ Places the user added are respected and worked around; PA advises on gaps and never removes
   (ruling 6). ✅ In the sense-check branch the proposal is the named option (rapid) or the named
-  option plus its most similar neighbours, pre-ticked (standard) (ruling 25). ✅ "Most
-  promising" only as per-axis sorts on comparable axes and conditional recommendations on those
-  axes.
+  option plus its most similar neighbours, pre-ticked (standard) (ruling 25; ❓ similarity measure
+  = open question 10). ✅ "Most
+  promising" only after assessment, as per-axis sorts on comparable axes and conditional
+  recommendations on those axes; before assessment `propose` describes coverage and gaps only.
 
 ## 8 — assess
 
@@ -190,8 +202,14 @@ neighbours (standard).
   parent's evidence appears only as related evidence for a different design (ruling 15).
   ✅ Shortlist only, on the user's word; every cell labelled *scoping pass*. ✅ Unassessed cells
   are honest empty states ("not yet searched" / "no credible evidence found").
-  ❓ Extraction vs retrieval-augmented reading over the read texts; latency lever: strips first,
-  deeper sections in the background or on first open (concept open question 2). ✅ Reuses the EB's causality
+  🟡 **Shape to spike** (open question 2, owner 2026-09-07): a **light per-document extraction**
+  (small field set: direction, outcome family, magnitude with comparator and period, design,
+  setting, and a trial or registration identifier if independence detection needs it) run as a
+  parallel fan-out over the capped set, for the countable cells; **retrieval-augmented reading**
+  over the read texts for the narrative sections; the stage-1 screen's structured fields for the
+  abstract-level strip shown first. Extraction is slower than reading, so the per-option document
+  cap is the latency lever and the spike measures fit to the rapid budget. ❓ Study-independence
+  detection for vote counting is open. ✅ Reuses the EB's causality
   taxonomy, discord detection and profile-not-scalar framing salvaged from V2 (concept § Effect
   cell, § Transferability cell).
 

@@ -25,8 +25,10 @@ supported sentence, and the sentence is what gets copied into advice.
 - ✅ **Generation is free.** Suggesting an option needs no source. A suggestion is a labelled
   hypothesis ("suggested by Policy Atlas", "added by you") and enters the same funnel as
   evidence-derived options. This is how structural and thin-evidence options get in at all.
-- ✅ **Interpretation is labelled.** Mechanism sentences, failure modes and assumptions reuse the
-  EB's claim-type and grounding-tier machinery rather than a new scheme: tier-2/3 inferences
+- ✅ **Interpretation is labelled.** Mechanism sentences, failure modes, assumptions and the
+  **ambition tag** (assigned at longlist depth before any evidence is read; a tier-4 reasoning
+  claim, shown "as described, not measured", ruling 20) reuse the EB's claim-type and
+  grounding-tier machinery rather than a new scheme: tier-2/3 inferences
   where the literature supports them; capped, visibly labelled *reasoning* claims (tier 4,
   "reasoning, not evidence", which must not smuggle findings) where they are the model's own
   analysis. The full evidence search is what upgrades interpretive claims toward cited tiers.
@@ -44,8 +46,10 @@ supported sentence, and the sentence is what gets copied into advice.
 - ✅ **Claim depth follows reading depth** (ruling 16). Every claim carries the depth of what was
   read — abstract or full text. A section may not assert what the read material does not
   support. Abstracts are quotable anywhere. "Reasoning" never labels an empirical claim about
-  the corpus ("every evaluated scheme paired the offer with an obligation" is a sourced corpus
-  finding with a stated search boundary, or it is not said).
+  the corpus: "every evaluated scheme paired the offer with an obligation" is a **corpus
+  finding**, cited by its coverage denominator and the option's sources list ("12 of 12
+  evaluations read"; Sources tab → by option), never by a wall of per-document citations, or it
+  is not said (owner, 2026-09-07).
 
 ## Provenance labels every surface carries
 
@@ -57,7 +61,12 @@ supported sentence, and the sentence is what gets copied into advice.
   case study never raises an evidence-strength rating. The baseline's skew to official
   statistics and grey literature is shown, not hidden.
 - ✅ **Coverage denominators:** "3 of 5 documents", "6 of 9 evaluations" — never a bare
-  adjective standing in for a count.
+  adjective standing in for a count. A denominator plus the option's sources list is the
+  citation form for corpus-level claims.
+- ✅ **Editorial elements are unlabelled.** The summary's "What needs deciding or commissioning
+  next" and the sense-check's "questions to put to the department" are scaffolding assembled
+  from already-labelled unresolved points; they carry no tier label of their own (owner,
+  2026-09-07).
 - ✅ **What was searched** is stated on the Sources tab and in the Export bundle: documents
   retrieved and passed, inherited versus added (ruling 22), grey literature, web, screens
   applied, what was read at which depth, and explicitly *not searched*. Breadth is claimed;
@@ -98,8 +107,9 @@ supported sentence, and the sentence is what gets copied into advice.
   (empirical · author hypothesis · theory background).
 - ✅ **Default-to-Unknown context discipline, three sources** (ruling 18): the Factor | Evidence
   says | Your context | Basis table takes context entries typed **retrieved** (from the
-  baseline or the assessment, cited, geography-tagged and counted only where it matches the
-  target unit), **stated by you** (a fact about the present) or **planned by you** (a
+  baseline or the assessment, cited and geography-tagged; a fact at a **containing geography
+  counts unless a more local retrieved or stated fact contradicts it**, and is shown with its
+  level — owner, 2026-09-07), **stated by you** (a fact about the present) or **planned by you** (a
   commitment). Never inferred. Unknown stays unknown. Only the first two can lift a cap; a
   commitment becomes a named condition of a conditional verdict ("Conditional on: local
   delivery funded"). A stated intention never acquires the force of verified capacity.

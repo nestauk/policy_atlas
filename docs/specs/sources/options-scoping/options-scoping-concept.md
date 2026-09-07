@@ -295,8 +295,12 @@ runs) · an **orientation / domain-primer capability** for users new to a domain
 2. **Mini evidence search spec** — which EB components at what depth, and the cost
    envelope (a standard run ≈ N options × one mini search; per-run price target
    constrains N and depth). **Partly resolved 2026-09-07 (ruling 16):** the mini search
-   reads the full text of the documents it relies on, capped per option; extraction vs
-   retrieval-augmented reading over those texts stays open.
+   reads the full text of the documents it relies on, capped per option. **Shape to spike
+   (owner, 2026-09-07):** a light per-document extraction (small field set) in parallel for the
+   countable cells, retrieval-augmented reading for the narrative sections; extraction is slower
+   than reading, so the document cap is the latency lever and the spike measures fit to the
+   rapid budget. Open: how "one vote per independent study" detects several papers on one
+   trial.
 3. **Rapid-mode latency budget** — a number, and how much grounding fits inside it.
 4. **Option minting mechanics** — clustering, overlap/dedup, target longlist size.
 5. **Taxonomy source** — curated asset vs prompt-internal (Green Book solution dimension
@@ -313,6 +317,9 @@ runs) · an **orientation / domain-primer capability** for users new to a domain
 9. **Magnitude banding** — whether analytical banding earns its place after v1, and
    which approach (literature-anchored vs session-calibrated; see "Effect cell").
    Requires its own eval before any band reaches users.
+10. **Similarity measure** (added 2026-09-07, ruling 25) — what "most similar neighbours"
+    means for the standard sense-check's comparison set (embedding distance over descriptions,
+    same lever type and outcome, or agent judgement). Settle when that task is contracted.
 
 ## Wireframe-round rulings (owner, 2026-09-03)
 
@@ -504,7 +511,8 @@ until then the rulings win over the boards.
 18. **Transferability: three context sources, the weakest leg decides.** The Factor |
     Evidence says | Your context | Basis table takes three kinds of context entry:
     **retrieved** (from the baseline or the assessment, cited, tagged with the geography it
-    applies to and counted only where that matches the target unit), **stated by you** (a
+    applies to; a fact at a containing geography counts unless a more local retrieved or stated
+    fact contradicts it, and is shown with its level — owner 2026-09-07), **stated by you** (a
     fact about the present) and **planned by you** (a commitment). Only the first two can
     lift a cap; a commitment becomes a named condition of a conditional verdict
     ("Conditional on: local delivery funded"). The verdict word is set by the **weakest
@@ -515,8 +523,10 @@ until then the rulings win over the boards.
 19. **Assessment allocation is debiased; three depths stay.** Reasoned guesses (ruling 12)
     **never feed the shortlist proposal or any pre-assessment recommendation**; they are a
     flag and a sort the user asks for. Study count alone is never a place reason. "Thin
-    evidence" is a reason to assess, never to skip. The summary and the export list every
-    kept option that was not assessed, by theme, so omissions are explicit. A whole-longlist
+    evidence" is a reason to assess, never to skip. Conditional recommendations ("if your
+    priority is X…") are made **only after assessment**; before it the agent describes coverage
+    and gaps. The summary and the export list every kept option that was not assessed, by
+    theme, so omissions are explicit. A whole-longlist
     "Assess all kept options" action is deferred (inference cost).
 20. **Coverage is anchored on lever types; the grid is re-anchored; ambition is a tag.**
     The shortlist proposal fills **one place per fixed lever type present among the kept
@@ -524,10 +534,14 @@ until then the rulings win over the boards.
     places, the user removes if over. Generated themes group the longlist and label the
     grid but **do not earn places**; a single-option theme gets no automatic place unless
     its lever type is otherwise uncovered (themes are generated and a singleton may be a
-    clustering artefact). The grid view's **rows are lever types**. **Ambition** survives
-    only as a per-option descriptive tag with a one-line justification, shown as the grid's
-    columns and labelled "as described, not measured"; the proposal warns when every place
-    shares one band (the all-incremental shortlist is the NAO failure). Board 5b's
+    clustering artefact). Every option has **one primary lever type** and may touch others;
+    coverage counts the primary, and secondary types shape the gap message ("Regulate: no
+    dedicated option; touched by the youth guarantee package") (owner, 2026-09-07). The grid
+    view's **rows are primary lever types**. **Ambition** survives only as a per-option tag
+    with a one-line justification, shown as the grid's columns, labelled "as described, not
+    measured" and carried as a **tier-4 reasoning claim** (no evidence has been read when it is
+    assigned); the proposal warns when every place shares one band (the all-incremental
+    shortlist is the NAO failure). Board 5b's
     "Organisational has no place: both options thin" broke ruling 6 and is withdrawn.
 21. **The handoff carries the whole record; resume from the analysis.** Export (ruling 14)
     additionally bundles the **full longlist with states and reasons** and the **shortlist
@@ -571,8 +585,10 @@ until then the rulings win over the boards.
     proposal is the named option **plus its most similar neighbours**, pre-ticked, confirmed
     with one action; each assessed at standard depth; the assessed table sits under the
     profile as the comparison. The user can widen at any point (add a neighbour, assess it,
-    or switch to exploring the space) within the same task. Board 8 is redrawn as the rapid
-    version, honouring the pause.
+    or switch to exploring the space) within the same task. **The plan asks for depth every
+    time, in both branches; no default.** Which user edits count as a design change that mints a
+    variant (ruling 15) is the agent's judgement, stated, with no fixed rule. The similarity
+    measure is open question 10. Board 8 is redrawn as the rapid version, honouring the pause.
 26. **Effect-cell vote-count rules.** "Report, don't compute" still involves choices, so
     they are fixed: one vote per independent study; direction defined per outcome family;
     statistical significance never counted; disagreement shown as the discord flag. Banding
