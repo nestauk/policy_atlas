@@ -1105,7 +1105,7 @@ def test_patch_plan_apo_geography_token_sets_publisher_source(
     tmp_path: Path, token: str
 ) -> None:
     """038 APO test mod: the geography box accepts "APO" / "Australian Policy
-    Online" (case-insensitive) when Sources is grey literature only."""
+    Online" (case-insensitive) when Sources is Policy literature only."""
     _reset_turn_locks()
     with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
         client,
@@ -1140,7 +1140,7 @@ def test_patch_plan_apo_geography_422s_unless_grey_lit_only(tmp_path: Path) -> N
         # frontend surfaces the envelope message verbatim on Start search.
         assert (
             response.json()["error"]["message"]
-            == "the APO restriction needs Sources set to grey literature only"
+            == "the APO restriction needs Sources set to Policy literature only"
         )
 
 

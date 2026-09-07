@@ -1449,12 +1449,6 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                     for raw_card in raw_cards:
                         if not isinstance(raw_card, dict):
                             continue
-                        result_claim_str = raw_card.get("result_claim_id")
-                        result_claim_uuid = (
-                            claim_id_map.get(result_claim_str)
-                            if isinstance(result_claim_str, str)
-                            else None
-                        )
                         card_id_str = raw_card.get("card_id")
                         try:
                             card_uuid = (
@@ -1467,6 +1461,11 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                         # Project per-card claims from stored claim_ids/spans
                         card_claims = _project_card_claims(
                             raw_card, block_claim_by_id,
+                        )
+                        result_claim_uuid = _resolve_card_result_claim_id(
+                            raw_card,
+                            card_claims=card_claims,
+                            claim_id_map=claim_id_map,
                         )
                         strength, design, since_year = _card_evidence_fields(
                             raw_card, card_claims,
@@ -1618,6 +1617,37 @@ def _card_evidence_fields(
     return strength, design, since_year
 
 
+def _resolve_card_result_claim_id(
+    raw_card: dict[str, Any],
+    *,
+    card_claims: list[ClaimOut],
+    claim_id_map: dict[str, uuid.UUID],
+) -> uuid.UUID | None:
+    """Resolve a card's result claim, rebinding via ordinal when aliases collide.
+
+    Args:
+        raw_card: One card dict from the rollup JSONB.
+        card_claims: Claims already projected onto this card.
+        claim_id_map: Synthesis alias / UUID string → public claim UUID.
+
+    Returns:
+        The public claim UUID for the result span, or None.
+    """
+    result_claim_str = raw_card.get("result_claim_id")
+    result_claim_uuid = (
+        claim_id_map.get(result_claim_str)
+        if isinstance(result_claim_str, str)
+        else None
+    )
+    card_claim_ids = {claim.claim_id for claim in card_claims}
+    if result_claim_uuid is not None and result_claim_uuid in card_claim_ids:
+        return result_claim_uuid
+    ordinal = raw_card.get("result_ordinal")
+    if isinstance(ordinal, int) and 0 <= ordinal < len(card_claims):
+        return card_claims[ordinal].claim_id
+    return None
+
+
 def _project_card_claims(
     raw_card: dict[str, Any],
     block_claim_by_id: dict[str, ClaimOut],
@@ -1626,7 +1656,8 @@ def _project_card_claims(
 
     Uses stored ``claim_ids`` and ``claim_spans`` from the rollup when
     available; falls back to substring matching for rollups written before
-    per-card claim storage.
+    per-card claim storage, and when stored synthesis aliases collided across
+    cards (every card reused ``sNc0..``).
 
     Args:
         raw_card: One card dict from the rollup JSONB.
@@ -1636,6 +1667,8 @@ def _project_card_claims(
         ClaimOut list with spans relative to card.prose.
     """
     card_prose = raw_card.get("prose", "")
+    if not isinstance(card_prose, str):
+        card_prose = ""
     stored_ids = raw_card.get("claim_ids")
     stored_spans = raw_card.get("claim_spans")
 
@@ -1666,7 +1699,10 @@ def _project_card_claims(
                 gap=block_claim.gap,
                 theme=block_claim.theme,
             ))
-        return result
+        # Alias collision: every card stored the same sNc* ids, so the lookup
+        # returns another card's claims whose text is not in this prose.
+        if result and all(claim.text in card_prose for claim in result):
+            return result
 
     # Fallback: match block claims whose text is a substring of card prose.
     # The lookup holds each claim under both its UUID and its synthesis alias,
@@ -1686,6 +1722,7 @@ def _project_card_claims(
                 gap=claim.gap,
                 theme=claim.theme,
             ))
+    result.sort(key=lambda claim: claim.span[0] if claim.span is not None else 0)
     return result
 
 

@@ -28,6 +28,12 @@ def test_first_message_is_unchanged_system_prompt() -> None:
     assert messages[0] == {"role": "system", "content": PLANNER_SYSTEM_PROMPT}
 
 
+def test_system_prompt_teaches_apo_publisher_source() -> None:
+    assert 'publisher_source to "apo"' in PLANNER_SYSTEM_PROMPT
+    assert "Australian Policy Online" in PLANNER_SYSTEM_PROMPT
+    assert "at most 1000 characters" in PLANNER_SYSTEM_PROMPT
+
+
 def test_role_mapping_user_planner_and_unknown() -> None:
     turns = [
         _turn("first user turn", role="user"),

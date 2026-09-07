@@ -974,9 +974,11 @@ def test_parse_screen_directive_criteria_over_cap_list_rejects() -> None:
 
 
 def test_parse_screen_directive_criteria_over_cap_string_rejects() -> None:
+    from policy_atlas.evidence_base.assess.screen import SCREENING_CRITERION_MAX
+
     with pytest.raises(ScreenDirectiveError):
         _parse_screen_directive(
-            {"screening": {"criteria": ["x" * (DIRECTIVE_STRING_MAX + 1)]}}
+            {"screening": {"criteria": ["x" * (SCREENING_CRITERION_MAX + 1)]}}
         )
 
 

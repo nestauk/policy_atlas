@@ -4828,9 +4828,15 @@ def _ground_case_study_card(
     if not wire_claims:
         return None
 
+    # Mint across the whole case-studies block, not per card. validate_claims
+    # defaults claim_id to s{section}c{offset-in-batch}; calling it once per
+    # card without explicit ids reused sNc0.. for every card, so the rollup's
+    # claim_ids aliases all collided and the read model projected every card
+    # onto the first/last card's citations.
     claim_indices = list(
         range(claim_index_start, claim_index_start + len(wire_claims))
     )
+    claim_ids = [f"s{section_index}c{idx}" for idx in claim_indices]
     spans = bind_spans(card_text, [claim.text for claim in wire_claims])
     if any(span is None for span in spans):
         return None
@@ -4843,6 +4849,7 @@ def _ground_case_study_card(
         citable_finding_ids=citable_finding_ids,
         citable_chunk_ids=citable_chunk_ids,
         spans=spans,
+        claim_ids=claim_ids,
         claim_indices=claim_indices,
         available_claim_types=available_claim_types,
     )

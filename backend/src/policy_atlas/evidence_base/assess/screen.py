@@ -18,7 +18,6 @@ from policy_atlas.core import events, tracing
 from policy_atlas.core.openai_client import CallBudget
 from policy_atlas.core.prompt_fields import clamp_reason, metadata_dict
 from policy_atlas.core.schema import (
-    DIRECTIVE_STRING_MAX,
     chunk,
     project_source_snapshot,
     source_screening_result,
@@ -54,8 +53,10 @@ MAX_CONCURRENT_STAGE2 = 4
 # 2 finding 3): a plan-visible screening criteria list is small, so this
 # mirrors — but is deliberately smaller than — the selection directive's
 # DIRECTIVE_LIST_MAX discipline (select.py/synthesis_tools.py, 200). Per-entry
-# length is bounded by the shared DIRECTIVE_STRING_MAX (schema.py, 200).
+# length uses SCREENING_CRITERION_MAX (plan edits; longer than the shared
+# DIRECTIVE_STRING_MAX used by other guidance channels).
 CRITERIA_LIST_MAX = 50
+SCREENING_CRITERION_MAX = 1000
 
 
 @dataclass(frozen=True)
@@ -228,7 +229,7 @@ def _parse_screen_directive(
 
     Grammar: ``{stage?: 1 | 2, criteria?: list[str], rescreen?: true}``.
     Unknown keys reject. ``criteria`` entries must be non-empty strings no
-    longer than ``DIRECTIVE_STRING_MAX`` chars; the list itself is bounded by
+    longer than ``SCREENING_CRITERION_MAX`` chars; the list itself is bounded by
     ``CRITERIA_LIST_MAX`` entries. Anything above a cap rejects — it is
     never truncated. Criteria are preserved alongside a stage-2 directive.
 
@@ -266,7 +267,7 @@ def _parse_screen_directive(
             if (
                 not isinstance(item, str)
                 or not item
-                or len(item) > DIRECTIVE_STRING_MAX
+                or len(item) > SCREENING_CRITERION_MAX
             ):
                 raise ScreenDirectiveError(
                     "screening directive criteria entries must be bounded, non-empty strings"
@@ -297,7 +298,7 @@ def _compose_screen_intent(intent: str, criteria: list[str]) -> str:
 
     The composed string is validated HERE against ``SCREEN_INTENT_MAX``, at
     directive validation time. ``CRITERIA_LIST_MAX`` (50) x per-entry
-    ``DIRECTIVE_STRING_MAX`` (200) admits a composed string well past
+    ``SCREENING_CRITERION_MAX`` (1000) admits a composed string well past
     ``SCREEN_INTENT_MAX`` (2000); prompt assembly (screen_prompt.py) applies
     ``sanitize_prompt_field`` as a generic truncating defence, but a
     screening criteria list is a decision surface, not display text — the

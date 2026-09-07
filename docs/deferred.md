@@ -2290,5 +2290,5 @@ omissions.
   approved plan rows fail validation. The `"apo"` *value* allowlist lives
   only in `_validate_overton_block` — a graduation slice adding another
   caller of `overton_wire_params` must keep that single choke point in mind.
-  The planning chat never learned the token (`planner_v10` untouched); a
-  product version would be a new slice.
+  Planning chat teaches the APO token as of `planner_v11` (planning UX
+  follow-up); graduating beyond the test mod is still a new slice.

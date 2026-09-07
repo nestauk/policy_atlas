@@ -749,13 +749,17 @@ def test_expected_artefact_shape_and_time_band_are_deterministic() -> None:
 def test_screening_criteria_caps_mirror_screen_directive_grammar() -> None:
     """Plan-model caps match screen.py's directive caps by construction.
 
-    Live check 017: a >200-char criterion validated on the plan, composed,
-    and rejected at the screen boundary mid-run. The plan model must reject
-    anything its compile target rejects.
+    Per-entry SCREENING_CRITERION_MAX (1000) and list CRITERIA_LIST_MAX (50);
+    the plan model must reject anything its compile target rejects.
     """
-    with pytest.raises(ValidationError, match="at most 200 characters"):
-        _plan(screening_criteria=["x" * 201])
+    from policy_atlas.evidence_base.assess.screen import SCREENING_CRITERION_MAX
+
+    with pytest.raises(ValidationError, match="at most 1000 characters"):
+        _plan(screening_criteria=["x" * (SCREENING_CRITERION_MAX + 1)])
     with pytest.raises(ValidationError, match="at most 50 entries"):
         _plan(screening_criteria=[f"criterion {i}" for i in range(51)])
-    ok = _plan(screening_criteria=["x" * 200] + [f"criterion {i}" for i in range(49)])
+    ok = _plan(
+        screening_criteria=["x" * SCREENING_CRITERION_MAX]
+        + [f"criterion {i}" for i in range(49)]
+    )
     assert len(ok.screening_criteria) == 50

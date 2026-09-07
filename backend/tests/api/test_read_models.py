@@ -2200,3 +2200,93 @@ def test_citation_context_starts_and_ends_on_whole_words(
             if project_id is not None:
                 with engine.begin() as conn:
                     delete_project_data(conn, project_id)
+
+
+def test_project_card_claims_recovers_from_colliding_aliases() -> None:
+    """When every card stored the same sNc* aliases, match claims by prose."""
+    from policy_atlas.api.contract.read_models import ClaimOut, CitationOut
+
+    card_a_id = uuid.uuid4()
+    card_b_id = uuid.uuid4()
+    cite_a = CitationOut(
+        citation_id=uuid.uuid4(),
+        n=1,
+        source_title="Source A",
+        quote="quote a",
+    )
+    cite_b = CitationOut(
+        citation_id=uuid.uuid4(),
+        n=2,
+        source_title="Source B",
+        quote="quote b",
+    )
+    claim_a = ClaimOut(
+        claim_id=card_a_id,
+        claim_type="citation",
+        text="anti-racism programme reduced incidents",
+        span=(0, 40),
+        citations=[cite_a],
+    )
+    claim_b = ClaimOut(
+        claim_id=card_b_id,
+        claim_type="citation",
+        text="respectful relationships improved attitudes",
+        span=(0, 44),
+        citations=[cite_b],
+    )
+    # Alias map overwritten so s9c0 points only at card B's claim — the
+    # pre-fix minting bug every card shared.
+    block_claim_by_id = {
+        str(card_a_id): claim_a,
+        str(card_b_id): claim_b,
+        "s9c0": claim_b,
+    }
+    raw_card_a = {
+        "title": "South Australia — anti-racism",
+        "prose": "The anti-racism programme reduced incidents in schools.",
+        "claim_ids": ["s9c0"],
+        "result_ordinal": 0,
+        "result_claim_id": "s9c0",
+    }
+    projected = repository._project_card_claims(raw_card_a, block_claim_by_id)
+    assert [c.claim_id for c in projected] == [card_a_id]
+    assert projected[0].citations[0].source_title == "Source A"
+
+    result_id = repository._resolve_card_result_claim_id(
+        raw_card_a,
+        card_claims=projected,
+        claim_id_map={"s9c0": card_b_id, str(card_a_id): card_a_id},
+    )
+    assert result_id == card_a_id
+
+
+def test_project_card_claims_keeps_alias_hits_when_text_matches() -> None:
+    """Healthy rollups (unique aliases whose text is in the card) stay put."""
+    from policy_atlas.api.contract.read_models import ClaimOut, CitationOut
+
+    claim_id = uuid.uuid4()
+    claim = ClaimOut(
+        claim_id=claim_id,
+        claim_type="citation",
+        text="uptake is near-universal",
+        span=(10, 34),
+        citations=[
+            CitationOut(
+                citation_id=uuid.uuid4(),
+                n=1,
+                source_title="Finland meals",
+                quote="near-universal",
+            )
+        ],
+    )
+    raw_card = {
+        "prose": "Finland shows uptake is near-universal today.",
+        "claim_ids": ["s3c0"],
+        "claim_spans": [{"claim_id": "s3c0", "span": [13, 37]}],
+    }
+    projected = repository._project_card_claims(
+        raw_card, {"s3c0": claim, str(claim_id): claim}
+    )
+    assert len(projected) == 1
+    assert projected[0].claim_id == claim_id
+    assert projected[0].span == (13, 37)

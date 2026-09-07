@@ -15,6 +15,8 @@ import {
   displayedScreening,
   displayedYearAfter,
   displayedYearBefore,
+  mergeOverlayChanges,
+  SCREENING_CRITERION_MAX,
   type PlanOverlay,
 } from "./planOverlay";
 import { START_SEARCH_CLASS, usePlanStart } from "./planStart";
@@ -309,12 +311,14 @@ export function PlanDocument({
 }) {
   const planQuery = usePlan(projectId);
   const draft = planQuery.data?.plan;
-  const { start, startNotice, disabled: startDisabled, label: startLabel } = usePlanStart({
-    projectId,
-    overlay,
-    runActive,
-    onStarted,
-  });
+  const { start, discardAndStart, startNotice, canDiscard, disabled: startDisabled, label: startLabel } =
+    usePlanStart({
+      projectId,
+      overlay,
+      runActive,
+      onStarted,
+      onDiscardOverlay: () => onOverlayChange({}),
+    });
 
   const [editingQuestion, setEditingQuestion] = useState(false);
   const [editingSettings, setEditingSettings] = useState(false);
@@ -333,7 +337,8 @@ export function PlanDocument({
     published_before_year: "",
     geography: "",
   });
-  const [screeningDraft, setScreeningDraft] = useState("");
+  const [screeningDraft, setScreeningDraft] = useState<string[]>([]);
+  const [screeningSaveError, setScreeningSaveError] = useState<string | null>(null);
 
   const beginQuestionEdit = () => {
     if (draft === undefined) return;
@@ -361,7 +366,9 @@ export function PlanDocument({
   };
   const beginScreeningEdit = () => {
     if (draft === undefined) return;
-    setScreeningDraft(displayedScreening(draft, overlay).join("\n"));
+    const rules = displayedScreening(draft, overlay);
+    setScreeningDraft(rules.length > 0 ? rules : [""]);
+    setScreeningSaveError(null);
     setEditingScreening(true);
   };
 
@@ -439,7 +446,10 @@ export function PlanDocument({
               onEdit={beginQuestionEdit}
               onCancel={() => setEditingQuestion(false)}
               onSave={() => {
-                onOverlayChange({ ...overlay, question: questionDraft });
+                if (draft === undefined) return;
+                onOverlayChange(
+                  mergeOverlayChanges(overlay, draft, { question: questionDraft }),
+                );
                 setEditingQuestion(false);
               }}
               view={
@@ -463,12 +473,14 @@ export function PlanDocument({
               onEdit={beginSettingsEdit}
               onCancel={() => setEditingSettings(false)}
               onSave={() => {
-                onOverlayChange({
-                  ...overlay,
-                  search_effort: settingsDraft.search_effort,
-                  analysis_depth: settingsDraft.analysis_depth,
-                  steering_mode: settingsDraft.steering_mode,
-                });
+                if (draft === undefined) return;
+                onOverlayChange(
+                  mergeOverlayChanges(overlay, draft, {
+                    search_effort: settingsDraft.search_effort,
+                    analysis_depth: settingsDraft.analysis_depth,
+                    steering_mode: settingsDraft.steering_mode,
+                  }),
+                );
                 setEditingSettings(false);
               }}
               view={
@@ -547,13 +559,15 @@ export function PlanDocument({
               onEdit={beginFiltersEdit}
               onCancel={() => setEditingFilters(false)}
               onSave={() => {
-                onOverlayChange({
-                  ...overlay,
-                  backend_scope: filterDraft.backend_scope,
-                  published_after_year: filterDraft.published_after_year.trim(),
-                  published_before_year: filterDraft.published_before_year.trim(),
-                  geography: filterDraft.geography.trim(),
-                });
+                if (draft === undefined) return;
+                onOverlayChange(
+                  mergeOverlayChanges(overlay, draft, {
+                    backend_scope: filterDraft.backend_scope,
+                    published_after_year: filterDraft.published_after_year.trim(),
+                    published_before_year: filterDraft.published_before_year.trim(),
+                    geography: filterDraft.geography.trim(),
+                  }),
+                );
                 setEditingFilters(false);
               }}
               view={
@@ -643,15 +657,24 @@ export function PlanDocument({
               label="Screening rules"
               editing={editingScreening}
               onEdit={beginScreeningEdit}
-              onCancel={() => setEditingScreening(false)}
+              onCancel={() => {
+                setScreeningSaveError(null);
+                setEditingScreening(false);
+              }}
               onSave={() => {
-                onOverlayChange({
-                  ...overlay,
-                  screening_criteria: screeningDraft
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter((line) => line.length > 0),
-                });
+                if (draft === undefined) return;
+                const rules = screeningDraft.map((line) => line.trim()).filter((line) => line.length > 0);
+                const tooLong = rules.find((rule) => rule.length > SCREENING_CRITERION_MAX);
+                if (tooLong !== undefined) {
+                  setScreeningSaveError(
+                    `Each screening rule must be at most ${SCREENING_CRITERION_MAX} characters.`,
+                  );
+                  return;
+                }
+                setScreeningSaveError(null);
+                onOverlayChange(
+                  mergeOverlayChanges(overlay, draft, { screening_criteria: rules }),
+                );
                 setEditingScreening(false);
               }}
               view={
@@ -666,13 +689,51 @@ export function PlanDocument({
                 )
               }
             >
-              <textarea
-                rows={6}
-                value={screeningDraft}
-                onChange={(event) => setScreeningDraft(event.target.value)}
-                placeholder="One screening rule per line"
-                className={cn(panelFieldClass, "resize-y")}
-              />
+              <div className="space-y-2">
+                {screeningDraft.map((rule, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={rule}
+                      aria-label={`Screening rule ${index + 1}`}
+                      placeholder="One inclusion or exclusion rule"
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setScreeningDraft((current) =>
+                          current.map((entry, entryIndex) =>
+                            entryIndex === index ? value : entry,
+                          ),
+                        );
+                      }}
+                      className={cn(panelFieldClass, "min-w-0 flex-1")}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove screening rule ${index + 1}`}
+                      className={panelEditButtonClass}
+                      onClick={() =>
+                        setScreeningDraft((current) =>
+                          current.length <= 1 ? [""] : current.filter((_, i) => i !== index),
+                        )
+                      }
+                    >
+                      −
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className={panelEditButtonClass}
+                  onClick={() => setScreeningDraft((current) => [...current, ""])}
+                >
+                  + Add rule
+                </button>
+                {screeningSaveError != null && (
+                  <p role="alert" className="text-body text-red-tint">
+                    {screeningSaveError}
+                  </p>
+                )}
+              </div>
             </PanelSection>
 
             {agreedSteps.length > 0 && (
@@ -702,9 +763,18 @@ export function PlanDocument({
               {startLabel}
             </Button>
             {startNotice != null && (
-              <p role="alert" className="mt-2 text-body text-red-tint">
-                {startNotice}
-              </p>
+              <div role="alert" className="mt-2 space-y-2">
+                <p className="text-body text-red-tint">{startNotice}</p>
+                {canDiscard && (
+                  <button
+                    type="button"
+                    className={panelEditButtonClass}
+                    onClick={discardAndStart}
+                  >
+                    Discard edits and start
+                  </button>
+                )}
+              </div>
             )}
           </div>
           )}

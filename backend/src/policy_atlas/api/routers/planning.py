@@ -685,7 +685,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
     if geography.strip().casefold() in {"apo", "australian policy online"}:
         if backend_scope != "grey_lit_only":
             raise ValueError(
-                "the APO restriction needs Sources set to grey literature only"
+                "the APO restriction needs Sources set to Policy literature only"
             )
         return {**_GEO_CONSTRAINT_RESET, "publisher_source": "apo"}
     if geography in TIER1_GROUPS:

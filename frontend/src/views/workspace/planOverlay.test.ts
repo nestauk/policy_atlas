@@ -5,8 +5,12 @@ import type { components } from "../../api/gen/types";
 import {
   displayedGeography,
   displayedYearAfter,
+  mergeOverlayChanges,
   overlayIsDirty,
   overlayToPlanPatch,
+  pruneOverlayToPlanDiff,
+  screeningOverlayError,
+  SCREENING_CRITERION_MAX,
 } from "./planOverlay";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
@@ -73,6 +77,22 @@ describe("planOverlay", () => {
     ).toBe("GB");
   });
 
+  it("shows APO from publisher_source unless the overlay overrides geography", () => {
+    const apoPlan = plan({
+      backend_scope: "grey_lit_only",
+      scope_constraints: {
+        author_affiliation_countries: null,
+        country_group: null,
+        published_after: null,
+        published_before: null,
+        publisher_country: null,
+        publisher_source: "apo",
+      },
+    });
+    expect(displayedGeography(apoPlan, {})).toBe("APO");
+    expect(displayedGeography(apoPlan, { geography: "" })).toBe("");
+  });
+
   it("compiles local edits into a typed patch", () => {
     expect(overlayToPlanPatch({ question: "New question", published_after_year: "2018" })).toEqual({
       question: "New question",
@@ -85,5 +105,67 @@ describe("planOverlay", () => {
       published_after: "",
       geography: "",
     });
+  });
+
+  it("omits no-op geography when patching against the live plan", () => {
+    const apoPlan = plan({
+      backend_scope: "grey_lit_only",
+      scope_constraints: {
+        author_affiliation_countries: null,
+        country_group: null,
+        published_after: null,
+        published_before: null,
+        publisher_country: null,
+        publisher_source: "apo",
+      },
+    });
+    expect(
+      overlayToPlanPatch(
+        { backend_scope: "grey_lit_only", geography: "APO" },
+        apoPlan,
+      ),
+    ).toEqual({});
+    expect(overlayToPlanPatch({ backend_scope: "both" }, apoPlan)).toEqual({
+      backend_scope: "both",
+    });
+  });
+
+  it("does not blank geography when only Sources changes on save", () => {
+    const apoPlan = plan({
+      backend_scope: "both",
+      scope_constraints: {
+        author_affiliation_countries: null,
+        country_group: null,
+        published_after: null,
+        published_before: null,
+        publisher_country: null,
+        publisher_source: "apo",
+      },
+    });
+    const next = mergeOverlayChanges(
+      {},
+      apoPlan,
+      {
+        backend_scope: "grey_lit_only",
+        published_after_year: "",
+        published_before_year: "",
+        geography: "APO",
+      },
+    );
+    expect(next).toEqual({ backend_scope: "grey_lit_only" });
+    expect(displayedGeography(apoPlan, next)).toBe("APO");
+  });
+
+  it("prunes overlay keys that already match the plan", () => {
+    expect(pruneOverlayToPlanDiff({ question: "What works?", screening_criteria: ["Peer-reviewed"] }, plan())).toEqual(
+      {},
+    );
+  });
+
+  it("flags overlong screening rules before PATCH", () => {
+    expect(screeningOverlayError(["ok"], "Q")).toBeNull();
+    expect(screeningOverlayError(["x".repeat(SCREENING_CRITERION_MAX + 1)], "Q")).toMatch(
+      /longer than 1000 characters/,
+    );
   });
 });

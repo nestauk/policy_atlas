@@ -48,8 +48,8 @@ def _plan_from_draft(draft: PlanDraftWire) -> OrchestrationPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    # planner_v10: OECD members source-origin default + OECD setting screen.
-    assert PLANNER_PROMPT_VERSION == "planner_v10"
+    # planner_v11: APO publisher_source + longer screening criteria.
+    assert PLANNER_PROMPT_VERSION == "planner_v11"
 
 
 def test_planner_prompt_defaults_source_origin_to_oecd_members() -> None:

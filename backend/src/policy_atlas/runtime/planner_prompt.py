@@ -26,12 +26,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
+# planner_v11: APO / Australian Policy Online as publisher_source when asked
+# or chosen (forces grey_lit_only); screening criteria up to 1000 chars each.
 # planner_v10: OECD members source-origin default PLUS an OECD study-setting
 # screening criterion (origin filters cannot see setting; junk otherwise
 # still gets in). Spoken chip; publisher/author origin still not the same
 # as study setting. Succeeds planner_v9.
 # The router and watch moments live in orchestrator_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v10"
+PLANNER_PROMPT_VERSION = "planner_v11"
 
 # Default screening criterion when the OECD source-origin default applies.
 # Emitted verbatim into screening_criteria. Contiguous for pin tests.
@@ -246,11 +248,9 @@ class PlanDraftWire(BaseModel):
     @field_validator("publisher_source")
     @classmethod
     def _pin_publisher_source(cls, value: str | None) -> str | None:
-        # Not a planner-authored field (no prompt text describes it — APO
-        # test mod, 038). The downstream models pin Literal["apo"], so any
-        # other emission would crash the turn's draft projection; drop it
-        # here instead — the chat doing nothing is the contract's accepted
-        # behaviour.
+        # Not a planner-authored field until planner_v11 (APO test mod, 038 +
+        # planning UX). Downstream models pin Literal["apo"], so any other
+        # emission would crash the turn's draft projection; drop it here.
         return value if value == "apo" else None
     country_group: CountryGroupDraft | None = None
     search_effort: str | None = None
@@ -445,8 +445,8 @@ Intent-awareness — binding:
   ("only studies with under-5s", "exclude opinion pieces") — user-expressed,
   plus ones you suggest when the intent type warrants them, plus the OECD
   setting criterion when the source-origin default below applies. Each
-  criterion is ONE short rule, strictly under 200 characters; split compound
-  rules into separate criteria rather than writing long sentences.
+  criterion is ONE rule, at most 1000 characters; split compound rules into
+  separate criteria rather than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
   recency window. NEVER set published_before unless the user explicitly
@@ -469,6 +469,14 @@ Intent-awareness — binding:
   geography lives in the text). When you set one, say in plain language
   whose location it uses (the publisher, or the author's organisation) —
   never the field names.
+- publisher_source: restrict grey literature to a named Overton collection.
+  The only value is "apo" (Australian Policy Online). When the user asks for
+  APO / Australian Policy Online as the source collection — or you decide
+  that restriction fits — set publisher_source to "apo", set backend_scope
+  to grey_lit_only, and clear publisher_country, author_affiliation_countries
+  and country_group (APO replaces country geography). Say in `reply` that
+  sources are restricted to Australian Policy Online. Never invent other
+  publisher_source values; never use publisher_country for APO.
 - country_group: a named country grouping, applied to BOTH backends at once
   (academic side by author affiliation, grey-literature side by publishing
   source geography — say that in plain language in `reply`). Never combine

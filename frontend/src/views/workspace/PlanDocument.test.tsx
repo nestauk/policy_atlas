@@ -166,9 +166,7 @@ describe("PlanDocument", () => {
     expect(screen.getByRole("button", { name: "Thoroughness" })).toHaveTextContent("Custom");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(onOverlayChange).toHaveBeenCalledWith(
-      expect.objectContaining({ search_effort: "rapid", analysis_depth: "standard" }),
-    );
+    expect(onOverlayChange).toHaveBeenCalledWith({ search_effort: "rapid" });
   });
 
   it("snaps both axes when a research-approach preset is picked", async () => {
@@ -348,5 +346,46 @@ describe("PlanDocument", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Start search" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Research question" })).toBeInTheDocument();
+  });
+
+  it("shows APO in Source geography when publisher_source is set", () => {
+    mockUsePlan({
+      data: planOut({
+        ...fullPlan(),
+        backend_scope: "grey_lit_only",
+        scope_constraints: {
+          author_affiliation_countries: null,
+          country_group: null,
+          published_after: null,
+          published_before: null,
+          publisher_country: null,
+          publisher_source: "apo",
+        },
+      }),
+    });
+    renderPlan();
+    expect(screen.getByText("APO")).toBeInTheDocument();
+  });
+
+  it("edits screening rules as separate fields with add and remove", async () => {
+    mockUsePlan({ data: planOut(fullPlan()) });
+    const onOverlayChange = vi.fn();
+    const user = userEvent.setup();
+    renderPlan(onOverlayChange);
+
+    const edits = screen.getAllByRole("button", { name: "Edit" });
+    await user.click(edits[3]);
+    expect(screen.getByDisplayValue("Peer-reviewed")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Published after 2015")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /\+ Add rule/ }));
+    const inputs = screen.getAllByRole("textbox", { name: /Screening rule/ });
+    expect(inputs).toHaveLength(3);
+    await user.type(inputs[2], "UK setting");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onOverlayChange).toHaveBeenCalledWith({
+      screening_criteria: ["Peer-reviewed", "Published after 2015", "UK setting"],
+    });
   });
 });

@@ -24,6 +24,7 @@ export function PlanCard({
   onReviewPlan,
   overlay = {},
   onOverlayApplied,
+  onDiscardOverlay,
 }: {
   projectId: string;
   runActive: boolean;
@@ -32,13 +33,15 @@ export function PlanCard({
   onReviewPlan?: () => void;
   overlay?: PlanOverlay;
   onOverlayApplied?: () => void;
+  onDiscardOverlay?: () => void;
 }) {
   const planQuery = usePlan(projectId);
-  const { start, startNotice, disabled, label } = usePlanStart({
+  const { start, discardAndStart, startNotice, canDiscard, disabled, label } = usePlanStart({
     projectId,
     overlay,
     runActive,
     onStarted: onOverlayApplied,
+    onDiscardOverlay: onDiscardOverlay ?? onOverlayApplied,
   });
 
   const plan: PlanDraft | null = planQuery.data?.plan ?? null;
@@ -56,9 +59,18 @@ export function PlanCard({
         </Button>
       )}
       {isOwner && startNotice != null && (
-        <p role="alert" className="w-full text-body text-red">
-          {startNotice}
-        </p>
+        <div role="alert" className="w-full space-y-2">
+          <p className="text-body text-red">{startNotice}</p>
+          {canDiscard && (
+            <button
+              type="button"
+              className="cursor-pointer border border-red/40 px-3 py-1.5 text-body font-semibold text-red hover:bg-red-tint"
+              onClick={discardAndStart}
+            >
+              Discard edits and start
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

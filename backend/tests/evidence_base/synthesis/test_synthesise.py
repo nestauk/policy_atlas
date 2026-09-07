@@ -3659,10 +3659,17 @@ def test_case_studies_present_composition(conn: Connection) -> None:
     assert cs_block["title"] == "Case studies"
     cards = cs_block.get("cards", [])
     assert len(cards) >= 2
+    all_claim_ids: list[str] = []
     for card in cards:
         assert card.get("prose", "").strip() != ""
         assert isinstance(card.get("claim_ids"), list)
         assert len(card["claim_ids"]) >= 1, "each card stores its claim ids"
+        all_claim_ids.extend(card["claim_ids"])
+    # Per-card minting must not reuse sNc0.. across cards — colliding aliases
+    # made every card project onto the same citations in the read model.
+    assert len(all_claim_ids) == len(set(all_claim_ids)), (
+        f"case-study claim_ids must be unique across cards, got {all_claim_ids}"
+    )
 
     assert row.counts.get("case_studies") == {"present": True}
     provenance = row.synthesis_provenance
