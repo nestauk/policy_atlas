@@ -67,6 +67,13 @@ referent). Instead:
   convenience, **never a user-facing absolute dial**.
 - *(Maps the wireframe's **Quick / Deep** control: treat it as a `search_effort_signal` /
   `search_breadth_signal`, **not** a hard public depth ladder — EB handoff §7.1.)*
+- **As enacted (flow-back, 2026-09-07):** the shipped Evidence search planning chat offers the
+  user a choice of **rapid / standard / deep** (a bundle of analysis depth and search depth;
+  the backend's `AnalysisDepth` is `landscape | standard | deep`). The "never a user-entered
+  field" rule above therefore describes the intent of 2026-06, not the product; the relative
+  nudge survives as the *edit* path beside the chosen level. Options scoping uses the **same
+  three words** (owner ruling 2026-09-07), so this is one vocabulary across capabilities, not an
+  exception. Reconcile this section when the plan contract is next revised.
 
 ## Source / evidence policy
 

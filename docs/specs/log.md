@@ -1,5 +1,20 @@
 # Spec update log
 
+## 2026-09-07 (later)
+* **Update**: Options scoping, third review pass and its rulings (concept rulings 30–40): the
+  component skeleton rebuilt on the Evidence search spine as is (classify and appraise at longlist
+  depth), `longlist` replaces `mint`, the three depths become compositions; the Result is the
+  **report** (provisional from the longlist, rewritten by assessment) with Baseline and Longlist as
+  working views; source quality is not "how sure"; containing-geography context fills a local
+  factor only by applicability; inherited findings reused at finding grain; identity rules for
+  variants; the proposal is a provisional allocation of reading effort with one challenger in the
+  standard sense-check; read-set discipline under the cap; editorial exceptions bounded; tabs are
+  Agent · Result · Sources · Share · History. **System contracts amended:** components are shared
+  across capabilities ([execution-orchestration](system/execution-orchestration.md) § vocabulary,
+  withdrawing "a capability never runs another's component"); the depth "relative nudge" section of
+  [plan-as-object](system/plan-as-object.md) carries an as-enacted note (rapid / standard / deep is
+  user-chosen in the shipped product).
+
 ## 2026-09-07
 * **Update**: Options scoping review round. A two-pass adversarial product review of the concept
   and wireframes (blind proposal, then comparison) produced eleven findings; the owner ruled on

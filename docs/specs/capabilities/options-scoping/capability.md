@@ -12,7 +12,7 @@ timestamp: 2026-09-07
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (the
 owner-agreed concept of 2026-09-01/02, the wireframe-round rulings of 2026-09-03 and the
 review-round rulings of 2026-09-07, hereafter "concept § Shape", "concept ruling N"; the
-review-round rulings 15–29 win where they differ), now frozen origin; this spec + `docs/adr/` are canonical
+review-round rulings 15–40 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
 ([ADR 0002](../../../adr/0002-spec-governance.md)). OS is an **instance** of the capability
 framework: the Tier-0 substrate, the retrieval contract, the findings layer, the grounding tiers
 and the plan object are owned by the system contracts and only **referenced** here; the
@@ -60,7 +60,8 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   **variant of** and **part of** (ruling 15). Every option has one **primary lever type** and may
   touch others; coverage is counted over primary lever types, not over themes (ruling 20). Green Book words in the product: longlist, shortlist, do
   nothing, do minimum. "Lever family", "annex", "thread", "pin", "set aside", "promote", "frame"
-  never appear user-facing (concept § Vocabulary; rulings 5, 8, 13; the shell is "Plan").
+  never appear user-facing (concept § Vocabulary; rulings 5, 8, 13; the plan lives in the "Agent"
+  tab, ruling 40).
 - ✅ **Rigidity:** structured — a fixed stage order with two hard gates (below), user
   iteration on top of every stage.
 - ✅ **Dependencies.** Upstream: optional. A scoping task may **start from an Evidence search
@@ -96,8 +97,9 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   `docs/deferred.md`).
 - ✅ **No composite scores or rankings is a product boundary**, justified by the incentive
   findings of the Green Book Review 2020 and by [trust.md](trust.md); the Green Book 2026
-  recommends rather than mandates the options framework and permits facilitated MCA at longlist
-  stage, so this is not a Treasury prohibition (concept § Intent, corrected 2026-09-07).
+  recommends rather than mandates the options framework and permits facilitated MCDA at longlist
+  stage (not the simple weight-and-score MCA it recommends against), so this is not a Treasury
+  prohibition (concept § Intent, corrected 2026-09-07).
 
 ## Depths and modes
 
@@ -107,8 +109,9 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
      classify, appraise, full-text ingest) once at the plan level, then clustering into options
      with per-option coverage: study count by evidence type and **quality tier**, countries,
      populations, outcomes measured (owner, 2026-09-07: classify and appraise always run on
-     acquired documents, so a descriptive "how sure" exists before assessment — shown on the
-     option card and as a user-requested sort, never a place reason). Runs over every option. No
+     acquired documents, so a **source-quality profile** of the documents that mention an option
+     exists before assessment — shown on the option card and as a user-requested sort, never a
+     place reason, and **never called "how sure"**, ruling 33). Runs over every option. No
      per-option reading.
   2. *Assessment depth* — the **mini evidence search**, run on the **shortlist only** and only
      when the user says so ("Assess these N", with a time estimate). It **reads the full text of
@@ -132,13 +135,16 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   sum. The narrative sections (mechanism, case studies, what it would take, moderator quotes)
   come from **retrieval-augmented reading** over the read texts. The stage-1 screen's structured
   fields give an abstract-level strip before any full text is read. The per-option document cap
-  is the latency lever; the spike before the assessment contract measures whether the light
-  extraction fits the rapid budget at that cap. ❓ How "one vote per independent study" detects
+  is the latency lever; the **read set under the cap is chosen so that distinct implementations,
+  the required outcomes and the counter-case survive**, omissions are represented, and a
+  budget-limited result may be explicitly incomplete (ruling 38); the spike measures **whole-run**
+  time to a usable result, not extraction alone. ❓ How "one vote per independent study" detects
   several papers on one trial is open (a trial or registration identifier in the light
   extraction is the candidate).
 - ✅ **Depth settings and entry branches are orthogonal** (ruling 25). *Rapid* and *standard*
   govern retrieval breadth and documents read per option, and apply to both branches; **the plan
-  asks for depth every time, in both branches; there is no default** (owner, 2026-09-07). Deep (per-option stress-testing, mechanism-analogy
+  asks for depth every time, in both branches; there is no default** (owner, 2026-09-07). The
+  words are the Evidence search's user-facing **rapid / standard / deep** (ruling 40). Deep (per-option stress-testing, mechanism-analogy
   search) ⏸ later. ❓ The rapid latency budget is a number the contract must set (concept open
   question 3).
 - ✅ **Cost lever.** If a standard run is too expensive the cut is depth, not coverage: a lighter
@@ -166,8 +172,9 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
 - ✅ **Baseline, and it pauses** (rulings 2, 24). Confirming the plan builds the baseline only. The
   run stops; the user reads it, **questions it in chat**, changes the plan if needed, and
   confirms the plan before any option is generated. The baseline is a **profile of "Do
-  nothing"** (structure in § Output structure). No orientation stage; the baseline's "what is
-  contested" element is how newcomers are served in v1. ❓ Baseline content generation couples to
+  nothing"** (structure in § Output structure): empirical premises sourced, interpretations (the
+  key assumption, what is contested) labelled reasoning (ruling 40). No orientation stage; the
+  baseline's "what is contested" element is how newcomers are served in v1. ❓ Baseline content generation couples to
   grey-literature and official-statistics sourcing (open question 6).
 - ✅ **Longlist.** Two directions into one funnel: bottom-up (**intervention mentions** — not
   documents — cluster into options, many-to-many, since a document may discuss a bundle or, as a
@@ -177,8 +184,11 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   your evidence search", ruling 22). Every entrant gets the same treatment — the fait-accompli
   fix (concept § Shape 2). **A user modification of an option's design becomes a new option,
   variant of its parent, with its own mini search** (ruling 15); which edits count as a design
-  change is the agent's judgement, stated in the chat, with no fixed rule (owner, 2026-09-07);
-  packages and ingredients are linked part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
+  change is the agent's judgement, stated in the chat, with no fixed rule (owner, 2026-09-07); a
+  substantive edit suspends inherited claims until the variant's own assessment; the default
+  *distinct* screen never excludes a variant or a part-of relation; support binds to a finding
+  and a specified design, never to a document (ruling 36); packages and ingredients are linked
+  part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
   target longlist size — are open question 4; 🟡 clustering at option grain is unproven and is
   spiked before the longlist contract (ruling 31).
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
@@ -192,19 +202,26 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   least moderate evidence") are checked after assessment; the plan says so; until then each
   option carries a labelled **reasoned guess** that is a flag and a user-requested sort only
   (see [trust.md](trust.md)). *Evidence-scope* constraints ("OECD evidence only") act on
-  retrieval and screening and **can never exclude an option**; an option whose only example is
-  out of scope stays, marked "no in-scope evidence". The agent asks when a sentence is
-  ambiguous between the kinds. Screen findings that rest on the corpus are cited.
+  retrieval and screening and **can never exclude a known option**; an option whose only example
+  is out of scope stays, marked "no in-scope evidence" (an evidence-scope constraint can prevent
+  an option from ever being discovered, so the breadth claim is bounded by the authorised scope,
+  ruling 36). The agent asks when a sentence is ambiguous between the kinds. Screen findings
+  that rest on the corpus are cited. After assessment, an effect- or cost-shaped constraint that
+  fails or cannot be checked is shown on the option ("breaks: low cost (assessed)" /
+  "unresolved: cost not comparable"); the option stays and the user decides (ruling 40).
 - ✅ **Shortlist assembly is separate from screening** (rulings 6, 19, 20). The proposed
-  shortlist is a **representative coverage of the decision space, not a top-N**: **one place per
-  primary lever type present among the kept options**, each picked on a **single named axis stated
+  shortlist is a **provisional allocation of reading effort across the decision space, not a
+  top-N** and not a certificate of representative coverage (ruling 37): **one place per primary
+  lever type present among the kept options**, each picked on a **single named axis stated
   in its reason**. An option's secondary lever types do not fill places but do shape the gap
   message ("Regulate: no dedicated option; touched by the youth guarantee package") (owner,
   2026-09-07). Themes group the longlist and label the grid but do not earn places; a
   single-option theme gets no automatic place unless its primary lever type is otherwise
   uncovered.
   Pre-assessment reasons are limited to what coverage knows (distinctness, "widest
-  implementation record", "only option of its lever type", "thin evidence"); **study count alone
+  implementation record" = implementations and countries recorded in the mentioning documents,
+  "only option of its lever type", "thin evidence" = few mentioning documents or none of the
+  required outcome; ruling 37); **study count alone
   and quality-tier distribution are never reasons** (tiers are display and a user-requested sort
   only, guarding hierarchy bias — owner, 2026-09-07), **reasoned guesses never feed the
   proposal**, and thin evidence is a reason to assess. The proposal never fills two places with a package and its own ingredient
@@ -224,16 +241,20 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   per option and the option profile, all labelled *scoping pass* (see § Output structure and
   [trust.md](trust.md)). The summary and the export **list every kept option that was not
   assessed**, by theme (ruling 19).
-- ✅ **Summary and export** (rulings 14, 17, 21). A short summary above the assessed table — PA's
-  reading of the shortlist, never a ranking: no superlatives across options; each effect with
-  its own comparator, population and period; conditional recommendations only on comparable
-  axes; a fixed closing element **"What needs deciding or commissioning next"** built from the
-  unresolved differences, the unassessed options and the conditions verdicts rest on. The
-  "editable first version" is delivered by **Export**, a Share concern: it bundles the summary,
-  the assessed table, the option profiles, the baseline, the **full longlist with states and
-  reasons**, the **shortlist assembly record** (each place, its reason, who filled it) and the
-  Sources statement of what was searched; it claims breadth, never exhaustiveness. The author's
-  own steer is written outside Atlas.
+- ✅ **The report and export** (rulings 14, 17, 21, 32). The Result is the **report** (§ Output
+  structure): provisional from the longlist stage, rewritten by assessment. Its top-line section
+  is what ruling 14 called the summary — PA's reading, never a ranking: no superlatives across
+  options; each effect with its own comparator, population and period; conditional
+  recommendations only on comparable axes and only after assessment; cost comparisons only on
+  matching bases (ruling 33). Its closing section, **"What needs deciding or commissioning
+  next"**, is built from the unresolved differences, the unassessed options and the conditions
+  verdicts rest on; before assessment it identifies unknowns only and carries no conditional
+  recommendation, and a question never carries an unsupported premise (ruling 39). The "editable
+  first version" is delivered by **Export**, a Share concern: the report with its attachments —
+  the option profiles, the baseline profile, the **full longlist with states and reasons**, the
+  **shortlist assembly record** (each place, its reason, who filled it) and the Sources statement
+  of what was searched; it claims breadth, never exhaustiveness. The author's own steer is
+  written outside Atlas.
 - ✅ **The full evidence search mints its own EB task** (ruling 9): seeded from the option,
   synthesis template = the option-profile sections, listed under the parent scoping task and
   linked both ways, sharing its project and visibility. The scoping profile then **reads its
@@ -251,22 +272,39 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
 - ✅ **Neighbours at metadata depth only**, as context: parent and variants, options of the
   same lever type, and the lever types the idea does not touch. Secondary on the page.
 - ✅ **Proposal through the gate.** Rapid: the named option alone. Standard: the named option
-  **plus its most similar neighbours**, pre-ticked, one confirmation. Each assessed at the
-  chosen depth. ❓ The similarity measure is an implementation decision (open question 10).
-- ✅ **Primary surface = the named option's profile.** In standard the assessed table sits under
-  it as the comparison. One extra output element: **"questions to put to the department"**,
-  generated like the summary's closing element. Export = profile, neighbour list, questions.
+  **plus its most similar neighbours plus one challenger** — an option reaching the same stated
+  outcome through a different primary lever type, when the longlist has one — pre-ticked, one
+  confirmation, each comparator's reason stated (ruling 37). Each assessed at the chosen depth.
+  ❓ The similarity measure is an implementation decision (open question 10).
+- ✅ **Primary surface = the report opened on the named option**, with its profile as the main
+  view; in standard the assessed comparison sits in "what the evidence base holds". The closing
+  section carries the **"questions to put to the department"** (ruling 39 bounds them). Export =
+  the same complete report and attachments as the explore branch (ruling 32); the sense-check
+  bundle is its front, not a smaller record.
 - ✅ The user can widen at any point (add a neighbour, assess it, switch to exploring the space)
   within the same task. Sense-check is not scrutiny of a developed proposal (⏸ critical review).
 
 ## Output structure
 
+- ✅ **The report** (ruling 32) — the Result artefact, a grounded block written as linear text in
+  the Evidence search report's style with a side outline and collapsible sections carrying
+  one-line takeaways. Sections: **top line** · **the problem and what is contested** · **the
+  approaches** (a paragraph per theme: options in a sentence each, variants and packages,
+  exclusions with their constraints) · **what the evidence base holds** (provisional: the
+  source-quality profile per option and thin coverage; assessed: the assessed table embedded,
+  each effect with its own comparator, population and period; the kept-but-unassessed options by
+  theme) · **transferability and assumptions** (assessed form) · **what needs deciding or
+  commissioning next** (plus the questions to put to the department in the sense-check) · **what
+  was searched and not searched**. Exists from the longlist stage in a provisional form that says
+  nothing has been assessed; rewritten by assessment. Baseline, Longlist (list · grid · shortlist
+  views) and the profiles are working views behind it.
 - ✅ **Baseline profile ("Do nothing")** (rulings 2, 24). Its own structure, different from an
   option's because the question is different: what is in place · trend if nothing changes · who
   is affected (where the target unit is checked against the data) · what is already changing ·
   **what is contested** (rival explanations of the problem; disagreements between sources) ·
-  cost of inaction · key assumption · sources. Reported facts only; the tool does not forecast;
-  the source-tier skew (official statistics, grey literature) is visible. "Do nothing" is the
+  cost of inaction · key assumption · sources. Empirical premises sourced; the key assumption
+  and what is contested are labelled reasoning (ruling 40); the tool does not forecast; the
+  source-tier skew (official statistics, grey literature) is visible. "Do nothing" is the
   reference wherever options appear — a sentence with a link on the longlist, an unremovable
   reference on the shortlist, and a band above the assessed table worded as **the situation
   these options would change**, never "compared against" (ruling 17; scoping does not perform
@@ -281,18 +319,23 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   reasoning claim** since no evidence has been read when it is assigned, ruling 20; owner
   2026-09-07). A click opens a
   light **option-before-assessment** page: what it is for · what the evidence base holds so far
-  (study count by evidence type and quality tier, countries, populations, outcomes) · screens and
-  guesses · where it came from.
-- ✅ **Shortlist.** One list at two stages: before assessment, the places with their reasons and
-  the assess action; after, the assessed table for the same options with the summary above it.
+  (the **source-quality profile**: mentioning documents by evidence type and quality tier,
+  countries, populations, outcomes — never "how sure", ruling 33) · screens and guesses · where
+  it came from.
+- ✅ **Shortlist view.** Before assessment, the places with their reasons and the assess action;
+  after, the same options with their assessed rows, which live in the report's "what the
+  evidence base holds" section (ruling 32).
 - ✅ **Assessed table = verdict strips stacked** (ruling 7). Six columns: Option (with its
   description) · How big, as reported · How sure · Where tried · Transferability · Key
-  assumption. No study-design labels in the table (they belong to the profile). One provenance
+  assumption. No study-design labels in the table ("15 studies", not "4 randomised"; owner
+  2026-09-03, recorded in ruling 40). One provenance
   tag per row (*scoping pass* / *full run*). A variant's row shows only the variant's own
   evidence (ruling 15). The option name opens the profile; there is no second, expandable
-  layer. Sortable by evidence strength and study count only; direction tallies are per option
-  within one outcome family and **not sortable across options** (ruling 17); **no composite
-  score, ever.**
+  layer. "How sure" here means confidence in the specified design–outcome claim from relevant
+  evidence, counting documents until independence is known (ruling 33). Sortable by evidence
+  strength and document count only; direction tallies are per option within one outcome family
+  and **not sortable across options** (ruling 17); cost cells compare only on matching bases;
+  **no composite score, ever.**
 - ✅ **Option profile** (concept § Option click-through; rulings 8, 13). Layered skim → sections
   → next steps. *At a glance*: what it is in two plain sentences · how big (as reported, native
   units) · how sure (evidence strength and study count) · where tried · transferability verdict
@@ -308,7 +351,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   did, what happened, what made it work or not, and what to watch for; typed by source tier) ·
   Transferability working (the Factor | Evidence says | Your context | Basis table, with
   context entries typed retrieved · stated by you · planned by you; a retrieved fact at a
-  containing geography counts unless a more local fact contradicts it, ruling 18) ·
+  containing geography fills a local factor only when the proposition applies at the target
+  unit by its nature, otherwise it is context and the factor stays Unknown, ruling 34) ·
   Assumptions (load-bearing, strength, the key one) · What it would take (implementation
   requirements, reported costs, time to impact, distributional notes — provenance-carrying, no
   analysis). Next steps: run a full evidence search · start a theory of change (⏸ consumer) ·
@@ -328,14 +372,16 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
 Settled by the owner on the wireframes (rulings 1, 13; source
 [README](../../sources/options-scoping/README.md)):
 
-- ✅ **Navigation is the EB task's**: Plan · Results · Sources · Share · History, with Results
-  split into **Baseline · Longlist · Shortlist**. The chat is always the left column under the
-  tabs; the right column holds the tab's content and opens wide for the longlist, the grid and
-  the profiles. ("Assessment" is a state the shortlist is in, not a place.) The grid view's rows
-  are the fixed lever types (ruling 20). The boards predate the review round; where they differ
-  from rulings 15–29, the rulings win (source README).
-- ✅ **The plan is presented exactly like the EB search plan**: the navy plan document beside the
-  planning conversation, with Question · What we are trying to change · Settings · Constraints
+- ✅ **Navigation is the task's** (post-038 vocabulary, ruling 40): **Agent · Result · Sources ·
+  Share · History**. The plan document and the planning chat live in the Agent tab. **Result is
+  the report** (ruling 32), with **Baseline** and **Longlist** (list · grid · shortlist views) as
+  working views reachable from it and from the run's progress. The chat is always the left
+  column; the right column holds the current content and opens wide for the longlist, the grid
+  and the profiles. ("Assessment" is a state the shortlist is in, not a place.) The grid view's
+  rows are the fixed lever types (ruling 20). The boards predate the review round; where they
+  differ from rulings 15–40, the rulings win (source README).
+- ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
+  document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints
   (each with when it is checked) · Plan steps · Check-ins, an Edit action per section, and one
   start action.
 - ✅ **Design language follows the EB report**: one body size, grey for secondary text, small
@@ -389,7 +435,7 @@ contracts:
 
 ❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search cost
 envelope and the light-extraction-plus-reading shape to spike (reading rule settled, ruling 16;
-study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
+read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
 · 6 baseline generation and grey-literature sourcing · 7 iteration mechanics and versioning ·
 8 the entry point from the product's front door (the rest of the product surface is settled) ·
 9 magnitude banding (requires its own eval before any band reaches users) · 10 the similarity

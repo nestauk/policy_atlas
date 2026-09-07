@@ -35,9 +35,15 @@ supported sentence, and the sentence is what gets copied into advice.
 - ✅ **Assessment is grounded.** Anything *asserted* about an option — evidence strength, effect,
   transferability, case studies, costs — requires retrieval: tiers 1–3 only. Unassessed cells
   are honest empty states: "not yet searched" or "no credible evidence found", never a hedged
-  guess. Before assessment an option shows only what the screened set holds (counts, countries,
-  source types) and says so.
-- ✅ **Support belongs to the specified design** (ruling 15). Evidence for a youth guarantee with
+  guess. Before assessment an option shows what the screened set holds — the **source-quality
+  profile** of its mentioning documents (counts by evidence type and appraisal tier), countries,
+  populations, outcomes — plus its labelled reasoned guesses and ambition tag, and says so;
+  it never shows "how sure", which after assessment means confidence in the specified
+  design–outcome claim from relevant evidence, documents counted until independence is known
+  (ruling 33).
+- ✅ **Support belongs to the specified design, and binds to a finding** (rulings 15, 36): a
+  document that discusses two designs may support both through distinct findings; a substantive
+  edit suspends inherited claims until the variant's own assessment. Evidence for a youth guarantee with
   an obligation is not evidence for one without. A user-modified option is a variant with its
   own assessment; the parent's evidence appears in its profile only as *related evidence for a
   different design*, never in its row or the summary. The unresolved difference stays in the
@@ -49,7 +55,9 @@ supported sentence, and the sentence is what gets copied into advice.
   the corpus: "every evaluated scheme paired the offer with an obligation" is a **corpus
   finding**, cited by its coverage denominator and the option's sources list ("12 of 12
   evaluations read"; Sources tab → by option), never by a wall of per-document citations, or it
-  is not said (owner, 2026-09-07).
+  is not said (owner, 2026-09-07). The denominator is the **rendering**; behind it stands a
+  reproducible membership set and a per-source support record, as the Evidence search's pattern
+  claims already require (ruling 39).
 
 ## Provenance labels every surface carries
 
@@ -63,10 +71,12 @@ supported sentence, and the sentence is what gets copied into advice.
 - ✅ **Coverage denominators:** "3 of 5 documents", "6 of 9 evaluations" — never a bare
   adjective standing in for a count. A denominator plus the option's sources list is the
   citation form for corpus-level claims.
-- ✅ **Editorial elements are unlabelled.** The summary's "What needs deciding or commissioning
-  next" and the sense-check's "questions to put to the department" are scaffolding assembled
-  from already-labelled unresolved points; they carry no tier label of their own (owner,
-  2026-09-07).
+- ✅ **Editorial structure is unlabelled; propositions never are** (ruling 39). The report's "What
+  needs deciding or commissioning next" and the sense-check's "questions to put to the
+  department" are scaffolding assembled from already-labelled unresolved points and carry no tier
+  label of their own — but no new empirical or evaluative proposition may enter them unlabelled,
+  including inside a question ("how will you scale this proven low-cost intervention?" carries
+  two assessment claims). Before assessment they identify unknowns only.
 - ✅ **What was searched** is stated on the Sources tab and in the Export bundle: documents
   retrieved and passed, inherited versus added (ruling 22), grey literature, web, screens
   applied, what was read at which depth, and explicitly *not searched*. Breadth is claimed;
@@ -107,9 +117,11 @@ supported sentence, and the sentence is what gets copied into advice.
   (empirical · author hypothesis · theory background).
 - ✅ **Default-to-Unknown context discipline, three sources** (ruling 18): the Factor | Evidence
   says | Your context | Basis table takes context entries typed **retrieved** (from the
-  baseline or the assessment, cited and geography-tagged; a fact at a **containing geography
-  counts unless a more local retrieved or stated fact contradicts it**, and is shown with its
-  level — owner, 2026-09-07), **stated by you** (a fact about the present) or **planned by you** (a
+  baseline or the assessment, cited and geography-tagged; a fact at a containing geography
+  fills a local factor **only when the proposition applies at the target unit by its nature** —
+  rules, entitlements, duties, universal provisions — while aggregates, averages and
+  implementation observations are shown as context with their level and date and the factor
+  stays Unknown; ruling 34), **stated by you** (a fact about the present) or **planned by you** (a
   commitment). Never inferred. Unknown stays unknown. Only the first two can lift a cap; a
   commitment becomes a named condition of a conditional verdict ("Conditional on: local
   delivery funded"). A stated intention never acquires the force of verified capacity.
@@ -152,12 +164,18 @@ supported sentence, and the sentence is what gets copied into advice.
   conditional recommendations only, on comparable axes.
 - ✅ **Omissions are explicit.** The summary and the export list every kept option that was not
   assessed, by theme, so "no ranking" cannot be defeated by silent selection (ruling 19).
-- ✅ The summary above the assessed table is PA's reading, never a ranking, and says so.
+- ✅ The report's top line is PA's reading, never a ranking, and says so; the proposal is a
+  provisional allocation of reading effort, never "representative coverage" (ruling 37).
 
 ## What is structurally impossible
 
 - A suggestion appearing with an evidence-strength rating it did not earn.
-- A variant's row or the summary showing evidence that was earned by a different design.
+- A variant's row or the report showing evidence that was earned by a different design.
+- "How sure" shown for an option before its assessment, or a source-quality tier presented as
+  confidence in an effect.
+- A question or closing element carrying an empirical or evaluative proposition with no support
+  record behind it.
+- A local transferability factor filled by an aggregate or average from a containing geography.
 - A claim asserted at a depth greater than the material read for it.
 - A scoping-pass cell displayed without its depth label, or a full-run cell without its task.
 - A number in any cell or ordering that was computed by fusing judgments; a sort across
@@ -167,6 +185,7 @@ supported sentence, and the sentence is what gets copied into advice.
 - An option excluded by a restriction on evidence.
 - A transferability verdict stronger than its weakest leg allows, a "your context" entry that
   was neither retrieved with a citation nor stated by the user, or a cap lifted by a plan.
+- A cost comparison across options on non-matching denominators, price bases or scope.
 - A factor count standing in for a transferability judgment.
 - A case study raising the how-sure rating.
 - An export from which a reader cannot see what was considered, excluded and why.

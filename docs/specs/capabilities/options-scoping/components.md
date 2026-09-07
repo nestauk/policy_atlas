@@ -11,7 +11,7 @@ timestamp: 2026-09-07
 The components, their origin in the Evidence search (EB), their declared I/O, realisation and
 gating. Distilled from
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (§ Shape,
-§ Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–30). Shared tools
+§ Architecture stance, rulings 2–6, 9, 11, 12, 14, the review-round rulings 15–40). Shared tools
 and the findings schema are owned by
 [../../system/execution-orchestration.md](../../system/execution-orchestration.md) and
 [../../system/data-model.md](../../system/data-model.md); the EB components referenced below are
@@ -25,12 +25,20 @@ template or field set) or **new**, and every "new" is justified. The EB's mandat
 acquire, screen, classify, appraise, ingest — runs **as is** at longlist depth; OS adds three
 variations (plan slots, `longlist`, `constrain`) and two new components (`inherit`, `propose`).
 The three depths of ruling 3 are **compositions** of these components, not components themselves.
+Honesty about what "reuse" means (pass-3 review): by the execution contract's I/O test, `longlist`
+and `constrain` are OS components in their own right, **built on the shared EB engines** (the
+two-stage grouping engine and deterministic coverage utilities; the per-item judgment fan-out) —
+nothing is mirrored, but their I/O is new. Reuse of the spine also asks three **declared changes to
+EB interfaces**: the screen returns structured fields including the interventions an abstract
+mentions (🟡); `extract` registers a light field profile; `synthesise` gains the report, profile and
+baseline templates. The execution contract was amended 2026-09-07 to say components are shared
+across capabilities (ruling 40).
 
 ```
 [0 inherit] ─▶ 1 plan ──▶ ⟨baseline⟩ ══gate: confirm plan against baseline══▶
    2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 propose
                                        (the EB spine as is, then the longlist; runs over every option)
-   ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 10 synthesise(summary) ─▶ export (Share seam)
+   ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 10 synthesise(report, assessed) ─▶ export (Share seam)
                                      └──▶ ⟨full run⟩ per option = the whole EB chain as a child task (user-triggered)
 ```
 
@@ -43,7 +51,8 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   clustering; everything after it is per-option full-text reading, paid for only on options the
   user kept.
 - ✅ **Classify and appraise run at longlist depth** (owner, 2026-09-07), so every option carries
-  evidence types and quality tiers before assessment. Full text is fetched and ingested for the
+  a **source-quality profile** of its mentioning documents before assessment — never called "how
+  sure" (ruling 33). Full text is fetched and ingested for the
   whole screened-in set, as in the EB, each source carrying `text_basis` (full text | abstract
   only) — the label ruling 16 needs.
 
@@ -64,15 +73,15 @@ The three depths of ruling 3 are **compositions** of these components, not compo
 | 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
 | 8 | propose | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
 | 9 | extract | EB, **modified** — light field set | per-document countable cells for a shortlisted option: direction, outcome family, magnitude with comparator and period, design, setting, trial identifier; **skipped for documents whose full findings were inherited** | per-source fan-out | inside ⟨assess⟩ only |
-| 10 | synthesise | is EB, templates | `produce-grounded-block` over the option's (or the baseline's) substrate with a template: **baseline** · **profile** · **summary** · **sense-check questions** | agent-loop | per composition |
+| 10 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (provisional and assessed forms; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
 
 | Composition | Made of | Runs |
 |---|---|---|
 | ⟨baseline⟩ | acquire (grey-literature + official-statistics source policy) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
-| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → longlist → constrain → propose | over every option |
-| ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest] → extract(light) over the option's documents → synthesise(**profile**); "how sure" = the roll-up of appraise tiers already computed | per shortlisted option, on "Assess these N" |
+| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → longlist → constrain → propose → synthesise(**report**, provisional) | over every option |
+| ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest] → extract(light) over the **read set** (chosen under the cap so distinct implementations, required outcomes and the counter-case survive; omissions represented — ruling 38; inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
 | ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task** seeded from the option with the profile template; the scoping profile re-reads its cells from the report | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
 
@@ -86,7 +95,9 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   extracted findings** (`intervention_outcome_finding` / `implementation_context_finding`, at
   finding grain with the intervention named) — the best possible input to `longlist`, since a
   finding already isolates one intervention from a document that may discuss several (owner,
-  2026-09-07). ⟨assess⟩ then skips the light extraction for documents whose findings exist.
+  2026-09-07). ⟨assess⟩ reuses those findings **at finding grain**: it skips only the extraction
+  requirements a finding satisfies for the specified option and the same source snapshot, fills
+  or labels the rest, and reconciles profile, version and coverage before counting (ruling 35).
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are
   re-screened and re-pass classify/appraise if their rubric version differs; inherited rows take
   the fait-accompli path like any suggestion. ✅ The run acquires beyond the inherited set; the
@@ -98,7 +109,8 @@ The three depths of ruling 3 are **compositions** of these components, not compo
 
 - **In:** the user's question (or, in the sense-check branch, a named option); the conversation.
   **Out:** the plan object — question · what we are trying to change · who or what should change
-  (target unit) · where · outcomes · **depth (asked every time, no default)** · constraints (each
+  (target unit) · where · outcomes · **depth (rapid / standard / deep, asked every time, no
+  default; the Evidence search's words)** · constraints (each
   tagged *from your question* / *assumed* / *your call*; each tagged *scope-shaped* / *effect- or
   cost-shaped, checked after assessment* / *evidence-scope*) · plan steps · check-ins (rulings 1,
   12, 23, 25).
@@ -134,7 +146,8 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   carried as a tier-4 reasoning claim, relations *variant of* / *part of*) grouped into generated
   themes, each theme mapped to lever type(s) with a one-line "what it does"; **per-option
   coverage** (study count by evidence type and quality tier, countries, populations, outcomes
-  measured) — the longlist metadata, including a descriptive "how sure" before assessment.
+  measured) — the longlist metadata, shown as a **source-quality profile**, never as "how sure"
+  (ruling 33).
 - ✅ **Same two machines as EB characterise, at option grain**: the bounded two-stage LLM grouping
   (discover, then assign, code-enforced exhaustiveness, an explicit unclustered bucket) discovers
   *options* rather than landscape themes and then groups options into themes; the deterministic
@@ -155,8 +168,10 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   (regulate, subsidise, tax or charge, inform, provide a service, enforce existing powers, devolve,
   change who runs the system) prompts suggestions and checks coverage. Themes are never a fixed
   list (ruling 11). ✅ A user modification of an option's design mints a new option linked *variant
-  of* its parent (ruling 15; which edits count is the agent's judgement, stated); packages and
-  ingredients are linked *part of* and shown together. ✅ Generation is free: a suggested option
+  of* its parent (ruling 15; which edits count is the agent's judgement, stated); a substantive
+  edit suspends inherited claims until the variant's own assessment; support binds to a finding
+  and a specified design, not to a document (ruling 36); packages and ingredients are linked
+  *part of* and shown together. ✅ Generation is free: a suggested option
   needs no source and is labelled ([trust.md](trust.md)). ❓ Overlap/dedup and target longlist size
   (open question 4). 🟡 Taxonomy as a curated asset rather than prompt-internal text (open
   question 5).
@@ -167,7 +182,10 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   option marked *included* or *excluded: breaks "<constraint>"* (scope-shaped constraints only,
   ruling 23), or *no in-scope evidence*, plus a labelled **reasoned guess** per after-assessment
   constraint; the three default screens (relevant to outcomes · distinct · in scope) applied and
-  cited like any other.
+  cited like any other — the *distinct* screen never excludes a variant or a part-of relation
+  (ruling 36). After assessment, a failed or uncheckable effect/cost constraint is shown on the
+  option ("breaks: low cost (assessed)" / "unresolved: cost not comparable"); the option stays and
+  the user decides (ruling 40).
 - ✅ The EB screen's per-item judgment with the object changed: an option judged against
   constraints instead of a document against an intent. Runs on coverage and the specified design
   as options complete; never on analysis. ✅ Thin evidence is noted, never a reason to exclude.
@@ -182,8 +200,11 @@ The three depths of ruling 3 are **compositions** of these components, not compo
 
 - **In:** the included options with coverage and relations; the user's additions. **Out:** the
   proposed shortlist — **one place per primary lever type present among the kept options**
-  (ruling 20), each with one named reason from what coverage knows (distinctness, widest
-  implementation record, only option of its lever type, thin evidence); gap messages naming
+  (ruling 20) — a **provisional allocation of reading effort**, never "representative coverage"
+  (ruling 37) — each with one named reason from what coverage knows (distinctness; widest
+  implementation record = implementations and countries recorded in the mentioning documents;
+  only option of its lever type; thin evidence = few mentioning documents or none of the required
+  outcome); gap messages naming
   secondary lever types ("Regulate: no dedicated option; touched by the youth guarantee package");
   the list of kept options not proposed, by theme; warnings when every place shares one ambition
   band or when a package and its own ingredient would both take places.
@@ -193,8 +214,10 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   to assess. ✅ Themes group but do not earn places; a singleton theme is proposed only if its
   primary lever type is otherwise uncovered. ✅ Places the user added are respected and worked
   around; PA advises on gaps and never removes (ruling 6). ✅ In the sense-check branch the
-  proposal is the named option (rapid) or the named option plus its most similar neighbours,
-  pre-ticked (standard) (ruling 25; ❓ similarity measure = open question 10). ✅ "Most promising"
+  proposal is the named option (rapid) or the named option plus its most similar neighbours
+  **plus one challenger** reaching the same outcome through a different primary lever type,
+  pre-ticked, each with its reason (standard) (rulings 25, 37; ❓ similarity measure = open
+  question 10). ✅ "Most promising"
   only after assessment, as per-axis sorts on comparable axes and conditional recommendations on
   those axes; before assessment `propose` describes coverage and gaps only.
 - **Why new:** nothing in the EB selects a representative set over a fixed taxonomy; EB `select`
@@ -210,17 +233,23 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   study, per outcome family, significance never counted — ruling 26; ❓ independence detection
   open, a trial/registration identifier is the candidate field), magnitude in native units with
   its comparator, population and period, design, setting. Run as a parallel per-source fan-out
-  over the capped set so latency is close to one document's. **Skipped for documents whose full
-  findings were inherited from a deep Evidence search** (the EB schema carries the countable
-  fields at finding grain); the profile then reads those findings directly (owner, 2026-09-07). ✅ **synthesise(profile)** by
+  over the **read set** — chosen under the per-option cap so that distinct implementations, the
+  required outcomes and the counter-case survive, with omissions represented and a
+  budget-limited result allowed to be explicitly incomplete (ruling 38) — so one stage's latency
+  is close to one document's; whole-run latency is what the rapid budget measures. Inherited
+  findings are reused at finding grain: only the requirements they satisfy are skipped (ruling
+  35). ✅ **synthesise(profile)** by
   retrieval-augmented reading over the option's chunks for the narrative sections: mechanism and
   failure mode (tier-labelled) · constituents (a variant's parent evidence here as related
   evidence for a different design) · evidence for and against · variants in practice · case
   studies typed by tier · transferability working (three legs; moderator/dealbreaker extraction
   with quotes; context typed retrieved / stated by you / planned by you; weakest leg decides; no
   factor fractions — ruling 18) · assumptions · what it would take · reported cost beside the
-  earlier guess. "How sure" = the roll-up of appraise tiers and study counts already computed at
-  longlist depth.
+  earlier guess. "How sure" = confidence in the specified design–outcome claim from evidence
+  found relevant to it; documents counted until independence is known; the pre-assessment
+  source-quality profile is shown beside it, not in place of it (ruling 33). Retrieved context
+  fills a local transferability factor only where the proposition applies at the target unit by
+  its nature (ruling 34).
 - ✅ **Reads the full text of the documents it relies on, capped per option; every claim carries
   the depth of what was read** (`text_basis`; ruling 16). ✅ A variant is assessed on its own
   design (ruling 15). ✅ Shortlist only, on the user's word; every cell labelled *scoping pass*.
@@ -228,15 +257,21 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   is slower than reading, so the per-option document cap is the latency lever and the spike
   measures fit to the rapid budget; the stage-1 screen's structured fields give the abstract-level
   strip shown first.
-- ✅ **synthesise(summary)** writes the summary above the assessed table: never a ranking — no
-  superlatives across options; each effect with its own comparator, population and period;
-  conditional recommendations only on comparable axes (ruling 17); the kept-but-unassessed options
-  listed (ruling 19); the closing element **"What needs deciding or commissioning next"** (ruling
-  21); in the sense-check branch also **"questions to put to the department"** (ruling 25). Not
-  user-editable in v1 (ruling 14). ✅ **synthesise(baseline)** writes the "Do nothing" profile
-  (what is in place · trend if nothing changes · who is affected · what is already changing ·
-  what is contested · cost of inaction · key assumption · sources), reported facts only, every
-  statement provenance-carrying, "not found" stated as such; the run **pauses** after it and the
+- ✅ **synthesise(report)** writes the Result (ruling 32) in two forms. *Provisional*, after the
+  longlist stage: top line · the problem and what is contested · the approaches · what the
+  evidence base holds (source-quality profiles, thin coverage) · what needs deciding or
+  commissioning next (unknowns only, no conditional recommendation) · what was searched.
+  *Assessed*: the same sections rewritten, the assessed table embedded, transferability and
+  assumptions added; never a ranking — no superlatives across options; each effect with its own
+  comparator, population and period; conditional recommendations only on comparable axes and
+  matching bases (rulings 17, 33); the kept-but-unassessed options listed (ruling 19); in the
+  sense-check branch the closing section carries **"questions to put to the department"**
+  (ruling 25), bounded by ruling 39 (structure unlabelled; no unsupported proposition, even
+  inside a question). Not user-editable in v1 (ruling 14). ✅ **synthesise(baseline)** writes the
+  "Do nothing" profile (what is in place · trend if nothing changes · who is affected · what is
+  already changing · what is contested · cost of inaction · key assumption · sources), empirical
+  premises sourced and interpretations labelled reasoning (ruling 40), every statement
+  provenance-carrying, "not found" stated as such; the run **pauses** after it and the
   pause is a place to question it in chat (rulings 2, 24). ❓ Baseline sourcing mechanics (open
   question 6).
 
@@ -253,7 +288,8 @@ The three depths of ruling 3 are **compositions** of these components, not compo
 
 ## export (Share seam)
 
-- ✅ Bundles the summary, the assessed table, the option profiles, the baseline, the **full longlist
-  with states and reasons**, the **shortlist assembly record** and the Sources statement (inherited
-  versus added; what was read at which depth); claims breadth, never exhaustiveness (rulings 14,
-  21). Arch §10 seam; no export contract drafted yet.
+- ✅ Bundles the **report** with its attachments: the option profiles, the baseline profile, the
+  **full longlist with states and reasons**, the **shortlist assembly record** and the Sources
+  statement (inherited versus added; what was read at which depth; what was not read under the
+  cap); the same complete bundle in both branches (ruling 32); claims breadth, never
+  exhaustiveness (rulings 14, 21). Arch §10 seam; no export contract drafted yet.

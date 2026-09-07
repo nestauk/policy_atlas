@@ -631,3 +631,89 @@ until then the rulings win over the boards.
     and ⟨assess⟩ skips the light extraction for those documents. The clustering-quality spike
     before the longlist contract must test many-to-many assignment, bundles and reviews across
     domains; option-grain clustering is unproven.
+
+### Pass-3 rulings (owner, 2026-09-07, after the third review pass)
+
+32. **The report is the Result; stages are how it is built.** The scoping task's Result artefact
+    is a **report** (the vocabulary's word for the Result tab's artefact), written as linear
+    text in the Evidence search report's style with a side outline and collapsible sections.
+    Sections: **top line** (the question, what was searched, where things stand) · **the problem
+    and what is contested** (from the baseline) · **the approaches** (a paragraph per theme
+    naming its options, variants, packages and exclusions with their constraints) · **what the
+    evidence base holds** (before assessment: the source-quality profile per option and where
+    coverage is thin; after: the assessed table embedded, each effect with its own comparator,
+    population and period, and the kept-but-unassessed options by theme) · **transferability and
+    assumptions** (assessed form only) · **what needs deciding or commissioning next** (in the
+    sense-check branch also the questions to put to the department) · **what was searched and
+    not searched**. It **exists from the longlist stage onward** in a provisional form that says
+    nothing has been assessed, and is rewritten by assessment. Ruling 14's "summary" becomes the
+    top-line section; the report is a **grounded block** (`produce-grounded-block`), never the
+    provenance contract's citation-free navigation summary. **Baseline, Longlist (list · grid ·
+    shortlist views) and the option profiles are working views**: operated during the run,
+    reachable behind the report afterwards. The sense-check branch opens the report on the named
+    option. Export = the report with its attachments (profiles, baseline profile, full longlist
+    with states and reasons, shortlist assembly record, sources).
+33. **Source quality is not "how sure"** (amends ruling 30). Before assessment an option shows a
+    **source-quality profile** of the documents that mention it — by evidence type and appraisal
+    tier — and never the words "how sure": a high-tier review that mentions an option only to say
+    it was never evaluated is not support. After assessment "how sure" means confidence in the
+    **specified design–outcome claim** from evidence found relevant to it. Documents are counted,
+    not studies, until independence is known; no independent-study tally before then. Ruling 17's
+    comparable axes are narrowed: cost as reported is comparable only on matching denominators,
+    price bases and scope, otherwise the comparison is withheld.
+34. **Applicability, not containment** (amends ruling 18's addendum). A retrieved fact at a
+    containing geography fills a local transferability factor only when the proposition applies
+    at the target unit by its nature — rules, entitlements, duties, universal provisions, with
+    relevant exceptions considered. Aggregates, averages, typical conditions and implementation
+    observations are shown as context with their level and date; the local factor stays Unknown.
+35. **Inherited findings are reused at finding grain** (amends ruling 31). An inherited
+    extraction may be partial, for a different intervention, or under an older field profile.
+    ⟨assess⟩ reuses the findings that satisfy the specified option's requirements for the same
+    source snapshot and fills or labels the rest; it never skips a whole document because findings
+    exist. Profile, version, coverage and source links are preserved and reconciled before
+    counting.
+36. **Identity rules.** Support binds to a **finding and a specified design**, not to a document:
+    a parent's document may carry findings for both designs. A substantive user edit **suspends**
+    inherited claims for the variant until its own assessment (it shows "not yet assessed"). The
+    default *distinct* screen never excludes a variant or a part-of relation. "Never exclude an
+    option" protects **known** candidates: an evidence-scope constraint can prevent an option
+    from ever being discovered, so the breadth claim is bounded by the authorised evidence scope,
+    and candidates already encountered are preserved when their sources are filtered.
+37. **The proposal is a provisional allocation of reading effort**, never "debiased" or
+    "representative coverage". "Thin evidence" and "widest implementation record" are defined on
+    real fields (count and type of mentioning documents; countries and implementations recorded
+    in them), not on impressions. The standard sense-check's comparison set is the most similar
+    neighbours **plus one challenger**: an option reaching the same stated outcome through a
+    different primary lever type, when the longlist has one; each comparator's reason is stated.
+38. **The read set and the cap.** ⟨assess⟩ states how the read set is chosen under the per-option
+    cap (stratified so that distinct implementations, the required outcomes and the counter-case
+    survive) and how omissions are represented. A budget-limited result may be **explicitly
+    incomplete**; the report says what was not read. Whole-run latency, not extraction latency, is
+    what the rapid budget measures.
+39. **Editorial exceptions are bounded.** Unlabelled editorial structure is allowed; unlabelled
+    new empirical or evaluative **propositions** are not, including propositions embedded in a
+    question ("how will you scale this proven low-cost intervention?" carries two assessment
+    claims). Before assessment the closing questions identify unknowns and never carry
+    conditional recommendations. A coverage denominator is the **rendering** of a corpus-level
+    claim; behind it stands a reproducible membership set and a per-source support record, as the
+    Evidence search's pattern claims already require.
+40. **Corrections and recorded decisions.** Tabs are the post-038 vocabulary's: **Agent · Result ·
+    Sources · Share · History** (the plan document lives in the Agent tab; Result = the report
+    with Baseline and Longlist as views), replacing ruling 1's Plan · Results. Depth words are the
+    Evidence search's user-facing **rapid / standard / deep**. The execution contract now says
+    components are shared across capabilities (ruling 30's reuse rule, made canonical). The
+    assessed table carries no study-design labels ("15 studies", not "4 randomised") — the
+    owner's canvas ruling of 2026-09-03, recorded here for the first time. Ruling 8's "Swap on
+    shortlist" is superseded by ruling 5's add/remove. The baseline's empirical premises are
+    sourced and its interpretations (key assumption, what is contested) are labelled reasoning —
+    "reported facts only" was too strong. After assessment, an effect- or cost-shaped constraint
+    that fails or cannot be checked is shown on the option ("breaks: low cost (assessed)" /
+    "unresolved: cost not comparable"); the option stays and the user decides. The Green Book
+    permits facilitated **MCDA**, not the simple weighting-and-scoring MCA it recommends against
+    (term corrected in Intent). The distillation comb-through rulings of 2026-09-07 (variant
+    threshold left to the agent · no default depth · similarity measure open · sorts = evidence
+    strength and study count · parent evidence in "What it is made of" · place-reason vocabulary ·
+    no pre-assessment conditional recommendations · inherit as component 0 · one primary lever
+    type per option · ambition tag tier-4 · light extraction + reading as the shape to spike ·
+    trust boundary between propositions · corpus claims by denominator · closing elements
+    unlabelled) are canonical as rulings, recorded here from the review pack's decision sheet.

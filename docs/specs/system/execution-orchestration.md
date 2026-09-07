@@ -61,8 +61,12 @@ interpreting the plan-as-data**, not a graph rebuilt per run.
   system can do.* May be a thin primitive **or a facade over a substantial internal workflow**
   (`produce-grounded-block`; a corpus-scale `appraise` fan-out). Size/duration is **not** what
   makes a tool — the single declared interface is. "Tool vs workflow" is a category error.
-- **Component** — a step in **one** capability's skeleton; **owned by its capability, run by its
-  expert sub-agent**.
+- **Component** — a step in a capability's skeleton, **shared across capabilities** (owner ruling
+  2026-09-07, options-scoping review round): a component is authored once, carries its own
+  declared I/O, and any capability may compose it into its own pipeline — as is, parameterised,
+  or as a declared variation. It runs under the expert sub-agent of the capability whose run it
+  is part of. *(Supersedes the 2026-06 wording "owned by its capability, run by its expert
+  sub-agent", written when there was one capability.)*
 - **Capability** — an artefact-producing composition of components, run by a dedicated expert
   sub-agent, coordinated by the Agent.
 
@@ -73,9 +77,15 @@ them.**
   only its current component's declared tools + the tiny universal core. The registry can grow
   large without degrading any agent's choice (reuse without exposure).
 - **Cross-capability reuse splits by what's reused**: a shared **operation** → reference the
-  **tool**; another capability's **analysis** (a component) → the **Agent invokes that
-  capability's expert sub-agent** to run the component. **A capability never runs another's
-  component itself** (a component carries its owner's expertise/context; a tool does not).
+  **tool**; a shared **step** → compose the **component** into your own pipeline (as is, with
+  parameters, or as a declared variation with its own I/O — e.g. options scoping runs the
+  Evidence search's acquire → screen → classify → appraise → ingest spine as is, and varies
+  `characterise` into `longlist`); another capability's **whole analysis** (its artefact) →
+  the **Agent invokes that capability's expert sub-agent** (e.g. the full evidence search a
+  scoping task spawns as a child task). *(Owner ruling 2026-09-07; the earlier rule "a
+  capability never runs another's component" is withdrawn — see
+  [capabilities/options-scoping/components.md](../capabilities/options-scoping/components.md)
+  § Reuse rule.)*
 - **Gradation vs distinct operation — the I/O test**: only intensity/depth varies (same I/O
   shape) → a **gradation** (a plan parameter; a named bundle = a "mode"); I/O shape differs,
   output consumed inside → a **component**; I/O shape differs, output is a standalone artefact →
