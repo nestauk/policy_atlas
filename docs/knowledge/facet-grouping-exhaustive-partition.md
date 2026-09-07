@@ -12,7 +12,7 @@ timestamp: 2026-07-07
 writes is an **exhaustive partition** of the referenced extraction run's findings:
 
 - The finding set is resolved via the roll-up's own `docs[].extraction_record_id` entries
-  (fresh and memo-reused alike), project-guarded, and cross-checked against
+  (fresh and memo-reused alike), task-guarded, and cross-checked against
   `counts.findings.total` — a mismatch is a structural `GroupError`, no row.
 - The LLM's only job is partitioning **distinct facet values**; finding membership derives
   in code (finding → its value → the value's group). Values the model misses or that fail

@@ -30,7 +30,9 @@ export function ArtefactDownload({
 
   const downloadPdf = () => {
     setOpen(false);
-    window.setTimeout(() => window.print(), 0);
+    // Expand handlers on sections listen for `beforeprint` and flushSync
+    // their open state; print then captures the full report.
+    window.print();
   };
 
   return (

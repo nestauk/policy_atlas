@@ -3,6 +3,7 @@
 .agent/
 .vscode/
 .DS_Store
+.impeccable/
 
 # Environment and local credentials
 .env

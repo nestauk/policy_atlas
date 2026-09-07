@@ -52,11 +52,11 @@ letter diverges from its invariant is an instruction to diverge.
   this fail?** If the fixture cannot produce one, the guard is decorative. The cheap check
   is a mutation — break the production line deliberately and confirm the test goes red.
 - Related fixture trap (031): the runtime walk's stub search acquires **0 new** sources,
-  because the seeded project already holds the records the stub returns. `assert
+  because the seeded task already holds the records the stub returns. `assert
   headline > 0` off a plain walk fails; a non-zero headline has to be seeded, or the test
   has to use a backend that yields fresh records per call.
 - **A property walk is vacuous wherever its fixture cannot produce the breach** (033):
-  the tenancy-invariant walk checked `project.org_id IS DISTINCT FROM portfolio.org_id`
+  the tenancy-invariant walk checked `task.org_id IS DISTINCT FROM project.org_id`
   after every op — over a fixture with exactly one organisation, so the predicate could
   never fire regardless of implementation. Mutation-testing proved it: deleting the org
   sync still passed, because the interaction never occurred. The fix is twofold — widen

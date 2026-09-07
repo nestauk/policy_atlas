@@ -227,7 +227,7 @@ which is worse than not shipping it, so it is its own checkpoint.*
 
 ### Phase 11 — Records · *lead*
 Spec flow-back (`web-api.md` §§ Auth boundary, Portfolios, Conversations; `data-model.md`;
-`JUMPBOX.md` operator IAM; `DEPLOYMENT.md` CLI invocation, the **roll-forward** posture and
+`infra/JUMPBOX.md` operator IAM; `DEPLOYMENT.md` CLI invocation, the **roll-forward** posture and
 the **manual downgrade procedure**, since the ECS task runs `alembic upgrade head` only);
 deferred seams; **the AGENTS.md phase pointer**; and **the three privacy-notice
 discrepancies quoted verbatim in `verification.md` as an open escalation** to the notice's

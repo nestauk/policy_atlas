@@ -22,7 +22,6 @@ from policy_atlas.core.schema import (
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    project_source_snapshot,
     runs,
     search_coverage_record,
     selection_result,
@@ -32,12 +31,13 @@ from policy_atlas.core.schema import (
     source_snapshot,
     source_tag,
     synthesis_result,
+    task_source_snapshot,
 )
-from tests.api.resource_support import api_client, create_project
+from tests.api.resource_support import api_client, create_task
 from tests.helpers import (
     ICF_PROFILE_ID,
     IOF_PROFILE_ID,
-    delete_project_data,
+    delete_task_data,
     now,
     seed_ingested_full_text,
     seed_scope,
@@ -48,33 +48,33 @@ from tests.helpers import (
 
 
 def _seed_read_model_ladder(
-    engine: Engine, project_id: uuid.UUID
+    engine: Engine, task_id: uuid.UUID
 ) -> tuple[tuple[uuid.UUID, uuid.UUID, uuid.UUID], uuid.UUID]:
-    """Seed one project with a known source ladder and cited synthesis claim."""
+    """Seed one task with a known source ladder and cited synthesis claim."""
     with engine.begin() as conn:
         run_id = uuid.uuid4()
         conn.execute(
             insert(runs).values(
                 run_id=run_id,
-                project_id=project_id,
+                task_id=task_id,
                 status="running",
                 started_at=now(),
             )
         )
-        scope_id = seed_scope(conn, project_id)
+        scope_id = seed_scope(conn, task_id)
         events.append(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type="search.executed",
             payload={"query": "training uptake", "result_count": 3},
         )
-        selected_pss = seed_select_doc(
-            conn, project_id, run_id, scope_id, title="Selected trial", year=2020
+        selected_tss = seed_select_doc(
+            conn, task_id, run_id, scope_id, title="Selected trial", year=2020
         )
         selected_snapshot_id = conn.execute(
-            select(project_source_snapshot.c.source_snapshot_id).where(
-                project_source_snapshot.c.project_source_snapshot_id == selected_pss
+            select(task_source_snapshot.c.source_snapshot_id).where(
+                task_source_snapshot.c.task_source_snapshot_id == selected_tss
             )
         ).scalar_one()
         conn.execute(
@@ -94,14 +94,14 @@ def _seed_read_model_ladder(
                 }
             )
         )
-        _, excluded_pss = seed_source(conn, project_id, {"title": "Excluded review", "year": 2019})
+        _, excluded_tss = seed_source(conn, task_id, {"title": "Excluded review", "year": 2019})
         seed_screening_result(
-            conn, project_id, run_id, scope_id, excluded_pss, status="not_relevant"
+            conn, task_id, run_id, scope_id, excluded_tss, status="not_relevant"
         )
-        _, found_pss = seed_source(conn, project_id, {"title": "Unscreened report", "year": 2018})
+        _, found_tss = seed_source(conn, task_id, {"title": "Unscreened report", "year": 2018})
         full_snapshot_id = seed_ingested_full_text(
             conn,
-            pss_id=selected_pss,
+            tss_id=selected_tss,
             chunks=[
                 "Cited evidence sentence." + "B" * 900,
                 "A" * 900 + " Cited evidence sentence." + "B" * 900,
@@ -111,13 +111,13 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(selection_result).values(
                 selection_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 strategy="coverage_stratified_v1",
                 budget=1,
                 selection_provenance={},
-                selected=[{"pss_id": str(selected_pss)}],
+                selected=[{"tss_id": str(selected_tss)}],
                 excluded={},
                 flags={},
                 created_at=now(),
@@ -127,9 +127,9 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(source_extraction_record).values(
                 extraction_record_id=record_id,
-                project_id=project_id,
+                task_id=task_id,
                 source_snapshot_id=full_snapshot_id,
-                project_source_snapshot_id=selected_pss,
+                task_source_snapshot_id=selected_tss,
                 extraction_fingerprint="fixture",
                 status="extracted",
                 basis="full_text",
@@ -145,7 +145,7 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(intervention_outcome_finding).values(
                 finding_id=iof_id,
-                project_id=project_id,
+                task_id=task_id,
                 extraction_record_id=record_id,
                 intervention="Training",
                 outcome="Uptake",
@@ -167,7 +167,7 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(implementation_context_finding).values(
                 finding_id=icf_id,
-                project_id=project_id,
+                task_id=task_id,
                 extraction_record_id=record_id,
                 context_type="barrier",
                 claim="Staff time constrained implementation.",
@@ -191,7 +191,7 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(extraction_result).values(
                 extraction_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 selection_run_id=run_id,
@@ -208,7 +208,7 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(grouping_result).values(
                 grouping_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 extraction_run_id=run_id,
@@ -236,8 +236,8 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(source_tag).values(
                 source_tag_id=uuid.uuid4(),
-                project_id=project_id,
-                project_source_snapshot_id=selected_pss,
+                task_id=task_id,
+                task_source_snapshot_id=selected_tss,
                 tag="School health",
                 tag_type="topic_theme",
                 asserted_by="openalex",
@@ -249,7 +249,7 @@ def _seed_read_model_ladder(
             insert(search_coverage_record).values(
                 search_coverage_record_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_id=project_id,
+                task_id=task_id,
                 acquired_by_run_id=run_id,
                 backends=[],
                 scope_filters={},
@@ -266,7 +266,7 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(artefact).values(
                 artefact_id=artefact_id,
-                project_id=project_id,
+                task_id=task_id,
                 title="Evidence base",
                 created_at=now(),
             )
@@ -338,7 +338,7 @@ def _seed_read_model_ladder(
         conn.execute(
             insert(synthesis_result).values(
                 synthesis_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 characterisation_run_id=None,
@@ -360,7 +360,7 @@ def _seed_read_model_ladder(
                 created_at=now(),
             )
         )
-        return citation_ids, found_pss
+        return citation_ids, found_tss
 
 
 def test_evidence_url_fallback_ladder() -> None:
@@ -400,10 +400,10 @@ def test_edge_snippet_marks_both_ends_and_starts_on_a_word() -> None:
 def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> None:
     """Assert exact ladder, screened-in distributions, artefact and context projections."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = uuid.UUID(create_project(client, owner))
-        citation_ids, _ = _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        citation_ids, _ = _seed_read_model_ladder(engine, task_id)
         try:
-            funnel = client.get(f"/api/v1/projects/{project_id}/funnel", headers=owner)
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner)
             assert funnel.status_code == 200
             assert funnel.json() == {
                 "found": 3,
@@ -415,11 +415,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 "findings": 2,
                 "cited": 1,
             }
-            landscape = client.get(f"/api/v1/projects/{project_id}/landscape", headers=owner).json()
+            landscape = client.get(f"/api/v1/tasks/{task_id}/landscape", headers=owner).json()
             assert landscape["evidence_types"] == {"RCTs and Quasi-Experimental Studies": 1}
             assert landscape["years"] == {"2020": 1}
             evidence = client.get(
-                f"/api/v1/projects/{project_id}/evidence?page=1&page_size=2", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?page=1&page_size=2", headers=owner
             )
             assert evidence.status_code == 200
             assert evidence.json()["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
@@ -429,10 +429,10 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 "found",
             }
             assert (
-                client.get(f"/api/v1/projects/{project_id}/evidence", headers=other).status_code
+                client.get(f"/api/v1/tasks/{task_id}/evidence", headers=other).status_code
                 == 404
             )
-            findings = client.get(f"/api/v1/projects/{project_id}/findings", headers=owner).json()[
+            findings = client.get(f"/api/v1/tasks/{task_id}/findings", headers=owner).json()[
                 "data"
             ]
             assert {(row["profile"], row["relevance"]) for row in findings} == {
@@ -461,28 +461,28 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert icf["quote_verified"] is True
             assert icf["chunk_id"] is None
             assert (
-                client.get(f"/api/v1/projects/{project_id}/groups", headers=owner).json()["facets"][
+                client.get(f"/api/v1/tasks/{task_id}/groups", headers=owner).json()["facets"][
                     0
                 ]["groups"][0]["size"]
                 == 2
             )
-            decisions = client.get(f"/api/v1/projects/{project_id}/decisions", headers=owner)
+            decisions = client.get(f"/api/v1/tasks/{task_id}/decisions", headers=owner)
             assert decisions.status_code == 200
             assert decisions.json()["data"][0]["kind"] == "search.executed"
             assert decisions.json()["data"][0]["summary"] == "Executed a search query."
-            coverage = client.get(f"/api/v1/projects/{project_id}/coverage", headers=owner).json()
+            coverage = client.get(f"/api/v1/tasks/{task_id}/coverage", headers=owner).json()
             assert coverage["sentence"] == "Searching completed. Coverage was judged adequate."
             assert coverage["base"]["counts"] == {"found": 3, "relevant": 1, "screened_out": 1}
             assert coverage["backends"] == []
             assert coverage["backends_detail"] == []
-            artefact = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()
+            artefact = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()
             assert artefact["sections"][0]["role"] == "key_findings"
             assert artefact["sections"][0]["focus"] == "Training uptake"
             assert artefact["sections"][0]["blocks"][0]["claims"][0]["citations"][0]["n"] == 1
             assert artefact["sections"][0]["blocks"][0]["claims"][0]["weakly_grounded"] is False
             assert artefact["sections"][0]["blocks"][0]["claims"][0]["gap"]["grade"] == "limited"
             all_evidence = client.get(
-                f"/api/v1/projects/{project_id}/evidence?page=1&page_size=3", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?page=1&page_size=3", headers=owner
             ).json()["data"]
             cited_source = next(row for row in all_evidence if row["status"] == "cited")
             # Envelope authority (027 owner feedback, 2026-07-29): a citation
@@ -502,7 +502,7 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
                 (reference["n"], reference["title"]) for reference in artefact["references"]
             ] == [(1, "Selected trial")]
             dossier = client.get(
-                f"/api/v1/projects/{project_id}/sources/{cited_source['source_id']}", headers=owner
+                f"/api/v1/tasks/{task_id}/sources/{cited_source['source_id']}", headers=owner
             )
             assert dossier.status_code == 200
             assert dossier.json()["abstract_source"] == "provider"
@@ -523,14 +523,14 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             )
             assert (
                 client.get(
-                    f"/api/v1/projects/{project_id}/sources/{cited_source['source_id']}",
+                    f"/api/v1/tasks/{task_id}/sources/{cited_source['source_id']}",
                     headers=other,
                 ).status_code
                 == 404
             )
             near_start, middle, near_end = [
                 client.get(
-                    f"/api/v1/projects/{project_id}/citations/{citation_id}/context",
+                    f"/api/v1/tasks/{task_id}/citations/{citation_id}/context",
                     headers=owner,
                 ).json()
                 for citation_id in citation_ids
@@ -555,31 +555,31 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert len(near_start["context"]) == 827
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine: Engine) -> None:
     """Theme claims resolve named characterisation and grouping references honestly."""
     with api_client(tmp_path) as (client, owner, _):
-        project_id = uuid.UUID(create_project(client, owner))
-        _, found_pss = _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _, found_tss = _seed_read_model_ladder(engine, task_id)
         try:
             with engine.begin() as conn:
                 synthesis = conn.execute(
                     select(
                         synthesis_result.c.evidence_scope_id,
                         synthesis_result.c.run_id,
-                    ).where(synthesis_result.c.project_id == project_id)
+                    ).where(synthesis_result.c.task_id == task_id)
                 ).one()
-                selected_pss = conn.execute(
-                    select(source_extraction_record.c.project_source_snapshot_id).where(
-                        source_extraction_record.c.project_id == project_id
+                selected_tss = conn.execute(
+                    select(source_extraction_record.c.task_source_snapshot_id).where(
+                        source_extraction_record.c.task_id == task_id
                     )
                 ).scalar_one()
                 conn.execute(
                     insert(characterisation_result).values(
                         characterisation_id=uuid.uuid4(),
-                        project_id=project_id,
+                        task_id=task_id,
                         evidence_scope_id=synthesis.evidence_scope_id,
                         run_id=synthesis.run_id,
                         grouping_provenance={},
@@ -591,7 +591,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                                     "name": "Access",
                                     "description": "Access to support",
                                     "size": 3,
-                                    "member_ids": [str(selected_pss), str(found_pss)],
+                                    "member_ids": [str(selected_tss), str(found_tss)],
                                 }
                             ]
                         },
@@ -602,14 +602,14 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                 # characterisation_run_id — never "latest by created_at".
                 conn.execute(
                     update(synthesis_result)
-                    .where(synthesis_result.c.project_id == project_id)
+                    .where(synthesis_result.c.task_id == task_id)
                     .values(characterisation_run_id=synthesis.run_id)
                 )
                 decoy_run_id = uuid.uuid4()
                 conn.execute(
                     insert(runs).values(
                         run_id=decoy_run_id,
-                        project_id=project_id,
+                        task_id=task_id,
                         status="running",
                         started_at=now(),
                     )
@@ -617,7 +617,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                 conn.execute(
                     insert(characterisation_result).values(
                         characterisation_id=uuid.uuid4(),
-                        project_id=project_id,
+                        task_id=task_id,
                         evidence_scope_id=synthesis.evidence_scope_id,
                         run_id=decoy_run_id,
                         grouping_provenance={},
@@ -641,7 +641,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                             select(block.c.block_id).where(
                                 block.c.artefact_id
                                 == select(synthesis_result.c.artefact_id)
-                                .where(synthesis_result.c.project_id == project_id)
+                                .where(synthesis_result.c.task_id == task_id)
                                 .scalar_subquery()
                             )
                         )
@@ -661,7 +661,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         },
                     )
                 )
-            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+            claim = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
                 "sections"
             ][0]["blocks"][0]["claims"][0]
             assert claim["theme"] == {
@@ -674,8 +674,8 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         "size": 3,
                         "facet": None,
                         "sources": [
-                            {"source_id": str(selected_pss), "title": "Selected trial"},
-                            {"source_id": str(found_pss), "title": "Unscreened report"},
+                            {"source_id": str(selected_tss), "title": "Selected trial"},
+                            {"source_id": str(found_tss), "title": "Unscreened report"},
                         ],
                     }
                 ],
@@ -684,24 +684,24 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
             with engine.begin() as conn:
                 conn.execute(
                     update(characterisation_result)
-                    .where(characterisation_result.c.project_id == project_id)
+                    .where(characterisation_result.c.task_id == task_id)
                     .values(
                         themes={
                             "themes": [
                                 {
                                     "theme_id": "characterisation:access",
                                     "name": "Access",
-                                    "member_ids": [str(selected_pss), str(uuid.uuid4())],
+                                    "member_ids": [str(selected_tss), str(uuid.uuid4())],
                                 }
                             ]
                         }
                     )
                 )
-            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+            claim = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
                 "sections"
             ][0]["blocks"][0]["claims"][0]
             assert claim["theme"]["items"][0]["sources"] == [
-                {"source_id": str(selected_pss), "title": "Selected trial"}
+                {"source_id": str(selected_tss), "title": "Selected trial"}
             ]
 
             with engine.begin() as conn:
@@ -718,7 +718,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         }
                     )
                 )
-            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+            claim = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
                 "sections"
             ][0]["blocks"][0]["claims"][0]
             assert claim["theme"] == {
@@ -730,7 +730,7 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         "description": "Training findings",
                         "size": 2,
                         "facet": "intervention",
-                        "sources": [{"source_id": str(selected_pss), "title": "Selected trial"}],
+                        "sources": [{"source_id": str(selected_tss), "title": "Selected trial"}],
                     }
                 ],
             }
@@ -749,47 +749,47 @@ def test_artefact_theme_claim_resolves_durable_references(tmp_path: Path, engine
                         }
                     )
                 )
-            claim = client.get(f"/api/v1/projects/{project_id}/artefact", headers=owner).json()[
+            claim = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
                 "sections"
             ][0]["blocks"][0]["claims"][0]
             assert claim["theme"] is None
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
-def _seed_evidence_filter_fixture(engine: Engine, project_id: uuid.UUID) -> uuid.UUID:
+def _seed_evidence_filter_fixture(engine: Engine, task_id: uuid.UUID) -> uuid.UUID:
     """Seed evidence spanning found/screened_out/selected/not_selected for filter tests."""
     with engine.begin() as conn:
         run_id = uuid.uuid4()
         conn.execute(
             insert(runs).values(
-                run_id=run_id, project_id=project_id, status="running", started_at=now()
+                run_id=run_id, task_id=task_id, status="running", started_at=now()
             )
         )
-        scope_id = seed_scope(conn, project_id)
+        scope_id = seed_scope(conn, task_id)
         for index in range(3):
-            seed_source(conn, project_id, {"title": f"Found {index}"})
-        _, screened_out_pss = seed_source(conn, project_id, {"title": "Screened out"})
+            seed_source(conn, task_id, {"title": f"Found {index}"})
+        _, screened_out_tss = seed_source(conn, task_id, {"title": "Screened out"})
         seed_screening_result(
-            conn, project_id, run_id, scope_id, screened_out_pss, status="not_relevant"
+            conn, task_id, run_id, scope_id, screened_out_tss, status="not_relevant"
         )
-        _, selected_pss = seed_source(conn, project_id, {"title": "Selected"})
-        seed_screening_result(conn, project_id, run_id, scope_id, selected_pss, status="relevant")
-        _, not_selected_pss = seed_source(conn, project_id, {"title": "Not selected"})
+        _, selected_tss = seed_source(conn, task_id, {"title": "Selected"})
+        seed_screening_result(conn, task_id, run_id, scope_id, selected_tss, status="relevant")
+        _, not_selected_tss = seed_source(conn, task_id, {"title": "Not selected"})
         seed_screening_result(
-            conn, project_id, run_id, scope_id, not_selected_pss, status="relevant"
+            conn, task_id, run_id, scope_id, not_selected_tss, status="relevant"
         )
         conn.execute(
             insert(selection_result).values(
                 selection_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 strategy="coverage_stratified_v1",
                 budget=1,
                 selection_provenance={},
-                selected=[{"pss_id": str(selected_pss)}],
+                selected=[{"tss_id": str(selected_tss)}],
                 excluded={},
                 flags={},
                 created_at=now(),
@@ -801,23 +801,23 @@ def _seed_evidence_filter_fixture(engine: Engine, project_id: uuid.UUID) -> uuid
 def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: Engine) -> None:
     """`status` filters the collection; `total_items` reflects the filter, not the page."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_evidence_filter_fixture(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_evidence_filter_fixture(engine, task_id)
         try:
             found = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=found&page=1&page_size=2",
+                f"/api/v1/tasks/{task_id}/evidence?status=found&page=1&page_size=2",
                 headers=owner,
             )
             assert found.status_code == 200
             body = found.json()
             # Collection-true: total reflects the filtered collection (3), not the
-            # page length (2) and not the unfiltered project total (6).
+            # page length (2) and not the unfiltered task total (6).
             assert body["pagination"] == {"page": 1, "page_size": 2, "total_items": 3}
             assert len(body["data"]) == 2
             assert {row["status"] for row in body["data"]} == {"found"}
 
             screened_out = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=screened_out", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?status=screened_out", headers=owner
             ).json()
             assert screened_out["pagination"]["total_items"] == 1
             assert screened_out["data"][0]["status"] == "screened_out"
@@ -825,48 +825,48 @@ def test_evidence_status_filter_collection_true_counts(tmp_path: Path, engine: E
             # `Included` = the 7 in-ladder positions, i.e. everything but
             # found/screened_out — here, selected + not_selected.
             included = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=Included", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?status=Included", headers=owner
             ).json()
             assert included["pagination"]["total_items"] == 2
             assert {row["status"] for row in included["data"]} == {"selected", "not_selected"}
 
             combined = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=found&status=screened_out",
+                f"/api/v1/tasks/{task_id}/evidence?status=found&status=screened_out",
                 headers=owner,
             ).json()
             assert combined["pagination"]["total_items"] == 4
             assert {row["status"] for row in combined["data"]} == {"found", "screened_out"}
 
             invalid = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=bogus", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?status=bogus", headers=owner
             )
             assert invalid.status_code == 422
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engine) -> None:
     """Evidence sorting is collection-wide, stable, and theme-id addressable."""
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        scope_id = _seed_evidence_filter_fixture(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        scope_id = _seed_evidence_filter_fixture(engine, task_id)
         theme_id = uuid.uuid4()
         with engine.begin() as conn:
             rows = conn.execute(
                 select(
-                    project_source_snapshot.c.project_source_snapshot_id,
-                    project_source_snapshot.c.source_snapshot_id,
+                    task_source_snapshot.c.task_source_snapshot_id,
+                    task_source_snapshot.c.source_snapshot_id,
                     source_snapshot.c.metadata,
                 )
                 .select_from(
-                    project_source_snapshot.join(
+                    task_source_snapshot.join(
                         source_snapshot,
-                        project_source_snapshot.c.source_snapshot_id
+                        task_source_snapshot.c.source_snapshot_id
                         == source_snapshot.c.source_snapshot_id,
                     )
                 )
-                .where(project_source_snapshot.c.project_id == project_id)
+                .where(task_source_snapshot.c.task_id == task_id)
             ).all()
             title_rows = {
                 row.metadata["title"]: row
@@ -890,15 +890,15 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             run_id = uuid.uuid4()
             conn.execute(
                 insert(runs).values(
-                    run_id=run_id, project_id=project_id, status="running", started_at=now()
+                    run_id=run_id, task_id=task_id, status="running", started_at=now()
                 )
             )
             conn.execute(
                 insert(source_classification_result).values(
                     source_classification_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=title_rows["Found 0"].project_source_snapshot_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=title_rows["Found 0"].task_source_snapshot_id,
+                    task_id=task_id,
                     classified_by_run_id=run_id,
                     primary_evidence_type="RCTs and Quasi-Experimental Studies",
                     classified_at=now(),
@@ -908,8 +908,8 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
                 insert(source_appraisal_result).values(
                     source_appraisal_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=title_rows["Found 0"].project_source_snapshot_id,
-                    project_id=project_id,
+                    task_source_snapshot_id=title_rows["Found 0"].task_source_snapshot_id,
+                    task_id=task_id,
                     appraised_by_run_id=run_id,
                     quality_score=4,
                     rubric_version="test",
@@ -919,8 +919,8 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             conn.execute(
                 insert(source_tag).values(
                     source_tag_id=uuid.uuid4(),
-                    project_id=project_id,
-                    project_source_snapshot_id=title_rows["Found 1"].project_source_snapshot_id,
+                    task_id=task_id,
+                    task_source_snapshot_id=title_rows["Found 1"].task_source_snapshot_id,
                     tag="Legacy Theme alpha",
                     tag_type="topic_theme",
                     asserted_by="characterise",
@@ -932,8 +932,8 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             conn.execute(
                 insert(source_tag).values(
                     source_tag_id=uuid.uuid4(),
-                    project_id=project_id,
-                    project_source_snapshot_id=title_rows["Found 0"].project_source_snapshot_id,
+                    task_id=task_id,
+                    task_source_snapshot_id=title_rows["Found 0"].task_source_snapshot_id,
                     tag="Theme alpha",
                     tag_type="topic_theme",
                     asserted_by="characterise",
@@ -944,18 +944,18 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             )
         try:
             by_title = client.get(
-                f"/api/v1/projects/{project_id}/evidence?sort=title", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?sort=title", headers=owner
             ).json()["data"]
             assert by_title[0]["title"] == "alpha"
             by_year = client.get(
-                f"/api/v1/projects/{project_id}/evidence?sort=year", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?sort=year", headers=owner
             ).json()["data"]
             assert [item["year"] for item in by_year if item["year"] is not None][:2] == [
                 2025,
                 2010,
             ]
             by_status = client.get(
-                f"/api/v1/projects/{project_id}/evidence?sort=status", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?sort=status", headers=owner
             ).json()["data"]
             ranks = {
                 status: index
@@ -986,7 +986,7 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
             for sort, field in field_by_sort.items():
                 for order in ("asc", "desc"):
                     ordered = client.get(
-                        f"/api/v1/projects/{project_id}/evidence?sort={sort}&order={order}"
+                        f"/api/v1/tasks/{task_id}/evidence?sort={sort}&order={order}"
                         "&page_size=20",
                         headers=owner,
                     ).json()["data"]
@@ -1007,66 +1007,66 @@ def test_evidence_sort_theme_filter_and_validation(tmp_path: Path, engine: Engin
                         .values(metadata={"title": "Tie"})
                     )
             unsorted = client.get(
-                f"/api/v1/projects/{project_id}/evidence?page_size=20", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?page_size=20", headers=owner
             ).json()["data"]
             expected_tie_order = [item["source_id"] for item in unsorted if item["title"] == "Tie"]
             sorted_ties = [
                 item["source_id"]
                 for page in range(1, 5)
                 for item in client.get(
-                    f"/api/v1/projects/{project_id}/evidence?sort=title&page={page}&page_size=2",
+                    f"/api/v1/tasks/{task_id}/evidence?sort=title&page={page}&page_size=2",
                     headers=owner,
                 ).json()["data"]
                 if item["title"] == "Tie"
             ]
             assert sorted_ties == expected_tie_order
             themed = client.get(
-                f"/api/v1/projects/{project_id}/evidence?theme={theme_id}&status=found&cited=false",
+                f"/api/v1/tasks/{task_id}/evidence?theme={theme_id}&status=found&cited=false",
                 headers=owner,
             ).json()
             assert [item["title"] for item in themed["data"]] == ["Tie"]
             assert (
                 client.get(
-                    f"/api/v1/projects/{project_id}/evidence?theme={uuid.uuid4()}", headers=owner
+                    f"/api/v1/tasks/{task_id}/evidence?theme={uuid.uuid4()}", headers=owner
                 ).json()["pagination"]["total_items"]
                 == 0
             )
             assert (
                 client.get(
-                    f"/api/v1/projects/{project_id}/evidence?order=desc", headers=owner
+                    f"/api/v1/tasks/{task_id}/evidence?order=desc", headers=owner
                 ).status_code
                 == 422
             )
             assert (
                 client.get(
-                    f"/api/v1/projects/{project_id}/evidence?sort=unknown", headers=owner
+                    f"/api/v1/tasks/{task_id}/evidence?sort=unknown", headers=owner
                 ).status_code
                 == 422
             )
             assert (
                 client.get(
-                    f"/api/v1/projects/{project_id}/evidence?sort=year&order=sideways",
+                    f"/api/v1/tasks/{task_id}/evidence?sort=year&order=sideways",
                     headers=owner,
                 ).status_code
                 == 422
             )
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_artefact_summary_projection_and_multi_block_omission(
     tmp_path: Path, engine: Engine
 ) -> None:
-    """Single-block summaries project; multi-block sections honestly omit them."""
+    """Single-block summaries task; multi-block sections honestly omit them."""
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
         try:
             with engine.begin() as conn:
                 artefact_id = conn.execute(
                     select(synthesis_result.c.artefact_id).where(
-                        synthesis_result.c.project_id == project_id
+                        synthesis_result.c.task_id == task_id
                     )
                 ).scalar_one()
                 original_block_id = conn.execute(
@@ -1083,7 +1083,7 @@ def test_artefact_summary_projection_and_multi_block_omission(
                     .values(summary="Section takeaway.", summary_status="verified")
                 )
             artefact_body = client.get(
-                f"/api/v1/projects/{project_id}/artefact", headers=owner
+                f"/api/v1/tasks/{task_id}/artefact", headers=owner
             ).json()
             assert artefact_body["summary"] == "Artefact takeaway."
             assert artefact_body["summary_status"] == "verified"
@@ -1099,19 +1099,19 @@ def test_artefact_summary_projection_and_multi_block_omission(
                         version=1,
                         content="A second physical block.",
                         content_hash="second-block",
-                        summary="Must not project.",
+                        summary="Must not task.",
                         summary_status="verified",
                         created_at=now(),
                     )
                 )
                 blocks = conn.execute(
                     select(synthesis_result.c.blocks).where(
-                        synthesis_result.c.project_id == project_id
+                        synthesis_result.c.task_id == task_id
                     )
                 ).scalar_one()
                 conn.execute(
                     update(synthesis_result)
-                    .where(synthesis_result.c.project_id == project_id)
+                    .where(synthesis_result.c.task_id == task_id)
                     .values(
                         blocks=[
                             *blocks,
@@ -1125,14 +1125,14 @@ def test_artefact_summary_projection_and_multi_block_omission(
                     )
                 )
             multi_block_section = client.get(
-                f"/api/v1/projects/{project_id}/artefact", headers=owner
+                f"/api/v1/tasks/{task_id}/artefact", headers=owner
             ).json()["sections"][0]
             assert len(multi_block_section["blocks"]) == 2
             assert multi_block_section["summary"] is None
             assert multi_block_section["summary_status"] is None
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_landscape_cited_scope_uses_only_latest_artefact_members(
@@ -1140,33 +1140,33 @@ def test_landscape_cited_scope_uses_only_latest_artefact_members(
 ) -> None:
     """The cited landscape excludes screened-in but uncited sources and themes."""
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
         try:
             with engine.begin() as conn:
                 synthesis = conn.execute(
                     select(
                         synthesis_result.c.evidence_scope_id,
                         synthesis_result.c.run_id,
-                    ).where(synthesis_result.c.project_id == project_id)
+                    ).where(synthesis_result.c.task_id == task_id)
                 ).one()
-                selected_pss = conn.execute(
-                    select(project_source_snapshot.c.project_source_snapshot_id)
+                selected_tss = conn.execute(
+                    select(task_source_snapshot.c.task_source_snapshot_id)
                     .select_from(
-                        project_source_snapshot.join(
+                        task_source_snapshot.join(
                             source_snapshot,
-                            project_source_snapshot.c.source_snapshot_id
+                            task_source_snapshot.c.source_snapshot_id
                             == source_snapshot.c.source_snapshot_id,
                         )
                     )
                     .where(
-                        project_source_snapshot.c.project_id == project_id,
+                        task_source_snapshot.c.task_id == task_id,
                         source_snapshot.c.metadata["title"].astext == "Selected trial",
                     )
                 ).scalar_one()
-                uncited_pss = seed_select_doc(
+                uncited_tss = seed_select_doc(
                     conn,
-                    project_id,
+                    task_id,
                     synthesis.run_id,
                     synthesis.evidence_scope_id,
                     title="Uncited relevant trial",
@@ -1175,7 +1175,7 @@ def test_landscape_cited_scope_uses_only_latest_artefact_members(
                 conn.execute(
                     insert(characterisation_result).values(
                         characterisation_id=uuid.uuid4(),
-                        project_id=project_id,
+                        task_id=task_id,
                         evidence_scope_id=synthesis.evidence_scope_id,
                         run_id=synthesis.run_id,
                         grouping_provenance={},
@@ -1186,14 +1186,14 @@ def test_landscape_cited_scope_uses_only_latest_artefact_members(
                                     "theme_id": str(uuid.uuid4()),
                                     "name": "Cited theme",
                                     "description": "Contains the cited source.",
-                                    "member_ids": [str(selected_pss)],
+                                    "member_ids": [str(selected_tss)],
                                     "size": 1,
                                 },
                                 {
                                     "theme_id": str(uuid.uuid4()),
                                     "name": "Uncited theme",
                                     "description": "Contains only the uncited source.",
-                                    "member_ids": [str(uncited_pss)],
+                                    "member_ids": [str(uncited_tss)],
                                     "size": 1,
                                 },
                             ]
@@ -1201,22 +1201,22 @@ def test_landscape_cited_scope_uses_only_latest_artefact_members(
                         created_at=now(),
                     )
                 )
-            whole = client.get(f"/api/v1/projects/{project_id}/landscape", headers=owner).json()
+            whole = client.get(f"/api/v1/tasks/{task_id}/landscape", headers=owner).json()
             cited = client.get(
-                f"/api/v1/projects/{project_id}/landscape?scope=cited", headers=owner
+                f"/api/v1/tasks/{task_id}/landscape?scope=cited", headers=owner
             ).json()
             assert whole["years"] == {"2020": 1, "2021": 1}
             assert cited["years"] == {"2020": 1}
             assert [theme["name"] for theme in cited["themes"]] == ["Cited theme"]
             assert (
                 client.get(
-                    f"/api/v1/projects/{project_id}/landscape?scope=whole", headers=owner
+                    f"/api/v1/tasks/{task_id}/landscape?scope=whole", headers=owner
                 ).status_code
                 == 422
             )
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_landscape_geography_residual_makes_every_scope_add_up(
@@ -1230,18 +1230,18 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
     its own, smaller total — it must not be "corrected" to the funnel's.
     """
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
         try:
             with engine.begin() as conn:
                 scope_id = conn.execute(
                     select(search_coverage_record.c.evidence_scope_id).where(
-                        search_coverage_record.c.project_id == project_id
+                        search_coverage_record.c.task_id == task_id
                     )
                 ).scalar_one()
                 run_id = conn.execute(
                     select(search_coverage_record.c.acquired_by_run_id).where(
-                        search_coverage_record.c.project_id == project_id
+                        search_coverage_record.c.task_id == task_id
                     )
                 ).scalar_one()
                 # A second relevant source, and the country goes on THIS one —
@@ -1251,22 +1251,22 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                 # assertion pass even if the residual were skipped at that
                 # scope, which is the whole thing this test exists to pin.
                 _, uncited_with_country = seed_source(
-                    conn, project_id, {"title": "Reported country", "backend": "openalex"}
+                    conn, task_id, {"title": "Reported country", "backend": "openalex"}
                 )
                 seed_screening_result(
-                    conn, project_id, run_id, scope_id, uncited_with_country, status="relevant"
+                    conn, task_id, run_id, scope_id, uncited_with_country, status="relevant"
                 )
                 for snapshot_id, metadata in conn.execute(
                     select(source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata)
                     .select_from(
                         source_snapshot.join(
-                            project_source_snapshot,
-                            project_source_snapshot.c.source_snapshot_id
+                            task_source_snapshot,
+                            task_source_snapshot.c.source_snapshot_id
                             == source_snapshot.c.source_snapshot_id,
                         )
                     )
                     .where(
-                        project_source_snapshot.c.project_id == project_id,
+                        task_source_snapshot.c.task_id == task_id,
                         source_snapshot.c.metadata["title"].astext == "Reported country",
                     )
                 ).all():
@@ -1276,13 +1276,13 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
                         .values(metadata={**metadata, "publication_country": "GB"})
                     )
 
-            funnel = client.get(f"/api/v1/projects/{project_id}/funnel", headers=owner).json()
-            whole = client.get(f"/api/v1/projects/{project_id}/landscape", headers=owner).json()
+            funnel = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=owner).json()
+            whole = client.get(f"/api/v1/tasks/{task_id}/landscape", headers=owner).json()
             assert whole["geographies"] == {"GB": 1, "Not reported": 1}
             assert sum(whole["geographies"].values()) == funnel["relevant"] == 2
 
             cited = client.get(
-                f"/api/v1/projects/{project_id}/landscape?scope=cited", headers=owner
+                f"/api/v1/tasks/{task_id}/landscape?scope=cited", headers=owner
             ).json()
             # The cited scope draws only the artefact's citations, so it sums to
             # that smaller population — not to the funnel's relevant count. The
@@ -1292,34 +1292,34 @@ def test_landscape_geography_residual_makes_every_scope_add_up(
             assert sum(cited["geographies"].values()) == 1 != funnel["relevant"]
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_coverage_ignores_a_superseded_questions_rounds(
     tmp_path: Path, engine: Engine
 ) -> None:
-    """"Where I looked" describes one question, cumulatively — not the project.
+    """"Where I looked" describes one question, cumulatively — not the task.
 
-    Approving a plan mints a new ``evidence_scope`` (``orchestrate.py``), so a
-    re-planned project holds the abandoned question's coverage records too.
-    Summing acquire runs project-wide put that question's query strings and hits
+    Approving a plan mints a new ``evidence_scope`` (``agent.py``), so a
+    re-planned task holds the abandoned question's coverage records too.
+    Summing acquire runs task-wide put that question's query strings and hits
     into this question's card, beside a sentence read from the current
     question's row (review stack, task 031). Round-cumulative was the fix;
     question-cumulative was not.
     """
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
         try:
             with engine.begin() as conn:
                 old_run = conn.execute(
                     select(search_coverage_record.c.acquired_by_run_id).where(
-                        search_coverage_record.c.project_id == project_id
+                        search_coverage_record.c.task_id == task_id
                     )
                 ).scalar_one()
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=old_run,
                     event_type="search.executed",
                     payload={
@@ -1329,19 +1329,19 @@ def test_coverage_ignores_a_superseded_questions_rounds(
                     },
                 )
                 # The replan: a second scope, its own acquire run, its own row.
-                new_scope = seed_scope(conn, project_id)
+                new_scope = seed_scope(conn, task_id)
                 new_run = uuid.uuid4()
                 conn.execute(
                     insert(runs).values(
                         run_id=new_run,
-                        project_id=project_id,
+                        task_id=task_id,
                         status="running",
                         started_at=now(),
                     )
                 )
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=new_run,
                     event_type="search.executed",
                     payload={
@@ -1354,7 +1354,7 @@ def test_coverage_ignores_a_superseded_questions_rounds(
                     insert(search_coverage_record).values(
                         search_coverage_record_id=uuid.uuid4(),
                         evidence_scope_id=new_scope,
-                        project_id=project_id,
+                        task_id=task_id,
                         acquired_by_run_id=new_run,
                         backends=[{"backend": "openalex", "trust_class": "academic"}],
                         scope_filters={},
@@ -1366,7 +1366,7 @@ def test_coverage_ignores_a_superseded_questions_rounds(
                 )
 
             coverage = client.get(
-                f"/api/v1/projects/{project_id}/coverage", headers=owner
+                f"/api/v1/tasks/{task_id}/coverage", headers=owner
             ).json()
             detail = next(
                 row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
@@ -1375,7 +1375,7 @@ def test_coverage_ignores_a_superseded_questions_rounds(
             assert detail["results"] == 7, "the abandoned question's 99 hits must not count"
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_coverage_backend_results_sum_query_hits_across_every_round(
@@ -1389,25 +1389,25 @@ def test_coverage_backend_results_sum_query_hits_across_every_round(
     cumulative relevant count — defect 2's two grains on one line.
     """
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
         try:
             with engine.begin() as conn:
                 scope_id = conn.execute(
                     select(search_coverage_record.c.evidence_scope_id).where(
-                        search_coverage_record.c.project_id == project_id
+                        search_coverage_record.c.task_id == task_id
                     )
                 ).scalar_one()
                 round_one_run = conn.execute(
                     select(search_coverage_record.c.acquired_by_run_id).where(
-                        search_coverage_record.c.project_id == project_id
+                        search_coverage_record.c.task_id == task_id
                     )
                 ).scalar_one()
                 # Round 1 already owns a coverage record from the ladder; give it
                 # a named OpenAlex hit so both rounds contribute.
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=round_one_run,
                     event_type="search.executed",
                     payload={"backend": "openalex", "query": "round one", "result_count": 40},
@@ -1416,14 +1416,14 @@ def test_coverage_backend_results_sum_query_hits_across_every_round(
                 conn.execute(
                     insert(runs).values(
                         run_id=round_two_run,
-                        project_id=project_id,
+                        task_id=task_id,
                         status="running",
                         started_at=now(),
                     )
                 )
                 events.append(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     run_id=round_two_run,
                     event_type="search.executed",
                     payload={"backend": "openalex", "query": "round two", "result_count": 32},
@@ -1432,7 +1432,7 @@ def test_coverage_backend_results_sum_query_hits_across_every_round(
                     insert(search_coverage_record).values(
                         search_coverage_record_id=uuid.uuid4(),
                         evidence_scope_id=scope_id,
-                        project_id=project_id,
+                        task_id=task_id,
                         acquired_by_run_id=round_two_run,
                         backends=[{"backend": "openalex", "trust_class": "academic"}],
                         scope_filters={},
@@ -1448,12 +1448,12 @@ def test_coverage_backend_results_sum_query_hits_across_every_round(
                     select(source_snapshot.c.source_snapshot_id, source_snapshot.c.metadata)
                     .select_from(
                         source_snapshot.join(
-                            project_source_snapshot,
-                            project_source_snapshot.c.source_snapshot_id
+                            task_source_snapshot,
+                            task_source_snapshot.c.source_snapshot_id
                             == source_snapshot.c.source_snapshot_id,
                         )
                     )
-                    .where(project_source_snapshot.c.project_id == project_id)
+                    .where(task_source_snapshot.c.task_id == task_id)
                 ).all():
                     conn.execute(
                         update(source_snapshot)
@@ -1462,7 +1462,7 @@ def test_coverage_backend_results_sum_query_hits_across_every_round(
                     )
 
             coverage = client.get(
-                f"/api/v1/projects/{project_id}/coverage", headers=owner
+                f"/api/v1/tasks/{task_id}/coverage", headers=owner
             ).json()
             detail = next(
                 row for row in coverage["backends_detail"] if row["backend"] == "OpenAlex"
@@ -1470,46 +1470,46 @@ def test_coverage_backend_results_sum_query_hits_across_every_round(
             assert detail["results"] == 72, "both rounds' hits, not round 2's 32 alone"
             assert [query["query"] for query in detail["queries"]] == ["round one", "round two"]
             # The 027 §C.1 behaviour is deliberately untouched: relevance stays
-            # project-wide per backend, so it is not a subset of the hit total.
+            # task-wide per backend, so it is not a subset of the hit total.
             assert detail["relevant"] == 1
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_evidence_cited_filter_and_combination(tmp_path: Path, engine: Engine) -> None:
     """`cited` filters the collection and combines with `status`."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _seed_read_model_ladder(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
         try:
             cited_only = client.get(
-                f"/api/v1/projects/{project_id}/evidence?cited=true", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?cited=true", headers=owner
             ).json()
             assert cited_only["pagination"]["total_items"] == 1
             assert cited_only["data"][0]["status"] == "cited"
 
             combined = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=Included&cited=true", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?status=Included&cited=true", headers=owner
             ).json()
             assert combined["pagination"]["total_items"] == 1
 
             none_match = client.get(
-                f"/api/v1/projects/{project_id}/evidence?status=found&cited=true", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?status=found&cited=true", headers=owner
             ).json()
             assert none_match["pagination"]["total_items"] == 0
             assert none_match["data"] == []
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def _seed_findings_filter_fixture(
-    engine: Engine, project_id: uuid.UUID
+    engine: Engine, task_id: uuid.UUID
 ) -> tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]:
     """Seed two sources with three grouped findings across two facets.
 
-    Returns (source1_pss, source2_pss, iof1_id, iof2_id, icf1_id). `iof1` and
+    Returns (source1_tss, source2_tss, iof1_id, iof2_id, icf1_id). `iof1` and
     `icf1` are extracted from source 1; `iof2` from source 2. `iof1` groups
     into `intervention:g01` ("Training"), `iof2` into `intervention:g02`
     ("Coaching"), `icf1` into `barrier_theme:g01` ("Staffing").
@@ -1518,19 +1518,19 @@ def _seed_findings_filter_fixture(
         run_id = uuid.uuid4()
         conn.execute(
             insert(runs).values(
-                run_id=run_id, project_id=project_id, status="running", started_at=now()
+                run_id=run_id, task_id=task_id, status="running", started_at=now()
             )
         )
-        scope_id = seed_scope(conn, project_id)
-        snap1_id, source1_pss = seed_source(conn, project_id, {"title": "Source one"})
-        snap2_id, source2_pss = seed_source(conn, project_id, {"title": "Source two"})
+        scope_id = seed_scope(conn, task_id)
+        snap1_id, source1_tss = seed_source(conn, task_id, {"title": "Source one"})
+        snap2_id, source2_tss = seed_source(conn, task_id, {"title": "Source two"})
         record1_id, record2_id = uuid.uuid4(), uuid.uuid4()
         conn.execute(
             insert(source_extraction_record).values(
                 extraction_record_id=record1_id,
-                project_id=project_id,
+                task_id=task_id,
                 source_snapshot_id=snap1_id,
-                project_source_snapshot_id=source1_pss,
+                task_source_snapshot_id=source1_tss,
                 extraction_fingerprint="fixture-1",
                 status="extracted",
                 basis="full_text",
@@ -1544,9 +1544,9 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(source_extraction_record).values(
                 extraction_record_id=record2_id,
-                project_id=project_id,
+                task_id=task_id,
                 source_snapshot_id=snap2_id,
-                project_source_snapshot_id=source2_pss,
+                task_source_snapshot_id=source2_tss,
                 extraction_fingerprint="fixture-2",
                 status="extracted",
                 basis="full_text",
@@ -1561,7 +1561,7 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(intervention_outcome_finding).values(
                 finding_id=iof1_id,
-                project_id=project_id,
+                task_id=task_id,
                 extraction_record_id=record1_id,
                 intervention="Training",
                 outcome="Uptake",
@@ -1576,7 +1576,7 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(intervention_outcome_finding).values(
                 finding_id=iof2_id,
-                project_id=project_id,
+                task_id=task_id,
                 extraction_record_id=record2_id,
                 intervention="Coaching",
                 outcome="Uptake",
@@ -1591,7 +1591,7 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(implementation_context_finding).values(
                 finding_id=icf1_id,
-                project_id=project_id,
+                task_id=task_id,
                 extraction_record_id=record1_id,
                 context_type="barrier",
                 claim="Staff time constrained implementation.",
@@ -1609,13 +1609,13 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(selection_result).values(
                 selection_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 strategy="coverage_stratified_v1",
                 budget=2,
                 selection_provenance={},
-                selected=[{"pss_id": str(source1_pss)}, {"pss_id": str(source2_pss)}],
+                selected=[{"tss_id": str(source1_tss)}, {"tss_id": str(source2_tss)}],
                 excluded={},
                 flags={},
                 created_at=now(),
@@ -1624,7 +1624,7 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(extraction_result).values(
                 extraction_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 selection_run_id=run_id,
@@ -1638,7 +1638,7 @@ def _seed_findings_filter_fixture(
         conn.execute(
             insert(grouping_result).values(
                 grouping_result_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 evidence_scope_id=scope_id,
                 run_id=run_id,
                 extraction_run_id=run_id,
@@ -1683,19 +1683,19 @@ def _seed_findings_filter_fixture(
                 created_at=now(),
             )
         )
-        return source1_pss, source2_pss, iof1_id, iof2_id, icf1_id
+        return source1_tss, source2_tss, iof1_id, iof2_id, icf1_id
 
 
 def test_findings_profile_and_source_filters(tmp_path: Path, engine: Engine) -> None:
     """`profile` and `source_id` filter the findings collection with true counts."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = uuid.UUID(create_project(client, owner))
-        source1_pss, _source2_pss, iof1_id, iof2_id, icf1_id = _seed_findings_filter_fixture(
-            engine, project_id
+        task_id = uuid.UUID(create_task(client, owner))
+        source1_tss, _source2_tss, iof1_id, iof2_id, icf1_id = _seed_findings_filter_fixture(
+            engine, task_id
         )
         try:
             iof_only = client.get(
-                f"/api/v1/projects/{project_id}/findings?profile=iof", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?profile=iof", headers=owner
             ).json()
             assert iof_only["pagination"]["total_items"] == 2
             assert {row["finding_id"] for row in iof_only["data"]} == {
@@ -1704,13 +1704,13 @@ def test_findings_profile_and_source_filters(tmp_path: Path, engine: Engine) -> 
             }
 
             icf_only = client.get(
-                f"/api/v1/projects/{project_id}/findings?profile=icf", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?profile=icf", headers=owner
             ).json()
             assert icf_only["pagination"]["total_items"] == 1
             assert icf_only["data"][0]["finding_id"] == str(icf1_id)
 
             by_source = client.get(
-                f"/api/v1/projects/{project_id}/findings?source_id={source1_pss}", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?source_id={source1_tss}", headers=owner
             ).json()
             assert by_source["pagination"]["total_items"] == 2
             assert {row["finding_id"] for row in by_source["data"]} == {
@@ -1719,113 +1719,113 @@ def test_findings_profile_and_source_filters(tmp_path: Path, engine: Engine) -> 
             }
 
             unknown_source = client.get(
-                f"/api/v1/projects/{project_id}/findings?source_id={uuid.uuid4()}", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?source_id={uuid.uuid4()}", headers=owner
             ).json()
             assert unknown_source["pagination"]["total_items"] == 0
             assert unknown_source["data"] == []
 
             invalid_profile = client.get(
-                f"/api/v1/projects/{project_id}/findings?profile=bogus", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?profile=bogus", headers=owner
             )
             assert invalid_profile.status_code == 422
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_findings_group_filters_and_validation(tmp_path: Path, engine: Engine) -> None:
     """`facet`+`group` and `group_id` filter findings; bad combinations 422."""
     with api_client(tmp_path) as (client, owner, other):
-        project_id = uuid.UUID(create_project(client, owner))
-        _source1_pss, _source2_pss, iof1_id, iof2_id, _icf1_id = _seed_findings_filter_fixture(
-            engine, project_id
+        task_id = uuid.UUID(create_task(client, owner))
+        _source1_tss, _source2_tss, iof1_id, iof2_id, _icf1_id = _seed_findings_filter_fixture(
+            engine, task_id
         )
         try:
             by_facet_group = client.get(
-                f"/api/v1/projects/{project_id}/findings?facet=intervention&group=Training",
+                f"/api/v1/tasks/{task_id}/findings?facet=intervention&group=Training",
                 headers=owner,
             ).json()
             assert by_facet_group["pagination"]["total_items"] == 1
             assert by_facet_group["data"][0]["finding_id"] == str(iof1_id)
 
             by_group_id = client.get(
-                f"/api/v1/projects/{project_id}/findings?group_id=intervention:g02", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?group_id=intervention:g02", headers=owner
             ).json()
             assert by_group_id["pagination"]["total_items"] == 1
             assert by_group_id["data"][0]["finding_id"] == str(iof2_id)
 
             unknown_group = client.get(
-                f"/api/v1/projects/{project_id}/findings?facet=intervention&group=Nope",
+                f"/api/v1/tasks/{task_id}/findings?facet=intervention&group=Nope",
                 headers=owner,
             ).json()
             assert unknown_group["pagination"]["total_items"] == 0
             assert unknown_group["data"] == []
 
             unknown_group_id = client.get(
-                f"/api/v1/projects/{project_id}/findings?group_id=nope:g01", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?group_id=nope:g01", headers=owner
             ).json()
             assert unknown_group_id["pagination"]["total_items"] == 0
 
             combined = client.get(
-                f"/api/v1/projects/{project_id}/findings"
+                f"/api/v1/tasks/{task_id}/findings"
                 "?facet=intervention&group=Training&profile=iof",
                 headers=owner,
             ).json()
             assert combined["pagination"]["total_items"] == 1
 
             facet_without_group = client.get(
-                f"/api/v1/projects/{project_id}/findings?facet=intervention", headers=owner
+                f"/api/v1/tasks/{task_id}/findings?facet=intervention", headers=owner
             )
             assert facet_without_group.status_code == 422
 
             group_id_with_facet = client.get(
-                f"/api/v1/projects/{project_id}/findings"
+                f"/api/v1/tasks/{task_id}/findings"
                 "?group_id=intervention:g01&facet=intervention",
                 headers=owner,
             )
             assert group_id_with_facet.status_code == 422
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: Engine) -> None:
     """origin/evidence_type/strength filter collection-true; event reasons + read depth surface."""
     with api_client(tmp_path) as (client, owner, _other):
-        project_id = uuid.UUID(create_project(client, owner))
-        scope_id = _seed_evidence_filter_fixture(engine, project_id)
+        task_id = uuid.UUID(create_task(client, owner))
+        scope_id = _seed_evidence_filter_fixture(engine, task_id)
         with engine.begin() as conn:
             rows = conn.execute(
                 select(
-                    project_source_snapshot.c.project_source_snapshot_id,
+                    task_source_snapshot.c.task_source_snapshot_id,
                     source_snapshot.c.metadata,
                 )
                 .select_from(
-                    project_source_snapshot.join(
+                    task_source_snapshot.join(
                         source_snapshot,
-                        project_source_snapshot.c.source_snapshot_id
+                        task_source_snapshot.c.source_snapshot_id
                         == source_snapshot.c.source_snapshot_id,
                     )
                 )
-                .where(project_source_snapshot.c.project_id == project_id)
+                .where(task_source_snapshot.c.task_id == task_id)
             ).all()
             by_title = {
-                row.metadata["title"]: row.project_source_snapshot_id
+                row.metadata["title"]: row.task_source_snapshot_id
                 for row in rows
                 if isinstance(row.metadata, dict) and isinstance(row.metadata.get("title"), str)
             }
             run_id = uuid.uuid4()
             conn.execute(
                 insert(runs).values(
-                    run_id=run_id, project_id=project_id, status="running", started_at=now()
+                    run_id=run_id, task_id=task_id, status="running", started_at=now()
                 )
             )
             conn.execute(
                 insert(source_classification_result).values(
                     source_classification_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=by_title["Selected"],
-                    project_id=project_id,
+                    task_source_snapshot_id=by_title["Selected"],
+                    task_id=task_id,
                     classified_by_run_id=run_id,
                     primary_evidence_type="Systematic Review and Meta-Analysis",
                     classified_at=now(),
@@ -1835,8 +1835,8 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
                 insert(source_appraisal_result).values(
                     source_appraisal_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=by_title["Selected"],
-                    project_id=project_id,
+                    task_source_snapshot_id=by_title["Selected"],
+                    task_id=task_id,
                     appraised_by_run_id=run_id,
                     quality_score=2,
                     rubric_version="test",
@@ -1845,11 +1845,11 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 event_type="source.screened",
                 payload={
-                    "project_source_snapshot_id": str(by_title["Selected"]),
+                    "task_source_snapshot_id": str(by_title["Selected"]),
                     "status": "relevant",
                     "reps": [
                         # A dissenting rep first: the surfaced reason must be
@@ -1869,11 +1869,11 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 event_type="source.screened",
                 payload={
-                    "project_source_snapshot_id": str(by_title["Screened out"]),
+                    "task_source_snapshot_id": str(by_title["Screened out"]),
                     "status": "not_relevant",
                     "reps": [
                         {
@@ -1886,20 +1886,20 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             )
             events.append(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 run_id=run_id,
                 event_type="source.classified",
                 payload={
-                    "project_source_snapshot_id": str(by_title["Selected"]),
+                    "task_source_snapshot_id": str(by_title["Selected"]),
                     "primary_evidence_type": "Systematic Review and Meta-Analysis",
                     "confidence": 0.8,
                     "reason": "Systematic review of trials",
                 },
             )
-            seed_ingested_full_text(conn, pss_id=by_title["Selected"], chunks=["Full text body."])
+            seed_ingested_full_text(conn, tss_id=by_title["Selected"], chunks=["Full text body."])
         try:
             typed = client.get(
-                f"/api/v1/projects/{project_id}/evidence?evidence_type=Systematic%20Review%20and%20Meta-Analysis",
+                f"/api/v1/tasks/{task_id}/evidence?evidence_type=Systematic%20Review%20and%20Meta-Analysis",
                 headers=owner,
             ).json()
             assert typed["pagination"]["total_items"] == 1
@@ -1910,30 +1910,30 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             assert selected_row["read_in_full"] is True
 
             limited = client.get(
-                f"/api/v1/projects/{project_id}/evidence?strength=Limited", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?strength=Limited", headers=owner
             ).json()
             assert limited["pagination"]["total_items"] == 1
             assert limited["data"][0]["appraisal_tier"] == "Limited"
             strong = client.get(
-                f"/api/v1/projects/{project_id}/evidence?strength=Strong", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?strength=Strong", headers=owner
             ).json()
             assert strong["pagination"]["total_items"] == 0
 
             uploaded = client.get(
-                f"/api/v1/projects/{project_id}/evidence?origin=Uploaded", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?origin=Uploaded", headers=owner
             ).json()
             assert uploaded["pagination"]["total_items"] == 6
             openalex = client.get(
-                f"/api/v1/projects/{project_id}/evidence?origin=OpenAlex", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?origin=OpenAlex", headers=owner
             ).json()
             assert openalex["pagination"]["total_items"] == 0
             invalid = client.get(
-                f"/api/v1/projects/{project_id}/evidence?origin=bogus", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?origin=bogus", headers=owner
             )
             assert invalid.status_code == 422
 
             unfiltered = client.get(
-                f"/api/v1/projects/{project_id}/evidence", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence", headers=owner
             ).json()
             screened_out_row = next(
                 row for row in unfiltered["data"] if row["title"] == "Screened out"
@@ -1942,7 +1942,7 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             assert screened_out_row["read_in_full"] is False
 
             dossier = client.get(
-                f"/api/v1/projects/{project_id}/sources/{by_title['Selected']}", headers=owner
+                f"/api/v1/tasks/{task_id}/sources/{by_title['Selected']}", headers=owner
             ).json()
             assert dossier["screen_reason"] == "UK primary cohort in scope"
             assert dossier["classification_reason"] == "Systematic review of trials"
@@ -1953,7 +1953,7 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
             # for both relevant rows), then not-relevant by rising confidence,
             # unscreened rows last as nulls.
             spectrum = client.get(
-                f"/api/v1/projects/{project_id}/evidence?sort=relevance", headers=owner
+                f"/api/v1/tasks/{task_id}/evidence?sort=relevance", headers=owner
             ).json()
             ranks = [row["screen_status"] for row in spectrum["data"]]
             assert ranks[:3].count("relevant") == 2
@@ -1967,8 +1967,8 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
                     .where(
                         source_snapshot.c.source_snapshot_id
                         == conn.execute(
-                            select(project_source_snapshot.c.source_snapshot_id).where(
-                                project_source_snapshot.c.project_source_snapshot_id
+                            select(task_source_snapshot.c.source_snapshot_id).where(
+                                task_source_snapshot.c.task_source_snapshot_id
                                 == by_title["Screened out"]
                             )
                         ).scalar_one()
@@ -1976,26 +1976,26 @@ def test_evidence_facet_filters_reasons_and_read_depth(tmp_path: Path, engine: E
                     .values(metadata={"title": "Screened out", "year": 2015})
                 )
             bounded = client.get(
-                f"/api/v1/projects/{project_id}/evidence?year_from=2014&year_to=2016",
+                f"/api/v1/tasks/{task_id}/evidence?year_from=2014&year_to=2016",
                 headers=owner,
             ).json()
             assert bounded["pagination"]["total_items"] == 1
             assert bounded["data"][0]["title"] == "Screened out"
         finally:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
 
 
 def _seed_artefact_citation(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     chunks: tuple[str, ...],
     quote: str,
     cite_sequence: int,
 ) -> uuid.UUID:
     """Insert one artefact citation over a snapshot's chunks; return citation id."""
-    snapshot_id, _ = seed_source(conn, project_id)
+    snapshot_id, _ = seed_source(conn, task_id)
     cited_chunk_id: uuid.UUID | None = None
     for sequence, content in enumerate(chunks):
         chunk_id = uuid.uuid4()
@@ -2017,7 +2017,7 @@ def _seed_artefact_citation(
     artefact_id, block_id, unit_id, annotation_id, citation_id = (uuid.uuid4() for _ in range(5))
     conn.execute(
         insert(artefact).values(
-            artefact_id=artefact_id, project_id=project_id, title="Evidence base", created_at=now()
+            artefact_id=artefact_id, task_id=task_id, title="Evidence base", created_at=now()
         )
     )
     conn.execute(
@@ -2067,22 +2067,22 @@ def test_artefact_citation_context_tolerates_quote_normalisation(
     tmp_path: Path, engine: Engine
 ) -> None:
     """Curly quotes / case still locate a unique span (same locator as chat)."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     with api_client(tmp_path) as (client, owner, _):
         try:
-            project_id = uuid.UUID(create_project(client, owner))
+            task_id = uuid.UUID(create_task(client, owner))
             raw_span = "The report found “Clear   Evidence”\nacross studies."
             content = "Before text. " + "x" * 900 + " " + raw_span + " " + "y" * 900
             with engine.begin() as conn:
                 citation_id = _seed_artefact_citation(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     chunks=(content,),
                     quote='the report found "clear evidence" across studies.',
                     cite_sequence=0,
                 )
             response = client.get(
-                f"/api/v1/projects/{project_id}/citations/{citation_id}/context",
+                f"/api/v1/tasks/{task_id}/citations/{citation_id}/context",
                 headers=owner,
             )
             assert response.status_code == 200
@@ -2090,19 +2090,19 @@ def test_artefact_citation_context_tolerates_quote_normalisation(
             assert raw_span in body["context"]
             assert body["context"][body["span_start"] : body["span_end"]] == raw_span
         finally:
-            if project_id is not None:
+            if task_id is not None:
                 with engine.begin() as conn:
-                    delete_project_data(conn, project_id)
+                    delete_task_data(conn, task_id)
 
 
 def test_citation_context_keeps_neighbours_as_short_edge_snippets(
     tmp_path: Path, engine: Engine
 ) -> None:
     """Whole adjacent chunks are not attached; only a short edge snippet is."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     with api_client(tmp_path) as (client, owner, _):
         try:
-            project_id = uuid.UUID(create_project(client, owner))
+            task_id = uuid.UUID(create_task(client, owner))
             previous = "OFFTOPIC PREVIOUS " + ("P" * 400) + " trailing previous sentence."
             quoted = "The quoted evidence span."
             middle = ("x" * 900) + f" {quoted} " + ("y" * 900)
@@ -2110,13 +2110,13 @@ def test_citation_context_keeps_neighbours_as_short_edge_snippets(
             with engine.begin() as conn:
                 mid_id = _seed_artefact_citation(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     chunks=(previous, middle, following),
                     quote=quoted,
                     cite_sequence=1,
                 )
             mid = client.get(
-                f"/api/v1/projects/{project_id}/citations/{mid_id}/context",
+                f"/api/v1/tasks/{task_id}/citations/{mid_id}/context",
                 headers=owner,
             ).json()
             assert quoted in mid["context"]
@@ -2128,13 +2128,13 @@ def test_citation_context_keeps_neighbours_as_short_edge_snippets(
             with engine.begin() as conn:
                 start_id = _seed_artefact_citation(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     chunks=(previous, quoted + " " + ("y" * 900), following),
                     quote=quoted,
                     cite_sequence=1,
                 )
             start = client.get(
-                f"/api/v1/projects/{project_id}/citations/{start_id}/context",
+                f"/api/v1/tasks/{task_id}/citations/{start_id}/context",
                 headers=owner,
             ).json()
             assert start["previous"] is not None
@@ -2147,13 +2147,13 @@ def test_citation_context_keeps_neighbours_as_short_edge_snippets(
             with engine.begin() as conn:
                 end_id = _seed_artefact_citation(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     chunks=(previous, ("x" * 900) + " " + quoted, following),
                     quote=quoted,
                     cite_sequence=1,
                 )
             end = client.get(
-                f"/api/v1/projects/{project_id}/citations/{end_id}/context",
+                f"/api/v1/tasks/{task_id}/citations/{end_id}/context",
                 headers=owner,
             ).json()
             assert end["next"] is not None
@@ -2163,31 +2163,31 @@ def test_citation_context_keeps_neighbours_as_short_edge_snippets(
             assert "OFFTOPIC NEXT" not in end["next"]
             assert len(end["next"]) <= 226
         finally:
-            if project_id is not None:
+            if task_id is not None:
                 with engine.begin() as conn:
-                    delete_project_data(conn, project_id)
+                    delete_task_data(conn, task_id)
 
 
 def test_citation_context_starts_and_ends_on_whole_words(
     tmp_path: Path, engine: Engine
 ) -> None:
     """The clamped window drops partial words and wraps truncated sides with '...'."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     with api_client(tmp_path) as (client, owner, _):
         try:
-            project_id = uuid.UUID(create_project(client, owner))
+            task_id = uuid.UUID(create_task(client, owner))
             quote = "The quoted evidence span."
             content = ("alpha " * 200) + quote + " " + ("omega " * 200)
             with engine.begin() as conn:
                 citation_id = _seed_artefact_citation(
                     conn,
-                    project_id=project_id,
+                    task_id=task_id,
                     chunks=(content,),
                     quote=quote,
                     cite_sequence=0,
                 )
             body = client.get(
-                f"/api/v1/projects/{project_id}/citations/{citation_id}/context",
+                f"/api/v1/tasks/{task_id}/citations/{citation_id}/context",
                 headers=owner,
             ).json()
             assert body["context"].startswith("...")
@@ -2197,6 +2197,6 @@ def test_citation_context_starts_and_ends_on_whole_words(
             assert inner.endswith("omega")
             assert body["context"][body["span_start"] : body["span_end"]] == quote
         finally:
-            if project_id is not None:
+            if task_id is not None:
                 with engine.begin() as conn:
-                    delete_project_data(conn, project_id)
+                    delete_task_data(conn, task_id)

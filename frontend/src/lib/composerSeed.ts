@@ -14,11 +14,6 @@ import { useEffect } from "react";
  */
 const SEED_EVENT = "policy-atlas:seed-composer";
 
-/** Ask the planning composer to take this text and focus itself. */
-export function seedComposer(text: string): void {
-  window.dispatchEvent(new CustomEvent(SEED_EVENT, { detail: text }));
-}
-
 /** Subscribe the composer to seed requests. */
 export function useComposerSeed(apply: (text: string) => void): void {
   useEffect(() => {

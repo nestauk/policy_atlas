@@ -99,7 +99,7 @@ const HUMAN_REASON: Record<string, string> = {
 
 /** Humanize a backend reason code; unknown snake_case codes de-snake rather
  *  than render as variables, anything else passes through untouched. */
-export function humanReason(code: string): string {
+function humanReason(code: string): string {
   if (HUMAN_REASON[code] !== undefined) return HUMAN_REASON[code];
   if (/^[a-z0-9_]+$/.test(code)) {
     const phrase = code.replaceAll("_", " ");
@@ -141,7 +141,7 @@ const STATUS_LABELS: Record<EvidenceItem["status"], string> = {
   selected: "Shortlisted",
   read_in_full: "Read in full",
   findings_extracted: "Findings extracted",
-  cited: "Cited in the evidence base",
+  cited: "Cited in the report",
   unavailable: "Included — abstract only",
 };
 

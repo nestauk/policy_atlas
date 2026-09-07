@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from policy_atlas.runtime.orchestrator_prompt import (
+from policy_atlas.runtime.agent_prompt import (
     RouterCompileTransport,
     WatchDecisionTransport,
     WatchTriageWire,

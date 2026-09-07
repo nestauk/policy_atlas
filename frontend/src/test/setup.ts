@@ -6,6 +6,18 @@ import { afterEach } from "vitest";
 // wire it explicitly so tests don't leak DOM into each other.
 afterEach(() => {
   cleanup();
+  // Web storage differs by runtime: inert under the local Node's experimental
+  // `localStorage`, working in CI's jsdom — where a per-browser choice (the
+  // chats sidebar open or shut) written by one test leaked into the next and
+  // turned "Show chats" into "Hide chats" (038 review follow-on). Start every
+  // test with empty storage wherever storage exists.
+  for (const name of ["localStorage", "sessionStorage"] as const) {
+    try {
+      window[name]?.clear();
+    } catch {
+      // Storage unavailable here (the accessor itself may throw): nothing to clear.
+    }
+  }
 });
 
 // jsdom lacks the pointer-capture API Radix's swipe/press handling touches.

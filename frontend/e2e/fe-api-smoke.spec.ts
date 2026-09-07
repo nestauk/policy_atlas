@@ -7,19 +7,19 @@ import { expect, test } from "@playwright/test";
  * Playwright configuration.
  */
 
-let projectId = "";
+let taskId = "";
 
 test.describe.serial("@fe-api-smoke built frontend against real API", () => {
-  test("renders the authenticated real project-list response", async ({ page }) => {
-    const loadedProjects = page.waitForResponse(
+  test("renders the authenticated real task-list response", async ({ page }) => {
+    const loadedTasks = page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/v1/projects" &&
+        new URL(response.url()).pathname === "/api/v1/tasks" &&
         response.request().method() === "GET" &&
         response.status() === 200,
     );
 
     await page.goto("/");
-    await loadedProjects;
+    await loadedTasks;
 
     // S4: a first-time account has no active or archived tasks, so `/`
     // redirects to `/new`. The GET 200 above is still the wiring check.
@@ -28,38 +28,38 @@ test.describe.serial("@fe-api-smoke built frontend against real API", () => {
     await expect(page.getByRole("button", { name: "Evidence search" })).toBeVisible();
   });
 
-  test("creates a project through the real authenticated POST", async ({ page }) => {
+  test("creates a task through the real authenticated POST", async ({ page }) => {
     await page.goto("/new");
     await page.getByRole("button", { name: "Evidence search" }).click();
-    await page.getByLabel("Your question").fill("FE API smoke project");
+    await page.getByLabel("Your question").fill("FE API smoke task");
 
     const created = page.waitForResponse(
       (response) =>
-        new URL(response.url()).pathname === "/api/v1/projects" &&
+        new URL(response.url()).pathname === "/api/v1/tasks" &&
         response.request().method() === "POST" &&
         response.status() === 201,
     );
     await page.getByRole("button", { name: "Start" }).click();
     await created;
 
-    await expect(page).toHaveURL(/\/projects\/[^/]+$/);
-    projectId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
+    await expect(page).toHaveURL(/\/tasks\/[^/]+$/);
+    taskId = new URL(page.url()).pathname.split("/").at(-1) ?? "";
   });
 
   test("starts a stub run and renders progress from the real SSE tail", async ({ page }) => {
-    if (!projectId) throw new Error("real-API project creation did not supply a project id");
+    if (!taskId) throw new Error("real-API task creation did not supply a task id");
 
-    await page.goto(`/projects/${projectId}`);
-    await page.getByLabel("Message the planner").fill("Map school-meal evidence.");
+    await page.goto(`/tasks/${taskId}`);
+    await page.getByLabel("Message the Task Agent").fill("Map school-meal evidence.");
     await page.getByRole("button", { name: "Send" }).click();
-    await page.getByLabel("Message the planner").fill("landscape only");
+    await page.getByLabel("Message the Task Agent").fill("landscape only");
     await page.getByRole("button", { name: "Send" }).click();
     await page.getByRole("button", { name: "Start search" }).click();
 
     // "Searching" is the acquire stage — the one component every stub plan
     // starts with. Labels come from the plan-panel vocabulary, not SSE copy.
     // (Never assert discretionary stages such as "Mapping"/characterise: the
-    // orchestrator may omit them.)
+    // agent may omit them.)
     // The timeline entry persists after the component completes, so this
     // assertion has no race against the stub's near-instant execution.
     // `.first()` because depth-graded search reruns acquire once per round and

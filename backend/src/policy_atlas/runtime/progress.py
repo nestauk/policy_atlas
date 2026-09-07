@@ -23,13 +23,13 @@ class ProgressEmitter:
 
     Args:
         engine: Database engine used for one short transaction per event.
-        project_id: Owning project.
+        task_id: Owning task.
         run_id: Synthesise component run.
     """
 
-    def __init__(self, engine: Engine, *, project_id: uuid.UUID, run_id: uuid.UUID) -> None:
+    def __init__(self, engine: Engine, *, task_id: uuid.UUID, run_id: uuid.UUID) -> None:
         self._engine = engine
-        self._project_id = project_id
+        self._task_id = task_id
         self._run_id = run_id
         self._sections_by_synthesis_index: list[dict[str, Any]] = []
         self._key_findings: dict[str, Any] | None = None
@@ -148,7 +148,7 @@ class ProgressEmitter:
             with self._engine.begin() as conn:
                 events.append(
                     conn,
-                    project_id=self._project_id,
+                    task_id=self._task_id,
                     run_id=self._run_id,
                     event_type=event_type,
                     payload=payload,

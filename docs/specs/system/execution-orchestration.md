@@ -1,7 +1,7 @@
 ---
 type: System contract
 title: Execution & orchestration
-description: Orchestrator and sub-agents, the tool registry + universal core, steering modes, the routing rule and durability.
+description: Agent and sub-agents, the tool registry + universal core, steering modes, the routing rule and durability.
 tags: [system, orchestration, execution, tools, steering, durability]
 timestamp: 2026-07-05
 ---
@@ -12,18 +12,18 @@ timestamp: 2026-07-05
 §4 (capabilities, tools, execution model) and §6 (steering & durability). This spec + `docs/adr/` are canonical; the source is frozen origin
 ([ADR 0002](../../adr/0002-spec-governance.md)).
 
-## Orchestrator + capability sub-agents
+## Agent + capability sub-agents
 
-- **One user-facing surface: the persistent project orchestrator/co-pilot.** It frames the
-  task, owns the **orchestration plan**, decides at *plan time* (reading declared capability
+- **One user-facing surface: the persistent Task Agent.** It frames the
+  task, owns the **task plan**, decides at *plan time* (reading declared capability
   specs) which capabilities/components meet the directive, delegates to **capability
   sub-agents**, mediates check-ins, records decisions, explains what changed.
 - **Sub-agents never address the user directly.** A sub-agent surfaces input/decision requests
-  **only** through `clarify` / `escalate`: it **parks** on a durable signal and the orchestrator
+  **only** through `clarify` / `escalate`: it **parks** on a durable signal and the Agent
   relays the request into the thread, **attributed to the capability**, collects the response,
   resumes the sub-agent. N capabilities, **not** N chatbots.
 - **Every capability sub-agent composes its own artefact at its run terminus** (task 013
-  flow-back): composition is capability expertise, so the orchestrator *shapes* the artefact at
+  flow-back): composition is capability expertise, so the Agent *shapes* the artefact at
   plan time (sections, facets, depth — compiled parameters) and owns **no runtime content
   machinery**. EB's instance is its `synthesise` terminal component.
 - **Plan-time authority, not runtime.** Flexibility lives at plan time (cheap, human-gated,
@@ -64,7 +64,7 @@ interpreting the plan-as-data**, not a graph rebuilt per run.
 - **Component** — a step in **one** capability's skeleton; **owned by its capability, run by its
   expert sub-agent**.
 - **Capability** — an artefact-producing composition of components, run by a dedicated expert
-  sub-agent, coordinated by the orchestrator.
+  sub-agent, coordinated by the Agent.
 
 One-liner: **tools are the shared verbs; components are a capability's sentences built from
 them.**
@@ -73,7 +73,7 @@ them.**
   only its current component's declared tools + the tiny universal core. The registry can grow
   large without degrading any agent's choice (reuse without exposure).
 - **Cross-capability reuse splits by what's reused**: a shared **operation** → reference the
-  **tool**; another capability's **analysis** (a component) → the **orchestrator invokes that
+  **tool**; another capability's **analysis** (a component) → the **Agent invokes that
   capability's expert sub-agent** to run the component. **A capability never runs another's
   component itself** (a component carries its owner's expertise/context; a tool does not).
 - **Gradation vs distinct operation — the I/O test**: only intensity/depth varies (same I/O
@@ -95,10 +95,10 @@ them.**
     canonical egress governance event** (§9). ⏸ open-web backend is a deferred seam **behind the
     same verb** (declaration-scoped per component; ingests as frozen chunks — no cite-the-live-web
     path).
-  - **`retrieve`** — in-corpus hybrid lexical+vector retrieval over the project corpus; **reads
+  - **`retrieve`** — in-corpus hybrid lexical+vector retrieval over the task corpus; **reads
     the derived index, never the canonical layer**. See *Tier-0 retrieval contract* below.
   - **`lookup`** — deterministic, identifier/filter-addressed, side-effect-free access to
-    **canonical project state**, including aggregate queries over columns/tags (the queries whose
+    **canonical task state**, including aggregate queries over columns/tags (the queries whose
     re-running *is* metadata-pattern verification). No ranking, no egress, no writes.
   - **`appraise`** — source quality (see [provenance-grounding.md](provenance-grounding.md)).
   - **`produce-grounded-block`** — synthesise → cite → verify → write (cite/verify mandatory).
@@ -116,7 +116,7 @@ them.**
 
 ## Tier-0 retrieval contract
 
-v3.0 retrieval is **hybrid lexical + dense** over the project corpus — **Postgres FTS + pgvector
+v3.0 retrieval is **hybrid lexical + dense** over the task corpus — **Postgres FTS + pgvector
 on Aurora** — with **application-side rank fusion** (e.g. RRF), never assumed from the DB.
 **Cross-encoder reranking sits behind the retrieval-profile seam** (Bedrock Rerank keeps it in
 the inference trust boundary), used where precision matters, **never always-on** — selection
@@ -134,14 +134,14 @@ quality/latency/filtering/scale/operability.
 
 *(Rewritten by task 024 — ADRs 0020–0023. The organising principle is the **decider dial**:
 every decision surfaces in the durable record; the steering mode never changes what is
-decided or what is visible — it moves the **decider** between the user and the orchestrator.)*
+decided or what is visible — it moves the **decider** between the user and the Agent.)*
 
 **Steering mode** = a per-run **delegation posture** (mutable mid-run), answering "when
 should I come back to you?". Check-in *stream* ≠ pauses: progress check-ins stream (and
 persist as steering events) in every mode; the mode governs only what blocks and who
 answers. The four modes, with their user-facing labels:
 
-| Label ("When should I come back to you?") | Plan value | User decides live | Orchestrator decides (recorded + flagged) |
+| Label ("When should I come back to you?") | Plan value | User decides live | Agent decides (recorded + flagged) |
 |---|---|---|---|
 | "Often — walk me through it" | `frequent` | everything (the watch only *recommends*) | nothing |
 | "At the key decisions" *(default)* | `moderate` | P2 + P3 + P4 always (the evidence base · the selection · the synthesis shape); P1 + watch escalations when fired | routine boundary residuals |
@@ -150,10 +150,10 @@ answers. The four modes, with their user-facing labels:
 
 The pauses hang on the **steer-point lattice** (task 024): **P1** `search_exception`
 (after acquire, exception-only — fires on hard coverage triggers in every attended mode) ·
-**P2** `evidence_base_coverage` (before select — the full coverage picture, where adequacy
+**P2** `evidence_search_coverage` (before select — the full coverage picture, where adequacy
 is actually judgeable) · **P3** `deepening_selection` (after select, with a selection
 preview) · **P4** `synthesis_shape` (before synthesise, with the proposal). Every pause
-presents the canonical floor options + orchestrator-authored run-specific options + free
+presents the canonical floor options + Agent-authored run-specific options + free
 text through the router; every pause and decision is a durable steering event keyed to the
 walk's `capability_run` identity. Named behaviour change (024): **Minimal is now
 fired-only at every lattice point** — the as-built 017 behaviour paused unconditionally at
@@ -172,12 +172,12 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
 
 - **Firm principle, restated for the decider dial: substance is never silent in any mode.**
   A substance decision always surfaces in the durable record with its decider attributed
-  (`decided_by: user | orchestrator | standing_default`); the dial can move the decider,
+  (`decided_by: user | agent | standing_default`); the dial can move the decider,
   never the visibility. The **structural trigger floor is never suppressible** — declared
   triggers fire deterministically regardless of the watch's judgement, which can add
   escalations but never remove one.
-- **The orchestrator watch — the decider layer** *(024; discharges this spec's former
-  "⏸ no first-principles runtime classifier" deferral — see below)*: one orchestrator
+- **The Agent watch — the decider layer** *(024; discharges this spec's former
+  "⏸ no first-principles runtime classifier" deferral — see below)*: one Agent
   agent, three moments (the planning conversation · the free-text steering **router** at
   pauses · the boundary **watch**), one prompt family, one shared session. The watch
   observes component boundaries under **structurally gated invocation**: clean boundaries
@@ -190,7 +190,7 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
   user, within the user's own surface** — the same options and free-text grammar,
   compiled through the same author-blind fail-closed parsers — attributed, flagged, and
   overridable at any attended pause. **Authority order is fixed regardless of author:
-  user > declared rules > orchestrator.** Replacement re-runs bias-to-escalate in
+  user > declared rules > Agent.** Replacement re-runs bias-to-escalate in
   attended modes (they change what everything downstream sees); additive re-runs are
   self-decidable where the mode delegates. Fail-safe: a watch or router failure degrades
   to the deterministic floor (structural routing, canonical menu) — the run never depends
@@ -235,7 +235,7 @@ ask* / *flag & continue* / *silently log & continue*, by **kind of decision × m
 ## Durability & concurrency
 
 - **Serial execution in v3.0** — one active branch; a check-in **holds the run**. The dependency
-  DAG is **persisted** (the orchestration plan *is* this graph) so parallel-eligible sets are
+  DAG is **persisted** (the task plan *is* this graph) so parallel-eligible sets are
   identifiable at plan time; v3.0 walks a **topological order serially**. ⏸ branch-level
   parallelism deferred (the evidence-parallel / synthesis-centralised split is preserved for
   when it lands — never fan out the *conclusion*).

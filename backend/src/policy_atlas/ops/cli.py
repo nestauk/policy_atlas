@@ -9,7 +9,7 @@ The command tree, with every global option before the subcommand::
       user  enrol     --email E --display-name D --org ORG
       user  resync    --email E
       user  de-enrol  (--email E | --sub SUB)
-      rows  assign    (--project ID | --portfolio ID) --org ORG
+      rows  assign    (--task ID | --project ID) --org ORG
       admin grant     (--email E | --sub SUB)
       admin revoke    (--email E | --sub SUB)
 
@@ -106,7 +106,7 @@ def main(
 ) -> int:
     """Run one operator command.
 
-    The seams mirror ``runtime/orchestrate.main``: every external dependency is
+    The seams mirror ``runtime/agent.main``: every external dependency is
     an optional argument that defaults to the real thing, so the suite can drive
     the actual entrypoint against the test database with a stubbed identity
     provider and no AWS call is ever made.
@@ -258,8 +258,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rows_assign = rows.add_parser("assign", help="assign one row to an organisation")
     assign_subject = rows_assign.add_mutually_exclusive_group(required=True)
+    assign_subject.add_argument("--task", type=uuid.UUID)
     assign_subject.add_argument("--project", type=uuid.UUID)
-    assign_subject.add_argument("--portfolio", type=uuid.UUID)
     rows_assign.add_argument("--org", required=True, help="organisation name or id")
 
     admin = groups.add_parser("admin", help="the support role").add_subparsers(
@@ -416,7 +416,7 @@ def _dispatch(
     if args.group == "rows":
         org = commands.resolve_organisation(conn, args.org)
         return commands.assign_rows(
-            conn, org=org, project_id=args.project, portfolio_id=args.portfolio
+            conn, org=org, task_id=args.task, project_id=args.project
         )
 
     return commands.set_admin(

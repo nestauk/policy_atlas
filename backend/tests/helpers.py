@@ -10,8 +10,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.usage import UsageResult
-from policy_atlas.evidence_base.sourcing.search_loop import CallVerb, ExecutedCall, QueryOrigin
-from policy_atlas.evidence_base.sourcing.search_prompts import (
+from policy_atlas.evidence_search.sourcing.search_loop import CallVerb, ExecutedCall, QueryOrigin
+from policy_atlas.evidence_search.sourcing.search_prompts import (
     QueriesPayload,
     ReformulatePayload,
     SearchQueriesWire,
@@ -20,7 +20,7 @@ from policy_atlas.evidence_base.sourcing.search_prompts import (
 )
 
 if TYPE_CHECKING:
-    from policy_atlas.evidence_base.extract.icf_records import ICFRecordWire
+    from policy_atlas.evidence_search.extract.icf_records import ICFRecordWire
 
 EVIDENCE_TYPE = "RCTs and Quasi-Experimental Studies"
 IOF_PROFILE_ID = "eb_iof_base_v1"
@@ -169,8 +169,8 @@ def executed_calls_for(
 
 def make_icf_wire_record(**overrides: Any) -> "ICFRecordWire":
     """Build an ICF wire record with sane defaults; override per test."""
-    from policy_atlas.evidence_base.extract.icf_records import ICFRecordWire
-    from policy_atlas.evidence_base.extract.iof_records import IOFAnchorWire
+    from policy_atlas.evidence_search.extract.icf_records import ICFRecordWire
+    from policy_atlas.evidence_search.extract.iof_records import IOFAnchorWire
 
     values: dict[str, Any] = {
         "context_type": "barrier",
@@ -218,7 +218,7 @@ def profile_docs(
     """Return old-style document outcome entries for a profile summary."""
     return [
         {
-            "pss_id": doc["pss_id"],
+            "tss_id": doc["tss_id"],
             "basis": doc["basis"],
             **doc["profiles"][profile_id],
         }
@@ -248,15 +248,15 @@ def profile_vetted_out(
     return cast("dict[str, Any]", summary["profiles"][profile_id]["vetted_out"])
 
 
-def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
-    """Delete every row belonging to a project, FK-ordered.
+def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
+    """Delete every row belonging to a task, FK-ordered.
 
     Used by tests that must genuinely commit (e.g. commit-survival) and then clean up,
     since the rolled-back ``conn`` fixture can't isolate committed rows.
 
     Args:
         conn: Open database connection.
-        project_id: Project whose rows to remove.
+        task_id: Task whose rows to remove.
     """
     from policy_atlas.core.schema import (
         addressable_unit,
@@ -274,10 +274,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         grouping_result,
         implementation_context_finding,
         intervention_outcome_finding,
-        orchestration_plan,
         planning_transcript,
-        project,
-        project_source_snapshot,
         runs,
         search_coverage_record,
         selection_result,
@@ -288,6 +285,9 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         source_snapshot,
         source_tag,
         synthesis_result,
+        task,
+        task_plan,
+        task_source_snapshot,
     )
     from policy_atlas.core.schema import (
         chunk as chunk_table,
@@ -296,16 +296,16 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         citation as citation_table,
     )
 
-    # Capture snapshot IDs associated with this project before any deletes.
+    # Capture snapshot IDs associated with this task before any deletes.
     # Union of envelope + full-text snapshot ids (plan-review finding 5:
-    # full-text snapshots are project-less rows reachable only through the
+    # full-text snapshots are task-less rows reachable only through the
     # link; capturing only the envelope id orphans them).
     snapshot_ids_set: set[uuid.UUID] = set()
     for env_id, ft_id in conn.execute(
         select(
-            project_source_snapshot.c.source_snapshot_id,
-            project_source_snapshot.c.full_text_snapshot_id,
-        ).where(project_source_snapshot.c.project_id == project_id)
+            task_source_snapshot.c.source_snapshot_id,
+            task_source_snapshot.c.full_text_snapshot_id,
+        ).where(task_source_snapshot.c.task_id == task_id)
     ).fetchall():
         snapshot_ids_set.add(env_id)
         if ft_id is not None:
@@ -314,7 +314,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
 
     block_ids_subq = select(block.c.block_id).where(
         block.c.artefact_id.in_(
-            select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
+            select(artefact.c.artefact_id).where(artefact.c.task_id == task_id)
         )
     )
     annotation_ids_subq = select(annotation.c.annotation_id).where(
@@ -324,7 +324,7 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     # Task 013 row first: FKs onto artefact and all four upstream result tables
     # (characterisation/selection/extraction/grouping) plus scope/runs.
     conn.execute(delete(synthesis_result).where(
-        synthesis_result.c.project_id == project_id
+        synthesis_result.c.task_id == task_id
     ))
     # citation → annotation → addressable_unit → block (then event_log, artefact, runs)
     conn.execute(delete(citation_table).where(
@@ -334,69 +334,69 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
     conn.execute(delete(addressable_unit).where(addressable_unit.c.block_id.in_(block_ids_subq)))
     # Task 012 row: FKs onto extraction_result/scope/runs.
     conn.execute(delete(grouping_result).where(
-        grouping_result.c.project_id == project_id
+        grouping_result.c.task_id == task_id
     ))
     # Task 011 rows first: findings FK onto extraction records, which FK onto
-    # pss/runs; extraction_result FKs onto scope/runs.
+    # tss/runs; extraction_result FKs onto scope/runs.
     conn.execute(delete(implementation_context_finding).where(
-        implementation_context_finding.c.project_id == project_id
+        implementation_context_finding.c.task_id == task_id
     ))
     conn.execute(delete(intervention_outcome_finding).where(
-        intervention_outcome_finding.c.project_id == project_id
+        intervention_outcome_finding.c.task_id == task_id
     ))
     conn.execute(delete(source_extraction_record).where(
-        source_extraction_record.c.project_id == project_id
+        source_extraction_record.c.task_id == task_id
     ))
     conn.execute(delete(extraction_result).where(
-        extraction_result.c.project_id == project_id
+        extraction_result.c.task_id == task_id
     ))
-    # Task 009 rows first: tags/characterisation FK onto pss/runs; embeddings FK onto chunk
-    conn.execute(delete(source_tag).where(source_tag.c.project_id == project_id))
+    # Task 009 rows first: tags/characterisation FK onto tss/runs; embeddings FK onto chunk
+    conn.execute(delete(source_tag).where(source_tag.c.task_id == task_id))
     # Task 010 row: same FK class as characterisation_result (scope + runs guards).
     conn.execute(delete(selection_result).where(
-        selection_result.c.project_id == project_id
+        selection_result.c.task_id == task_id
     ))
     conn.execute(delete(characterisation_result).where(
-        characterisation_result.c.project_id == project_id
+        characterisation_result.c.task_id == task_id
     ))
     # source_appraisal_result → source_classification_result → source_screening_result
     # (FK-safe order)
     conn.execute(delete(source_appraisal_result).where(
-        source_appraisal_result.c.project_id == project_id
+        source_appraisal_result.c.task_id == task_id
     ))
     conn.execute(delete(source_classification_result).where(
-        source_classification_result.c.project_id == project_id
+        source_classification_result.c.task_id == task_id
     ))
     conn.execute(delete(source_screening_result).where(
-        source_screening_result.c.project_id == project_id
+        source_screening_result.c.task_id == task_id
     ))
     conn.execute(delete(search_coverage_record).where(
-        search_coverage_record.c.project_id == project_id
+        search_coverage_record.c.task_id == task_id
     ))
-    conn.execute(delete(event_log).where(event_log.c.project_id == project_id))
+    conn.execute(delete(event_log).where(event_log.c.task_id == task_id))
     conn.execute(
         delete(block).where(
             block.c.artefact_id.in_(
-                select(artefact.c.artefact_id).where(artefact.c.project_id == project_id)
+                select(artefact.c.artefact_id).where(artefact.c.task_id == task_id)
             )
         )
     )
-    conn.execute(delete(artefact).where(artefact.c.project_id == project_id))
-    # project_source_snapshot before runs: acquired links carry run_id (FK to runs);
+    conn.execute(delete(artefact).where(artefact.c.task_id == task_id))
+    # task_source_snapshot before runs: acquired links carry run_id (FK to runs);
     # upload links carry run_id=NULL, which is why the old runs-first order never bit.
-    conn.execute(delete(project_source_snapshot).where(
-        project_source_snapshot.c.project_id == project_id
+    conn.execute(delete(task_source_snapshot).where(
+        task_source_snapshot.c.task_id == task_id
     ))
-    conn.execute(delete(runs).where(runs.c.project_id == project_id))
+    conn.execute(delete(runs).where(runs.c.task_id == task_id))
     # chat_turn before capability_run (chat_turn.capability_run_id FKs onto it).
     conn.execute(delete(chat_turn).where(
         chat_turn.c.conversation_id.in_(
-            select(conversation.c.id).where(conversation.c.project_id == project_id)
+            select(conversation.c.id).where(conversation.c.task_id == task_id)
         )
     ))
     # capability_run after runs (runs.capability_run_id FKs onto it) and before
-    # evidence_scope/project (its composite scope FK + project FK target them).
-    conn.execute(delete(capability_run).where(capability_run.c.project_id == project_id))
+    # evidence_scope/task (its composite scope FK + task FK target them).
+    conn.execute(delete(capability_run).where(capability_run.c.task_id == task_id))
     if snapshot_ids:
         conn.execute(delete(chunk_embedding).where(
             chunk_embedding.c.chunk_id.in_(
@@ -411,36 +411,36 @@ def delete_project_data(conn: Connection, project_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
-    # Durable planning turns before their project parent.
+    # Durable planning turns before their task parent.
     conn.execute(delete(planning_transcript).where(
-        planning_transcript.c.project_id == project_id
+        planning_transcript.c.task_id == task_id
     ))
-    # orchestration_plan before evidence_scope (fk_oplan_scope_project) and
-    # before conversation (orchestration_plan.conversation_id FKs onto it).
-    conn.execute(delete(orchestration_plan).where(
-        orchestration_plan.c.project_id == project_id
+    # task_plan before evidence_scope (fk_plan_scope_task) and
+    # before conversation (task_plan.conversation_id FKs onto it).
+    conn.execute(delete(task_plan).where(
+        task_plan.c.task_id == task_id
     ))
     # conversation after its FK dependants (chat_turn above,
-    # planning_transcript/orchestration_plan above) and before project.
-    conn.execute(delete(conversation).where(conversation.c.project_id == project_id))
-    conn.execute(delete(evidence_scope).where(evidence_scope.c.project_id == project_id))
-    conn.execute(delete(project).where(project.c.project_id == project_id))
+    # planning_transcript/task_plan above) and before task.
+    conn.execute(delete(conversation).where(conversation.c.task_id == task_id))
+    conn.execute(delete(evidence_scope).where(evidence_scope.c.task_id == task_id))
+    conn.execute(delete(task).where(task.c.task_id == task_id))
 
 
 def seed_ingested_full_text(
     conn: Connection,
     *,
-    pss_id: uuid.UUID,
+    tss_id: uuid.UUID,
     chunks: list[str],
 ) -> uuid.UUID:
-    """Insert an ingested full-text snapshot with chunks + embeddings; link it to ``pss_id``.
+    """Insert an ingested full-text snapshot with chunks + embeddings; link it to ``tss_id``.
 
     Returns the full-text snapshot id.
     """
     from policy_atlas.core.embeddings import EMBEDDING_PROFILE, UNIT_POLICY, StubEmbeddingBackend
     from policy_atlas.core.hashing import content_hash
     from policy_atlas.core.schema import chunk as chunk_table
-    from policy_atlas.core.schema import chunk_embedding, project_source_snapshot, source_snapshot
+    from policy_atlas.core.schema import chunk_embedding, source_snapshot, task_source_snapshot
 
     full_snapshot_id = uuid.uuid4()
     conn.execute(
@@ -454,8 +454,8 @@ def seed_ingested_full_text(
         )
     )
     conn.execute(
-        update(project_source_snapshot)
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+        update(task_source_snapshot)
+        .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
         .values(full_text_snapshot_id=full_snapshot_id, full_text_status="ingested")
     )
     embedder = StubEmbeddingBackend()
@@ -490,13 +490,13 @@ def seed_ingested_full_text(
 
 
 def seed_source(
-    conn: Connection, project_id: uuid.UUID, meta: dict[str, Any] | None = None
+    conn: Connection, task_id: uuid.UUID, meta: dict[str, Any] | None = None
 ) -> tuple[uuid.UUID, uuid.UUID]:
-    """Insert source_snapshot + project_source_snapshot; return (source_snapshot_id, pss_id)."""
-    from policy_atlas.core.schema import project_source_snapshot, source_snapshot
+    """Insert source_snapshot + task_source_snapshot; return (source_snapshot_id, tss_id)."""
+    from policy_atlas.core.schema import source_snapshot, task_source_snapshot
 
     snap_id = uuid.uuid4()
-    pss_id = uuid.uuid4()
+    tss_id = uuid.uuid4()
     conn.execute(source_snapshot.insert().values(
         source_snapshot_id=snap_id,
         content_hash=str(uuid.uuid4()),
@@ -505,19 +505,19 @@ def seed_source(
         metadata=meta or {},
         created_at=now(),
     ))
-    conn.execute(project_source_snapshot.insert().values(
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
+    conn.execute(task_source_snapshot.insert().values(
+        task_source_snapshot_id=tss_id,
+        task_id=task_id,
         source_snapshot_id=snap_id,
         origin="uploaded",
         run_id=None,
         ingested_at=now(),
     ))
-    return snap_id, pss_id
+    return snap_id, tss_id
 
 
 def seed_scope(
-    conn: Connection, project_id: uuid.UUID, context: dict[str, Any] | None = None
+    conn: Connection, task_id: uuid.UUID, context: dict[str, Any] | None = None
 ) -> uuid.UUID:
     """Insert a evidence_scope; return scope_id."""
     from policy_atlas.core.schema import evidence_scope
@@ -525,7 +525,7 @@ def seed_scope(
     scope_id = uuid.uuid4()
     conn.execute(evidence_scope.insert().values(
         evidence_scope_id=scope_id,
-        project_id=project_id,
+        task_id=task_id,
         intent="Test intent",
         context=context or {},
         created_at=now(),
@@ -535,10 +535,10 @@ def seed_scope(
 
 def seed_screening_result(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     scope_id: uuid.UUID,
-    pss_id: uuid.UUID,
+    tss_id: uuid.UUID,
     status: str = "relevant",
     *,
     screen_stage: int = 1,
@@ -564,8 +564,8 @@ def seed_screening_result(
     conn.execute(source_screening_result.insert().values(
         source_screening_result_id=row_id,
         evidence_scope_id=scope_id,
-        project_source_snapshot_id=pss_id,
-        project_id=project_id,
+        task_source_snapshot_id=tss_id,
+        task_id=task_id,
         screened_by_run_id=run_id,
         status=status,
         screen_basis=basis,
@@ -577,8 +577,8 @@ def seed_screening_result(
     return row_id
 
 
-def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
-    """Insert a project + running run; return (project_id, run_id).
+def seed_task_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
+    """Insert a task + running run; return (task_id, run_id).
 
     Revision-aware: migration roundtrip tests call this at downgraded
     revisions where the 025 lifecycle columns don't exist yet, so the
@@ -586,25 +586,25 @@ def seed_project_and_run(conn: Connection) -> tuple[uuid.UUID, uuid.UUID]:
     """
     from sqlalchemy import inspect
 
-    from policy_atlas.core.schema import project
+    from policy_atlas.core.schema import task
 
     pid = uuid.uuid4()
-    values: dict[str, object] = {"project_id": pid, "created_at": now()}
-    live_columns = {col["name"] for col in inspect(conn).get_columns("project")}
+    values: dict[str, object] = {"task_id": pid, "created_at": now()}
+    live_columns = {col["name"] for col in inspect(conn).get_columns("task")}
     if "name" in live_columns:
-        values.update(name="Test project", status="active", updated_at=now())
-    conn.execute(project.insert().values(**values))
+        values.update(name="Test task", status="active", updated_at=now())
+    conn.execute(task.insert().values(**values))
     return pid, seed_run(conn, pid)
 
 
-def seed_run(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
-    """Insert an additional running run for an existing project; return run_id."""
+def seed_run(conn: Connection, task_id: uuid.UUID) -> uuid.UUID:
+    """Insert an additional running run for an existing task; return run_id."""
     from policy_atlas.core.schema import runs
 
     rid = uuid.uuid4()
     conn.execute(
         runs.insert().values(
-            run_id=rid, project_id=project_id, status="running", started_at=now()
+            run_id=rid, task_id=task_id, status="running", started_at=now()
         )
     )
     return rid
@@ -612,7 +612,7 @@ def seed_run(conn: Connection, project_id: uuid.UUID) -> uuid.UUID:
 
 def seed_select_doc(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID,
     scope_id: uuid.UUID,
     *,
@@ -626,20 +626,20 @@ def seed_select_doc(
 ) -> uuid.UUID:
     """Insert a screened-relevant source ready for select, with optional classification."""
     from policy_atlas.core.schema import (
-        project_source_snapshot,
         source_appraisal_result,
         source_classification_result,
         source_snapshot,
+        task_source_snapshot,
     )
 
-    snap_id, pss_id = seed_source(
+    snap_id, tss_id = seed_source(
         conn,
-        project_id,
+        task_id,
         meta={"title": title, "abstract": abstract or f"Abstract for {title}.", "year": year},
     )
     conn.execute(
-        update(project_source_snapshot)
-        .where(project_source_snapshot.c.project_source_snapshot_id == pss_id)
+        update(task_source_snapshot)
+        .where(task_source_snapshot.c.task_source_snapshot_id == tss_id)
         .values(origin=origin)
     )
     conn.execute(
@@ -647,13 +647,13 @@ def seed_select_doc(
         .where(source_snapshot.c.source_snapshot_id == snap_id)
         .values(text_basis=text_basis)
     )
-    seed_screening_result(conn, project_id, run_id, scope_id, pss_id, status="relevant")
+    seed_screening_result(conn, task_id, run_id, scope_id, tss_id, status="relevant")
     if evidence_type is not None:
         conn.execute(source_classification_result.insert().values(
             source_classification_result_id=uuid.uuid4(),
             evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
+            task_source_snapshot_id=tss_id,
+            task_id=task_id,
             classified_by_run_id=run_id,
             primary_evidence_type=evidence_type,
             classified_at=now(),
@@ -662,19 +662,19 @@ def seed_select_doc(
         conn.execute(source_appraisal_result.insert().values(
             source_appraisal_result_id=uuid.uuid4(),
             evidence_scope_id=scope_id,
-            project_source_snapshot_id=pss_id,
-            project_id=project_id,
+            task_source_snapshot_id=tss_id,
+            task_id=task_id,
             appraised_by_run_id=run_id,
             quality_score=quality,
             rubric_version="test-rubric",
             appraised_at=now(),
         ))
-    return pss_id
+    return tss_id
 
 
 def seed_characterisation(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     run_id: uuid.UUID,
     *,
@@ -686,7 +686,7 @@ def seed_characterisation(
 
     conn.execute(characterisation_result.insert().values(
         characterisation_id=uuid.uuid4(),
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         run_id=run_id,
         grouping_provenance={"backend_mode": "stub"},
@@ -696,12 +696,12 @@ def seed_characterisation(
                 {
                     "name": name,
                     "description": f"{name} documents",
-                    "member_ids": [str(pss_id) for pss_id in ids],
+                    "member_ids": [str(tss_id) for tss_id in ids],
                     "size": len(ids),
                 }
                 for name, ids in themes.items()
             ],
-            "unclustered_ids": [str(pss_id) for pss_id in (unclustered or [])],
+            "unclustered_ids": [str(tss_id) for tss_id in (unclustered or [])],
         },
         created_at=now(),
     ))
@@ -709,7 +709,7 @@ def seed_characterisation(
 
 def run_select(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     characterisation_run_id: uuid.UUID,
     *,
@@ -718,12 +718,12 @@ def run_select(
 ) -> tuple[dict[str, Any], Any, uuid.UUID]:
     """Seed a fresh run and execute select_scope; return (summary, persisted row, run_id)."""
     from policy_atlas.core.schema import selection_result
-    from policy_atlas.evidence_base.corpus.select import SelectContext, select_scope
+    from policy_atlas.evidence_search.corpus.select import SelectContext, select_scope
 
-    run_id = seed_run(conn, project_id)
+    run_id = seed_run(conn, task_id)
     summary = select_scope(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         context=SelectContext(
             scope_id=scope_id,
@@ -735,7 +735,7 @@ def run_select(
     )
     row = conn.execute(
         select(selection_result)
-        .where(selection_result.c.project_id == project_id)
+        .where(selection_result.c.task_id == task_id)
         .where(selection_result.c.run_id == run_id)
     ).one()
     return summary, row, run_id

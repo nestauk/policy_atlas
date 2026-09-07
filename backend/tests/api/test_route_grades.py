@@ -42,15 +42,15 @@ from policy_atlas.core.schema import (
     chat_turn,
     conversation,
     evidence_scope,
-    orchestration_plan,
     planning_transcript,
+    task_plan,
 )
-from policy_atlas.core.schema import project as project_table
+from policy_atlas.core.schema import task as task_table
 from policy_atlas.runtime.chat_backend import StubChatBackend
 from tests.api.org_support import (
     make_org,
-    make_portfolio,
     make_project,
+    make_task,
     ops_enrol,
     seeded,
     tenancy_client,
@@ -58,17 +58,17 @@ from tests.api.org_support import (
 from tests.api.test_chat_turns import _citable_tools, _cleanup, _walk
 from tests.api.test_sse import _StreamingAsgiTransport
 from tests.helpers import now
-from tests.runtime.test_runner import _base_plan, _seed_project
+from tests.runtime.test_runner import _base_plan, _seed_task
 
 
-def _seed_run(conn: Connection, *, project_id: uuid.UUID) -> uuid.UUID:
+def _seed_run(conn: Connection, *, task_id: uuid.UUID) -> uuid.UUID:
     """Insert one terminal capability run so `GET .../runs/{run_id}` has a row to find."""
     run_id = uuid.uuid4()
     scope_id = uuid.uuid4()
     conn.execute(
         evidence_scope.insert().values(
             evidence_scope_id=scope_id,
-            project_id=project_id,
+            task_id=task_id,
             intent="route-grade test",
             context={},
             created_at=now(),
@@ -77,9 +77,9 @@ def _seed_run(conn: Connection, *, project_id: uuid.UUID) -> uuid.UUID:
     conn.execute(
         capability_run.insert().values(
             capability_run_id=run_id,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
-            capability="evidence_base",
+            capability="evidence_search",
             plan_id=uuid.uuid4(),
             plan_version=1,
             status="succeeded",
@@ -91,11 +91,11 @@ def _seed_run(conn: Connection, *, project_id: uuid.UUID) -> uuid.UUID:
     return run_id
 
 
-def _seed_approved_plan(conn: Connection, *, project_id: uuid.UUID) -> None:
+def _seed_approved_plan(conn: Connection, *, task_id: uuid.UUID) -> None:
     """Insert one approved plan so `GET .../plan` has something to return.
 
     `evidence_scope_id` is left NULL: the composite FK guard on
-    `orchestration_plan` uses MATCH SIMPLE, so a NULL scope skips the check
+    `task_plan` uses MATCH SIMPLE, so a NULL scope skips the check
     (schema comment, `core/schema.py`) and this test needs no separate
     `evidence_scope` row.
     """
@@ -106,9 +106,9 @@ def _seed_approved_plan(conn: Connection, *, project_id: uuid.UUID) -> None:
         steering_mode="unattended",
     )
     conn.execute(
-        orchestration_plan.insert().values(
+        task_plan.insert().values(
             plan_id=uuid.uuid4(),
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=None,
             evidence_scope_id=None,
             version=1,
@@ -125,7 +125,7 @@ def _insert_conversation(
     conn: Connection,
     *,
     conversation_id: uuid.UUID,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     kind: str,
     created_by: str | None,
     status: str = "active",
@@ -134,7 +134,7 @@ def _insert_conversation(
     conn.execute(
         conversation.insert().values(
             id=conversation_id,
-            project_id=project_id,
+            task_id=task_id,
             kind=kind,
             title=f"{kind} conversation",
             entry_artefact_id=None,
@@ -148,6 +148,24 @@ def _insert_conversation(
 
 
 # --- READ grade: a same-org colleague reaches the row (200), not 404 --------
+
+
+def test_get_task_read_grade_lets_a_colleague_open_the_row(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            task_id = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+
+        response = client.get(f"/api/v1/tasks/{task_id}", headers=colleague.headers)
+
+        assert response.status_code == 200
+        assert response.json()["is_owner"] is False
 
 
 def test_get_project_read_grade_lets_a_colleague_open_the_row(
@@ -168,24 +186,6 @@ def test_get_project_read_grade_lets_a_colleague_open_the_row(
         assert response.json()["is_owner"] is False
 
 
-def test_get_portfolio_read_grade_lets_a_colleague_open_the_row(
-    engine: Engine, tmp_path: Path
-) -> None:
-    with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
-        with seeded(engine) as conn:
-            org_id = make_org(conn)
-            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            portfolio_id = make_portfolio(
-                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
-            )
-
-        response = client.get(f"/api/v1/portfolios/{portfolio_id}", headers=colleague.headers)
-
-        assert response.status_code == 200
-        assert response.json()["is_owner"] is False
-
-
 def test_read_models_route_read_grade_lets_a_colleague_read(
     engine: Engine, tmp_path: Path
 ) -> None:
@@ -195,11 +195,11 @@ def test_read_models_route_read_grade_lets_a_colleague_read(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
-        response = client.get(f"/api/v1/projects/{project_id}/funnel", headers=colleague.headers)
+        response = client.get(f"/api/v1/tasks/{task_id}/funnel", headers=colleague.headers)
 
         assert response.status_code == 200
 
@@ -210,14 +210,14 @@ def test_runs_read_grade_lets_a_colleague_list_and_get(engine: Engine, tmp_path:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            run_id = _seed_run(conn, project_id=project_id)
+            run_id = _seed_run(conn, task_id=task_id)
 
-        listed = client.get(f"/api/v1/projects/{project_id}/runs", headers=colleague.headers)
+        listed = client.get(f"/api/v1/tasks/{task_id}/runs", headers=colleague.headers)
         fetched = client.get(
-            f"/api/v1/projects/{project_id}/runs/{run_id}", headers=colleague.headers
+            f"/api/v1/tasks/{task_id}/runs/{run_id}", headers=colleague.headers
         )
 
         assert listed.status_code == 200
@@ -234,15 +234,15 @@ def test_check_ins_and_planning_turns_read_grade_let_a_colleague_list(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         check_ins = client.get(
-            f"/api/v1/projects/{project_id}/check-ins", headers=colleague.headers
+            f"/api/v1/tasks/{task_id}/check-ins", headers=colleague.headers
         )
         planning_turns = client.get(
-            f"/api/v1/projects/{project_id}/planning-turns", headers=colleague.headers
+            f"/api/v1/tasks/{task_id}/planning-turns", headers=colleague.headers
         )
 
         assert check_ins.status_code == 200
@@ -255,24 +255,24 @@ def test_get_plan_read_grade_lets_a_colleague_read(engine: Engine, tmp_path: Pat
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            _seed_approved_plan(conn, project_id=project_id)
+            _seed_approved_plan(conn, task_id=task_id)
 
-        response = client.get(f"/api/v1/projects/{project_id}/plan", headers=colleague.headers)
+        response = client.get(f"/api/v1/tasks/{task_id}/plan", headers=colleague.headers)
 
         assert response.status_code == 200
         assert response.json()["status"] == "approved"
 
 
-def _stale_pending_turn(conn: Connection, *, project_id: uuid.UUID) -> uuid.UUID:
+def _stale_pending_turn(conn: Connection, *, task_id: uuid.UUID) -> uuid.UUID:
     """Insert one planning turn old enough for the sweeper to fail, and return its id."""
     turn_id = uuid.uuid4()
     conn.execute(
         planning_transcript.insert().values(
             id=turn_id,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=None,
             client_turn_id=uuid.uuid4(),
             turn_index=0,
@@ -333,22 +333,22 @@ def test_a_read_graded_planning_get_by_anyone_but_the_owner_writes_nothing(
                 display_name="Support",
                 is_admin=True,
             )
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            _seed_approved_plan(conn, project_id=project_id)
-            turn_id = _stale_pending_turn(conn, project_id=project_id)
+            _seed_approved_plan(conn, task_id=task_id)
+            turn_id = _stale_pending_turn(conn, task_id=task_id)
 
         for caller in (colleague, admin):
             for path in ("planning-turns", "plan"):
                 response = client.get(
-                    f"/api/v1/projects/{project_id}/{path}", headers=caller.headers
+                    f"/api/v1/tasks/{task_id}/{path}", headers=caller.headers
                 )
                 assert response.status_code == 200, (path, response.text)
                 assert _turn_status(engine, turn_id) == "pending"
 
         owner_read = client.get(
-            f"/api/v1/projects/{project_id}/planning-turns", headers=owner.headers
+            f"/api/v1/tasks/{task_id}/planning-turns", headers=owner.headers
         )
         assert owner_read.status_code == 200
         assert _turn_status(engine, turn_id) == "failed"
@@ -393,7 +393,7 @@ def test_sse_snapshot_read_grade_lets_a_colleague_open_the_stream(
             ops_enrol(conn, user_id=owner_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague_id, org_id=org_id, display_name="Colleague")
             ops_enrol(conn, user_id=stranger_id, org_id=other_org, display_name="Stranger")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner_id, org_id=org_id, visibility="org"
             )
 
@@ -406,7 +406,7 @@ def test_sse_snapshot_read_grade_lets_a_colleague_open_the_stream(
         ):
             context = client.stream(
                 "GET",
-                f"/api/v1/projects/{project_id}/events",
+                f"/api/v1/tasks/{task_id}/events",
                 headers={"Authorization": f"Bearer {colleague_token}"},
             )
             response = await context.__aenter__()
@@ -416,7 +416,7 @@ def test_sse_snapshot_read_grade_lets_a_colleague_open_the_stream(
                 await context.__aexit__(None, None, None)
 
             cross_org = await client.get(
-                f"/api/v1/projects/{project_id}/events",
+                f"/api/v1/tasks/{task_id}/events",
                 headers={"Authorization": f"Bearer {stranger_token}"},
             )
             assert cross_org.status_code == 404
@@ -427,9 +427,9 @@ def test_sse_snapshot_read_grade_lets_a_colleague_open_the_stream(
 def test_list_conversations_colleague_sees_empty_not_404_owner_sees_legacy_rows(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Read-graded on the project, then narrowed to the caller's own chats.
+    """Read-graded on the task, then narrowed to the caller's own chats.
 
-    A colleague who can read the project sees an **empty page**, not a 404 —
+    A colleague who can read the task sees an **empty page**, not a 404 —
     chat creation for colleagues arrives in phase 5, so today they simply have
     none. The owner keeps seeing every legacy pre-033 row (`created_by IS
     NULL`) as their own.
@@ -439,22 +439,22 @@ def test_list_conversations_colleague_sees_empty_not_404_owner_sees_legacy_rows(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             _insert_conversation(
                 conn,
                 conversation_id=uuid.uuid4(),
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 created_by=None,
             )
 
         colleague_page = client.get(
-            f"/api/v1/projects/{project_id}/conversations", headers=colleague.headers
+            f"/api/v1/tasks/{task_id}/conversations", headers=colleague.headers
         )
         owner_page = client.get(
-            f"/api/v1/projects/{project_id}/conversations", headers=owner.headers
+            f"/api/v1/tasks/{task_id}/conversations", headers=owner.headers
         )
 
         assert colleague_page.status_code == 200
@@ -466,7 +466,31 @@ def test_list_conversations_colleague_sees_empty_not_404_owner_sees_legacy_rows(
 # --- WRITE grade: a same-org colleague who can read gets 403, not 404 -------
 
 
-def test_archive_project_write_grade_colleague_403_outsider_404(
+def test_archive_task_write_grade_colleague_403_outsider_404(
+    engine: Engine, tmp_path: Path
+) -> None:
+    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
+        with seeded(engine) as conn:
+            org_id = make_org(conn)
+            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
+            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
+            task_id = make_task(
+                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
+            )
+
+        forbidden = client.post(
+            f"/api/v1/tasks/{task_id}/archive", headers=colleague.headers
+        )
+        missing = client.post(
+            f"/api/v1/tasks/{task_id}/archive", headers=outsider.headers
+        )
+
+        assert forbidden.status_code == 403
+        assert forbidden.json()["error"]["code"] == "forbidden"
+        assert missing.status_code == 404
+
+
+def test_update_project_write_grade_colleague_403_outsider_404(
     engine: Engine, tmp_path: Path
 ) -> None:
     with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
@@ -478,35 +502,11 @@ def test_archive_project_write_grade_colleague_403_outsider_404(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
-        forbidden = client.post(
-            f"/api/v1/projects/{project_id}/archive", headers=colleague.headers
-        )
-        missing = client.post(
-            f"/api/v1/projects/{project_id}/archive", headers=outsider.headers
-        )
-
-        assert forbidden.status_code == 403
-        assert forbidden.json()["error"]["code"] == "forbidden"
-        assert missing.status_code == 404
-
-
-def test_update_portfolio_write_grade_colleague_403_outsider_404(
-    engine: Engine, tmp_path: Path
-) -> None:
-    with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
-        with seeded(engine) as conn:
-            org_id = make_org(conn)
-            ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
-            ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            portfolio_id = make_portfolio(
-                conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
-            )
-
         forbidden = client.patch(
-            f"/api/v1/portfolios/{portfolio_id}", headers=colleague.headers, json={"name": "X"}
+            f"/api/v1/projects/{project_id}", headers=colleague.headers, json={"name": "X"}
         )
         missing = client.patch(
-            f"/api/v1/portfolios/{portfolio_id}", headers=outsider.headers, json={"name": "X"}
+            f"/api/v1/projects/{project_id}", headers=outsider.headers, json={"name": "X"}
         )
 
         assert forbidden.status_code == 403
@@ -523,18 +523,18 @@ def test_respond_to_check_in_write_grade_colleague_403_outsider_404(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         body = {"kind": "abort"}
         forbidden = client.post(
-            f"/api/v1/projects/{project_id}/check-ins/{uuid.uuid4()}/response",
+            f"/api/v1/tasks/{task_id}/check-ins/{uuid.uuid4()}/response",
             headers=colleague.headers,
             json=body,
         )
         missing = client.post(
-            f"/api/v1/projects/{project_id}/check-ins/{uuid.uuid4()}/response",
+            f"/api/v1/tasks/{task_id}/check-ins/{uuid.uuid4()}/response",
             headers=outsider.headers,
             json=body,
         )
@@ -551,16 +551,16 @@ def test_create_planning_turn_write_grade_colleague_403_outsider_404(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         body = {"message": "Hello", "client_turn_id": str(uuid.uuid4())}
         forbidden = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns", headers=colleague.headers, json=body
+            f"/api/v1/tasks/{task_id}/planning-turns", headers=colleague.headers, json=body
         )
         missing = client.post(
-            f"/api/v1/projects/{project_id}/planning-turns",
+            f"/api/v1/tasks/{task_id}/planning-turns",
             headers=outsider.headers,
             json={**body, "client_turn_id": str(uuid.uuid4())},
         )
@@ -577,15 +577,15 @@ def test_patch_plan_write_grade_colleague_403_outsider_404(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         forbidden = client.patch(
-            f"/api/v1/projects/{project_id}/plan", headers=colleague.headers, json={}
+            f"/api/v1/tasks/{task_id}/plan", headers=colleague.headers, json={}
         )
         missing = client.patch(
-            f"/api/v1/projects/{project_id}/plan", headers=outsider.headers, json={}
+            f"/api/v1/tasks/{task_id}/plan", headers=outsider.headers, json={}
         )
 
         assert forbidden.status_code == 403
@@ -600,15 +600,15 @@ def test_create_run_write_grade_colleague_403_outsider_404(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         forbidden = client.post(
-            f"/api/v1/projects/{project_id}/runs", headers=colleague.headers, json={}
+            f"/api/v1/tasks/{task_id}/runs", headers=colleague.headers, json={}
         )
         missing = client.post(
-            f"/api/v1/projects/{project_id}/runs", headers=outsider.headers, json={}
+            f"/api/v1/tasks/{task_id}/runs", headers=outsider.headers, json={}
         )
 
         assert forbidden.status_code == 403
@@ -621,11 +621,11 @@ def test_create_run_write_grade_colleague_403_outsider_404(
 def test_conversation_id_router_closes_the_deep_link_leak_for_a_colleague(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """A colleague who can read the project must never learn a chat exists.
+    """A colleague who can read the task must never learn a chat exists.
 
     `GET /{id}` and `GET /{id}/turns` are the deep-link surfaces this grading
     closes: both 404 for a colleague who did not create the chat, even though
-    the project itself shows up in their listing. The chat's creator (the
+    the task itself shows up in their listing. The chat's creator (the
     owner, here) still reaches every lifecycle route.
     """
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
@@ -633,23 +633,23 @@ def test_conversation_id_router_closes_the_deep_link_leak_for_a_colleague(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             conversation_id = uuid.uuid4()
             _insert_conversation(
                 conn,
                 conversation_id=conversation_id,
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 created_by=owner.user_id,
             )
 
-        colleague_sees_project = str(project_id) in {
-            row["project_id"]
-            for row in client.get("/api/v1/projects", headers=colleague.headers).json()["data"]
+        colleague_sees_task = str(task_id) in {
+            row["task_id"]
+            for row in client.get("/api/v1/tasks", headers=colleague.headers).json()["data"]
         }
-        assert colleague_sees_project
+        assert colleague_sees_task
 
         deep_link = client.get(
             f"/api/v1/conversations/{conversation_id}", headers=colleague.headers
@@ -686,20 +686,20 @@ def test_conversation_id_router_closes_the_deep_link_leak_for_a_colleague(
 def test_planning_conversation_get_is_404_for_a_colleague(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Planning conversations stay owner-only, whoever else can read the project."""
+    """Planning conversations stay owner-only, whoever else can read the task."""
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             conversation_id = uuid.uuid4()
             _insert_conversation(
                 conn,
                 conversation_id=conversation_id,
-                project_id=project_id,
+                task_id=task_id,
                 kind="planning",
                 created_by=None,
             )
@@ -716,7 +716,7 @@ def test_planning_conversation_get_is_404_for_a_colleague(
 # --- Private rows and cross-org callers --------------------------------------
 
 
-def test_private_project_is_404_for_a_colleague_on_a_read_graded_route(
+def test_private_task_is_404_for_a_colleague_on_a_read_graded_route(
     engine: Engine, tmp_path: Path
 ) -> None:
     with tenancy_client(tmp_path, count=2) as (client, (owner, colleague)):
@@ -724,11 +724,11 @@ def test_private_project_is_404_for_a_colleague_on_a_read_graded_route(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
-        response = client.get(f"/api/v1/projects/{project_id}", headers=colleague.headers)
+        response = client.get(f"/api/v1/tasks/{task_id}", headers=colleague.headers)
 
         assert response.status_code == 404
 
@@ -743,44 +743,44 @@ def test_cross_org_caller_gets_404_across_read_and_write_graded_routes(
             other_org = make_org(conn, name="Other")
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=stranger.user_id, org_id=other_org, display_name="Stranger")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            portfolio_id = make_portfolio(
+            project_id = make_project(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         assert (
-            client.get(f"/api/v1/projects/{project_id}", headers=stranger.headers).status_code
+            client.get(f"/api/v1/tasks/{task_id}", headers=stranger.headers).status_code
             == 404
         )
         assert (
             client.get(
-                f"/api/v1/portfolios/{portfolio_id}", headers=stranger.headers
+                f"/api/v1/projects/{project_id}", headers=stranger.headers
             ).status_code
             == 404
         )
         assert (
             client.get(
-                f"/api/v1/projects/{project_id}/funnel", headers=stranger.headers
+                f"/api/v1/tasks/{task_id}/funnel", headers=stranger.headers
             ).status_code
             == 404
         )
         assert (
             client.get(
-                f"/api/v1/projects/{project_id}/runs", headers=stranger.headers
+                f"/api/v1/tasks/{task_id}/runs", headers=stranger.headers
             ).status_code
             == 404
         )
         assert (
             client.post(
-                f"/api/v1/projects/{project_id}/archive", headers=stranger.headers
+                f"/api/v1/tasks/{task_id}/archive", headers=stranger.headers
             ).status_code
             == 404
         )
         assert (
             client.patch(
-                f"/api/v1/portfolios/{portfolio_id}",
+                f"/api/v1/projects/{project_id}",
                 headers=stranger.headers,
                 json={"name": "x"},
             ).status_code
@@ -791,30 +791,30 @@ def test_cross_org_caller_gets_404_across_read_and_write_graded_routes(
 # --- Colleague chat mutations (phase 5, contract § 4) ------------------------
 #
 # Owner call (b) grants a same-org colleague exactly three mutations and
-# nothing else: create a conversation on a readable project, post a turn to
+# nothing else: create a conversation on a readable task, post a turn to
 # their own conversation, cancel their own turn. These cases drive all three
 # through the real routes.
 
 
-def _chat_ready_project(
+def _chat_ready_task(
     engine: Engine, *, owner_user_id: str, org_id: uuid.UUID, visibility: str = "org"
 ) -> uuid.UUID:
-    """Seed a project a chat turn can actually run against, stamped for one org.
+    """Seed a task a chat turn can actually run against, stamped for one org.
 
-    `make_project` is too thin here: a turn needs the evidence fixtures and a
+    `make_task` is too thin here: a turn needs the evidence fixtures and a
     terminal capability run, which is what `tests.runtime.test_runner`'s
-    `_seed_project` builds. This wraps it and applies the tenancy columns the
+    `_seed_task` builds. This wraps it and applies the tenancy columns the
     seeder knows nothing about.
     """
-    project_id, scope_id = _seed_project(engine)
+    task_id, scope_id = _seed_task(engine)
     with engine.begin() as conn:
         conn.execute(
-            update(project_table)
-            .where(project_table.c.project_id == project_id)
+            update(task_table)
+            .where(task_table.c.task_id == task_id)
             .values(owner_user_id=owner_user_id, org_id=org_id, visibility=visibility)
         )
-    _walk(engine, project_id=project_id, scope_id=scope_id, status="succeeded")
-    return project_id
+    _walk(engine, task_id=task_id, scope_id=scope_id, status="succeeded")
+    return task_id
 
 
 def _pending_turn(engine: Engine, *, conversation_id: uuid.UUID, turn_index: int = 0) -> uuid.UUID:
@@ -858,27 +858,27 @@ def _chat_overrides() -> dict[Callable[..., object], Callable[..., object]]:
 def test_create_conversation_read_grade_lets_a_colleague_start_their_own_chat(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """Colleague mutation 1: create a conversation on a project you can read.
+    """Colleague mutation 1: create a conversation on a task you can read.
 
     The widening from phase 4's write grade. A colleague gets 201 and the row
     records *them* as its author, so it is theirs and not the owner's — the
     owner cannot see it in their library and 404s on its deep link. An
-    outsider, and a colleague on a `private` project, still get 404.
+    outsider, and a colleague on a `private` task, still get 404.
     """
     with tenancy_client(tmp_path, count=3) as (client, (owner, colleague, outsider)):
         with seeded(engine) as conn:
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            shared = make_project(
+            shared = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
-            private = make_project(
+            private = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="private"
             )
 
         created = client.post(
-            f"/api/v1/projects/{shared}/conversations", headers=colleague.headers, json={}
+            f"/api/v1/tasks/{shared}/conversations", headers=colleague.headers, json={}
         )
         assert created.status_code == 201, created.text
         conversation_id = uuid.UUID(created.json()["id"])
@@ -887,22 +887,22 @@ def test_create_conversation_read_grade_lets_a_colleague_start_their_own_chat(
 
         assert (
             client.post(
-                f"/api/v1/projects/{shared}/conversations", headers=outsider.headers, json={}
+                f"/api/v1/tasks/{shared}/conversations", headers=outsider.headers, json={}
             ).status_code
             == 404
         )
         assert (
             client.post(
-                f"/api/v1/projects/{private}/conversations", headers=colleague.headers, json={}
+                f"/api/v1/tasks/{private}/conversations", headers=colleague.headers, json={}
             ).status_code
             == 404
         )
 
         colleague_library = client.get(
-            f"/api/v1/projects/{shared}/conversations", headers=colleague.headers
+            f"/api/v1/tasks/{shared}/conversations", headers=colleague.headers
         ).json()["data"]
         owner_library = client.get(
-            f"/api/v1/projects/{shared}/conversations", headers=owner.headers
+            f"/api/v1/tasks/{shared}/conversations", headers=owner.headers
         ).json()["data"]
         assert [row["id"] for row in colleague_library] == [str(conversation_id)]
         assert owner_library == []
@@ -917,7 +917,7 @@ def test_create_conversation_read_grade_lets_a_colleague_start_their_own_chat(
 def test_create_conversation_can_never_mint_a_planning_conversation(
     engine: Engine, tmp_path: Path
 ) -> None:
-    """A planning conversation can only ever be created by the project owner.
+    """A planning conversation can only ever be created by the task owner.
 
     Enforced by the *shape of the request body*, not by a branch: this route
     writes the literal `kind="chat"`, and `ConversationCreate` forbids extras,
@@ -931,20 +931,20 @@ def test_create_conversation_can_never_mint_a_planning_conversation(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
 
         for principal in (owner, colleague):
             asked = client.post(
-                f"/api/v1/projects/{project_id}/conversations",
+                f"/api/v1/tasks/{task_id}/conversations",
                 headers=principal.headers,
                 json={"kind": "planning"},
             )
             assert asked.status_code == 422, asked.text
 
         plain = client.post(
-            f"/api/v1/projects/{project_id}/conversations", headers=colleague.headers, json={}
+            f"/api/v1/tasks/{task_id}/conversations", headers=colleague.headers, json={}
         )
         assert plain.status_code == 201
         assert plain.json()["kind"] == "chat"
@@ -955,12 +955,12 @@ def test_colleague_posts_and_cancels_a_turn_in_their_own_chat(
 ) -> None:
     """Colleague mutations 2 and 3, end to end on the real routes.
 
-    The colleague opens a chat on the owner's project, posts a turn that runs
+    The colleague opens a chat on the owner's task, posts a turn that runs
     to a terminal `completed` NDJSON event, and cancels a second pending turn
     of their own. None of it requires anything of the owner.
     """
     monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
         with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
             client,
@@ -972,12 +972,12 @@ def test_colleague_posts_and_cancels_a_turn_in_their_own_chat(
                 ops_enrol(
                     conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
                 )
-            project_id = _chat_ready_project(
+            task_id = _chat_ready_task(
                 engine, owner_user_id=owner.user_id, org_id=org_id
             )
 
             created = client.post(
-                f"/api/v1/projects/{project_id}/conversations",
+                f"/api/v1/tasks/{task_id}/conversations",
                 headers=colleague.headers,
                 json={},
             )
@@ -1012,7 +1012,7 @@ def test_colleague_posts_and_cancels_a_turn_in_their_own_chat(
             assert cancelled.status_code == 200, cancelled.text
             assert cancelled.json()["status"] == "cancelled"
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_turn_routes_are_isolated_in_both_directions(
@@ -1030,21 +1030,21 @@ def test_turn_routes_are_isolated_in_both_directions(
             org_id = make_org(conn)
             ops_enrol(conn, user_id=owner.user_id, org_id=org_id, display_name="Owner")
             ops_enrol(conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague")
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             owners_chat, colleagues_chat = uuid.uuid4(), uuid.uuid4()
             _insert_conversation(
                 conn,
                 conversation_id=owners_chat,
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 created_by=owner.user_id,
             )
             _insert_conversation(
                 conn,
                 conversation_id=colleagues_chat,
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 created_by=colleague.user_id,
             )
@@ -1095,12 +1095,12 @@ def test_owner_posts_into_a_legacy_null_created_by_conversation(
 ) -> None:
     """The legacy disjunct on the turn routes, not just on the listing.
 
-    A pre-033 chat records no author. It belongs to the project owner and to
+    A pre-033 chat records no author. It belongs to the task owner and to
     nobody else: the owner posts and cancels into it, a colleague who can read
-    the project 404s on both.
+    the task 404s on both.
     """
     monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
         with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
             client,
@@ -1112,7 +1112,7 @@ def test_owner_posts_into_a_legacy_null_created_by_conversation(
                 ops_enrol(
                     conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
                 )
-            project_id = _chat_ready_project(
+            task_id = _chat_ready_task(
                 engine, owner_user_id=owner.user_id, org_id=org_id
             )
             legacy = uuid.uuid4()
@@ -1120,7 +1120,7 @@ def test_owner_posts_into_a_legacy_null_created_by_conversation(
                 _insert_conversation(
                     conn,
                     conversation_id=legacy,
-                    project_id=project_id,
+                    task_id=task_id,
                     kind="chat",
                     created_by=None,
                 )
@@ -1154,7 +1154,7 @@ def test_owner_posts_into_a_legacy_null_created_by_conversation(
                 == 200
             )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_de_enrolment_kills_a_colleagues_chat_mutations(
@@ -1163,12 +1163,12 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
     """A colleague's chat access dies with their org leg, not with `created_by`.
 
     Matching `created_by` is not enough to keep posting: the turn routes also
-    require the project under `own_estate`, so clearing the person's `org_id`
+    require the task under `own_estate`, so clearing the person's `org_id`
     — what ops de-enrolment does — takes every one of their three mutations
     to 404 on the very next request, with nothing else changed and no deploy.
     """
     monkeypatch.setattr(chat_turns, "build_section_tools", _citable_tools)
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
         with tenancy_client(tmp_path, count=2, overrides=_chat_overrides()) as (
             client,
@@ -1180,12 +1180,12 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
                 ops_enrol(
                     conn, user_id=colleague.user_id, org_id=org_id, display_name="Colleague"
                 )
-            project_id = _chat_ready_project(
+            task_id = _chat_ready_task(
                 engine, owner_user_id=owner.user_id, org_id=org_id
             )
 
             created = client.post(
-                f"/api/v1/projects/{project_id}/conversations",
+                f"/api/v1/tasks/{task_id}/conversations",
                 headers=colleague.headers,
                 json={},
             )
@@ -1208,7 +1208,7 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
 
             assert (
                 client.post(
-                    f"/api/v1/projects/{project_id}/conversations",
+                    f"/api/v1/tasks/{task_id}/conversations",
                     headers=colleague.headers,
                     json={},
                 ).status_code
@@ -1230,7 +1230,7 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
                 == 404
             )
             # The reads die with the org leg too: matching `created_by` must
-            # not keep a transcript open on a project the caller can no
+            # not keep a transcript open on a task the caller can no
             # longer reach (contract § 5 — de-enrolment is a revocation
             # event; the owner's evidence base rides in those turns).
             assert (
@@ -1248,7 +1248,7 @@ def test_de_enrolment_kills_a_colleagues_chat_mutations(
                 == 404
             )
     finally:
-        _cleanup(engine, project_id)
+        _cleanup(engine, task_id)
 
 
 def test_a_chat_creator_can_archive_their_own_chat_standing_behaviour_pending_owner_call(
@@ -1263,13 +1263,13 @@ def test_a_chat_creator_can_archive_their_own_chat_standing_behaviour_pending_ow
     predicate is the creator/owner conjunction, and they are the creator.
 
     Two readings are available and this test takes neither. Either the three
-    are the *mutations on somebody else's project* and renaming your own chat
+    are the *mutations on somebody else's task* and renaming your own chat
     was never in scope of the sentence — or the list is exhaustive and this is
     an unintended fourth. **Escalated to the owner**; the name of this case
     says so, and it changes with the ruling rather than quietly outliving it.
 
     What is asserted is only what is true: the creator reaches their own
-    chat's lifecycle routes, and *nobody else* does — not the project owner,
+    chat's lifecycle routes, and *nobody else* does — not the task owner,
     not an administrator. That second half is the property no reading disputes
     and no existing case covered, because this router has no 403 to spend: a
     refused write here is the same opaque 404 as an absent row.
@@ -1288,19 +1288,19 @@ def test_a_chat_creator_can_archive_their_own_chat_standing_behaviour_pending_ow
                 display_name="Support",
                 is_admin=True,
             )
-            project_id = make_project(
+            task_id = make_task(
                 conn, owner_user_id=owner.user_id, org_id=org_id, visibility="org"
             )
             chat_id = uuid.uuid4()
             _insert_conversation(
                 conn,
                 conversation_id=chat_id,
-                project_id=project_id,
+                task_id=task_id,
                 kind="chat",
                 created_by=colleague.user_id,
             )
 
-        # The owner of the project and an administrator are refused all three,
+        # The owner of the task and an administrator are refused all three,
         # indistinguishably from the chat not existing.
         for stranger in (owner, admin):
             assert (

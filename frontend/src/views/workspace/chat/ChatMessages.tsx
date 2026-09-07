@@ -81,11 +81,11 @@ type ActiveProvenance =
  * Returns:
  *   User bubbles, assistant prose, and citation affordances.
  */
-export function ChatMessages({ projectId, rows, onOpenPlanning, onRetry }: { projectId: string; rows: ChatConversationRow[]; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
+export function ChatMessages({ taskId, rows, onOpenPlanning, onRetry }: { taskId: string; rows: ChatConversationRow[]; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
   const [active, setActive] = useState<ActiveProvenance | null>(null);
   const [dossierRef, setDossierRef] = useState<string | null>(null);
   const datedRows = useMemo(() => rows.map((row, index) => ({ row, showDate: index === 0 || dayOf(createdAt(row)) !== dayOf(createdAt(rows[index - 1])) })), [rows]);
-  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-body text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={(citation) => setActive({ kind: "citation", turn: row, citation })} onClaim={(claim) => setActive({ kind: "claim", turn: row, claim })} onOpenDossier={setDossierRef} onOpenPlanning={onOpenPlanning} onRetry={onRetry} /></div>)}{active !== null && <ChatProvenanceSheet projectId={projectId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier projectId={projectId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
+  return <div className="space-y-5">{datedRows.map(({ row, showDate }) => <div key={keyOf(row)} className="space-y-3">{showDate && <DateDivider value={createdAt(row)} />}<UserBubble text={userMessageOf(row)} />{activityOf(row).length > 0 && <p className="mr-8 text-body text-grey">{activitySummary(activityOf(row))}</p>}<AssistantMessage turn={row} onCitation={(citation) => setActive({ kind: "citation", turn: row, citation })} onClaim={(claim) => setActive({ kind: "claim", turn: row, claim })} onOpenDossier={setDossierRef} onOpenPlanning={onOpenPlanning} onRetry={onRetry} /></div>)}{active !== null && <ChatProvenanceSheet taskId={taskId} active={active} onClose={() => setActive(null)} onOpenDossier={setDossierRef} />}{dossierRef !== null && <SourceDossier taskId={taskId} sourceRef={dossierRef} onClose={() => setDossierRef(null)} />}</div>;
 }
 
 function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlanning, onRetry }: { turn: ChatConversationRow; onCitation: (citation: ChatCitation) => void; onClaim: (claim: ChatClaim) => void; onOpenDossier: (sourceRef: string) => void; onOpenPlanning: () => void; onRetry: (clientTurnId: string) => void }) {
@@ -105,13 +105,13 @@ function AssistantMessage({ turn, onCitation, onClaim, onOpenDossier, onOpenPlan
     const code = errorCodeOf(turn);
     const message = isConflictCode(code) ? conflictSentences[code] : "This answer failed.";
     return <div className="mr-8 space-y-2">
-      {answer && <p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
+      {answer && <p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled onCitation={onCitation} onClaim={onClaim} /></p>}
       <p role="alert" className="text-body text-red">{message}</p>
       <Button size="sm" variant="secondary" onClick={() => onRetry(clientTurnIdOf(turn))}>Retry</Button>
     </div>;
   }
   if (!answer && !("id" in turn && turn.status === "pending")) return null;
-  return <div className="mr-8 space-y-2"><p className="max-w-[52ch] whitespace-pre-wrap text-body leading-relaxed text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
+  return <div className="mr-8 space-y-2"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink"><AnnotatedChatProse text={answer} citations={citations} claims={claims} turn={turn} disabled={cancelled} onCitation={onCitation} onClaim={onClaim} /></p>{"id" in turn && turn.status === "pending" && <p role="status" className="animate-pulse text-body text-grey">Checking the evidence…</p>}{cancelled && <Chip tone="yellow">Stopped before evidence check</Chip>}{warning && <Chip tone="yellow">Not evidence-checked</Chip>}{handoff && <div className="border-l-2 border-yellow bg-yellow-tint/50 p-3 text-body text-navy">The evidence base does not hold this.<Button size="sm" variant="secondary" className="ml-2" onClick={onOpenPlanning}>Open planning</Button></div>}{citations.length > 0 && <References citations={citations} turn={turn} onCitation={onCitation} onOpenDossier={onOpenDossier} />}{answer && <button type="button" aria-label="Copy answer" title="Copy answer" onClick={() => void copy()} className="text-grey hover:text-blue"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="5" width="9" height="10" rx="1" /><path d="M11 5V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2" /></svg></button>}</div>;
 }
 
 /** The prose's annotation layer (029 Fix C + 030 fold): span-anchored claims
@@ -318,17 +318,17 @@ function enrichmentStatusOf(turn: ChatConversationRow): string | null {
  *  verification.md § Known unverified items) — never a transient failure to
  *  retry into a multi-second "Loading…" storm. `staleTime` means re-opening
  *  the same citation's sheet doesn't refetch it. */
-function useChatChunkContext(projectId: string, citation: ChatCitation | null) {
+function useChatChunkContext(taskId: string, citation: ChatCitation | null) {
   const client = useApiClient();
   const chunkId = citation?.chunk_id ?? citation?.id ?? citation?.citation_id ?? "";
   const quote = citation?.quote ?? "";
   return useQuery({
-    queryKey: ["projects", projectId, "chat-chunk-context", chunkId, quote],
+    queryKey: ["tasks", taskId, "chat-chunk-context", chunkId, quote],
     enabled: citation !== null && chunkId !== "" && quote !== "",
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const { data, error } = await client.GET("/api/v1/projects/{project_id}/chunks/{chunk_id}/context", { params: { path: { project_id: projectId, chunk_id: chunkId }, query: { quote } } });
+      const { data, error } = await client.GET("/api/v1/tasks/{task_id}/chunks/{chunk_id}/context", { params: { path: { task_id: taskId, chunk_id: chunkId }, query: { quote } } });
       if (data === undefined) throw error;
       return data;
     },
@@ -341,7 +341,7 @@ function useChatChunkContext(projectId: string, citation: ChatCitation | null) {
  *  block) or a claim-keyed open (a claim span — that one claim, over every
  *  citation it carries). Replaces the old sticky `CitationPopover`/bespoke
  *  `CitationSheet`. */
-function ChatProvenanceSheet({ projectId, active, onClose, onOpenDossier }: { projectId: string; active: ActiveProvenance; onClose: () => void; onOpenDossier: (sourceRef: string) => void }) {
+function ChatProvenanceSheet({ taskId, active, onClose, onOpenDossier }: { taskId: string; active: ActiveProvenance; onClose: () => void; onOpenDossier: (sourceRef: string) => void }) {
   const allCitations = citationsOf(active.turn);
   const claimTexts =
     active.kind === "citation"
@@ -355,7 +355,7 @@ function ChatProvenanceSheet({ projectId, active, onClose, onOpenDossier }: { pr
       onClose={onClose}
     >
       {shownCitations.map((citation, index) => (
-        <ChatCitationBlock key={citationId(citation) || index} projectId={projectId} turn={active.turn} citation={citation} onOpenDossier={onOpenDossier} />
+        <ChatCitationBlock key={citationId(citation) || index} taskId={taskId} turn={active.turn} citation={citation} onOpenDossier={onOpenDossier} />
       ))}
     </ProvenanceSheet>
   );
@@ -368,8 +368,8 @@ function ChatProvenanceSheet({ projectId, active, onClose, onOpenDossier }: { pr
  *  fold). Absent `appraisal_label` renders no chip (honest absence); this
  *  is the sheet's citation block only — References rows and hover tooltips
  *  don't gain it. */
-function ChatCitationBlock({ projectId, turn, citation, onOpenDossier }: { projectId: string; turn: ChatConversationRow; citation: ChatCitation; onOpenDossier: (sourceRef: string) => void }) {
-  const context = useChatChunkContext(projectId, citation);
+function ChatCitationBlock({ taskId, turn, citation, onOpenDossier }: { taskId: string; turn: ChatConversationRow; citation: ChatCitation; onOpenDossier: (sourceRef: string) => void }) {
+  const context = useChatChunkContext(taskId, citation);
   const sourceRef = citation.source_id ?? citation.source_title ?? null;
   const titleText = citation.source_title ?? citation.title ?? citationId(citation) ?? "Citation";
   return (
@@ -393,7 +393,7 @@ function ChatCitationBlock({ projectId, turn, citation, onOpenDossier }: { proje
   );
 }
 
-function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-body text-ink">{scrub(text)}</p></div>; }
+function UserBubble({ text }: { text: string }) { return <div className="ml-8 border border-blue-tint bg-blue-tint-2 px-3.5 py-2.5"><p className="max-w-prose-measure whitespace-pre-wrap text-lead text-ink">{scrub(text)}</p></div>; }
 function DateDivider({ value }: { value: string }) { return <div className="flex items-center gap-2 text-caption text-grey"><span className="h-px flex-1 bg-line" />{new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric" })}<span className="h-px flex-1 bg-line" /></div>; }
 function createdAt(row: ChatConversationRow) { return "id" in row ? row.created_at : row.createdAt; }
 function userMessageOf(row: ChatConversationRow) { return "id" in row ? row.user_message : row.userMessage; }

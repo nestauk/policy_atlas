@@ -22,8 +22,8 @@ are done (spec-prep 2026-06-22; refreshed 2026-07-03); `[ ]` items are open gate
 - [ ] Tool/component I/O contracts — draft when the first implementation task lands.
 - [x] Task-contract map for first implementation slices — superseded by the running task sequence
   (`docs/tasks/001`–`028` merged as of 2026-08-06 — system live at
-  `v3.policyatlas.uk`; the next slice is named in
-  AGENTS.md **Current phase**).
+  `v3.policyatlas.uk`; the next slice is the newest `docs/tasks/NNN-*/contract.md` and
+  its `task/NNN-slug` branch).
 - [x] Verification plan for first implementation slices — per-task `verification.md` from
   `docs/tasks/_templates/`, gated by the task-cycle review stack.
 

@@ -1,7 +1,8 @@
 import { friendlyDecisionDetails, groupSearchDecisions } from "./decisionsPresentation";
+import { TASK } from "../lib/vocabulary";
 
 /** One row of the task's history, already reduced to what a reader sees. */
-export type HistoryRow = {
+type HistoryRow = {
   /** Stable list key. */
   id: string;
   /** ISO timestamp the row is ordered by. */
@@ -43,8 +44,13 @@ const DECISION_CATEGORY: Record<string, { label: string; tone: HistoryRow["tone"
   "steering.decision": { label: "Check-in", tone: "blue" },
   "steering.pause": { label: "Check-in", tone: "yellow" },
   "search.executed.grouped": { label: "Search", tone: "soft" },
-  "project.renamed": { label: "Task", tone: "soft" },
-  "project.archived": { label: "Task", tone: "soft" },
+  // The lifecycle kinds under both generations: rows written before task 038
+  // say `project.*`, and the log is append-only.
+  ...Object.fromEntries(
+    ["renamed", "archived", "shared_publicly", "unshared"].flatMap((kind) =>
+      [`task.${kind}`, `project.${kind}`].map((key) => [key, { label: TASK.one, tone: "soft" }]),
+    ),
+  ),
   "plan.approved": { label: "Plan", tone: "green" },
   "component.completed": { label: "Completed", tone: "green" },
   "component.failed": { label: "Failed", tone: "red" },

@@ -10,21 +10,21 @@ from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.inference import StubEchoProvider
-from policy_atlas.core.schema import artefact, project, runs
-from policy_atlas.evidence_base.corpus.theme_grouping import StubThemeGroupingBackend
-from policy_atlas.evidence_base.synthesis.grounding_judge import StubGroundingJudgeBackend
-from policy_atlas.evidence_base.synthesis.synthesis_backend import StubSynthesisBackend
+from policy_atlas.core.schema import artefact, runs, task
+from policy_atlas.evidence_search.corpus.theme_grouping import StubThemeGroupingBackend
+from policy_atlas.evidence_search.synthesis.grounding_judge import StubGroundingJudgeBackend
+from policy_atlas.evidence_search.synthesis.synthesis_backend import StubSynthesisBackend
 from policy_atlas.runtime import harness
 from policy_atlas.runtime.harness import run_harness, scoped_search_backends
 from policy_atlas.runtime.run_spec import Plan, compile
-from tests.evidence_base.corpus.test_characterise import _RaisingDiscoverBackend, _seed_doc
+from tests.evidence_search.corpus.test_characterise import _RaisingDiscoverBackend, _seed_doc
 from tests.helpers import (
-    delete_project_data,
+    delete_task_data,
     now,
     seed_characterisation,
-    seed_project_and_run,
     seed_run,
     seed_scope,
+    seed_task_and_run,
 )
 
 # NOTE: these tests exercise generic harness dispatch/lifecycle machinery.
@@ -50,16 +50,16 @@ def test_scoped_search_backends_keeps_openalex_for_academic_only() -> None:
 
 
 def test_run_lifecycle_succeeded(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
+    pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     config = compile(Plan(component="acquire", evidence_scope_id=scope_id))
 
     # Emit run.started + plan.compiled (skeleton does this; simulate here)
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
     )
 
     # Run record reached succeeded
@@ -69,21 +69,21 @@ def test_run_lifecycle_succeeded(conn: Connection) -> None:
 
 
 def test_run_lifecycle_failed_on_component_error(conn: Connection) -> None:
-    pid, rid_screen = seed_project_and_run(conn)
+    pid, rid_screen = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
 
     rid = uuid.uuid4()
     conn.execute(runs.insert().values(
-        run_id=rid, project_id=pid, status="running", started_at=now()
+        run_id=rid, task_id=pid, status="running", started_at=now()
     ))
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider(),
         theme_grouping_backend=_RaisingDiscoverBackend(),
     )
 
@@ -95,25 +95,25 @@ def test_run_lifecycle_failed_on_component_error(conn: Connection) -> None:
     assert log[-1]["event_type"] == "run.failed"
 
 
-def test_run_harness_binds_project_run_component_contextvars(conn: Connection) -> None:
-    """run_harness binds project_id/run_id/component once via
+def test_run_harness_binds_task_run_component_contextvars(conn: Connection) -> None:
+    """run_harness binds task_id/run_id/component once via
     structlog.contextvars.bound_contextvars around the component body, so
     log calls made deep inside a component execution (here, the theme
     grouping backend invoked by characterise) inherit them without any
     kwarg being hand-threaded down to that call site.
     """
-    pid, rid_screen = seed_project_and_run(conn)
+    pid, rid_screen = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
 
     rid = uuid.uuid4()
     conn.execute(runs.insert().values(
-        run_id=rid, project_id=pid, status="running", started_at=now()
+        run_id=rid, task_id=pid, status="running", started_at=now()
     ))
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     seen_contextvars: dict[str, Any] = {}
 
@@ -141,16 +141,16 @@ def test_run_harness_binds_project_run_component_contextvars(conn: Connection) -
         def assign(self, batch: list[Any], *, themes: list[Any]) -> Any:
             return StubThemeGroupingBackend().assign(batch, themes=themes)
 
-    # Outside the harness call, no ambient project_id/run_id/component context.
+    # Outside the harness call, no ambient task_id/run_id/component context.
     assert structlog.contextvars.get_contextvars() == {}
 
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider(),
         theme_grouping_backend=_ContextSpyingThemeGroupingBackend(),
     )
 
     assert seen_contextvars == {
-        "project_id": str(pid),
+        "task_id": str(pid),
         "run_id": str(rid),
         "component": "characterise",
     }
@@ -188,23 +188,23 @@ def test_configure_logging_json_chain_renders_exc_info(
         structlog.reset_defaults()
 
 
-def test_run_project_mismatch_raises_before_write(conn: Connection) -> None:
-    pid, rid = seed_project_and_run(conn)
+def test_run_task_mismatch_raises_before_write(conn: Connection) -> None:
+    pid, rid = seed_task_and_run(conn)
     other_pid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=other_pid,
+        task.insert().values(
+            task_id=other_pid,
             created_at=now(),
-            name="Test project",
+            name="Test task",
             status="active",
             updated_at=now(),
         )
     )
     config = compile(Plan(component="acquire", evidence_scope_id=uuid.uuid4()))
 
-    with pytest.raises(ValueError, match="belongs to project"):
+    with pytest.raises(ValueError, match="belongs to task"):
         run_harness(
-            conn, config=config, project_id=other_pid, run_id=rid, provider=StubEchoProvider()
+            conn, config=config, task_id=other_pid, run_id=rid, provider=StubEchoProvider()
         )
 
 
@@ -213,21 +213,21 @@ def test_failed_characterise_emits_component_failed_with_coverage(conn: Connecti
     genuine mid-pipeline failure persists partial-progress detail (here,
     characterise's ``coverage`` — the equivalent of the old echo/grounding
     chain's ``block_id`` on a failed grounding attempt)."""
-    pid, rid_screen = seed_project_and_run(conn)
+    pid, rid_screen = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
 
     rid = uuid.uuid4()
     conn.execute(runs.insert().values(
-        run_id=rid, project_id=pid, status="running", started_at=now()
+        run_id=rid, task_id=pid, status="running", started_at=now()
     ))
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider(),
         theme_grouping_backend=_RaisingDiscoverBackend(),
     )
 
@@ -249,12 +249,12 @@ def test_component_failed_persists_structured_exception_reason(
     the ``component.failed`` event — flattening to ``str(exc)`` alone would
     make a halt-and-re-gate undiagnosable from the record (the 013 rule: a
     persisted rejection must persist its reason)."""
-    pid, rid = seed_project_and_run(conn)
+    pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     config = compile(Plan(component="screen", evidence_scope_id=scope_id))
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     class _ReasonedError(RuntimeError):
         reason = "stage2_supersession_collision"
@@ -262,18 +262,18 @@ def test_component_failed_persists_structured_exception_reason(
     def failing_screen_sources(
         conn: Connection,
         *,
-        project_id: uuid.UUID,
+        task_id: uuid.UUID,
         run_id: uuid.UUID,
         context: Any,
         screening_backend: Any = None,
     ) -> dict[str, Any]:
-        del conn, project_id, run_id, context, screening_backend
+        del conn, task_id, run_id, context, screening_backend
         raise _ReasonedError("forced supersession collision")
 
     monkeypatch.setattr(harness, "screen_sources", failing_screen_sources)
 
     run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
     )
 
     event_log = events.read(conn, pid)
@@ -283,20 +283,20 @@ def test_component_failed_persists_structured_exception_reason(
 
 
 def test_event_log_five_types_in_order(conn: Connection) -> None:
-    pid, rid_screen = seed_project_and_run(conn)
+    pid, rid_screen = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     _seed_doc(conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]")
 
     rid = uuid.uuid4()
     conn.execute(runs.insert().values(
-        run_id=rid, project_id=pid, status="running", started_at=now()
+        run_id=rid, task_id=pid, status="running", started_at=now()
     ))
     config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
     outcome = run_harness(
-        conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider()
+        conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider()
     )
 
     log = events.read(conn, pid)
@@ -313,7 +313,7 @@ def test_synthesise_completes_with_characterisation_substrate(conn: Connection) 
     should complete, mirroring the select-over-characterisation seeding
     precedent (tests.helpers.seed_characterisation).
     """
-    pid, rid = seed_project_and_run(conn)
+    pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     characterisation_run_id = seed_run(conn, pid)
     seed_characterisation(
@@ -331,13 +331,13 @@ def test_synthesise_completes_with_characterisation_substrate(conn: Connection) 
         )
     )
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     outcome = run_harness(
         conn,
         config=config,
-        project_id=pid,
+        task_id=pid,
         run_id=rid,
         provider=StubEchoProvider(),
         synthesis_backend=StubSynthesisBackend(),
@@ -358,7 +358,7 @@ def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> No
     ``component.failed`` event lands, the run ends 'failed', and no second
     artefact is written.
     """
-    pid, rid = seed_project_and_run(conn)
+    pid, rid = seed_task_and_run(conn)
     scope_id = seed_scope(conn, pid)
     characterisation_run_id = seed_run(conn, pid)
     seed_characterisation(
@@ -376,13 +376,13 @@ def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> No
         )
     )
 
-    events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-    events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+    events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
 
     run_harness(
         conn,
         config=config,
-        project_id=pid,
+        task_id=pid,
         run_id=rid,
         provider=StubEchoProvider(),
         synthesis_backend=StubSynthesisBackend(),
@@ -392,14 +392,14 @@ def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> No
     row = conn.execute(select(runs).where(runs.c.run_id == rid)).one()
     assert row.status == "succeeded"
     artefacts_before = conn.execute(
-        select(func.count()).select_from(artefact).where(artefact.c.project_id == pid)
+        select(func.count()).select_from(artefact).where(artefact.c.task_id == pid)
     ).scalar_one()
 
     # Second attempt, same run_id, same harness path — must not raise.
     run_harness(
         conn,
         config=config,
-        project_id=pid,
+        task_id=pid,
         run_id=rid,
         provider=StubEchoProvider(),
         synthesis_backend=StubSynthesisBackend(),
@@ -420,7 +420,7 @@ def test_synthesise_harness_same_run_reexecution_is_loud(conn: Connection) -> No
     assert "same_run_reexecution" in failed_events[0]["payload"]["error"]
 
     artefacts_after = conn.execute(
-        select(func.count()).select_from(artefact).where(artefact.c.project_id == pid)
+        select(func.count()).select_from(artefact).where(artefact.c.task_id == pid)
     ).scalar_one()
     assert artefacts_after == artefacts_before
 
@@ -447,25 +447,25 @@ def test_failure_evidence_survives_commit(engine: Engine) -> None:
     try:
         with engine.begin() as conn:
             conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
             conn.execute(runs.insert().values(
-                run_id=rid_screen, project_id=pid, status="running", started_at=now()
+                run_id=rid_screen, task_id=pid, status="running", started_at=now()
             ))
             scope_id = seed_scope(conn, pid)
             _seed_doc(
                 conn, pid, rid_screen, scope_id, title="Report", abstract="Body. [stub-theme: X]"
             )
             conn.execute(runs.insert().values(
-                run_id=rid, project_id=pid, status="running", started_at=now()
+                run_id=rid, task_id=pid, status="running", started_at=now()
             ))
             config = compile(Plan(component="characterise", evidence_scope_id=scope_id))
-            events.append(conn, project_id=pid, run_id=rid, event_type="run.started", payload={})
-            events.append(conn, project_id=pid, run_id=rid, event_type="plan.compiled", payload={})
+            events.append(conn, task_id=pid, run_id=rid, event_type="run.started", payload={})
+            events.append(conn, task_id=pid, run_id=rid, event_type="plan.compiled", payload={})
             run_harness(
-                conn, config=config, project_id=pid, run_id=rid, provider=StubEchoProvider(),
+                conn, config=config, task_id=pid, run_id=rid, provider=StubEchoProvider(),
                 theme_grouping_backend=_RaisingDiscoverBackend(),
             )
         # transaction committed on block exit (harness swallows CharacteriseFailure, no rollback)
@@ -480,4 +480,4 @@ def test_failure_evidence_survives_commit(engine: Engine) -> None:
             assert "coverage" in failed["payload"]
     finally:
         with engine.begin() as conn:
-            delete_project_data(conn, pid)
+            delete_task_data(conn, pid)

@@ -1,8 +1,8 @@
 """Steering-history read-model tests (task 024, task 3).
 
-Drives two real ``run_plan`` walks in one project — a moderate-mode walk with
+Drives two real ``run_plan`` walks in one task — a moderate-mode walk with
 a steer-point Adjust then a Continue, and a minimal-mode walk with a single
-Continue — then rebuilds the project's steering history from a fresh
+Continue — then rebuilds the task's steering history from a fresh
 connection and checks the per-walk projection: story identity, event
 sequencing, payload-key partitioning and vocabulary filtering.
 """
@@ -17,23 +17,23 @@ from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.runner import run_plan
 from policy_atlas.runtime.steering import Adjust
 from policy_atlas.runtime.steering_history import steering_history
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
-from tests.runtime.test_steering import ScriptedIO, _cleanup_project, _insert_plan_row
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
+from tests.runtime.test_steering import ScriptedIO, _cleanup_task, _insert_plan_row
 
 NON_STEERING_EVENT_TYPES = {"run.started", "plan.compiled", "component.timing"}
 
 
-def _drive_walk_a(engine: Engine, *, project_id: uuid.UUID, scope_id: uuid.UUID) -> uuid.UUID:
+def _drive_walk_a(engine: Engine, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> uuid.UUID:
     """Moderate-mode walk: steer-point pause -> Adjust, then a pause -> Continue."""
     plan = _base_plan()  # moderate steering mode, deep chain (default)
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     io = ScriptedIO(
         [Adjust(directive_deltas={"group": {"grouping": {"facets": ["population"]}}})]
     )
 
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -47,13 +47,13 @@ def _drive_walk_a(engine: Engine, *, project_id: uuid.UUID, scope_id: uuid.UUID)
     return outcome.capability_run_id
 
 
-def _drive_walk_b(engine: Engine, *, project_id: uuid.UUID, scope_id: uuid.UUID) -> uuid.UUID:
+def _drive_walk_b(engine: Engine, *, task_id: uuid.UUID, scope_id: uuid.UUID) -> uuid.UUID:
     """Minimal-mode walk: a single steer-point pause resolved with Continue."""
     plan = _base_plan(steering_mode="minimal")
 
     outcome = run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=uuid.uuid4(),
@@ -68,14 +68,14 @@ def _drive_walk_b(engine: Engine, *, project_id: uuid.UUID, scope_id: uuid.UUID)
 
 def test_two_walk_rebuild_from_fresh_connection(engine: Engine) -> None:
     """steering_history rebuilds both walks' stories, in order, from scratch."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        walk_a_id = _drive_walk_a(engine, project_id=project_id, scope_id=scope_id)
-        walk_b_id = _drive_walk_b(engine, project_id=project_id, scope_id=scope_id)
+        task_id, scope_id = _seed_task(engine)
+        walk_a_id = _drive_walk_a(engine, task_id=task_id, scope_id=scope_id)
+        walk_b_id = _drive_walk_b(engine, task_id=task_id, scope_id=scope_id)
 
         with engine.connect() as fresh_conn:
-            stories = steering_history(fresh_conn, project_id)
+            stories = steering_history(fresh_conn, task_id)
 
         assert len(stories) == 2
         story_a, story_b = stories
@@ -120,39 +120,39 @@ def test_two_walk_rebuild_from_fresh_connection(engine: Engine) -> None:
         assert b_ids == {str(walk_b_id)}
         assert a_ids.isdisjoint(b_ids)
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_payload_partition_matches_story_walk(engine: Engine) -> None:
     """Every event's payload capability_run_id matches its own story's id."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _drive_walk_a(engine, project_id=project_id, scope_id=scope_id)
-        _drive_walk_b(engine, project_id=project_id, scope_id=scope_id)
+        task_id, scope_id = _seed_task(engine)
+        _drive_walk_a(engine, task_id=task_id, scope_id=scope_id)
+        _drive_walk_b(engine, task_id=task_id, scope_id=scope_id)
 
         with engine.connect() as conn:
-            stories = steering_history(conn, project_id)
+            stories = steering_history(conn, task_id)
 
         assert stories
         for story in stories:
             for event in story["events"]:
                 assert event["payload"]["capability_run_id"] == str(story["capability_run_id"])
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_single_walk_filter_returns_only_that_walk(engine: Engine) -> None:
     """A specific capability_run_id returns only that walk's story."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _drive_walk_a(engine, project_id=project_id, scope_id=scope_id)
-        walk_b_id = _drive_walk_b(engine, project_id=project_id, scope_id=scope_id)
+        task_id, scope_id = _seed_task(engine)
+        _drive_walk_a(engine, task_id=task_id, scope_id=scope_id)
+        walk_b_id = _drive_walk_b(engine, task_id=task_id, scope_id=scope_id)
 
         with engine.connect() as conn:
-            only_b = steering_history(conn, project_id, capability_run_id=walk_b_id)
-            missing = steering_history(conn, project_id, capability_run_id=uuid.uuid4())
+            only_b = steering_history(conn, task_id, capability_run_id=walk_b_id)
+            missing = steering_history(conn, task_id, capability_run_id=uuid.uuid4())
 
         assert len(only_b) == 1
         assert only_b[0]["capability_run_id"] == walk_b_id
@@ -161,23 +161,23 @@ def test_single_walk_filter_returns_only_that_walk(engine: Engine) -> None:
         }
         assert missing == []
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 def test_non_steering_events_excluded(engine: Engine) -> None:
     """Walk stories never surface run.started/plan.compiled/component.timing."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
-        _drive_walk_a(engine, project_id=project_id, scope_id=scope_id)
-        _drive_walk_b(engine, project_id=project_id, scope_id=scope_id)
+        task_id, scope_id = _seed_task(engine)
+        _drive_walk_a(engine, task_id=task_id, scope_id=scope_id)
+        _drive_walk_b(engine, task_id=task_id, scope_id=scope_id)
 
         with engine.connect() as conn:
-            stories = steering_history(conn, project_id)
+            stories = steering_history(conn, task_id)
 
         assert stories
         for story in stories:
             event_types = {event["event_type"] for event in story["events"]}
             assert event_types.isdisjoint(NON_STEERING_EVENT_TYPES)
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)

@@ -1,0 +1,993 @@
+"""Acquire component — metadata-only acquisition through the ``search`` seam.
+
+``SearchBackend`` is the seam (protocol, like ``InferenceProvider``); the v3.0
+implementations replay committed sanitized fixtures derived from dev-time-recorded
+real OpenAlex and Overton responses — authentic structure, fabricated values,
+zero runtime egress. Live HTTP backends live in ``search_live.py`` behind the
+same protocol, so this module stays fixture-default and HTTP-import-free.
+
+Each accepted result is snapshotted on the text in hand (title + best available
+summary), joined to the task with ``origin="acquired"``. Every search call
+emits a ``search.executed`` governance event; every acquire run writes one
+``search_coverage_record`` row.
+"""
+
+import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, NamedTuple, Protocol
+
+import structlog
+from sqlalchemy import select
+from sqlalchemy.engine import Connection
+
+from policy_atlas.core import events
+from policy_atlas.core.embeddings import (
+    EmbeddingBackend,
+    StubEmbeddingBackend,
+    embed_pending_chunks,
+)
+from policy_atlas.core.hashing import content_hash
+from policy_atlas.core.schema import (
+    METHODOLOGICAL_STRUCTURAL,
+    TOPIC_THEME,
+    search_coverage_record,
+    source_snapshot,
+    task_source_snapshot,
+)
+from policy_atlas.core.schema import chunk as chunk_table
+from policy_atlas.core.tags import has_control_character, insert_source_tags
+
+log = structlog.get_logger()
+
+SEGMENTATION_POLICY = "metadata_envelope_v1"
+# Provider tag values are third-party (including provider-LLM) output; bound them
+# like theme names so no unvalidated text shape reaches source_tag or coverage keys.
+TAG_MAX_LENGTH = 200
+MAX_TAGS_PER_RECORD = 50
+# Bounded retention for the deep loop's backward-snowball batch (decision 16):
+# referenced_works can run into the hundreds; only the leading slice is kept.
+REFERENCED_WORKS_RETAIN_CAP = 60
+
+
+@dataclass
+class AcquireContext:
+    """Scope-level input to an acquire run.
+
+    Attributes:
+        scope_id: The evidence scope whose intent drives the search.
+        intent: The scope's research intent — the v3.0 query, verbatim.
+        context: The scope's context JSONB.
+    """
+
+    scope_id: uuid.UUID
+    intent: str
+    context: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class BackendCaps:
+    """Capability flags declared by a search backend.
+
+    Attributes:
+        has_snowball: Whether citation/reference expansion verbs are available.
+        has_title_lookup: Whether exact-title lookup is available.
+        has_doi_lookup: Whether DOI-batch lookup is available.
+    """
+
+    has_snowball: bool
+    has_title_lookup: bool
+    has_doi_lookup: bool = False
+
+
+class SearchBackend(Protocol):
+    """The ``search`` seam: one configured backend with a declared trust class.
+
+    Attributes:
+        name: Backend identifier (e.g. ``"openalex"``).
+        trust_class: Declared trust class (e.g. ``"academic_aggregator"``).
+        mode: ``"fixture"`` or ``"live"`` — carried into events + coverage record.
+        caps: Backend capability flags for deeper search loops.
+    """
+
+    name: str
+    trust_class: str
+    mode: str
+    caps: BackendCaps
+
+    def search(
+        self,
+        query: str,
+        *,
+        wire_params: dict[str, str] | None = None,
+        max_results: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Return raw provider records for the query."""
+        ...
+
+    def fetch_citations(
+        self, record_id: str, *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return records citing the given provider record."""
+        ...
+
+    def fetch_references(
+        self, record_ids: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return provider records for referenced provider IDs."""
+        ...
+
+    def lookup_title(self, title: str) -> list[dict[str, Any]]:
+        """Return provider records matching a title query."""
+        ...
+
+    def lookup_dois(
+        self, dois: list[str], *, max_results: int | None = None
+    ) -> list[dict[str, Any]]:
+        """Return provider records matching DOI identifiers."""
+        ...
+
+
+class ExecutedSearchCall(Protocol):
+    """Duck-typed executed search call accepted from the strategy layer."""
+
+    @property
+    def backend_name(self) -> str:
+        """Backend identifier matching a configured backend."""
+        ...
+
+    @property
+    def verb(self) -> str:
+        """Search verb for the executed call."""
+        ...
+
+    @property
+    def query(self) -> str:
+        """Exact query text sent to the backend."""
+        ...
+
+    @property
+    def query_origin(self) -> str:
+        """Deterministic origin of the query text."""
+        ...
+
+    @property
+    def wire_params(self) -> dict[str, str]:
+        """Executed backend wire parameters."""
+        ...
+
+    @property
+    def records(self) -> list[dict[str, Any]]:
+        """Raw provider records returned by the call."""
+        ...
+
+    @property
+    def status(self) -> str:
+        """``"ok"`` or ``"error"``."""
+        ...
+
+    @property
+    def error(self) -> str | None:
+        """Redacted error text for failed calls."""
+        ...
+
+    @property
+    def post_filter_excluded(self) -> int | None:
+        """Records excluded by a compiled post-filter, when one was active."""
+        ...
+
+
+def _reconstruct_abstract(index: dict[str, list[int]] | None) -> str | None:
+    """Rebuild plain text from an OpenAlex ``abstract_inverted_index``.
+
+    OpenAlex ships no plain abstract — tokens map to their positions; the
+    position-ordered join is the abstract. Empty/missing index -> None.
+    """
+    if not index:
+        return None
+    positions: dict[int, str] = {}
+    for token, token_positions in index.items():
+        for pos in token_positions:
+            positions[pos] = token
+    return " ".join(positions[p] for p in sorted(positions)) or None
+
+
+def _normalize_doi(doi: Any) -> str | None:
+    """Normalize a DOI to lowercase bare form (cross-backend identity key)."""
+    if not isinstance(doi, str) or not doi:
+        return None
+    d = doi.strip().lower()
+    for prefix in (
+        "https://doi.org/",
+        "http://doi.org/",
+        "https://dx.doi.org/",
+        "http://dx.doi.org/",
+    ):
+        if d.startswith(prefix):
+            d = d[len(prefix):]
+            break
+    return d or None
+
+
+def _slim_authorships(authorships: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Names + institution names + countries only — the retained slice of authorships."""
+    return [
+        {
+            "author_name": (a.get("author") or {}).get("display_name"),
+            "institutions": [
+                i.get("display_name") for i in (a.get("institutions") or [])
+            ],
+            "countries": a.get("countries") or [],
+        }
+        for a in (authorships or [])
+    ]
+
+
+_OPENALEX_RETAIN_KEYS = (
+    "primary_location",  # URL/OA block — required by slice 008
+    "best_oa_location",
+    "open_access",
+    "topics",
+    "primary_topic",
+    "keywords",
+    "cited_by_count",
+    "fwci",
+    "is_retracted",
+    "is_paratext",
+    "ids",
+    "language",
+    "sustainable_development_goals",
+    "indexed_in",  # decision 20: crossref/doaj/pubmed/arxiv — cheap discipline/OA prior
+    "publication_date",  # decision 20: full ISO date; envelope keeps year-grain only
+)
+# "referenced_works" is deliberately NOT in this tuple — decision 20 caps its
+# retention (REFERENCED_WORKS_RETAIN_CAP) rather than keeping it raw/unbounded,
+# so it is handled explicitly in _map_openalex_work below.
+
+_OVERTON_RETAIN_KEYS = (
+    "document_url",  # slice 008; multi-PDF documents are real
+    "pdf_url",
+    "grouped_pdf_ids_in_result",
+    "source",  # geography + publisher typing for characterise
+    "topics",
+    "classifications",
+    "sdgcategories",
+    "cofog_divisions",
+    "cites",  # snowball-seam signal
+    "citation_count",
+    "citation_count_including_self",
+    "es_score",  # provider relevance
+    "published_on",
+    "added_on",
+    "languages",
+    "authors_are_organizations",
+    # LLM-generated, like llm_document_description — retained but always
+    # identifiable as machine text, never mixed into document-own-words fields
+    "llm_document_theme",
+    "overton_policy_document_series",  # decision 20: also tagged, see _provider_tags
+    "translated_title",  # decision 20: English-first title mapping input
+    "title",  # decision 20: native title, retained so it survives displacement
+    "pdf_document_id",  # decision 20: second half of the two-level identity
+    "keyed_other_identifiers",  # decision 20: cross-reference identity beyond DOI
+)
+
+
+def _map_openalex_work(record: dict[str, Any]) -> dict[str, Any] | None:
+    """OpenAlex Work -> normalized envelope + chunk; None when unusable.
+
+    Unusable = no title (nothing screenable) or no ``id`` (no locator, no
+    re-run identity — and ``source_locator`` is NOT NULL).
+    """
+    title = record.get("display_name")
+    if not title or not record.get("id"):
+        return None
+    abstract = _reconstruct_abstract(record.get("abstract_inverted_index"))
+    source = (record.get("primary_location") or {}).get("source") or {}
+    envelope = {
+        "title": title,
+        "abstract": abstract,
+        "year": record.get("publication_year"),
+        "doi": _normalize_doi(record.get("doi")),
+        "language": record.get("language"),
+        "backend": "openalex",
+        "backend_record_id": record.get("id"),
+        "record_type": record.get("type"),
+        "publisher_org": source.get("display_name"),
+    }
+    provider_fields = {k: record.get(k) for k in _OPENALEX_RETAIN_KEYS if k in record}
+    provider_fields["authorships"] = _slim_authorships(record.get("authorships"))
+    referenced_works = record.get("referenced_works")
+    if isinstance(referenced_works, list) and referenced_works:
+        provider_fields["referenced_works"] = referenced_works[:REFERENCED_WORKS_RETAIN_CAP]
+    return {
+        "envelope": envelope,
+        "abstract_source": "publisher_abstract" if abstract else "none",
+        "title_source": None,  # OpenAlex has no translation seam (decision 20)
+        "source_locator": record.get("id"),  # the work's canonical id URL
+        "provider_fields": provider_fields,
+    }
+
+
+def _first_or_none(value: Any) -> Any:
+    """First element of a non-empty list, else None (Overton list-or-absent shapes)."""
+    if isinstance(value, list) and value:
+        return value[0]
+    return None
+
+
+def _map_overton_document(record: dict[str, Any]) -> dict[str, Any] | None:
+    """Overton policy document -> normalized envelope + chunk; None when unusable.
+
+    Overton expresses absence as empty strings/lists on always-present keys —
+    empty-string/empty-list is treated as absent throughout.
+
+    English-first title mapping (contract rev 3.6a): the envelope title is
+    ``translated_title`` when present, else the native ``title`` — unusable
+    only when both are absent. The native title is always retained in
+    ``provider_fields`` (``_OVERTON_RETAIN_KEYS``) so it survives displacement.
+    """
+    native_title = record.get("title") or None
+    translated_title = record.get("translated_title") or None
+    if translated_title:
+        title, title_source = translated_title, "translated"
+    elif native_title:
+        title, title_source = native_title, "native"
+    else:
+        return None
+
+    # Overton ships no real abstract: snippet (document excerpt) falls back to
+    # llm_document_description (LLM-generated — its use must always be visible).
+    snippet = record.get("snippet") or None
+    llm_description = record.get("llm_document_description") or None
+    if snippet:
+        abstract, abstract_source = snippet, "snippet"
+    elif llm_description:
+        abstract, abstract_source = llm_description, "llm_description"
+    else:
+        abstract, abstract_source = None, "none"
+
+    published_on = record.get("published_on") or ""
+    year = int(published_on[:4]) if published_on[:4].isdigit() else None
+
+    source_locator = record.get("document_url") or record.get("overton_url")
+    if not source_locator:
+        # no address at all: the identity triple can't be completed and
+        # source_locator is NOT NULL — unusable, counted, never a crashed run
+        return None
+
+    koi = record.get("keyed_other_identifiers")
+    doi = _normalize_doi(_first_or_none(koi.get("doi")) if isinstance(koi, dict) else None)
+
+    source = record.get("source") or {}
+    envelope = {
+        "title": title,
+        "abstract": abstract,
+        "year": year,
+        "doi": doi,
+        "language": _first_or_none(record.get("languages")) or None,
+        "backend": "overton",
+        "backend_record_id": record.get("policy_document_id"),
+        "record_type": source.get("type") or None,
+        "publisher_org": source.get("title") or None,
+    }
+    provider_fields = {k: record.get(k) for k in _OVERTON_RETAIN_KEYS if k in record}
+    return {
+        "envelope": envelope,
+        "abstract_source": abstract_source,
+        "title_source": title_source,
+        "source_locator": source_locator,
+        "provider_fields": provider_fields,
+    }
+
+
+_MAPPERS = {
+    "openalex": _map_openalex_work,
+    "overton": _map_overton_document,
+}
+
+
+def _chunk_text(envelope: dict[str, Any]) -> str:
+    """The text in hand: title + best available summary."""
+    title: str = envelope["title"]
+    abstract = envelope.get("abstract")
+    return f"{title}\n\n{abstract}" if abstract else title
+
+
+def _normalize_tag(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    tag = " ".join(value.strip().split())
+    if not tag or len(tag) > TAG_MAX_LENGTH or has_control_character(tag):
+        return None
+    return tag
+
+
+def _dedupe_tag_values(
+    values: list[Any], asserted_by: str, tag_type: str = TOPIC_THEME
+) -> list[tuple[str, str, str]]:
+    tags: list[tuple[str, str, str]] = []
+    seen: set[str] = set()
+    for value in values:
+        tag = _normalize_tag(value)
+        if tag is None:
+            continue
+        key = tag.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        tags.append((tag, asserted_by, tag_type))
+    return tags
+
+
+def _provider_tags(backend_name: str, record: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Extract provider topical/structural assertions from a raw provider record.
+
+    Returns ``(tag, asserted_by, tag_type)`` triples — the tag-assignment type
+    is per-assertion (decision 20) so topical and methodological/structural
+    provider assertions coexist under the same asserter.
+    """
+    if backend_name == "openalex":
+        values: list[Any] = []
+        primary_topic = record.get("primary_topic")
+        if isinstance(primary_topic, dict):
+            values.append(primary_topic.get("display_name"))
+        topics = record.get("topics")
+        if isinstance(topics, list):
+            values.extend(
+                topic.get("display_name") for topic in topics if isinstance(topic, dict)
+            )
+        sdgs = record.get("sustainable_development_goals")
+        if isinstance(sdgs, list):
+            values.extend(sdg.get("display_name") for sdg in sdgs if isinstance(sdg, dict))
+        # "keywords" is deliberately never promoted to tags (decision 20: the
+        # shape probe showed wrong-sense disambiguation noise, e.g.
+        # "Stock (firearms)") — retention in provider_fields stands.
+        return _dedupe_tag_values(values, "openalex")
+
+    if backend_name == "overton":
+        overton_values: list[Any] = []
+        topics = record.get("topics")
+        if isinstance(topics, str):
+            overton_values.append(topics)
+        elif isinstance(topics, list):
+            overton_values.extend(topics)
+        classifications = record.get("classifications")
+        if isinstance(classifications, list):
+            for classification in classifications:
+                if isinstance(classification, dict):
+                    overton_values.append(classification.get("name"))
+                else:
+                    overton_values.append(classification)
+        sdgcategories = record.get("sdgcategories")
+        if isinstance(sdgcategories, list):
+            overton_values.extend(sdgcategories)
+        source_tags = record.get("source_tags")  # decision 20: publisher-curated headings
+        if isinstance(source_tags, list):
+            overton_values.extend(source_tags)
+        tags = [
+            *_dedupe_tag_values(overton_values, "overton"),
+            *_dedupe_tag_values([record.get("llm_document_theme")], "overton_llm"),
+        ]
+        # decision 20 (rev 3.6b): the document series is methodological/
+        # structural material, not a topical assertion.
+        tags.extend(
+            _dedupe_tag_values(
+                [record.get("overton_policy_document_series")],
+                "overton",
+                tag_type=METHODOLOGICAL_STRUCTURAL,
+            )
+        )
+        return tags
+
+    return []
+
+
+class _Candidate(NamedTuple):
+    """One mapped, not-yet-persisted record and the call it came from."""
+
+    backend_name: str
+    verb: str
+    record: dict[str, Any]
+    mapped: dict[str, Any]
+    text: str
+    chash: str
+
+
+def _interleave(per_call: list[list[_Candidate]]) -> list[_Candidate]:
+    """Merge per-call candidate lists round-robin by rank position.
+
+    Providers return each call's records in rank order (OpenAlex relevance,
+    Overton similarity), so taking every call's rank-1 record, then every
+    rank-2, and so on, is a merge that keeps the fan-out's query diversity: a
+    later trim removes the tail of every query rather than every record of the
+    later queries. Sorting the merged set by score instead would need a score
+    that is comparable across queries, which provider relevance scores are not.
+
+    Args:
+        per_call: One candidate list per call, each already in provider order.
+
+    Returns:
+        A single list, rank-interleaved across the calls in the given order.
+    """
+    merged: list[_Candidate] = []
+    for rank in range(max((len(candidates) for candidates in per_call), default=0)):
+        for candidates in per_call:
+            if rank < len(candidates):
+                merged.append(candidates[rank])
+    return merged
+
+
+def acquire_sources(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    run_id: uuid.UUID,
+    context: AcquireContext,
+    backends: list[SearchBackend],
+    embedder: EmbeddingBackend | None = None,
+    executed_calls: Sequence[ExecutedSearchCall],
+    depth: str = "rapid",
+    scope_wire_params: dict[str, Any] | None = None,
+    search_guidance: list[str] | None = None,
+    record_cap_per_backend: int | None = None,
+) -> dict[str, Any]:
+    """Acquire metadata-only sources for an evidence scope over the given backends.
+
+    Performs no search egress itself; it consumes the pre-executed
+    ``executed_calls`` call stream from the search strategy layer, in order,
+    and reuses the existing mapping, deduplication, event, coverage, tag, and
+    embedding machinery.
+
+    Args:
+        conn: Open database connection; all writes occur within its transaction.
+        task_id: Owning task.
+        run_id: The run recorded on task links and the coverage record.
+        context: Scope-level input; ``context.intent`` is the query, verbatim.
+        backends: Configured backends, searched in list order (dedup outcomes
+            are deterministic because the order is fixed).
+        embedder: Optional embedding backend. Defaults to the deterministic stub.
+        executed_calls: Pre-executed call stream from the search strategy
+            layer; no backend ``search`` method is called here.
+        depth: Search-depth directive recorded in events and coverage.
+        scope_wire_params: Per-backend executed wire params or variant payloads
+            recorded on the coverage record.
+        search_guidance: B1 (024 steering surface) executed ``search.guidance``
+            list, echoed verbatim onto ``search_coverage_record.scope_filters``
+            as a sibling ``guidance`` key when present.
+        record_cap_per_backend: Maximum records persisted per backend from the
+            ``search`` fan-out, applied after the rank-interleaved merge and
+            after dedup, so a capped round still yields a full cap of *new*
+            documents. ``None`` means uncapped. This is the run's volume brake:
+            each persisted record costs an embedding here and ``SCREEN_REPS``
+            screening calls downstream. Targeted verbs (snowball, suggest) are
+            never trimmed — they carry their own call caps upstream.
+
+    Returns:
+        Counts dict: ``acquired``, ``already_acquired``, ``skipped_unusable``,
+        ``dropped_over_cap``, ``results_returned`` (invariant: the first four
+        sum to it, per backend and in total), ``by_backend`` (with per-backend
+        ``status``/``error``), ``tags_materialised``, ``embed``,
+        ``stop_condition``, ``adequacy_verdict``, ``coverage_record_id``,
+        ``acquired_tss_by_verb``.
+    """
+    # A backend without a registered mapping (or a duplicate name, which would
+    # corrupt by_backend) is a wiring error, not a search failure — fail loud
+    # before any work; the harness reports it as component.failed.
+    names = [b.name for b in backends]
+    unknown = [n for n in names if n not in _MAPPERS]
+    if unknown:
+        raise ValueError(f"no mapper registered for backend(s): {unknown}")
+    if len(set(names)) != len(names):
+        raise ValueError(f"duplicate backend names: {names}")
+    backend_by_name = {backend.name: backend for backend in backends}
+    unknown_call_backends = [
+        call.backend_name
+        for call in executed_calls
+        if call.backend_name not in backend_by_name
+    ]
+    if unknown_call_backends:
+        raise ValueError(
+            f"executed call references unknown backend(s): {unknown_call_backends}"
+        )
+
+    # Preload the task's existing identity keys — dedup is then in-memory,
+    # and also catches duplicates within this call's own result stream.
+    # ponytail: JSONB ->> scan over all task snapshots; fine at v3.0 corpus
+    # sizes, add expression indexes if acquire volume ever makes this slow.
+    seen_record_ids: set[str] = set()
+    seen_dois: set[str] = set()
+    seen_hashes: set[str] = set()
+    for meta, chash in conn.execute(
+        select(source_snapshot.c.metadata, source_snapshot.c.content_hash)
+        .select_from(
+            task_source_snapshot.join(
+                source_snapshot,
+                task_source_snapshot.c.source_snapshot_id
+                == source_snapshot.c.source_snapshot_id,
+            )
+        )
+        .where(task_source_snapshot.c.task_id == task_id)
+    ):
+        seen_hashes.add(chash)
+        if meta.get("backend_record_id"):
+            seen_record_ids.add(meta["backend_record_id"])
+        # normalize on read: uploaded snapshots may carry a prefixed/mixed-case
+        # DOI in their free-form metadata; acquire-written envelopes are already
+        # normalized, but the guard must hold across origins
+        doi = _normalize_doi(meta.get("doi"))
+        if doi:
+            seen_dois.add(doi)
+
+    now = datetime.now(UTC)
+    by_backend: dict[str, dict[str, Any]] = {
+        backend.name: {
+            "status": "ok",
+            "error": None,
+            "results_returned": 0,
+            "acquired": 0,
+            "already_acquired": 0,
+            "skipped_unusable": 0,
+            "dropped_over_cap": 0,
+            "tags_materialised": 0,
+        }
+        for backend in backends
+    }
+    ok_calls_by_backend = dict.fromkeys(names, 0)
+    errors_by_backend: dict[str, list[str]] = {name: [] for name in names}
+    tag_assertions: list[tuple[uuid.UUID, str, str, str]] = []
+    acquired_tss_by_verb: dict[str, list[str]] = {}
+
+    def map_records(
+        *,
+        backend_name: str,
+        verb: str,
+        records: list[dict[str, Any]],
+        counts: dict[str, Any],
+    ) -> list[_Candidate]:
+        """Map one call's raw records to candidates. No dedup, no writes."""
+        counts["results_returned"] += len(records)
+        mapper = _MAPPERS[backend_name]  # validated upfront
+
+        candidates: list[_Candidate] = []
+        for record in records:
+            mapped = mapper(record)
+            if mapped is None:
+                # A snapshot needs at least a title to be screenable —
+                # skip is visible, never silent.
+                counts["skipped_unusable"] += 1
+                continue
+            text = _chunk_text(mapped["envelope"])
+            candidates.append(
+                _Candidate(
+                    backend_name=backend_name,
+                    verb=verb,
+                    record=record,
+                    mapped=mapped,
+                    text=text,
+                    chash=content_hash(text),
+                )
+            )
+        return candidates
+
+    def is_new(candidate: _Candidate) -> bool:
+        """Three identity guards, task-scoped, claiming the keys on a pass.
+
+        Exact re-run, cross-backend DOI identity, exact text duplicate. Called
+        on the merged stream in keep-order, so the best-ranked copy of a
+        document claims its identity and later copies are the ones dropped.
+        """
+        envelope = candidate.mapped["envelope"]
+        record_id = envelope["backend_record_id"]
+        doi = envelope["doi"]
+        if (
+            (record_id and record_id in seen_record_ids)
+            or (doi and doi in seen_dois)
+            or candidate.chash in seen_hashes
+        ):
+            return False
+        seen_hashes.add(candidate.chash)
+        if record_id:
+            seen_record_ids.add(record_id)
+        if doi:
+            seen_dois.add(doi)
+        return True
+
+    def persist(candidate: _Candidate) -> None:
+        """Write one accepted candidate: snapshot, chunk, task link, tags."""
+        backend_name = candidate.backend_name
+        verb = candidate.verb
+        record = candidate.record
+        mapped = candidate.mapped
+        text = candidate.text
+        chash = candidate.chash
+        envelope = mapped["envelope"]
+        record_id = envelope["backend_record_id"]
+        counts = by_backend[backend_name]
+
+        snapshot_id = uuid.uuid4()
+        tss_id = uuid.uuid4()
+        conn.execute(
+            source_snapshot.insert().values(
+                source_snapshot_id=snapshot_id,
+                content_hash=chash,
+                text_basis="abstract_only",  # metadata envelope in hand, not full text
+                source_locator=mapped["source_locator"],
+                # None-valued envelope keys are persisted as *absent* —
+                # authentic absence (contract decision 4), and exactly what
+                # _stub_screen's fail-open default expects (missing abstract
+                # -> title_only, no screen changes).
+                metadata={
+                    **{k: v for k, v in envelope.items() if v is not None},
+                    "abstract_source": mapped["abstract_source"],
+                    # title_source follows abstract_source's None-omission
+                    # pattern: OpenAlex has no translation seam, so it maps
+                    # to None and is left out of persisted metadata.
+                    **(
+                        {"title_source": mapped["title_source"]}
+                        if mapped["title_source"] is not None
+                        else {}
+                    ),
+                    "provider_fields": mapped["provider_fields"],
+                },
+                created_at=now,
+            )
+        )
+        conn.execute(
+            chunk_table.insert().values(
+                chunk_id=uuid.uuid4(),
+                source_snapshot_id=snapshot_id,
+                sequence=1,
+                content=text,
+                content_hash=chash,
+                locator={"sequence": 1},
+                segmentation_policy=SEGMENTATION_POLICY,
+                created_at=now,
+            )
+        )
+        conn.execute(
+            task_source_snapshot.insert().values(
+                task_source_snapshot_id=tss_id,
+                task_id=task_id,
+                source_snapshot_id=snapshot_id,
+                origin="acquired",
+                run_id=run_id,
+                ingested_at=now,
+            )
+        )
+        tag_pairs = _provider_tags(backend_name, record)
+        if len(tag_pairs) > MAX_TAGS_PER_RECORD:
+            log.warning(
+                "acquire.tags_truncated",
+                backend=backend_name,
+                backend_record_id=record_id,
+                tag_count=len(tag_pairs),
+                cap=MAX_TAGS_PER_RECORD,
+            )
+            tag_pairs = tag_pairs[:MAX_TAGS_PER_RECORD]
+        tag_assertions.extend(
+            (tss_id, tag, asserted_by, tag_type) for tag, asserted_by, tag_type in tag_pairs
+        )
+        counts["tags_materialised"] += len(tag_pairs)
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            event_type="source.acquired",
+            payload={
+                "source_snapshot_id": str(snapshot_id),
+                "task_source_snapshot_id": str(tss_id),
+                "evidence_scope_id": str(context.scope_id),
+                "backend": backend_name,
+                "backend_record_id": record_id,
+            },
+        )
+
+        counts["acquired"] += 1
+        acquired_tss_by_verb.setdefault(verb, []).append(str(tss_id))
+
+    # Per-backend candidate lists, kept apart by verb: the `search` fan-out is
+    # merged and trimmed, targeted verbs are not.
+    search_candidates: dict[str, list[list[_Candidate]]] = {name: [] for name in names}
+    targeted_candidates: dict[str, list[_Candidate]] = {name: [] for name in names}
+
+    for call in executed_calls:
+        backend = backend_by_name[call.backend_name]
+        counts = by_backend[backend.name]
+        if call.status not in {"ok", "error"}:
+            raise ValueError(f"executed call has invalid status: {call.status!r}")
+        result_count = len(call.records) if call.status == "ok" else 0
+        error = call.error if call.status == "error" else None
+        post_filter_excluded = call.post_filter_excluded
+        event_payload: dict[str, Any] = {
+            "backend": backend.name,
+            "trust_class": backend.trust_class,
+            "mode": backend.mode,
+            "query": call.query,
+            "query_origin": call.query_origin,
+            "verb": call.verb,
+            "depth": depth,
+            "filters": call.wire_params,
+            "status": call.status,
+            "result_count": result_count,
+            "error": error,
+            "evidence_scope_id": str(context.scope_id),
+        }
+        if post_filter_excluded is not None:
+            event_payload["post_filter_excluded"] = post_filter_excluded
+        events.append(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            event_type="search.executed",
+            payload=event_payload,
+        )
+        if call.status == "ok":
+            ok_calls_by_backend[backend.name] += 1
+            candidates = map_records(
+                backend_name=backend.name,
+                verb=call.verb,
+                records=call.records,
+                counts=counts,
+            )
+            if call.verb == "search":
+                search_candidates[backend.name].append(candidates)
+            else:
+                targeted_candidates[backend.name].extend(candidates)
+        else:
+            errors_by_backend[backend.name].append(error or "unknown search error")
+            log.warning(
+                "acquire.backend_failed",
+                backend=backend.name,
+                task_id=str(task_id),
+                run_id=str(run_id),
+                error=error,
+            )
+
+    # Merge, dedup, trim, persist — in that order, per backend. Dedup runs
+    # *before* the trim so a capped round still yields a full cap of new
+    # documents however many repeats the queries returned; and it runs over the
+    # interleaved stream so the best-ranked copy of a document is the one kept.
+    # Targeted verbs are deduped first and never trimmed: snowball and suggest
+    # results are individually chosen, and their arms are capped upstream.
+    for name in names:
+        counts = by_backend[name]
+        for candidate in targeted_candidates[name]:
+            if is_new(candidate):
+                persist(candidate)
+            else:
+                counts["already_acquired"] += 1
+
+        kept = 0
+        for candidate in _interleave(search_candidates[name]):
+            # Cap checked before the identity guards, never after: `is_new`
+            # *claims* the keys it checks, so running it on a record we are
+            # about to drop would make a later backend's genuine record look
+            # already-acquired and lose it.
+            if record_cap_per_backend is not None and kept >= record_cap_per_backend:
+                counts["dropped_over_cap"] += 1
+                continue
+            if not is_new(candidate):
+                counts["already_acquired"] += 1
+                continue
+            persist(candidate)
+            kept += 1
+        if counts["dropped_over_cap"]:
+            log.info(
+                "acquire.capped",
+                backend=name,
+                task_id=str(task_id),
+                run_id=str(run_id),
+                kept=kept,
+                dropped=counts["dropped_over_cap"],
+                cap=record_cap_per_backend,
+            )
+
+    any_error = False
+    for backend in backends:
+        errors = errors_by_backend[backend.name]
+        if errors:
+            by_backend[backend.name]["error"] = "; ".join(errors)
+        if errors and ok_calls_by_backend[backend.name] == 0:
+            by_backend[backend.name]["status"] = "error"
+            any_error = True
+
+    # Bulk insert per tag_type (insert_source_tags takes one tag_type per call)
+    # instead of one statement per record; tag_types are sorted so call order
+    # is deterministic across runs.
+    assertions_by_type: dict[str, list[tuple[uuid.UUID, str, str]]] = {}
+    for tss_id, tag, asserted_by, tag_type in tag_assertions:
+        assertions_by_type.setdefault(tag_type, []).append((tss_id, tag, asserted_by))
+    for tag_type in sorted(assertions_by_type):
+        insert_source_tags(
+            conn,
+            task_id=task_id,
+            run_id=run_id,
+            now=now,
+            assertions=assertions_by_type[tag_type],
+            tag_type=tag_type,
+        )
+
+    totals = {
+        key: sum(b[key] for b in by_backend.values())
+        for key in (
+            "acquired",
+            "already_acquired",
+            "skipped_unusable",
+            "dropped_over_cap",
+            "results_returned",
+            "tags_materialised",
+        )
+    }
+
+    # Fail-closed adequacy (decision 8): any backend error -> inadequate (that
+    # part of the search space wasn't searched); zero usable records across the
+    # run -> inadequate (nothing screenable came back). An empty-but-successful
+    # backend beside a productive one is honest coverage, not inadequacy.
+    #
+    # Honest stop attribution (task 019 item 5): a clean run is 'completed',
+    # never a claimed truncation. 'wall_clock_exceeded' left the vocabulary
+    # with the wall clock itself (task 030) — every planned call now runs.
+    stop_condition = "error" if any_error else "completed"
+    usable = totals["acquired"] + totals["already_acquired"]
+    adequacy_verdict = "inadequate" if (any_error or usable == 0) else "adequate"
+
+    coverage_scope_filters: dict[str, Any] = dict(scope_wire_params or {})
+    post_filter_exclusions = [
+        {
+            "backend": call.backend_name,
+            "verb": call.verb,
+            "query": call.query,
+            "query_origin": call.query_origin,
+            "post_filter_excluded": call.post_filter_excluded,
+        }
+        for call in executed_calls
+        if call.post_filter_excluded is not None
+    ]
+    if post_filter_exclusions:
+        coverage_scope_filters["post_filter_exclusions"] = post_filter_exclusions
+    if search_guidance:
+        coverage_scope_filters["guidance"] = list(search_guidance)
+
+    coverage_record_id = uuid.uuid4()
+    conn.execute(
+        search_coverage_record.insert().values(
+            search_coverage_record_id=coverage_record_id,
+            evidence_scope_id=context.scope_id,
+            task_id=task_id,
+            acquired_by_run_id=run_id,
+            backends=[
+                {
+                    "backend": b.name,
+                    "trust_class": b.trust_class,
+                    "mode": b.mode,
+                    "depth": depth,
+                }
+                for b in backends
+            ],
+            scope_filters=coverage_scope_filters,
+            stop_condition=stop_condition,
+            adequacy_verdict=adequacy_verdict,
+            verdict_origin="model",
+            created_at=now,
+        )
+    )
+
+    if embedder is None:
+        embedder = StubEmbeddingBackend()
+    embed_counts = embed_pending_chunks(
+        conn,
+        embedder=embedder,
+        task_id=task_id,
+        run_id=run_id,
+    )
+
+    return {
+        **totals,
+        "by_backend": by_backend,
+        "embed": embed_counts,
+        "stop_condition": stop_condition,
+        "adequacy_verdict": adequacy_verdict,
+        "coverage_record_id": str(coverage_record_id),
+        "acquired_tss_by_verb": acquired_tss_by_verb,
+    }

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useApiClient, useFindings, useGroups, useProject } from "../api/queries";
+import { useApiClient, useFindings, useGroups, useTask } from "../api/queries";
 import { HighlightedContext } from "./ArtefactView";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
@@ -34,7 +34,7 @@ type IcfFinding = Extract<FindingOut, { profile: "icf" }>;
 /** The IOF expansion's statistics vocabulary — the as-built keys
  *  (`ci_lower`/`ci_upper`/`standard_error`/`i_squared`/`tau2`), never the
  *  demo's `ci`/`se`/`i2` (transcription trap 1). */
-export function statRows(statistics: IofFinding["statistics"]): Array<[string, string]> {
+function statRows(statistics: IofFinding["statistics"]): Array<[string, string]> {
   const rows: Array<[string, string]> = [];
   if (statistics.effect_size !== null && statistics.effect_size !== undefined) {
     const type = statistics.effect_size_type;
@@ -83,26 +83,26 @@ function DefinitionRow({ label, value }: { label: string; value: string | null }
 /** The shared grounding shape: the finding's exact anchoring words. The
  *  verified tick renders only when verification actually passed. */
 function ExactWords({
-  projectId,
+  taskId,
   finding,
 }: {
-  projectId: string;
+  taskId: string;
   finding: FindingOut;
 }) {
   const client = useApiClient();
   const chunkId = finding.chunk_id ?? null;
   const quote = finding.quote ?? "";
   const context = useQuery({
-    queryKey: ["projects", projectId, "finding-chunk-context", chunkId, quote],
+    queryKey: ["tasks", taskId, "finding-chunk-context", chunkId, quote],
     enabled: chunkId !== null && quote !== "",
     retry: false,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await client.GET(
-        "/api/v1/projects/{project_id}/chunks/{chunk_id}/context",
+        "/api/v1/tasks/{task_id}/chunks/{chunk_id}/context",
         {
           params: {
-            path: { project_id: projectId, chunk_id: chunkId ?? "" },
+            path: { task_id: taskId, chunk_id: chunkId ?? "" },
             query: { quote },
           },
         },
@@ -137,7 +137,7 @@ function ExactWords({
   );
 }
 
-function IofExpansion({ finding, projectId }: { finding: IofFinding; projectId: string }) {
+function IofExpansion({ finding, taskId }: { finding: IofFinding; taskId: string }) {
   const stats = statRows(finding.statistics);
   const qualifiers = finding.stratum_qualifiers ?? [];
   return (
@@ -185,12 +185,12 @@ function IofExpansion({ finding, projectId }: { finding: IofFinding; projectId: 
           ))}
         </div>
       </div>
-      <ExactWords projectId={projectId} finding={finding} />
+      <ExactWords taskId={taskId} finding={finding} />
     </div>
   );
 }
 
-function IcfExpansion({ finding, projectId }: { finding: IcfFinding; projectId: string }) {
+function IcfExpansion({ finding, taskId }: { finding: IcfFinding; taskId: string }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div>
@@ -220,7 +220,7 @@ function IcfExpansion({ finding, projectId }: { finding: IcfFinding; projectId: 
           <DefinitionRow label="Workforce needed" value={finding.workforce_requirements ?? null} />
         </dl>
       </div>
-      <ExactWords projectId={projectId} finding={finding} />
+      <ExactWords taskId={taskId} finding={finding} />
     </div>
   );
 }
@@ -238,13 +238,13 @@ function FindingRow({
   showKind,
   expanded,
   onToggle,
-  projectId,
+  taskId,
 }: {
   finding: FindingOut;
   showKind: boolean;
   expanded: boolean;
   onToggle: () => void;
-  projectId: string;
+  taskId: string;
 }) {
   const group = groupLabel(finding);
   const directionLabel =
@@ -308,7 +308,7 @@ function FindingRow({
         </td>
         <td className="max-w-[220px] px-3 py-3 text-body leading-snug">
           <Link
-            to={`/projects/${projectId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
+            to={`/tasks/${taskId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
             className="text-grey hover:text-blue hover:underline"
           >
             {scrub(finding.source_title)}
@@ -320,9 +320,9 @@ function FindingRow({
           <td />
           <td colSpan={showKind ? 6 : 5} className="px-4 py-4">
             {finding.profile === "iof" ? (
-              <IofExpansion finding={finding} projectId={projectId} />
+              <IofExpansion finding={finding} taskId={taskId} />
             ) : (
-              <IcfExpansion finding={finding} projectId={projectId} />
+              <IcfExpansion finding={finding} taskId={taskId} />
             )}
           </td>
         </tr>
@@ -339,9 +339,9 @@ function FindingRow({
  * are server-side and URL-addressable (`?profile=`, `?facet=` + `?group=`).
  */
 export function FindingsView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  useDocumentTitle(project.data?.name, "Findings");
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Findings");
   const [searchParams, setSearchParams] = useSearchParams();
   const profileParam = searchParams.get("profile");
   const profile = profileParam === "iof" || profileParam === "icf" ? profileParam : undefined;
@@ -350,14 +350,14 @@ export function FindingsView() {
   const rawPage = Number(searchParams.get("page") ?? "1");
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
 
-  const findings = useFindings(projectId, {
+  const findings = useFindings(taskId, {
     page,
     page_size: 50,
     profile,
     facet,
     group,
   });
-  const groups = useGroups(projectId);
+  const groups = useGroups(taskId);
   const [open, setOpen] = useState<string | null>(null);
 
   const updateParams = (update: (next: URLSearchParams) => void) => {
@@ -526,7 +526,7 @@ export function FindingsView() {
                       onToggle={() =>
                         setOpen(open === finding.finding_id ? null : finding.finding_id)
                       }
-                      projectId={projectId}
+                      taskId={taskId}
                     />
                   </Fragment>
                 ))}

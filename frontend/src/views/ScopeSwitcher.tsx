@@ -20,8 +20,9 @@ export function ScopeSwitcher({
   onChange: (next: Scope) => void;
 }) {
   const options: { value: Scope; label: string }[] = [
-    { value: "all", label: TENANCY_COPY.scopeOrganisation },
+    // Mine first: it is the default (owner, 2026-09-05).
     { value: "mine", label: TENANCY_COPY.scopeMine },
+    { value: "all", label: TENANCY_COPY.scopeOrganisation },
   ];
   return (
     <div role="tablist" aria-label="Scope" className="inline-flex border border-line-2">

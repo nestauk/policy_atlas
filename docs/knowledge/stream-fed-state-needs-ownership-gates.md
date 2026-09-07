@@ -21,7 +21,7 @@ delivered it.
 
 Pre-033, only the owner could reach the workspace, so `stream.pendingCheckIn`
 never needed an owner dimension. The moment colleagues could read the
-project, the SSE-fed field rendered the full steering card — options,
+task, the SSE-fed field rendered the full steering card — options,
 free-text steer, Stop analysis — to any colleague viewing during a pending
 check-in. The stream itself was correctly authorised; the *state* was not
 ownership-aware.

@@ -1,9 +1,8 @@
 # API layer
 
-`client.ts` exports `createApiClient()` (unauthenticated) and
-`createAuthedApiClient(auth)` — both typed `openapi-fetch` clients bound to
-the generated `paths` type in `gen/types.ts`. Base URL comes from
-`VITE_API_BASE_URL`, defaulting to `/api` (the local dev proxy).
+`client.ts` exports `createAuthedApiClient(auth)`, a typed `openapi-fetch`
+client bound to the generated `paths` type in `gen/types.ts`. Base URL comes
+from `VITE_API_BASE_URL`, defaulting to `/api` (the local dev proxy).
 
 The generated client is schema-first: `gen/types.ts` and the committed
 `../../openapi.json` are produced from the backend's Pydantic contract
@@ -24,7 +23,7 @@ The generated client is schema-first: `gen/types.ts` and the committed
   exponential backoff with jitter (1s–30s), and a single
   refresh-then-retry on a 401 before surfacing `onUnauthenticated`.
 - `queries.ts` — TanStack Query hooks over the authed client:
-  `useProjects`, `useProject`, `useCheckIns`, plus the read-model hooks
+  `useTasks`, `useTask`, `useCheckIns`, plus the read-model hooks
   named in task 025 §6 (`useFunnel`, `useLandscape`, `useEvidence`,
   `useFindings`, `useDecisions`, `useArtefact`) and the task-027 durable
   transcript/run reads (`usePlanningTurns`, `useRuns`). `groups`/`coverage`
