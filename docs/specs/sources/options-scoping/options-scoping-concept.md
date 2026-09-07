@@ -619,3 +619,15 @@ until then the rulings win over the boards.
     synthesise(profile), "how sure" being the roll-up of tiers already computed; ⟨full run⟩ =
     the whole EB chain as a child task. `inherit` stays a component of its own; `propose` is the
     only component with no EB ancestor. Export is a Share seam.
+31. **A document is not an option; inherit findings too (owner, 2026-09-07).** The EB's
+    characterise assigns each document to one theme. That will not work for options off the
+    shelf: documents discuss bundles, name several interventions, and systematic reviews cover
+    many intervention types. The `longlist` component therefore assigns **intervention
+    mentions**, not documents, many-to-many — at longlist depth from the screen's structured
+    fields (the interventions an abstract names), and at finding grain where a deep Evidence
+    search was inherited. A document counts once per option it mentions; a review's spanning
+    contribution is visible; a bundle becomes a package with *part of* links. When a linked
+    Evidence search ran the deep chain, `inherit` also hands over its **extracted findings**,
+    and ⟨assess⟩ skips the light extraction for those documents. The clustering-quality spike
+    before the longlist contract must test many-to-many assignment, bundles and reviews across
+    domains; option-grain clustering is unproven.

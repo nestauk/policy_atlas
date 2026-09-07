@@ -54,16 +54,16 @@ The three depths of ruling 3 are **compositions** of these components, not compo
 
 | # | Component | Origin | What OS uses it for | Realisation | Gating |
 |---|---|---|---|---|---|
-| 0 | inherit | **new** — no EB analogue; a thin procedure over Links | seed the plan, the pool and the longlist from a linked Evidence search task | procedure | optional; user chooses the task |
+| 0 | inherit | **new** — no EB analogue; a thin procedure over Links | seed the plan, the pool, the longlist and — from a deep search — the extracted findings, from a linked Evidence search task | procedure | optional; user chooses the task |
 | 1 | plan | system plan-as-object instance (the EB plan UI), OS slots | the scaffolded planning conversation → plan object: target unit, three constraint kinds, entry branch, depth asked every time | agent (lead-authored prompt) | mandatory; gate: confirm |
 | 2 | acquire | is EB (incl. ingest) | `search` with intent = the plan, an option or a variant; source policy for the baseline; seed corpus from `inherit` | procedure | mandatory |
-| 3 | screen | is EB, stage 1 only | title-and-abstract consensus screen, plan as intent; 🟡 structured fields returned; evidence-scope constraints applied here | per-doc fan-out | mandatory; **no stage 2 in OS** |
+| 3 | screen | is EB, stage 1 only | title-and-abstract consensus screen, plan as intent; 🟡 structured fields returned, incl. the **interventions the abstract mentions** (one document may name several); evidence-scope constraints applied here | per-doc fan-out | mandatory; **no stage 2 in OS** |
 | 4 | classify | is EB | primary evidence type + open tags per screened-in document | per-doc fan-out | mandatory |
 | 5 | appraise | is EB | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
-| 6 | longlist | EB characterise, **modified** | both characterise machines at option grain: cluster screened documents into options, options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory |
+| 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — spike before the longlist contract |
 | 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
 | 8 | propose | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
-| 9 | extract | EB, **modified** — light field set | per-document countable cells for a shortlisted option: direction, outcome family, magnitude with comparator and period, design, setting, trial identifier | per-source fan-out | inside ⟨assess⟩ only |
+| 9 | extract | EB, **modified** — light field set | per-document countable cells for a shortlisted option: direction, outcome family, magnitude with comparator and period, design, setting, trial identifier; **skipped for documents whose full findings were inherited** | per-source fan-out | inside ⟨assess⟩ only |
 | 10 | synthesise | is EB, templates | `produce-grounded-block` over the option's (or the baseline's) substrate with a template: **baseline** · **profile** · **summary** · **sense-check questions** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
@@ -82,7 +82,11 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   screened documents queued into the pool, flagged *inherited* for re-screening against the
   scoping plan; its report's theme claims and grouping rows queued as longlist suggestions
   labelled "from your evidence search" (the report holds no list of named interventions; `longlist`
-  turns the rows into option suggestions).
+  turns the rows into option suggestions); and, **when the linked task ran the deep chain, its
+  extracted findings** (`intervention_outcome_finding` / `implementation_context_finding`, at
+  finding grain with the intervention named) — the best possible input to `longlist`, since a
+  finding already isolates one intervention from a document that may discuss several (owner,
+  2026-09-07). ⟨assess⟩ then skips the light extraction for documents whose findings exist.
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are
   re-screened and re-pass classify/appraise if their rubric version differs; inherited rows take
   the fait-accompli path like any suggestion. ✅ The run acquires beyond the inherited set; the
@@ -132,11 +136,21 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   coverage** (study count by evidence type and quality tier, countries, populations, outcomes
   measured) — the longlist metadata, including a descriptive "how sure" before assessment.
 - ✅ **Same two machines as EB characterise, at option grain**: the bounded two-stage LLM grouping
-  (discover, then assign every document, code-enforced exhaustiveness, an explicit unclustered
-  bucket) discovers *options* rather than landscape themes and then groups options into themes;
-  the deterministic coverage/patterns run per option instead of per run. **Different**: the output
-  is an option schema with a specified design, two grouping levels, generation-free entrants, and
-  relations. Named for what it produces (owner, 2026-09-07).
+  (discover, then assign, code-enforced exhaustiveness, an explicit unclustered bucket) discovers
+  *options* rather than landscape themes and then groups options into themes; the deterministic
+  coverage/patterns run per option instead of per run. **Different, and why it will not work off
+  the shelf** (owner, 2026-09-07): characterise assigns each *document* to one theme, and **a
+  document is not an option**. Documents discuss bundles, name several interventions, and —
+  systematic reviews especially — cover many intervention types. So the **unit of assignment is
+  the intervention mention**, not the document: at longlist depth the mentions come from the
+  screen's structured fields (the interventions the abstract names); where a deep search was
+  inherited, the unit is the extracted finding. Assignment is **many-to-many**: one document may
+  support several options and counts once per option it mentions; a review's contribution is
+  visible as such ("3 of 12 documents are reviews spanning several options"); a bundle becomes a
+  package option with *part of* links to its constituents. The output is an option schema with a
+  specified design, two grouping levels, generation-free entrants and relations. Named for what
+  it produces. 🟡 **Unproven**: the concept's clustering-quality spike must test many-to-many
+  assignment, bundles and reviews across domains before the longlist contract.
 - ✅ Top-down: the **small, curated, versioned list of about ten domain-agnostic lever types**
   (regulate, subsidise, tax or charge, inform, provide a service, enforce existing powers, devolve,
   change who runs the system) prompts suggestions and checks coverage. Themes are never a fixed
@@ -196,7 +210,9 @@ The three depths of ruling 3 are **compositions** of these components, not compo
   study, per outcome family, significance never counted — ruling 26; ❓ independence detection
   open, a trial/registration identifier is the candidate field), magnitude in native units with
   its comparator, population and period, design, setting. Run as a parallel per-source fan-out
-  over the capped set so latency is close to one document's. ✅ **synthesise(profile)** by
+  over the capped set so latency is close to one document's. **Skipped for documents whose full
+  findings were inherited from a deep Evidence search** (the EB schema carries the countable
+  fields at finding grain); the profile then reads those findings directly (owner, 2026-09-07). ✅ **synthesise(profile)** by
   retrieval-augmented reading over the option's chunks for the narrative sections: mechanism and
   failure mode (tier-labelled) · constituents (a variant's parent evidence here as related
   evidence for a different design) · evidence for and against · variants in practice · case

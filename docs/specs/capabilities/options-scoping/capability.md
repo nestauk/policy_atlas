@@ -65,8 +65,10 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   iteration on top of every stage.
 - ✅ **Dependencies.** Upstream: optional. A scoping task may **start from an Evidence search
   task** (a Link, ruling 22): its question seeds the plan, its screened documents enter the
-  pool and are re-screened against the scoping plan, and its report's interventions enter the
-  longlist as labelled suggestions; the run still retrieves beyond the inherited set and the
+  pool and are re-screened against the scoping plan, its report's interventions enter the
+  longlist as labelled suggestions, and — when the search ran the deep chain — its **extracted
+  findings** are inherited too, so clustering works at finding grain and assessment skips the
+  light extraction for those documents (ruling 31); the run still retrieves beyond the inherited set and the
   Sources tab states inherited versus added. Otherwise OS assembles its own pool with the EB's
   acquire and screen components inside its own pipeline; it never orchestrates full EB runs per
   option (concept § Architecture stance). Downstream: a shortlisted option can **spawn an EB
@@ -167,15 +169,18 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   nothing"** (structure in § Output structure). No orientation stage; the baseline's "what is
   contested" element is how newcomers are served in v1. ❓ Baseline content generation couples to
   grey-literature and official-statistics sourcing (open question 6).
-- ✅ **Longlist.** Two directions into one funnel: bottom-up (screened documents cluster into
-  options; drill-down shows the constituents) and top-down (lever-type suggestions, the user's
+- ✅ **Longlist.** Two directions into one funnel: bottom-up (**intervention mentions** — not
+  documents — cluster into options, many-to-many, since a document may discuss a bundle or, as a
+  systematic review does, many interventions; drill-down shows the constituents; ruling 31) and
+  top-down (lever-type suggestions, the user's
   and ministerial additions, and a linked Evidence search report's interventions labelled "from
   your evidence search", ruling 22). Every entrant gets the same treatment — the fait-accompli
   fix (concept § Shape 2). **A user modification of an option's design becomes a new option,
   variant of its parent, with its own mini search** (ruling 15); which edits count as a design
   change is the agent's judgement, stated in the chat, with no fixed rule (owner, 2026-09-07);
   packages and ingredients are linked part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
-  target longlist size — are open question 4.
+  target longlist size — are open question 4; 🟡 clustering at option grain is unproven and is
+  spiked before the longlist contract (ruling 31).
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
   metadata as options complete. Hard screens = the user's session constraints of the
   scope-shaped kind plus three defaults (relevant to stated outcomes, distinct, within scope).
