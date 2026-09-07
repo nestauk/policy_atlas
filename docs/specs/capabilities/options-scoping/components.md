@@ -29,16 +29,18 @@ Honesty about what "reuse" means (pass-3 review): by the execution contract's I/
 and `constrain` are OS components in their own right, **built on the shared EB engines** (the
 two-stage grouping engine and deterministic coverage utilities; the per-item judgment fan-out) —
 nothing is mirrored, but their I/O is new. Reuse of the spine also asks three **declared changes to
-EB interfaces**: the screen returns structured fields including the interventions an abstract
-mentions (🟡); `extract` registers a light field profile; `synthesise` gains the report, profile and
-baseline templates. The execution contract was amended 2026-09-07 to say components are shared
+EB interfaces** (ruling 43): `extract` registers two new profiles (an **abstract profile** run over
+every screened-in document, and a **light full-text profile**) and `select` gains a scoping
+read-set strategy; `synthesise` gains the report, profile and baseline templates; the provenance
+contract declares one new block kind (the transferability working). The **screen is unchanged**: it
+screens for relevance only. The execution contract was amended 2026-09-07 to say components are shared
 across capabilities (ruling 40).
 
 ```
 [0 inherit] ─▶ 1 plan ──▶ ⟨baseline⟩ ══gate: confirm plan against baseline══▶
-   2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 propose
+   2 acquire ─▶ 3 screen ─▶ 4 classify ─▶ 5 appraise ─▶ (ingest) ─▶ 10 extract(abstract) ─▶ 6 longlist ─▶ 7 constrain ─▶ 8 propose
                                        (the EB spine as is, then the longlist; runs over every option)
-   ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 10 synthesise(report, assessed) ─▶ export (Share seam)
+   ══gate: "Assess these N"══▶ ⟨assess⟩ per shortlisted option ─▶ 11 synthesise(report, assessed) ─▶ export (Share seam)
                                      └──▶ ⟨full run⟩ per option = the whole EB chain as a child task (user-triggered)
 ```
 
@@ -66,22 +68,23 @@ across capabilities (ruling 40).
 | 0 | inherit | **new** — no EB analogue; a thin procedure over Links | seed the plan, the pool, the longlist and — from a deep search — the extracted findings, from a linked Evidence search task | procedure | optional; user chooses the task |
 | 1 | plan | system plan-as-object instance (the EB plan UI), OS slots | the scaffolded planning conversation → plan object: target unit, three constraint kinds, entry branch, depth asked every time | agent (lead-authored prompt) | mandatory; gate: confirm |
 | 2 | acquire | is EB (incl. ingest) | `search` with intent = the plan, an option or a variant; source policy for the baseline; seed corpus from `inherit` | procedure | mandatory |
-| 3 | screen | is EB, stage 1 only | title-and-abstract consensus screen, plan as intent; 🟡 structured fields returned, incl. the **interventions the abstract mentions** (one document may name several); evidence-scope constraints applied here | per-doc fan-out | mandatory; **no stage 2 in OS** |
-| 4 | classify | is EB | primary evidence type + open tags per screened-in document | per-doc fan-out | mandatory |
+| 3 | screen | is EB, stage 1 only, **unchanged** | title-and-abstract consensus screen for relevance, plan as intent; evidence-scope constraints applied at retrieval and here | per-doc fan-out | mandatory; **no stage 2 in OS** |
+| 4 | classify | is EB | primary evidence type + open tags per screened-in document; Unknown and Non-evidence shown as their own buckets in an option's source-quality profile (a non-evidence document counts as a mention, never as evidence); Unknown is not resolved within scoping (ruling 43) | per-doc fan-out | mandatory |
 | 5 | appraise | is EB | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
 | 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — spike before the longlist contract |
 | 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
 | 8 | propose | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
-| 9 | extract | EB, **modified** — 🟡 light field profile (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it) | per-document countable cells for a shortlisted option over the read set; inherited findings reused at finding grain (ruling 35) | per-source fan-out | inside ⟨assess⟩ only; field set and independence method are spike 2 |
-| 10 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (provisional and assessed forms; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
+| 9 | select | is EB (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
+| 10 | extract | is EB, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are spike 2 |
+| 11 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (provisional and assessed forms; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
 
 | Composition | Made of | Runs |
 |---|---|---|
-| ⟨baseline⟩ | acquire (grey-literature + official-statistics source policy) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
-| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → longlist → constrain → propose → synthesise(**report**, provisional) | over every option |
-| ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest] → extract(light) over the **read set** (chosen under the cap so distinct implementations, required outcomes and the counter-case survive; omissions represented — ruling 38; inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
+| ⟨baseline⟩ | acquire (Overton and OpenAlex only in v1, grey-literature-weighted source policy; the coverage statement names live official statistics and departmental pages as not searched — ruling 43) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
+| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → propose → synthesise(**report**, provisional) | over every option |
+| ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest → extract(abstract)] → **select** (the scoping read-set strategy: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions — rulings 38, 43) → extract(**light**) over the selected set (inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
 | ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task** seeded from the option with the profile template; the scoping profile re-reads its cells from the report | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
 
@@ -91,7 +94,8 @@ across capabilities (ruling 40).
   screened documents queued into the pool, flagged *inherited* for re-screening against the
   scoping plan; its report's theme claims and grouping rows queued as longlist suggestions
   labelled "from your evidence search" (the report holds no list of named interventions; `longlist`
-  turns the rows into option suggestions); and, **when the linked task ran the deep chain, its
+  turns the rows into option suggestions); its documents' **abstract-profile extractions** where
+  they exist (reused by memo); and, **when the linked task ran the deep chain, its
   extracted findings** (`intervention_outcome_finding` / `implementation_context_finding`, at
   finding grain with the intervention named) — the best possible input to `longlist`, since a
   finding already isolates one intervention from a document that may discuss several (owner,
@@ -101,8 +105,10 @@ across capabilities (ruling 40).
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are
   re-screened (🟡 proposal: they re-pass classify/appraise when the rubric or classifier version
   differs — not yet ruled; the shared cache-validity rules decide); inherited rows take the
-  fait-accompli path like any suggestion. Uploaded source snapshots are task-private in the data
-  model, so a Link alone does not carry them — the inheritance contract must name what crosses. ✅ The run acquires beyond the inherited set; the
+  fait-accompli path like any suggestion. Acquired source snapshots cross with the Link. Uploaded
+  snapshots (task-private in the data model; no upload feature exists yet) do **not** cross
+  automatically — the inherit contract of the day uploads ship decides the mechanism (ruling 43).
+  ✅ The run acquires beyond the inherited set; the
   Sources tab states inherited versus added. Fallback if a contract must trim: question and
   documents only. Kept as its own component so the inherited-versus-added accounting has one
   owner (owner, 2026-09-07).
@@ -124,13 +130,15 @@ across capabilities (ruling 40).
   scaffolding chat as a shared component with EB (open question 8). ✅ Prompt-bearing:
   lead-authored under [prompting.md](../../system/prompting.md).
 
-## 2 — acquire · 3 — screen · 4 — classify · 5 — appraise (the EB spine, as is)
+## 2 — acquire · 3 — screen · 4 — classify · 5 — appraise (the EB spine, as is) · extract(abstract)
 
 - **In:** the plan (or an option / variant as intent; or the baseline's source policy). **Out:**
   the screened-in document set with, per document: evidence type and tags (classify), quality tier
-  under the rubric version (appraise), `text_basis`, and the screen's structured fields (🟡
-  setting country, population, outcome family) so scope-shaped screens in `constrain` run on
-  abstracts.
+  under the rubric version (appraise), `text_basis`, and — from **extract's abstract profile**
+  (ruling 43) — the interventions the abstract names (none / one / several), setting country,
+  population, outcome family and a design hint, so scope-shaped screens in `constrain` run on
+  abstracts and `longlist` clusters mentions. Study geography is read from the abstract text,
+  never inferred from publication metadata.
 - ✅ `acquire` is EB acquire with `search` as the only egress verb; full text is fetched and
   ingested for the whole screened-in set. ✅ `screen` is EB stage 1 with the plan as the id-keyed
   intent record; **no stage-2 full-text confirmation in OS** (ruling 3). ✅ **Evidence-scope
@@ -157,8 +165,8 @@ across capabilities (ruling 40).
   the shelf** (owner, 2026-09-07): characterise assigns each *document* to one theme, and **a
   document is not an option**. Documents discuss bundles, name several interventions, and —
   systematic reviews especially — cover many intervention types. So the **unit of assignment is
-  the intervention mention**, not the document: at longlist depth the mentions come from the
-  screen's structured fields (the interventions the abstract names); where a deep search was
+  the intervention mention**, not the document: at longlist depth the mentions come from
+  `extract`'s abstract profile (the interventions the abstract names); where a deep search was
   inherited, the unit is the extracted finding. Assignment is **many-to-many**: one document may
   support several options and counts once per option it mentions; a review's contribution is
   visible as such ("3 of 12 documents are reviews spanning several options"); a bundle becomes a
@@ -225,13 +233,18 @@ across capabilities (ruling 40).
 - **Why new:** nothing in the EB selects a representative set over a fixed taxonomy; EB `select`
   picks documents for extraction by strategy, not options for coverage.
 
-## 9 — extract (light) · 10 — synthesise (templates): inside ⟨assess⟩
+## 9 — select · 10 — extract (light profile) · 11 — synthesise (templates): inside ⟨assess⟩
 
 - **In:** a shortlisted option with its specified design and ingested documents; the baseline's
   retrieved context (geography-tagged; a containing geography counts unless a more local fact
   contradicts it, ruling 18). **Out:** the verdict strip and the profile sections (§ Output
   structure in [capability.md](capability.md)).
-- ✅ **extract, light field set** for the countable cells: direction (one vote per independent
+- ✅ **select, scoping read-set strategy** (ruling 43): from the option's screened documents,
+  stratify by implementation and outcome family, reserve places for the counter-case, cap per
+  option, and record what was left out and why — the EB's own `select` tool with a second strategy
+  beside its coverage-aware-stratified-over-clusters one. The omissions record feeds the report's
+  "what was not read".
+- ✅ **extract, light field set** for the countable cells over the selected set: direction (one vote per independent
   study, per outcome family, significance never counted — ruling 26; ❓ independence detection
   open, a trial/registration identifier is the candidate field), magnitude in native units with
   its comparator, population and period, design, setting. Run as a parallel per-source fan-out
@@ -257,8 +270,8 @@ across capabilities (ruling 40).
   design (ruling 15). ✅ Shortlist only, on the user's word; every cell labelled *scoping pass*.
   ✅ Unassessed cells are honest empty states. 🟡 **Shape to spike** (open question 2): extraction
   is slower than reading, so the per-option document cap is the latency lever and the spike
-  measures fit to the rapid budget; the stage-1 screen's structured fields give the abstract-level
-  strip shown first.
+  measures fit to the rapid budget; the abstract-profile extraction already on every document
+  gives the abstract-level strip shown first.
 - ✅ **synthesise(report)** writes the Result (ruling 32) in two forms. *Provisional*, after the
   longlist stage: top line · the problem and what is contested · the approaches · what the
   evidence base holds (source-quality profiles, thin coverage) · what needs deciding or
@@ -292,27 +305,30 @@ across capabilities (ruling 40).
   in scoping. ✅ This is the one place the Evidence search's evidence-descriptive boundary is
   widened, and only for the profile-template case (see the EB capability spec § Scope boundaries).
 
-## Open interfaces (from the third review pass; no ruling needed, to be settled at contract)
+## Interface rulings (owner, 2026-09-07; concept ruling 43)
 
-- **Intervention mentions.** The *requirement* — a per-document list of the interventions an
-  abstract names, with unknown/none and multiple-mention semantics — is settled (ruling 31). The
-  *method* is not: a new structured output of the shared screen (a schema, prompt, validation and
-  consumer change) or a separate cheap pass. Study geography must come from the abstract, never
-  inferred from publication metadata.
-- **Classify at option level.** Non-evidence and Unknown documents are skipped-and-counted by the
-  EB; the source-quality profile must show them as such rather than hide them, and the full-text
-  resolution of Unknown stays deferred.
-- **Extract's selection dependency.** The EB deep chain extracts a `select`ed subset; OS supplies a
-  capped read set instead. Either `extract` accepts an explicit source set, or the dependency is
-  generalised.
-- **Synthesise substrates.** The report and profile templates read new substrate kinds: option
-  membership, relations, countable aggregates, context legs and constraint states. These need
-  declared claim types under the provenance contract, not only a template.
-- **Baseline backends.** Official statistics and supplementary web acquisition must use declared
-  backends; open-web search is still a system seam.
-- **Shared seams recorded for the system contracts** (ruling 42): reading budget and evidence
-  eligibility; source-quality policy distinct from evidence-scope constraints; durable option
-  identity and relations across runs.
+The six open interfaces the third review pass raised, ruled:
+
+1. **Mentions and abstract-level fields** come from `extract` with a new **abstract profile** over
+   every screened-in document; the screen is unchanged. Whether the abstract record is a finding
+   or a new record kind is a contract detail.
+2. **Classify at option level:** Unknown and Non-evidence documents appear as their own buckets in
+   the source-quality profile; non-evidence counts as a mention, never as evidence; Unknown is
+   not resolved within scoping.
+3. **The read set** is built by `select` with a scoping strategy (ruling 38's discipline); `extract`
+   keeps taking a selected set.
+4. **Claim kinds:** membership and countable aggregates are EB pattern claims; relations are
+   reasoning claims or user actions; constraint states are records; the **transferability
+   working** is a new grounded-block kind with per-column grounding, declared in
+   [../../system/provenance-grounding.md](../../system/provenance-grounding.md).
+5. **Baseline backends:** Overton and OpenAlex only in v1; the coverage statement names live
+   statistics and departmental pages as not searched; the open-web seam stays closed.
+6. **Uploaded snapshots:** deferred — no upload feature exists; when it does, uploads do not cross
+   automatically.
+
+**Shared seams still recorded for the system contracts** (ruling 42): reading budget and evidence
+eligibility; source-quality policy distinct from evidence-scope constraints; durable option
+identity and relations across runs.
 
 ## export (Share seam)
 

@@ -117,6 +117,19 @@ Two further positions relative to the rungs:
   recomputable, never a deterministic fact; a **softer grade below both rungs** (facet grouping
   over findings also inherits the extraction dependency).
 
+## Column-grounded blocks (declared 2026-09-07 for options scoping)
+
+A fourth shape beside claims, gaps and patterns: a **tabular block whose columns are grounded
+differently**. The first instance is options scoping's **transferability working** (Factor ·
+Evidence says · Your context · Basis): the *Evidence says* cell is a claim at tiers 1–3 with its
+citations; the *Your context* cell is typed **retrieved** (a cited fact, applicable at the target
+unit by its nature), **stated by you** (a present fact the user gave) or **planned by you** (a
+commitment, which can only ever be a named condition); the *Basis* cell names which; and a
+**verdict word** is derived deterministically from the rows (the weakest leg decides, no factor
+fractions). Verify checks each cell against its own rule, and the derivation against the rows.
+Declared here so the block kind is shared; the row semantics are the capability's
+([../capabilities/options-scoping/trust.md](../capabilities/options-scoping/trust.md)).
+
 ## `produce-grounded-block` — how verify works
 
 Runs **synthesise → cite → verify → write**, with **cite and verify as mandatory internal

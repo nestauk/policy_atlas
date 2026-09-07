@@ -745,3 +745,21 @@ until then the rulings win over the boards.
     retrieval); source-quality policy kept distinct from evidence-scope constraints in the plan
     vocabulary (policy flags, never deletes); durable option identity and relations across runs
     (data model — a run-local cluster id is not enough).
+43. **Interface rulings (owner, 2026-09-07).** The six open interfaces the third review pass
+    raised: (1) intervention mentions and the abstract-level fields (setting, population, outcome
+    family, design hint) come from **`extract` with a new abstract profile** over every
+    screened-in document, reused by memo; the **screen is unchanged** and screens for relevance
+    only; study geography is read from the abstract, never inferred from publication metadata.
+    (2) Unknown and Non-evidence documents appear as **their own buckets** in an option's
+    source-quality profile; non-evidence counts as a mention, never as evidence; Unknown is **not
+    resolved within scoping**. (3) The capped read set in ⟨assess⟩ is built by the EB's
+    **`select` with a scoping strategy** (ruling 38's discipline: stratify by implementation and
+    outcome family, reserve the counter-case, cap, record omissions); `extract` keeps taking a
+    selected set. (4) Claim kinds: membership and countable aggregates are EB **pattern claims**;
+    relations are reasoning claims or user actions; constraint states are records; the
+    **transferability working is a new column-grounded block kind** declared in the provenance
+    contract. (5) The baseline searches **Overton and OpenAlex only** in v1 and says what it could
+    not reach; the open-web seam stays closed. (6) Uploaded snapshots: **deferred** — no upload
+    feature exists; when it does, uploads do not cross a Link automatically. Options scoping
+    therefore uses `extract` with two profiles (abstract; light full-text) and `select` with one
+    new strategy, and adds no sibling component for any of them.

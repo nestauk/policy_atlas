@@ -211,6 +211,9 @@ no separate broad/narrow mode — stratify across whatever clusters exist; depth
 cluster). Guards against horizon scans collapsing onto a narrow top-k. Realised as the shared
 **`select`** tool (strategy-parameterised: *(candidate set, cheap signals, strategy, budget) →
 chosen subset + rationale*); EB's coverage-aware-stratified-over-clusters is one strategy.
+*(Options scoping adds a second: the **scoping read-set strategy** — stratify one option's
+documents by implementation and outcome family, reserve the counter-case, cap per option, record
+omissions; OS ruling 43, 2026-09-07.)*
 Strata are the characterisation's clusters plus the counted **`unclustered`** set as a
 first-class stratum (already implied by §5's counted-unclustered and "whatever clusters exist").
 **Realisation: procedure with an optional bounded generative rerank** — stratification, the

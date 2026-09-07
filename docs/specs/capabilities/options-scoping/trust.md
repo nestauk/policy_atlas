@@ -115,6 +115,10 @@ supported sentence, and the sentence is what gets copied into advice.
   any weak leg collapses the argument.
 - ✅ **Moderator and dealbreaker extraction** with verbatim quotes and evidence-basis tags
   (empirical · author hypothesis · theory background).
+- ✅ The working is a **column-grounded block** (ruling 43; declared in
+  [../../system/provenance-grounding.md](../../system/provenance-grounding.md)): the evidence cell
+  of each row is grounded at tiers 1–3, the context cell is typed retrieved / stated / planned,
+  the basis tag names which, and the verdict word is derived deterministically from the rows.
 - ✅ **Default-to-Unknown context discipline, three sources** (ruling 18): the Factor | Evidence
   says | Your context | Basis table takes context entries typed **retrieved** (from the
   baseline or the assessment, cited and geography-tagged; a fact at a containing geography

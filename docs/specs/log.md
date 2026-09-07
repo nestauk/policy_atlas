@@ -23,6 +23,13 @@
   [plan-as-object](system/plan-as-object.md) (evidence-scope constraint ≠ source policy),
   [data-model](system/data-model.md) (durable option identity) and
   [execution-orchestration](system/execution-orchestration.md) (reading budget / eligibility).
+* **Update** (same day): OS concept ruling 43 — the six open interfaces ruled: mentions via a new
+  `extract` abstract profile (screen unchanged); Unknown/Non-evidence as buckets, unresolved in
+  scoping; the read set via `select` with a scoping strategy; claim kinds mapped onto pattern and
+  reasoning claims plus one new **column-grounded block** declared in
+  [provenance-grounding](system/provenance-grounding.md); baseline on Overton + OpenAlex only;
+  uploads deferred. [evidence-search/components.md](capabilities/evidence-search/components.md) § 6
+  notes the second `select` strategy.
 
 ## 2026-09-07
 * **Update**: Options scoping review round. A two-pass adversarial product review of the concept

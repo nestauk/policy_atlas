@@ -12,7 +12,7 @@ timestamp: 2026-09-07
 [options-scoping-concept.md](../../sources/options-scoping/options-scoping-concept.md) (the
 owner-agreed concept of 2026-09-01/02, the wireframe-round rulings of 2026-09-03 and the
 review-round rulings of 2026-09-07, hereafter "concept § Shape", "concept ruling N"; the
-review-round rulings 15–42 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
+review-round rulings 15–43 win where they differ), reopened in PR #63 for the review round; this spec + `docs/adr/` are canonical
 ([ADR 0002](../../../adr/0002-spec-governance.md)). OS is an **instance** of the capability
 framework: the Tier-0 substrate, the retrieval contract, the findings layer, the grounding tiers
 and the plan object are owned by the system contracts and only **referenced** here; the
@@ -135,10 +135,12 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   sum. The narrative sections (mechanism, case studies, what it would take, moderator quotes)
   come from **retrieval-augmented reading** over the read texts. The stage-1 screen's structured
   fields give an abstract-level strip before any full text is read. The per-option document cap
-  is the latency lever; the **read set under the cap is chosen so that distinct implementations,
-  the required outcomes and the counter-case survive**, omissions are represented, and a
-  budget-limited result may be explicitly incomplete (ruling 38); the spike measures **whole-run**
-  time to a usable result, not extraction alone. ❓ How "one vote per independent study" detects
+  is the latency lever; the **read set under the cap is chosen by the EB's `select` with a scoping
+  strategy so that distinct implementations, the required outcomes and the counter-case
+  survive**, omissions are represented, and a budget-limited result may be explicitly incomplete
+  (rulings 38, 43); the spike measures **whole-run** time to a usable result, not extraction alone.
+  Mentions and the abstract-level fields come from `extract`'s abstract profile over every
+  screened-in document; the screen is unchanged (ruling 43). ❓ How "one vote per independent study" detects
   several papers on one trial is open (a trial or registration identifier in the light
   extraction is the candidate).
 - ✅ **Depth settings and entry branches are orthogonal** (ruling 25). *Rapid* and *standard*
@@ -307,8 +309,10 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   is affected (where the target unit is checked against the data) · what is already changing ·
   **what is contested** (rival explanations of the problem; disagreements between sources) ·
   cost of inaction · key assumption · sources. Empirical premises sourced; the key assumption
-  and what is contested are labelled reasoning (ruling 40); the tool does not forecast; the
-  source-tier skew (official statistics, grey literature) is visible. "Do nothing" is the
+  and what is contested are labelled reasoning (ruling 40); the tool does not forecast. In v1 the
+  baseline searches Overton and OpenAlex only, and its coverage statement names live official
+  statistics and departmental pages as not searched; the user may supply them as stated facts
+  (ruling 43). The source-tier skew (grey literature) is visible. "Do nothing" is the
   reference wherever options appear — a sentence with a link on the longlist, an unremovable
   reference on the shortlist, and a band above the assessed table worded as **the situation
   these options would change**, never "compared against" (ruling 17; scoping does not perform
@@ -317,7 +321,8 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   does" mapped to its lever type; each option carries its name, a one-sentence description, the
   stated outcomes it is for, its relations (variant of · part of), and its state (on the
   shortlist · suggested · from your evidence search · added by you · excluded with the
-  constraint · no in-scope evidence). Two views: list (for judging each option) and grid
+  constraint · no in-scope evidence); its source-quality profile shows unknown-type and
+  non-evidence documents as their own buckets (ruling 43). Two views: list (for judging each option) and grid
   (**primary lever type × ambition**, for judging the set; ambition is a per-option tag with a
   one-line justification, labelled "as described, not measured" and carried as a **tier-4
   reasoning claim** since no evidence has been read when it is assigned, ruling 20; owner
