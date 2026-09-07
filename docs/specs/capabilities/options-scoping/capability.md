@@ -101,13 +101,20 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
 
 - ✅ **Three depths of evidence work, one gate between the cheap and the expensive**
   (concept ruling 3):
-  1. *Longlist depth* — retrieval, the EB's title-and-abstract consensus screen once at the plan
-     level, clustering, and cheap metadata per option (study count, source type, countries,
-     populations, outcomes measured). Runs over every option. No per-option analysis.
+  1. *Longlist depth* — the EB's mandatory spine as is (acquire, title-and-abstract screen,
+     classify, appraise, full-text ingest) once at the plan level, then clustering into options
+     with per-option coverage: study count by evidence type and **quality tier**, countries,
+     populations, outcomes measured (owner, 2026-09-07: classify and appraise always run on
+     acquired documents, so a descriptive "how sure" exists before assessment — shown on the
+     option card and as a user-requested sort, never a place reason). Runs over every option. No
+     per-option reading.
   2. *Assessment depth* — the **mini evidence search**, run on the **shortlist only** and only
      when the user says so ("Assess these N", with a time estimate). It **reads the full text of
-     the documents it relies on**, capped per option (ruling 16). Fills the verdict strip and
-     the option profile. Every cell is labelled *scoping pass*.
+     the documents it relies on**, capped per option (ruling 16; full text is already fetched for
+     the whole screened-in set, so the cost is the reading). Per option: a targeted acquire if
+     its document set is thin, a light extraction for the countable cells, and synthesise with
+     the profile template. Fills the verdict strip and the option profile. Every cell is labelled
+     *scoping pass*.
   3. *Full evidence search* — the complete EB pipeline for **one option**, user-triggered, which
      mints its own EB task (ruling 9).
 - ✅ **Claim depth follows reading depth** (ruling 16). Screening stays title-and-abstract; no
@@ -191,10 +198,11 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   2026-09-07). Themes group the longlist and label the grid but do not earn places; a
   single-option theme gets no automatic place unless its primary lever type is otherwise
   uncovered.
-  Pre-assessment reasons are limited to what metadata knows (distinctness, "widest
+  Pre-assessment reasons are limited to what coverage knows (distinctness, "widest
   implementation record", "only option of its lever type", "thin evidence"); **study count alone
-  is never a reason**, **reasoned guesses never feed the proposal**, and thin evidence is a
-  reason to assess. The proposal never fills two places with a package and its own ingredient
+  and quality-tier distribution are never reasons** (tiers are display and a user-requested sort
+  only, guarding hierarchy bias — owner, 2026-09-07), **reasoned guesses never feed the
+  proposal**, and thin evidence is a reason to assess. The proposal never fills two places with a package and its own ingredient
   without saying so, and warns when every place shares one ambition band. "Strongest evidence"
   arrives with the assessment as a sort. A place is filled in one of two ways — **proposed by
   Policy Atlas** with its reason, or **added by you**; when the user adds, PA advises on
@@ -267,8 +275,9 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   one-line justification, labelled "as described, not measured" and carried as a **tier-4
   reasoning claim** since no evidence has been read when it is assigned, ruling 20; owner
   2026-09-07). A click opens a
-  light **option-before-assessment** page: what it is for · what the evidence base holds so far ·
-  screens and guesses · where it came from.
+  light **option-before-assessment** page: what it is for · what the evidence base holds so far
+  (study count by evidence type and quality tier, countries, populations, outcomes) · screens and
+  guesses · where it came from.
 - ✅ **Shortlist.** One list at two stages: before assessment, the places with their reasons and
   the assess action; after, the assessed table for the same options with the summary above it.
 - ✅ **Assessed table = verdict strips stacked** (ruling 7). Six columns: Option (with its

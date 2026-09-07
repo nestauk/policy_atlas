@@ -607,4 +607,15 @@ until then the rulings win over the boards.
     keep equal weight); dropping the transferability verdict word in favour of an
     argument-only cell; removing the do-nothing band; assessing every kept option by default;
     treating evidence restrictions as plan Settings rather than a constraint kind.
-
+30. **Component skeleton corrections (owner, 2026-09-07).** Components are reused or
+    modified from the Evidence search, never mirrored (each marked is-EB / EB-modified / new).
+    The EB's mandatory spine — acquire, screen, classify, appraise, ingest — runs **as is at
+    longlist depth**, so every option carries evidence types and quality tiers before
+    assessment: shown on the option card and as a user-requested sort, **never a place reason**
+    (hierarchy bias); this corrects ruling 6's "strongest evidence arrives with the assessment".
+    The option-clustering component is named **`longlist`** (EB characterise modified: the same
+    two machines at option grain). The three depths are **compositions**, not components:
+    ⟨baseline⟩ = spine + synthesise(baseline); ⟨assess⟩ = [acquire if thin] + extract(light) +
+    synthesise(profile), "how sure" being the roll-up of tiers already computed; ⟨full run⟩ =
+    the whole EB chain as a child task. `inherit` stays a component of its own; `propose` is the
+    only component with no EB ancestor. Export is a Share seam.

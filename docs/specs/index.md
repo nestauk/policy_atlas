@@ -67,7 +67,7 @@ implementation lands — see the flow-back in [README](README).
 | Agent/sub-agents, the tool registry + universal core, steering modes, the routing rule, durability | [system/execution-orchestration.md](system/execution-orchestration.md) → arch §4, §6 |
 | The plan object, plan→config compile, two-level/progressive planning, source/evidence policy, depth/thoroughness | [system/plan-as-object.md](system/plan-as-object.md) → arch §5 |
 | Anything in the Evidence search run (acquire → … → synthesise) | [capabilities/evidence-search/](capabilities/evidence-search/) → build spec |
-| Anything in an Options Scoping run (plan → baseline → longlist → shortlist → assess → export; the ramp into an Evidence search task) | [capabilities/options-scoping/](capabilities/options-scoping/) → concept (source #10) |
+| Anything in an Options Scoping run (plan → baseline → longlist → shortlist → assess → export; the full evidence search as a child Evidence search task) | [capabilities/options-scoping/](capabilities/options-scoping/) → concept (source #10) |
 | Writing or changing ANY LLM prompt/envelope surface; the refine-replay loop; model swaps | [system/prompting.md](system/prompting.md) — no frozen-source arch section (018 origin) |
 | Export/share, version-pinned deep-links, the superseded-version banner | **No contract drafted yet** — read arch §10 directly (a down-weighted v3.0 seam). |
 | Collaboration/comments/event log, persistence substrate, observability/eval, security/egress | **No contract drafted yet** — read arch §7, §9, §8, §11 directly; draft the contract when the first task lands. |
