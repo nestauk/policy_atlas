@@ -3,7 +3,7 @@
 One implementation slice: make the app usable on narrow (phone) screens without changing
 the desktop or tablet rendering.
 
-> **Status:** drafted. Contract approved (before planning): _pending_ ·
+> **Status:** approved. Contract approved (before planning): 2026-09-08 · owner ·
 > Plan approved (before implementation): _pending_ · ADR: none expected.
 
 ## Goal
