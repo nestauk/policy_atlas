@@ -307,7 +307,7 @@ test.describe("mock task-lifecycle journey", () => {
 
     // "All" is one click away and shows the whole collection.
     const sourceFilters = page.getByRole("group", { name: "Filter sources" });
-    await sourceFilters.getByRole("button", { name: "All" }).click();
+    await sourceFilters.getByRole("button", { name: "All", exact: true }).click();
     await expect(page).toHaveURL(/[?&]status=all/);
     await expect(sourceRows).toHaveCount(mockEvidence.length + 1);
     // The retracted verdict lives in the Relevant column's hover button.
