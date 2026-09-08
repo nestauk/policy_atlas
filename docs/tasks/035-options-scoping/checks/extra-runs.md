@@ -17,7 +17,7 @@ The review found the results bundle held a later light run than the check-2 repo
 three runner defects. All are fixed and the bundle is pinned.
 
 - **light_v2** is one complete run over all 36 read-set documents: 173 findings; anchors 125
-  exact · 60 normalised · **38 failed (20 percent)**; every document carries a wall time. The
+  exact · 60 normalised · **38 failed (17 percent)**; every document carries a wall time. The
   check-2 trace was recomputed on it (**trace2_v2**). Both are the reference for everything below.
 - **True fan-out timing** (all of an option's documents extracted at once): T3, 10 documents,
   **24.6 s** wall (sum of document times 76.7 s); T4, 12 documents, **16.0 s** (sum 65.2 s). The
@@ -71,22 +71,23 @@ Injected into the unemployment corpus with an "OECD evidence only" evidence-scop
 benefit sanctions, *variant of* the guarantee with obligation), a ministerial suggestion (free
 bus travel for jobseekers), a taxonomy-prompted suggestion (guaranteed-hours rights, lever type
 *regulate*), and a modified design (wage subsidies restricted to long-term-unemployed under-25s
-for twelve months). Discovery at the C3-3 ceiling (`clamp(ceil(N/4), 8, 40)` → 25) found 20
+for twelve months). Discovery at the C3-3 ceiling (`clamp(ceil(N/4), 8, 40)` → 25) found 19
 options (residual 33 of 97 units).
 
 | check | result |
 |---|---|
 | every no-document entrant survives as its own option with its origin label | **yes**, all four; each became an option with zero documents (an honest empty coverage state) |
-| the variant is not excluded by the *distinct* screen and keeps its relation | yes; "Youth guarantee without benefit sanctions" is its own option, variant of the guarantee with obligation |
-| a user-added place is kept through the proposal | yes; the proposal seated the variant as *added by you* under its lever type |
+| the variant survives as its own option and keeps its relation | yes; "Youth guarantee without benefit sanctions" is its own option, variant of the guarantee with obligation. **No distinctness screen was run** in this check, so ruling 36's "the distinct screen never excludes a variant" is not tested here |
+| a user-added place is kept through the proposal | **not exercised**: the check wrote the user's place as a separate output beside the proposal rather than running it through repeated proposals or a user edit |
 | scope-shaped constraints judge the specified design | yes: "guaranteed-hours rights" was **excluded** as needing primary legislation (correct for a local-authority constraint); benefit reform and area tax credits likewise; nine options came back **uncheckable** |
 | an option whose only source is set aside is kept marked "no in-scope evidence" | **not exercised**: every option with set-aside members also had in-scope members ("skills training": 8 in scope, 5 set aside) |
-| reason text when coverage is empty | a defect: "widest implementation record (0 countries recorded across 1 documents)" — the reason axis needs a floor |
+| reason text when coverage is empty | a defect: "widest implementation record (0 countries recorded across 4 documents)" — the reason axis needs a floor when no geography is recorded |
 
 ## 3 — Run 2 (machinery half): grain on equal inputs
 
 The same 22 documents (the T3 and T4 candidates), three unit sources, one clustering procedure,
-grain judged by a model, paraphrase stability measured on each set:
+grain judged by the ordinary producer model (`gpt-5.4-mini`, not the stronger judge), paraphrase
+stability measured on each set:
 
 | unit source | units | options | residual | grain (model-judged) | mentions moved under paraphrase |
 |---|---|---|---|---|---|
@@ -116,11 +117,15 @@ about other things. The cap-3 read set held zero eligible findings for T3. Five 
 contrary findings are one review counted five times, so the dedup of A8 changes this table too.
 
 **Equal text, cap 5** (the first 60 000 characters of each document to both approaches): for T3
-extraction produced 4 attributable contrary findings; the single reading call's cells showed **no**
-contrary family yet set its counter-evidence flag to true. For T4: extraction 3, reading again
-flag true with no family behind it. The reading call knows something is there and cannot say
-what; extraction says what and where. That is the honest form of the check-5 claim the review
-struck out.
+extraction produced 4 attributable contrary findings; the single reading call's cells reported
+**one null result** in three documents for physical activity (and, for T4, two null and one
+mixed for physical activity, one null and one mixed for social participation). *Correction after
+the pass-5 review: an earlier version of this section said the reading call showed no contrary
+family; the runner's outcome-label matching failed (the reading's family names did not match the
+desired-direction map, spaces against underscores), so `contrary_families` came out empty while
+the tallies plainly carried the null results.* Reading alone did report the contrary evidence at
+cap 5. What it did not produce is a per-claim anchor or claim key; the case for extraction is
+verifiability, not detection, and this run does not show a detection difference either way.
 
 ## 5 — Run 4: a second option with a real blocker, model-judged
 
@@ -129,9 +134,10 @@ Option: the whole-system, place-based approach. Evidence: 25 effect findings ass
 ICF-lite; 45 of them blockers, 14 barriers, 28 conditions). Target: children aged 5 to 15 in a
 deprived northern district.
 
-**Factor extraction drift, three runs:** 12, 13 and 13 rows; **one factor shared by all three**;
-dealbreakers flagged in one run of three (three factors), none in the other two — with 45
-blocker claims in the evidence. This is worse than the first option showed. A factor list cannot
+**Factor extraction drift, three runs:** 12, 13 and 13 rows; **one factor label shared by all
+three** (an exact lower-cased match, so a lower bound on shared meaning); dealbreakers flagged in
+one run of three (three factors), none in the other two — with 45 blocker claims in the evidence
+(themselves model labels, not quote-vetted). This is worse than the first option showed. A factor list cannot
 be re-derived per run; it has to be produced once, pinned to an evidence and design version, and
 probably built by clustering the context claims rather than by free extraction.
 
@@ -142,10 +148,10 @@ factor:
 |---|---|---|---|
 | blocker present (stated) | met | met | |
 | blocker absent (stated) | not met | not met | all-rows verdict "does not transfer"; dealbreakers-only stays Unknown because no dealbreaker was flagged in the run used |
-| blocker planned | conditional | conditional | after one correction: the fill set it met on a commitment, the code corrected it |
+| blocker planned | conditional | conditional | the fill set it conditional itself; the one code correction in this case restored an evidence-leg status, not a planned→met error *(corrected after pass 5)* |
 | blocker unstated (entry about a different factor) | unknown | **met** | over-read: an attendance spreadsheet set "place-based coordination" met; the model judge said unknown |
 | rule applies by nature | met | met | |
-| rule with a local exception | not met | **met** | the exception did not defeat the rule — the same failure as the first option's P2 pair |
+| rule with a local exception | not met | **met** | **not a demonstrated failure**: the drafted exception excluded districts that had already received a comparable grant, and no entry said this target had, so the target was never inside the exception; the model judge agreed with met *(corrected after pass 5: the fixture, not the fill, was at fault)* |
 
 **Chat promotion** (plain messages to typed entries): all six typed as a person would — a budget
 bid and a funder's assurance became *planned*, a 2022 audit *retrieved*, a present partnership
@@ -153,10 +159,11 @@ board and present officers *stated*, an opinion dropped. The C3 mechanism works 
 
 **Model judge** on 20 filled rows: agreed with 16; the four disagreements are the two over-reads
 above and two rows where the promoted partnership board was read as establishing deliverers and
-senior buy-in. The code guard catches type errors (planned set met); it cannot catch over-reading,
-and it cannot make an exception defeat a rule. Those need a field, not a prompt sentence: an
-entry that carries an explicit `exception_to` reference, and a verify rule that a factor is filled
-only from an entry the model itself tagged as bearing on that factor.
+senior buy-in. In this run the code guard's two corrections both restored evidence-leg statuses;
+no planned→met error occurred to catch. The guard cannot catch over-reading. Whether an exception
+can defeat a rule remains **untested** across both options (the first option's rule matched no
+factor; this option's fixture never placed the target inside the exception). A rerun needs a
+fixture that does, and a judge that derives its answer before seeing the system's.
 
 ## 6 — Run 1 (machinery half): a real NEET corpus
 
@@ -167,7 +174,7 @@ screened in, 32 with full text, 20 fetches blocked by hosts; grey-literature hea
 
 | measure | NEET |
 |---|---|
-| mentions → options | 126 mentions from 59 documents; 124 units → **20 options** at a ceiling of 21 (binding) |
+| mentions → options | 126 mentions from 59 documents; 124 units → **20 options** at a ceiling of 21 (near, not binding) |
 | residual | 28 of 124 (23 percent); residual kinds as before: actors ("schools", "colleges"), events, out-of-question measures |
 | grain | class-grain again ("Youth Guarantee", 4 documents; "Government-led NEET policy") |
 | shortlist | 5 places; the "change who runs the system" seat went to a **one-document, unevaluated** option |
@@ -218,10 +225,11 @@ two syntheses of this size, and remains a projection.
 - **Weakened or reshaped:** D1 (factor extraction is far less stable than the first run
   suggested; pin, do not re-derive; consider clustering the claims), D5 (dealbreaker detection is
   the bottleneck — with none flagged, a dealbreakers-only rule reads Unknown for everything), E8
-  (the honest form: reading alone flags without attribution), E5 (seat instability is real but
+  (no detection difference shown either way; extraction's case is verifiability only), E5 (seat instability is real but
   confined to thin, unevaluated lever types — the gap-message guard addresses exactly that; the
   contested-place guard is less supported), A8 (needs normalisation and DOI, and it changes the
   contrary counts too).
-- **New:** an entry needs an explicit exception reference and a factor-bearing tag (two failures
-  of the same kind across two options); the reason axis needs a floor when coverage is empty; the
-  set-aside-only path remains untested.
+- **New:** the fill over-reads adjacent context (two options); whether an exception defeats a
+  rule is untested; the reason axis needs a floor when no geography is recorded; the
+  set-aside-only path, the distinctness screen on a variant and the user-added place through a
+  real proposal remain untested.
