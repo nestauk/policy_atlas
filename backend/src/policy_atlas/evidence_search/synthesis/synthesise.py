@@ -4831,6 +4831,7 @@ def _ground_case_study_card(
     claim_indices = list(
         range(claim_index_start, claim_index_start + len(wire_claims))
     )
+    claim_ids = [f"s{section_index}c{index}" for index in claim_indices]
     spans = bind_spans(card_text, [claim.text for claim in wire_claims])
     if any(span is None for span in spans):
         return None
@@ -4843,6 +4844,7 @@ def _ground_case_study_card(
         citable_finding_ids=citable_finding_ids,
         citable_chunk_ids=citable_chunk_ids,
         spans=spans,
+        claim_ids=claim_ids,
         claim_indices=claim_indices,
         available_claim_types=available_claim_types,
     )

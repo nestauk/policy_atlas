@@ -4427,7 +4427,7 @@
         "type": "object"
       },
       "ScopeConstraintsDraft": {
-        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.",
+        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.\n    publisher_source: Optional Overton source-collection filter; the only\n        supported value is `apo` (Australian Policy Online).",
         "properties": {
           "author_affiliation_countries": {
             "anyOf": [
@@ -4490,6 +4490,19 @@
             ],
             "default": null,
             "title": "Publisher Country"
+          },
+          "publisher_source": {
+            "anyOf": [
+              {
+                "const": "apo",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Publisher Source"
           }
         },
         "title": "ScopeConstraintsDraft",
