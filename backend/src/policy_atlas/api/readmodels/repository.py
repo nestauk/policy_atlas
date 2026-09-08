@@ -1464,12 +1464,6 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     for raw_card in raw_cards:
                         if not isinstance(raw_card, dict):
                             continue
-                        result_claim_str = raw_card.get("result_claim_id")
-                        result_claim_uuid = (
-                            claim_id_map.get(result_claim_str)
-                            if isinstance(result_claim_str, str)
-                            else None
-                        )
                         card_id_str = raw_card.get("card_id")
                         try:
                             card_uuid = (
@@ -1483,6 +1477,22 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                         card_claims = _task_card_claims(
                             raw_card, block_claim_by_id,
                         )
+                        result_claim_str = raw_card.get("result_claim_id")
+                        result_claim_uuid = (
+                            claim_id_map.get(result_claim_str)
+                            if isinstance(result_claim_str, str)
+                            else None
+                        )
+                        if result_claim_uuid not in {claim.claim_id for claim in card_claims}:
+                            result_ordinal = raw_card.get("result_ordinal")
+                            if (
+                                isinstance(result_ordinal, int)
+                                and not isinstance(result_ordinal, bool)
+                                and 0 <= result_ordinal < len(card_claims)
+                            ):
+                                result_claim_uuid = card_claims[result_ordinal].claim_id
+                            else:
+                                result_claim_uuid = None
                         strength, design, since_year = _card_evidence_fields(
                             raw_card, card_claims,
                         )
@@ -1681,7 +1691,12 @@ def _task_card_claims(
                 gap=block_claim.gap,
                 theme=block_claim.theme,
             ))
-        return result
+        # Old case-study rollups minted aliases afresh for each card.  The
+        # block alias map then resolves every colliding id to one claim, which
+        # may not belong to this card.  Only trust stored aliases when their
+        # resolved text is actually present in the card prose.
+        if all(claim.text in card_prose for claim in result):
+            return result
 
     # Fallback: match block claims whose text is a substring of card prose.
     # The lookup holds each claim under both its UUID and its synthesis alias,
@@ -1701,6 +1716,7 @@ def _task_card_claims(
                 gap=claim.gap,
                 theme=claim.theme,
             ))
+    result.sort(key=lambda claim: claim.span[0] if claim.span is not None else -1)
     return result
 
 
