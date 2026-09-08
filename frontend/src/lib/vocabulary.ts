@@ -91,7 +91,7 @@ export const PUBLIC_SHARE = {
   statusOn: "Shared publicly — anyone with the link can view.",
   statusOff: "Not shared publicly.",
   warning:
-    `Anyone on the internet with the link can see this ${TASK.one}'s result and sources — including the source list and quoted excerpts from the underlying documents. They do not need to sign in.`,
+    `Anyone on the internet with the public link can see this ${TASK.one}'s result and sources — including the source list and quoted excerpts from the underlying documents. They do not need to sign in.`,
   turnOn: "Share publicly",
   turnOff: "Stop sharing publicly",
   copyLink: "Copy link",

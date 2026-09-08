@@ -91,6 +91,17 @@ def _title(metadata: Mapping[str, Any], locator: str) -> str:
     return _metadata_text(metadata, "title") or locator
 
 
+def _abstract_fields(
+    metadata: Mapping[str, Any],
+) -> tuple[str | None, Literal["provider", "llm_description"] | None]:
+    """The document's description and its provenance label, dossier-identical."""
+    abstract = _metadata_text(metadata, "abstract")
+    if abstract is None:
+        return None, None
+    raw_source = _metadata_text(metadata, "abstract_source")
+    return abstract, "llm_description" if raw_source == "llm_description" else "provider"
+
+
 def _year(metadata: Mapping[str, Any]) -> int | None:
     value = metadata.get("publication_year", metadata.get("year"))
     return value if isinstance(value, int) and not isinstance(value, bool) else None
@@ -747,6 +758,7 @@ def evidence_page(
             or (year_to is not None and year_value > year_to)
         ):
             continue
+        abstract, abstract_source = _abstract_fields(metadata)
         sortable_items.append(
             (
                 EvidenceItemOut(
@@ -773,6 +785,8 @@ def evidence_page(
                         row.task_source_snapshot_id
                     ),
                     read_in_full=row.full_text_status == "ingested",
+                    abstract=abstract,
+                    abstract_source=abstract_source,
                 ),
                 appraisal.quality_score if appraisal is not None else None,
             )
@@ -2299,8 +2313,7 @@ def source_dossier_out(
     ).get(source_id)
     provider_value = metadata.get("provider_fields")
     provider: Mapping[str, Any] = provider_value if isinstance(provider_value, Mapping) else {}
-    abstract = _metadata_text(metadata, "abstract")
-    raw_abstract_source = _metadata_text(metadata, "abstract_source")
+    abstract, abstract_source = _abstract_fields(metadata)
     tags = [
         SourceTagOut(tag=tag_row.tag, tag_type=tag_row.tag_type, asserted_by=tag_row.asserted_by)
         for tag_row in conn.execute(
@@ -2334,11 +2347,7 @@ def source_dossier_out(
         classification_reason=classification_reasons.get(source_id),
         read_in_full=row["full_text_status"] == "ingested",
         abstract=abstract,
-        abstract_source="llm_description"
-        if raw_abstract_source == "llm_description"
-        else "provider"
-        if abstract is not None
-        else None,
+        abstract_source=abstract_source,
         publisher=_metadata_text(metadata, "publisher_org"),
         record_type=_metadata_text(metadata, "record_type"),
         language=_metadata_text(metadata, "language"),
