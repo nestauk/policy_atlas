@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract.read_models import ClaimOut
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
@@ -541,6 +542,57 @@ def test_artefact_case_studies_keep_healthy_claim_aliases(
         finally:
             with engine.begin() as conn:
                 delete_task_data(conn, task_id)
+
+
+def _card_claim(text: str) -> ClaimOut:
+    return ClaimOut(claim_id=uuid.uuid4(), claim_type="citation", text=text)
+
+
+def test_task_card_claims_trusts_explicit_null_span_aliases() -> None:
+    """A write-path span=None record (title-bound text) is not collision evidence."""
+    prose_claim = _card_claim("In the prose.")
+    title_claim = _card_claim("Bold Title Programme")
+    raw_card = {
+        "prose": "In the prose. And more.",
+        "claim_ids": ["s0c0", "s0c1"],
+        "claim_spans": [
+            {"claim_id": "s0c0", "span": [0, 13]},
+            {"claim_id": "s0c1", "span": None},
+        ],
+    }
+    result = repository._task_card_claims(
+        raw_card, {"s0c0": prose_claim, "s0c1": title_claim}
+    )
+    assert [claim.claim_id for claim in result] == [
+        prose_claim.claim_id,
+        title_claim.claim_id,
+    ]
+    assert result[1].span is None
+
+
+def test_task_card_claims_unresolvable_aliases_fall_back_to_prose() -> None:
+    """Stored ids that resolve to nothing must not project an empty card."""
+    known = _card_claim("Known claim text.")
+    raw_card = {
+        "prose": "Known claim text. Context.",
+        "claim_ids": ["ghost"],
+        "claim_spans": [],
+    }
+    result = repository._task_card_claims(
+        raw_card, {"s9c9": known, str(known.claim_id): known}
+    )
+    assert [claim.claim_id for claim in result] == [known.claim_id]
+
+
+def test_task_card_claims_fallback_sorts_by_span_position() -> None:
+    """The prose fallback orders claims by their position in the card."""
+    later = _card_claim("zeta point.")
+    earlier = _card_claim("alpha point.")
+    raw_card = {"prose": "alpha point. Then zeta point."}
+    result = repository._task_card_claims(
+        raw_card, {str(later.claim_id): later, str(earlier.claim_id): earlier}
+    )
+    assert [claim.text for claim in result] == ["alpha point.", "zeta point."]
 
 
 def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> None:

@@ -2339,8 +2339,29 @@ deliberately left, each with its reason:
   `grey_lit_only`). Optional and additive everywhere. On removal: delete the
   field (`task_plan.py`, `ScopeConstraintsDraft`, `PlanDraftWire`), the
   geography-token branch in `_geography_constraints`, the two fold-list
-  entries (`agent.py build_plan`, `_draft_from_wire`), the Overton allowlist
-  keys, the `scopeChips` label, and the `planner_v11` APO prompt rule (a
-  version bump + hash re-pin) — and either tolerate or re-save stored plans
-  that carry the field, or old approved plan rows fail validation. Planning
-  chat teaches APO since `planner_v11` (task 039).
+  entries (`agent.py build_plan`, `_draft_from_wire`) plus the
+  `_draft_from_wire` publisher_source normaliser, the Overton allowlist
+  keys — both the wire key (`search_live.py` `_OVERTON_ALLOWED_WIRE_KEYS`)
+  and the filter key + wire mapping + value allowlist in `search_loop.py`
+  (`_OVERTON_FILTER_KEYS`, `overton_wire_params`, `_validate_overton_block`) —
+  the `task_plan.py` mutual-exclusion clause and grey_lit_only guard, the
+  `_drop_scope_incompatible_geo` clearing line (`planning.py`), the
+  `_render_scope_constraints` branch (`agent.py`, CLI render), the
+  `scopeChips` label, and the `planner_v11` APO prompt rule (a version bump +
+  hash re-pin) — and either tolerate or re-save stored plans that carry the
+  field, or old approved plan rows fail validation. Planning chat teaches APO
+  since `planner_v11` (task 039).
+- **Plan overlay seams (039 review stack)** — (1) mid-year scope dates
+  (reachable via planner/chat/API) display as bare years in the plan
+  document, and the dirty-only prune treats a re-entered equal year as a
+  no-op, so the day component can be neither seen nor reset from the UI;
+  compare against the stored ISO value (or display the full date) if this
+  ever bites. (2) `planOverlay.ts` enumerates the overlay keys in three
+  places (`mergeOverlayChanges`'s `set()` calls, `overlayToPlanPatch`'s
+  guards, `serverDisplayedValue`'s switch) — a new plan field must be added
+  to all three or it prunes on save but leaks through the start-time PATCH;
+  consolidate if a fourth list appears. (3) The screening cap mirror
+  (`SCREENING_CRITERION_MAX`/`SCREEN_INTENT_MAX`/`SCREENING_CRITERIA_LIST_MAX`)
+  duplicates backend constants with no cross-language pin test — a backend
+  cap change drifts silently until the backend rejects what the client
+  accepted.

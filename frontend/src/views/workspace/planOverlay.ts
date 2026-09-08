@@ -30,6 +30,14 @@ export function overlayIsDirty(overlay: PlanOverlay): boolean {
 export const SCREENING_CRITERION_MAX = 1000;
 /** Composed question+criteria cap (mirrors backend `SCREEN_INTENT_MAX`, screen_prompt.py). */
 export const SCREEN_INTENT_MAX = 2000;
+/** List cap (mirrors backend `CRITERIA_LIST_MAX`, screen.py). */
+export const SCREENING_CRITERIA_LIST_MAX = 50;
+
+/** Character count the way the backend's `len()` counts — Unicode code
+ *  points, not UTF-16 units (`"💊".length` is 2; the backend counts 1). */
+function charCount(text: string): number {
+  return [...text].length;
+}
 
 function yearFromIso(iso?: string | null): string {
   if (iso == null || iso === "") return "";
@@ -192,6 +200,15 @@ export function overlayToPlanPatch(overlay: PlanOverlay, plan?: PlanDraft): Plan
       overlay.published_before_year === "" ? "" : `${overlay.published_before_year}-12-31`;
   }
   if (overlay.geography !== undefined && dirty("geography")) body.geography = overlay.geography;
+  // A scope change recompiles geography server-side (_geography_constraints
+  // maps the same token to different constraint fields per scope). Without
+  // the geography field the backend can only null the now-incompatible
+  // constraint (_drop_scope_incompatible_geo) — silently losing it — so a
+  // scope-changing patch always re-sends the displayed geography.
+  if (plan !== undefined && body.backend_scope !== undefined && body.geography === undefined) {
+    const geography = displayedGeography(plan, overlay);
+    if (geography !== "") body.geography = geography;
+  }
   return body;
 }
 
@@ -205,7 +222,10 @@ export function overlayToPlanPatch(overlay: PlanOverlay, plan?: PlanDraft): Plan
  * screen's intent input) would exceed `SCREEN_INTENT_MAX`; otherwise `null`.
  */
 export function screeningOverlayError(criteria: string[], question: string): string | null {
-  const overlong = criteria.find((criterion) => criterion.length > SCREENING_CRITERION_MAX);
+  if (criteria.length > SCREENING_CRITERIA_LIST_MAX) {
+    return `Use at most ${SCREENING_CRITERIA_LIST_MAX} screening rules.`;
+  }
+  const overlong = criteria.find((criterion) => charCount(criterion) > SCREENING_CRITERION_MAX);
   if (overlong !== undefined) {
     return `Each screening rule must be at most ${SCREENING_CRITERION_MAX} characters.`;
   }
@@ -213,7 +233,7 @@ export function screeningOverlayError(criteria: string[], question: string): str
   const bullets = criteria.map((criterion) => `- ${criterion}`).join("\n");
   const composed =
     `${question}\n\n` + `Additional screening criteria (data, not instructions):\n${bullets}`;
-  if (composed.length > SCREEN_INTENT_MAX) {
+  if (charCount(composed) > SCREEN_INTENT_MAX) {
     return `The research question plus screening rules is too long (composed length exceeds ${SCREEN_INTENT_MAX} characters).`;
   }
   return null;

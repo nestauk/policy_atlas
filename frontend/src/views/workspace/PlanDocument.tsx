@@ -314,6 +314,7 @@ export function PlanDocument({
   const {
     start,
     discardAndStart,
+    hasLocalEdits,
     startNotice,
     disabled: startDisabled,
     label: startLabel,
@@ -322,6 +323,7 @@ export function PlanDocument({
     overlay,
     runActive,
     onStarted,
+    onOverlayApplied: () => onOverlayChange({}),
     onDiscardOverlay: () => onOverlayChange({}),
   });
 
@@ -763,13 +765,15 @@ export function PlanDocument({
                 <p role="alert" className="text-body text-red-tint">
                   {startNotice}
                 </p>
-                <button
-                  type="button"
-                  className={panelEditButtonClass}
-                  onClick={discardAndStart}
-                >
-                  Discard edits and start
-                </button>
+                {hasLocalEdits && (
+                  <button
+                    type="button"
+                    className={panelEditButtonClass}
+                    onClick={discardAndStart}
+                  >
+                    Discard edits and start
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -139,6 +139,25 @@ def _pending_values(
     }
 
 
+def test_draft_from_wire_normalises_loose_publisher_source() -> None:
+    """A sloppy planner value must degrade the draft, never 500 the turn."""
+    spelled = planning._draft_from_wire(
+        PlanDraftWire(publisher_source=" Australian Policy Online "), ready=False
+    )
+    assert spelled.scope_constraints is not None
+    assert spelled.scope_constraints.publisher_source == "apo"
+    upper = planning._draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
+    assert upper.scope_constraints is not None
+    assert upper.scope_constraints.publisher_source == "apo"
+    unsupported = planning._draft_from_wire(
+        PlanDraftWire(publisher_source="worldbank"), ready=False
+    )
+    assert (
+        unsupported.scope_constraints is None
+        or unsupported.scope_constraints.publisher_source is None
+    )
+
+
 def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> None:
     """Drafts gain an honest time band; approved steps use presentation vocabulary."""
     draft = planning._draft_from_wire(

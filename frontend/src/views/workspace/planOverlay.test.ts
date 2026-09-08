@@ -9,6 +9,7 @@ import {
   overlayIsDirty,
   overlayToPlanPatch,
   screeningOverlayError,
+  SCREENING_CRITERIA_LIST_MAX,
   SCREENING_CRITERION_MAX,
   SCREEN_INTENT_MAX,
 } from "./planOverlay";
@@ -180,6 +181,31 @@ describe("overlayToPlanPatch prunes no-ops against a live plan", () => {
     const patch = overlayToPlanPatch({ question: "What works?" });
     expect(patch).toEqual({ question: "What works?" });
   });
+
+  it("re-sends the displayed geography whenever the patch changes backend_scope", () => {
+    const patch = overlayToPlanPatch(
+      { backend_scope: "grey_lit_only" },
+      plan({
+        backend_scope: "academic_only",
+        scope_constraints: {
+          author_affiliation_countries: ["GB"],
+          country_group: null,
+          published_after: null,
+          published_before: null,
+          publisher_country: null,
+          publisher_source: null,
+        },
+      }),
+    );
+    // Without the geography field the backend would null the incompatible
+    // constraint instead of recompiling "GB" under the new scope.
+    expect(patch).toEqual({ backend_scope: "grey_lit_only", geography: "GB" });
+  });
+
+  it("adds no geography to a scope change when the plan has none", () => {
+    const patch = overlayToPlanPatch({ backend_scope: "academic_only" }, plan());
+    expect(patch).toEqual({ backend_scope: "academic_only" });
+  });
 });
 
 describe("screeningOverlayError", () => {
@@ -200,5 +226,21 @@ describe("screeningOverlayError", () => {
     const question = "q".repeat(1_990);
     const error = screeningOverlayError(["Exclude opinion pieces."], question);
     expect(error).toMatch(String(SCREEN_INTENT_MAX));
+  });
+
+  it("counts code points the way the backend's len() does, not UTF-16 units", () => {
+    // 600 pill emoji: 1200 UTF-16 units, 600 backend characters — valid.
+    expect(screeningOverlayError(["💊".repeat(600)], "What works?")).toBeNull();
+    expect(screeningOverlayError(["💊".repeat(SCREENING_CRITERION_MAX + 1)], "What works?")).toMatch(
+      String(SCREENING_CRITERION_MAX),
+    );
+  });
+
+  it("mirrors the backend's 50-rule list cap", () => {
+    const fifty = Array.from({ length: SCREENING_CRITERIA_LIST_MAX }, (_, i) => `Rule ${i}`);
+    expect(screeningOverlayError(fifty, "What works?")).toBeNull();
+    expect(screeningOverlayError([...fifty, "one too many"], "What works?")).toMatch(
+      String(SCREENING_CRITERIA_LIST_MAX),
+    );
   });
 });

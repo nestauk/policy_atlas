@@ -20,14 +20,19 @@ export function usePlanStart({
   overlay,
   runActive,
   onStarted,
+  onOverlayApplied,
   onDiscardOverlay,
 }: {
   taskId: string;
   overlay: PlanOverlay;
   runActive: boolean;
   onStarted?: () => void;
+  /** Clears the caller's overlay state as soon as the PATCH lands — the
+   *  edits are on the server from that moment, so keeping them locally would
+   *  let a failed run start replay them over later server-side changes. */
+  onOverlayApplied?: () => void;
   /** Clears the caller's overlay state — wired to the same `setPlanOverlay({})`
-   *  clearer a normal `onStarted` uses, but called up front so Discard starts
+   *  clearer `onOverlayApplied` uses, but called up front so Discard starts
    *  against the last saved server plan without a PATCH. */
   onDiscardOverlay?: () => void;
 }) {
@@ -63,12 +68,20 @@ export function usePlanStart({
   const start = () => {
     if (plan === null) return;
     setStartNotice(null);
-    if (!overlayIsDirty(overlay)) {
+    // The pruned body can be empty even when the overlay holds keys (a chat
+    // turn applied the same edits meanwhile) — a bodyless PATCH would still
+    // mint a new approved plan version, so skip it and clear the stale keys.
+    const body = overlayIsDirty(overlay) ? overlayToPlanPatch(overlay, plan) : {};
+    if (Object.keys(body).length === 0) {
+      if (overlayIsDirty(overlay)) onOverlayApplied?.();
       beginRun();
       return;
     }
-    patchPlan.mutate(overlayToPlanPatch(overlay, plan), {
-      onSuccess: () => beginRun(),
+    patchPlan.mutate(body, {
+      onSuccess: () => {
+        onOverlayApplied?.();
+        beginRun();
+      },
       onError: (error) => {
         const code = (error as { code?: string }).code;
         const message = (error as Error | undefined)?.message;
@@ -96,6 +109,9 @@ export function usePlanStart({
   return {
     start,
     discardAndStart,
+    // Gates "Discard edits and start": with nothing local to discard the
+    // action is a mislabelled retry.
+    hasLocalEdits: overlayIsDirty(overlay),
     applying,
     startNotice,
     disabled: applying || runActive,

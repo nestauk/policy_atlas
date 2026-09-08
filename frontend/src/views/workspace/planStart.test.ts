@@ -88,6 +88,53 @@ describe("usePlanStart — Discard edits and start", () => {
   });
 });
 
+describe("usePlanStart — the overlay clears as soon as the PATCH lands", () => {
+  it("clears on PATCH success even when the run start then fails", () => {
+    mockPlan();
+    const { startRun } = mockMutations(
+      { mutate: vi.fn((_body, handlers) => handlers.onSuccess()), isPending: false },
+      {
+        mutate: vi.fn((_body, handlers) =>
+          handlers.onError(Object.assign(new Error("capacity"), { code: "internal" })),
+        ),
+        isPending: false,
+      },
+    );
+    const onOverlayApplied = vi.fn();
+
+    const { result } = renderHook(() =>
+      usePlanStart({ taskId: "t1", overlay: DIRTY_OVERLAY, runActive: false, onOverlayApplied }),
+    );
+    act(() => result.current.start());
+
+    expect(onOverlayApplied).toHaveBeenCalledTimes(1);
+    expect(startRun.mutate).toHaveBeenCalledTimes(1);
+    expect(result.current.startNotice).toBe("The search couldn't start. Try again.");
+  });
+
+  it("skips the PATCH and clears stale keys when the pruned body is empty", () => {
+    mockPlan();
+    const { patchPlan, startRun } = mockMutations({ mutate: vi.fn(), isPending: false });
+    const onOverlayApplied = vi.fn();
+
+    const { result } = renderHook(() =>
+      usePlanStart({
+        taskId: "t1",
+        // Dirty by key count, but equal to the server plan's own value — a
+        // chat turn applied the same edit meanwhile.
+        overlay: { question: "What works?" },
+        runActive: false,
+        onOverlayApplied,
+      }),
+    );
+    act(() => result.current.start());
+
+    expect(patchPlan.mutate).not.toHaveBeenCalled();
+    expect(startRun.mutate).toHaveBeenCalledTimes(1);
+    expect(onOverlayApplied).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("usePlanStart — the notice clears when the overlay changes", () => {
   it("drops a stale failure notice once the overlay is edited", () => {
     mockPlan();

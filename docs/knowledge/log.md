@@ -1,5 +1,27 @@
 # Knowledge update log
 
+## 2026-09-08 (task 039 step 8)
+* **Creation**: Added
+  [scope-constraint-fields-projection-surfaces](scope-constraint-fields-projection-surfaces.md) —
+  the five surfaces a new `ScopeConstraints` field must touch; the planner
+  sees constraints via `PlanDraftWire`, not the CLI render (the build's
+  claim, corrected by the step-7 contract verifier), and the loose-wire →
+  strict-draft fold needs a normaliser (039 review stack).
+* **Creation**: Added
+  [jointly-compiled-fields-patch-together](jointly-compiled-fields-patch-together.md) —
+  a dirty-only patch that prunes an "unchanged" geography from a
+  scope-changing PATCH silently deletes the restriction (039 review stack,
+  confirmed + fixed).
+* **Update**: [testing-database](testing-database.md) — cross-checkout
+  variant: other working copies share the default `policy_atlas_test` name;
+  isolate the gate with a per-checkout `TEST_DATABASE_URL` override (039
+  step-7 incident, 86 phantom failures).
+* **Declined candidates** (recorded per the step-8 rule): "re-apply slices
+  carry a rename table in the contract" — process guidance; the 039 contract
+  itself is the exemplar and task-cycle-design is the enforcement point.
+  "Vacuously-true `all()` on an empty list" — generic language pitfall, now
+  pinned by tests.
+
 ## 2026-09-05 (task 038 step 8)
 * **Creation**: Added
   [stored-json-keys-are-vocabulary-too](stored-json-keys-are-vocabulary-too.md) —

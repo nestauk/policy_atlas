@@ -1,7 +1,10 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–038; 038 renames the catalog (`project`→`task`,
+stands (tasks 001–039; 039 adds the APO test-mod (`publisher_source`,
+Overton `source=apo`) plus planning/artefact bug fixes — no migration; when
+another checkout of this repo may be running tests, isolate the gate with a
+per-checkout `TEST_DATABASE_URL` `*_test` override; 038 renames the catalog (`project`→`task`,
 `portfolio`→`project`, `orchestration_plan`→`plan`) and the API paths
 (`/api/v1/tasks`, `/api/v1/projects`) — run `alembic upgrade head` against
 the dev DB after pulling (reversible: ADR 0036 § Rollback), and rename any

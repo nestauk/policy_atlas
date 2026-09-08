@@ -128,6 +128,15 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
         value = values.pop(key, None)
         if value is not None:
             constraints[key] = value
+    # The wire's publisher_source is a loose str (planner output) while the
+    # draft narrows to Literal["apo"]. Normalise the taught spellings and drop
+    # anything else — the turn must degrade (ready=false), never 500.
+    source = constraints.pop("publisher_source", None)
+    if isinstance(source, str) and source.strip().casefold() in {
+        "apo",
+        "australian policy online",
+    }:
+        constraints["publisher_source"] = "apo"
     if constraints:
         values["scope_constraints"] = constraints
     values.pop("steer_point_defaults", None)

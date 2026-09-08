@@ -585,7 +585,7 @@ class ScopeConstraints(BaseModel):
             return filters
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
-        if self.publisher_source is not None:
+        elif self.publisher_source is not None:
             filters["overton"] = {"publisher_source": self.publisher_source}
         if self.author_affiliation_countries is not None:
             filters["openalex"] = {

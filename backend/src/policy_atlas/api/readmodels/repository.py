@@ -1666,6 +1666,7 @@ def _task_card_claims(
 
     if isinstance(stored_ids, list) and stored_ids:
         span_by_id: dict[str, tuple[int, int] | None] = {}
+        null_span_ids: set[str] = set()
         if isinstance(stored_spans, list):
             for entry in stored_spans:
                 if isinstance(entry, dict):
@@ -1673,7 +1674,10 @@ def _task_card_claims(
                     sp = entry.get("span")
                     if isinstance(cid, str) and isinstance(sp, (list, tuple)) and len(sp) == 2:
                         span_by_id[cid] = (int(sp[0]), int(sp[1]))
+                    elif isinstance(cid, str) and sp is None:
+                        null_span_ids.add(cid)
         result: list[ClaimOut] = []
+        trusted: list[bool] = []
         for cid in stored_ids:
             if not isinstance(cid, str):
                 continue
@@ -1691,11 +1695,19 @@ def _task_card_claims(
                 gap=block_claim.gap,
                 theme=block_claim.theme,
             ))
+            # A stored entry with an explicitly-null span is the write path's
+            # own record that this claim's text bound into the card title, not
+            # the prose (synthesise.py stores span=None on a prose miss) —
+            # trust it rather than treating the miss as collision evidence.
+            trusted.append(block_claim.text in card_prose or cid in null_span_ids)
         # Old case-study rollups minted aliases afresh for each card.  The
         # block alias map then resolves every colliding id to one claim, which
         # may not belong to this card.  Only trust stored aliases when their
-        # resolved text is actually present in the card prose.
-        if all(claim.text in card_prose for claim in result):
+        # resolved text is actually present in the card prose (or the write
+        # path recorded the miss deliberately). An empty resolution means the
+        # aliases are unusable — fall through to prose matching, don't return
+        # an empty card.
+        if result and all(trusted):
             return result
 
     # Fallback: match block claims whose text is a substring of card prose.

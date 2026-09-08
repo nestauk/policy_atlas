@@ -40,11 +40,11 @@ export function PlanCard({
   onDiscardOverlay?: () => void;
 }) {
   const planQuery = usePlan(taskId);
-  const { start, discardAndStart, startNotice, disabled, label } = usePlanStart({
+  const { start, discardAndStart, hasLocalEdits, startNotice, disabled, label } = usePlanStart({
     taskId,
     overlay,
     runActive,
-    onStarted: onOverlayApplied,
+    onOverlayApplied,
     onDiscardOverlay,
   });
 
@@ -67,9 +67,11 @@ export function PlanCard({
           <p role="alert" className="text-body text-red">
             {startNotice}
           </p>
-          <Button variant="secondary" size="sm" onClick={discardAndStart}>
-            Discard edits and start
-          </Button>
+          {hasLocalEdits && (
+            <Button variant="secondary" size="sm" onClick={discardAndStart}>
+              Discard edits and start
+            </Button>
+          )}
         </div>
       )}
     </div>
