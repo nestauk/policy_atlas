@@ -270,7 +270,7 @@ export function ContentsSidebar({
   return (
     <nav
       aria-label="Contents"
-      className="mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
+      className="max-md:hidden mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
     >
       <ul className="space-y-1 border-l border-line">
         {entries.map((entry, index) =>
@@ -373,7 +373,7 @@ export function SectionDisclosure({
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
       {!expanded && summary !== null && (
-        <p className="mt-1.5 max-w-prose-measure text-lead text-grey">{scrub(summary.text)}</p>
+        <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
     </section>
@@ -426,7 +426,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 text-heading font-bold text-navy">
+        <h2 className="flex-1 text-heading font-bold text-navy max-md:text-[20px]">
           How the evidence was gathered
         </h2>
         <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
