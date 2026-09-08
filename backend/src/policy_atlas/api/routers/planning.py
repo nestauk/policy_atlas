@@ -690,7 +690,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
     if geography.strip().casefold() in {"apo", "australian policy online"}:
         if backend_scope != "grey_lit_only":
             raise ValueError(
-                "the APO restriction needs Sources set to grey literature only"
+                "the APO restriction needs Sources set to policy literature only"
             )
         return {
             "publisher_country": None,
@@ -743,7 +743,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
         if len(names) == 1:
             constraints["publisher_country"] = next(iter(names))
             return constraints
-        raise ValueError("grey literature geography must resolve to one Overton country")
+        raise ValueError("policy literature geography must resolve to one Overton country")
     constraints["country_group"] = {
         "label": geography,
         "countries": codes,

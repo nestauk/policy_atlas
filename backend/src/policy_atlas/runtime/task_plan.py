@@ -934,7 +934,7 @@ class TaskPlan(BaseModel):
             and self.backend_scope == "academic_only"
         ):
             raise ValueError(
-                "publisher_country filters the grey-literature backend, which "
+                "publisher_country filters the policy-literature backend, which "
                 "backend_scope 'academic_only' excludes"
             )
 
@@ -952,7 +952,7 @@ class TaskPlan(BaseModel):
             and self.backend_scope != "grey_lit_only"
         ):
             raise ValueError(
-                "publisher_source restricts the grey-literature backend; "
+                "publisher_source restricts the policy-literature backend; "
                 "backend_scope must be 'grey_lit_only'"
             )
 
