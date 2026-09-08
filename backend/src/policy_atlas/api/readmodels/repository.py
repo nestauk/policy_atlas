@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.api.contract import (
     EVIDENCE_STATUS_INCLUDED,
     ArtefactOut,
+    AuthorshipOut,
     BlockOut,
     CaseStudyCardOut,
     ChunkContextOut,
@@ -98,6 +99,50 @@ def _year(metadata: Mapping[str, Any]) -> int | None:
 
 def _venue(metadata: Mapping[str, Any]) -> str | None:
     return _metadata_text(metadata, "venue") or _metadata_text(metadata, "journal")
+
+
+def _authorships(metadata: Mapping[str, Any]) -> list[AuthorshipOut]:
+    """Return display authorships for a source, first non-empty rung wins.
+
+    Args:
+        metadata: Envelope (or chunk-owning envelope) metadata.
+
+    Returns:
+        Named authors with their institutions (OpenAlex-shaped provider
+        data), else bare author names (a plainer provider shape), else a
+        single Overton corporate author (the issuing organisation), else
+        an empty list. Malformed provider shapes are skipped, never raised.
+    """
+    provider = metadata.get("provider_fields")
+    provider = provider if isinstance(provider, Mapping) else {}
+    raw_authorships = provider.get("authorships")
+    if isinstance(raw_authorships, list):
+        named = [
+            AuthorshipOut(
+                name=entry["author_name"],
+                institutions=[
+                    i for i in (entry.get("institutions") or []) if isinstance(i, str) and i
+                ],
+            )
+            for entry in raw_authorships
+            if isinstance(entry, Mapping)
+            and isinstance(entry.get("author_name"), str)
+            and entry.get("author_name")
+        ]
+        if named:
+            return named
+    raw_authors = provider.get("authors")
+    names: list[str] = []
+    if isinstance(raw_authors, str) and raw_authors:
+        names = [raw_authors]
+    elif isinstance(raw_authors, list):
+        names = [a for a in raw_authors if isinstance(a, str) and a]
+    if names:
+        return [AuthorshipOut(name=name) for name in names]
+    publisher_org = _metadata_text(metadata, "publisher_org")
+    if _metadata_text(metadata, "backend") == "overton" and publisher_org:
+        return [AuthorshipOut(name=publisher_org)]
+    return []
 
 
 def _provider_landing_page(metadata: Mapping[str, Any]) -> str | None:
@@ -1534,6 +1579,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 # A missed metadata lookup has only the display placeholder —
                 # never let that fall through _url's locator rung as a "URL".
                 url=_url(ref_meta, ref_locator) if ref_entry is not None else None,
+                authorships=_authorships(ref_meta),
             )
         )
     study_types = {
@@ -2325,6 +2371,7 @@ def source_dossier_out(
         else None,
         tags=tags,
         cited_in=_source_cited_in(conn, task_id, source_id),
+        authorships=_authorships(metadata),
     )
 
 
@@ -2498,6 +2545,7 @@ def _clamped_quote_window(
     end_window = _snap_end(text, end_window, not_before=end)
     prefix = _ELLIPSIS if start_window > 0 else ""
     suffix = _ELLIPSIS if end_window < len(text) else ""
+    chunk_meta = _chunk_metadata(conn, task_id, source_snapshot_id)
     return ChunkContextOut(
         context=prefix + text[start_window:end_window] + suffix,
         span_start=position - start_window + len(prefix),
@@ -2505,8 +2553,9 @@ def _clamped_quote_window(
         clamped=start_window > 0 or end_window < len(text),
         previous=previous,
         next=following,
-        year=_chunk_year(conn, task_id, source_snapshot_id),
-        venue=_chunk_venue(conn, task_id, source_snapshot_id),
+        year=_year(chunk_meta),
+        venue=_venue(chunk_meta),
+        authorships=_authorships(chunk_meta),
     )
 
 
@@ -2600,17 +2649,3 @@ def _chunk_metadata(
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}
-
-
-def _chunk_year(
-    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
-) -> int | None:
-    """Read the publication year for a chunk through its task source link."""
-    return _year(_chunk_metadata(conn, task_id, source_snapshot_id))
-
-
-def _chunk_venue(
-    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
-) -> str | None:
-    """Read the venue for a chunk through its task source link."""
-    return _venue(_chunk_metadata(conn, task_id, source_snapshot_id))

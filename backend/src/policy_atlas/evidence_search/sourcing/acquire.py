@@ -262,6 +262,7 @@ _OVERTON_RETAIN_KEYS = (
     "added_on",
     "languages",
     "authors_are_organizations",
+    "authors",  # 042: author names (string or list); normalised at read time
     # LLM-generated, like llm_document_description — retained but always
     # identifiable as machine text, never mixed into document-own-words fields
     "llm_document_theme",

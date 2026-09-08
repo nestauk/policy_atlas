@@ -3,7 +3,9 @@
 Items 1–6, decisions D1–D5, terms and the surface map are defined in
 [contract.md](contract.md). This plan cites them and adds nothing to scope.
 
-> Plan approved (before implementation): _pending_.
+> Plan approved (before implementation): 2026-09-08 · owner. Phase 0 waived —
+> owner ran full `make verify` green at build open (2026-09-08); build runs in
+> the design conversation by owner instruction.
 > Plan-stage adversarial review: waived per the contract-gate ruling
 > (owner, 2026-09-08 — adversarial reviews waived for this slice).
 

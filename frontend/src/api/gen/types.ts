@@ -1106,6 +1106,21 @@ export interface components {
             type: "artefact.skeleton";
         };
         /**
+         * AuthorshipOut
+         * @description One author and their institutions, for display.
+         *
+         *     Args:
+         *         name: Author display name. For a policy document with no named
+         *             people this is the issuing organisation (corporate author).
+         *         institutions: Institution display names, possibly empty.
+         */
+        AuthorshipOut: {
+            /** Institutions */
+            institutions?: string[];
+            /** Name */
+            name: string;
+        };
+        /**
          * BlockOut
          * @description One prose block within an artefact section.
          *
@@ -1468,8 +1483,11 @@ export interface components {
          *             reaches the start of this chunk; otherwise omitted.
          *         next: Short head of the next chunk, only when the window reaches
          *             the end of this chunk; otherwise omitted.
+         *         authorships: Authors and their institutions, for display.
          */
         ChunkContextOut: {
+            /** Authorships */
+            authorships?: components["schemas"]["AuthorshipOut"][];
             /** Clamped */
             clamped: boolean;
             /** Context */
@@ -3037,8 +3055,11 @@ export interface components {
          *         year: Publication year, or `None` if unknown.
          *         venue: Publication venue, or `None` if unknown.
          *         url: Optional reference URL.
+         *         authorships: Authors and their institutions, for display.
          */
         ReferenceOut: {
+            /** Authorships */
+            authorships?: components["schemas"]["AuthorshipOut"][];
             /** N */
             n: number;
             /** Title */
@@ -3215,6 +3236,8 @@ export interface components {
             abstract_source?: ("provider" | "llm_description") | null;
             /** Appraisal Tier */
             appraisal_tier?: string | null;
+            /** Authorships */
+            authorships?: components["schemas"]["AuthorshipOut"][];
             /** Cited */
             cited: boolean;
             /** Cited By Count */
