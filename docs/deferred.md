@@ -2363,3 +2363,19 @@ deliberately left, each with its reason:
   `tests/api/test_admin_leg.py::test_administrator_reads_a_null_organisation_row_and_an_ownerless_one`
   failed once on a polluted baseline, passed on isolated rerun and at both
   full `make verify` runs of step 6/7 — watch for recurrence.
+
+## Citation authors (task 042 seams)
+
+- **Overton snapshot backfill**: author names are retained at acquisition only
+  from task 042 onward (`_OVERTON_RETAIN_KEYS` gained `authors`). Existing
+  Overton snapshots are immutable and show the publishing organisation as a
+  corporate author instead. Backfill = re-acquisition; do it only if readers
+  ask for named authors on old policy documents.
+- **`TopSource.authors` stays unfed**: the "Most relevant sources" cards have
+  an authors slot in the UI, but citations don't carry authorships on the
+  wire. Feed it by joining the reference list's authorships by source, if the
+  cards ever need bylines.
+- **Institutions in the reference list**: the report reference list shows
+  names only (042 D4); institutions render in the citation sheet and the
+  dossier. Add them to references only if readers ask — the list is dense
+  already.
