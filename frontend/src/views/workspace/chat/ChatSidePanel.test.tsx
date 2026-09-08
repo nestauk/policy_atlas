@@ -200,6 +200,25 @@ describe("ChatSidePanel", () => {
     expect(screen.getByRole("link", { name: /View in Agent tab/ })).toHaveAttribute("href", "/tasks/p1");
   });
 
+  // Task 040 phase 5 (D9): below `md` neither the rail nor the 280px+ panel
+  // fits a phone, so both hide behind `max-md:hidden` and a one-tap strip to
+  // the Agent tab stands in — present in both states.
+  it("shut, it keeps the desktop rail and adds the mobile strip to the Agent tab", () => {
+    state.activeConversationId = null;
+    render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByRole("complementary", { name: "Chats" })).toHaveClass("max-md:hidden");
+    const strip = screen.getByRole("link", { name: "Open the Agent" });
+    expect(strip).toHaveAttribute("href", "/tasks/p1");
+    expect(strip).toHaveClass("md:hidden");
+  });
+
+  it("open on a deep link, the aside hides below md and the mobile strip stays", () => {
+    state.activeConversationId = "c1";
+    render(<ChatSidePanel taskId="p1" isOwner />);
+    expect(screen.getByRole("complementary", { name: "Agent" })).toHaveClass("max-md:hidden");
+    expect(screen.getByRole("link", { name: "Open the Agent" })).toHaveAttribute("href", "/tasks/p1");
+  });
+
   it("renders the draft pane while the URL names a draft chat", () => {
     state.activeConversationId = "new";
     render(<ChatSidePanel taskId="p1" isOwner />);
