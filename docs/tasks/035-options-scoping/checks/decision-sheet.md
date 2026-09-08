@@ -7,6 +7,18 @@ is edited to the ruling, quoting the decision. Rows are grouped by the spec they
 
 Legend for *Decision*: accept · reject · edit (say how) · defer.
 
+## When to decide each row (owner, 2026-09-08: decide in the task the row concerns)
+
+| decide at | rows | why then |
+|---|---|---|
+| **before task 1's contract** | A6, A7, A8, C1, C2, C3, C4; A4 in reduced form (does task 1's `inherit` reuse inherited findings, or copy them and leave field-grain reuse to task 3?) | these define the shared records task 1 creates and later tasks build on: the Link, the inherited flag, document identity, the plan's constraint face and code name, user-context entries, multi-scope plans |
+| task 2 (longlist) | A1, A2, A9, A10, A11, E1, E2, E4, E5, E6, F2, F3 | the option entity, the mention profile, the shortlist quota guards |
+| task 3 (shortlist and assessment) | A3, B1, B2, B3, C5, D1–D6, E3, E7–E13, F4, F6 | the light profile, reading scope and eligibility, the transferability block, "how sure", the cap setting |
+| task 5 (full run) | E14, E15, F5 | the derivation edge, membership against a specified design in the child |
+| any time, as small Evidence search slices | A4 (full form), A5 | the memo key and the `text_basis` label; each wants an ADR |
+| after check 1 | revisit anything check 1 contradicts | check 1 is the one check that can change the shape |
+
+
 ## A — data-model.md
 
 | # | proposal | where | from | rec. | decision |
