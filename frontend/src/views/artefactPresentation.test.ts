@@ -42,6 +42,14 @@ describe("numberedAuthorships", () => {
     ]);
   });
 
+  it("dedupes a repeated institution within one author's list (no ¹,¹ markers)", () => {
+    const numbered = numberedAuthorships([
+      { name: "A One", institutions: ["Uni X", "Uni X"] },
+    ]);
+    expect(numbered.authors).toEqual([{ name: "A One", markers: [1] }]);
+    expect(numbered.institutions).toEqual(["Uni X"]);
+  });
+
   it("gives an author without institutions no markers", () => {
     const numbered = numberedAuthorships([
       { name: "A One", institutions: [] },

@@ -22,7 +22,8 @@ not done. Item numbers 1–6 and decisions D1–D5 are defined in
 7. [x] Verification evidence recorded ([verification.md](verification.md)).
 8. [x] Deferred seams listed in docs/deferred.md: Overton snapshot backfill,
        `TopSource.authors`, institutions in the reference list.
-9. [ ] Required review stack for Tier 3 ran as adjudicated at the contract
-       gate (adversarial waived; standard stack pending — owner asked to open
-       the PR after verification; run the stack against the PR in a fresh
-       conversation), findings in [verification.md](verification.md).
+9. [x] Required review stack for Tier 3 ran as adjudicated at the contract
+       gate (adversarial waived by owner; contract verifier · `/code-review`
+       medium · security lane ran in a fresh conversation 2026-09-08; all
+       findings adjudicated and fixes re-verified), findings in
+       [verification.md](verification.md) § Review findings.

@@ -101,6 +101,14 @@ def _venue(metadata: Mapping[str, Any]) -> str | None:
     return _metadata_text(metadata, "venue") or _metadata_text(metadata, "journal")
 
 
+def _institution_names(raw: Any) -> list[str]:
+    """Return string institution names; a non-list shape (e.g. a bare string,
+    which would iterate per character) is malformed and yields none."""
+    if not isinstance(raw, list):
+        return []
+    return [i for i in raw if isinstance(i, str) and i]
+
+
 def _authorships(metadata: Mapping[str, Any]) -> list[AuthorshipOut]:
     """Return display authorships for a source, first non-empty rung wins.
 
@@ -120,9 +128,7 @@ def _authorships(metadata: Mapping[str, Any]) -> list[AuthorshipOut]:
         named = [
             AuthorshipOut(
                 name=entry["author_name"],
-                institutions=[
-                    i for i in (entry.get("institutions") or []) if isinstance(i, str) and i
-                ],
+                institutions=_institution_names(entry.get("institutions")),
             )
             for entry in raw_authorships
             if isinstance(entry, Mapping)

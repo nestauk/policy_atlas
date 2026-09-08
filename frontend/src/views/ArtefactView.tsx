@@ -1652,7 +1652,7 @@ export function ArtefactView() {
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). */
-function ReferencesSection({
+export function ReferencesSection({
   references,
   onOpenReference,
 }: {

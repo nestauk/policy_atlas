@@ -396,11 +396,15 @@ def test_authorships_named_rung_filters_malformed_institutions() -> None:
                 "not a mapping",  # malformed entry skipped
                 {"institutions": ["No name key"]},  # missing author_name skipped
                 {"author_name": None},  # non-string author_name skipped
+                # A string institutions value is malformed (would iterate per
+                # character) — skipped, the author survives with none.
+                {"author_name": "Casey Mockford", "institutions": "Acme Institute"},
             ],
         }
     }
     assert repository._authorships(metadata) == [
-        AuthorshipOut(name="Alex Sampleton", institutions=["Acme Institute"])
+        AuthorshipOut(name="Alex Sampleton", institutions=["Acme Institute"]),
+        AuthorshipOut(name="Casey Mockford", institutions=[]),
     ]
 
 

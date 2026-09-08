@@ -57,6 +57,20 @@ describe("Sheet", () => {
     }
     expect(dialog.className.split(" ")).toContain("overflow-y-auto");
   });
+
+  it("renders the close control at the larger 042 size with the bigger padding box", () => {
+    render(
+      <Sheet open>
+        <SheetContent title="Source dossier">
+          <p>Dossier body</p>
+        </SheetContent>
+      </Sheet>,
+    );
+    const close = screen.getByRole("button", { name: "Close panel" });
+    for (const token of ["p-2", "text-lead", "leading-none"]) {
+      expect(close.className.split(" ")).toContain(token);
+    }
+  });
 });
 
 describe("Popover", () => {

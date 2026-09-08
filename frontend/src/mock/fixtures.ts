@@ -129,14 +129,18 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
 };
 
+/** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
+ *  One copy feeds the dossier, the reference list and both chunk-context
+ *  handlers so the surfaces can never silently disagree. */
+export const mockAuthorships: components["schemas"]["AuthorshipOut"][] = [
+  { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+  { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+];
+
 export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
   [mockEvidence[2].source_id]: {
     ...mockEvidence[2],
-    // Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
-    authorships: [
-      { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
-      { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
-    ],
+    authorships: mockAuthorships,
     abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.",
     abstract_source: "provider",
     publisher: "BMJ",
@@ -316,10 +320,7 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
     year: 2022,
     venue: "BMJ Open",
     url: null,
-    authorships: [
-      { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
-      { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
-    ],
+    authorships: mockAuthorships,
   }],
 };
 

@@ -29,8 +29,11 @@ round-trip class, e.g.
 documented shared-Postgres interference (AGENTS.md landmines; the sibling
 worktree's dev session shares the instance). `pytest --lf` on a freshly reset
 test database reran exactly those 25: all pass (10.6s). The Phase 1 full run
-of the same suite (minus ingest tests) was fully green (2526 passed). No
-failure implicates this slice's changes.
+of the same suite was fully green (2526 passed — the full count including
+ingest; an earlier draft of this note wrongly said "minus ingest"). The
+review stack re-ran the full suite on a freshly reset test database with no
+concurrent lane: 2526 passed, zero failures, confirming the interference
+attribution. No failure implicates this slice's changes.
 
 ## OpenAPI diff (rubric item 3)
 
@@ -71,12 +74,88 @@ seeded task from the PR branch in their own environment.
   recorded here per the plan-column rule.
 - D1–D5 all hold as pinned; no scope beyond the contract's surface map was
   touched. No prompts, no SQL schema, no dependencies.
-- All new author/institution render paths pass through `scrub()`.
-- Review stack (steps 7–10): **not yet run** — the owner asked to commit and
-  open the PR directly after verification. Adversarial reviews were waived at
-  the contract gate; the standard stack (contract verifier · `/code-review` ·
-  `/security-review` · `/simplify`) can run against the open PR in a fresh
-  conversation.
+- All new author/institution DOM render paths pass through `scrub()`. The
+  markdown download interpolates author names unscrubbed — deliberately the
+  same treatment `reference.title`/`venue` already get there (the sink is a
+  file save, never rendered as HTML); contract's "same as titles" holds.
+- Review stack (step 7): ran 2026-09-08 in a fresh conversation — see
+  § Review findings below.
+
+## Review findings (step 7, adjudicated 2026-09-08)
+
+Stack as adjudicated at the contract gate: contract verifier · `/code-review`
+medium · security lane · `/simplify` justification; adversarial waived
+(owner). Review diff scoped to this slice's commits (`29bea87..HEAD`) —
+the branch stacks on task 040 (PR #68), which ran its own stack.
+
+**Self-verify gate:** the full `make verify` composition re-ran green in the
+review conversation via component commands (same DB plumbing constraint):
+okf-validate 138/0 · backend 2526 passed on a freshly reset test DB ·
+mypy/ruff clean · `uv build` OK (the one component the build's step-6 row
+had omitted — closed here) · infra 46 · guards · drift-check OK ·
+frontend-verify · e2e 11/11.
+
+**Security lane (unique value: end-to-end taint trace): clean.** Provider
+author strings traced acquire → JSONB → `_authorships` → wire → render;
+every DOM path scrubbed; the markdown download is a file-save sink treating
+authors exactly as titles; no new attack surface, no data exposure.
+
+**Contract verifier:** all contract items 1–6 and D1–D5 hold in code;
+OpenAPI diff additive-only re-confirmed independently. Findings adjudicated:
+
+- **Adopted — close-button change had no test** (contract claimed existing
+  Sheet tests covered it; none asserted the close control): class assertion
+  added to `primitives.test.tsx`.
+- **Adopted — no component test for the on-screen reference render** and the
+  live check never showed an Overton corporate-author reference:
+  `ReferencesSection` exported and tested (named authors · corporate author ·
+  honest absence, names-only/no superscripts).
+- **Adopted — doc corrections:** scrub-coverage claim scoped to DOM paths;
+  flake-note "minus ingest" wording fixed; `plan.md` Phase 3 executor mark
+  annotated with the codex→lead reroute.
+- **Recorded, no change** — `_authorships` rung 2 (bare `authors`) is not
+  backend-gated: unreachable for OpenAlex today (which writes rung-1
+  `authorships`); matches plan S2, not a D2 leak.
+- **Declined — `<sup>` markers lack accessible text** (screen readers say
+  "one comma two"): out of contract scope; standard reference-display noise.
+
+**`/code-review` medium (Claude half of the pair):**
+
+- **Adopted (CONFIRMED, medium)** — `numberedAuthorships` didn't dedupe a
+  repeated institution within one author (OpenAlex duplicate affiliation
+  records → "Name¹,¹"): per-author Set-dedupe added + unit test.
+- **Adopted (PLAUSIBLE, low)** — a string `institutions` value iterated per
+  character in `_authorships`: extracted `_institution_names` with an
+  isinstance-list guard + unit test.
+- **Adopted (cleanup)** — the two-author mock literal was pasted five times:
+  four mock copies collapsed into one exported `mockAuthorships`; the test
+  literal kept deliberately (explicit test inputs).
+- Refuted/cut by its verifiers: uncapped author lists (D4/D5 pinned full
+  lists), whitespace-name triggers, double-computation micro-optimisation.
+
+**Flagged deviations — all four confirmed:** mock-mode live check (API side
+covered by `test_read_model_goldens_and_owner_scope`, verified to assert
+what it claims; the seeded-app eyeball stays with the owner); codex→lead
+reroute (recorded, plan mark now annotated); component-command substitution
+(complete after the `uv build` close); the 25-failure flake (attribution
+confirmed: this stack's isolated full-suite rerun was 100% green; no
+migration-adjacent file in the diff).
+
+**`/simplify`: not run** — `/code-review` medium already carried the
+reuse/simplification/efficiency angles and its cleanup findings were
+applied; a second same-family pass would duplicate it.
+
+**Heterogeneity note for the owner:** with the codex build lane stalled
+(phase 3 rerouted to lead) and adversarial waived at the gate, no non-Claude
+reviewer has read this slice's shipping code. The waiver predates the
+reroute; flagged as a residual, not re-decided here.
+
+**Knowledge candidates (step 8):** one lesson worth keeping — substituting
+component commands for a Make target must enumerate the target's full recipe
+(the build's substitution silently dropped `uv build`); folded into this
+section rather than a new `docs/knowledge/` concept (single occurrence, no
+durable seam). No other candidates; the build flagged no anomalies beyond
+the four deviations above.
 
 ## Diff summary
 

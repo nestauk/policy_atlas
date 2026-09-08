@@ -180,8 +180,9 @@ export function numberedAuthorships(
     .filter((a) => a.name !== "")
     .map((a) => ({
       name: a.name,
-      markers: (a.institutions ?? [])
-        .filter((institution) => institution !== "")
+      // Set-dedupe within one author: duplicate affiliation records slimming
+      // to the same display name must not render as a repeated marker (¹,¹).
+      markers: [...new Set((a.institutions ?? []).filter((institution) => institution !== ""))]
         .map((institution) => {
           const existing = markerByInstitution.get(institution);
           if (existing !== undefined) return existing;

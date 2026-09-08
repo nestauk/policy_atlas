@@ -83,7 +83,7 @@ Done when `make verify-fast` is green. Then `lead` (inline, one command):
 
 ## Phase 2 — (folded into Phase 1 close — openapi sync, see above)
 
-## Phase 3 — Frontend authors render: items 1–3 — `codex`
+## Phase 3 — Frontend authors render: items 1–3 — `codex` → `lead` (rerouted in build: codex job stalled, see verification.md § Fidelity notes)
 
 Judgment-bearing execution (three surfaces, shared helpers, typography in an
 established design system) with a machine-verifiable done. Brief carries S3,
