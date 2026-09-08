@@ -128,6 +128,8 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   if (activeConversationId === null) {
     // Shut, the overlay is the same rail the Agent tab's sidebar shuts to
     // (owner request 2026-09-05): one object on every task tab.
+    // Below md the rail hides with no stand-in (task 040 amendment A6): the
+    // bottom tab bar's Agent tab is the mobile way into the conversation.
     return (
       <ConversationRail
         toggleLabel={COPY.openAgent}
@@ -140,7 +142,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
         onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
         recent={recentChats(rows)}
         onSelectChat={setActiveConversation}
-        className="h-full w-12 flex-col border-r py-2"
+        className="h-full w-12 flex-col border-r py-2 max-md:hidden"
       />
     );
   }
@@ -160,7 +162,7 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
     <aside
       aria-label={COPY.agentAriaLabel}
       style={{ width: panel.width }}
-      className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-line bg-paper"
+      className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden border-r border-line bg-paper max-md:hidden"
     >
       <div
         {...panel.separatorProps}

@@ -147,21 +147,43 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(lastEvidenceQuery()).toMatchObject({ sort: "status", order: "asc" });
   });
 
-  it("offers a theme select scoped to themes carrying a theme_id, defaulting to All themes", () => {
+  // The theme filter is an app-styled Popover listbox (040 amendment), not a
+  // native <select> — options exist only while the menu is open. The trigger's
+  // accessible name is label + current selection ("Key theme All themes").
+  it("offers a theme select scoped to themes carrying a theme_id, defaulting to All themes", async () => {
+    const user = userEvent.setup();
     renderSources();
-    const select = screen.getByRole("combobox", { name: "Key theme" });
-    expect(within(select).getByRole("option", { name: "All themes" })).toBeInTheDocument();
-    expect(within(select).getByRole("option", { name: "School food environments" })).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: /^Key theme/ });
+    expect(trigger).toHaveTextContent("All themes");
+    await user.click(trigger);
+    const listbox = screen.getByRole("listbox", { name: "Key theme" });
+    expect(within(listbox).getByRole("option", { name: "All themes" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "School food environments" })).toBeInTheDocument();
     // "Family support" carries no theme_id in the fixture — it must not
     // offer a selection that can never round-trip against the API.
-    expect(within(select).queryByRole("option", { name: "Family support" })).toBeNull();
+    expect(within(listbox).queryByRole("option", { name: "Family support" })).toBeNull();
   });
 
   it("sets the theme param and the evidence query when a theme is chosen", async () => {
     const user = userEvent.setup();
     renderSources();
-    const select = screen.getByRole("combobox", { name: "Key theme" });
-    await user.selectOptions(select, SCHOOL_FOOD_THEME_ID);
+    await user.click(screen.getByRole("button", { name: /^Key theme/ }));
+    await user.click(screen.getByRole("option", { name: "School food environments" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(`theme=${SCHOOL_FOOD_THEME_ID}`);
+    expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
+  });
+
+  // 040 review finding: the native <select> gave arrow keys for free — the
+  // popover listbox must keep the keyboard path (focus opens on the current
+  // option, arrows move, Enter picks).
+  it("supports keyboard selection: focus lands in the listbox, arrows move, Enter picks", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(screen.getByRole("button", { name: /^Key theme/ }));
+    expect(screen.getByRole("option", { name: "All themes" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("option", { name: "School food environments" })).toHaveFocus();
+    await user.keyboard("{Enter}");
     expect(screen.getByTestId("location")).toHaveTextContent(`theme=${SCHOOL_FOOD_THEME_ID}`);
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });

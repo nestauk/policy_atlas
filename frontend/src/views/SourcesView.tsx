@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
@@ -11,6 +11,7 @@ import { Button } from "../ui/brand/Button";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
+import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
@@ -228,7 +229,7 @@ export function SourcesView() {
                     })}
                   />
                 </SortableColumnHeader>
-                <th className="px-3 py-3">
+                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">
                   Origin
                   <HeaderFilter
                     label="Filter by origin"
@@ -290,19 +291,19 @@ export function SourcesView() {
                   activeOrder={effectiveOrder}
                   onSort={handleSort}
                 />
-                <th className="px-3 py-3">Cited</th>
+                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">Cited</th>
               </tr>
             </thead>
             <tbody>
               {evidence.data.data.map((item) => (
                 <tr key={item.source_id} className="border-b border-line last:border-b-0">
-                  <td className="max-w-md px-4 py-3 align-top">
+                  <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
                     <TitleWithDescription item={item} onOpen={() => updateParams((next) => next.set("source", item.source_id))} />
-                    {item.venue && <p className="mt-0.5 text-body text-grey">{scrub(item.venue)}</p>}
+                    {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
                   </td>
-                  <td className="px-3 py-3 align-top text-body text-navy">{item.year ?? ""}</td>
-                  <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.evidence_type && (
                       item.classification_reason ? (
                         <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
@@ -315,7 +316,7 @@ export function SourcesView() {
                       )
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.appraisal_tier && (
                       <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
                         <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
@@ -324,8 +325,8 @@ export function SourcesView() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top"><RelevantCell item={item} /></td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><RelevantCell item={item} /></td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {readDepthLabel(item) !== null && (
                       item.read_in_full ? (
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
@@ -338,7 +339,7 @@ export function SourcesView() {
                       )
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.cited && <Chip tone="green">Cited</Chip>}
                   </td>
                 </tr>
@@ -398,8 +399,8 @@ export function SourcesView() {
                     <tbody>
                       {(backend.queries ?? []).map((item) => (
                         <tr key={item.query} className="border-b border-line last:border-b-0">
-                          <td className="break-all px-4 py-3 text-body text-navy">{scrub(item.query)}</td>
-                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy">
+                          <td className="break-all px-4 py-3 text-body text-navy max-md:text-meta">{scrub(item.query)}</td>
+                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy max-md:text-meta">
                             {typeof item.results === "number" ? item.results : "—"}
                           </td>
                         </tr>
@@ -433,7 +434,7 @@ function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screen
     <button
       type="button"
       onClick={onOpen}
-      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue max-md:text-meta"
     >
       {scrub(item.title)}
     </button>
@@ -728,20 +729,119 @@ function FilterSelect({
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
+  // App-styled Popover listbox (the NewTaskView ProjectPicker pattern), not a
+  // native <select>: consistent chrome at every width, and long theme names
+  // wrap in the menu instead of sizing (and overflowing) the closed control.
+  const [open, setOpen] = useState(false);
+  const triggerId = useId();
+  const labelId = useId();
+  const valueId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
+  const selected = options.find((option) => option.value === value);
+  const pick = (next: string) => {
+    onChange(next);
+    setOpen(false);
+  };
+  const optionButtons = () =>
+    Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+  // The native <select> this replaced gave arrow-key navigation for free;
+  // Radix Popover only owns Esc/dismiss/focus-return, so the listbox moves
+  // focus itself (040 review finding).
+  const onListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = optionButtons();
+    if (buttons.length === 0) return;
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : event.key === "ArrowDown"
+            ? Math.min(current + 1, buttons.length - 1)
+            : Math.max(current - 1, 0);
+    buttons[next]?.focus();
+  };
+  const optionClass = (active: boolean) =>
+    cn(
+      "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue max-md:text-meta",
+      active && "bg-blue-tint-2 font-medium",
+    );
   return (
-    <label className="flex items-center gap-1.5 text-meta font-semibold text-grey">
-      {label}
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="cursor-pointer border border-line-2 bg-paper px-2 py-1.5 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
-      >
-        <option value="">{allLabel}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey max-md:text-caption">
+      <label id={labelId} htmlFor={triggerId} className="cursor-pointer">
+        {label}
+      </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            id={triggerId}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-labelledby={`${labelId} ${valueId}`}
+            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
+          >
+            <span id={valueId} className="truncate">{selected?.label ?? allLabel}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 shrink-0 text-grey"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-72 max-w-[calc(100vw-2rem)] p-1"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            const buttons = optionButtons();
+            (buttons.find((button) => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
+          }}
+        >
+          <ul
+            ref={listRef}
+            role="listbox"
+            aria-labelledby={labelId}
+            onKeyDown={onListKeyDown}
+            className="flex max-h-80 flex-col overflow-y-auto"
+          >
+            <li role="none">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === ""}
+                onClick={() => pick("")}
+                className={optionClass(value === "")}
+              >
+                {allLabel}
+              </button>
+            </li>
+            {options.map((option) => (
+              <li key={option.value} role="none">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === option.value}
+                  onClick={() => pick(option.value)}
+                  className={optionClass(value === option.value)}
+                >
+                  {option.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 

@@ -41,6 +41,7 @@ import {
   FullReportExpandAllButton,
   FullReportExpandProvider,
   GatheredSection,
+  MobileDisclosureToggle,
   type OutlineSection,
   SectionDisclosure,
   SECTION_EXPAND_LINK_CLASS,
@@ -972,7 +973,7 @@ export function AnnotatedProse({
     }
     if (current.length > 0) bullets.push(current);
     return (
-      <div className="max-w-prose-measure text-lead text-ink">
+      <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
         <ul className="list-none space-y-1.5">
           {bullets.map((bullet, bulletIndex) => {
             const isGap = bullet.some(
@@ -990,12 +991,12 @@ export function AnnotatedProse({
           })}
         </ul>
         {crossing.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
         {unspanned.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
@@ -1004,7 +1005,7 @@ export function AnnotatedProse({
   }
 
   return (
-    <div className="max-w-prose-measure text-lead text-ink">
+    <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
       <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
@@ -1016,7 +1017,7 @@ export function AnnotatedProse({
         })}
       </p>
       {unspanned.map((claim) => (
-        <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+        <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
           <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
@@ -1119,7 +1120,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
     (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
   );
   return (
-    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
+    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
       {terminalPartial ? (
         <div
           role="alert"
@@ -1505,21 +1506,19 @@ export function ArtefactView() {
   ];
 
   return (
-    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 md:flex-row">
+    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
       <ContentsSidebar entries={outlineEntries} />
-      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
+      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
       <header id="answer" className="mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-              Report
-            </p>
-            <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
-              {scrub(data.title)}
-            </h1>
-          </div>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
+            Report
+          </p>
           <ArtefactDownload artefact={data} />
         </div>
+        <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
+          {scrub(data.title)}
+        </h1>
         {snapshotCells.length > 0 && (
           <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value, href]) => {
@@ -1674,18 +1673,19 @@ function ReferencesSection({
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
         <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>References</h2>
-        <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && (
-        <p className="mt-1.5 text-lead text-grey">
+        <p className="mt-1.5 text-lead text-grey max-md:text-body">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
           in this report
         </p>
       )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-lead text-ink">
+        <ol className="mt-3 space-y-1.5 text-lead text-ink max-md:text-body">
           {references.map((reference) => (
             <li key={reference.n} className="flex gap-2">
               <span className="font-bold text-blue">[{reference.n}]</span>
@@ -1708,6 +1708,7 @@ function ReferencesSection({
           ))}
         </ol>
       )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

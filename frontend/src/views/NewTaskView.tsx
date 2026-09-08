@@ -21,7 +21,7 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
             <button
               type="button"
               onClick={onPick}
-              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
+              className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy max-md:text-body max-md:leading-snug hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
             >
               <span>{capability.name}</span>
               <span aria-hidden="true" className="shrink-0 text-blue">
@@ -37,7 +37,7 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
               aria-disabled="true"
               className="flex items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 select-none"
             >
-              <span className="text-lead font-normal leading-[25px] text-grey">{capability.name}</span>
+              <span className="text-lead font-normal leading-[25px] text-grey max-md:text-body max-md:leading-snug">{capability.name}</span>
               <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
                 {COPY.comingSoon}
               </span>
@@ -166,13 +166,13 @@ function QuestionForm() {
         submit();
       }}
     >
-      <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey">
+      <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
         Evidence search
       </p>
-      <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty">
+      <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
         What do you need evidence on?
       </h1>
-      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty">
+      <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
       Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.
       </p>
 
@@ -239,16 +239,16 @@ export function NewTaskView() {
   const picked = searchParams.get("capability") === "evidence_search";
 
   return (
-    <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9">
-      <div className="w-full max-w-[50vw] min-w-0">
+    <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9 max-md:px-4 max-md:py-6">
+      <div className="w-full max-w-[50vw] min-w-0 max-md:max-w-full">
         {picked ? (
           <QuestionForm />
         ) : (
           <>
-            <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey">
+            <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
               {COPY.newTask}
             </p>
-            <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty">
+            <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
               {COPY.newTaskPrompt}
             </h1>
             <CapabilityList
