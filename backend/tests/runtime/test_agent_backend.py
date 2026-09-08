@@ -41,6 +41,7 @@ from policy_atlas.runtime.agent_prompt import (
     AuthoredOptionWire,
     RouterCompileWire,
     RouterFragmentWire,
+    WATCH_PROMPT_VERSION,
     WatchDecisionWire,
     WatchTriageWire,
     build_router_messages,
@@ -244,7 +245,7 @@ def test_hook_maps_author_to_apply() -> None:
     assert outcome.reasoning == "deepen on quality"
     assert outcome.profile == {
         "model": AGENT_MODEL,
-        "prompt_version": "agent_v1_watch",
+        "prompt_version": WATCH_PROMPT_VERSION,
     }
 
 

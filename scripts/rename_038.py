@@ -333,21 +333,23 @@ PHASE_EXCLUDED_PATHS: dict[int, frozenset[str]] = {
 PROMPT_EXEMPT: frozenset[str] = frozenset(
     {
         "backend/src/policy_atlas/core/prompt_fields.py",
-        "backend/src/policy_atlas/evidence_base/assess/classify_prompt.py",
-        "backend/src/policy_atlas/evidence_base/assess/screen_prompt.py",
-        "backend/src/policy_atlas/evidence_base/extract/icf_prompt.py",
-        "backend/src/policy_atlas/evidence_base/extract/iof_prompt.py",
-        "backend/src/policy_atlas/evidence_base/extract/relevance_prompt.py",
-        "backend/src/policy_atlas/evidence_base/sourcing/search_prompts.py",
-        "backend/src/policy_atlas/evidence_base/synthesis/summary_prompts.py",
-        "backend/src/policy_atlas/evidence_base/synthesis/synthesis_prompts_v6.py",
-        "backend/src/policy_atlas/evidence_base/synthesis/voice_prompt.py",
+        "backend/src/policy_atlas/evidence_search/assess/classify_prompt.py",
+        "backend/src/policy_atlas/evidence_search/assess/screen_prompt.py",
+        "backend/src/policy_atlas/evidence_search/extract/icf_prompt.py",
+        "backend/src/policy_atlas/evidence_search/extract/iof_prompt.py",
+        "backend/src/policy_atlas/evidence_search/extract/relevance_prompt.py",
+        "backend/src/policy_atlas/evidence_search/sourcing/search_prompts.py",
+        "backend/src/policy_atlas/evidence_search/synthesis/summary_prompts.py",
+        "backend/src/policy_atlas/evidence_search/synthesis/synthesis_prompts_v6.py",
+        "backend/src/policy_atlas/evidence_search/synthesis/voice_prompt.py",
         "backend/src/policy_atlas/runtime/chat_prompt.py",
-        "backend/src/policy_atlas/runtime/orchestrator_prompt.py",
+        # Package rename: orchestrator_prompt.py → agent_prompt.py. Prompt
+        # version ids inside stay on orchestrator_v1* (ruling R1).
+        "backend/src/policy_atlas/runtime/agent_prompt.py",
         "backend/src/policy_atlas/runtime/planner_prompt.py",
         # The 2 inline prompts.
-        "backend/src/policy_atlas/evidence_base/synthesis/synthesis_backend.py",
-        "backend/src/policy_atlas/evidence_base/extract/finding_vetter.py",
+        "backend/src/policy_atlas/evidence_search/synthesis/synthesis_backend.py",
+        "backend/src/policy_atlas/evidence_search/extract/finding_vetter.py",
     }
 )
 

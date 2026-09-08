@@ -11,7 +11,7 @@ v7 = task 022 Phase F cache-prefix RUN/SECTION layout and id-carrying repair)
 is the section-loop surface: one system prompt plus
 the three tool JSON schemas, **versioned as one unit** — the OpenAI form runs
 the bounded tool-calling loop (the repo's first agent loop; the loop runner and
-turn accounting live in :mod:`policy_atlas.evidence_base.synthesis.synthesis_tools`).
+turn accounting live in :mod:`policy_atlas.evidence_search.synthesis.synthesis_tools`).
 
 Standing injection posture, tightened for the loop (contract decision 14):
 intent, substrate summaries, finding records, tool-returned frozen chunk text,
@@ -1401,7 +1401,7 @@ class SynthesisBackend(Protocol):
     deterministic fixture-like work) and return raw output after structural
     parsing only. Callers own semantic validation (proposal validation, the
     per-type claim validators) and all budget/turn/repair policy — the loop
-    runner in :mod:`policy_atlas.evidence_base.synthesis.synthesis_tools` owns turn accounting, tool
+    runner in :mod:`policy_atlas.evidence_search.synthesis.synthesis_tools` owns turn accounting, tool
     execution and cap enforcement. A transport or parse failure raises so the
     caller can fail the component honestly.
     """
