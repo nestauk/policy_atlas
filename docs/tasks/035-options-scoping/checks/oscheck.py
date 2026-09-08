@@ -134,11 +134,15 @@ def windows(chunks: list[dict]) -> list[list[dict]]:
 def cmd_light(data: Path):
     readset = load(data, "readset.chunks.json")
     docs_by_slug = {s: {d["tss_id"]: d for d in load(data, f"{s}.docs.json")["docs"]} for s in ("inactivity", "unemployment")}
-    results = {}
+    prev = (data / "out" / "light.json")
+    results = load(data / "out", "light.json")["docs"] if prev.exists() else {}
+    todo = {t: e for t, e in readset.items() if t not in results}
+    print(f"light: {len(results)} already profiled, {len(todo)} to run")
 
     def one(tss, entry):
         d = docs_by_slug[entry["slug"]][tss]
         chars = entry["chars"]
+        t0 = time.time()
         if chars < MIN_FULLTEXT_CHARS:
             segs = [[{"segment_id": "abstract", "content": d["abstract"] or ""}]]
             basis = "abstract_only (full_text snapshot has %d chars)" % chars
@@ -157,10 +161,12 @@ def cmd_light(data: Path):
             if identity is None or (parsed.study_identity.trial_or_programme_name and not identity.get("trial_or_programme_name")):
                 identity = parsed.study_identity.model_dump()
             usages.append(usage)
-        return tss, {"slug": entry["slug"], "title": d["title"], "basis": basis, "windows": len(segs), "findings": findings, "study_identity": identity}
+        tokens = {"prompt": sum((getattr(u, "prompt", 0) or 0) for u in usages),
+                  "completion": sum((getattr(u, "completion", 0) or 0) for u in usages)}
+        return tss, {"slug": entry["slug"], "title": d["title"], "basis": basis, "windows": len(segs), "chars": chars, "wall_s": round(time.time() - t0, 1), "tokens": tokens, "findings": findings, "study_identity": identity}
 
     with ThreadPoolExecutor(6) as ex:
-        futs = {ex.submit(one, tss, e): tss for tss, e in readset.items()}
+        futs = {ex.submit(one, tss, e): tss for tss, e in todo.items()}
         for f in as_completed(futs):
             try:
                 tss, out = f.result(); results[tss] = out
