@@ -2334,3 +2334,13 @@ deliberately left, each with its reason:
   exists, so V9's `session_id = task id` covers the API path only (planning turn, run
   start, steering continuation, chat turn). Restructure if CLI traces ever need to group
   with a Task (038 review stack, Codex).
+- **APO test mod (039) removal path** — `publisher_source: "apo"` is a test-mod
+  constraint (Overton `source=apo`; OpenAlex dropped via the pre-existing
+  `grey_lit_only`). Optional and additive everywhere. On removal: delete the
+  field (`task_plan.py`, `ScopeConstraintsDraft`, `PlanDraftWire`), the
+  geography-token branch in `_geography_constraints`, the two fold-list
+  entries (`agent.py build_plan`, `_draft_from_wire`), the Overton allowlist
+  keys, the `scopeChips` label, and the `planner_v11` APO prompt rule (a
+  version bump + hash re-pin) — and either tolerate or re-save stored plans
+  that carry the field, or old approved plan rows fail validation. Planning
+  chat teaches APO since `planner_v11` (task 039).
