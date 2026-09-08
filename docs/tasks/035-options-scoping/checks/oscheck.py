@@ -49,6 +49,7 @@ QUESTIONS = {
     "inactivity": "Which interventions from OECD countries are most promising for reducing physical inactivity among population groups least likely to be active, and what is relevant for UK policy?",
     "obesity": "What interventions, policies or programmes reduce childhood obesity among children and young people in the UK, and what is known about how they are delivered?",
     "unemployment": "What policies are effective at reducing unemployment in local areas?",
+    "neet": "What interventions reduce the number of young people aged 16 to 24 who are not in education, employment or training (NEET) in England?",
 }
 
 _client = None
@@ -201,11 +202,11 @@ class OptionBackend:
         return [ClusterAssignment(unit_id=a.unit_id, label=(RESIDUAL if a.option_label.strip().casefold() == "ungroupable" else a.option_label)) for a in parsed.assignments], usage
 
 
-def policy(n_units: int, *, floor=5, cap=40, per=6) -> ClusteringPolicy:
+def policy(n_units: int, *, floor=5, cap=40, per=6, label_max=80, description_max=240) -> ClusteringPolicy:
     return ClusteringPolicy(
         min_labels=0, max_labels=max(floor, min(cap, math.ceil(n_units / per))), assignment_batch_size=40,
-        discovery_retry_cap=1, assignment_repair_cap=1, residual_label=RESIDUAL, unresolved_policy="residual",
-        label_max=80, description_max=240, log_event_prefix="oscheck", max_concurrent_batches=4,
+        discovery_retry_cap=2, assignment_repair_cap=1, residual_label=RESIDUAL, unresolved_policy="residual",
+        label_max=label_max, description_max=description_max, log_event_prefix="oscheck", max_concurrent_batches=4,
     )
 
 
@@ -247,10 +248,12 @@ def lever_typing(labels: list[ClusterLabel], levers=None, *, with_definitions=Tr
 def coverage(assignments: dict[str, str], units_by_id: dict[str, ClusterUnit], docs: dict, unit_doc, *, geo_key, pop_key, out_key):
     per = defaultdict(lambda: {"units": 0, "docs": set(), "evaluated_docs": set(), "by_type": Counter(), "by_tier": Counter(), "countries": Counter(), "populations": Counter(), "outcomes": Counter(), "bundles": 0})
     for uid, label in assignments.items():
-        u = units_by_id[uid]; tss = unit_doc(uid); d = docs.get(tss, {})
-        c = per[label]; c["units"] += 1; c["docs"].add(tss)
-        if u.payload.get("role") in ("evaluated", None):
-            c["evaluated_docs"].add(tss)
+        u = units_by_id[uid]; tss = unit_doc(uid); d = docs.get(tss, {}) if tss else {}
+        c = per[label]; c["units"] += 1
+        if tss:  # a no-document entrant (a suggestion) contributes no document to coverage
+            c["docs"].add(tss)
+            if u.payload.get("role") in ("evaluated", None):
+                c["evaluated_docs"].add(tss)
         c["by_type"][d.get("primary_evidence_type")] += 1 if tss not in c["docs"] or True else 0
         c["by_tier"][d.get("tier")] += 1
         if u.payload.get(geo_key): c["countries"][u.payload[geo_key]] += 1
