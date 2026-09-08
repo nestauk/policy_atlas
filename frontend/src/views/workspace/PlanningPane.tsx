@@ -438,6 +438,7 @@ export function PlanningPane({
   onReviewPlan,
   planOverlay,
   onOverlayApplied,
+  onDiscardOverlay,
   onAtBottomChange,
 }: {
   taskId: string;
@@ -452,6 +453,9 @@ export function PlanningPane({
   onReviewPlan?: () => void;
   planOverlay?: PlanOverlay;
   onOverlayApplied?: () => void;
+  /** Clears the same overlay state as `onOverlayApplied` — wired to the
+   *  plan-ready card's Discard edits and start action. */
+  onDiscardOverlay?: () => void;
   /** Reports when the reader asks for the site footer (a deliberate scroll
    *  past the transcript's end) and when they scroll back up (038 V8); the
    *  Agent tab reveals the footer under both columns accordingly. */
@@ -670,7 +674,7 @@ export function PlanningPane({
               />
             );
           return index === planCardAt - 1
-            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} />]
+            ? [rendered, <PlanCard key="plan-card" taskId={taskId} runActive={runActive} started={planStarted} isOwner={isOwner} onReviewPlan={onReviewPlan} overlay={planOverlay} onOverlayApplied={onOverlayApplied} onDiscardOverlay={onDiscardOverlay} />]
             : [rendered];
         })}
 

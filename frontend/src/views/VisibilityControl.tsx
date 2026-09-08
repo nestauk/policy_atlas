@@ -31,12 +31,14 @@ export function VisibilityControl({
   pending,
   onChange,
   className,
+  variant = "ghost",
 }: {
   visibility: Visibility;
   isOwner: boolean;
   pending: boolean;
   onChange: (next: Visibility) => void;
   className?: string;
+  variant?: "ghost" | "primary";
 }) {
   if (!isOwner) return null;
   const next: Visibility = visibility === "private" ? "org" : "private";
@@ -44,7 +46,7 @@ export function VisibilityControl({
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant={variant}
       size="sm"
       disabled={pending}
       onClick={() => onChange(next)}

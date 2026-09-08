@@ -1693,6 +1693,32 @@
       "EvidenceItemOut": {
         "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
         "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "abstract_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "provider",
+                  "llm_description"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Source"
+          },
           "appraisal_tier": {
             "anyOf": [
               {
@@ -4462,7 +4488,7 @@
         "type": "object"
       },
       "ScopeConstraintsDraft": {
-        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.",
+        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.\n    publisher_source: Optional Overton source-collection filter; the only\n        supported value is `apo` (Australian Policy Online).",
         "properties": {
           "author_affiliation_countries": {
             "anyOf": [
@@ -4525,6 +4551,19 @@
             ],
             "default": null,
             "title": "Publisher Country"
+          },
+          "publisher_source": {
+            "anyOf": [
+              {
+                "const": "apo",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Publisher Source"
           }
         },
         "title": "ScopeConstraintsDraft",

@@ -139,6 +139,25 @@ def _pending_values(
     }
 
 
+def test_draft_from_wire_normalises_loose_publisher_source() -> None:
+    """A sloppy planner value must degrade the draft, never 500 the turn."""
+    spelled = planning._draft_from_wire(
+        PlanDraftWire(publisher_source=" Australian Policy Online "), ready=False
+    )
+    assert spelled.scope_constraints is not None
+    assert spelled.scope_constraints.publisher_source == "apo"
+    upper = planning._draft_from_wire(PlanDraftWire(publisher_source="APO"), ready=False)
+    assert upper.scope_constraints is not None
+    assert upper.scope_constraints.publisher_source == "apo"
+    unsupported = planning._draft_from_wire(
+        PlanDraftWire(publisher_source="worldbank"), ready=False
+    )
+    assert (
+        unsupported.scope_constraints is None
+        or unsupported.scope_constraints.publisher_source is None
+    )
+
+
 def test_draft_projection_derives_time_band_and_deduplicates_public_stages() -> None:
     """Drafts gain an honest time band; approved steps use presentation vocabulary."""
     draft = planning._draft_from_wire(
@@ -1112,3 +1131,111 @@ def test_patch_plan_422s_unknown_geography(tmp_path: Path) -> None:
             json={"geography": "Not a real country"},
         )
         assert response.status_code == 422
+
+
+def test_patch_plan_apo_geography_token_sets_publisher_source(tmp_path: Path) -> None:
+    """Test mod, task 039: the APO token requires grey_lit_only scope and sets
+    publisher_source; the alternate casing/spelled-out form resolves the same
+    way."""
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert (
+            patched.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+        )
+
+
+def test_patch_plan_apo_geography_token_accepts_spelled_out_mixed_case(
+    tmp_path: Path,
+) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={
+                "backend_scope": "grey_lit_only",
+                "geography": "australian POLICY online",
+            },
+        )
+        assert patched.status_code == 200, patched.text
+        assert (
+            patched.json()["plan"]["scope_constraints"]["publisher_source"] == "apo"
+        )
+
+
+def test_patch_plan_apo_geography_token_422s_without_grey_lit_only_scope(
+    tmp_path: Path,
+) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        response = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"geography": "APO"},
+        )
+        assert response.status_code == 422
+
+
+def test_patch_plan_apo_cleared_by_later_country_geography_edit(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"geography": "France"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None
+
+
+def test_patch_plan_apo_cleared_by_later_backend_scope_edit(tmp_path: Path) -> None:
+    _reset_turn_locks()
+    with api_client(tmp_path, {get_planner_backend: lambda: StubPlannerBackend()}) as (
+        client,
+        owner,
+        _,
+    ):
+        task_id = _approve_stub_plan(client, owner)
+        client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "grey_lit_only", "geography": "APO"},
+        )
+        patched = client.patch(
+            f"/api/v1/tasks/{task_id}/plan",
+            headers=owner,
+            json={"backend_scope": "both"},
+        )
+        assert patched.status_code == 200, patched.text
+        assert patched.json()["plan"]["scope_constraints"]["publisher_source"] is None

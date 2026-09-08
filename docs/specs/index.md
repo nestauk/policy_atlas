@@ -23,6 +23,8 @@ When two of them disagree on such an area, the lower number wins (ratified from 
 7. [task-lifecycle-ux/](sources/task-lifecycle-ux/README.md) — the 2026-08-17 clickable prototype for the task-lifecycle IA (workspace level + the five task stages). Product intent only, never a schema/contract source; it contains outputs the backend deliberately does not produce. Read its README for how to unpack it.
 8. [synthesis-report-ux/](sources/synthesis-report-ux/README.md) — the 2026-08-26 clickable prototype for the report's Results tab (front matter, key-findings bullets, case-study cards). Product intent only, never a schema/contract source; task 034's contract records its deliberate departures. Read its README for how to unpack it.
 9. [vocabulary/policy-atlas-definitions.md](sources/vocabulary/policy-atlas-definitions.md) — the team's definitions as agreed on 2026-09-04 (Capability · Component · Task · Project · Tabs · Artefact · Agent · Task Agent · Chats · Links · Context). Frozen snapshot; the living version is [vocabulary.md](vocabulary.md).
+10. [options-scoping-concept.md](sources/options-scoping/options-scoping-concept.md) — canonical Options Scoping capability intent and the owner's rulings (concept 2026-09-01/02; wireframe-round rulings 2026-09-03, which win over its earlier sections). The doc the OS specs distil from.
+11. [options-scoping/](sources/options-scoping/README.md) — the options-scoping wireframe canvas (`options-scoping-wireframes.html`, readable boards under `boards/`). Product intent only, never a schema/contract source; every figure on it is placeholder. Read its README for how to read it.
 
 **Reading a frozen source after task 038** ([ADR 0036](../adr/0036-one-vocabulary-across-code-schema-api-and-screen.md)):
 the sources use the pre-038 words — `project` there is today's **`task`** (the Task),
@@ -31,7 +33,7 @@ the sources use the pre-038 words — `project` there is today's **`task`** (the
 and "the orchestrator" is the **Agent** (`agent`). The living table is
 [vocabulary.md § Code words](vocabulary.md#code-words).
 
-Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7).
+Backend architecture and EB capability design outrank all visual shorthand. On locked product decisions and repo-safe constraints, the UX handoff (#4) overrides the wireframe and visual assets (#5, #6, #7). For options scoping, the concept (#10) outranks its canvas (#11).
 
 ## Distilled specs in this repo
 
@@ -51,7 +53,8 @@ implementation lands — see the flow-back in [README](README).
   - [system/prompting.md](system/prompting.md) — doctrine for every prompt surface
     (promoted from the 018 research + loop method; not distilled from the frozen sources).
 - Capability specs (instances of the framework):
-  - [capabilities/evidence-search/](capabilities/evidence-search/) — the first and only v3.0 capability.
+  - [capabilities/evidence-search/](capabilities/evidence-search/) — the first v3.0 capability.
+  - [capabilities/options-scoping/](capabilities/options-scoping/) — the second: options scoping, reusing Evidence search machinery in its own pipeline ([capability](capabilities/options-scoping/capability.md) · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md)).
 
 ## What to read for a task
 
@@ -64,6 +67,7 @@ implementation lands — see the flow-back in [README](README).
 | Agent/sub-agents, the tool registry + universal core, steering modes, the routing rule, durability | [system/execution-orchestration.md](system/execution-orchestration.md) → arch §4, §6 |
 | The plan object, plan→config compile, two-level/progressive planning, source/evidence policy, depth/thoroughness | [system/plan-as-object.md](system/plan-as-object.md) → arch §5 |
 | Anything in the Evidence search run (acquire → … → synthesise) | [capabilities/evidence-search/](capabilities/evidence-search/) → build spec |
+| Anything in an Options Scoping run (plan → baseline → longlist → shortlist → assess → export; the full evidence search as a child Evidence search task) | [capabilities/options-scoping/](capabilities/options-scoping/) → concept (source #10) |
 | Writing or changing ANY LLM prompt/envelope surface; the refine-replay loop; model swaps | [system/prompting.md](system/prompting.md) — no frozen-source arch section (018 origin) |
 | Export/share, version-pinned deep-links, the superseded-version banner | **No contract drafted yet** — read arch §10 directly (a down-weighted v3.0 seam). |
 | Collaboration/comments/event log, persistence substrate, observability/eval, security/egress | **No contract drafted yet** — read arch §7, §9, §8, §11 directly; draft the contract when the first task lands. |

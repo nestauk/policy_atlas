@@ -9,6 +9,7 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
 
 from policy_atlas.api.contract import AuthorshipOut
+from policy_atlas.api.contract.read_models import ClaimOut
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core import events
 from policy_atlas.core.schema import (
@@ -456,6 +457,203 @@ def test_edge_snippet_marks_both_ends_and_starts_on_a_word() -> None:
     assert repository._edge_snippet(previous, from_end=True) == "...trailing previous sentence...."
     following = "leading next sentence. " + ("N" * 400) + " OFFTOPIC NEXT"
     assert repository._edge_snippet(following, from_end=False) == "...leading next sentence...."
+
+
+def _seed_case_study_cards(
+    engine: Engine,
+    task_id: uuid.UUID,
+    *,
+    colliding_aliases: bool,
+) -> None:
+    """Replace the ladder artefact with two case-study cards."""
+    with engine.begin() as conn:
+        synthesis = conn.execute(
+            select(synthesis_result.c.blocks).where(synthesis_result.c.task_id == task_id)
+        ).one()
+        block_id = uuid.UUID(synthesis.blocks[0]["block_id"])
+        first_text = "First card evidence."
+        second_text = "Second card evidence."
+        conn.execute(
+            update(block)
+            .where(block.c.block_id == block_id)
+            .values(content=f"{first_text}\n\n{second_text}")
+        )
+        first_unit_id = conn.execute(
+            select(addressable_unit.c.unit_id).where(addressable_unit.c.block_id == block_id)
+        ).scalar_one()
+        first_annotation_id = conn.execute(
+            select(annotation.c.annotation_id).where(annotation.c.unit_id == first_unit_id)
+        ).scalar_one()
+        conn.execute(
+            update(addressable_unit)
+            .where(addressable_unit.c.unit_id == first_unit_id)
+            .values(content=first_text, locator={"start": 0, "end": len(first_text)})
+        )
+        conn.execute(
+            update(annotation)
+            .where(annotation.c.annotation_id == first_annotation_id)
+            .values(payload={"claim_id": "s9c0"})
+        )
+        second_unit_id, second_annotation_id = uuid.uuid4(), uuid.uuid4()
+        conn.execute(
+            insert(addressable_unit).values(
+                unit_id=second_unit_id,
+                block_id=block_id,
+                unit_type="text_span",
+                locator={
+                    "start": len(first_text) + 2,
+                    "end": len(first_text) + 2 + len(second_text),
+                },
+                content=second_text,
+                created_at=now(),
+            )
+        )
+        second_alias = "s9c0" if colliding_aliases else "s9c1"
+        conn.execute(
+            insert(annotation).values(
+                annotation_id=second_annotation_id,
+                block_id=block_id,
+                unit_id=second_unit_id,
+                annotation_type="citation",
+                payload={"claim_id": second_alias},
+                created_at=now(),
+            )
+        )
+        conn.execute(
+            update(synthesis_result)
+            .where(synthesis_result.c.task_id == task_id)
+            .values(
+                blocks=[
+                    {
+                        "block_id": str(block_id),
+                        "title": "Case studies",
+                        "role": "case_studies",
+                        "cards": [
+                            {
+                                "card_id": str(uuid.uuid4()),
+                                "title": "First",
+                                "prose": first_text,
+                                "claim_ids": ["s9c0"],
+                                "claim_spans": [
+                                    {"claim_id": "s9c0", "span": [42, 42 + len(first_text)]}
+                                ],
+                                "result_claim_id": "s9c0",
+                                "result_ordinal": 0,
+                            },
+                            {
+                                "card_id": str(uuid.uuid4()),
+                                "title": "Second",
+                                "prose": second_text,
+                                "claim_ids": [second_alias],
+                                "claim_spans": [
+                                    {"claim_id": second_alias, "span": [0, len(second_text)]}
+                                ],
+                                "result_claim_id": second_alias,
+                                "result_ordinal": 0,
+                            },
+                        ],
+                    }
+                ]
+            )
+        )
+
+
+def test_artefact_case_studies_recover_colliding_claim_aliases(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Colliding legacy aliases recover claims and result ids from card prose."""
+    with api_client(tmp_path) as (client, owner, _):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            _seed_case_study_cards(engine, task_id, colliding_aliases=True)
+            cards = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["cards"]
+            assert [card["claims"][0]["text"] for card in cards] == [
+                "First card evidence.",
+                "Second card evidence.",
+            ]
+            assert all(card["claims"][0]["text"] in card["prose"] for card in cards)
+            assert [card["result_claim_id"] for card in cards] == [
+                card["claims"][0]["claim_id"] for card in cards
+            ]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def test_artefact_case_studies_keep_healthy_claim_aliases(
+    tmp_path: Path, engine: Engine
+) -> None:
+    """Healthy per-card aliases retain their stored span-based projection."""
+    with api_client(tmp_path) as (client, owner, _):
+        task_id = uuid.UUID(create_task(client, owner))
+        _seed_read_model_ladder(engine, task_id)
+        try:
+            _seed_case_study_cards(engine, task_id, colliding_aliases=False)
+            cards = client.get(f"/api/v1/tasks/{task_id}/artefact", headers=owner).json()[
+                "sections"
+            ][0]["cards"]
+            assert [card["claims"][0]["text"] for card in cards] == [
+                "First card evidence.",
+                "Second card evidence.",
+            ]
+            assert cards[0]["claims"][0]["span"] == [42, 42 + len("First card evidence.")]
+        finally:
+            with engine.begin() as conn:
+                delete_task_data(conn, task_id)
+
+
+def _card_claim(text: str) -> ClaimOut:
+    return ClaimOut(claim_id=uuid.uuid4(), claim_type="citation", text=text)
+
+
+def test_task_card_claims_trusts_explicit_null_span_aliases() -> None:
+    """A write-path span=None record (title-bound text) is not collision evidence."""
+    prose_claim = _card_claim("In the prose.")
+    title_claim = _card_claim("Bold Title Programme")
+    raw_card = {
+        "prose": "In the prose. And more.",
+        "claim_ids": ["s0c0", "s0c1"],
+        "claim_spans": [
+            {"claim_id": "s0c0", "span": [0, 13]},
+            {"claim_id": "s0c1", "span": None},
+        ],
+    }
+    result = repository._task_card_claims(
+        raw_card, {"s0c0": prose_claim, "s0c1": title_claim}
+    )
+    assert [claim.claim_id for claim in result] == [
+        prose_claim.claim_id,
+        title_claim.claim_id,
+    ]
+    assert result[1].span is None
+
+
+def test_task_card_claims_unresolvable_aliases_fall_back_to_prose() -> None:
+    """Stored ids that resolve to nothing must not project an empty card."""
+    known = _card_claim("Known claim text.")
+    raw_card = {
+        "prose": "Known claim text. Context.",
+        "claim_ids": ["ghost"],
+        "claim_spans": [],
+    }
+    result = repository._task_card_claims(
+        raw_card, {"s9c9": known, str(known.claim_id): known}
+    )
+    assert [claim.claim_id for claim in result] == [known.claim_id]
+
+
+def test_task_card_claims_fallback_sorts_by_span_position() -> None:
+    """The prose fallback orders claims by their position in the card."""
+    later = _card_claim("zeta point.")
+    earlier = _card_claim("alpha point.")
+    raw_card = {"prose": "alpha point. Then zeta point."}
+    result = repository._task_card_claims(
+        raw_card, {str(later.claim_id): later, str(earlier.claim_id): earlier}
+    )
+    assert [claim.text for claim in result] == ["alpha point.", "zeta point."]
 
 
 def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> None:

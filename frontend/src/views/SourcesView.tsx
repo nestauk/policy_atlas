@@ -1,12 +1,13 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
+import { Button } from "../ui/brand/Button";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
@@ -47,8 +48,9 @@ export function SourcesView() {
   useDocumentTitle(task.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
+  // No explicit status → Included (the screened-in set), the owner default.
   const statusFilter =
-    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "all";
+    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "Included";
   const citedFilter = searchParams.get("cited") === "true";
   const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
   const typeFilter = searchParams.get("type") ?? undefined;
@@ -126,7 +128,7 @@ export function SourcesView() {
 
   return (
     <main className="py-8">
-      <header className="mb-5">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div role="group" aria-label="Filter sources" className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((filter) => (
             <button
@@ -134,8 +136,7 @@ export function SourcesView() {
               type="button"
               aria-pressed={statusFilter === filter.key}
               onClick={() => updateParams((next) => {
-                if (filter.key === "all") next.delete("status");
-                else next.set("status", filter.key);
+                next.set("status", filter.key);
                 next.delete("page");
               })}
               className={`${FILTER_CHIP_CLASS} ${
@@ -175,6 +176,7 @@ export function SourcesView() {
             })}
           />
         </div>
+        <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
       </header>
 
       {evidence.isPending && <SourceLoading />}
@@ -297,13 +299,7 @@ export function SourcesView() {
               {evidence.data.data.map((item) => (
                 <tr key={item.source_id} className="border-b border-line last:border-b-0">
                   <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
-                    <button
-                      type="button"
-                      onClick={() => updateParams((next) => next.set("source", item.source_id))}
-                      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue max-md:text-meta"
-                    >
-                      {scrub(item.title)}
-                    </button>
+                    <TitleWithDescription item={item} onOpen={() => updateParams((next) => next.set("source", item.source_id))} />
                     {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
                   </td>
                   <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
@@ -429,6 +425,111 @@ export function SourcesView() {
         onClose={() => updateParams((next) => next.delete("source"))}
       />
     </main>
+  );
+}
+
+/** The title cell's button: opens the dossier on click and, when the source
+ *  carries a description, previews it (clamped) on hover. */
+function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screeningDetails>[0] & { title: string; abstract?: string | null; abstract_source?: string | null }; onOpen: () => void }) {
+  const button = (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue max-md:text-meta"
+    >
+      {scrub(item.title)}
+    </button>
+  );
+  if (!item.abstract) return button;
+  const clamped = item.abstract.length > 300 ? `${item.abstract.slice(0, 300)}…` : item.abstract;
+  return (
+    <Tooltip
+      content={
+        <p className="max-w-prose-measure">
+          {item.abstract_source === "llm_description" && <span className="font-semibold">AI description — </span>}
+          {scrub(clamped)}
+        </p>
+      }
+    >
+      {button}
+    </Tooltip>
+  );
+}
+
+/** A CSV cell: quoted/escaped, and defused against spreadsheet formula
+ *  injection — titles and venues arrive from external sources. */
+function csvCell(value: string | number | boolean | null | undefined): string {
+  let text = value === null || value === undefined ? "" : String(value);
+  // Also defuse markers behind leading whitespace ("\t=SUM…").
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+/** Downloads the whole source list (every page, no filters) as a CSV file. */
+function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {
+  const client = useApiClient();
+  const [downloading, setDownloading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const download = async () => {
+    setDownloading(true);
+    setFailed(false);
+    try {
+      const rows = [];
+      // ponytail: offset pagination, no snapshot — a source arriving mid-download
+      // can shift pages; add a cursor if downloads during active runs matter.
+      for (let page = 1; ; page += 1) {
+        const { data, error } = await client.GET("/api/v1/tasks/{task_id}/evidence", {
+          params: { path: { task_id: taskId }, query: { page, page_size: 200 } },
+        });
+        if (data === undefined) throw error;
+        rows.push(...data.data);
+        if (page * data.pagination.page_size >= data.pagination.total_items) break;
+      }
+      const header = ["Title", "Venue", "Year", "Origin", "Status", "Status reason", "Evidence type", "Evidence type reason", "Strength", "Screening", "Screening confidence", "Screening reason", "Read in full", "Cited", "URL", "Description", "Description source"];
+      const csv = [
+        header.map(csvCell).join(","),
+        ...rows.map((item) => [
+          item.title,
+          item.venue,
+          item.year,
+          item.origin,
+          item.status,
+          item.status_reason,
+          item.evidence_type,
+          item.classification_reason,
+          item.appraisal_tier,
+          item.screen_status,
+          item.screen_confidence,
+          item.screen_reason,
+          item.read_in_full,
+          item.cited,
+          item.url,
+          item.abstract,
+          item.abstract_source === "llm_description" ? "AI description" : item.abstract_source,
+        ].map(csvCell).join(",")),
+      ].join("\r\n");
+      // UTF-8 BOM so spreadsheet apps decode non-ASCII source text correctly.
+      const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <span className="flex items-center gap-2">
+      {failed && <span role="alert" className="text-caption text-red">The download failed. Try again.</span>}
+      <Button type="button" variant="primary" size="sm" disabled={downloading} onClick={() => void download()}>
+        {downloading ? "Preparing…" : "Download CSV"}
+      </Button>
+    </span>
   );
 }
 

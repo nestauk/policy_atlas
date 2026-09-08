@@ -40,7 +40,7 @@ function PublicLinkSection({
       </p>
       <p className="mt-2 text-body text-grey">{PUBLIC_SHARE.warning}</p>
       <div className="mt-4 flex flex-wrap gap-3">
-        <Button type="button" variant="ghost" disabled={pending} onClick={() => onToggle(!isPublic)}>
+        <Button type="button" variant="primary" disabled={pending} onClick={() => onToggle(!isPublic)}>
           {isPublic ? PUBLIC_SHARE.turnOff : PUBLIC_SHARE.turnOn}
         </Button>
         {isPublic && (
@@ -199,7 +199,8 @@ export function ShareView() {
               isOwner={task.data.is_owner}
               pending={update.isPending}
               onChange={changeVisibility}
-              className="mt-2 px-0"
+              variant="primary"
+              className="mt-4"
             />
           </section>
         )}

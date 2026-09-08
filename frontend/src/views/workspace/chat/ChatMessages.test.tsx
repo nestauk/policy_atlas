@@ -65,11 +65,25 @@ describe("ChatMessages", () => {
     expect(openPlanning).toHaveBeenCalledOnce();
   });
 
+  it("shows a citation's best-supported claim, not the worst-verdict stamp", async () => {
+    renderChat([turn({
+      id: "t9", client_turn_id: "ct9", answer: "Costs fell [1]. Nothing else covers this. [1]",
+      citations: [{ id: "chunk-1", n: 1, quote: "Costs fell", state: "verdict:unsupported_mis_cited" }],
+      claims: [
+        { text: "Costs fell [1].", citation_ns: [1], verdict: "tier_1", rationale: "Direct quote from the source." },
+        { text: "Nothing else covers this. [1]", citation_ns: [1], verdict: "unsupported_mis_cited", rationale: "The source cannot prove a negative." },
+      ],
+    })]);
+    await openAllReferences();
+    expect(screen.getByText("Tier 1 · direct quote")).toBeInTheDocument();
+    expect(screen.queryByText("Unsupported")).toBeNull();
+  });
+
   it("shows an unresolved citation as unchecked and a failed one as flagged", async () => {
     renderChat([turn({ id: "t3", client_turn_id: "ct3", answer: "Costs fell [1] and uptake held [2]", citations: [{ id: "chunk-1", n: 1, quote: "Costs fell" }, { id: "chunk-2", n: 2, quote: "Uptake held", state: "verdict:unsupported_mis_cited" }] })]);
     await openAllReferences();
     expect(screen.getByText("Unchecked · awaiting evidence check")).toBeInTheDocument();
-    expect(screen.getByText("Unsupported — flagged")).toBeInTheDocument();
+    expect(screen.getByText("Unsupported")).toBeInTheDocument();
   });
 
   it("ignores a bare grounding_tier/verdict key on the citation itself (dead payload shape)", async () => {

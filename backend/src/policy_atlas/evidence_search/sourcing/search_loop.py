@@ -244,6 +244,7 @@ _OPENALEX_FILTER_KEYS = {
 _OVERTON_FILTER_KEYS = {
     "publisher_type",
     "publisher_country",
+    "publisher_source",
     "publisher_region",
     "source_country_post_filter",
     "language",
@@ -555,6 +556,8 @@ def overton_wire_params(filters: dict[str, Any] | None) -> dict[str, str]:
             params["source_type"] = _single_enum_value(key, value, OVERTON_PUBLISHER_TYPES)
         elif key == "publisher_country":
             params["source_country"] = _single_str_value(key, value)
+        elif key == "publisher_source":
+            params["source"] = _single_str_value(key, value)
         elif key == "publisher_region":
             params["source_region"] = _single_enum_value(key, value, OVERTON_REGION_GROUPS)
         elif key == "language":
@@ -698,6 +701,13 @@ def _validate_overton_block(block: dict[str, Any]) -> dict[str, Any]:
                 key, value, error=SearchDirectiveError, accept_list_of_one=False, strict=True
             )
             out[key] = validate_overton_display_name(country, field_name=key)
+        elif key == "publisher_source":
+            source = _single_str_value(
+                key, value, error=SearchDirectiveError, accept_list_of_one=False, strict=True
+            )
+            if source != "apo":
+                raise SearchDirectiveError(f"{key} contains an unsupported Overton source")
+            out[key] = source
         elif key == "publisher_region":
             out[key] = _single_enum_value(
                 key,
