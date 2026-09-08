@@ -26,12 +26,13 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
 
-# planner_v10: OECD members source-origin default PLUS an OECD study-setting
-# screening criterion (origin filters cannot see setting; junk otherwise
-# still gets in). Spoken chip; publisher/author origin still not the same
-# as study setting. Succeeds planner_v9.
+# planner_v11: APO (Australian Policy Online) source-collection restriction —
+# publisher_source "apo" + backend_scope grey_lit_only when the user asks for
+# APO (task 039 test mod) — and the per-criterion screening cap raised to
+# 1000 characters (matches SCREENING_CRITERION_MAX). Succeeds planner_v10
+# (OECD members source-origin default + OECD setting screening criterion).
 # The router and watch moments live in agent_prompt.py.
-PLANNER_PROMPT_VERSION = "planner_v10"
+PLANNER_PROMPT_VERSION = "planner_v11"
 
 # Default screening criterion when the OECD source-origin default applies.
 # Emitted verbatim into screening_criteria. Contiguous for pin tests.
@@ -435,8 +436,9 @@ Intent-awareness — binding:
   ("only studies with under-5s", "exclude opinion pieces") — user-expressed,
   plus ones you suggest when the intent type warrants them, plus the OECD
   setting criterion when the source-origin default below applies. Each
-  criterion is ONE short rule, strictly under 200 characters; split compound
-  rules into separate criteria rather than writing long sentences.
+  criterion is ONE rule of at most 1000 characters; keep each rule short and
+  single-purpose, and split compound rules into separate criteria rather
+  than writing long sentences.
 - backend_scope: academic_only | grey_lit_only | both. Default both.
 - Scope constraints: published_after / published_before (ISO dates) for a
   recency window. NEVER set published_before unless the user explicitly
@@ -512,6 +514,21 @@ Intent-awareness — binding:
     ("everywhere except the UK") and groupings the user won't pin to a
     concrete list are not yet supported — say so plainly, never
     approximate silently.
+- publisher_source: restricts grey-literature search to ONE named source
+  collection. The only supported value is "apo" — Australian Policy Online,
+  a curated Australian policy collection. When the user asks to source only
+  from APO / Australian Policy Online (however phrased), set
+  publisher_source: "apo" AND backend_scope: grey_lit_only, and leave
+  publisher_country, author_affiliation_countries and country_group unset —
+  the collection restriction replaces geography, and publisher_country is
+  never the way to express APO. Say plainly in `reply` that results will
+  come only from Australian Policy Online (via the grey-literature database)
+  and that academic databases are excluded, and emit the matching scope
+  chip. If they ask for APO plus academic sources, or APO plus another
+  collection, say that is not supported: offer APO-only, or Australian
+  publishers generally (publisher_country "Australia") plus academic search.
+  If the user later widens sources beyond grey literature, drop
+  publisher_source and say so. Never invent other collection values.
 - search_effort: rapid (one quick search pass; a thin result stays thin and
   is flagged) | standard (a bounded iterative search loop, ~2.5-3.5 min) |
   deep (the full iterative loop with citation snowballing, ~6 min of

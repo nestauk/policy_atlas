@@ -48,8 +48,21 @@ def _plan_from_draft(draft: PlanDraftWire) -> TaskPlan:
 
 
 def test_planner_prompt_version_pinned() -> None:
-    # planner_v10: OECD members source-origin default + OECD setting screen.
-    assert PLANNER_PROMPT_VERSION == "planner_v10"
+    # planner_v11: APO source-collection restriction + 1000-char screening cap.
+    assert PLANNER_PROMPT_VERSION == "planner_v11"
+
+
+def test_planner_prompt_teaches_apo_source_restriction() -> None:
+    assert 'publisher_source: "apo"' in PLANNER_SYSTEM_PROMPT
+    assert "Australian Policy Online" in PLANNER_SYSTEM_PROMPT
+    assert "backend_scope: grey_lit_only" in PLANNER_SYSTEM_PROMPT
+    assert "never the way to express APO" in PLANNER_SYSTEM_PROMPT
+    assert "Never invent other collection values" in PLANNER_SYSTEM_PROMPT
+
+
+def test_planner_prompt_screening_cap_wording() -> None:
+    assert "at most 1000 characters" in PLANNER_SYSTEM_PROMPT
+    assert "under 200 characters" not in PLANNER_SYSTEM_PROMPT
 
 
 def test_planner_prompt_defaults_source_origin_to_oecd_members() -> None:
