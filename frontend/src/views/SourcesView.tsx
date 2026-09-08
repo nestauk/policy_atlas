@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
@@ -10,6 +10,7 @@ import { useDocumentTitle } from "../lib/title";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
+import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
@@ -627,22 +628,77 @@ function FilterSelect({
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
+  // App-styled Popover listbox (the NewTaskView ProjectPicker pattern), not a
+  // native <select>: consistent chrome at every width, and long theme names
+  // wrap in the menu instead of sizing (and overflowing) the closed control.
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+  const pick = (next: string) => {
+    onChange(next);
+    setOpen(false);
+  };
+  const optionClass = (active: boolean) =>
+    cn(
+      "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue max-md:text-meta",
+      active && "bg-blue-tint-2 font-medium",
+    );
   return (
-    <label className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey">
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey">
       {label}
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        // A <select> sizes to its longest option; capped below md so a long
-        // theme name can't overflow the filter row.
-        className="min-w-0 cursor-pointer border border-line-2 bg-paper px-2 py-1.5 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52"
-      >
-        <option value="">{allLabel}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-label={label}
+            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52"
+          >
+            <span className="truncate">{selected?.label ?? allLabel}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 shrink-0 text-grey"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 max-w-[calc(100vw-2rem)] p-1">
+          <ul role="listbox" aria-label={label} className="flex max-h-80 flex-col overflow-y-auto">
+            <li role="none">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === ""}
+                onClick={() => pick("")}
+                className={optionClass(value === "")}
+              >
+                {allLabel}
+              </button>
+            </li>
+            {options.map((option) => (
+              <li key={option.value} role="none">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === option.value}
+                  onClick={() => pick(option.value)}
+                  className={optionClass(value === option.value)}
+                >
+                  {option.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 

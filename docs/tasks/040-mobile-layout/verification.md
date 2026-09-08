@@ -63,7 +63,7 @@ logged) → claim citation opened → Download menu opened (PDF/Markdown,
 | A1 | New Task full-width, smaller type, no "Coming soon" overlap (`a1-newtask-390.png`) | 1280 layout as before |
 | A2/A3 | Task and project rows wrap: title on its own line, metadata below (`a2-tasks-390.png`) | 1280 grid columns aligned as before (`a4-tasks-1280.png`) |
 | A4 | Nav links left-justified row 2; account icon on the logo row, top-right (`a1-newtask-390.png`) | 1280 header identical (`a4-tasks-1280.png`) |
-| A5 | Sources sub-tabs smaller; Key-theme select capped, no overflow (`a5-allsources-390.png`) | 1280 unchanged |
+| A5 | Sources sub-tabs smaller; theme filter is an app-styled popover listbox, options wrap at 14px (`theme-open-390.png`) | Popover at 1280 too — **intended all-widths change**, owner call (`theme-open-1280.png`) |
 | A6 | Chat strip removed; report full-width; Agent reachable via bottom bar (`a6-result-390.png`) | 1280 rail/panel unchanged |
 
 ## End-to-end command
