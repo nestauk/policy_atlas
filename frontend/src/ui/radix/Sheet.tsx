@@ -59,7 +59,7 @@ export function SheetContent({
           </div>
           <DialogPrimitive.Close
             aria-label="Close panel"
-            className="cursor-pointer p-1.5 text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
+            className="cursor-pointer p-2 text-lead leading-none text-grey hover:text-navy focus-visible:outline-2 focus-visible:outline-blue"
           >
             ✕
           </DialogPrimitive.Close>

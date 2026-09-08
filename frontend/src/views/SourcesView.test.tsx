@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mockCoverage, mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
+import { mockCoverage, mockEvidence, mockFunnel, mockLandscape, mockSourceDossiers } from "../mock/fixtures";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { SourcesView } from "./SourcesView";
+import { SourceDossierBody, SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
@@ -308,6 +308,46 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     expect(screen.getAllByText("Read in full").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Abstract only").length).toBeGreaterThan(0);
     expect(screen.queryByText("Cited in the evidence base")).toBeNull();
+  });
+});
+
+describe("SourceDossierBody authorships (042)", () => {
+  const authored = mockSourceDossiers[mockEvidence[2].source_id];
+  const corporate = mockSourceDossiers[mockEvidence[7].source_id];
+
+  it("renders authors with superscript markers and numbered, deduped institutions", () => {
+    const { container } = render(
+      <SourceDossierBody source={authored} findings={[]} findingsPending={false} />,
+    );
+    expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Casey Mockford/).length).toBeGreaterThan(0);
+    // The sheet header owns the title (042 item 4): the body never repeats it.
+    expect(screen.queryByText(authored.title)).toBeNull();
+    expect(screen.getAllByText(/Institute of Fictional Studies/).length).toBeGreaterThan(0);
+    // Marker sequence proves the shared institution deduped to number 1 and
+    // listed once: two author markers, then the two numbered institution rows.
+    const markers = [...container.querySelectorAll("sup")].map((sup) => sup.textContent);
+    expect(markers).toEqual(["1", "1,2", "1", "2"]);
+  });
+
+  it("renders a corporate author with no markers and no institutions line", () => {
+    const { container } = render(
+      <SourceDossierBody source={corporate} findings={[]} findingsPending={false} />,
+    );
+    expect(screen.getAllByText(/Example Policy Institute/).length).toBeGreaterThan(0);
+    expect(container.querySelector("sup")).toBeNull();
+  });
+
+  it("renders no authors line at all when the source carries none", () => {
+    const { container } = render(
+      <SourceDossierBody
+        source={{ ...authored, authorships: [] }}
+        findings={[]}
+        findingsPending={false}
+      />,
+    );
+    expect(screen.queryByText(/Sampleton/)).toBeNull();
+    expect(container.querySelector("sup")).toBeNull();
   });
 });
 

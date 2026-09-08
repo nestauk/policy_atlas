@@ -33,6 +33,7 @@ import {
   MOCK_PLANNING_CONVERSATION_ID,
   MOCK_TASK_ID,
   MOCK_RUN_ID,
+  mockAuthorships,
 } from "./fixtures";
 
 type MeOut = components["schemas"]["MeOut"];
@@ -489,6 +490,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: mockAuthorships,
     });
   }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/citations/`) && path.endsWith("/context")) {
@@ -505,6 +507,7 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: mockAuthorships,
     });
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/findings`)) {

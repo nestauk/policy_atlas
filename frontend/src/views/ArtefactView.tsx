@@ -52,7 +52,8 @@ import {
   useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { SourceDossierBody } from "./SourcesView";
+import { AuthorsLine, InstitutionsLine, SourceDossierBody } from "./SourcesView";
+import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
@@ -351,9 +352,11 @@ export function CitationProvenanceBlock({
           <span>{scrub(sourceTitle)}</span>
         )}
       </p>
+      <AuthorsLine authorships={context.data?.authorships} className="mt-0.5 text-body text-grey" />
       {meta.length > 0 && (
         <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
+      <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
       <div className="mt-3 space-y-2 text-body leading-relaxed">
         {context.isPending && (
@@ -492,9 +495,6 @@ export function ProvenanceSheet({
             ))}
           {extras}
           {children}
-          <p className="border-t border-line pt-3 text-body text-grey">
-            Every claim links to the exact passage it came from.
-          </p>
         </div>
       </SheetContent>
     </Sheet>
@@ -1058,7 +1058,6 @@ export function SourceDossier({
     >
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
-        description="Source dossier"
       >
         {evidence.isPending && (
           <p role="status" className="animate-pulse text-body text-grey">
@@ -1653,11 +1652,17 @@ export function ArtefactView() {
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). */
-function ReferencesSection({
+export function ReferencesSection({
   references,
   onOpenReference,
 }: {
-  references: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  references: Array<{
+    n: number;
+    title: string;
+    year?: number | null;
+    venue?: string | null;
+    authorships?: components["schemas"]["AuthorshipOut"][];
+  }>;
   onOpenReference: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1686,26 +1691,30 @@ function ReferencesSection({
       {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
         <ol className="mt-3 space-y-1.5 text-lead text-ink max-md:text-body">
-          {references.map((reference) => (
-            <li key={reference.n} className="flex gap-2">
-              <span className="font-bold text-blue">[{reference.n}]</span>
-              <span>
-                <button
-                  type="button"
-                  className="cursor-pointer text-left hover:underline"
-                  onClick={() => onOpenReference(reference.title)}
-                >
-                  {scrub(reference.title)}
-                </button>
-                {reference.year !== null && reference.year !== undefined && (
-                  <span className="text-grey"> ({reference.year})</span>
-                )}
-                {reference.venue !== null && reference.venue !== undefined && (
-                  <span className="text-grey"> · {scrub(reference.venue)}</span>
-                )}
-              </span>
-            </li>
-          ))}
+          {references.map((reference) => {
+            const authors = referenceAuthorsLine(reference.authorships);
+            return (
+              <li key={reference.n} className="flex gap-2">
+                <span className="font-bold text-blue">[{reference.n}]</span>
+                <span>
+                  <button
+                    type="button"
+                    className="cursor-pointer text-left hover:underline"
+                    onClick={() => onOpenReference(reference.title)}
+                  >
+                    {scrub(reference.title)}
+                  </button>
+                  {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
+                  {reference.year !== null && reference.year !== undefined && (
+                    <span className="text-grey"> ({reference.year})</span>
+                  )}
+                  {reference.venue !== null && reference.venue !== undefined && (
+                    <span className="text-grey"> · {scrub(reference.venue)}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       )}
       {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}

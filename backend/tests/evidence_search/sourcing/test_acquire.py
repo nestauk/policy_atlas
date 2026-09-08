@@ -376,11 +376,16 @@ def test_map_overton_string_or_list_shapes() -> None:
     rec = ov_record(snippet="s")
     rec["authors"] = "Alex Sampleton"
     rec["topics"] = "Affordable housing"
-    assert _map_overton_document(rec) is not None
+    mapped = _map_overton_document(rec)
+    assert mapped is not None
+    # 042: author names ride in provider_fields, normalised at read time.
+    assert mapped["provider_fields"]["authors"] == "Alex Sampleton"
     rec2 = ov_record(snippet="s")
     rec2["authors"] = ["Alex Sampleton"]
     rec2["topics"] = ["Affordable housing"]
-    assert _map_overton_document(rec2) is not None
+    mapped2 = _map_overton_document(rec2)
+    assert mapped2 is not None
+    assert mapped2["provider_fields"]["authors"] == ["Alex Sampleton"]
 
 
 def test_map_overton_absent_shapes_tolerated() -> None:

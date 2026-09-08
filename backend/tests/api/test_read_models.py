@@ -8,6 +8,7 @@ from pathlib import Path
 from sqlalchemy import insert, select, update
 from sqlalchemy.engine import Connection, Engine
 
+from policy_atlas.api.contract import AuthorshipOut
 from policy_atlas.api.contract.read_models import ClaimOut
 from policy_atlas.api.readmodels import repository
 from policy_atlas.core import events
@@ -91,7 +92,16 @@ def _seed_read_model_ladder(
                     "record_type": "article",
                     "language": "en",
                     "doi": "10.1234/trial",
-                    "provider_fields": {"cited_by_count": 12, "fwci": 1.5},
+                    "provider_fields": {
+                        "cited_by_count": 12,
+                        "fwci": 1.5,
+                        "authorships": [
+                            {
+                                "author_name": "Alex Sampleton",
+                                "institutions": ["Acme Institute"],
+                            }
+                        ],
+                    },
                 }
             )
         )
@@ -375,6 +385,57 @@ def test_evidence_url_fallback_ladder() -> None:
         == "https://provider.example"
     )
     assert repository._url({"doi": "10.1234/example"}, None) == "https://doi.org/10.1234/example"
+
+
+def test_authorships_named_rung_filters_malformed_institutions() -> None:
+    """Rung 1: named authorships win, with non-string institution entries dropped."""
+    metadata = {
+        "provider_fields": {
+            "authorships": [
+                {"author_name": "Alex Sampleton", "institutions": ["Acme Institute", None, ""]},
+                {"author_name": "", "institutions": ["Dropped Institute"]},  # empty name skipped
+                "not a mapping",  # malformed entry skipped
+                {"institutions": ["No name key"]},  # missing author_name skipped
+                {"author_name": None},  # non-string author_name skipped
+                # A string institutions value is malformed (would iterate per
+                # character) — skipped, the author survives with none.
+                {"author_name": "Casey Mockford", "institutions": "Acme Institute"},
+            ],
+        }
+    }
+    assert repository._authorships(metadata) == [
+        AuthorshipOut(name="Alex Sampleton", institutions=["Acme Institute"]),
+        AuthorshipOut(name="Casey Mockford", institutions=[]),
+    ]
+
+
+def test_authorships_falls_back_to_bare_author_names() -> None:
+    """Rung 2: a plain 'authors' string or list, when no named authorships rung fires."""
+    assert repository._authorships({"provider_fields": {"authors": "Alex Sampleton"}}) == [
+        AuthorshipOut(name="Alex Sampleton")
+    ]
+    assert repository._authorships(
+        {"provider_fields": {"authors": ["Alex Sampleton", "", None, "Jo Person"]}}
+    ) == [
+        AuthorshipOut(name="Alex Sampleton"),
+        AuthorshipOut(name="Jo Person"),
+    ]
+
+
+def test_authorships_overton_corporate_author_fallback() -> None:
+    """Rung 3: an Overton document with a publisher_org but no authors gets one corporate author."""
+    assert repository._authorships({"backend": "overton", "publisher_org": "Marble Agency"}) == [
+        AuthorshipOut(name="Marble Agency")
+    ]
+    # Not applied for a non-Overton backend, even with a publisher_org present.
+    assert repository._authorships({"backend": "openalex", "publisher_org": "Marble Agency"}) == []
+
+
+def test_authorships_empty_for_uploaded_style_envelope() -> None:
+    """Rung 4: no provider authorships, no authors, no Overton fallback -> empty list."""
+    assert repository._authorships({}) == []
+    assert repository._authorships({"provider_fields": "not a mapping"}) == []
+    assert repository._authorships({"provider_fields": {"authorships": "not a list"}}) == []
 
 
 def test_context_window_snaps_cuts_to_word_boundaries() -> None:
@@ -699,6 +760,9 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert [
                 (reference["n"], reference["title"]) for reference in artefact["references"]
             ] == [(1, "Selected trial")]
+            assert artefact["references"][0]["authorships"] == [
+                {"name": "Alex Sampleton", "institutions": ["Acme Institute"]}
+            ]
             dossier = client.get(
                 f"/api/v1/tasks/{task_id}/sources/{cited_source['source_id']}", headers=owner
             )
@@ -707,6 +771,9 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert dossier.json()["fwci"] == 1.5
             assert dossier.json()["tags"] == [
                 {"tag": "School health", "tag_type": "topic_theme", "asserted_by": "openalex"}
+            ]
+            assert dossier.json()["authorships"] == [
+                {"name": "Alex Sampleton", "institutions": ["Acme Institute"]}
             ]
             assert (
                 dossier.json()["cited_in"]
@@ -741,6 +808,11 @@ def test_read_model_goldens_and_owner_scope(tmp_path: Path, engine: Engine) -> N
             assert near_end["context"].startswith("...")
             assert not near_end["context"].endswith("...")
             assert all(context["clamped"] is True for context in (near_start, middle, near_end))
+            assert all(
+                context["authorships"]
+                == [{"name": "Alex Sampleton", "institutions": ["Acme Institute"]}]
+                for context in (near_start, middle, near_end)
+            )
             assert all(
                 context["context"][context["span_start"] : context["span_end"]]
                 == "Cited evidence sentence."
