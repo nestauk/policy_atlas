@@ -320,6 +320,8 @@ describe("SourceDossierBody authorships (042)", () => {
     );
     expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Casey Mockford/).length).toBeGreaterThan(0);
+    // The sheet header owns the title (042 item 4): the body never repeats it.
+    expect(screen.queryByText(authored.title)).toBeNull();
     expect(screen.getAllByText(/Institute of Fictional Studies/).length).toBeGreaterThan(0);
     // Marker sequence proves the shared institution deduped to number 1 and
     // listed once: two author markers, then the two numbered institution rows.

@@ -495,9 +495,6 @@ export function ProvenanceSheet({
             ))}
           {extras}
           {children}
-          <p className="border-t border-line pt-3 text-body text-grey">
-            Every claim links to the exact passage it came from.
-          </p>
         </div>
       </SheetContent>
     </Sheet>
@@ -1061,7 +1058,6 @@ export function SourceDossier({
     >
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
-        description="Source dossier"
       >
         {evidence.isPending && (
           <p role="status" className="animate-pulse text-body text-grey">

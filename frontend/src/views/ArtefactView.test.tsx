@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialRunStreamState } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { AnnotatedProse, CitationProvenanceBlock, highlightParts, LiveArtefactBody, orderSections, showLiveArtefact } from "./ArtefactView";
+import { AnnotatedProse, CitationProvenanceBlock, highlightParts, LiveArtefactBody, orderSections, ProvenanceSheet, showLiveArtefact } from "./ArtefactView";
 
 describe("highlightParts", () => {
   it("finds an exact quote", () => {
@@ -349,5 +349,17 @@ describe("CitationProvenanceBlock authorships (042)", () => {
     );
     expect(container.querySelector("sup")).toBeNull();
     expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
+  });
+});
+
+describe("ProvenanceSheet footer (042 item 5)", () => {
+  it("renders the claim without the removed tagline", () => {
+    render(
+      <ProvenanceSheet claimTexts={["A claim."]} onClose={() => {}}>
+        {null}
+      </ProvenanceSheet>,
+    );
+    expect(screen.getByText("A claim.")).toBeInTheDocument();
+    expect(screen.queryByText(/Every claim links to the exact passage/)).toBeNull();
   });
 });

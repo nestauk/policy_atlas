@@ -800,7 +800,7 @@ function SourceDossier({
   if (!sourceId) return null;
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent title={source ? scrub(source.title) : "Source dossier"} description="Source dossier">
+      <SheetContent title={source ? scrub(source.title) : "Source dossier"}>
         {isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && <SourceDossierBody source={source} findings={findings} findingsPending={findingsPending} />}
@@ -884,8 +884,9 @@ export function SourceDossierBody({
   return (
     <div className="space-y-6 text-caption">
       <header>
-        <p className="font-display text-body font-bold leading-snug text-navy">{scrub(source.title)}</p>
-        <AuthorsLine authorships={source.authorships} className="mt-1 text-grey" />
+        {/* The sheet header already shows the title (042 item 4) — the body
+            starts at the authors line. */}
+        <AuthorsLine authorships={source.authorships} className="text-grey" />
         {(source.year || source.venue) && <p className="mt-1 text-grey">{[source.year, source.venue].filter(Boolean).map(String).map(scrub).join(" · ")}</p>}
         <InstitutionsLine authorships={source.authorships} className="mt-1 text-grey" />
         <div className="mt-3 flex flex-wrap gap-1.5">
