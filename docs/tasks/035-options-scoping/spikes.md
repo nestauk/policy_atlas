@@ -100,3 +100,57 @@ method, who does it, what it depends on, and the result that would change the de
 ## Order
 
 6 → (2 ∥ 3) → 4 → 5, with 1 running whenever live asks are available and landing before contracts.
+
+## After the spikes — the intended task split (owner, 2026-09-08)
+
+The concept and spec carry no build order (ruling 28); this is the working intention for the
+contracts, recorded here because it is a task-planning decision, not a product one. Spike results
+can change it.
+
+**Branching.** One feature branch, `feat/options-scoping`, until the capability is ready for users.
+Each task has its own sub-branch, contract, rubric and full review stack, and a PR into the feature
+branch (`verify.yml` runs on every pull request, whatever its base). `dev` is merged into the feature
+branch after each task lands. The final merge into `dev` is a merge commit, not a squash, so the task
+commits survive; that needs the ruleset's one-off break-glass. Task branches are not deleted with
+`--delete-branch` while a later task is stacked on them. The capability picker stays off in production
+until the last task.
+
+**Five tasks, in order.** Task numbers are assigned at contract time (035 was reserved before the
+split; 036–038 are taken).
+
+1. **Task shell and baseline.** The options-scoping task kind; the plan with its slots and the three
+   constraint kinds; the task tabs (Agent · Result · Sources · Share · History); `inherit` in the
+   scoping direction for the plan and the document pool, with inherited-versus-added accounting; the
+   ⟨baseline⟩ composition and template with "what is contested"; the pause-and-confirm gate; the
+   Baseline view. No option entity yet: there are no options to store. Ends with a scoping task that
+   has a confirmed plan and a baseline. Gated on spike 6.
+2. **Longlist.** The abstract extraction profile; `longlist`, which **mints the option entity** as
+   declared in `data-model.md` (stable task-scoped id, versioned specified design, primary and
+   secondary lever type, ambition tag, theme, variant-of and part-of relations, included and excluded
+   states with the constraint record behind an exclusion, mention-grain membership, origin including
+   "from your evidence search"); the part of `inherit` that turns a linked report's interventions into
+   suggestions; `constrain`; the list view and the option card with its source-quality profile. The
+   Result at this stage is the longlist (ruling 50). The first demoable milestone and the riskiest
+   task. Gated on spike 3 (and 2).
+3. **Shortlist and assessment.** `shortlist` with its reasons and gap messages; the grid and
+   shortlist views; add, remove and exclude from the view and the chat; the "Assess these N" gate;
+   the scoping `select` strategy; the light extraction profile; the profile template; the
+   transferability working block (new column-grounded block kind); the assessed report; the
+   comparison view; post-assessment constraint checks. Extends the option entity with the shortlist
+   membership record and the assessed cells. The largest task. Gated on spikes 4 and 5.
+4. **Sense-check, Sources and export.** The sense-check entry branch (short plan, light baseline
+   still paused, neighbours at metadata depth, the named option alone through the gate, questions to
+   put to the department; the standard variant with similar neighbours plus one challenger); depth as
+   a setting in both branches; the Sources tab additions (statuses set aside / read in full / abstract
+   only / not read under the cap, By option); export through Share. Placed before the full run because
+   the sense-check is one of the two primary jobs (ruling 29).
+5. **Full run (deferrable).** The child Evidence search task written with the profile template and
+   computing the judgement cells (ruling 41); `inherit` in the Evidence search direction (ruling 48);
+   one document in two homes (ruling 47); History. Extends the option entity with the child-task link.
+   Kept separate because it is the only task that changes the live Evidence search (a prompt-bearing
+   template and a declared boundary widening, which want their own ADR). It can wait for a later round
+   if the live-ask spike shows people stopping at the assessed report.
+
+**Alongside.** The eval slice of ruling 27 (four behavioural tests on live asks; recall floor) runs
+next to the tasks, not inside one.
+
