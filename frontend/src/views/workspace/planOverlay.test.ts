@@ -29,6 +29,7 @@ function plan(overrides: Partial<PlanDraft> = {}): PlanDraft {
       published_after: "2016-01-01",
       published_before: null,
       publisher_country: null,
+      publisher_source: null,
     },
     scoping_notes: null,
     screening_criteria: ["Peer-reviewed"],
@@ -64,11 +65,30 @@ describe("planOverlay", () => {
             published_after: null,
             published_before: null,
             publisher_country: "GB",
+            publisher_source: null,
           },
         }),
         {},
       ),
     ).toBe("GB");
+  });
+
+  it("reads APO from publisher_source with an empty overlay", () => {
+    expect(
+      displayedGeography(
+        plan({
+          scope_constraints: {
+            author_affiliation_countries: null,
+            country_group: null,
+            published_after: null,
+            published_before: null,
+            publisher_country: null,
+            publisher_source: "apo",
+          },
+        }),
+        {},
+      ),
+    ).toBe("APO");
   });
 
   it("compiles local edits into a typed patch", () => {

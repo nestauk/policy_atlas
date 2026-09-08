@@ -121,6 +121,7 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
         "published_after",
         "published_before",
         "publisher_country",
+        "publisher_source",
         "author_affiliation_countries",
         "country_group",
     ):
@@ -675,6 +676,18 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
             "publisher_country": None,
             "author_affiliation_countries": None,
             "country_group": None,
+            "publisher_source": None,
+        }
+    if geography.strip().casefold() in {"apo", "australian policy online"}:
+        if backend_scope != "grey_lit_only":
+            raise ValueError(
+                "the APO restriction needs Sources set to grey literature only"
+            )
+        return {
+            "publisher_country": None,
+            "author_affiliation_countries": None,
+            "country_group": None,
+            "publisher_source": "apo",
         }
     if geography in TIER1_GROUPS:
         return {
@@ -685,6 +698,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
                 "countries": None,
                 "authorship": "pinned-table",
             },
+            "publisher_source": None,
         }
     tokens = [part.strip() for part in geography.split(",") if part.strip() != ""]
     codes: list[str] = []
@@ -702,6 +716,7 @@ def _geography_constraints(geography: str, backend_scope: str) -> dict[str, Any]
         "publisher_country": None,
         "author_affiliation_countries": None,
         "country_group": None,
+        "publisher_source": None,
     }
     if len(codes) == 1:
         if backend_scope != "grey_lit_only":
@@ -733,6 +748,8 @@ def _drop_scope_incompatible_geo(constraints: dict[str, Any], backend_scope: str
         constraints["publisher_country"] = None
     elif backend_scope == "grey_lit_only":
         constraints["author_affiliation_countries"] = None
+    if backend_scope != "grey_lit_only":
+        constraints["publisher_source"] = None
 
 
 def _apply_plan_patch(plan: TaskPlan, patch: PlanPatchIn) -> TaskPlan:

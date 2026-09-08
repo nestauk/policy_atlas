@@ -428,6 +428,9 @@ class ScopeConstraints(BaseModel):
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter, as 2-letter alpha codes normalised to upper-case.
         country_group: Optional named group applied to both search backends.
+        publisher_source: Optional Overton source-collection filter; the only
+            supported value is ``apo`` (Australian Policy Online). Test mod,
+            task 039.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -437,6 +440,7 @@ class ScopeConstraints(BaseModel):
     publisher_country: str | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroup | None = None
+    publisher_source: Literal["apo"] | None = None
 
     @field_validator("published_after", "published_before")
     @classmethod
@@ -538,6 +542,15 @@ class ScopeConstraints(BaseModel):
                 "country_group is mutually exclusive with publisher_country "
                 "and author_affiliation_countries"
             )
+        if self.publisher_source is not None and (
+            self.publisher_country is not None
+            or self.author_affiliation_countries is not None
+            or self.country_group is not None
+        ):
+            raise ValueError(
+                "publisher_source is mutually exclusive with publisher_country, "
+                "author_affiliation_countries and country_group"
+            )
         return self
 
     def to_filters(self) -> dict[str, dict[str, Any]]:
@@ -545,8 +558,9 @@ class ScopeConstraints(BaseModel):
 
         Returns:
             A ``filters`` object with recency under ``shared``, publisher
-            geography under ``overton``, and author-affiliation geography
-            under ``openalex``. Empty constraints compile to ``{}``.
+            geography or source collection under ``overton`` (the latter as
+            ``publisher_source``), and author-affiliation geography under
+            ``openalex``. Empty constraints compile to ``{}``.
         """
         filters: dict[str, dict[str, Any]] = {}
         shared: dict[str, str] = {}
@@ -571,6 +585,8 @@ class ScopeConstraints(BaseModel):
             return filters
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
+        if self.publisher_source is not None:
+            filters["overton"] = {"publisher_source": self.publisher_source}
         if self.author_affiliation_countries is not None:
             filters["openalex"] = {
                 "author_affiliation_countries": self.author_affiliation_countries
@@ -928,6 +944,15 @@ class TaskPlan(BaseModel):
             raise ValueError(
                 "author_affiliation_countries filters the academic backend, "
                 "which backend_scope 'grey_lit_only' excludes"
+            )
+
+        if (
+            self.scope_constraints.publisher_source is not None
+            and self.backend_scope != "grey_lit_only"
+        ):
+            raise ValueError(
+                "publisher_source restricts the grey-literature backend; "
+                "backend_scope must be 'grey_lit_only'"
             )
 
         # Compile-target parity for the screen prompt: the composed intent

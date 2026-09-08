@@ -240,6 +240,7 @@ class PlanDraftWire(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     publisher_country: str | None = None
+    publisher_source: str | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroupDraft | None = None
     search_effort: str | None = None

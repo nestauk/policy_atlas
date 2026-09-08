@@ -251,6 +251,25 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
             "backend_scope": "grey_lit_only",
             "scope_constraints": {"author_affiliation_countries": ["GB"]},
         },
+        {
+            "backend_scope": "grey_lit_only",
+            "scope_constraints": {
+                "publisher_source": "apo",
+                "publisher_country": "UK",
+            },
+        },
+        {
+            "backend_scope": "academic_only",
+            "scope_constraints": {"publisher_source": "apo"},
+        },
+        {
+            "backend_scope": "both",
+            "scope_constraints": {"publisher_source": "apo"},
+        },
+        {
+            "backend_scope": "grey_lit_only",
+            "scope_constraints": {"publisher_source": "xyz"},
+        },
     ],
 )
 def test_fail_closed_validation(overrides: dict[str, Any]) -> None:
@@ -534,6 +553,18 @@ def test_scope_constraints_compile_into_two_level_search_filters() -> None:
             },
         }
     }
+
+
+def test_publisher_source_compiles_to_overton_filter() -> None:
+    """publisher_source='apo' with a grey_lit_only scope is valid and compiles
+    to the overton block that acquire-time validation and the search loop
+    expect. Test mod, task 039."""
+    plan = _plan(
+        backend_scope="grey_lit_only",
+        scope_constraints={"publisher_source": "apo"},
+    )
+
+    assert plan.scope_constraints.to_filters() == {"overton": {"publisher_source": "apo"}}
 
 
 def test_author_affiliation_countries_normalised_to_upper_case() -> None:
