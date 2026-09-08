@@ -227,7 +227,7 @@ export function SourcesView() {
                     })}
                   />
                 </SortableColumnHeader>
-                <th className="px-3 py-3">
+                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">
                   Origin
                   <HeaderFilter
                     label="Filter by origin"
@@ -289,25 +289,25 @@ export function SourcesView() {
                   activeOrder={effectiveOrder}
                   onSort={handleSort}
                 />
-                <th className="px-3 py-3">Cited</th>
+                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">Cited</th>
               </tr>
             </thead>
             <tbody>
               {evidence.data.data.map((item) => (
                 <tr key={item.source_id} className="border-b border-line last:border-b-0">
-                  <td className="max-w-md px-4 py-3 align-top">
+                  <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
                     <button
                       type="button"
                       onClick={() => updateParams((next) => next.set("source", item.source_id))}
-                      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
+                      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue max-md:text-meta"
                     >
                       {scrub(item.title)}
                     </button>
-                    {item.venue && <p className="mt-0.5 text-body text-grey">{scrub(item.venue)}</p>}
+                    {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
                   </td>
-                  <td className="px-3 py-3 align-top text-body text-navy">{item.year ?? ""}</td>
-                  <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.evidence_type && (
                       item.classification_reason ? (
                         <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
@@ -320,7 +320,7 @@ export function SourcesView() {
                       )
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.appraisal_tier && (
                       <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
                         <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
@@ -329,8 +329,8 @@ export function SourcesView() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top"><RelevantCell item={item} /></td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><RelevantCell item={item} /></td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {readDepthLabel(item) !== null && (
                       item.read_in_full ? (
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
@@ -343,7 +343,7 @@ export function SourcesView() {
                       )
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.cited && <Chip tone="green">Cited</Chip>}
                   </td>
                 </tr>
@@ -403,8 +403,8 @@ export function SourcesView() {
                     <tbody>
                       {(backend.queries ?? []).map((item) => (
                         <tr key={item.query} className="border-b border-line last:border-b-0">
-                          <td className="break-all px-4 py-3 text-body text-navy">{scrub(item.query)}</td>
-                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy">
+                          <td className="break-all px-4 py-3 text-body text-navy max-md:text-meta">{scrub(item.query)}</td>
+                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy max-md:text-meta">
                             {typeof item.results === "number" ? item.results : "—"}
                           </td>
                         </tr>
@@ -643,7 +643,7 @@ function FilterSelect({
       active && "bg-blue-tint-2 font-medium",
     );
   return (
-    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey">
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey max-md:text-caption">
       {label}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -652,7 +652,7 @@ function FilterSelect({
             aria-haspopup="listbox"
             aria-expanded={open}
             aria-label={label}
-            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52"
+            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
           >
             <span className="truncate">{selected?.label ?? allLabel}</span>
             <svg
