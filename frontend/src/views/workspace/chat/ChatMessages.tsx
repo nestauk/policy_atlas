@@ -407,7 +407,26 @@ function errorCodeOf(row: ChatConversationRow) { return "id" in row ? undefined 
 function activitySummary(labels: string[]) { return labels.length === 1 ? labels[0] : `${labels.at(-1) ?? "Checked the evidence"} — ${labels.length} searches`; }
 function citationsOf(turn: ChatConversationRow): ChatCitation[] { return "id" in turn && Array.isArray(turn.citations) ? turn.citations.filter((citation) => citation !== null && typeof citation === "object") as ChatCitation[] : []; }
 function citationId(citation: ChatCitation) { return citation.id ?? citation.chunk_id ?? citation.citation_id ?? ""; }
+// Best-first tier order for the chat display choice below.
+const TIER_RANK = ["tier_1", "tier_2", "tier_3", "tier_4", "unsupported_mis_cited"];
+
 function verdictInfoFor(turn: ChatConversationRow, citation: ChatCitation): { tier: string | null; rationale: string | null } {
+  // Chat shows a citation's BEST-supported claim (tier and rationale from
+  // that same claim, so they can never contradict). The backend stamps
+  // `citation.state` with the WORST claim verdict — right for the report,
+  // misleading here: short chat answers routinely add meta-claims ("the
+  // evidence base contains no other…") that cite a perfectly good source
+  // and would drag its reference chip to Unsupported.
+  const judged = claimsCiting(turn, citation)
+    .filter((claim) => typeof claim.verdict === "string" && TIER_LABEL[claim.verdict])
+    .sort((left, right) => TIER_RANK.indexOf(left.verdict as string) - TIER_RANK.indexOf(right.verdict as string));
+  const best = judged[0];
+  if (best !== undefined) {
+    return {
+      tier: best.verdict as string,
+      rationale: typeof best.rationale === "string" && best.rationale !== "" ? best.rationale : null,
+    };
+  }
   const claim = claimFor(turn, citation);
   const rationale = claim !== null && typeof claim.rationale === "string" && claim.rationale !== "" ? claim.rationale : null;
   // The only live shape is `citation.state === "verdict:<tier>"` — the

@@ -167,7 +167,7 @@ export const TIER_LABEL: Record<string, string> = {
   tier_2: "Tier 2 · grounded",
   tier_3: "Tier 3 · supported",
   tier_4: "Tier 4 · reasoning",
-  unsupported_mis_cited: "Unsupported — flagged",
+  unsupported_mis_cited: "Unsupported",
 };
 
 export const TIER_TEXT: Record<string, string> = {

@@ -211,6 +211,10 @@ class EvidenceItemOut(BaseModel):
     screen_reason: str | None = None
     classification_reason: str | None = None
     read_in_full: bool = False
+    # The document's own description — the provider abstract, a snippet, or
+    # the provider's LLM-written description (flagged as such).
+    abstract: str | None = None
+    abstract_source: Literal["provider", "llm_description"] | None = None
 
 
 class FindingBaseOut(BaseModel):
@@ -319,8 +323,6 @@ class CitedInOut(BaseModel):
 class SourceDossierOut(EvidenceItemOut):
     """The optional source dossier, including provenance and latest citations."""
 
-    abstract: str | None = None
-    abstract_source: Literal["provider", "llm_description"] | None = None
     publisher: str | None = None
     record_type: str | None = None
     language: str | None = None

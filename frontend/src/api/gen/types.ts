@@ -1879,6 +1879,10 @@ export interface components {
          *         url: Optional source URL.
          */
         EvidenceItemOut: {
+            /** Abstract */
+            abstract?: string | null;
+            /** Abstract Source */
+            abstract_source?: ("provider" | "llm_description") | null;
             /** Appraisal Tier */
             appraisal_tier?: string | null;
             /** Cited */
