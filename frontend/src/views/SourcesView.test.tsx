@@ -9,6 +9,7 @@ import { SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
+  useApiClient: vi.fn(() => ({ GET: vi.fn() })),
   useTask: vi.fn(),
   useLandscape: vi.fn(),
   useCoverage: vi.fn(),
@@ -230,14 +231,14 @@ describe("SourcesView — fixture-driven render (mock mode)", () => {
 });
 
 describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", () => {
-  it("defaults to All on the relevance spectrum, Relevant header marked descending", () => {
+  it("defaults to Included on the relevance spectrum, Relevant header marked descending", () => {
     renderSources();
     expect(lastEvidenceQuery()).toMatchObject({
-      status: undefined,
+      status: ["Included"],
       sort: "relevance",
       order: "desc",
     });
-    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("columnheader", { name: /Relevant/ })).toHaveAttribute(
       "aria-sort",
       "descending",
@@ -307,5 +308,36 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     expect(screen.getAllByText("Read in full").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Abstract only").length).toBeGreaterThan(0);
     expect(screen.queryByText("Cited in the evidence base")).toBeNull();
+  });
+});
+
+describe("SourcesView — Download CSV", () => {
+  it("fetches every page unfiltered and builds an escaped CSV", async () => {
+    const rowA = { ...mockEvidence[0], title: 'A "quoted", title', url: "https://a.example" };
+    const rowB = { ...mockEvidence[0], source_id: "22222222-2222-2222-2222-222222222222", title: "\t=SUM(1)" };
+    const get = vi.fn()
+      .mockResolvedValueOnce({ data: { data: [rowA], pagination: { page: 1, page_size: 1, total_items: 2 } } })
+      .mockResolvedValueOnce({ data: { data: [rowB], pagination: { page: 2, page_size: 1, total_items: 2 } } });
+    vi.mocked(queries.useApiClient).mockReturnValue({ GET: get } as never);
+    let blob: Blob | undefined;
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn((value: Blob) => { blob = value; return "blob:mock"; }),
+      revokeObjectURL: vi.fn(),
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    renderSources();
+    await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls[0][1].params.query).toEqual({ page: 1, page_size: 200 });
+    const csv = await blob!.text();
+    expect(csv).toContain("Screening reason");
+    expect(csv).toContain("Description");
+    expect(csv).toContain('"A ""quoted"", title"');
+    expect(csv).toContain("\"'\t=SUM(1)\"");
+    expect(click).toHaveBeenCalled();
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe("Tower Hamlets task - sources.csv");
+    click.mockRestore();
+    vi.unstubAllGlobals();
   });
 });

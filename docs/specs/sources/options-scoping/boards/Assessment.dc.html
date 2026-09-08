@@ -1,0 +1,196 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:4040px; height:4040px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; align-items:center; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Agent</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Result</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span><span class="btn ghost sm" style="margin-left:auto;">Hide chat</span></nav><nav aria-label="Result views" style="display:flex; align-items:center; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Report</span><span style="padding:12px 0; ">Baseline</span><span style="padding:12px 0; ">Longlist</span></nav>
+  <div class="main">
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="turn user"><span class="who">You</span><div class="bubble">Assess these seven.</div></div><div class="sys"><span class="tick"></span><span>Assessed 7 options · full text read for 38 documents, capped at 12 per option · 15 minutes</span></div><div class="sys"><span class="tick"></span><span>Report written from the assessment</span></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Done. The report is written: what the evidence base holds carries a verdict strip per option, each effect in its own comparator, population and period, and the kept options that were not assessed are listed by theme. Open the comparison table from the report if you want the seven side by side. Everything is a <strong>scoping pass</strong>: screened on titles and abstracts, full text read for the documents cited, document set not confirmed.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Why is the youth guarantee only conditional?</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">The weakest leg decides. Funded local delivery is unknown for the UK: nothing retrieved settles it and the plan does not say. Tell me it is funded, as a fact, and the cap lifts. Tell me it would be funded, as a plan, and the verdict becomes conditional on that.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Ask about the report…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden; display:flex; gap:24px; align-items:flex-start;">
+    <nav aria-label="Contents" style="width:224px; flex-shrink:0; padding-right:16px;"><p class="eyebrow" style="margin:0;">Contents</p><ul style="list-style:none; margin:8px 0 0; padding:0; border-left:1px solid #e4e4e7; display:flex; flex-direction:column; gap:4px;"><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Top line</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">The problem and what is contested</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">The approaches</a></li><li><a href="#" style="display:block; border-left:2px solid #0000ff; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#0f294a; font-weight:600;">What the evidence base holds</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Transferability and assumptions</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What needs deciding or commissioning next</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What was searched and not searched</a></li></ul></nav>
+    <div class="prose" style="flex:1; min-width:0;">
+      <p class="m" style="margin-bottom:8px;">Report · scoping assessment complete · 7 options reviewed, 5 with outcome evidence</p>
+      
+      <h2 style="font-size:24px; margin-bottom:4px;">Options for reducing the number of 16 to 24 year olds who are NEET</h2>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0 4px;"><span class="btn blue sm">Export</span><span class="btn ghost sm">Compare in a table</span><span class="btn ghost sm">Open longlist</span><a href="#">Change the plan</a></div>
+      <section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Top line</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p><strong>Caseworker support and wage subsidies have the strongest evidence in this reading set, and their populations differ from the group driving the rise.</strong> The caseworker findings concern the long-term unemployed; the wage-subsidy findings concern the job-ready. <a href="#">See the option verdicts</a>.</p>
+      <p><strong>A youth guarantee stays conditional on funded local delivery.</strong> No matching implementation was found for the sanction-free variant. <a href="#">Inspect the profile</a>.</p>
+      <p><strong>The next decision is whether to keep the broad target or focus further work on economically inactive young people.</strong> This is Policy Atlas's reasoning from the population mismatch, not a measured effect. Reported costs do not support a common cost comparison.</p>
+      <p class="m">7 options reviewed at standard depth · 5 with outcome evidence · 1 with implementation evidence only · 1 where assessment was attempted and no matching evidence was found. Seven other included options were not assessed; one was excluded. Each effect is stated against its own comparator, population and period; the options are not compared with each other or with the UK baseline, which this scoping does not forecast.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">The problem and what is contested</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">About one in eight 16 to 24 year olds is NEET, rising since 2022, the rise in inactivity; three disagreements between sources.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">The approaches</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Six themes, fifteen options, one excluded, one variant, one package.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What the evidence base holds</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <div style="padding:12px 16px; border:1px solid #0f294a; background:#f4f4f5; margin:0 0 16px; max-width:none;">
+        <p style="margin:0; max-width:none;"><strong>The situation these options would change.</strong> The Jobcentre Youth Offer and current apprenticeship funding, unchanged. NEET is about 1 in 8 and rising since 2022; the rise is in inactivity <span class="m">(ONS 2026, DWP 2024)</span>. Cost of inaction: £50,000 to £60,000 per long-term NEET young person over a lifetime, as reported <span class="m">(Youth Futures 2022)</span>. Key assumption, Policy Atlas's reasoning: the current offer does not reach the inactive group. <a href="#">Open baseline</a></p>
+      </div>
+      <p class="m">One strip per reviewed option. Sorted by evidence strength; <a href="#">sort by document count</a>. Sorts are displays, not rankings. An option name opens its profile; <a href="#">compare in a table</a> lays the seven side by side.</p>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Intensive caseworker support</a> <span class="m">· A named worker with a small caseload who stays with a young person across transitions.</span></p>
+  <p style="margin:4px 0 0;">How sure: <strong>strong</strong>, 15 documents · tried in England, Denmark, Netherlands, Germany and Ireland · transferability: <strong>likely</strong>, every named factor present, retrieved or stated</p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> Eleven of fifteen documents report gains: 8 to 15 points more in education or work at 12 months, against usual Jobcentre support, for 18 to 24 year olds unemployed six months or more, 2014 to 2022.</p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> Caseloads stay under 30 per worker.</p>
+</div>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Wage subsidies</a> <span class="m">· Government pays part of the wage for six months when an employer hires a 16 to 24 year old who is NEET.</span></p>
+  <p style="margin:4px 0 0;">How sure: <strong>strong</strong>, 12 documents · tried in the UK (Kickstart), Sweden and Australia · transferability: <strong>likely</strong>, ran in the UK 2020 to 2022, retrieved</p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> Nine of twelve documents report gains: 5 to 10 points more employed during the subsidy, against non-participants, for job-ready 18 to 24 year olds, 2009 to 2022. Two of six report gains sustained at 12 months.</p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> Subsidised jobs convert to unsubsidised ones.</p>
+</div>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Youth guarantee</a> <span class="m">· A guaranteed offer of a job, apprenticeship, training or education within four months of becoming NEET.</span></p>
+  <p style="margin:4px 0 0;">How sure: <strong>moderate</strong>, 9 documents · EU-wide since 2013, 7 states evaluated · transferability: <strong>conditional on local delivery funded</strong>; the weakest leg is unknown</p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> Six of nine documents report reductions: NEET rate down 1 to 3 points against the pre-guarantee trend, for 15 to 24 year olds registering as NEET, 2014 to 2021.</p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> Local providers can supply enough quality offers within four months.</p>
+</div>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Enforce participation-age duty</a> <span class="m">· Use existing powers so every 16 and 17 year old is tracked and in education or training.</span></p>
+  <p style="margin:4px 0 0;">How sure: <strong>thin</strong>, 2 documents · tried in England · transferability: <strong>likely</strong>, the duty exists, retrieved <span class="m">(DfE 2025)</span></p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> One of two documents reports fewer 16 and 17 year olds NEET: 0.5 points against the pre-duty trend, England, 2013 to 2016. No effect measured for 18 to 24 year olds.</p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> Tracking reaches those not enrolled anywhere.</p>
+</div>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Careers guidance with follow-up</a> <span class="m">· One-to-one guidance plus scheduled follow-up contact after a young person leaves education.</span></p>
+  <p style="margin:4px 0 0;">How sure: <strong>thin</strong>, 3 documents · tried in England, one trial · transferability: <strong>unknown</strong>, no factor retrieved or stated, capped</p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> Two of three documents report gains: 2 to 4 points more applications, against no guidance, for school leavers in England, 2018 to 2021. No measured effect on being in education or work.</p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> A service can reach young people not enrolled in it.</p>
+</div>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Joint commissioning</a> <span class="m">· Pooled budgets and one commissioner for youth employment, health and housing services in an area.</span></p>
+  <p style="margin:4px 0 0;">How sure: <span class="prov empty">not assessable on outcomes</span>, 2 documents, implementation evidence only · tried in Greater Manchester · transferability: <strong>unknown</strong>, capped, no outcome evidence</p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> <span class="prov empty">No document reports an effect on NEET outcomes; two describe implementation.</span></p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> Pooling budgets changes what is provided.</p>
+</div>
+      <div style="padding:14px 0 12px; border-top:1px solid #e4e4e7;">
+  <p style="margin:0;"><a href="#" style="font-weight:700;">Youth guarantee without sanctions</a> <span class="m">· The same offer, with no benefit condition attached to taking it up. Variant, added by you.</span></p>
+  <p style="margin:4px 0 0;"><span class="prov empty">Assessment attempted · no matching evidence found · 0 documents · nowhere found</span></p>
+  <p style="margin:6px 0 0;"><strong>How big, as reported.</strong> <span class="prov empty">No matching implementation found: every evaluated guarantee attached a registration or take-up condition. Own evidence only; the parent's appears in its profile as related evidence.</span></p>
+  <p style="margin:4px 0 0;"><strong>Key assumption.</strong> That the offer works without a take-up condition. Untested.</p>
+</div>
+      <p class="m" style="margin-top:12px;">"How sure" is confidence in the specified design's effect on your outcomes, from evidence found relevant to it. Documents are counted, not studies, until independence is known. Empty cells say why they are empty.</p>
+      <p><strong>Not assessed, by theme.</strong> Financial: SME apprenticeship incentives · Levy ring-fence for under-25s · Conditional cash transfers (no in-scope evidence). Programmes: Paid work experience · Youth Hubs · Employment support in mental health care. Organisational: NEET tracking and data-sharing. Excluded: Sanctions for under-25s who miss appointments.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Transferability and assumptions</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p>Your context came from three sources: facts retrieved from the baseline and the assessment, cited with the geography they apply to; facts stated by you; and plans stated by you, which become named conditions. The verdict word follows the weakest leg: a decisive factor that is unknown or only planned caps the verdict whatever the others say. No factor is counted against a total.</p>
+      <p>The youth guarantee is conditional on local delivery being funded. Careers guidance and joint commissioning are unknown because no factor was retrieved or stated for them. Each option's <a href="#">profile</a> shows the working.</p>
+      <p><strong>Low cost per participant</strong>, checked now that costs are reported: unresolved for five options, because their reported costs use different denominators and price bases and are not comparable; breaks for the youth guarantee, at €500 to €1,500 per participant-year as reported <span class="m">(Eurofound 2021)</span>. The options stay; you decide.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What needs deciding or commissioning next</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <ul>
+        <li>Whether local delivery of a guarantee would be funded. Both guarantee designs rest on it.</li>
+        <li>Whether a guarantee without a take-up condition has run anywhere. No document names one; a full evidence search on the variant would confirm the gap or fill it.</li>
+        <li>Whether the target is all NEET young people or the inactive group. The caseworker evidence is for the long-term unemployed, not the inactive.</li>
+        <li>Whether low cost is a hard constraint. Reported costs are not comparable across the seven.</li>
+        <li>Seven kept options were not assessed, including every market option.</li>
+      </ul>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What was searched and not searched</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">412 documents screened in; full text read for 38; 23 set aside under the evidence scope; 19 not read under the cap.</p>
+    </section></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

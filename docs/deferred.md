@@ -28,6 +28,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options Assessment** consumes EB output + the findings layer to resolve descriptive
   intervention clusters into named, comparable options — the decision-relative step EB explicitly
   leaves out.
+- **Orientation / domain primer** (owner, 2026-09-07, options-scoping review round): a
+  question-to-primer capability for users new to a domain — problem framing, rival diagnoses,
+  institutions, terms, the levers in use — routed by the product shell and linkable from
+  Options scoping. For now scoping's baseline gains a "what is contested" element instead
+  (concept ruling 24). Owner wants this on the table when the next capabilities are chosen.
+- **Options scoping: "Assess all kept options"** (owner, 2026-09-07): a whole-longlist
+  assessment action beside "Assess these N". Deferred on inference cost; revisit after live
+  runs show what a standard run costs (concept ruling 19).
 - **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
   018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
   capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed
@@ -40,6 +48,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Product / output
 
+- **Options scoping: a report written from the longlist alone** — an on-demand "write a report from
+  the longlist" action (top line · the problem and what is contested · the approaches · what the
+  evidence base holds as source-quality profiles · what needs deciding next · what was searched) for
+  the person who stops before assessing. Withdrawn from v1 by concept ruling 50 (2026-09-08): the
+  report is a product of assessment; before it the Result is the longlist. Revisit if live asks show
+  people handing over unassessed longlists.
 - **Export & sharing** — share CTAs, version-pinned external deep links
   back into the body (handoff §7.3). The primary surface is the tool itself.
   **Read-only/public links DISCHARGED (task 037):** a Task's owner shares it
@@ -2334,6 +2348,37 @@ deliberately left, each with its reason:
   exists, so V9's `session_id = task id` covers the API path only (planning turn, run
   start, steering continuation, chat turn). Restructure if CLI traces ever need to group
   with a Task (038 review stack, Codex).
+- **APO test mod (039) removal path** — `publisher_source: "apo"` is a test-mod
+  constraint (Overton `source=apo`; OpenAlex dropped via the pre-existing
+  `grey_lit_only`). Optional and additive everywhere. On removal: delete the
+  field (`task_plan.py`, `ScopeConstraintsDraft`, `PlanDraftWire`), the
+  geography-token branch in `_geography_constraints`, the two fold-list
+  entries (`agent.py build_plan`, `_draft_from_wire`) plus the
+  `_draft_from_wire` publisher_source normaliser, the Overton allowlist
+  keys — both the wire key (`search_live.py` `_OVERTON_ALLOWED_WIRE_KEYS`)
+  and the filter key + wire mapping + value allowlist in `search_loop.py`
+  (`_OVERTON_FILTER_KEYS`, `overton_wire_params`, `_validate_overton_block`) —
+  the `task_plan.py` mutual-exclusion clause and grey_lit_only guard, the
+  `_drop_scope_incompatible_geo` clearing line (`planning.py`), the
+  `_render_scope_constraints` branch (`agent.py`, CLI render), the
+  `scopeChips` label, and the `planner_v11` APO prompt rule (a version bump +
+  hash re-pin) — and either tolerate or re-save stored plans that carry the
+  field, or old approved plan rows fail validation. Planning chat teaches APO
+  since `planner_v11` (task 039).
+- **Plan overlay seams (039 review stack)** — (1) mid-year scope dates
+  (reachable via planner/chat/API) display as bare years in the plan
+  document, and the dirty-only prune treats a re-entered equal year as a
+  no-op, so the day component can be neither seen nor reset from the UI;
+  compare against the stored ISO value (or display the full date) if this
+  ever bites. (2) `planOverlay.ts` enumerates the overlay keys in three
+  places (`mergeOverlayChanges`'s `set()` calls, `overlayToPlanPatch`'s
+  guards, `serverDisplayedValue`'s switch) — a new plan field must be added
+  to all three or it prunes on save but leaks through the start-time PATCH;
+  consolidate if a fourth list appears. (3) The screening cap mirror
+  (`SCREENING_CRITERION_MAX`/`SCREEN_INTENT_MAX`/`SCREENING_CRITERIA_LIST_MAX`)
+  duplicates backend constants with no cross-language pin test — a backend
+  cap change drifts silently until the backend rejects what the client
+  accepted.
 
 ## Mobile layout (task 040 seams)
 

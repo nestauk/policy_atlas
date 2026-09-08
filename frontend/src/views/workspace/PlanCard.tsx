@@ -7,6 +7,10 @@ import { START_SEARCH_CLASS, usePlanStart } from "./planStart";
 
 type PlanDraft = components["schemas"]["PlanDraft"];
 
+/** Stable default so an unset `overlay` prop never fools the "clear the
+ *  start notice on overlay change" effect with a fresh `{}` every render. */
+const EMPTY_OVERLAY: PlanOverlay = {};
+
 /**
  * Inline actions once the three planning steps are done: review in the plan
  * document, or start the search. Local plan edits apply on start, not on each save.
@@ -22,8 +26,9 @@ export function PlanCard({
   started = false,
   isOwner,
   onReviewPlan,
-  overlay = {},
+  overlay = EMPTY_OVERLAY,
   onOverlayApplied,
+  onDiscardOverlay,
 }: {
   taskId: string;
   runActive: boolean;
@@ -32,13 +37,15 @@ export function PlanCard({
   onReviewPlan?: () => void;
   overlay?: PlanOverlay;
   onOverlayApplied?: () => void;
+  onDiscardOverlay?: () => void;
 }) {
   const planQuery = usePlan(taskId);
-  const { start, startNotice, disabled, label } = usePlanStart({
+  const { start, discardAndStart, hasLocalEdits, startNotice, disabled, label } = usePlanStart({
     taskId,
     overlay,
     runActive,
-    onStarted: onOverlayApplied,
+    onOverlayApplied,
+    onDiscardOverlay,
   });
 
   const plan: PlanDraft | null = planQuery.data?.plan ?? null;
@@ -56,9 +63,16 @@ export function PlanCard({
         </Button>
       )}
       {isOwner && startNotice != null && (
-        <p role="alert" className="w-full text-body text-red">
-          {startNotice}
-        </p>
+        <div className="flex w-full flex-wrap items-center gap-3">
+          <p role="alert" className="text-body text-red">
+            {startNotice}
+          </p>
+          {hasLocalEdits && (
+            <Button variant="secondary" size="sm" onClick={discardAndStart}>
+              Discard edits and start
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

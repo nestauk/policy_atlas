@@ -28,6 +28,7 @@ from policy_atlas.core.usage import UsageResult
 from policy_atlas.core.windowing import greedy_windows
 from policy_atlas.evidence_search.assess.screen import (
     CRITERIA_LIST_MAX,
+    SCREENING_CRITERION_MAX,
     ScreenContext,
     ScreenDirectiveError,
     ScreenSupersessionError,
@@ -974,10 +975,31 @@ def test_parse_screen_directive_criteria_over_cap_list_rejects() -> None:
 
 
 def test_parse_screen_directive_criteria_over_cap_string_rejects() -> None:
+    """Task 039 bug 2: the per-entry cap is `SCREENING_CRITERION_MAX` (1000),
+    not the shared `DIRECTIVE_STRING_MAX` (200) — real screening rules
+    outgrew 200 chars."""
     with pytest.raises(ScreenDirectiveError):
         _parse_screen_directive(
-            {"screening": {"criteria": ["x" * (DIRECTIVE_STRING_MAX + 1)]}}
+            {"screening": {"criteria": ["x" * (SCREENING_CRITERION_MAX + 1)]}}
         )
+
+
+def test_parse_screen_directive_criteria_at_cap_string_accepted() -> None:
+    stage, criteria, _ = _parse_screen_directive(
+        {"screening": {"criteria": ["x" * SCREENING_CRITERION_MAX]}}
+    )
+    assert stage == 1
+    assert criteria == ["x" * SCREENING_CRITERION_MAX]
+
+
+def test_parse_screen_directive_criteria_over_old_200_cap_now_accepted() -> None:
+    """A >200-char criterion (the old cap) is exactly the case live check 017
+    found too restrictive for real screening rules — it must now pass."""
+    stage, criteria, _ = _parse_screen_directive(
+        {"screening": {"criteria": ["x" * (DIRECTIVE_STRING_MAX + 1)]}}
+    )
+    assert stage == 1
+    assert criteria == ["x" * (DIRECTIVE_STRING_MAX + 1)]
 
 
 # --- Criteria composition into the screen intent INPUT (never evidence_scope.intent) ---

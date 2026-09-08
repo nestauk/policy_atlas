@@ -1879,6 +1879,10 @@ export interface components {
          *         url: Optional source URL.
          */
         EvidenceItemOut: {
+            /** Abstract */
+            abstract?: string | null;
+            /** Abstract Source */
+            abstract_source?: ("provider" | "llm_description") | null;
             /** Appraisal Tier */
             appraisal_tier?: string | null;
             /** Cited */
@@ -3143,6 +3147,8 @@ export interface components {
          *         author_affiliation_countries: Optional OpenAlex author-affiliation
          *             country filter (2-letter alpha codes).
          *         country_group: Optional named group applied to both search backends.
+         *         publisher_source: Optional Overton source-collection filter; the only
+         *             supported value is `apo` (Australian Policy Online).
          */
         ScopeConstraintsDraft: {
             /**
@@ -3167,6 +3173,11 @@ export interface components {
              * @default null
              */
             publisher_country: string | null;
+            /**
+             * Publisher Source
+             * @default null
+             */
+            publisher_source: "apo" | null;
         };
         /**
          * SectionOut

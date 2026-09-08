@@ -297,15 +297,24 @@ test.describe("mock task-lifecycle journey", () => {
     const sourcesTable = page.getByRole("table").first();
     const sourceRows = sourcesTable.getByRole("row");
     await expect(sourceRows.first()).toBeVisible();
-    // Default view = All, sorted on the relevance spectrum.
-    await expect(sourceRows).toHaveCount(mockEvidence.length + 1);
+    // Default view = Included (041: the screened-in set), sorted on the
+    // relevance spectrum.
+    const includedCount = mockEvidence.filter(
+      (item) => item.status !== "found" && item.status !== "screened_out",
+    ).length;
+    await expect(sourceRows).toHaveCount(includedCount + 1);
     await expect(page.getByRole("heading", { name: "Search queries" })).toBeVisible();
+
+    // "All" is one click away and shows the whole collection.
+    const sourceFilters = page.getByRole("group", { name: "Filter sources" });
+    await sourceFilters.getByRole("button", { name: "All" }).click();
+    await expect(page).toHaveURL(/[?&]status=all/);
+    await expect(sourceRows).toHaveCount(mockEvidence.length + 1);
     // The retracted verdict lives in the Relevant column's hover button.
     await expect(
       page.getByRole("button", { name: "Excluded — retracted: screening details" }),
     ).toBeVisible();
 
-    const sourceFilters = page.getByRole("group", { name: "Filter sources" });
     await sourceFilters.getByRole("button", { name: "Screened out" }).click();
     await expect(page).toHaveURL(/[?&]status=screened_out/);
     const screenedOut = mockEvidence.filter((item) => item.status === "screened_out").length;

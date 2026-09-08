@@ -1,5 +1,110 @@
 # Spec update log
 
+## 2026-09-08
+* **Update**: Options scoping board refinement — concept rulings 45–47 (the report stays linear with
+  verdict strips, the comparison table is the shortlist view after assessment; the Sources tab is
+  the Evidence search's Sources component plus read-depth and set-aside statuses; one document after
+  a full run: the child task's report is the profile, shown in place, no mirror). Boards 6, 6b, 7b
+  and 7c redrawn, board 6c added; [capability.md](capabilities/options-scoping/capability.md)
+  (product surface, report sections, Sources tab, full evidence search) and
+  [components.md](capabilities/options-scoping/components.md) (⟨full run⟩) amended;
+  [source README](sources/options-scoping/README.md) updated.
+* **Update**: `inherit` becomes a **shared component** (options-scoping concept ruling 48): the
+  Evidence search adopts it for the reverse direction, so a task started from a scoping task (the
+  child full run) inherits the option's specified design, the user context and evidence scope, the
+  option's documents (re-screened) and the light findings (reused at finding grain) before acquire
+  runs. [EB components](capabilities/evidence-search/components.md) gains § 0 inherit and a wiring
+  row; [EB capability](capabilities/evidence-search/capability.md) dependencies and scope boundary
+  amended; [OS components](capabilities/options-scoping/components.md) § 0 and ⟨full run⟩ amended;
+  [execution-orchestration](system/execution-orchestration.md) names `inherit` as the first
+  component both capabilities compose. Boards 7b, 7c, 7d updated.
+* **Update**: Options scoping board refinement pass (concept ruling 49): an owner-approved ChatGPT
+  review pack ported into the canonical boards in the ruled design language — Hide chat, the plan's
+  constraints as a table, the baseline's target-population callout, five state boards (generating,
+  direct edit with Undo, plan changed with refresh, refresh running, History), corrected counts, top
+  lines leading with findings, Sources filters grouped with a "source quality" column. Restyle, chips,
+  viewport clipping and the "Do nothing" rename not adopted. [Source README](sources/options-scoping/README.md).
+* **Update**: Options scoping ruling 50 — **no report before assessment**: the report is written from
+  the assessment and rewritten by a full run; before it the Result tab opens on the longlist. Board 3c
+  withdrawn (24 boards). [capability.md](capabilities/options-scoping/capability.md) § Output
+  structure and the report/export bullet, [components.md](capabilities/options-scoping/components.md)
+  (synthesise, ⟨longlist depth⟩) amended; the on-demand longlist report recorded in
+  [deferred.md](../deferred.md) § Product / output.
+
+## 2026-09-07 (boards redrawn)
+* **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction
+  ([source README](sources/options-scoping/README.md); readable boards under
+  `sources/options-scoping/boards/`, bundled canvas page rebuilt). Every board now carries the
+  task's tabs (Agent · Result · Sources · Share · History) with the plan in the Agent tab; the
+  report is the Result, in a provisional form from the longlist stage (new board 3c) and an
+  assessed form (board 6, the assessed table embedded); the longlist shows a variant option, the
+  evidence-scope constraint's "no in-scope evidence" state and a source-quality profile per option;
+  the grid's rows are primary lever types; the shortlist is a provisional allocation of reading
+  effort; transferability works from three context sources with the weakest leg deciding; Sources
+  states what was read at which depth; the sense-check is a rapid entry branch. Page 2's
+  alternatives are marked superseded. The product-surface source note in
+  [capability.md](capabilities/options-scoping/capability.md) updated to match. Rulings still win
+  over boards where they differ.
+
+## 2026-09-07 (later)
+* **Update**: Options scoping, third review pass and its rulings (concept rulings 30–40): the
+  component skeleton rebuilt on the Evidence search spine as is (classify and appraise at longlist
+  depth), `longlist` replaces `mint`, the three depths become compositions; the Result is the
+  **report** (provisional from the longlist, rewritten by assessment) with Baseline and Longlist as
+  working views; source quality is not "how sure"; containing-geography context fills a local
+  factor only by applicability; inherited findings reused at finding grain; identity rules for
+  variants; the proposal is a provisional allocation of reading effort with one challenger in the
+  standard sense-check; read-set discipline under the cap; editorial exceptions bounded; tabs are
+  Agent · Result · Sources · Share · History. **System contracts amended:** components are shared
+  across capabilities ([execution-orchestration](system/execution-orchestration.md) § vocabulary,
+  withdrawing "a capability never runs another's component"); the depth "relative nudge" section of
+  [plan-as-object](system/plan-as-object.md) carries an as-enacted note (rapid / standard / deep is
+  user-chosen in the shipped product).
+* **Update** (same day, closing the pass-3 ledger): OS concept rulings 41–42 — the child full
+  evidence search's report carries the profile's judgement cells (a declared widening of the
+  Evidence search's evidence-descriptive boundary, recorded in
+  [evidence-search/capability.md](capabilities/evidence-search/capability.md) § Scope boundaries);
+  six ordered spikes before any contract; eval refinements; an open-interfaces list in
+  [options-scoping/components.md](capabilities/options-scoping/components.md). Seam notes added to
+  [plan-as-object](system/plan-as-object.md) (evidence-scope constraint ≠ source policy),
+  [data-model](system/data-model.md) (durable option identity) and
+  [execution-orchestration](system/execution-orchestration.md) (reading budget / eligibility).
+* **Update** (same day): OS concept ruling 43 — the six open interfaces ruled: mentions via a new
+  `extract` abstract profile (screen unchanged); Unknown/Non-evidence as buckets, unresolved in
+  scoping; the read set via `select` with a scoping strategy; claim kinds mapped onto pattern and
+  reasoning claims plus one new **column-grounded block** declared in
+  [provenance-grounding](system/provenance-grounding.md); baseline on Overton + OpenAlex only;
+  uploads deferred. [evidence-search/components.md](capabilities/evidence-search/components.md) § 6
+  notes the second `select` strategy.
+* **Update** (same day): OS concept ruling 44 — the option entity declared in
+  [data-model](system/data-model.md) (task-scoped stable id, versioned specified design, typed
+  relations, state and membership records, child-task link; re-run matching open); the reading
+  budget / eligibility and evidence-scope seams left open with their candidates recorded in the
+  review pack.
+
+## 2026-09-07
+* **Update**: Options scoping review round. A two-pass adversarial product review of the concept
+  and wireframes (blind proposal, then comparison) produced eleven findings; the owner ruled on
+  all of them in one session (decision sheet in the gitignored review pack). Rulings 15–29 appended
+  to the frozen concept as "Review-round rulings"; the three OS specs re-distilled
+  ([capability](capabilities/options-scoping/capability.md) ·
+  [components](capabilities/options-scoping/components.md) ·
+  [trust](capabilities/options-scoping/trust.md)). Headlines: variants are linked options with
+  their own assessment; claim depth follows reading depth; the do-nothing band is a starting
+  point, not a comparison; transferability context is typed retrieved / stated / planned and the
+  weakest leg decides; guesses never feed the shortlist proposal; coverage anchors on lever types;
+  a scoping task may start from an Evidence search task; evidence-scope constraints never exclude
+  options; sense-check is an entry branch and rapid/standard are depth settings; no build-order
+  guidance in the spec. Two deferred seams added to `docs/deferred.md`.
+
+## 2026-09-04
+* **Creation**: Distilled the Options Scoping capability spec ([capability](capabilities/options-scoping/capability.md)
+  · [components](capabilities/options-scoping/components.md) · [trust rules](capabilities/options-scoping/trust.md))
+  from the owner-agreed concept and its wireframe-round rulings; froze the concept and the wireframe
+  canvas as sources #8 and #9 under [sources/options-scoping/](sources/options-scoping/README.md);
+  added the OS routing row to the [index](index.md). The concept moved here from the (uncontracted)
+  task 035 folder; task contracts consume the spec.
+
 ## 2026-07-12
 * **Update**: [system/data-model.md § The findings layer](system/data-model.md) — the
   `intervention_outcome_finding` base-field list gains `effect_basis` (`observed` |

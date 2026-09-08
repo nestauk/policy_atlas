@@ -15,6 +15,8 @@ import {
   displayedScreening,
   displayedYearAfter,
   displayedYearBefore,
+  mergeOverlayChanges,
+  screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
 import { START_SEARCH_CLASS, usePlanStart } from "./planStart";
@@ -309,11 +311,20 @@ export function PlanDocument({
 }) {
   const planQuery = usePlan(taskId);
   const draft = planQuery.data?.plan;
-  const { start, startNotice, disabled: startDisabled, label: startLabel } = usePlanStart({
+  const {
+    start,
+    discardAndStart,
+    hasLocalEdits,
+    startNotice,
+    disabled: startDisabled,
+    label: startLabel,
+  } = usePlanStart({
     taskId,
     overlay,
     runActive,
     onStarted,
+    onOverlayApplied: () => onOverlayChange({}),
+    onDiscardOverlay: () => onOverlayChange({}),
   });
 
   const [editingQuestion, setEditingQuestion] = useState(false);
@@ -333,7 +344,8 @@ export function PlanDocument({
     published_before_year: "",
     geography: "",
   });
-  const [screeningDraft, setScreeningDraft] = useState("");
+  const [screeningDraft, setScreeningDraft] = useState<string[]>([""]);
+  const [screeningError, setScreeningError] = useState<string | null>(null);
 
   const beginQuestionEdit = () => {
     if (draft === undefined) return;
@@ -361,8 +373,21 @@ export function PlanDocument({
   };
   const beginScreeningEdit = () => {
     if (draft === undefined) return;
-    setScreeningDraft(displayedScreening(draft, overlay).join("\n"));
+    const current = displayedScreening(draft, overlay);
+    setScreeningDraft(current.length > 0 ? current : [""]);
+    setScreeningError(null);
     setEditingScreening(true);
+  };
+  const addScreeningRule = () => {
+    setScreeningDraft((current) =>
+      current.some((rule) => rule.trim() === "") ? current : [...current, ""],
+    );
+  };
+  const updateScreeningRule = (index: number, value: string) => {
+    setScreeningDraft((current) => current.map((rule, i) => (i === index ? value : rule)));
+  };
+  const removeScreeningRule = (index: number) => {
+    setScreeningDraft((current) => current.filter((_, i) => i !== index));
   };
 
   const yearAfter = draft !== undefined ? displayedYearAfter(draft, overlay) : "";
@@ -439,7 +464,8 @@ export function PlanDocument({
               onEdit={beginQuestionEdit}
               onCancel={() => setEditingQuestion(false)}
               onSave={() => {
-                onOverlayChange({ ...overlay, question: questionDraft });
+                if (draft === undefined) return;
+                onOverlayChange(mergeOverlayChanges(overlay, draft, { question: questionDraft }));
                 setEditingQuestion(false);
               }}
               view={
@@ -463,12 +489,14 @@ export function PlanDocument({
               onEdit={beginSettingsEdit}
               onCancel={() => setEditingSettings(false)}
               onSave={() => {
-                onOverlayChange({
-                  ...overlay,
-                  search_effort: settingsDraft.search_effort,
-                  analysis_depth: settingsDraft.analysis_depth,
-                  steering_mode: settingsDraft.steering_mode,
-                });
+                if (draft === undefined) return;
+                onOverlayChange(
+                  mergeOverlayChanges(overlay, draft, {
+                    search_effort: settingsDraft.search_effort,
+                    analysis_depth: settingsDraft.analysis_depth,
+                    steering_mode: settingsDraft.steering_mode,
+                  }),
+                );
                 setEditingSettings(false);
               }}
               view={
@@ -547,13 +575,15 @@ export function PlanDocument({
               onEdit={beginFiltersEdit}
               onCancel={() => setEditingFilters(false)}
               onSave={() => {
-                onOverlayChange({
-                  ...overlay,
-                  backend_scope: filterDraft.backend_scope,
-                  published_after_year: filterDraft.published_after_year.trim(),
-                  published_before_year: filterDraft.published_before_year.trim(),
-                  geography: filterDraft.geography.trim(),
-                });
+                if (draft === undefined) return;
+                onOverlayChange(
+                  mergeOverlayChanges(overlay, draft, {
+                    backend_scope: filterDraft.backend_scope,
+                    published_after_year: filterDraft.published_after_year.trim(),
+                    published_before_year: filterDraft.published_before_year.trim(),
+                    geography: filterDraft.geography.trim(),
+                  }),
+                );
                 setEditingFilters(false);
               }}
               view={
@@ -643,15 +673,22 @@ export function PlanDocument({
               label="Screening rules"
               editing={editingScreening}
               onEdit={beginScreeningEdit}
-              onCancel={() => setEditingScreening(false)}
+              onCancel={() => {
+                setEditingScreening(false);
+                setScreeningError(null);
+              }}
               onSave={() => {
-                onOverlayChange({
-                  ...overlay,
-                  screening_criteria: screeningDraft
-                    .split("\n")
-                    .map((line) => line.trim())
-                    .filter((line) => line.length > 0),
-                });
+                if (draft === undefined) return;
+                const trimmed = screeningDraft
+                  .map((rule) => rule.trim())
+                  .filter((rule) => rule.length > 0);
+                const error = screeningOverlayError(trimmed, displayedQuestion(draft, overlay));
+                if (error != null) {
+                  setScreeningError(error);
+                  return;
+                }
+                setScreeningError(null);
+                onOverlayChange(mergeOverlayChanges(overlay, draft, { screening_criteria: trimmed }));
                 setEditingScreening(false);
               }}
               view={
@@ -666,13 +703,35 @@ export function PlanDocument({
                 )
               }
             >
-              <textarea
-                rows={6}
-                value={screeningDraft}
-                onChange={(event) => setScreeningDraft(event.target.value)}
-                placeholder="One screening rule per line"
-                className={cn(panelFieldClass, "resize-y")}
-              />
+              <div className="space-y-2">
+                {screeningDraft.map((rule, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={rule}
+                      onChange={(event) => updateScreeningRule(index, event.target.value)}
+                      placeholder="Screening rule"
+                      className={panelFieldClass}
+                    />
+                    <button
+                      type="button"
+                      aria-label={`Remove rule ${index + 1}`}
+                      onClick={() => removeScreeningRule(index)}
+                      className={panelEditButtonClass}
+                    >
+                      −
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={addScreeningRule} className={panelEditButtonClass}>
+                  + Add rule
+                </button>
+                {screeningError != null && (
+                  <p role="alert" className="text-body text-red-tint">
+                    {screeningError}
+                  </p>
+                )}
+              </div>
             </PanelSection>
 
             {agreedSteps.length > 0 && (
@@ -702,9 +761,20 @@ export function PlanDocument({
               {startLabel}
             </Button>
             {startNotice != null && (
-              <p role="alert" className="mt-2 text-body text-red-tint">
-                {startNotice}
-              </p>
+              <div className="mt-2 space-y-2">
+                <p role="alert" className="text-body text-red-tint">
+                  {startNotice}
+                </p>
+                {hasLocalEdits && (
+                  <button
+                    type="button"
+                    className={panelEditButtonClass}
+                    onClick={discardAndStart}
+                  >
+                    Discard edits and start
+                  </button>
+                )}
+              </div>
             )}
           </div>
           )}

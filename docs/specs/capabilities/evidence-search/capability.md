@@ -45,14 +45,24 @@ Companion files: [components.md](components.md) (the skeleton) · [provenance.md
   existing selection, assembling the corpus broadly *is* EB's distinctive job, so its skeleton
   **includes the assembly components** and **`search` egress originates from inside the EB run**.
 - **Rigidity:** fairly structured (toward the deterministic end of the dial).
-- **Dependencies:** none upstream (EB is the front of the v3.0 chain). Downstream capabilities
+- **Dependencies:** none upstream by default (EB is the front of the v3.0 chain). When a task is
+  started from an Options scoping task, the shared `inherit` component seeds it with that task's
+  documents, light findings, user context and evidence scope before acquire runs (OS ruling 48;
+  [components.md § 0](components.md)). Downstream capabilities
   (Options Assessment, Impact, Transferability, VfM) consume EB's findings layer — all ⏸ deferred.
 
 **Scope boundaries** (the evidence-vs-analysis line):
 - Narrow, single-intervention deep analysis is **out of EB** → the **Impact** capability (⏸).
 - **Precise option resolution is out of EB** — EB groups interventions *descriptively*
   (corpus-grounded thematic clusters); resolving them into named, comparable options is
-  decision-relative → a future **Options Assessment** (⏸).
+  decision-relative → the **Options scoping** capability
+  ([../options-scoping/](../options-scoping/capability.md)). **One declared widening (owner,
+  2026-09-07, OS ruling 41):** when an Evidence search task is spawned by a scoping task as its
+  "full evidence search" and written with the **option-profile template**, its report carries
+  that profile's judgement cells (how sure, transferability and conditions, key assumption),
+  computed with the parent's user context under the OS trust rules, and that report **is** the
+  option profile shown in the scoping task (OS ruling 47). Such a task opens with `inherit` from
+  the scoping task (OS ruling 48). Outside that case the evidence-descriptive rule stands.
 - EB may answer broader questions through grounded narrative synthesis over its **existing**
   findings, but must **not** add new schemas, structured computations or tools belonging to
   future capabilities (handoff §7.9). **Direct chunk-grounded narrative synthesis** is

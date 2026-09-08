@@ -400,6 +400,7 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
     published_after: "2019-01-01",
     published_before: null,
     publisher_country: null,
+    publisher_source: null,
     author_affiliation_countries: null,
     country_group: { label: "United Kingdom", countries: ["GB"], authorship: "planner-proposed" },
   },
