@@ -3,7 +3,7 @@
 Defect ids D1–D9, terms and file:line anchors are defined in
 [contract.md](contract.md). This plan cites them and adds nothing to scope.
 
-> Plan approved (before implementation): _pending_.
+> Plan approved (before implementation): 2026-09-08 · owner.
 > Plan-stage adversarial review: not run — Tier 2, tight contract, pattern-following
 > plan (per task-cycle-design: Tier 2 runs it on demand only).
 
