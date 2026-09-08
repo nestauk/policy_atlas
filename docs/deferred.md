@@ -28,6 +28,14 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options Assessment** consumes EB output + the findings layer to resolve descriptive
   intervention clusters into named, comparable options — the decision-relative step EB explicitly
   leaves out.
+- **Orientation / domain primer** (owner, 2026-09-07, options-scoping review round): a
+  question-to-primer capability for users new to a domain — problem framing, rival diagnoses,
+  institutions, terms, the levers in use — routed by the product shell and linkable from
+  Options scoping. For now scoping's baseline gains a "what is contested" element instead
+  (concept ruling 24). Owner wants this on the table when the next capabilities are chosen.
+- **Options scoping: "Assess all kept options"** (owner, 2026-09-07): a whole-longlist
+  assessment action beside "Assess these N". Deferred on inference cost; revisit after live
+  runs show what a standard run costs (concept ruling 19).
 - **Question-shape → future-capability mapping (user posture, 2026-07-10, recorded at the
   018 gate).** Two real-user question shapes from the V2 taxonomy have their ideal homes in
   capabilities that don't exist yet: **opinions / stakeholder mapping** (a proposed
@@ -40,6 +48,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Product / output
 
+- **Options scoping: a report written from the longlist alone** — an on-demand "write a report from
+  the longlist" action (top line · the problem and what is contested · the approaches · what the
+  evidence base holds as source-quality profiles · what needs deciding next · what was searched) for
+  the person who stops before assessing. Withdrawn from v1 by concept ruling 50 (2026-09-08): the
+  report is a product of assessment; before it the Result is the longlist. Revisit if live asks show
+  people handing over unassessed longlists.
 - **Export & sharing** — share CTAs, version-pinned external deep links
   back into the body (handoff §7.3). The primary surface is the tool itself.
   **Read-only/public links DISCHARGED (task 037):** a Task's owner shares it

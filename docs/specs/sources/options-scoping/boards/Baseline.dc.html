@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Archivo:wght@600;700&display=swap">
+  <style>  body { margin:0; background:#f4f4f5; color:#1c1c1e; font-family:"Manrope","Mulish",system-ui,sans-serif; font-size:16px; line-height:1.55; }
+  .eyebrow { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  a { color:#0000ff; } a:hover { color:#0f294a; }
+  h1,h2,h3 { margin:0; font-family:"Archivo","Manrope",system-ui,sans-serif; color:#0f294a; }
+  .board { width:1440px; height:var(--h, 900px); display:flex; flex-direction:column; overflow:hidden; background:#f4f4f5; }
+  .nav { height:48px; display:flex; align-items:center; gap:28px; padding:0 32px; background:#ffffff; border-bottom:1px solid #d4d4d8; }
+  .nav .mark { font-family:"Archivo",sans-serif; font-weight:700; color:#0f294a; font-size:16px; margin-right:12px; }
+  .nav .item { color:#646363; font-weight:600; font-size:16px; }
+  .nav .item.on { color:#0f294a; border-bottom:2px solid #0000ff; padding-bottom:2px; }
+  .taskbar { height:52px; display:flex; align-items:center; gap:16px; padding:0 32px; background:#f4f4f5; border-bottom:1px solid #d4d4d8; }
+  .taskbar .title { font-size:19px; font-weight:600; color:#0f294a; }
+  .badge { display:inline; font-size:16px; font-weight:400; color:#646363; }
+  .badge.blue { color:#0000ff; font-weight:600; }
+  .badge.soft { color:#646363; }
+  .badge.warn { color:#646363; }
+  .badge.ok { color:#0e6b5a; }
+  .main { flex:1; display:flex; min-height:0; }
+  .thread { width:820px; flex-shrink:0; display:flex; flex-direction:column; border-right:1px solid #d4d4d8; background:#ffffff; min-height:0; }
+  .thread .scroll { flex:1; overflow:hidden; padding:24px 32px; display:flex; flex-direction:column; gap:18px; }
+  .turn { display:flex; flex-direction:column; gap:6px; max-width:640px; }
+  .turn .who { font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .turn.user { align-self:flex-end; align-items:flex-end; }
+  .turn.user .bubble { background:#ececff; border:1px solid #0000ff; }
+  .bubble { padding:10px 14px; border:1px solid #d4d4d8; background:#ffffff; font-size:16px; line-height:1.55; }
+  .sys { font-size:16px; color:#646363; display:flex; gap:8px; align-items:center; }
+  .sys .tick { width:8px; height:8px; background:#0000ff; display:inline-block; }
+  .sys .dot { width:8px; height:8px; border:1px solid #646363; display:inline-block; }
+  .composer { height:64px; border-top:1px solid #d4d4d8; display:flex; align-items:center; gap:12px; padding:0 32px; }
+  .composer .input { flex:1; height:44px; border:1px solid #c9c9ce; display:flex; align-items:center; padding:0 12px; color:#9a9aa0; font-size:16px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; white-space:nowrap; height:40px; padding:0 16px; font-weight:700; font-size:16px; color:#ffffff; background:#0f294a; clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+  .btn.blue { background:#0000ff; }
+  .btn.ghost { background:#ffffff; color:#0f294a; border:1px solid #0f294a; clip-path:none; }
+  .btn.sm { height:36px; padding:0 12px; font-size:16px; }
+  .rail { flex:1; min-width:0; display:flex; flex-direction:column; background:#f4f4f5; min-height:0; }
+  .rail .head { height:44px; display:flex; align-items:center; justify-content:space-between; padding:0 20px; border-bottom:1px solid #d4d4d8; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; }
+  .sec { border-bottom:1px solid #d4d4d8; background:#ffffff; }
+  .sec .hdr { display:flex; align-items:center; gap:10px; padding:10px 20px; min-height:44px; }
+  .sec .hdr .name { font-weight:700; color:#0f294a; font-size:16px; width:120px; flex-shrink:0; }
+  .sec .hdr .take { flex:1; color:#646363; font-size:16px; }
+  .sec .hdr .take.empty { color:#9a9aa0; font-style:italic; }
+  .sec.open .hdr { background:#ececff; border-bottom:1px solid #d4d4d8; }
+  .sec.open .hdr .take { color:#0f294a; }
+  .sec .body { padding:14px 20px; display:flex; flex-direction:column; gap:10px; }
+  .kv { display:grid; grid-template-columns: 130px 1fr 110px; gap:8px 12px; align-items:start; font-size:16px; }
+  .kv .k { color:#646363; font-weight:600; }
+  .kv .v { color:#1c1c1e; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:16px; padding:2px 10px; border:1px solid #c9c9ce; color:#1c1c1e; background:#ffffff; }
+  .chip.on { border-color:#0000ff; color:#0000ff; background:#ececff; }
+  .chip.off { color:#9a9aa0; text-decoration:line-through; }
+  .list { display:flex; flex-direction:column; }
+  .row { display:flex; align-items:center; gap:10px; padding:8px 0; border-top:1px solid #ececee; font-size:16px; }
+  .row:first-child { border-top:0; }
+  .row .t { flex:1; }
+  .row .m { color:#646363; font-size:16px; }
+  .theme { font-size:16px; font-weight:700; color:#0f294a; padding:8px 0 2px; }
+  .ph { border:1px dashed #a1a1aa; color:#646363; display:flex; align-items:center; justify-content:center; font-size:16px; text-align:center; padding:6px; }
+  .note { font-size:16px; color:#646363; }
+  table { border-collapse:collapse; width:100%; font-size:16px; }
+  th { text-align:left; font-size:14px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#646363; padding:8px 10px; border-bottom:1px solid #0f294a; vertical-align:bottom; }
+  td { padding:6px 8px; border-bottom:1px solid #e4e4e7; vertical-align:top; }
+  .prov { font-size:16px; color:#646363; }
+  .prov.blue { color:#0000ff; }
+  .prov.empty { color:#9a9aa0; font-style:italic; }
+  .ico { width:16px; height:16px; flex-shrink:0; }
+  .m { color:#646363; }
+  .prose p { margin:0 0 12px; max-width:44em; }
+  .prose h3 { font-size:19px; margin:20px 0 8px; }
+  .prose ul { margin:0 0 12px; padding-left:22px; max-width:44em; }
+  .prose li { margin:0 0 4px; }
+  .contents { display:flex; flex-direction:column; gap:4px; margin:0 0 16px; }
+  .contents a { border-left:2px solid #d4d4d8; padding-left:12px; text-decoration:none; color:#0f294a; }
+</style>
+</helmet>
+<div class="board" style="--h:2340px; height:2340px;">
+  <div class="nav">
+    <span class="mark">Policy Atlas</span>
+    <span class="item ">New</span>
+    <span class="item on">Tasks</span>
+    <span class="item">Projects</span>
+  </div>
+  <div class="taskbar"><span class="title">Young people NEET, 16–24 — options</span><span class="badge blue">Options scoping</span><span class="badge soft">Standard</span></div>
+  <nav aria-label="Task" style="display:flex; align-items:center; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; ">Agent</span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Result</span><span style="padding:12px 0; ">Sources</span><span style="padding:12px 0; ">Share</span><span style="padding:12px 0; ">History</span><span class="btn ghost sm" style="margin-left:auto;">Hide chat</span></nav><nav aria-label="Result views" style="display:flex; align-items:center; gap:24px; padding:0 32px; border-bottom:1px solid #d4d4d8; background:#ffffff; font-weight:600; color:#646363;"><span style="padding:12px 0; color:#9a9aa0; font-weight:400;">Report <span style='font-weight:400;'>· after assessment</span></span><span style="padding:12px 0; color:#0f294a; border-bottom:2px solid #0000ff;">Baseline</span><span style="padding:12px 0; ">Longlist</span></nav>
+  <div class="main">
+    <div class="thread" style="width:400px;"><div class="scroll" style="padding:20px 24px; gap:14px;"><div class="sys"><span class="tick"></span><span>Baseline · 11 sources · Overton and OpenAlex</span></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">The baseline is ready. The rise is concentrated in the inactive group; your plan covers everyone who is NEET. Review that tension before I generate options. Question anything here; I will not generate options until you confirm.</div></div><div class="turn user"><span class="who">You</span><div class="bubble">Is the rise real, or did the survey change in 2023?</div></div><div class="turn"><span class="who">Policy Atlas</span><div class="bubble">Sources disagree. ONS reports that the rise survives the 2024 reweighting (ONS 2026); the Resolution Foundation attributes part of it to measurement (Resolution Foundation 2025). Both accounts are under What is contested, and the premise is left as reported, not settled. The plan still needs your confirmation.</div></div></div><div class="composer" style="padding:0 24px;"><div class="input">Question the baseline…</div><span class="btn blue">Send</span></div></div>
+    <div style="flex:1; background:#ffffff; padding:24px 40px; overflow:hidden; display:flex; gap:24px; align-items:flex-start;">
+    <nav aria-label="Contents" style="width:224px; flex-shrink:0; padding-right:16px;"><p class="eyebrow" style="margin:0;">Contents</p><ul style="list-style:none; margin:8px 0 0; padding:0; border-left:1px solid #e4e4e7; display:flex; flex-direction:column; gap:4px;"><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What is in place</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Trend if nothing changes</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Who is affected</a></li><li><a href="#" style="display:block; border-left:2px solid #0000ff; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#0f294a; font-weight:600;">What is contested</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">What is already changing</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Cost of inaction</a></li><li><a href="#" style="display:block; border-left:2px solid transparent; margin-left:-1px; padding:2px 0 2px 12px; line-height:1.3; text-decoration:none; color:#646363; font-weight:400;">Sources</a></li></ul></nav>
+    <div class="prose" style="flex:1; min-width:0;">
+      <p class="m" style="margin-bottom:8px;">Baseline · the situation these options would change · ready · awaiting your confirmation</p>
+      <h2 style="font-size:24px; margin-bottom:12px;">Do nothing: current policy and trajectory</h2>
+      <div style="padding:12px 16px; border:1px solid #0f294a; background:#f4f4f5; margin:0 0 16px; max-width:none;"><p style="margin:0 0 6px; max-width:none;"><strong>Check the target population.</strong> The rise is concentrated in economic inactivity, while much of the current offer targets unemployment. <span class="m">Interpretation from the baseline; Policy Atlas's reasoning.</span></p><p style="margin:0 0 6px; max-width:none;"><strong>Current plan:</strong> all young people aged 16 to 24 who are NEET, United Kingdom. Flag options that reach only the job-ready.</p><p style="margin:0; max-width:none;"><a href="#">Change the plan</a> · <a href="#">Inspect the disagreement</a></p></div>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 0 4px;"><span class="btn blue sm">Confirm plan and build longlist</span><span class="btn ghost sm">Change the plan</span><span class="btn ghost sm">Search further</span><span class="m">No options generated yet.</span></div>
+      <p>About one in eight 16 to 24 year olds is not in education, employment or training, and the number has risen since 2022. The rise is in economic inactivity rather than unemployment, and the current offer is built for the unemployed. Sources disagree about how much of the rise is measurement and how much is health.</p>
+      <h3>At a glance</h3>
+      <ul>
+        <li><strong>Now:</strong> 12.5%, about 950,000 young people, in the latest quarter <span class="m">(ONS 2026)</span>.</li>
+        <li><strong>Direction:</strong> rising since 2022, up about 1.5 points in three years; the unemployed share is flat <span class="m">(ONS 2026)</span>.</li>
+        <li><strong>Driver, as reported:</strong> inactivity, mostly ill-health; mental ill-health is the largest single reported reason <span class="m">(ONS 2026, Youth Futures 2025)</span>.</li>
+        <li><strong>Contested:</strong> how much of the rise is a survey artefact, and whether the problem is claimants who do not engage or inactive young people outside any service. See below.</li>
+        <li><strong>Key assumption:</strong> the current offer does not reach the inactive group driving the rise. This is Policy Atlas's reasoning, not a reported finding.</li>
+      </ul>
+      <section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What is in place</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">The Jobcentre Youth Offer, levy-funded apprenticeships, and no entitlement for young people who are inactive.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Trend if nothing changes</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p>The NEET rate rose from about 11% in 2022 to about 12.5%. The unemployed share is flat, so the inactive share accounts for the whole rise <span class="m">(ONS 2026)</span>. Long-term NEET, over twelve months, is a growing share of the total <span class="m">(Youth Futures 2025)</span>.</p>
+      <p><strong>Not found.</strong> No published projection of the NEET rate beyond the current year. No reported estimate of how many of the inactive group are in contact with any service. Policy Atlas does not forecast.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Who is affected</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">About half of the inactive group report a health condition; mostly 18 to 24; lower prior attainment; highest in the North East and Midlands.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What is contested</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Collapse −</span></div>
+      <div style="margin-top:12px;">
+      <p><strong>Why the rise.</strong> ONS attributes it to ill-health among the inactive <span class="m">(ONS 2026)</span>. The Resolution Foundation argues that a share of it is a survey artefact after the 2023 fall in Labour Force Survey response, and a share is health <span class="m">(Resolution Foundation 2025)</span>. Youth Futures points to weak entry-level hiring since 2023 <span class="m">(Youth Futures 2025)</span>.</p>
+      <p><strong>Who the problem is.</strong> DWP frames it as claimants who do not engage with the Youth Offer <span class="m">(DWP 2024)</span>. The Learning and Work Institute frames it as inactive young people who are outside any service and never become claimants <span class="m">(Learning and Work Institute 2025)</span>.</p>
+      <p><strong>Whether the current offer works.</strong> The Youth Offer evaluation reports positive outcomes for claimants who took part <span class="m">(DWP 2024)</span>. No source found evaluates its reach into the inactive group.</p>
+      <p class="m">These are disagreements between sources, reported as such. Which reading you take changes which options fit; the longlist is built to cover both. Naming them as the contested points is Policy Atlas's reasoning.</p>
+      </div>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">What is already changing</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Youth Guarantee trailblazers in eight areas, Jobcentre reforms from 2026, Kickstart ended in 2022.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Cost of inaction</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">£50,000 to £60,000 lifetime public-finance cost per long-term NEET young person, as reported.</p>
+    </section><section style="margin:0 0 28px;">
+      <div style="display:flex; align-items:baseline; gap:12px;"><h3 style="flex:1; margin:0;">Sources</h3><span style="flex-shrink:0; font-size:14px; font-weight:700; color:#0000ff;">Expand +</span></div>
+      <p class="m" style="margin:6px 0 0; max-width:44em;">Eleven sources from Overton and OpenAlex; live official statistics and departmental pages not searched.</p>
+    </section></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
