@@ -108,13 +108,6 @@ supported sentence, and the sentence is what gets copied into advice.
   (literature-anchored or session-calibrated, concept open question 9).
 - ✅ Sortable by evidence strength and study count only (the direction-consensus sort is
   dropped, ruling 17); **there is no impact scalar**.
-- **Checked 2026-09-08 (feasibility check 2).** The magnitude cell holds a **number with its
-  unit** only; the source's own characterisation ("a small but robust effect") is a separate,
-  quoted field (C2-8). "How sure" is **two numbers** — documents read, and independent own-data
-  studies where a programme name or registration id resolves several papers to one study;
-  reviews are documents, never studies, and review-mediated support (all of it in the
-  unemployment corpus) shows as "3 reviews, 0 independent primary studies read" (C2-1; ❓ owner to
-  confirm the wording). A document present as two snapshots counts once (C2-5).
 
 ## The transferability cell: the one opinionated cell, working shown
 
@@ -145,21 +138,6 @@ supported sentence, and the sentence is what gets copied into advice.
   as input; the child report computes the verdict under these same rules (ruling 41), so a cap
   caused by unstated context survives until the plan says otherwise. The cell is a first-class
   eval axis (calibration).
-- **Checked 2026-09-08 (feasibility check 4, paired context cases).** The discipline holds: a
-  national average filled nothing, a present fact set met, a commitment set conditional, a
-  dated observation stayed unknown; the model tried to strengthen on an assurance three times and
-  the code-side verify caught each. Consequences: the working is **two steps** (factor extraction
-  from evidence, then context fill against the fixed list) with **code-side verify** as part of
-  the block ([provenance-grounding.md](../../system/provenance-grounding.md)); retrieved entries
-  carry a geography level and an observation date; the **causal-role leg defaults to Unknown**
-  unless evidence and target contradict each other; the factor step asks explicitly what the
-  evidence reported as **blocking delivery** (it flagged no dealbreaker despite a governance block
-  in the evidence); and a user may **add a condition** the evidence did not name, as a row typed
-  *stated by you* whose evidence cell reads "not addressed by the evidence". ❓ **Owner rulings
-  needed:** (C4-2) only **dealbreakers** cap the support leg — helpful factors are shown, enter
-  the conditions list when planned, and do not cap; otherwise the verdict word is Unknown for
-  every option and carries no information. (C4-7) whether a **local aggregate** can set a factor
-  met, or only a local resource observation.
 
 ## Reasoned guesses: interpretation in the shortlisting stage
 

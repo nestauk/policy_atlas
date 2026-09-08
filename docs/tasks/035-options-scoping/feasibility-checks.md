@@ -100,24 +100,6 @@ small, time-boxed investigation that tests one design claim before a contract is
   comparisons omit the question the senior needs → change the comparison principle. Recipients lose
   qualifications → change the handoff before expanding output detail.
 
-## Results (2026-09-08)
-
-Five of the six checks ran on 2026-09-08, all on one branch (`checks/035-feasibility`, PR #72),
-against corpora exported read-only from staging. Raw results stay outside the repository (they
-carry staging document text). Each report ranks its findings by whether they change the design and
-ends with what it means for the contracts; the findings were flowed back into the living specs the
-same day (`docs/specs/system/*`, `docs/specs/capabilities/options-scoping/*`,
-`docs/specs/capabilities/evidence-search/components.md`), with the rulings still owed marked ❓.
-
-| check | report | outcome in one line | owner still owes |
-|---|---|---|---|
-| 6 contract trace | `check-6-contract-trace.md` | components compose; six shared invariants were missing from the system contracts (option as unit; mention as third finding kind; cross-task field-grain memo; `reading_scope` + eligibility record; evidence-scope set-aside; `task_link`) | — |
-| 2 attribution | `checks/check-2-evidence-attribution.md` | mention ≠ support is distinguishable through the mention's role; independence resolves only for own-data papers with identity → count documents; no inherited finding satisfies the light field set → field-grain reuse; unstated design feature must hold support back | the verdict table (~1 h); wording of "how sure" as two numbers |
-| 3 option grain | `checks/check-3-option-grain.md` | mentions give class options, findings give named implementations; membership unstable for classes under paraphrase; lever relabelling moved places in the thin corpus and seated an unevaluated singleton | ruling on *instance of* (C3-1); ruling on the two shortlist guards (C3-2); six expert questions |
-| 4 local conditions | `checks/check-4-local-condition.md` | the four context kinds are distinguished and the code guard catches over-statement; the working is two steps; the verdict word never moved (causal-role over-strict; weakest leg over helpful factors) | the pair table; rulings on dealbreakers-only capping (C4-2) and local aggregates (C4-7) |
-| 5 reading budget | `checks/check-5-reading-budget.md` | synthesis is 72 percent of compute, extraction 17 percent of a deep walk, gates a median 17 minutes; a cap of 3 reads one-sided; reading alone misses contrary evidence → the rapid budget is a synthesis budget | the rapid number (≈25 min compute for one option) |
-| 1 advice and commissioning | — | not run: the owner's team with pilot users; lands before any contract is signed | the live asks |
-
 ## Order
 
 6 → (2 ∥ 3) → 4 → 5, with 1 running whenever live asks are available and landing before contracts.

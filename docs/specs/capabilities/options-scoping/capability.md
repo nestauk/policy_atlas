@@ -148,10 +148,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   asks for depth every time, in both branches; there is no default** (owner, 2026-09-07). The
   words are the Evidence search's user-facing **rapid / standard / deep** (ruling 40). Deep (per-option stress-testing, mechanism-analogy
   search) ⏸ later. ❓ The rapid latency budget is a number the contract must set (concept open
-  question 3). *Measured 2026-09-08 (feasibility check 5): the budget bounds **syntheses**, not
-  extraction — synthesise is 72 percent of a walk's compute on staging; a one-option sense-check
-  is two syntheses plus one gate, about 25 minutes of compute on today's terminus; the
-  per-option document cap is a plan setting with defaults 5 (rapid) and 8 (standard).*
+  question 3).
 - ✅ **Cost lever.** If a standard run is too expensive the cut is depth, not coverage: a lighter
   longlist search, and the transferability working only for shortlisted options. ❓ The
   per-run price envelope (≈ N shortlisted options × one mini search) is open question 2.
@@ -195,11 +192,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   and a specified design, never to a document (ruling 36); packages and ingredients are linked
   part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
   target longlist size — are open question 4; 🟡 clustering at option grain is unproven and is
-  checked before the longlist contract (ruling 31). **Checked 2026-09-08 (feasibility check
-  3):** clustering works at option grain; mentions give class-grain options and deep findings
-  give named implementations, so ❓ relations gain *instance of* (owner ruling, C3-1); the mention
-  record carries an adoptability flag; assignment admits *design feature not stated* (ruling 36
-  made concrete); see [components.md § 6](components.md).
+  checked before the longlist contract (ruling 31).
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
   metadata as options complete. Hard screens = the user's session constraints of the
   scope-shaped kind plus three defaults (relevant to stated outcomes, distinct, within scope).
@@ -240,10 +233,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   coverage gaps and never removes. "Most promising" is served honestly and **only after
   assessment**: per-axis sorts on comparable axes and **conditional recommendations** on those
   axes only. Before assessment the agent describes coverage and gaps and makes no "if your
-  priority is X" statements (owner, 2026-09-07). Fused orderings are permanently out. ❓ **Owner
-  ruling needed (feasibility check 3 C3-2, 2026-09-08):** two guards on the quota — a lever type
-  whose options have no evaluated mention earns a gap message, not a place; a place with a close
-  runner-up lever or a near-equal rival is marked *contested* for the user to confirm.
+  priority is X" statements (owner, 2026-09-07). Fused orderings are permanently out.
 - ✅ **One shortlist action, plain words** (ruling 5). *Add to shortlist* is available from the
   moment an option exists (longlist row, option page, grid); *Remove from shortlist* reverses it;
   *Exclude* and *Include again* are the user's screening actions. An option the user added keeps
@@ -356,9 +346,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   tag per row (*scoping pass* / *full run*). A variant's row shows only the variant's own
   evidence (ruling 15). The option name opens the profile; there is no second, expandable
   layer. "How sure" here means confidence in the specified design–outcome claim from relevant
-  evidence, counting documents until independence is known (ruling 33) — shown as **two numbers**,
-  documents read and independent own-data studies where identity is known, reviews counted as
-  documents (feasibility check 2 C2-1, 2026-09-08; ❓ owner to confirm the wording). Sortable by evidence
+  evidence, counting documents until independence is known (ruling 33). Sortable by evidence
   strength and document count only; direction tallies are per option within one outcome family
   and **not sortable across options** (ruling 17); cost cells compare only on matching bases;
   **no composite score, ever.**
@@ -476,7 +464,7 @@ contracts:
 
 ❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search cost
 envelope and the light-extraction-plus-reading shape to check (reading rule settled, ruling 16;
-read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget (measured 2026-09-08: bounds syntheses; ~25 min compute for one option) · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
+read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
 · 6 baseline generation and grey-literature sourcing · 7 iteration mechanics and versioning ·
 8 the entry point from the product's front door (the rest of the product surface is settled) ·
 9 magnitude banding (requires its own eval before any band reaches users) · 10 the similarity
