@@ -114,7 +114,7 @@
       "x": 4620,
       "y": 5220,
       "w": 1440,
-      "h": 2660,
+      "h": 2740,
       "title": "7b · After a full evidence search: the profile is the child task's report, shown in place",
       "page": "journey"
     },
@@ -142,7 +142,7 @@
       "y": 9600,
       "w": 1440,
       "h": 1140,
-      "title": "7c · The child Evidence search task: one document; its Sources tab is what it adds",
+      "title": "7c · The child Evidence search task: one document; it inherits from the scoping task and its Sources tab is what it adds",
       "page": "journey"
     },
     {
@@ -197,7 +197,7 @@
       "y": 760,
       "w": 320,
       "page": "journey",
-      "text": "Rulings made visible:\n· three kinds of constraint; an evidence-scope constraint never excludes an option (2, 4: 'no in-scope evidence')\n· a design change mints a VARIANT, its own option with its own search; the parent's evidence is related evidence only (4, 6, 7)\n· baseline adds 'what is contested'; premises sourced, assumptions labelled reasoning; Overton + OpenAlex only (3)\n· before assessment an option shows a source-quality profile: documents by type and tier, countries, populations, outcomes; a mention is not support (4b, 3c)\n· grid rows = primary lever types; ambition = a tag 'as described, not measured', tier-4 reasoning; gap messages name secondary types (5)\n· the proposal is a provisional allocation of reading effort: one place per lever type present; reasons = distinct / widest implementation record / only option of its type / thin evidence, never a count (5b)\n· no 'most promising' and no conditional recommendation before assessment; sorts are sorts (5)\n· the do-nothing band is 'the situation these options would change', never a comparison; each effect carries its own comparator, population and period; no superlatives (6)\n· transferability: retrieved / stated by you / planned by you; the weakest leg decides; a plan becomes 'Conditional on: …'; no factor fractions (6, 7)\n· documents counted, not studies, until full text is read; no study-design labels (6, 6c)\n· the report stays linear text: verdict strips in the report, the comparison table as a working view (6, 6c; 2026-09-08)\n· unassessed kept options listed by theme; closing section 'what needs deciding or commissioning next' = unknowns only (3c, 6)\n· Sources = the Evidence search Sources component + statuses 'read in full / abstract only / not read under the cap / set aside: evidence scope' + a By option subview (6b; 2026-09-08)\n· one document: the child task's report is the profile, shown in place with the scoping frame around it; the child task adds Sources, plan and History (7b, 7c; 2026-09-08)\n· sense-check = an entry branch; rapid = the named option alone through 'Assess'; questions to put to the department (8)"
+      "text": "Rulings made visible:\n· three kinds of constraint; an evidence-scope constraint never excludes an option (2, 4: 'no in-scope evidence')\n· a design change mints a VARIANT, its own option with its own search; the parent's evidence is related evidence only (4, 6, 7)\n· baseline adds 'what is contested'; premises sourced, assumptions labelled reasoning; Overton + OpenAlex only (3)\n· before assessment an option shows a source-quality profile: documents by type and tier, countries, populations, outcomes; a mention is not support (4b, 3c)\n· grid rows = primary lever types; ambition = a tag 'as described, not measured', tier-4 reasoning; gap messages name secondary types (5)\n· the proposal is a provisional allocation of reading effort: one place per lever type present; reasons = distinct / widest implementation record / only option of its type / thin evidence, never a count (5b)\n· no 'most promising' and no conditional recommendation before assessment; sorts are sorts (5)\n· the do-nothing band is 'the situation these options would change', never a comparison; each effect carries its own comparator, population and period; no superlatives (6)\n· transferability: retrieved / stated by you / planned by you; the weakest leg decides; a plan becomes 'Conditional on: …'; no factor fractions (6, 7)\n· documents counted, not studies, until full text is read; no study-design labels (6, 6c)\n· the report stays linear text: verdict strips in the report, the comparison table as a working view (6, 6c; 2026-09-08)\n· unassessed kept options listed by theme; closing section 'what needs deciding or commissioning next' = unknowns only (3c, 6)\n· Sources = the Evidence search Sources component + statuses 'read in full / abstract only / not read under the cap / set aside: evidence scope' + a By option subview (6b; 2026-09-08)\n· one document: the child task's report is the profile, shown in place with the scoping frame around it; the child task adds Sources, plan and History (7b, 7c; 2026-09-08)\n· inherit is shared: the child Evidence search inherits the option's design, documents, light findings, user context and evidence scope from the scoping task, re-screens and searches beyond (7b, 7c, 7d; ruling 48)\n· sense-check = an entry branch; rapid = the named option alone through 'Assess'; questions to put to the department (8)"
     },
     {
       "id": "note-alts",

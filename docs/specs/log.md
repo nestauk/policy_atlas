@@ -9,6 +9,15 @@
   (product surface, report sections, Sources tab, full evidence search) and
   [components.md](capabilities/options-scoping/components.md) (⟨full run⟩) amended;
   [source README](sources/options-scoping/README.md) updated.
+* **Update**: `inherit` becomes a **shared component** (options-scoping concept ruling 48): the
+  Evidence search adopts it for the reverse direction, so a task started from a scoping task (the
+  child full run) inherits the option's specified design, the user context and evidence scope, the
+  option's documents (re-screened) and the light findings (reused at finding grain) before acquire
+  runs. [EB components](capabilities/evidence-search/components.md) gains § 0 inherit and a wiring
+  row; [EB capability](capabilities/evidence-search/capability.md) dependencies and scope boundary
+  amended; [OS components](capabilities/options-scoping/components.md) § 0 and ⟨full run⟩ amended;
+  [execution-orchestration](system/execution-orchestration.md) names `inherit` as the first
+  component both capabilities compose. Boards 7b, 7c, 7d updated.
 
 ## 2026-09-07 (boards redrawn)
 * **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction

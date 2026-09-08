@@ -18,7 +18,7 @@ record the decision.
 
 | File | What it is | How to use it |
 |---|---|---|
-| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07 and the board-refinement rulings 45–47 of 2026-09-08. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
+| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07 and the board-refinement rulings 45–48 of 2026-09-08. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
 | [options-scoping-wireframes.html](options-scoping-wireframes.html) | The wireframe canvas as a bundled, viewable page (the same content as the live canvas linked from the concept). | Product intent only: screens, copy, states and interaction patterns. Never a schema or contract source. |
 | [boards/](boards/) | The readable source of every board on the canvas — one `.dc.html` per board plus `canvas.json` for layout and titles. | Read these rather than the bundled page. Each board is plain HTML with inline styles. |
 
@@ -69,9 +69,9 @@ set aside and not read under the cap; the sense-check as a rapid entry branch wi
 the department. Page 2's structural alternatives are kept for reference and marked superseded. Where
 a board and a ruling still differ, the ruling wins.
 
-**Board refinement, 2026-09-08.** Three further rulings (45–47) came from reviewing the redrawn
+**Board refinement, 2026-09-08.** Four further rulings (45–48) came from reviewing the redrawn
 boards: the report stays linear, with one verdict strip per option and the comparison table as the
 shortlist view after assessment (new board 6c); the Sources tab is the Evidence search's Sources
 component with scoping's read-depth and set-aside statuses; and after a full evidence search there is
 one document, the child task's report shown in place as the profile, with the child task adding its
-plan, Sources and History. Boards 6, 6b, 7b and 7c were redrawn to match.
+plan, Sources and History; and `inherit` is a shared component, so the child Evidence search inherits the option's documents, light findings, user context and evidence scope from the scoping task. Boards 6, 6b, 7b, 7c and 7d were redrawn to match.

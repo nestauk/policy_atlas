@@ -810,3 +810,23 @@ Made on the redrawn boards. They amend the rulings named; the boards were redraw
     task adds is what only a task has: its plan (Agent), its confirmed document set (Sources) and
     its own History; its Result tab shows the same document. The scoping-pass profile is the
     earlier version of that document, kept in History. Export attaches the one document.
+48. **`inherit` is a shared component; the Evidence search has it too** (owner, 2026-09-08; applies
+    the reuse rule of ruling 30 in the other direction). `inherit` is authored once, as the
+    execution contract requires of components, with a Link as its input; **what crosses depends on
+    the source task's kind**. The scoping direction is ruling 22. The **Evidence search direction**:
+    a task started from an Options scoping task — the child full run of ruling 9 is the normal case
+    — inherits the option's **specified design** as the seed of its question and intent; the
+    scoping task's **user context** and **evidence-scope constraint** as inputs (so a cap set by
+    unstated context persists, ruling 41, and documents set aside under the scope stay set aside);
+    the option's **mentioning documents** with their classify and appraise results and abstract
+    profiles, queued into the pool flagged *inherited* and **re-screened against the new plan**
+    (whose intent, the specified design, is narrower than the scoping plan's); and the **light
+    findings** ⟨assess⟩ extracted for the option, reused **at finding grain** exactly as ruling 35
+    reuses deep findings in the other direction: the full extraction skips only the requirements a
+    light finding satisfies for the same source snapshot and profile version, and fills the rest.
+    The scoping-pass profile becomes the prior version of the one document (ruling 47) in the
+    child's History. Nothing inherited is trusted because it was found before; the run acquires
+    beyond the inherited set; the child's Sources tab states inherited versus added, as the
+    scoping task's does. One component owns the inherited-versus-added accounting in both
+    directions.
+

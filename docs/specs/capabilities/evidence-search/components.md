@@ -1,9 +1,9 @@
 ---
 type: Capability spec
 title: Evidence search — component skeleton
-description: The nine EB components — declared I/O, tool wiring, realisation and gating.
+description: The nine EB components plus the shared inherit step — declared I/O, tool wiring, realisation and gating.
 tags: [capability, evidence-search, components]
-timestamp: 2026-07-06
+timestamp: 2026-09-08
 ---
 
 # Evidence Base — component skeleton
@@ -15,10 +15,15 @@ shared tools and findings schema are owned by
 [../../system/data-model.md](../../system/data-model.md).
 
 ```
-acquire → screen → classify → appraise → ingest(fetch) → synthesise   (the mandatory spine)
+[inherit] → acquire → screen → classify → appraise → ingest(fetch) → synthesise   (the mandatory spine)
         + characterise (landscape content)                            (discretionary)
         + [select → extract → group]   (the deep chain, plan-selected) (discretionary)
 ```
+
+**`inherit` (shared, optional; Options scoping ruling 48).** When the task starts from a Link — an
+Options scoping task, the child full run of scoping ruling 9 being the normal case — the shared
+`inherit` component seeds the plan and the pool before acquire runs. It is the same component
+Options scoping uses in the other direction; §0 below gives this direction.
 
 **The mandatory EB spine** ([ADR 0013](../../../adr/0013-mandatory-eb-spine.md), task 016
 flow-back): every EB run executes acquire(`search`) → screen → classify → appraise →
@@ -42,6 +47,7 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
 
 | # | Component | Centres on | Declares (beyond core) | Realisation |
 |---|---|---|---|---|
+| 0 | inherit | a thin procedure over Links (shared with Options scoping, ruling 48) | — | procedure; optional |
 | 1 | acquire | `search` (only egress verb); ingestion follows | — | procedure |
 | 2 | screen | `screen`; re-invokes `search` on the thin-base hatch | `screen` | per-doc fan-out |
 | 3 | classify | `classify` (single-label doc type + open tags) | `classify` | per-doc fan-out |
@@ -51,6 +57,29 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
 | 7 | extract | `extract` → `intervention_outcome_finding` / `implementation_context_finding` | `extract` | per-source fan-out |
 | 8 | group | `cluster` (facet, over findings) + `query-findings` | `cluster`, `query-findings` | agent |
 | 9 | synthesise | `produce-grounded-block` (intent-led sections over available substrate) | `query-findings`, `search_chunks` (the `retrieve` increment) | agent-loop |
+
+## 0 — inherit (optional; shared with Options scoping, ruling 48)
+
+- **In:** a linked Options scoping task and one of its options (the child full run; also any
+  Evidence search task the user starts from a scoping task). **Out:** a draft plan whose question
+  and intent are seeded from the option's **specified design** (ruling 15), carrying the scoping
+  task's **user context** and **evidence-scope constraint** as inputs — so a transferability cap set
+  by unstated context persists (scoping ruling 41) and documents set aside under the scope stay set
+  aside; the option's **mentioning documents** with their classify and appraise results and
+  abstract profiles, queued into the pool flagged *inherited* and **re-screened** against this plan
+  (whose intent is narrower than the scoping plan's); and the **light findings** the scoping
+  ⟨assess⟩ extracted for the option, reused **at finding grain**: `extract` skips only the
+  requirements a light finding satisfies for the same source snapshot and profile version, and
+  fills the rest with the full profile (the mirror of scoping ruling 35). The scoping-pass profile
+  becomes the prior version of the one document this task's report is (scoping ruling 47), in
+  History.
+- ✅ Nothing inherited is trusted because it was found before: inherited documents are re-screened;
+  inherited findings are reconciled on profile, version and coverage before counting. ✅ The run
+  acquires beyond the inherited set; the Sources tab states inherited versus added, with an
+  *Inherited* filter. ✅ One component owns the inherited-versus-added accounting in both
+  directions; the mechanism for uploaded snapshots is decided when uploads ship (scoping ruling
+  43). Authored once: what crosses depends on the source task's kind, and the scoping direction is
+  [../options-scoping/components.md § 0](../options-scoping/components.md).
 
 ## 1 — acquire (front edge)
 

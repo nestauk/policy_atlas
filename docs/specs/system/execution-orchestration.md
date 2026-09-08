@@ -67,6 +67,8 @@ interpreting the plan-as-data**, not a graph rebuilt per run.
   or as a declared variation. It runs under the expert sub-agent of the capability whose run it
   is part of. *(Supersedes the 2026-06 wording "owned by its capability, run by its expert
   sub-agent", written when there was one capability.)*
+  `inherit` — the Link-driven seeding step, whose output depends on the source task's kind — is the
+  first component both capabilities compose (options-scoping ruling 48, 2026-09-08).
 - **Capability** — an artefact-producing composition of components, run by a dedicated expert
   sub-agent, coordinated by the Agent.
 
