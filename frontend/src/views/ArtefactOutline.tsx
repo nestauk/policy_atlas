@@ -362,7 +362,7 @@ export function SectionDisclosure({
           <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
           </h2>
-          <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+          <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
@@ -375,7 +375,25 @@ export function SectionDisclosure({
       {!expanded && summary !== null && (
         <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
+      {!expanded && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`${SECTION_EXPAND_LINK_CLASS} mt-1.5 block md:hidden`}
+        >
+          Expand +
+        </button>
+      )}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
+      {expanded && collapsible && (
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className={`${SECTION_EXPAND_LINK_CLASS} mt-3 block md:hidden`}
+        >
+          Collapse −
+        </button>
+      )}
     </section>
   );
 }
@@ -429,12 +447,21 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
         <h2 className="flex-1 text-heading font-bold text-navy max-md:text-[20px]">
           How the evidence was gathered
         </h2>
-        <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && funnelLine !== null && (
         <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
+      )}
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`${SECTION_EXPAND_LINK_CLASS} mt-1.5 block md:hidden`}
+        >
+          Expand +
+        </button>
       )}
       {open && (
         <div className="mt-3 space-y-4">
@@ -497,6 +524,15 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
             </div>
           )}
         </div>
+      )}
+      {open && (
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className={`${SECTION_EXPAND_LINK_CLASS} mt-3 block md:hidden`}
+        >
+          Collapse −
+        </button>
       )}
     </section>
   );

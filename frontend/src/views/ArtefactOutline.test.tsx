@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -50,6 +50,22 @@ describe("SectionDisclosure", () => {
     expect(screen.getByText("The takeaway.")).toBeInTheDocument();
     expect(screen.queryByText("Full cited prose.")).toBeNull();
     await user.click(toggle);
+    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+  });
+
+  it("collapsed sections show both the heading-row label and a mobile trailing Expand button", async () => {
+    const user = userEvent.setup();
+    render(
+      <SectionDisclosure id="s5" section={section} collapsible defaultOpen={false}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    const toggle = screen.getByRole("button", { expanded: false });
+    expect(within(toggle).getByText("Expand +")).toBeInTheDocument();
+
+    const trailing = screen.getByRole("button", { name: "Expand +" });
+    await user.click(trailing);
     expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
   });
