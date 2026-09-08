@@ -27,6 +27,36 @@ describe("Sheet", () => {
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("keeps the desktop slide-over and adds the max-md bottom-sheet classes", () => {
+    render(
+      <Sheet open>
+        <SheetContent title="Source dossier">
+          <p>Dossier body</p>
+        </SheetContent>
+      </Sheet>,
+    );
+    const dialog = screen.getByRole("dialog", { name: "Source dossier" });
+    // Desktop (>=768px) slide-over is untouched.
+    for (const token of ["inset-y-0", "max-w-xl", "right-0", "border-l", "starting:translate-x-full"]) {
+      expect(dialog.className.split(" ")).toContain(token);
+    }
+    // Below md: bottom-anchored, capped height, top border, slides up.
+    for (const token of [
+      "max-md:inset-x-0",
+      "max-md:inset-y-auto",
+      "max-md:bottom-0",
+      "max-md:max-h-[45svh]",
+      "max-md:max-w-none",
+      "max-md:border-x-0",
+      "max-md:border-t",
+      "max-md:starting:translate-x-0",
+      "max-md:starting:translate-y-full",
+    ]) {
+      expect(dialog.className.split(" ")).toContain(token);
+    }
+    expect(dialog.className.split(" ")).toContain("overflow-y-auto");
+  });
 });
 
 describe("Popover", () => {
