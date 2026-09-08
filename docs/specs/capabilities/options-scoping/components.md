@@ -71,11 +71,11 @@ across capabilities (ruling 40).
 | 3 | screen | is EB, stage 1 only, **unchanged** | title-and-abstract consensus screen for relevance, plan as intent; evidence-scope constraints applied at retrieval and here | per-doc fan-out | mandatory; **no stage 2 in OS** |
 | 4 | classify | is EB | primary evidence type + open tags per screened-in document; Unknown and Non-evidence shown as their own buckets in an option's source-quality profile (a non-evidence document counts as a mention, never as evidence); Unknown is not resolved within scoping (ruling 43) | per-doc fan-out | mandatory |
 | 5 | appraise | is EB | quality tier per document under the versioned rubric; the per-option roll-up happens in `longlist` | per-doc fan-out | mandatory |
-| 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — spike before the longlist contract |
+| 6 | longlist | EB characterise, **modified** — unit = intervention mention (or finding), many-to-many | both characterise machines at option grain: cluster **intervention mentions** (or extracted findings where a deep search was inherited) into options — a document may support several options — then options into themes; per-option coverage/patterns (counts, types, tiers, countries, populations, outcomes); entrants without documents; option schema (specified design, primary + secondary lever type, ambition tag, relations) | procedure + agent | mandatory; 🟡 unproven at option grain — check before the longlist contract |
 | 7 | constrain | EB screen, **modified** — object = option, criteria = the plan's constraints | scope-shaped screens on metadata and the specified design; reasoned guesses for after-assessment constraints | per-option fan-out (LLM judgment, checkable, cited when corpus-based) | mandatory; every exclusion carries its constraint |
 | 8 | shortlist | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
 | 9 | select | is EB (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
-| 10 | extract | is EB, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are spike 2 |
+| 10 | extract | is EB, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are check 2 |
 | 11 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (written from the assessment, rewritten by a full run — ruling 50; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
@@ -178,7 +178,7 @@ Evidence search direction (from a scoping task, the child full run's normal case
   visible as such ("3 of 12 documents are reviews spanning several options"); a bundle becomes a
   package option with *part of* links to its constituents. The output is an option schema with a
   specified design, two grouping levels, generation-free entrants and relations. Named for what
-  it produces. 🟡 **Unproven**: the concept's clustering-quality spike must test many-to-many
+  it produces. 🟡 **Unproven**: the concept's clustering-quality check must test many-to-many
   assignment, bundles and reviews across domains before the longlist contract.
 - ✅ Top-down: the **small, curated, versioned list of about ten domain-agnostic lever types**
   (regulate, subsidise, tax or charge, inform, provide a service, enforce existing powers, devolve,
@@ -277,8 +277,8 @@ output is still called *the proposal* — the proposed shortlist the user adds t
 - ✅ **Reads the full text of the documents it relies on, capped per option; every claim carries
   the depth of what was read** (`text_basis`; ruling 16). ✅ A variant is assessed on its own
   design (ruling 15). ✅ Shortlist only, on the user's word; every cell labelled *scoping pass*.
-  ✅ Unassessed cells are honest empty states. 🟡 **Shape to spike** (open question 2): extraction
-  is slower than reading, so the per-option document cap is the latency lever and the spike
+  ✅ Unassessed cells are honest empty states. 🟡 **Shape to check** (open question 2): extraction
+  is slower than reading, so the per-option document cap is the latency lever and the check
   measures fit to the rapid budget; the abstract-profile extraction already on every document
   gives the abstract-level strip shown first.
 - ✅ **synthesise(report)** writes the Result (rulings 32, 50) **from the assessment**, never

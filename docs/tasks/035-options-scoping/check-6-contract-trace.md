@@ -1,6 +1,6 @@
-# Spike 6 — contract trace
+# Feasibility check 6 — contract trace
 
-Source: `spikes.md` § 6. Question: can the declared components compose without hidden changes to
+Source: `feasibility-checks.md` § 6. Question: can the declared components compose without hidden changes to
 ownership, evidence eligibility, extraction profiles, context or output semantics?
 
 Method: two cases traced on paper through every component in
@@ -10,7 +10,7 @@ data-model, plan-as-object, provenance-grounding), the Evidence search component
 as-built schema (`backend/src/policy_atlas/core/schema.py`, dev at 81aa7174). The spec is
 read-only here. Every proposed change is a finding.
 
-Date: 2026-09-08. Branch `spike/6-contract-trace`.
+Date: 2026-09-08. Branch `checks/035-feasibility`.
 
 ## The two cases
 
@@ -233,7 +233,7 @@ missing from the system contracts.**
   citation-scope rule already requires this. Record it in trust.md so the transferability working
   is not built to cite a sibling artefact.
 - **F17 — Deltas after a plan change** (open question 7) touch every scope and every membership
-  record. Out of this spike; the multi-scope layout (F12) makes deltas per scope, which helps.
+  record. Out of this check; the multi-scope layout (F12) makes deltas per scope, which helps.
 - **F18 — Non-evidence in the source-quality profile.** Appraise skips-and-counts Unknown and
   Non-evidence; the profile shows them as buckets. Consistent; no change.
 
