@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { createInitialRunStreamState } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { AnnotatedProse, highlightParts, LiveArtefactBody, orderSections, showLiveArtefact } from "./ArtefactView";
+import { AnnotatedProse, CitationProvenanceBlock, highlightParts, LiveArtefactBody, orderSections, showLiveArtefact } from "./ArtefactView";
 
 describe("highlightParts", () => {
   it("finds an exact quote", () => {
@@ -297,5 +297,57 @@ describe("showLiveArtefact", () => {
         ended_at: "2026-07-21T10:12:00Z",
       }),
     ).toBe(true);
+  });
+});
+
+describe("CitationProvenanceBlock authorships (042)", () => {
+  const baseContext = {
+    isPending: false,
+    isError: false,
+    data: {
+      context: "The quoted passage sits here.",
+      span_start: 0,
+      span_end: 10,
+      clamped: false,
+      year: 2022,
+      venue: "BMJ Open",
+      authorships: [
+        { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+        { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+      ],
+    },
+  };
+
+  it("renders authors with markers between the title and the year line, institutions below", () => {
+    const { container } = render(
+      <CitationProvenanceBlock
+        n={1}
+        sourceTitle="A study"
+        sourceRef={null}
+        onOpenDossier={() => {}}
+        context={baseContext}
+        quote="The quoted"
+      />,
+    );
+    expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
+    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
+    expect(screen.getAllByText(/University of Exampleshire/).length).toBeGreaterThan(0);
+    const markers = [...container.querySelectorAll("sup")].map((sup) => sup.textContent);
+    expect(markers).toEqual(["1", "1,2", "1", "2"]);
+  });
+
+  it("renders no author or institution lines when the context carries none", () => {
+    const { container } = render(
+      <CitationProvenanceBlock
+        n={1}
+        sourceTitle="A study"
+        sourceRef={null}
+        onOpenDossier={() => {}}
+        context={{ ...baseContext, data: { ...baseContext.data, authorships: [] } }}
+        quote="The quoted"
+      />,
+    );
+    expect(container.querySelector("sup")).toBeNull();
+    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
   });
 });

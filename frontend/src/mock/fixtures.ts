@@ -132,6 +132,11 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
 export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
   [mockEvidence[2].source_id]: {
     ...mockEvidence[2],
+    // Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
+    authorships: [
+      { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+      { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+    ],
     abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.",
     abstract_source: "provider",
     publisher: "BMJ",
@@ -152,6 +157,8 @@ export const mockSourceDossiers: Record<string, components["schemas"]["SourceDos
   // the "grouped by asserter, never merged" rendering (contract strand 7).
   [mockEvidence[7].source_id]: {
     ...mockEvidence[7],
+    // Corporate author (042 D2): one name, no institutions, no markers.
+    authorships: [{ name: "Example Policy Institute" }],
     abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.",
     abstract_source: "llm_description",
     publisher: null,
@@ -303,7 +310,17 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       }],
     },
   ],
-  references: [{ n: 1, title: mockEvidence[2].title, year: 2022, venue: "BMJ Open", url: null }],
+  references: [{
+    n: 1,
+    title: mockEvidence[2].title,
+    year: 2022,
+    venue: "BMJ Open",
+    url: null,
+    authorships: [
+      { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+      { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+    ],
+  }],
 };
 
 /** The live-artefact skeleton (contract strand 13), display-index ordered —

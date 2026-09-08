@@ -30,6 +30,7 @@ import {
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
+import { numberedAuthorships } from "./artefactPresentation";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -808,6 +809,54 @@ function SourceDossier({
   );
 }
 
+/** The authors line with superscript affiliation markers (042 D5). Renders
+ *  nothing when the source carries no authors (honest absence). Shared by the
+ *  dossier header and the citation block in ArtefactView. */
+export function AuthorsLine({
+  authorships,
+  className,
+}: {
+  authorships: components["schemas"]["AuthorshipOut"][] | undefined;
+  className?: string;
+}) {
+  const numbered = numberedAuthorships(authorships);
+  if (numbered.authors.length === 0) return null;
+  return (
+    <p className={className}>
+      {numbered.authors.map((author, index) => (
+        <span key={`${author.name}-${index}`}>
+          {index > 0 && ", "}
+          {scrub(author.name)}
+          {author.markers.length > 0 && <sup>{author.markers.join(",")}</sup>}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** The numbered institutions under the year line (042 D5): deduped, ordered
+ *  by first appearance, numbers matching the AuthorsLine markers. */
+export function InstitutionsLine({
+  authorships,
+  className,
+}: {
+  authorships: components["schemas"]["AuthorshipOut"][] | undefined;
+  className?: string;
+}) {
+  const numbered = numberedAuthorships(authorships);
+  if (numbered.institutions.length === 0) return null;
+  return (
+    <p className={className}>
+      {numbered.institutions.map((institution, index) => (
+        <span key={institution}>
+          {index > 0 && " · "}
+          <sup>{index + 1}</sup> {scrub(institution)}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 /** Full source provenance, used by every route into the source dossier sheet. */
 export function SourceDossierBody({
   source,
@@ -836,7 +885,9 @@ export function SourceDossierBody({
     <div className="space-y-6 text-caption">
       <header>
         <p className="font-display text-body font-bold leading-snug text-navy">{scrub(source.title)}</p>
+        <AuthorsLine authorships={source.authorships} className="mt-1 text-grey" />
         {(source.year || source.venue) && <p className="mt-1 text-grey">{[source.year, source.venue].filter(Boolean).map(String).map(scrub).join(" · ")}</p>}
+        <InstitutionsLine authorships={source.authorships} className="mt-1 text-grey" />
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Chip tone="soft">{scrub(source.origin)}</Chip>
           {source.appraisal_tier && <Chip tone="soft">{scrub(source.appraisal_tier)}</Chip>}

@@ -1,7 +1,66 @@
 import { describe, expect, it } from "vitest";
 
 import { mockArtefact } from "../mock/fixtures";
-import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, cardEvidenceChipLabels } from "./artefactPresentation";
+import { mostRelevantSources, sectionNavLabel, artefactMarkdown, downloadFilename, fullReportIntro, splitLeadColon, cardEvidenceChipLabels, numberedAuthorships, referenceAuthorsLine } from "./artefactPresentation";
+
+describe("referenceAuthorsLine", () => {
+  it("returns null for absent or empty authorships", () => {
+    expect(referenceAuthorsLine(undefined)).toBeNull();
+    expect(referenceAuthorsLine([])).toBeNull();
+    expect(referenceAuthorsLine([{ name: "" }])).toBeNull();
+  });
+
+  it("joins up to three names in full", () => {
+    expect(referenceAuthorsLine([{ name: "A One" }])).toBe("A One");
+    expect(
+      referenceAuthorsLine([{ name: "A One" }, { name: "B Two" }, { name: "C Three" }]),
+    ).toBe("A One, B Two, C Three");
+  });
+
+  it("truncates a fourth author to et al.", () => {
+    expect(
+      referenceAuthorsLine([
+        { name: "A One" },
+        { name: "B Two" },
+        { name: "C Three" },
+        { name: "D Four" },
+      ]),
+    ).toBe("A One, B Two, C Three et al.");
+  });
+});
+
+describe("numberedAuthorships", () => {
+  it("dedupes institutions and numbers them by first appearance", () => {
+    const numbered = numberedAuthorships([
+      { name: "A One", institutions: ["Uni X"] },
+      { name: "B Two", institutions: ["Uni X", "Institute Y"] },
+    ]);
+    expect(numbered.institutions).toEqual(["Uni X", "Institute Y"]);
+    expect(numbered.authors).toEqual([
+      { name: "A One", markers: [1] },
+      { name: "B Two", markers: [1, 2] },
+    ]);
+  });
+
+  it("gives an author without institutions no markers", () => {
+    const numbered = numberedAuthorships([
+      { name: "A One", institutions: [] },
+      { name: "B Two", institutions: ["Institute Y"] },
+    ]);
+    expect(numbered.authors[0].markers).toEqual([]);
+    expect(numbered.institutions).toEqual(["Institute Y"]);
+  });
+
+  it("treats a corporate author as one unmarked name with no institution list", () => {
+    const numbered = numberedAuthorships([{ name: "Example Policy Institute" }]);
+    expect(numbered.authors).toEqual([{ name: "Example Policy Institute", markers: [] }]);
+    expect(numbered.institutions).toEqual([]);
+  });
+
+  it("is empty for absent authorships", () => {
+    expect(numberedAuthorships(undefined)).toEqual({ authors: [], institutions: [] });
+  });
+});
 
 describe("mostRelevantSources", () => {
   it("ranks by how many claims cite each source, not how many citation rows", () => {
@@ -185,7 +244,15 @@ describe("artefactMarkdown", () => {
         ],
       },
     ],
-    references: [{ n: 1, title: "A study", year: 2022, venue: "BMJ Open" }],
+    references: [
+      { n: 1, title: "A study", year: 2022, venue: "BMJ Open" },
+      {
+        n: 2,
+        title: "An authored study",
+        year: 2021,
+        authorships: [{ name: "A One" }, { name: "B Two" }],
+      },
+    ],
   };
 
   it("writes title, part labels, sections in report order, citation markers, and references", () => {
@@ -199,6 +266,7 @@ describe("artefactMarkdown", () => {
     expect(markdown).not.toContain("group the evidence by theme");
     expect(markdown).toContain("### References");
     expect(markdown).toContain("1. A study (2022, BMJ Open)");
+    expect(markdown).toContain("2. An authored study — A One, B Two (2021)");
   });
 
   it("omits an unverified summary — same honesty as the on-screen callout", () => {

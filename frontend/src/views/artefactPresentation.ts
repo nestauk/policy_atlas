@@ -141,6 +141,58 @@ export function mostRelevantSources(
     .slice(0, limit);
 }
 
+/** One author (or corporate author) and their institutions (042 wire shape). */
+export type AuthorshipLike = { name: string; institutions?: string[] | null };
+
+/**
+ * The reference list's authors line (042 D4): up to three names in full, a
+ * longer list becomes the first three plus "et al." Empty names are dropped;
+ * no authors at all returns null so the caller renders nothing.
+ */
+export function referenceAuthorsLine(
+  authorships: readonly AuthorshipLike[] | null | undefined,
+): string | null {
+  const names = (authorships ?? []).map((a) => a.name).filter((name) => name !== "");
+  if (names.length === 0) return null;
+  if (names.length > 3) return `${names.slice(0, 3).join(", ")} et al.`;
+  return names.join(", ");
+}
+
+export type NumberedAuthorships = {
+  /** Authors in wire order, each with the marker numbers of its institutions. */
+  authors: Array<{ name: string; markers: number[] }>;
+  /** Institutions deduped, ordered by first appearance; marker n = index n-1. */
+  institutions: string[];
+};
+
+/**
+ * Superscript affiliation numbering (042 D5): institutions dedupe and number
+ * by first appearance; each author carries its institutions' marker numbers.
+ * An author without institutions carries no markers (a corporate author is
+ * the one-name/no-institution case).
+ */
+export function numberedAuthorships(
+  authorships: readonly AuthorshipLike[] | null | undefined,
+): NumberedAuthorships {
+  const institutions: string[] = [];
+  const markerByInstitution = new Map<string, number>();
+  const authors = (authorships ?? [])
+    .filter((a) => a.name !== "")
+    .map((a) => ({
+      name: a.name,
+      markers: (a.institutions ?? [])
+        .filter((institution) => institution !== "")
+        .map((institution) => {
+          const existing = markerByInstitution.get(institution);
+          if (existing !== undefined) return existing;
+          institutions.push(institution);
+          markerByInstitution.set(institution, institutions.length);
+          return institutions.length;
+        }),
+    }));
+  return { authors, institutions };
+}
+
 /**
  * The label for a section in the contents list.
  *
@@ -334,7 +386,13 @@ type MarkdownArtefact = {
   summary?: string | null;
   summary_status?: "pending" | "verified" | "failed" | null;
   sections?: MarkdownSection[];
-  references?: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  references?: Array<{
+    n: number;
+    title: string;
+    year?: number | null;
+    venue?: string | null;
+    authorships?: AuthorshipLike[] | null;
+  }>;
   most_relevant_notes?: Array<{ source_id: string; note: string }> | null;
   full_report_intro?: string | null;
 };
@@ -460,15 +518,16 @@ export function artefactMarkdown(artefact: MarkdownArtefact): string {
   if (references.length > 0) {
     lines.push("### References", "");
     for (const reference of references) {
+      const authors = referenceAuthorsLine(reference.authorships);
+      const titled =
+        authors !== null
+          ? `${reference.n}. ${reference.title} — ${authors}`
+          : `${reference.n}. ${reference.title}`;
       const extra = [
         reference.year != null ? String(reference.year) : null,
         reference.venue ?? null,
       ].filter((part): part is string => part !== null);
-      lines.push(
-        extra.length > 0
-          ? `${reference.n}. ${reference.title} (${extra.join(", ")})`
-          : `${reference.n}. ${reference.title}`,
-      );
+      lines.push(extra.length > 0 ? `${titled} (${extra.join(", ")})` : titled);
     }
     lines.push("");
   }

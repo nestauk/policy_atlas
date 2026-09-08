@@ -489,6 +489,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: [
+        { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+        { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+      ],
     });
   }
   if (method === "GET" && path.includes(`/api/v1/tasks/${MOCK_TASK_ID}/citations/`) && path.endsWith("/context")) {
@@ -505,6 +509,10 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       span_end: context.length,
       year: 2022,
       venue: "BMJ Open",
+      authorships: [
+        { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+        { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+      ],
     });
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/findings`)) {
