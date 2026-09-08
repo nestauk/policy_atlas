@@ -1,5 +1,21 @@
 # Knowledge update log
 
+## 2026-09-08 (task 040 step 8)
+* **Creation**: Added
+  [additive-max-md-variants-prove-desktop-invariant](additive-max-md-variants-prove-desktop-invariant.md) —
+  additive `max-md:` classes make a desktop-unchanged invariant cheap and
+  provable from the compiled cascade; folds in the build's Sheet-conversion and
+  compute-once/render-twice lessons (040 build handoff + review finding F3).
+* **Creation**: Added
+  [native-control-replacement-rebuilds-free-a11y](native-control-replacement-rebuilds-free-a11y.md) —
+  a styled replacement for a native control must rebuild its free keyboard/
+  label/announcement bundle (040 review stack, convergent 3-lane finding).
+* **Adjudication notes**: the build's worktree/`COMPOSE_PROJECT_NAME` gotcha and
+  isolated-rerun baseline diagnosis went to `docs/agentic-ops/environment.md`
+  (living env doc, not a concept); "lifecycle tab list computed once, rendered
+  twice" stays a code-site comment inside the max-md concept's Watch out —
+  promote if a third placement appears.
+
 ## 2026-09-05 (task 038 step 8)
 * **Creation**: Added
   [stored-json-keys-are-vocabulary-too](stored-json-keys-are-vocabulary-too.md) —

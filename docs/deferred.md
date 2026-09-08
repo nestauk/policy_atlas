@@ -2334,3 +2334,32 @@ deliberately left, each with its reason:
   exists, so V9's `session_id = task id` covers the API path only (planning turn, run
   start, steering continuation, chat turn). Restructure if CLI traces ever need to group
   with a Task (038 review stack, Codex).
+
+## Mobile layout (task 040 seams)
+
+- **List pages, splash and the Sources sub-tab strip got no dedicated mobile
+  pass** (contract § Out of scope) — only what D1/D2/D7 chrome and amendments
+  A1–A3/A5 touched. "All sources" still clips slightly at 390px.
+- **768px exactly (iPad portrait)**: the task bar title + five tabs were
+  already tight before 040 (pre-existing; visible in the slice's
+  `result-768-top.png`).
+- **Expanded chat panel on mobile is hidden, not redesigned** — below md the
+  rail/panel carry `max-md:hidden` with no stand-in (A6); the bottom bar's
+  Agent tab is the way in. A real mobile chat layout is a future slice. A
+  `?chat=` deep link opened on a phone shows no panel (param stays in the URL,
+  no visible effect).
+- **Popover-as-listbox is hand-rolled in three places** (`FilterSelect` in
+  SourcesView, `ProjectPicker` in NewTaskView, the pickers in
+  workspace/PlanDocument) with drifting details; only FilterSelect has the
+  keyboard model (040 review fix). The seam is a shared `ui/` listbox
+  component — fixing an a11y detail once instead of three times. FilterSelect
+  also lacks the native `<select>`'s type-ahead.
+- **Bottom bar cosmetics**: the last tab ("History") sits flush against the
+  390px viewport edge on first paint — scrollable as D2 requires, but reads
+  clipped (040 review, declined as cosmetic).
+- **iOS Safari hardware pass**: `env(safe-area-inset-bottom)` padding on the
+  bottom bar is verified only in Chromium device emulation.
+- **Flaky backend test (not a 040 seam, logged here as backlog)**:
+  `tests/api/test_admin_leg.py::test_administrator_reads_a_null_organisation_row_and_an_ownerless_one`
+  failed once on a polluted baseline, passed on isolated rerun and at both
+  full `make verify` runs of step 6/7 — watch for recurrence.

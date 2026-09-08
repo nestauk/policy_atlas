@@ -1,7 +1,7 @@
 # Environment
 
 How to bring up a working local environment and the gotchas that bite. Reflects the repo as it
-stands (tasks 001–038; 038 renames the catalog (`project`→`task`,
+stands (tasks 001–040; 040 is frontend-only and changes no env; 038 renames the catalog (`project`→`task`,
 `portfolio`→`project`, `orchestration_plan`→`plan`) and the API paths
 (`/api/v1/tasks`, `/api/v1/projects`) — run `alembic upgrade head` against
 the dev DB after pulling (reversible: ADR 0036 § Rollback), and rename any
@@ -195,3 +195,12 @@ the Makefile; if they ever diverge, that's a bug in the workflow, not a fact to 
   failing deep in pytest.
 - **Migration is idempotent** — `alembic upgrade head` runs in both `make setup` and the test
   session fixture; running twice is safe.
+- **Git worktrees silently lose the shared dev Postgres** (040 build) — `docker compose` derives
+  its project name from the directory, so a worktree checkout looks for containers under the
+  worktree's name and finds none. Root-Makefile DB checks need `COMPOSE_PROJECT_NAME=policy_atlas`
+  (e.g. `COMPOSE_PROJECT_NAME=policy_atlas make verify`).
+- **Diagnose baseline test reds with an isolated rerun before believing them** (040 build) — the
+  first `make verify` on a fresh branch showed 13 backend failures; an isolated `make test` (nothing
+  else touching the shared Postgres) cleared 12 as test-DB pollution (the stranded-rows/parallel-lane
+  landmine, AGENTS.md § Landmines). A red baseline read without isolation misattributes pre-existing
+  pollution to the slice.
