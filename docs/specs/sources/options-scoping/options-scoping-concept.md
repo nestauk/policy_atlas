@@ -856,4 +856,15 @@ Made on the redrawn boards. They amend the rulings named; the boards were redraw
     duplicates (boards stay full height), and renaming "Do nothing" (kept, as the page title "Do
     nothing: current policy and trajectory"). The pack is kept in the gitignored review pack as
     reference.
+50. **No report before assessment** (owner, 2026-09-08; amends ruling 32). The report is the Result
+    and is **a product of assessment**: written when the shortlist is assessed and rewritten by a full
+    run. Before assessment the Result tab opens on the **longlist**, with the baseline as the other
+    view; the Report view is shown as available after assessment. Nothing is synthesised at the
+    longlist stage beyond what the longlist itself needs (theme summaries, source-quality profiles).
+    Export before assessment bundles the baseline profile and the full longlist with states and
+    reasons, without a report. Reasons: a document that says throughout that nothing is assessed
+    invites being read as findings; the run's result before assessment is a longlist, not a report;
+    and the generation, though small, buys little. **Deferred:** an on-demand "write a report from
+    the longlist" action for the person who stops before assessing (`docs/deferred.md`). Board 3c
+    is withdrawn.
 

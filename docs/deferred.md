@@ -48,6 +48,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 
 ## Product / output
 
+- **Options scoping: a report written from the longlist alone** — an on-demand "write a report from
+  the longlist" action (top line · the problem and what is contested · the approaches · what the
+  evidence base holds as source-quality profiles · what needs deciding next · what was searched) for
+  the person who stops before assessing. Withdrawn from v1 by concept ruling 50 (2026-09-08): the
+  report is a product of assessment; before it the Result is the longlist. Revisit if live asks show
+  people handing over unassessed longlists.
 - **Export & sharing** — share CTAs, version-pinned external deep links
   back into the body (handoff §7.3). The primary surface is the tool itself.
   **Read-only/public links DISCHARGED (task 037):** a Task's owner shares it

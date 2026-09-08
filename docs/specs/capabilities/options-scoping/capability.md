@@ -244,7 +244,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   [trust.md](trust.md)). The summary and the export **list every kept option that was not
   assessed**, by theme (ruling 19).
 - ✅ **The report and export** (rulings 14, 17, 21, 32). The Result is the **report** (§ Output
-  structure): provisional from the longlist stage, rewritten by assessment. Its top-line section
+  structure): written from the assessment, rewritten by a full run; before assessment the Result is the longlist (ruling 50). Its top-line section
   is what ruling 14 called the summary — PA's reading, never a ranking: no superlatives across
   options; each effect with its own comparator, population and period; conditional
   recommendations only on comparable axes and only after assessment; cost comparisons only on
@@ -298,14 +298,15 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   the Evidence search report's style with a side outline and collapsible sections carrying
   one-line takeaways. Sections: **top line** · **the problem and what is contested** · **the
   approaches** (a paragraph per theme: options in a sentence each, variants and packages,
-  exclusions with their constraints) · **what the evidence base holds** (provisional: the
-  source-quality profile per option and thin coverage; assessed: one verdict strip per option,
-  each effect with its own comparator, population and period, with the comparison table as a
-  working view (ruling 45); the kept-but-unassessed options by theme) · **transferability and assumptions** (assessed form) · **what needs deciding or
-  commissioning next** (plus the questions to put to the department in the sense-check) · **what
-  was searched and not searched**. Exists from the longlist stage in a provisional form that says
-  nothing has been assessed; rewritten by assessment. Baseline, Longlist (list · grid · shortlist
-  views) and the profiles are working views behind it.
+  exclusions with their constraints) · **what the evidence base holds** (one verdict strip per
+  option, each effect with its own comparator, population and period, with the comparison table as
+  a working view (ruling 45); the kept-but-unassessed options by theme) · **transferability and
+  assumptions** · **what needs deciding or commissioning next** (plus the questions to put to the
+  department in the sense-check) · **what was searched and not searched**. **Written from the
+  assessment, rewritten by a full run (ruling 50)**; before assessment the Result tab opens on the
+  longlist and the Report view is marked as available after assessment; an on-demand report from
+  the longlist is deferred. Baseline, Longlist (list · grid · shortlist views) and the profiles are
+  working views behind it.
 - ✅ **Baseline profile ("Do nothing")** (rulings 2, 24). Its own structure, different from an
   option's because the question is different: what is in place · trend if nothing changes · who
   is affected (where the target unit is checked against the data) · what is already changing ·
@@ -396,7 +397,7 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   column; the right column holds the current content and opens wide for the longlist, the grid
   and the profiles. ("Assessment" is a state the shortlist is in, not a place.) The grid view's
   rows are the fixed lever types (ruling 20). The boards were redrawn to rulings 15–44 on
-  2026-09-07 and refined to rulings 45–49 on 2026-09-08; where a board and a ruling still differ,
+  2026-09-07 and refined to rulings 45–50 on 2026-09-08; where a board and a ruling still differ,
   the ruling wins (source README).
 - ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
   document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints

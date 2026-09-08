@@ -18,7 +18,7 @@ record the decision.
 
 | File | What it is | How to use it |
 |---|---|---|
-| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07 and the board-refinement rulings 45–49 of 2026-09-08. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
+| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07 and the board-refinement rulings 45–50 of 2026-09-08. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
 | [options-scoping-wireframes.html](options-scoping-wireframes.html) | The wireframe canvas as a bundled, viewable page (the same content as the live canvas linked from the concept). | Product intent only: screens, copy, states and interaction patterns. Never a schema or contract source. |
 | [boards/](boards/) | The readable source of every board on the canvas — one `.dc.html` per board plus `canvas.json` for layout and titles. | Read these rather than the bundled page. Each board is plain HTML with inline styles. |
 
@@ -32,7 +32,7 @@ The journey, by board title:
 
 1. Ask: job and depth, no default depth · 2. Plan, agreed in dialogue, in the Agent tab · 3. Baseline,
 with what is contested; the run pauses · 4. Longlist, list view (and 4b, an option before assessment
-with its source-quality profile) · 3c. Report, provisional: the Result from the longlist stage ·
+with its source-quality profile) ·
 5. Longlist, grid view: rows are primary lever types · 5b. Longlist, shortlist view · 6. Report,
 assessed: the Result, one verdict strip per option · 6b. Sources: the Evidence search Sources component
 · 6c. Longlist, shortlist view after assessment: the comparison table · 7. Option profile, every
@@ -59,8 +59,8 @@ board and the concept's rulings differ, the rulings win.
 **Review round, 2026-09-07.** An adversarial product review led to the concept's last sections
 ("Review-round rulings" and "Pass-3 rulings", rulings 15–44). The boards were **redrawn to those
 rulings on 2026-09-07** at the owner's direction: the task's tabs (Agent · Result · Sources · Share ·
-History) with the plan in the Agent tab; the report as the Result, in a provisional form from the
-longlist stage (3c) and an assessed form (6), with Baseline and Longlist as working views; a variant
+History) with the plan in the Agent tab; the report as the Result, written from the
+assessment (6; ruling 50 later withdrew the provisional form and board 3c), with Baseline and Longlist as working views; a variant
 option with its own search; three kinds of constraint, the evidence-scope kind never excluding an
 option; a source-quality profile per option before assessment, never "how sure"; grid rows as primary
 lever types with ambition as a tag "as described, not measured"; the proposal as a provisional
@@ -84,3 +84,7 @@ plan's constraints as a table, the baseline's target-population callout, five st
 counts, top lines that lead with findings, grouped Sources filters and "source quality" before
 assessment. Its restyle, status chips, viewport clipping and the renaming of "Do nothing" were not
 adopted.
+
+**Ruling 50, 2026-09-08.** No report before assessment: the Result tab opens on the longlist until the
+shortlist is assessed; the report is written from the assessment. Board 3c withdrawn; the plan step,
+the Result view row and the annotations updated. An on-demand report from the longlist is deferred.

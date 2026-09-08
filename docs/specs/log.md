@@ -24,6 +24,12 @@
   direct edit with Undo, plan changed with refresh, refresh running, History), corrected counts, top
   lines leading with findings, Sources filters grouped with a "source quality" column. Restyle, chips,
   viewport clipping and the "Do nothing" rename not adopted. [Source README](sources/options-scoping/README.md).
+* **Update**: Options scoping ruling 50 — **no report before assessment**: the report is written from
+  the assessment and rewritten by a full run; before it the Result tab opens on the longlist. Board 3c
+  withdrawn (24 boards). [capability.md](capabilities/options-scoping/capability.md) § Output
+  structure and the report/export bullet, [components.md](capabilities/options-scoping/components.md)
+  (synthesise, ⟨longlist depth⟩) amended; the on-demand longlist report recorded in
+  [deferred.md](../deferred.md) § Product / output.
 
 ## 2026-09-07 (boards redrawn)
 * **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction

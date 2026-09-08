@@ -76,14 +76,14 @@ across capabilities (ruling 40).
 | 8 | shortlist | **new** — coverage over primary lever types has no EB analogue | one place per primary lever type present, one named reason each; gap messages; warnings; the unassessed list | procedure + agent | mandatory; user adds/removes on top |
 | 9 | select | is EB (new strategy) | the capped **read set** for one shortlisted option: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions (ruling 38) | procedure (+ optional bounded rerank) | inside ⟨assess⟩ only |
 | 10 | extract | is EB, **two new profiles** | **abstract profile** over every screened-in document at longlist depth (interventions named, setting country, population, outcome family, design hint; reused by memo) — the source of intervention mentions (ruling 43); 🟡 **light full-text profile** over the selected read set inside ⟨assess⟩ (proposed: direction, outcome family, magnitude with comparator and period, design, setting; a trial/registration identifier only if independence detection needs it); inherited findings reused at finding grain (ruling 35) | per-source fan-out | abstract profile mandatory; light profile inside ⟨assess⟩; field sets and independence method are spike 2 |
-| 11 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (provisional and assessed forms; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
+| 11 | synthesise | is EB, templates | `produce-grounded-block` over the run's substrate with a template: **report** (written from the assessment, rewritten by a full run — ruling 50; the sense-check's questions are its closing section) · **profile** · **baseline** | agent-loop | per composition |
 
 **Named compositions** (the three depths, ruling 3; not components):
 
 | Composition | Made of | Runs |
 |---|---|---|
 | ⟨baseline⟩ | acquire (Overton and OpenAlex only in v1, grey-literature-weighted source policy; the coverage statement names live official statistics and departmental pages as not searched — ruling 43) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
-| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → shortlist → synthesise(**report**, provisional) | over every option |
+| ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → shortlist | over every option; the Result is the longlist until assessment (ruling 50) |
 | ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest → extract(abstract)] → **select** (the scoping read-set strategy: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions — rulings 38, 43) → extract(**light**) over the selected set (inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
 | ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task**, opened by the child's `inherit` from the scoping task (the option's design, documents, light findings, user context and evidence scope — ruling 48) with the profile template; its report **is** the option profile, shown in place in the scoping task (ruling 47) | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
@@ -281,12 +281,12 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   is slower than reading, so the per-option document cap is the latency lever and the spike
   measures fit to the rapid budget; the abstract-profile extraction already on every document
   gives the abstract-level strip shown first.
-- ✅ **synthesise(report)** writes the Result (ruling 32) in two forms. *Provisional*, after the
-  longlist stage: top line · the problem and what is contested · the approaches · what the
-  evidence base holds (source-quality profiles, thin coverage) · what needs deciding or
-  commissioning next (unknowns only, no conditional recommendation) · what was searched.
-  *Assessed*: the same sections rewritten, the assessed table embedded, transferability and
-  assumptions added; never a ranking — no superlatives across options; each effect with its own
+- ✅ **synthesise(report)** writes the Result (rulings 32, 50) **from the assessment**, never
+  before it: top line · the problem and what is contested · the approaches · what the evidence
+  base holds (one verdict strip per option; the comparison table as a working view) ·
+  transferability and assumptions · what needs deciding or commissioning next · what was searched.
+  A full run rewrites it. (An on-demand report from the longlist alone is deferred.) The report
+  is never a ranking — no superlatives across options; each effect with its own
   comparator, population and period; conditional recommendations only on comparable axes and
   matching bases (rulings 17, 33); the kept-but-unassessed options listed (ruling 19); in the
   sense-check branch the closing section carries **"questions to put to the department"**
