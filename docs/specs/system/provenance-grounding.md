@@ -130,6 +130,30 @@ fractions). Verify checks each cell against its own rule, and the derivation aga
 Declared here so the block kind is shared; the row semantics are the capability's
 ([../capabilities/options-scoping/trust.md](../capabilities/options-scoping/trust.md)).
 
+*(Amendments 2026-09-08, feasibility check 4.)* The block is produced in **two steps, not one
+prompt** (C4-1): **factor extraction** from the option's evidence, once — the two evidence legs
+(worked somewhere; same causal role) judged from evidence and the stated target, and one row per
+support factor, moderator or dealbreaker, each with evidence ids, a verbatim quote and an
+evidence basis (empirical · author hypothesis · theory) — then **context fill** against that
+fixed list from the plan's typed context entries. A single prompt drifted its factor set between
+identical runs and tied the evidence legs to context. **Verify runs code-side rules** (C4-5) on
+the fill and records every correction as a flag: a *planned* entry never sets met (conditional
+at most); a retrieved entry at a containing geography sets met or not met only when marked
+*applies by nature*, never when *aggregate only*; an entry judged *dated* leaves the factor
+unknown; a context entry id must exist. In 14 test cases the model over-stated five times and
+every one was caught deterministically from the entry types and its own labels. The *retrieved*
+context cell carries the fact's **geography level and observation date** (check 6 F11, C4-6),
+which ruling 34's applicability test and the currency judgement both need. The **causal-role leg
+defaults to Unknown**: *not met* requires a stated contradiction between the evidence population
+or deliverer and the target, never an unstated feature (C4-4). ❓ **Owner ruling needed (C4-2):**
+the support leg's status is the weakest **dealbreaker** row; helpful factors are shown with their
+statuses and enter the conditions list when planned, but do not cap — otherwise, with nine
+helpful factors, the word reads Unknown for every option unless the user states every factor,
+and carries no information. When the evidence names no dealbreaker the leg reads "no necessary
+condition identified" and stays Unknown. ❓ **Owner ruling needed (C4-7):** whether a **local
+aggregate** (71 percent of residents live near a park) can set a factor met, or only a local
+resource observation can.
+
 ## `produce-grounded-block` — how verify works
 
 Runs **synthesise → cite → verify → write**, with **cite and verify as mandatory internal

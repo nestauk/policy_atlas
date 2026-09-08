@@ -82,8 +82,9 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   summary column** (parallel representation of the same version, hash-excluded; see
   [provenance-grounding.md](provenance-grounding.md)). A **chart is a ⏸ deferred view-type**
   over a structured-content block, not a new primitive.
-- **Addressable unit** = a text-span (prose) or cell/row (table). Citations, comments, claims
-  and (later) cross-artefact links all hang off **units**, uniformly. Each unit carries a
+- **Addressable unit** = a text-span (prose) or cell/row (table), or — since options scoping
+  (2026-09-08, feasibility check 6 F1) — an **option** (§ The option entity below). Citations,
+  comments, claims and (later) cross-artefact links all hang off **units**, uniformly. Each unit carries a
   **stable ID strictly bound to its block version** — IDs are **not** mapped across a
   substantive regeneration; immutable versioning keeps historical units addressable instead.
   One deterministic exception: a **`same_content_as` link** on exact normalised-content-hash
@@ -115,7 +116,12 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   grounding and audit. **A source whose full text can't be fetched (paywall, dead link) is
   snapshotted on the text in hand** (abstract + metadata), **not dropped** — each snapshot carries
   a **`text_basis`** (`full_text` | `abstract_only`) so grounding and coverage know what a finding
-  rests on. Identity rests on **content hash (at ingest) + the §9 search-governance
+  rests on. *(Amendment 2026-09-08, feasibility check 2 C2-7: `text_basis` describes **what was
+  parsed**, not what was fetched — a `full_text` snapshot holding a few hundred characters is a
+  failed parse and must not carry the label; five of 21 read-set documents did. The label is
+  derived from the parse result — a minimum-size or parse-success rule — or a third value
+  `full_text_failed_parse` is added. An Evidence search change; wants its own ADR.)* Identity
+  rests on **content hash (at ingest) + the §9 search-governance
   event + source locator**. A corrected re-upload is a **new snapshot**, optionally carrying a
   human-asserted `supersedes(source_snapshot_id)` edge (a link only — no diffing, no
   monitoring).
@@ -150,6 +156,18 @@ existing records and creates per-source tasks only for what's missing. Reuse hap
 fingerprint)`. Capabilities consume via pinned **evidence dataset snapshots** (point-in-time).
 **Model/prompt upgrades set future defaults; they never invalidate existing findings or
 historical state.**
+
+*(Amendment 2026-09-08, feasibility checks 6 F3 and 2 C2-2.)* Two invariants the build does not
+yet honour, which the shared `inherit` component and options scoping's finding reuse (OS rulings
+35, 48) depend on in both directions: **(1)** for **acquired** snapshots the memo key is
+`(source_snapshot, fingerprint)` with no task in it — they are already a cross-task substrate;
+uploaded snapshots stay task-private and task-keyed; **(2)** requirement resolution is at
+**field grain within a schema**, recorded through `field_coverage`, with the **intervention as
+implemented** (its stated design features) as a match key — a record from a lighter profile
+satisfies only the requirements it carries, and a record about a different design satisfies
+none. Check 2 measured the need: of 128 deep IOF records, none satisfied the light profile's
+field set; design features and study identity are absent by schema. Both invariants change the
+Evidence search and want an ADR.
 
 - **Where a finding is multidimensional, preserve it as one coherent typed record with its
   dimensions intact and queryable** — never flattened to disconnected fields or prose.
@@ -261,6 +279,30 @@ historical state.**
   surfaces pivot on the shared references and on `group`'s facet clusters (one card/section
   per intervention or theme, effects and implementation context as facets of one entity — the
   V2 `InterventionCard` precedent), recorded here so the web-app slice inherits it.
+- **Third and fourth profiles, declared 2026-09-08 for options scoping** (OS ruling 43;
+  feasibility checks 6 F2, 2 C2-1/C2-2/C2-8, 3 C3-3). **`intervention_mention`** — the
+  **abstract profile**, run over every screened-in document including Non-evidence (a
+  non-evidence document counts as a mention, never as evidence). **Grain:** one *intervention as
+  the abstract names it*, grounded in a single source's title and abstract. **Base fields:** the
+  shared source-named reference vocabulary (`intervention`, `outcome` as outcome families,
+  `population`, `setting`, `study_geography` — read from the abstract text, never publication
+  metadata) plus mention-grain fields: **`design_features`** (the stated features that define
+  this implementation), **`role`** (`evaluated` | `described` | `recommended` | `comparator` |
+  `mentioned` — the document's relation to the intervention; `evaluated` covers reviews that
+  report pooled effects), **`is_bundle`** and `components`, an **adoptability** flag (could a
+  government adopt this — the gate that keeps theories, study designs and events out of the
+  longlist), and a verbatim quote anchor; a document-level `design_hint` and
+  `names_no_intervention`. It joins `finding_reference_union` so `longlist` reads mentions and
+  deep findings as one unit shape; own fingerprint domain. **The light full-text profile** is an
+  **IOF subset plus four fields** — `design_features`, `magnitude_as_reported` (a number with its
+  unit only; the source's own characterisation such as "a small but robust effect" is a separate
+  field), `period`, `trial_or_registration_id` — writing `intervention_outcome_finding` under its
+  own profile id with `field_coverage` marking what it did not extract; and a document-level
+  **`study_identity`** (registration id, trial or programme name — matched **name first, id
+  second** — protocol-only flag, reports-on-own-data flag) so several papers on one study
+  resolve to one study and reviews are counted as documents, never as studies. **Document
+  identity for counting** is DOI or normalised title plus year, resolved at `inherit` and at
+  `longlist`, so one review present as two snapshots counts once (C2-5).
 - **Coverage states are gap provenance**: `searched_and_absent` · `not_applicable` ·
   `not_selected` (doc-level — screened-in but not chosen) · `not_extracted` (field-level) ·
   `unclear` · `extraction_failed`. A source that **reports** a null is a **finding**; a source
@@ -298,7 +340,45 @@ shortlist choice, a variant's link to its parent or a child task's dependency ac
   (proposed by Policy Atlas / added by you) · assessed (scoping pass / full run);
 - **membership records** against the id and a design version: the intervention mentions and the
   findings that belong to it (also the validated set behind its pattern claims);
-- a link to the child Evidence search task a full run mints.
+- a link to the child Evidence search task a full run mints (one row of `task_link`, below).
+
+*(Amendments 2026-09-08, feasibility checks 6, 2, 3.)*
+- The option is an **addressable-unit kind** (check 6 F1): claims, patterns, gaps and comments
+  about an option — its ambition tag, its coverage pattern claims, a constraint judgement, a
+  reasoned guess, a relation's rationale — are ordinary annotations keyed `(option, type)`, and
+  `produce-grounded-block` verify serves them unchanged. Without this the option's claims have no
+  anchor: unit ids are bound to a block version and change on regeneration; the option id does
+  not.
+- ❓ **Owner ruling needed (check 3 C3-1):** relations gain **instance of** beside *variant of*
+  and *part of*. Mentions cluster to **class-grain** options ("school-based physical activity
+  programmes", 24 documents); deep findings cluster to **named implementations** (The Daily Mile,
+  JU:MP). The assessable unit is a specified design; the counted unit is the class. A class option
+  carries its named implementations beneath it, or the reverse is a proposal to reuse *part of*
+  with a type.
+- Lever types are stored as **primary, secondary and runner-up**, each with the one-sentence
+  reason (check 3 C3-4): the typer named a runner-up for 18 of 29 and 27 of 32 options, so the grid
+  and the gap messages must be able to show where the typing is soft.
+- Membership records carry an **assignment stability marker** (check 3 C3-5 — under paraphrase
+  class options lost a third of their members, named designs kept theirs) and admit a third
+  outcome beside *member* and *not a member*: **design feature not stated** (check 2 C2-3), which
+  attaches a mention or finding to the parent class only and leaves every variant "not yet
+  assessed" — ruling 36's "support binds to a finding and a specified design" made concrete.
+- **Document identity for counting** is DOI or normalised title plus year (check 2 C2-5).
+
+### Links between tasks (declared 2026-09-08; feasibility check 6 F6, F7)
+
+"Link" and "Context" ([vocabulary.md](../vocabulary.md)) had no record. **`task_link`** — source
+task · target task · kind (`scoping_from_search` | `search_from_scoping` | …) · optional option id
+· created by · created at — is the input the shared `inherit` component reads in both directions,
+and the row the option entity's child-task link is. What crosses a link, record by record:
+snapshots, chunks and embeddings cross for free (shared substrate); screening never crosses
+(re-screen, OS ruling 22); classify and appraise rows cannot be read across the cross-task FK
+guards, so `inherit` **copies them as inherited assertions** (new rows, `asserted_by = inherit`,
+source run recorded) when the classifier or rubric version matches the current default, else
+re-runs them; findings cross under the field-grain memo above. The inherited flag is a nullable
+**`inherited_from_task_id`** on `task_source_snapshot`, **not** a new `origin` value (`origin` is
+a closed column that egress and appraisal read).
+
 Matching a regenerated option to an existing id after a plan change (deltas, not restarts) is
 **open** — OS open question 7 — and is a labelled judgement or a user confirmation, never silent.
 

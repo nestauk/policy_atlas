@@ -90,7 +90,26 @@ them.**
   § Reuse rule.)* *(Seam recorded 2026-09-07: a shared **reading-budget / evidence-eligibility**
   mechanism — which sources a component may read for a given claim, under what cap, with
   omissions represented — is needed by options scoping's ⟨assess⟩ and belongs here or in the
-  retrieval contract rather than in one capability's spec; OS ruling 42.)*
+  retrieval contract rather than in one capability's spec; OS ruling 42.)* **Resolved
+  2026-09-08 (feasibility checks 6 F4, 5 C5-1/C5-3).** Two grains, two mechanisms. **(1) The
+  read set is a hard boundary on reading.** `synthesise` gains a **`reading_scope`** parameter:
+  the set of snapshots whose full text it may retrieve (the option's read set chosen by
+  `select`), the set it may read at abstract depth (the option's mentioning documents), and any
+  declared exception (a variant's parent documents, for one "related evidence" section only).
+  Chunks outside the scope are not retrievable in that composition, and the omissions are
+  represented in the artefact ("what was not read"). This is distinct from, and does not touch,
+  the data model's soft-prior rule for intent scoping: a selection remains a soft prior for
+  reading in the Evidence search's own compositions; a *budget* is a boundary. **(2)
+  Eligibility is a record, not a rule**: which findings may support which option's claims is the
+  option's finding-grain membership record, written by `longlist` in **assign-only mode** after
+  extraction, against the option list with its specified designs; ⟨assess⟩ composes that step
+  between extract and synthesise. The measured reason for both: single-call "reading alone" over
+  five texts missed contrary evidence that per-document extraction found, and a cap of three read
+  one-sided pictures — the countable cells come from extraction under a declared budget, never
+  from unbounded reading. The **rapid budget is a synthesis budget**: on staging, synthesise is
+  72 percent of a walk's compute (median 13 minutes) and extraction 17 percent of a deep walk,
+  so the latency lever is the terminus's section count, turn caps and reading scope, not the
+  extraction cap.
 - **Gradation vs distinct operation — the I/O test**: only intensity/depth varies (same I/O
   shape) → a **gradation** (a plan parameter; a named bundle = a "mode"); I/O shape differs,
   output consumed inside → a **component**; I/O shape differs, output is a standalone artefact →

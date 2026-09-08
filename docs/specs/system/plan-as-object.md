@@ -48,8 +48,21 @@ may be refined as implementation lands.
 - **Approach** — how each section is done, described as **method, not tools**.
 - **Depth per section** — the thoroughness gradation + compile target (see below).
 - **Steering & check-ins** — mode + expected pauses, including mandatory gates.
-- **Assumptions & boundaries** — surfaced so the user corrects cheaply before the run.
+- **Assumptions & boundaries** — surfaced so the user corrects cheaply before the run. *(Amendment
+  2026-09-08, feasibility check 6 F10: this section holds the **user-context entries** options
+  scoping's transferability working reads — each typed **stated by you** (a present fact) or
+  **planned by you** (a commitment), with verbatim `user_text`, date and decision-event
+  provenance; versioned with the plan, so they can arrive mid-run through chat and be promoted
+  here, and carried across a Link by `inherit`. Capability agents never read transcripts, so
+  context that stays in chat does not exist for the working. The entry's **type** is what decides
+  whether it can lift a transferability cap; trust.md's "a cap is never lifted by a plan" refers
+  to the *planned* type, not to this section.)*
 - **Source / evidence policy** — the evidentiary standard (see below).
+- *(Amendment 2026-09-08, feasibility check 6 F12.)* A plan may compile to **more than one
+  intent record** (`evidence_scope` row): options scoping runs a baseline scope, a longlist scope,
+  one scope per user-minted variant and one per thin option's targeted acquire, all in one task.
+  Per-option coverage unions across scopes; membership keys on the task's document row, not on a
+  scope; Sources shows the scopes as its Landscape and By-option views.
 
 ## Thoroughness as a relative nudge, not an absolute level
 
@@ -74,6 +87,14 @@ referent). Instead:
   nudge survives as the *edit* path beside the chosen level. Options scoping uses the **same
   three words** (owner ruling 2026-09-07), so this is one vocabulary across capabilities, not an
   exception. Reconcile this section when the plan contract is next revised.
+- **Measured (2026-09-08, feasibility check 5):** on staging a standard Evidence search walk
+  takes a median 15 minutes of compute (p90 29), of which synthesise is 72 percent; users wait a
+  median 17 minutes (p90 two hours) at gates. Depth settings that compile to a **rapid** budget
+  therefore bound **syntheses**, not extraction: a one-option sense-check is two syntheses
+  (baseline, profile) plus one gate, about 25 minutes of compute on today's terminus. The
+  **per-option document cap** is a plan setting with defaults **5 (rapid) and 8 (standard)**
+  (C5-4; below 5 the read set was one-sided). Time-to-result is stated as **compute time** and,
+  separately, **elapsed time including gates** (C5-5).
 
 ## Source / evidence policy
 
@@ -84,7 +105,17 @@ statistics and peer-reviewed evaluations only"). Two faces:
   mechanism. *(Options scoping adds a third, distinct thing — an **evidence-scope constraint**
   such as "OECD evidence only", checked at retrieval and screening — which is neither the
   acquisition face nor the citable-quality policy and must never be compiled into either; OS
-  ruling 23, seam recorded 2026-09-07.)*
+  ruling 23, seam recorded 2026-09-07.)* **Resolved 2026-09-08 (feasibility check 6 F5) — the
+  third face.** The constraint cannot act at the screen: the screen is relevance-only (OS ruling
+  43) and runs before study geography is known, and the backends filter by institution country,
+  not by where a study was done. It compiles to two things: **`scope_filters`** on `search` where a
+  backend can express the constraint, and a **deterministic set-aside** over the abstract
+  profile's `study_geography` (and other reference columns) after extract(abstract) and before
+  `longlist` — a status per `task_source_snapshot` × constraint (*set aside: outside evidence
+  scope*), counted and shown on Sources, never support, never a reason to exclude an option. The
+  as-built table `evidence_scope` is the id-keyed **intent record**, not this constraint; the
+  constraint must never be compiled into it and carries a different code name
+  (`source_scope_constraint` or similar).
 - **Use face — the new bit: a grounding standard, not a retrieval boundary**. The agent may
   still **retrieve and read** any in-corpus source (never penned in), but the policy sets the
   **appraisal tier** (source *quality*, **not** the grounding/inference tier) a source must meet

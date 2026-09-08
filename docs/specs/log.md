@@ -1,6 +1,30 @@
 # Spec update log
 
 ## 2026-09-08
+* **Update**: Spec amendment pass from the options-scoping **feasibility checks** 6, 2, 3, 4, 5
+  (`docs/tasks/035-options-scoping/checks/`; the team's word for what concept ruling 42 called
+  spikes). Findings that name shared invariants are now in the system contracts, each tagged
+  "Amendment 2026-09-08, feasibility check N": [data-model](system/data-model.md) — the option as
+  an addressable-unit kind; `intervention_mention` as a third finding kind and the light
+  IOF-subset profile with `study_identity`; the cross-task field-grain memo for acquired snapshots
+  and `text_basis` derived from the parse (both Evidence search changes wanting ADRs); `task_link`
+  and `inherited_from_task_id`; lever runner-up, membership stability and "design feature not
+  stated". [execution-orchestration](system/execution-orchestration.md) — the reading-budget seam
+  resolved as `reading_scope` on synthesise plus the finding-grain membership record; the rapid
+  budget is a synthesis budget. [plan-as-object](system/plan-as-object.md) — the evidence-scope
+  constraint as the policy's third face compiling to `scope_filters` plus a deterministic
+  set-aside; typed user-context entries under Assumptions; a plan compiles to several intent
+  records; measured depth numbers and the per-option cap setting.
+  [provenance-grounding](system/provenance-grounding.md) — the column-grounded block as two steps
+  with code-side verify rules and dated, geography-levelled retrieved cells.
+  [OS components](capabilities/options-scoping/components.md), [OS capability](capabilities/options-scoping/capability.md),
+  [OS trust](capabilities/options-scoping/trust.md) and
+  [EB components](capabilities/evidence-search/components.md) amended to match (extract(abstract)
+  re-marked EB modified; `all_screened_in` and refined scoping select strategies;
+  `longlist(assign)` in ⟨assess⟩; `group` fixed-target-list mode; ruling 47's "prior version" as a
+  derivation edge). **Five owner rulings pending**, marked ❓ in place: *instance of* relation
+  (C3-1); shortlist quota guards (C3-2); dealbreakers-only capping (C4-2); local aggregates (C4-7);
+  "how sure" as two numbers (C2-1). Frozen sources untouched.
 * **Update**: Options scoping board refinement — concept rulings 45–47 (the report stays linear with
   verdict strips, the comparison table is the shortlist view after assessment; the Sources tab is
   the Evidence search's Sources component plus read-depth and set-aside statuses; one document after

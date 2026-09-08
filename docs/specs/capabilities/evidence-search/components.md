@@ -79,7 +79,11 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
   *Inherited* filter. ✅ One component owns the inherited-versus-added accounting in both
   directions; the mechanism for uploaded snapshots is decided when uploads ship (scoping ruling
   43). Authored once: what crosses depends on the source task's kind, and the scoping direction is
-  [../options-scoping/components.md § 0](../options-scoping/components.md).
+  [../options-scoping/components.md § 0](../options-scoping/components.md). *(Amendment
+  2026-09-08, OS feasibility check 6 F6/F7: the input is a `task_link` row; classify and appraise
+  rows are copied as inherited assertions when the classifier or rubric version matches, else
+  re-run; the inherited flag is `inherited_from_task_id` on the task's document row — see
+  [data-model.md § Links between tasks](../../system/data-model.md).)*
 
 ## 1 — acquire (front edge)
 
@@ -154,7 +158,10 @@ Cheap classification on the screened-in set, **per-document fan-out**; distinct 
   `select`/`extract`**; **`Unknown`** is **kept-and-eligible** (label stays metadata-based; ⏸
   resolving Unknowns on full text mirrors the appraisal seam). ⏸ **grey-lit category granularity**
   (splitting v2's coarse Policy-Guidance / Expert-Opinion) is a deferred refinement (with
-  policy-team input).
+  policy-team input). *(Amendment 2026-09-08, OS feasibility check 6 F2: options scoping's
+  `all_screened_in` select strategy includes **Non-evidence** documents so the abstract profile
+  records their intervention mentions — a mention, never evidence; the exclusion above stays for
+  every other strategy.)*
 - proposed **methodological / structural tags** — **open, inferred tags, not a closed column**
   (LLM-inferred; grey-lit variety unbounded; job is scoping/description) → the open tag layer,
   seeded + namespace-consolidated. *Not* flat multi-label on the primary type.
@@ -242,7 +249,11 @@ cluster). Guards against horizon scans collapsing onto a narrow top-k. Realised 
 chosen subset + rationale*); EB's coverage-aware-stratified-over-clusters is one strategy.
 *(Options scoping adds a second: the **scoping read-set strategy** — stratify one option's
 documents by implementation and outcome family, reserve the counter-case, cap per option, record
-omissions; OS ruling 43, 2026-09-07.)*
+omissions; OS ruling 43, 2026-09-07. Refined 2026-09-08 by OS feasibility check 5 C5-2: the
+strata are the abstract profile's *evaluated* role × outcome family, one review and one primary
+study are reserved, and text availability is a tiebreaker only — full-text-first picked process
+evaluations with no effects. A third strategy, `all_screened_in`, feeds the abstract profile —
+check 6 F2.)*
 Strata are the characterisation's clusters plus the counted **`unclustered`** set as a
 first-class stratum (already implied by §5's counted-unclustered and "whatever clusters exist").
 **Realisation: procedure with an optional bounded generative rerank** — stratification, the
@@ -292,7 +303,13 @@ describes them, so composition is never silently compiled.
 of the two schemas' records a run produced; a facet or claim shape outside both schemas is
 still shallow-landscape-only (topic clusters/tags/metadata). A future third schema is content
 work (a new profile bundle plugged into the profile-parameterised pipeline), not plumbing —
-see `docs/deferred.md` § Extract / findings layer for the schema-candidate ladder.
+see `docs/deferred.md` § Extract / findings layer for the schema-candidate ladder. *(Amendment
+2026-09-08: options scoping registers two further profiles — the abstract `intervention_mention`
+profile and a light IOF-subset profile — declared in
+[data-model.md § The findings layer](../../system/data-model.md). Two Evidence search changes
+recorded there want their own ADRs: the memo key for acquired snapshots drops `task_id` and
+requirement resolution moves to field grain (OS check 6 F3); `text_basis` is derived from the
+parse result, not the fetch (OS check 2 C2-7).)*
 
 ## 8 — group (facet-level theming)
 
@@ -339,6 +356,12 @@ synthesise envelope's `member_findings`.
 partition by the seven-value enum already exists as `icf_context_type_count`). The membership
 principle (members join by shared reference, regardless of kind) survived the rework as
 designed.
+
+*(Amendment 2026-09-08, OS feasibility check 6 F9.)* `group` gains a **fixed-target-list mode**:
+discovery skipped, exhaustive assignment against a supplied list of options with their specified
+designs. The profile-template child run (OS rulings 41, 47) needs it to compute membership against
+a specified design — the "how sure" cell — which no Evidence search component produces today;
+options scoping's `longlist(assign)` is the same call on the shared engine.
 
 ## 9 — synthesise (run terminus)
 
@@ -449,6 +472,12 @@ on what the run produced:
   is only a soft ranking prior) — what remains gated on the index-backed `retrieve` slice is
   retrieval **beyond the in-memory ceiling** (`RETRIEVAL_UNIT_CAP`, fail-closed) or over
   **unscreened** content, with ADR 0009's recorded risk note.
+
+*(Amendment 2026-09-08, OS feasibility check 6 F4.)* `synthesise` gains a **`reading_scope`**
+parameter — the snapshots it may read at full-text depth, the ones it may read at abstract depth,
+and any declared exception — used by options scoping's ⟨assess⟩ and ⟨full run⟩ compositions; in
+the Evidence search's own compositions the scope is the screened-in corpus and the selection stays
+a soft prior, unchanged. See [execution-orchestration.md](../../system/execution-orchestration.md).
 
 ⏸ **Consensus seam:** the *weighted* verdict (strength-weighted "the evidence supports X at
 strength Y") is deferred to the same roll-up seam; candidate mechanism = the deferred
