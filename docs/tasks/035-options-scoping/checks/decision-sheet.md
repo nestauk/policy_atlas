@@ -11,11 +11,11 @@ Legend for *Decision*: accept · reject · edit (say how) · defer.
 
 | decide at | rows | why then |
 |---|---|---|
-| **before task 1's contract** | A6, A7, A8, C1, C2, C3, C4; A4 in reduced form (does task 1's `inherit` reuse inherited findings, or copy them and leave field-grain reuse to task 3?) | these define the shared records task 1 creates and later tasks build on: the Link, the inherited flag, document identity, the plan's constraint face and code name, user-context entries, multi-scope plans |
+| **before task 1's contract** (owner decision 2026-09-08: the fifteen, taking the pass-4 additions) | A6, A7, A8, F1 (the inherit records, declared in both capability specs); C1, C2 (evidence-scope face and code name); C3, D3, E13 (user context and what task 1 must retain); C4 (multi-scope plans); A4 in reduced form (does task 1's `inherit` reuse inherited findings, or copy them?); A5 (honest parse and reading-depth labels, which baseline claims rely on); B3, C5, E12, E16 (the baseline's budget and honest timing language) | these define the shared records task 1 creates and later tasks build on, and what task 1 may promise |
 | task 2 (longlist) | A1, A2, A9, A10, A11, E1, E2, E4, E5, E6, F2, F3 | the option entity, the mention profile, the shortlist quota guards |
-| task 3 (shortlist and assessment) | A3, B1, B2, B3, C5, D1–D6, E3, E7–E13, F4, F6 | the light profile, reading scope and eligibility, the transferability block, "how sure", the cap setting |
-| task 5 (full run) | E14, E15, F5 | the derivation edge, membership against a specified design in the child |
-| any time, as small Evidence search slices | A4 (full form), A5 | the memo key and the `text_basis` label; each wants an ADR |
+| task 3 (shortlist and assessment) | A3, B1, B2, D1, D2, D4–D6, E3, E7–E11, F4, F6 (B3, C5, D3, E12, E13 moved before task 1) | the light profile, reading scope and eligibility, the transferability block, "how sure", the cap setting |
+| task 5 (full run) | E14, E15, F5 (F1 moved before task 1) | the derivation edge, membership against a specified design in the child |
+| any time, as small Evidence search slices | A4 (full form); A5's implementation (its requirement is decided before task 1) | the memo key and the `text_basis` label; each wants an ADR |
 | at post-build user testing (check 1, deferred by the owner 2026-09-08) | revisit anything the testing contradicts: the shortlist ceremony, the comparison principle, the handoff | check 1 is the one check that can change the shape; live asks are not feasible before the build |
 
 
