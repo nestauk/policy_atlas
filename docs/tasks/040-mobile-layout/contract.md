@@ -61,7 +61,7 @@ Same slice, same rules (mobile = `max-md:`, ≥768px unchanged unless said):
 | A2 | Task list rows (`TaskListRow.tsx`, `listPageChrome.ts`) | Mobile: rows wrap — title takes the whole first line, metadata (capability, status, sources, date) flows below; fixes hidden project/title and overflowing right columns. |
 | A3 | Project list rows (`ProjectsView.tsx`) | Same multi-line treatment. |
 | A4 | Global bar row 2 (`AppShell.tsx`, `Nav.tsx`) | Mobile: nav links left-justified at default gap (not spread); account icon moves up to the logo row, top-right. Desktop DOM/visuals unchanged. |
-| A5 | Sources sub-tabs + Key-theme filter (`SourcesLayout.tsx`, `SourcesView.tsx`) | Mobile: smaller tab type (`text-caption`), tighter padding. The theme filter is an app-styled Popover listbox (the `ProjectPicker` pattern) at **all widths** — owner call 2026-09-08 after the native `<select>` read badly on mobile; options wrap and step down to 14px below md. |
+| A5 | Sources sub-tabs + Key-theme filter (`SourcesLayout.tsx`, `SourcesView.tsx`) | Mobile: smaller tab type (`text-caption`), tighter padding. The theme filter is an app-styled Popover listbox (the `ProjectPicker` pattern) at **all widths** — owner call 2026-09-08 after the native `<select>` read badly on mobile; options wrap and step down to 14px below md. Rev 2 (owner, 2026-09-08, recorded at step 7): the All-sources table and filter chips step down one type size with tighter padding below md (`sourcesPresentation.ts`). |
 | A6 | Chat rail on mobile (`ChatSidePanel.tsx`) | **Supersedes D9's strip:** below md the rail hides with no stand-in — the bottom bar's Agent tab is the way in. Desktop unchanged. |
 
 ## Read first

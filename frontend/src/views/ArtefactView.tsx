@@ -41,6 +41,7 @@ import {
   FullReportExpandAllButton,
   FullReportExpandProvider,
   GatheredSection,
+  MobileDisclosureToggle,
   type OutlineSection,
   SectionDisclosure,
   SECTION_EXPAND_LINK_CLASS,
@@ -972,7 +973,7 @@ export function AnnotatedProse({
     }
     if (current.length > 0) bullets.push(current);
     return (
-      <div className="max-w-prose-measure text-lead text-ink max-md:text-body">
+      <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
         <ul className="list-none space-y-1.5">
           {bullets.map((bullet, bulletIndex) => {
             const isGap = bullet.some(
@@ -1004,7 +1005,7 @@ export function AnnotatedProse({
   }
 
   return (
-    <div className="max-w-prose-measure text-lead text-ink max-md:text-body">
+    <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
       <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
@@ -1672,18 +1673,19 @@ function ReferencesSection({
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
         <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>References</h2>
-        <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && (
-        <p className="mt-1.5 text-lead text-grey">
+        <p className="mt-1.5 text-lead text-grey max-md:text-body">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
           in this report
         </p>
       )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-lead text-ink">
+        <ol className="mt-3 space-y-1.5 text-lead text-ink max-md:text-body">
           {references.map((reference) => (
             <li key={reference.n} className="flex gap-2">
               <span className="font-bold text-blue">[{reference.n}]</span>
@@ -1706,6 +1708,7 @@ function ReferencesSection({
           ))}
         </ol>
       )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

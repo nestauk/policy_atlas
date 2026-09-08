@@ -379,8 +379,14 @@ export function AppShell() {
         {/* Below md the link group wraps to its own second row (order-last +
             w-full), left-justified, while the account icon stays on the logo
             row; from md up the DOM order and right grouping are unchanged
-            (ml-auto pins the links against the account icon). */}
-        <div className="flex items-center gap-5 md:ml-auto max-md:order-last max-md:w-full">
+            (ml-auto pins the links against the account icon, mr-5 restores the
+            gap-5 the icon had inside this div on dev — only when it renders). */}
+        <div
+          className={cn(
+            "flex items-center gap-5 md:ml-auto max-md:order-last max-md:w-full",
+            auth.user !== null && "md:mr-5",
+          )}
+        >
           <NavItem to="/new" end>
             {COPY.navNew}
           </NavItem>

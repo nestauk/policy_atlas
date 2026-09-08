@@ -375,26 +375,37 @@ export function SectionDisclosure({
       {!expanded && summary !== null && (
         <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
-      {!expanded && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={`${SECTION_EXPAND_LINK_CLASS} mt-1.5 block md:hidden`}
-        >
-          Expand +
-        </button>
-      )}
+      {!expanded && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
       {expanded && collapsible && (
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className={`${SECTION_EXPAND_LINK_CLASS} mt-3 block md:hidden`}
-        >
-          Collapse −
-        </button>
+        <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />
       )}
     </section>
+  );
+}
+
+/**
+ * Mobile-only secondary disclosure toggle (040 D8): the heading row hides its
+ * Expand/Collapse label below md, so collapsible sections render this tappable
+ * twin after the summary (collapsed) or at the section end (expanded). The
+ * heading row remains a toggle too; this one carries its own aria-expanded.
+ */
+export function MobileDisclosureToggle({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className={`${SECTION_EXPAND_LINK_CLASS} block md:hidden ${expanded ? "mt-3" : "mt-1.5"}`}
+    >
+      {expanded ? "Collapse −" : "Expand +"}
+    </button>
   );
 }
 
@@ -454,15 +465,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
       {!open && funnelLine !== null && (
         <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
       )}
-      {!open && (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className={`${SECTION_EXPAND_LINK_CLASS} mt-1.5 block md:hidden`}
-        >
-          Expand +
-        </button>
-      )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
         <div className="mt-3 space-y-4">
           {funnelLine !== null && (
@@ -525,15 +528,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           )}
         </div>
       )}
-      {open && (
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className={`${SECTION_EXPAND_LINK_CLASS} mt-3 block md:hidden`}
-        >
-          Collapse −
-        </button>
-      )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

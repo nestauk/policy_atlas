@@ -12,6 +12,8 @@ Evidence for the mobile-layout slice (defects D1–D9 in [contract.md](contract.
 | `make frontend-verify` + `pnpm e2e` (phase 2) | pass | 564 tests; e2e 11/11 |
 | `make frontend-verify` + `pnpm e2e` (phases 3–5 combined tree) | pass | 568 tests; e2e 11/11 |
 | `make verify` (step-6 exit) | **pass (exit 0)** | Fully green incl. backend — the baseline `test_admin_leg` red did not reproduce (flaky; see below). |
+| `make verify` (step-7 open, review gate) | pass (exit 0) | Fresh conversation, before any review lane ran. |
+| `make frontend-verify` + `make verify` (step-7 fixes) | pass (exit 0) | 569 tests (568 + a listbox keyboard test) after the adjudicated fixes. |
 
 ### Baseline note (build-open, 2026-09-08)
 
@@ -39,9 +41,13 @@ port 8000) + real frontend (vite, port 5173), dev-issuer token minted for
 `dafe0dd3` ("How to increase teacher effectiveness in Australia", succeeded run).
 Screenshots in [screenshots/](screenshots/).
 
+This table is the **phase-6 snapshot, before owner amendments A1–A6** — where an
+amendment supersedes a row (D9 → A6 removed the strip; D1's row-2 arrangement →
+A4), the amendments table below is authoritative for the shipped state.
+
 | Defect | 390px observation | ≥768px unchanged |
 |---|---|---|
-| D1 | Header is two rows: logo+BETA, then New Task/Tasks/Projects + account icon spread across the row (`result-390-top.png`) | 768/1280: single row as on `dev` |
+| D1 | Header is two rows: logo+BETA, then New Task/Tasks/Projects + account icon spread across the row (`result-390-top.png`; superseded by A4 — see below) | 768/1280: single row as on `dev` |
 | D2 | Bottom bar shows all five tabs with active underline; navigation to all five verified by URL (smoke log); horizontally scrollable | 768/1280: tabs in the task bar, no bottom bar |
 | D3 | No outline above the report | 1280: outline sidebar present, scroll-spy intact |
 | D4a | Title renders at 30px, 2–3 words per line (`result-390-top.png`) | 768/1280: 36px |
@@ -50,7 +56,7 @@ Screenshots in [screenshots/](screenshots/).
 | D6 | Claim tap opens a bottom sheet, <45svh, scrollable, overlay intact (`claim-sheet-390.png`) | 1280: right slide-over unchanged (cascade-level parity verified against compiled Tailwind output) |
 | D7 | Paper full-bleed, no gray frame, `px-4` (`result-390-top.png`) | 1280: gray frame + ring/shadow unchanged |
 | D8 | "Expand +" renders under the collapsed summary, not beside the heading; tap expands; "Collapse −" at section end (`d8-collapsed-390.png`, `d8-expanded-390.png`) | 1280: label beside the heading as before |
-| D9 | Rail replaced by one-tap strip; tap navigated to `/tasks/<id>` (Agent tab) — asserted by URL | 1280: resizable panel unchanged |
+| D9 | Rail replaced by one-tap strip; tap navigated to `/tasks/<id>` (Agent tab) — asserted by URL. **Superseded by A6: the strip was removed; as shipped the rail/panel are `max-md:hidden` with no stand-in** | 1280: resizable panel unchanged |
 
 Full-chain smoke (pinned): open task → all five tabs via the bottom bar (URLs
 logged) → claim citation opened → Download menu opened (PDF/Markdown,
@@ -98,22 +104,116 @@ node live.mjs && node live2.mjs && node smoke.mjs   # Playwright drives, scripts
   section end; heading row stays the sole `aria-expanded` toggle (D8).
 - **Phase 5** (`1ca6a65`, deep-reasoner): chat rail and expanded panel hidden
   below md; one-tap `MobileAgentStrip` links to the Agent tab; no viewport JS
-  (D9). Note: a `?chat=` deep link opened on a phone shows no panel — the
-  conversation is reachable via the Agent tab (accepted, within D9's contract).
+  (D9). **The strip was removed by A6 — no `MobileAgentStrip` ships**; below md
+  the rail/panel carry `max-md:hidden` with no stand-in. Note: a `?chat=` deep
+  link opened on a phone shows no panel — the conversation is reachable via the
+  Agent tab (accepted, within D9's contract).
 - **Amendments A1–A6** (lead, owner-directed 2026-09-08): New Task mobile type +
   full width (A1); task/project rows wrap to title + metadata lines (A2/A3);
   nav links left-justified with the account icon on the logo row (A4); smaller
-  Sources sub-tabs and a capped Key-theme select (A5); the D9 mobile strip
+  Sources sub-tabs and the Key-theme filter as a Popover listbox at all widths,
+  plus (rev 2) a denser All-sources table/chips below md (A5); the D9 mobile strip
   removed — the bottom bar's Agent tab supersedes it (A6). `make frontend-verify`
   green (568 tests) after the amendments.
 
 ## Review findings
 
-_Added at step 7._
+Step 7 ran 2026-09-08 in a fresh conversation. Gate: full `make verify` green
+(exit 0) before any lane; the baseline `test_admin_leg` red did not reproduce
+(reads as flaky — backlog note, not a slice fix). Lanes (all-Claude build, so
+Codex is the family flip): contract verifier (pinned Opus, read-only) ·
+`/code-review medium` · security finder (`/security-review` flow) · Codex
+adversarial. Review diff excluded `docs/tasks/040-mobile-layout/**`.
+This slice has no model inference, so no traces exist; the live-trace lane's
+analog was a lead content-read of the screenshots against the claims table
+(pre/post-amendment states confirmed).
+
+**Convergent (3 lanes + lead diff-read) — adopted, fixed:**
+
+- Theme-filter popover listbox had no keyboard interaction model (Codex MAJOR ·
+  code-review · contract-verifier F6): no arrow keys, focus stayed on the
+  trigger, `aria-label` masked the selected value, and the visible label was an
+  inert span (the removed `<label>`+`<select>` opened on label click). Fixed in
+  `SourcesView.tsx`: arrows/Home/End move focus, open focuses the selected
+  option, real `<label htmlFor>`, `aria-labelledby` announces label + selection;
+  keyboard test added. Residual (deferred): no type-ahead.
+
+**Single-lane — adopted, fixed:**
+
+- Mobile Expand/Collapse buttons lacked `aria-expanded` and were copy-pasted
+  4× (Codex MINOR + code-review): extracted `MobileDisclosureToggle` (carries
+  `aria-expanded`), used at all call sites.
+- `ReferencesSection` missed the D8/D5 sweep (code-review): every collapsible
+  section but References had the mobile toggle and body step-down. Same
+  treatment applied — adjudicated as the same defect on a twin surface (the
+  PublicTaskShell precedent), not scope growth.
+- F3 (contract verifier): `gap-x-5` in `Nav.tsx` was the one unconditional
+  class — at ≥md it truncated the task-bar title 20px earlier than `dev`.
+  Scoped to `max-md:gap-x-5`; the global bar's links↔account gap restored via
+  `md:mr-5` on the links div, conditional on the account menu rendering, so the
+  signed-out desktop DOM is untouched. Desktop-unchanged invariant now holds
+  with no unlisted exceptions.
+- `AnnotatedProse` inlined the exact `REPORT_BODY_CLASS` string 2× while the
+  same diff updated the constant (code-review): now uses the constant.
+- F1/F4/F5 (contract verifier, doc-vs-built): the D9 row and phase-5 summary
+  described a `MobileAgentStrip` that A6 removed (zero hits in `frontend/src`);
+  the D-table cited pre-amendment screenshots unlabelled; the diff summary
+  called the popover a "capped select". All corrected above; the D-table is now
+  labelled a phase-6 snapshot.
+- F2 (contract verifier): A5 rev 2 (denser All-sources below md, commit
+  `76c5502`) was owner-directed but never written into the contract — recorded
+  in the contract's A5 row.
+
+**Adopted as gaps (recorded, not fixed here):** F7 (Agent-tab mobile rendering
+unevidenced) → Known unverified; shared-listbox seam, type-ahead residual, F10
+(History tab reads clipped on first paint; scrollable per D2, cosmetic) →
+Deferred work.
+
+**Declined, with reasons:**
+
+- F8 (`aria-label="Task stages"` outside `vocabulary.ts`): vocabulary.ts
+  governs renameable product labels; this is aria-only copy, no rename
+  occurred, rubric 6 holds. Convention question for the owner, not a defect.
+- PublicTaskShell computes `publicLifecycleTabs(base)` twice (contract-verifier
+  nit; code-review independently dropped the same finding): public tabs carry
+  no marker logic, so the fork-hazard the "compute once" rule guards against
+  does not exist there.
+- Codex NITs on class-token/DOM-duplication test assertions: JSDOM cannot
+  apply responsive CSS, so token assertions are the honest ceiling for unit
+  tests; the compensating controls are the compiled-cascade check and the
+  pinned live manual check. Coverage gap accepted, not a defect.
+
+**Fake-done check on the step-7 fixes:** no test deleted/weakened — the
+rewritten queries pin *more* (accessible names, `aria-expanded` values) and a
+keyboard test was added; no error swallowed; no stub. `make verify` re-run
+green after fixes (see Commands run).
+
+**Flagged deviations — both confirmed as-is:** PublicTaskShell (same D2 defect,
+same component, no behaviour beyond D2; contract-verifier concurs "within the
+contract's vocabulary") and `?chat=` on mobile (contract § Constraints permits
+a CSS-hidden alternative rendering; panel stays mounted, no layout gap).
+
+**Lane economics:** reasoning-class ≈190K tokens (contract verifier 114K ·
+security finder 56K · Codex 18K), no fast-worker fan-out; within the ≤250K/
+≤500K split. `/simplify` skipped, justified: `/code-review medium` ran the
+reuse/simplification angles and its three cleanup findings (shared toggle,
+constant reuse, listbox seam) were applied or deferred above — a second
+same-family pass would re-read the same diff for nothing.
 
 ## Rubric status
 
-_Added at step 7._
+| # | Status |
+|---|---|
+| 1 | ✅ Holds — every defect anchored to shipping code by the contract verifier; D-table now labelled as the phase-6 snapshot. |
+| 2 | ✅ Holds after F3 fix — compiled-cascade proof that every `max-md:` rule postdates its base utility; the one unconditional class (`gap-x-5`) removed; D4b + A5 remain the only all-widths changes, both owner-approved. |
+| 3 | ✅ `make verify` green at step-6 exit and re-run green after step-7 fixes; live check recorded with screenshots at 390/768/1280. 768px evidence is one screenshot (header/task bar) — sheet/panel parity at 768 rests on the cascade proof. |
+| 4 | ✅ Zero JS viewport logic (grep-verified by the contract verifier). |
+| 5 | ✅ 21 files, all `frontend/src/**` + task docs; no deps/schema/auth/CI. |
+| 6 | ✅ Generated files and `vocabulary.ts` untouched; no label renamed. |
+| 7 | ✅ No test deleted/skipped; counts rose in every touched suite; D2/D9 covered; step-7 fixes added a keyboard test and aria assertions. |
+| 8 | ✅ Bottom bar is a `<nav class="print-hide">` — hidden twice over by `@media print`; `font-guard` green inside `make verify`. |
+| 9 | ✅ Evidence recorded; gap list extended with review findings (F7, F10, listbox seam); flow to `docs/deferred.md` is step 8. |
+| 10 | ✅ This section — four lanes ran, findings adjudicated, fixes applied and re-verified. |
 
 ## Intent & assumptions
 
@@ -127,6 +227,10 @@ _Added at step 7._
   `env(safe-area-inset-bottom)` padding on the bottom bar is untested on hardware.
 - `LiveArtefactBody` (streaming report) mobile rendering — class changes applied,
   not visually driven (no live run was streamed during the check).
+- The Agent tab's own mobile rendering (the workspace route) — A6 makes it the
+  only way into the conversation on a phone, but the live check asserted the
+  bottom-bar navigation by URL only; no 390px screenshot of the workspace
+  itself (review finding F7).
 
 ## Public safety
 
@@ -168,3 +272,13 @@ To flow to `docs/deferred.md` at step 8:
   `screenshots/result-768-top.png`.
 - Expanded chat panel on mobile is hidden, not redesigned; a real mobile chat
   layout is a future slice.
+- Popover-as-listbox is now hand-rolled in three places (`FilterSelect` in
+  SourcesView, `ProjectPicker` in NewTaskView, the pickers in
+  workspace/PlanDocument) with drifting details — a shared `ui/` listbox
+  component is the seam (step-7 code-review finding; keyboard nav was fixed in
+  `FilterSelect` only).
+- `FilterSelect` keyboard support covers arrows/Home/End/Enter but not the
+  native `<select>`'s type-ahead; add if AT users ask.
+- The bottom bar's last tab ("History") sits flush against the 390px viewport
+  edge on first paint — scrollable as D2 requires, but reads clipped; cosmetic
+  (review finding F10).

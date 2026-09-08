@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
 import { useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
@@ -632,10 +632,35 @@ function FilterSelect({
   // native <select>: consistent chrome at every width, and long theme names
   // wrap in the menu instead of sizing (and overflowing) the closed control.
   const [open, setOpen] = useState(false);
+  const triggerId = useId();
+  const labelId = useId();
+  const valueId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
   const selected = options.find((option) => option.value === value);
   const pick = (next: string) => {
     onChange(next);
     setOpen(false);
+  };
+  const optionButtons = () =>
+    Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+  // The native <select> this replaced gave arrow-key navigation for free;
+  // Radix Popover only owns Esc/dismiss/focus-return, so the listbox moves
+  // focus itself (040 review finding).
+  const onListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = optionButtons();
+    if (buttons.length === 0) return;
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : event.key === "ArrowDown"
+            ? Math.min(current + 1, buttons.length - 1)
+            : Math.max(current - 1, 0);
+    buttons[next]?.focus();
   };
   const optionClass = (active: boolean) =>
     cn(
@@ -644,17 +669,20 @@ function FilterSelect({
     );
   return (
     <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey max-md:text-caption">
-      {label}
+      <label id={labelId} htmlFor={triggerId} className="cursor-pointer">
+        {label}
+      </label>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
+            id={triggerId}
             aria-haspopup="listbox"
             aria-expanded={open}
-            aria-label={label}
+            aria-labelledby={`${labelId} ${valueId}`}
             className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
           >
-            <span className="truncate">{selected?.label ?? allLabel}</span>
+            <span id={valueId} className="truncate">{selected?.label ?? allLabel}</span>
             <svg
               aria-hidden="true"
               viewBox="0 0 24 24"
@@ -669,8 +697,22 @@ function FilterSelect({
             </svg>
           </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 max-w-[calc(100vw-2rem)] p-1">
-          <ul role="listbox" aria-label={label} className="flex max-h-80 flex-col overflow-y-auto">
+        <PopoverContent
+          align="start"
+          className="w-72 max-w-[calc(100vw-2rem)] p-1"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            const buttons = optionButtons();
+            (buttons.find((button) => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
+          }}
+        >
+          <ul
+            ref={listRef}
+            role="listbox"
+            aria-labelledby={labelId}
+            onKeyDown={onListKeyDown}
+            className="flex max-h-80 flex-col overflow-y-auto"
+          >
             <li role="none">
               <button
                 type="button"
