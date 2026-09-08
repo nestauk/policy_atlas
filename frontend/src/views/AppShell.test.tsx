@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -114,12 +114,28 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
 
   it("shows the Workspace nav badge when a check-in is pending outside the workspace", () => {
     renderShell(`/tasks/${TASK_ID}/sources`);
-    expect(screen.getByText("Check-in pending")).toBeInTheDocument();
+    // Two placements since 040 D2: the task NavBar (md+) and the bottom bar.
+    expect(screen.getAllByText("Check-in pending")).toHaveLength(2);
   });
 
   it("hides the badge while already on the Agent tab", () => {
     renderShell(`/tasks/${TASK_ID}`);
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppShell — mobile bottom tab bar (040 D2)", () => {
+  it("renders all five lifecycle tabs in the bottom bar on a task route", () => {
+    renderShell(`/tasks/${TASK_ID}/sources`);
+    const bottomBar = screen.getByRole("navigation", { name: "Task stages" });
+    for (const label of ["Agent", "Result", "Sources", "Share", "History"]) {
+      expect(within(bottomBar).getByText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("renders no bottom bar on list pages", () => {
+    renderShell("/");
+    expect(screen.queryByRole("navigation", { name: "Task stages" })).not.toBeInTheDocument();
   });
 });
 

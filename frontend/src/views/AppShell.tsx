@@ -9,7 +9,7 @@ import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
 import { StatusDot } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
-import { LifecycleBar } from "../ui/brand/LifecycleBar";
+import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink, NavItem } from "../ui/brand/Nav";
 import { COPY, PROJECT, TASK, TENANCY_COPY } from "../lib/vocabulary";
 import { lifecycleTabs, publicLifecycleTabs, withChat } from "./lifecycle";
@@ -343,6 +343,30 @@ export function AppShell() {
     return () => document.documentElement.classList.remove("overflow-hidden");
   }, [base]);
 
+  // One tab list, two placements (040 D2): in the task NavBar from `md` up,
+  // in a bottom bar below it — computed once so the marker logic stays single.
+  const lifecycleItems =
+    base === null
+      ? null
+      : withChat(
+          publicAccess
+            ? publicLifecycleTabs(base)
+            : lifecycleTabs(base, task.data?.latest_run?.status),
+          chatParam,
+        ).map((item) =>
+          item.tab === "agent" && hasPendingCheckIn
+            ? {
+                ...item,
+                marker: (
+                  <>
+                    <StatusDot tone="paused" />
+                    <span className="sr-only">Check-in pending</span>
+                  </>
+                ),
+              }
+            : item,
+        );
+
   const shellChrome = (
     <div
       className={cn(
@@ -352,7 +376,7 @@ export function AppShell() {
     >
       <NavBar aria-label="App" className="shrink-0">
         <NavHomeLink running={anyRunning} />
-        <div className="flex items-center gap-5">
+        <div className="flex items-center gap-5 max-md:w-full max-md:justify-between max-md:gap-3">
           <NavItem to="/new" end>
             {COPY.navNew}
           </NavItem>
@@ -384,27 +408,9 @@ export function AppShell() {
               </>
             )}
           </div>
-          <LifecycleBar
-            hint={COPY.lockedHint}
-            items={withChat(
-              publicAccess
-                ? publicLifecycleTabs(base)
-                : lifecycleTabs(base, task.data?.latest_run?.status),
-              chatParam,
-            ).map((item) =>
-              item.tab === "agent" && hasPendingCheckIn
-                ? {
-                    ...item,
-                    marker: (
-                      <>
-                        <StatusDot tone="paused" />
-                        <span className="sr-only">Check-in pending</span>
-                      </>
-                    ),
-                  }
-                : item,
-            )}
-          />
+          <div className="max-md:hidden">
+            <LifecycleBar hint={COPY.lockedHint} items={lifecycleItems ?? []} />
+          </div>
         </NavBar>
       )}
       <SensitiveInfoBanner />
@@ -457,6 +463,9 @@ export function AppShell() {
           {footerInScrollPane && <AppFooter />}
         </div>
       </div>
+      {lifecycleItems !== null && (
+        <LifecycleBottomBar hint={COPY.lockedHint} items={lifecycleItems} />
+      )}
       {/* List pages only — Plan hosts its own footer in the chat scroll. */}
       {base === null && <AppFooter />}
     </div>
