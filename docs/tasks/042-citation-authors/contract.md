@@ -3,7 +3,9 @@
 One implementation slice: show who wrote each source on the three reference
 surfaces, and clean four small snags in the two slide-over sheets.
 
-> **Status:** drafted. Contract approved (before planning): _pending_ ·
+> **Status:** approved. Contract approved (before planning): 2026-09-08 ·
+> owner (with D5 amended: institutions render — see D5) · adversarial reviews
+> waived at this gate (owner, 2026-09-08) ·
 > Plan approved (before implementation): _pending_ · ADR: none expected.
 
 ## Goal
@@ -15,12 +17,14 @@ sources. Six numbered changes:
 1. **Report reference list shows authors.** Each numbered reference in the
    report (and in the markdown download) shows the source's authors between
    the title and the year.
-2. **Citation sidebar shows authors.** The provenance sheet's citation block
-   shows the authors on the meta line between the `[n] Title` row and the
-   year/venue values. Applies to both routes into the block: the report's
-   claim panel and chat's citation sheet.
-3. **Source dossier shows authors.** The dossier header shows the authors
-   between the title and the year line.
+2. **Citation sidebar shows authors and institutions.** The provenance
+   sheet's citation block shows the authors (with superscript affiliation
+   markers, D5) between the `[n] Title` row and the year/venue values, and
+   the numbered institutions below the year line. Applies to both routes into
+   the block: the report's claim panel and chat's citation sheet.
+3. **Source dossier shows authors and institutions.** The dossier header
+   shows the authors (with superscript markers) between the title and the
+   year line, and the numbered institutions below the year line.
 4. **Dossier header duplication removed.** The sheet header already shows the
    source title; the dossier body repeats it. Remove the body's title line and
    the "Source dossier" subtitle. The year line (now with authors, item 3) and
@@ -34,7 +38,7 @@ sources. Six numbered changes:
 ## Deliverable
 
 A PR on `task/042-citation-authors`: three additive read-model fields
-(`authors`), one acquisition retention fix, the six frontend changes above,
+(`authorships`), one acquisition retention fix, the six frontend changes above,
 regenerated OpenAPI artefacts, tests, and `verification.md`.
 
 ## Terms
@@ -62,20 +66,27 @@ Decisions pinned here (owner confirms at the contract gate):
 - **D1 — honest absence.** No author data → no authors line. Never a
   placeholder.
 - **D2 — corporate-author fallback for Overton.** When a source has no
-  retained author names and its envelope backend is `overton`, `authors`
-  falls back to `[publisher_org]`. Rationale: reference convention for policy
-  documents (see Terms); Overton itself flags `authors_are_organizations`.
-  No such fallback for OpenAlex — there `publisher_org` is the journal, not
-  an author.
+  retained author names and its envelope backend is `overton`, the
+  authorships fall back to one entry: `{name: publisher_org, institutions:
+  []}`. The organisation renders in the author position — the reference
+  convention for policy documents (see Terms); Overton itself flags
+  `authors_are_organizations`. No such fallback for OpenAlex — there
+  `publisher_org` is the journal, not an author.
 - **D3 — retain Overton authors going forward.** Add `"authors"` to
-  `_OVERTON_RETAIN_KEYS` and normalise its string-or-list shape at read time.
-  Existing snapshots are immutable and keep the D2 fallback.
-- **D4 — display truncation.** Up to three names render in full; more than
-  three render as the first three plus "et al." One shared frontend helper;
-  the API always carries the full list.
-- **D5 — names only.** Author institutions/affiliations stay in the stored
-  authorships but do not render this slice (deferred seam, see
-  docs/deferred.md).
+  `_OVERTON_RETAIN_KEYS` and normalise its string-or-list shape at read time
+  (names only — Overton sends no per-author affiliations). Existing
+  snapshots are immutable and keep the D2 fallback.
+- **D4 — reference-list truncation.** In the report reference list (on-screen
+  and markdown), up to three names render in full; more than three render as
+  the first three plus "et al.", names only — no superscripts there. One
+  shared frontend helper; the API always carries the full list.
+- **D5 — institutions render (owner amendment, 2026-09-08).** In the
+  citation block and the source dossier, the full author list renders with
+  superscript affiliation markers (¹ ²…), and the institutions are listed
+  below the publication-year line, numbered by first appearance and deduped —
+  the standard paper display. An author without institutions carries no
+  superscript; a source with no institutions shows no institutions line. A
+  corporate author (D2) is one unmarked name and no institutions line.
 
 ## Surface map
 
@@ -88,8 +99,8 @@ Decisions pinned here (owner confirms at the contract gate):
 | 4 | Dossier sheet header | `SourceDossier` in `SourcesView.tsx` and `ArtefactView.tsx` | drop `description="Source dossier"` |
 | 5 | Provenance sheet footer | `frontend/src/views/ArtefactView.tsx` `ProvenanceSheet` | delete the tagline paragraph |
 | 6 | Sheet close button | `frontend/src/ui/radix/Sheet.tsx` | larger `✕`, hit target not smaller |
-| 1–3 | Read models | `backend/src/policy_atlas/api/contract/read_models.py` | `authors: list[str]` (default `[]`) on `ReferenceOut`, `SourceDossierOut`, `ChunkContextOut` |
-| 1–3 | Read-model build | `backend/src/policy_atlas/api/readmodels/repository.py` | one `_authors(metadata)` helper next to `_venue`; populate the three build sites |
+| 1–3 | Read models | `backend/src/policy_atlas/api/contract/read_models.py` | new `AuthorshipOut {name: str, institutions: list[str] = []}`; `authorships: list[AuthorshipOut]` (default `[]`) on `ReferenceOut`, `SourceDossierOut`, `ChunkContextOut` |
+| 1–3 | Read-model build | `backend/src/policy_atlas/api/readmodels/repository.py` | one `_authorships(metadata)` helper next to `_venue`; populate the three build sites |
 | D3 | Acquisition | `backend/src/policy_atlas/evidence_search/sourcing/acquire.py` | retain Overton `authors` |
 | — | Generated | `frontend/openapi.json`, `frontend/src/api/gen/types.ts` | via `make openapi-sync` only |
 
@@ -109,19 +120,21 @@ authors` slot — populating it is out of scope (nothing feeds it today).
 
 ## Scope / Out of scope
 
-- **In:** the surface-map rows above; unit tests for `_authors` (authorships
-  present · overton fallback · uploaded absence · malformed shapes); frontend
-  tests for the authors render, the truncation helper, and the four removals.
+- **In:** the surface-map rows above; unit tests for `_authorships`
+  (authorships present · overton fallback · uploaded absence · malformed
+  shapes); frontend tests for the authors render, the truncation helper, the
+  superscript/institution numbering helper (D5), and the four removals.
 - **Out:** `EvidenceItemOut`/sources-list rows; populating
-  `TopSource.authors`; rendering institutions (D5); any prompt, schema
-  (SQL), auth, or dependency change; backfilling existing Overton snapshots.
+  `TopSource.authors`; institutions in the reference list (D4 — names only
+  there); any prompt, schema (SQL), auth, or dependency change; backfilling
+  existing Overton snapshots.
 
 ## Constraints & approval gates
 
-- **Public interface (additive):** three new optional fields on existing
-  read models. This is the slice's one gated surface — approval is this
-  contract's sign-off. No field is removed or renamed; the OpenAPI diff must
-  be additive only.
+- **Public interface (additive):** one new component schema (`AuthorshipOut`)
+  and three new optional fields on existing read models. This is the slice's
+  one gated surface — approval is this contract's sign-off. No field is
+  removed or renamed; the OpenAPI diff must be additive only.
 - Generated files (`frontend/openapi.json`, `frontend/src/api/gen/types.ts`)
   change only via `make openapi-sync`; `make drift-check` stays green.
 - No SQL schema change: authors come from existing JSONB metadata.
@@ -145,8 +158,8 @@ n/a — no inference in this slice.
 - **Flag, don't drop** — D2's corporate author is the policy-document
   citation convention, applied only by backend (`overton`) and never for
   OpenAlex, where `publisher_org` is a journal, not an author.
-- Leave deferred seams in [docs/deferred.md](../../deferred.md): D5
-  (institutions), Overton snapshot backfill, `TopSource.authors`.
+- Leave deferred seams in [docs/deferred.md](../../deferred.md): Overton
+  snapshot backfill, `TopSource.authors`, institutions in the reference list.
 
 ## Stop conditions
 
@@ -156,16 +169,18 @@ outside the map needs touching; or the turn/token budget is spent.
 ## Acceptance checks
 
 - `make verify` green (includes `drift-check`).
-- Deterministic tests: `_authors` ladder (backend unit); reference/dossier/
-  citation-block render with and without authors (frontend); the tagline,
+- Deterministic tests: `_authorships` ladder (backend unit); reference/
+  dossier/citation-block render with and without authors and institutions
+  (frontend); the tagline,
   duplicated title and "Source dossier" subtitle are gone (frontend); close
   button class change covered by the existing Sheet tests. No AI eval — no
   judge behaviour changes.
 - **Live check (pinned scope):** one seeded task in the local app — open the
   report, expand References (authors visible on an OpenAlex and an Overton
-  reference), open one claim's provenance sheet (authors on the meta line, no
-  tagline), open one source dossier (authors under the title, no duplicate
-  title, no subtitle, larger ✕). ~3 minutes. No full live e2e.
+  reference), open one claim's provenance sheet (authors with superscripts
+  and the institutions below the year, no tagline), open one source dossier
+  (authors under the title, institutions below the year, no duplicate title,
+  no subtitle, larger ✕). ~3 minutes. No full live e2e.
 
 ## Verification evidence expected
 
@@ -185,5 +200,6 @@ decides at this gate.
 Review focus: additive-only OpenAPI diff; `scrub()` on every new
 author-string render; D2 never substitutes a journal for an author on
 OpenAlex sources; honest absence (no empty "()" or dangling "·" separators
-when fields are missing); the four removals don't break the a11y contract
-(the sheet keeps a `Description` for screen readers).
+when fields are missing, no superscript without a matching institution row);
+the four removals don't break the a11y contract (the sheet keeps a
+`Description` for screen readers).

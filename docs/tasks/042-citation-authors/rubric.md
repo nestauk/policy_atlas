@@ -16,8 +16,8 @@ not done. Item numbers 1–6 and decisions D1–D5 are defined in
        renders nothing (no empty separators or placeholders).
 6. [ ] No tests deleted, skipped or weakened without written justification.
 7. [ ] Verification evidence recorded ([verification.md](verification.md)).
-8. [ ] Deferred seams listed in docs/deferred.md: D5 institutions, Overton
-       snapshot backfill, `TopSource.authors`.
+8. [ ] Deferred seams listed in docs/deferred.md: Overton snapshot backfill,
+       `TopSource.authors`, institutions in the reference list.
 9. [ ] Required review stack for Tier 3 ran as adjudicated at the contract
        gate (adversarial waived or run — record which), findings in
        [verification.md](verification.md).
