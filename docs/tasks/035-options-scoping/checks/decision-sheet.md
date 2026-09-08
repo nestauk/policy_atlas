@@ -16,7 +16,7 @@ Legend for *Decision*: accept · reject · edit (say how) · defer.
 | task 3 (shortlist and assessment) | A3, B1, B2, B3, C5, D1–D6, E3, E7–E13, F4, F6 | the light profile, reading scope and eligibility, the transferability block, "how sure", the cap setting |
 | task 5 (full run) | E14, E15, F5 | the derivation edge, membership against a specified design in the child |
 | any time, as small Evidence search slices | A4 (full form), A5 | the memo key and the `text_basis` label; each wants an ADR |
-| after check 1 | revisit anything check 1 contradicts | check 1 is the one check that can change the shape |
+| at post-build user testing (check 1, deferred by the owner 2026-09-08) | revisit anything the testing contradicts: the shortlist ceremony, the comparison principle, the handoff | check 1 is the one check that can change the shape; live asks are not feasible before the build |
 
 
 ## A — data-model.md

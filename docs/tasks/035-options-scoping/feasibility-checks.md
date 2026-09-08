@@ -95,6 +95,12 @@ small, time-boxed investigation that tests one design claim before a contract is
 - **Who.** The owner's team with pilot users. Not agent work.
 - **Depends on.** Nothing technical; needs people and asks. Should land before any contract is
   signed.
+- **Owner decision (2026-09-08).** Live asks are not feasible at this stage; the deadline is tight.
+  Check 1 is **deferred to the user testing planned after the capability is built**, where ruling
+  27's four behavioural tests become the testing protocol. Consequence accepted: this is the one
+  check that can change the shape, so the parts it can change — the shortlist ceremony, the
+  similar-plus-challenger comparison, the handoff — are built so they are cheap to change after
+  testing, and no contract treats them as final.
 - **Changes the design if.** The shortlist ceremony adds no useful judgement → make selection
   subordinate to the report (the hybrid of ruling 32 already leans this way). Similar-plus-challenger
   comparisons omit the question the senior needs → change the comparison principle. Recipients lose
