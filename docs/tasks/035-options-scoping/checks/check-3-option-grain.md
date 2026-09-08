@@ -92,13 +92,13 @@ a close call for most options.
 |---|---|---|
 | inactivity | 6 | Built environment changes (19, 4) · Cross-sector governance (32, 1) · Mass media campaigns (19, 2) · Targeted support for disadvantaged groups (34, 6) · Population-level promotion policy (34, 2) · Incentives and financial support (16, 2) |
 | obesity | 6 | Whole-systems strategy (29, 1) · Social marketing campaigns (6, 1) · School-based prevention (17, 6) · Advertising restrictions (21, 1) · Healthy food access (13, 0) · Sugar and soft-drink fiscal measures (15, 0) |
-| unemployment | 5 | Labour-market partnership bodies (3, 1) · Vocational training (11, 3) · **Collective bargaining (1, 0)** · Place-based job creation (8, 1) · Employment tax credits (3, 0) |
+| unemployment | 5 | Labour-market partnership bodies (3, 1) · Vocational training (11, 3) · **Collective bargaining (1, 0)** — one of four tied "regulate" candidates, each one document and unevaluated, seated by tiebreak · Place-based job creation (8, 1) · Employment tax credits (3, 0) |
 
 **Perturbation (a) — paraphrase the options, re-assign every mention.**
 
 | corpus | mentions that changed option | median membership overlap (Jaccard) | least stable options | shortlist places moved |
 |---|---|---|---|---|
-| inactivity | 147 of 827 (18%) | 0.67 | Community-wide multi-strategy 0.39 · Whole-system strategies 0.49 · Community partnerships 0.54 | 2 (the "provide a service" place swapped between two class options with near-equal records) |
+| inactivity | 147 of 827 (18%) | 0.67 | Community-wide multi-strategy 0.39 · Whole-system strategies 0.49 · Community partnerships 0.54 | 1 seat (the "provide a service" place swapped between two class options with near-equal records) |
 | obesity | 75 of 461 (16%) | 0.77 | School PA promotion 0.17 · School nutrition education 0.44 · Commercial determinants 0.47 | 0 |
 | unemployment | 8 of 103 (8%) | 1.00 | Place-based job creation 0.73 | 0 |
 
@@ -112,15 +112,21 @@ two class options had near-equal implementation records.
 |---|---|---|---|
 | inactivity | 2 · 2 · 0 · 1 of 29 | never | 0 · 0 · 0 · 0 |
 | obesity | 1 · 3 · 1 · 3 of 32 | once (a "devolve" place appeared) | 0 · 1 · 0 · 0 |
-| unemployment | 1 · 1 · 3 · 1 of 18 | twice ("change who runs the system" came and went) | 0 · 0 · **4 of 5** · 1 |
+| unemployment | 1 · 1 · 3 · 1 of 18 | twice ("change who runs the system" came and went) | 0 · 0 (one option kept its seat under a different lever) · **2 of 5 seated options replaced** · 1 (a place lost) |
 
 What this shows. Relabelling a primary lever does move shortlist places without changing policy
-substance, and the effect concentrates where the instrument is weakest: thin corpora, singleton
-lever types, and options with a named runner-up. In the unemployment corpus one shuffle of the
-taxonomy order moved four of five places, and the baseline seated "Collective bargaining" on
-one document with no evaluation because it was the only "regulate" option. In the dense corpora
-the places held under relabelling; they moved under paraphrase instead, at the class-grain
+substance, and the effect concentrates where the instrument is weakest: thin corpora, lever
+types whose candidates are all unevaluated, and options with a named runner-up. In the
+unemployment corpus one shuffle of the taxonomy order replaced two of five seated options, and
+the baseline seated "Collective bargaining" on one document with no evaluation because all four
+"regulate" candidates were one-document, unevaluated options and the tiebreak fell to it. In the
+dense corpora the seats held under relabelling; one moved under paraphrase, at the class-grain
 options.
+
+*Correction (pass-4 review, 2026-09-08): the runner's "places moved" count was a symmetric
+difference that counted the outgoing and the incoming option, so an earlier version of this
+report said four of five places and two of six. The figures above are seat replacements read
+from the raw results; the runner now counts them that way.*
 
 ## 3 — Questions for a domain expert
 
@@ -157,10 +163,10 @@ owner or an expert should answer these against the `*.options.mentions.json` res
   implementations beneath. Without this the assessable unit (a specified design, ruling 15) and
   the counted unit (a class with 24 documents) are different things. Affects task 2 and the
   data-model declaration of the option entity.
-- **C3-2 — One place per primary lever type is not robust on its own.** Places moved without
-  substance under lever relabelling (four of five in the thin corpus) and under paraphrase (two
-  of six in the dense corpus), and a lever type represented only by an unevaluated singleton
-  earned a place. This fires ruling 42's clause in a bounded form: not "stop using quotas", but
+- **C3-2 — One place per primary lever type is not robust on its own.** Seats changed without
+  substance under lever relabelling (two of five seated options in the thin corpus) and under
+  paraphrase (one of six in the dense corpus), and a lever type whose four candidates were all
+  one-document, unevaluated options earned a place by tiebreak. This fires ruling 42's clause in a bounded form: not "stop using quotas", but
   **add two guards**: (i) a lever type whose options all have zero evaluated mentions earns a
   **gap message, not a place** ("Regulate: mentioned in 3 documents, none evaluates an option");
   (ii) a place is marked **contested** when the seated option's typer named a runner-up lever

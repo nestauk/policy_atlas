@@ -21,7 +21,7 @@ A first single-stage draft (`os_transfer_v0`) failed in two ways that the two-st
 it made the two evidence legs depend on context entries, so every verdict was Unknown; and its
 factor set drifted between identical runs (8 rows, then 3). Recorded as C4-1.
 
-## The factor list stage 1 produced (identical across two runs)
+## The factor list stage 1 produced (run 1 of 2; run 2 shared only 4 of its 12 factors)
 
 | leg | factor | evidence status | dealbreaker |
 |---|---|---|---|
@@ -38,7 +38,13 @@ factor set drifted between identical runs (8 rows, then 3). Recorded as C4-1.
 | support | fidelity of delivery over the full 12 weeks | unknown | no |
 | support | easy-to-implement peer mentor role | unknown | no |
 
-Two things to notice before the pairs. The extractor flagged **no dealbreaker**, although the
+Three things to notice before the pairs. **The factor list is not stable across extraction
+runs**: the second stage-1 run produced twelve rows of which four matched the first, and the
+peer-mentor causal-role status differed (unknown, then met). The list used below is run 1, held
+fixed by choice so the pairs compare like with like; that fixity is a design requirement (pin the
+list to an evidence, design and target version), not an observed property. *(Correction after
+the pass-4 review, 2026-09-08: an earlier version of this report said the list was identical
+across two runs.)* The extractor flagged **no dealbreaker**, although the
 evidence records a governance block (mentors could not be hosted under the existing walking
 scheme; insurance had to be arranged through the university). And the causal-role leg was judged
 *not met* because the trial population was in disadvantaged areas and the target did not say so;
@@ -54,12 +60,16 @@ this run; the rows did.
 | P3 planned funding vs present capacity | "committed to fund 20 peer mentors from April 2027" (planned) | "currently funds 20 trained peer mentors" (stated) | three mentor factors: **conditional → met** | yes, exactly as ruled: a commitment is a condition, a present fact can lift it |
 | P4 old vs current observation | 2009 audit: 38 leisure centres, 120 km of paths (local, dated) | 2025 audit: 24 centres, 150 km (local, current) | walking places: **unknown (dated) → met** | yes; the 2009 entry was read, marked dated, and left the factor unknown |
 | P5 containing aggregate vs local aggregate | "62% of people in England live within 15 minutes of a park" (national) | "71% of Bradford residents live within 15 minutes of a park" (local) | walking places: **unknown (aggregate only) → met** | yes for A (ruling 34 exactly); B is arguable (proximity to a park is not a safe walking route) |
-| P6 assurance | "the leisure trust has assured the council that routes will be available and mentors insured" (planned) | — | the model set factors **met** on the assurance; the code corrected **three** rows to conditional | the guard is load-bearing: the model did strengthen on an assurance |
+| P6 assurance | "the leisure trust has assured the council that routes will be available and mentors insured" (planned) | — | the model set **one** factor met on the assurance; the code corrected it to conditional, and restored two evidence-leg statuses the fill had changed without a context entry | the guard is load-bearing: the model did strengthen on an assurance, once |
 | P7 rich present context | four entries: local groups, present mentor funding, current paths, present insurance | — | three factors met; six of nine support factors still unknown; the insurance entry matched no factor | shows the ceiling: with good context the support leg stays unknown because most helpful factors are never stated |
 
-Corrections the code made across all 14 cases: 5 (one dated observation set met; one local
-aggregate over-read; three assurance rows set met). Determinism: the baseline case run twice gave
-identical rows and statuses.
+Corrections the code made across all 14 cases: 5 — one dated observation set met (P4a); one
+planned entry set met (P6); and three evidence-leg statuses the fill had changed to unknown
+without a context entry, restored to the stage-1 status (P5b, P6). One of those restorations put
+back the **wrong** causal-role "not met": the guard preserves a bad evidence judgement as readily
+as a good one. Determinism at stage 2: the baseline case run twice against the fixed list gave
+identical rows and statuses. *(Correction after the pass-4 review: an earlier version counted
+five over-statements and three assurance corrections.)*
 
 ## Answer to the question
 
@@ -71,9 +81,10 @@ recognised as such (first draft, P2a) but in this evidence set had no factor to 
 
 The check's "changes the design if" clauses:
 
-- *Verdicts strengthen on containment or assurances alone* → **the model did, three times, and
-  the code caught it**. Keep conditions visible and the verdict conditional, as ruled; the design
-  consequence is that the code-side enforcement is part of the block, not a test harness.
+- *Verdicts strengthen on containment or assurances alone* → **the model did, once, and the
+  code caught it**. Keep conditions visible and the verdict conditional, as ruled; the design
+  consequence is that the code-side enforcement is part of the block, not a test harness — and
+  that it can only enforce entry types, not repair a wrong evidence judgement.
 - *Even corrected conditions cannot be judged reliably* → **did not fire**. Corrected conditions
   were judged correctly in every pair; ruling 29's rejection of an argument-only cell stands.
 
@@ -86,9 +97,10 @@ causal-role judgement, not about the context discipline.
 **Changes the design.**
 
 - **C4-1 — The working is two components, not one prompt.** Factor extraction from evidence
-  (once per option, stable across runs) and context filling against the fixed list (per context
-  set) must be separate steps; a single prompt drifted its factor set and tangled the evidence
-  legs with context. Proposal: `synthesise(profile)` runs moderator/dealbreaker extraction as
+  (once per option, **pinned** to an evidence, design and target version — a repeat run shared
+  only 4 of 12 factors) and context filling against that fixed list (per context set) must be
+  separate steps; a single prompt drifted its factor set and tangled the evidence legs with
+  context. Proposal: `synthesise(profile)` runs moderator/dealbreaker extraction as
   its own grounded step producing the factor rows, then the context fill; the column-grounded
   block declaration in provenance-grounding.md names the two steps. Affects task 3.
 - **C4-2 — Only dealbreakers cap; helpful factors are shown, not summed.** trust.md already says
@@ -115,9 +127,11 @@ causal-role judgement, not about the context discipline.
 
 **Clarifies the design.**
 
-- **C4-5 — Code-side enforcement is part of the block.** Five model over-statements in 14 cases
-  were corrected deterministically from the entry types and the model's own applicability and
-  currency labels. The verify step for the column-grounded block should run exactly these rules
+- **C4-5 — Code-side enforcement is part of the block.** Two over-statements (a dated
+  observation and an assurance set met) and three evidence-leg changes were corrected
+  deterministically from the entry types and the model's own labels; the same rule restored a
+  wrong causal-role status, so enforcement bounds context use but cannot repair the evidence
+  judgement it protects. The verify step for the column-grounded block should run exactly these rules
   (planned → never met; aggregate at containing geography → never met/not met; dated → unknown;
   entry id must exist) and record corrections as flags.
 - **C4-6 — Currency needs a rule or a field.** The model judged a 2009 audit dated and a 2014

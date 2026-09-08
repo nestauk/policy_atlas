@@ -14,6 +14,13 @@ to a target or to none, and the resulting rows were traced back to their documen
 Runner: `oscheck.py` (commands `abstract`, `light`, `trace2`). Raw results are held outside the repository (they carry staging document text):
 session scratchpad `staging/out/trace2.json` and `staging/out/light.json`; a zip is available from the owner on request.
 
+**Version note (after the pass-4 review, 2026-09-08).** The numbers in this report come from the
+first light run: 21 documents, 90 findings, 125 anchors (69 exact · 35 normalised · 21 failed).
+The results bundle now holds a later run over 36 documents (136 findings, 196 anchors, 32 failed)
+in which six documents were re-profiled to record timing for check 5; the two runs are not
+identical, and `trace2.json` was computed from the first. The verdict table should be checked
+against a pinned copy of the first run, not the later bundle.
+
 The owner or an analyst should spend the hour on § The verdict table.
 
 ## The hand-built set
@@ -40,7 +47,7 @@ the trace.
 
 | target | documents mentioning (any role) | of which *evaluated* | documents with light findings | distinct claims | independent own-data studies | reviews or syntheses among the support |
 |---|---|---|---|---|---|---|
-| T3 whole-system place-based approach | 37 (18 described · 10 recommended · 3 mentioned · 7 evaluated) | 7 | 4 | 15 | 2 (JU:MP; Transform-Us!) | 1 (Inactive Nation) |
+| T3 whole-system place-based approach | 37 (18 described · 10 recommended · 3 mentioned · 7 evaluated) | 7 | 4 (one, `e12285a6`, read from its abstract after a failed parse) | 15 | 2 (JU:MP; Transform-Us!) | 1 (Inactive Nation) |
 | T4 community-wide multi-strategy programme | 22 | 11 | 2 | 6 | 1 (Antwerp community sport development) | 1 (the Cochrane review) |
 | T1 free leisure access with outreach | 2 | 2 | 0 (not in the read set) | 0 | 0 | 0 |
 | T2 peer-led walking programme | 1 | 1 | 1 | 5 (from 9 raw findings) | 1 (Walk with Me) | 0 |
@@ -49,11 +56,14 @@ the trace.
 | C wage or hiring subsidies | 9 | 2 | 2 | 2 | 0 | 2 |
 | D public employment programmes | 6 | 1 | 2 | 2 | 0 | 2 |
 
-What this shows. The funnel 37 → 7 → 4 → 2 for the whole-system approach is exactly the
-distinction the source-quality profile must display and never collapse: 37 documents mention
+What this shows. The four counts 37 · 7 · 4 · 2 for the whole-system approach are exactly the
+distinctions the source-quality profile must display and never collapse: 37 documents mention
 it, most of them policy syntheses that describe or recommend it; seven evaluate it; four were
-read; two are independent studies. The `role` field does most of the work before any full text
-is read. Described and recommended mentions never became support. Comparator mentions (51 in
+read; two are independent studies. They are **not one nested set**: three of the four read
+documents (`b9590c39`, `d745c2c8`, `e12285a6`) entered the read set by other roles and are not
+among the seven evaluated mentions, so the `role` field predicts support but does not bound it
+*(clarified after the pass-4 review)*. The `role` field does most of the work before any full
+text is read. Described and recommended mentions never became support. Comparator mentions (51 in
 the inactivity corpus) are excluded from membership by construction.
 
 ## 2 — Documents versus independent evidence

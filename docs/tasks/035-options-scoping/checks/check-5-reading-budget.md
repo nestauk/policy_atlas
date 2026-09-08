@@ -31,7 +31,8 @@ inactivity corpus is abstract-only; several "full text" snapshots are failed par
 | gate waits (pause → continuation), 13 observed | | **median 1049 s** (17 min) | 7450 s (2 h) | max 62 h (a task left overnight) | |
 
 Synthesise, not the spine and not extraction, is where the compute time goes: the median
-Evidence search report takes 13 minutes to write and about 2.4 million prompt tokens. The spine
+Evidence search report takes 13 minutes to write and about 0.9 million tokens (2.4 million in a
+deep walk). The spine
 (acquire → screen → classify → appraise → ingest) is about 4.5 minutes for a 150-document corpus.
 Extraction is 4 minutes in a deep walk. Humans waiting at gates add more than either.
 
@@ -42,7 +43,7 @@ Two options from the inactivity corpus; candidates are the documents whose abstr
 
 **T3 whole-system, place-based approach** (10 candidates, 3 with real full text)
 
-| cap | documents read (full text) | with effect findings | distinct claims | documents carrying contrary or null evidence | extraction wall time, parallel / sequential | tokens |
+| cap | documents read (full text) | with effect findings | distinct claims | documents with a non-increase finding in any outcome (see note) | extraction wall time, parallel / sequential | tokens |
 |---|---|---|---|---|---|---|
 | 3 | 3 (2) | 1 | 3 | 1 | 1.6 s / 2.9 s | 16 k |
 | 5 | 5 (2) | 3 | 5 | 1 | 1.8 s / 4.7 s | 19 k |
@@ -51,7 +52,7 @@ Two options from the inactivity corpus; candidates are the documents whose abstr
 
 **T4 community-wide multi-strategy programme** (12 candidates, 4 with real full text)
 
-| cap | documents read (full text) | with effect findings | distinct claims | contrary or null | extraction wall time, parallel / sequential | tokens |
+| cap | documents read (full text) | with effect findings | distinct claims | non-increase finding in any outcome (see note) | extraction wall time, parallel / sequential | tokens |
 |---|---|---|---|---|---|---|
 | 3 | 3 (1) | 3 | 3 | 2 | 2.8 s / 7.5 s | 10 k |
 | 5 | 5 (3) | 5 | 20 | 3 | 16 s / 29 s | 45 k |
@@ -62,9 +63,14 @@ What the tallies said at each cap. T4 at cap 3 reads as "no effect on population
 activity" (the Cochrane review, twice); at cap 12 the physical-activity family reads increase 2 ·
 no effect 2 · mixed 2. T3 at cap 3 is three positive claims from one document; at cap 10 it has
 four documents with mixed or null results. **The cap changes the texture of the conclusion**,
-from a one-sided picture to a balanced one, even where a contrary document survives. The
-counter-case survived at every cap in T4 because the review reserve carried it; in T3 it survived
-at cap 3 by luck (a conference abstract with mixed results).
+from a one-sided picture to a balanced one. In T4 a genuine contrary document (the Cochrane
+review's null result) survived at every cap because the review reserve carried it. In T3 the
+document the runner flagged at caps 3 and 5 (`d745c2c8`) was **not** a counter-case: its only
+non-increase finding is a *decrease in sedentary time*, a desirable result. *(Correction after the
+pass-4 review, 2026-09-08: the runner flagged any decrease, mixed or no-effect finding as
+"contrary" without checking the outcome's desirable direction; the column is renamed above and
+the runner now reports non-increase findings without calling them contrary. T3 has no
+identified contrary document at any cap.)*
 
 Selection lesson: at cap 3 for T3 two of the three chosen documents had **no effect findings at
 all**, because the strategy preferred full text and full text here meant a process evaluation
@@ -75,14 +81,16 @@ tiebreaker.
 Per-document extraction time: abstract-only documents 3.5 s median; full texts 1.6 s to 30 s
 (the 368 000-character trial report took 8 windows and 30 s; 235 000-character Inactive Nation, 5
 windows, 20 s). In a parallel fan-out the option's extraction latency is the slowest document,
-about 20 s, at any cap above 5.
+about 20 s, at any cap above 5. Caveat: 15 of the 36 profiled documents carry no wall time
+(they were profiled before timing was recorded), so the cap tables' sequential and parallel
+columns undercount, and "parallel" is the slowest recorded document, not a timed fan-out.
 
 ## 3 — Three ways to the cells (cap 5)
 
 | approach | T3 | T4 | time | what it misses |
 |---|---|---|---|---|
 | light extraction per document | 5 claims, 1 contrary document | 20 claims, 3 contrary | 2 to 16 s parallel; 19 to 45 k tokens | nothing the read set holds; 17% of anchors fail the quote check (check 2) |
-| targeted reading alone (one call over the five texts, cells written directly) | 3 positive families, **counter-evidence reported as absent** | 3 families, counter-evidence present | 3 to 4 s; one call | **missed the contrary document in T3** that extraction found; no per-claim anchors |
+| targeted reading alone (one call over the five texts, cells written directly) | 3 positive families and the sedentary-time decrease; no contrary evidence reported, and none was present (see the correction above) | 3 families, counter-evidence present | 3 to 4 s; one call | no per-claim anchors or claim keys, so nothing to verify or dedup; read only the first 60 000 characters of each text |
 | compatible finding reuse alone (inherited deep findings, no reading) | 74 records over 3 documents, 17 with a magnitude | 15 records over 4 documents, **0 with a magnitude** | 0 s | the magnitude cell; any document not in the deep run's selection |
 
 ## 4 — What a scoping run would cost, from these numbers
@@ -110,8 +118,8 @@ is bounded by extraction.
 ## Answer to the question
 
 - *A smaller cap changes the conclusion or drops the counter-case* → **yes, in texture**: cap 3
-  gave one-sided pictures for both options; the counter-case survived only where a review was
-  reserved. Design consequence: the read-set strategy stratifies on the abstract profile's
+  gave one-sided pictures for both options; in T4 the genuine counter-case survived because a
+  review was reserved; T3 had no identified counter-case to lose. Design consequence: the read-set strategy stratifies on the abstract profile's
   *evaluated* role and outcome families, reserves one review and one primary study, and the
   promised result states "N of M documents read" with the omissions listed (ruling 38 stands and
   is necessary).
@@ -136,10 +144,12 @@ is bounded by extraction.
   role and outcome families as strata, reserves one review and one primary study, and records
   omissions by stratum. Affects task 3 (`select`, scoping strategy) and the Sources tab's "not
   read under the cap".
-- **C5-3 — Countable cells come from per-document extraction, never from reading alone.**
-  The single-call reading missed contrary evidence that extraction found. Narrative sections may
-  read; the direction tally and magnitudes are extracted and anchored. Confirms the ⟨assess⟩
-  composition; rules out the shortcut.
+- **C5-3 — Countable cells come from per-document extraction, not from reading alone.** The
+  test did **not** show reading alone missing contrary evidence (the flagged document was not
+  contrary). The reason to prefer extraction is verifiability: it yields per-claim anchors and
+  claim keys that the vetter and dedup can check; a single reading call yields neither, and read
+  only the first 60 000 characters of each text. Narrative sections may read; the direction tally
+  and magnitudes are extracted and anchored. *(Weakened after the pass-4 review.)*
 
 **Clarifies the design.**
 

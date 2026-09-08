@@ -279,10 +279,12 @@ def cmd_budget(data: Path):
                     k = (f["outcome_family"].casefold(), f["effect_direction"])
                     if k in seen: continue
                     seen.add(k); tally[f["outcome_family"]][f["effect_direction"]] += 1; claims += 1
+                # pass-4 correction: a decrease can be a desirable result (sedentary time); this flags non-increase
+                # findings only and does not call them contrary — desirability needs the outcome's direction of benefit
                 if any(f["effect_direction"] in ("no_effect", "decrease", "mixed") for f in fs): counter_docs.append(c["tss"][:8])
                 wall.append(L.get("wall_s") or 0); tokens += sum((L.get("tokens") or {}).values())
             per_cap[cap] = {"read": [(c["tss"][:8], c["evidence_type"][:12], c["text_basis"][:8], c["reason"]) for c in chosen], "omitted": omitted, "docs_with_findings": docs_with, "distinct_claims": claims,
-                            "tally": {k: dict(v) for k, v in tally.items()}, "counter_case_docs": counter_docs, "extraction_wall_s_sequential": round(sum(wall), 1), "extraction_wall_s_parallel": round(max(wall) if wall else 0, 1), "tokens": tokens}
+                            "tally": {k: dict(v) for k, v in tally.items()}, "non_increase_docs": counter_docs, "extraction_wall_s_sequential": round(sum(wall), 1), "extraction_wall_s_parallel": round(max(wall) if wall else 0, 1), "tokens": tokens}
             print(f"{label[:28]} cap={cap:>2}: read {len(chosen):>2} (full-text {sum(1 for c in chosen if c['text_basis']=='full_text')}) docs_with_findings={docs_with} claims={claims} counter_docs={counter_docs} seq={per_cap[cap]['extraction_wall_s_sequential']}s par={per_cap[cap]['extraction_wall_s_parallel']}s tokens={tokens}")
         # approach (2): targeted reading alone over the cap-5 set
         chosen5, _ = select_read_set(cands, 5)

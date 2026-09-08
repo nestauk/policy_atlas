@@ -381,17 +381,22 @@ def cmd_stability(data: Path, slug: str):
     for name, typ in runs:
         changed = [l.label for l in labels if typ.get(l.label, {}).get("primary") != typing0[l.label]["primary"]]
         pl = shortlist(cov0, typ)
+        # seats whose seated option changed (pass-4 correction: the earlier symmetric difference counted outgoing and incoming names)
+        b0 = {p["lever"]: p["option"] for p in places0}; b1 = {p["lever"]: p["option"] for p in pl}
         relabel.append({"run": name, "options_with_changed_primary": changed, "n_changed": len(changed), "shortlist": pl,
-                        "places_moved": sorted({p["option"] for p in pl} ^ {p["option"] for p in places0}),
+                        "seats_replaced": [(lv, b0.get(lv), b1.get(lv)) for lv in sorted(set(b0) | set(b1)) if b0.get(lv) != b1.get(lv)],
+                        "places_moved_symdiff_deprecated": sorted({p["option"] for p in pl} ^ {p["option"] for p in places0}),
                         "lever_set_before": sorted({p["lever"] for p in places0}), "lever_set_after": sorted({p["lever"] for p in pl})})
     close_calls = [l.label for l in labels if typing0[l.label].get("runner_up")]
     out = {"slug": slug, "n_units": len(units), "n_options": len(labels), "baseline_shortlist": places0,
-           "paraphrase": {"units_moved": moved, "fraction_moved": moved / max(1, len(units)), "per_option": per_option, "shortlist": placesp, "places_moved": sorted({p["option"] for p in placesp} ^ {p["option"] for p in places0}), "paraphrased_labels": [{"from": o.label, "to": p.label} for o, p in zip(labels, plabels)]},
+           "paraphrase": {"units_moved": moved, "fraction_moved": moved / max(1, len(units)), "per_option": per_option, "shortlist": placesp,
+                          "seats_replaced": [(lv, a, b) for lv, a, b in ((lv, {p["lever"]: p["option"] for p in places0}.get(lv), {p["lever"]: p["option"] for p in placesp}.get(lv)) for lv in sorted({p["lever"] for p in places0} | {p["lever"] for p in placesp})) if a != b],
+                          "paraphrased_labels": [{"from": o.label, "to": p.label} for o, p in zip(labels, plabels)]},
            "lever_relabel": relabel, "options_with_runner_up_primary": close_calls}
     save(data, f"{slug}.stability.json", out)
-    print(f"paraphrase: {moved}/{len(units)} units moved; places moved: {out['paraphrase']['places_moved']}")
+    print(f"paraphrase: {moved}/{len(units)} units moved; seats replaced: {out['paraphrase']['seats_replaced']}")
     for r in relabel:
-        print(f"relabel {r['run']}: {r['n_changed']} options changed primary; places moved: {r['places_moved']}")
+        print(f"relabel {r['run']}: {r['n_changed']} options changed primary; seats replaced: {r['seats_replaced']}")
 
 
 # --------------------------------------------------------------------------- check 2 trace
