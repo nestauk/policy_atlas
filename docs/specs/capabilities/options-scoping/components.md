@@ -85,7 +85,7 @@ across capabilities (ruling 40).
 | ⟨baseline⟩ | acquire (Overton and OpenAlex only in v1, grey-literature-weighted source policy; the coverage statement names live official statistics and departmental pages as not searched — ruling 43) → screen → classify → appraise → ingest → synthesise(**baseline**) | once, after plan confirmation; the run pauses after it |
 | ⟨longlist depth⟩ | acquire → screen → classify → appraise → ingest → extract(**abstract**) → longlist → constrain → shortlist → synthesise(**report**, provisional) | over every option |
 | ⟨assess⟩ | [acquire with the option as intent, if its document set is thin → screen → classify → appraise → ingest → extract(abstract)] → **select** (the scoping read-set strategy: stratify by implementation and outcome family, reserve the counter-case, cap per option, record omissions — rulings 38, 43) → extract(**light**) over the selected set (inherited findings reused at finding grain — ruling 35) → synthesise(**profile**); then synthesise(**report**, assessed). "How sure" = confidence in the specified claim from relevant evidence, documents counted until independence is known (ruling 33) | per shortlisted option, on "Assess these N" |
-| ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task** seeded from the option with the profile template; the scoping profile re-reads its cells from the report | per option, user-triggered (ruling 9) |
+| ⟨full run⟩ | the whole EB chain (incl. classify, select, stage-2, full extract, group) as a **child Evidence search task** seeded from the option with the profile template; its report **is** the option profile, shown in place in the scoping task (ruling 47) | per option, user-triggered (ruling 9) |
 | export | the Share/export seam (arch §10; no contract yet), not a component | user-triggered |
 
 ## 0 — inherit (optional; ruling 22)
@@ -299,8 +299,8 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   search task seeded from the option, with the option-profile sections as its synthesis template;
   its report **computes the profile's judgement cells** (how sure, transferability and
   conditions, key assumption) under the OS trust rules carried by the template (ruling 41); on
-  completion the scoping profile mirrors those cells, tagged *full run*, and keeps the
-  scoping-pass version in History.
+  completion that report **is** the option profile, shown in place in the scoping task tagged
+  *full run* (one document, two homes — ruling 47); the scoping-pass version is kept in History.
 - ✅ The child task is listed under the parent, linked both ways, and shares its project and
   visibility. ✅ The user's stated context is owned by the scoping task and passed to the child as
   input, so a transferability cap caused by unstated context survives the full run until the plan

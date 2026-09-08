@@ -87,8 +87,8 @@
       "x": 0,
       "y": 5220,
       "w": 1440,
-      "h": 3680,
-      "title": "6 · Report, assessed: the Result, with the assessed table embedded",
+      "h": 3800,
+      "title": "6 · Report, assessed: the Result, one verdict strip per option",
       "page": "journey"
     },
     {
@@ -96,8 +96,8 @@
       "x": 1540,
       "y": 5220,
       "w": 1440,
-      "h": 1300,
-      "title": "6b · Sources: what was read at which depth, set aside, not read under the cap",
+      "h": 1700,
+      "title": "6b · Sources: the Evidence search Sources component, with read depth and set-aside statuses",
       "page": "journey"
     },
     {
@@ -114,8 +114,8 @@
       "x": 4620,
       "y": 5220,
       "w": 1440,
-      "h": 2160,
-      "title": "7b · Option profile after a full evidence search; the child report carries the verdicts",
+      "h": 2660,
+      "title": "7b · After a full evidence search: the profile is the child task's report, shown in place",
       "page": "journey"
     },
     {
@@ -128,17 +128,26 @@
       "page": "journey"
     },
     {
-      "file": "Report.dc.html",
+      "file": "ShortlistAssessed.dc.html",
       "x": 1540,
       "y": 9600,
       "w": 1440,
-      "h": 1060,
-      "title": "7c · The full report, a child Evidence search task with the profile structure",
+      "h": 1800,
+      "title": "6c · Longlist, shortlist view after assessment: the comparison table",
+      "page": "journey"
+    },
+    {
+      "file": "Report.dc.html",
+      "x": 3080,
+      "y": 9600,
+      "w": 1440,
+      "h": 1140,
+      "title": "7c · The child Evidence search task: one document; its Sources tab is what it adds",
       "page": "journey"
     },
     {
       "file": "TasksList.dc.html",
-      "x": 3080,
+      "x": 4620,
       "y": 9600,
       "w": 1440,
       "h": 900,
@@ -180,7 +189,7 @@
       "y": 0,
       "w": 320,
       "page": "journey",
-      "text": "Redrawn 2026-09-07 to concept rulings 15–44 (review round and pass 3). Where a board and the concept differ, the concept wins.\n\nThe scoping task is ONE chat, always on the left. Tabs are the task's: Agent · Result · Sources · Share · History. The plan lives in the Agent tab. The Result is the REPORT: linear text with a side outline and collapsible sections, provisional from the longlist stage (3c), rewritten by assessment (6). Baseline, Longlist (list · grid · shortlist views) and the option profiles are working views reached from it. Depth words: rapid / standard / deep, asked every time, no default.\n\nThe baseline is built first and the run PAUSES: question it in chat, then confirm the plan against it. Three depths of evidence work: the longlist reads titles and abstracts and carries a source-quality profile per option (never 'how sure'); the assessment reads the full text of the documents each shortlisted option relies on, capped; a full evidence search is a child task whose report computes the judgement cells.\n\nRow 4 holds the sense-check branch at rapid depth and the child-report boards. Page 2 keeps two superseded structural alternatives for reference.\n\nSample question: reducing the number of 16 to 24 year olds not in education, employment or training. Every figure, count, quotation and named source is placeholder sample data."
+      "text": "Redrawn 2026-09-07 to concept rulings 15–44 (review round and pass 3). Where a board and the concept differ, the concept wins.\n\nThe scoping task is ONE chat, always on the left. Tabs are the task's: Agent · Result · Sources · Share · History. The plan lives in the Agent tab. The Result is the REPORT: linear text with a side outline and collapsible sections, provisional from the longlist stage (3c), rewritten by assessment (6). Baseline, Longlist (list · grid · shortlist views) and the option profiles are working views reached from it. Depth words: rapid / standard / deep, asked every time, no default.\n\nThe baseline is built first and the run PAUSES: question it in chat, then confirm the plan against it. Three depths of evidence work: the longlist reads titles and abstracts and carries a source-quality profile per option (never 'how sure'); the assessment reads the full text of the documents each shortlisted option relies on, capped; a full evidence search is a child task whose report IS the option profile, shown in place in the scoping task (one document, two homes; 2026-09-08). The report stays linear: assessed options appear as stacked verdict strips (6); the wide comparison table is the shortlist view after assessment (6c). The Sources tab is the Evidence search's Sources component with two additions: read-depth and set-aside statuses, and a By option subview (6b).\n\nRow 4 holds the sense-check branch at rapid depth and the child-report boards. Page 2 keeps two superseded structural alternatives for reference.\n\nSample question: reducing the number of 16 to 24 year olds not in education, employment or training. Every figure, count, quotation and named source is placeholder sample data."
     },
     {
       "id": "note-rules",
@@ -188,7 +197,7 @@
       "y": 760,
       "w": 320,
       "page": "journey",
-      "text": "Rulings made visible:\n· three kinds of constraint; an evidence-scope constraint never excludes an option (2, 4: 'no in-scope evidence')\n· a design change mints a VARIANT, its own option with its own search; the parent's evidence is related evidence only (4, 6, 7)\n· baseline adds 'what is contested'; premises sourced, assumptions labelled reasoning; Overton + OpenAlex only (3)\n· before assessment an option shows a source-quality profile: documents by type and tier, countries, populations, outcomes; a mention is not support (4b, 3c)\n· grid rows = primary lever types; ambition = a tag 'as described, not measured', tier-4 reasoning; gap messages name secondary types (5)\n· the proposal is a provisional allocation of reading effort: one place per lever type present; reasons = distinct / widest implementation record / only option of its type / thin evidence, never a count (5b)\n· no 'most promising' and no conditional recommendation before assessment; sorts are sorts (5)\n· the do-nothing band is 'the situation these options would change', never a comparison; each effect carries its own comparator, population and period; no superlatives (6)\n· transferability: retrieved / stated by you / planned by you; the weakest leg decides; a plan becomes 'Conditional on: …'; no factor fractions (6, 7)\n· documents counted, not studies, until full text is read; no study-design labels in the table (6)\n· unassessed kept options listed by theme; closing section 'what needs deciding or commissioning next' = unknowns only (3c, 6)\n· Sources says what was read at which depth, what was set aside under the evidence scope, what was not read under the cap (6b)\n· the child report computes the verdict cells with the parent's context passed in (7b, 7c)\n· sense-check = an entry branch; rapid = the named option alone through 'Assess'; questions to put to the department (8)"
+      "text": "Rulings made visible:\n· three kinds of constraint; an evidence-scope constraint never excludes an option (2, 4: 'no in-scope evidence')\n· a design change mints a VARIANT, its own option with its own search; the parent's evidence is related evidence only (4, 6, 7)\n· baseline adds 'what is contested'; premises sourced, assumptions labelled reasoning; Overton + OpenAlex only (3)\n· before assessment an option shows a source-quality profile: documents by type and tier, countries, populations, outcomes; a mention is not support (4b, 3c)\n· grid rows = primary lever types; ambition = a tag 'as described, not measured', tier-4 reasoning; gap messages name secondary types (5)\n· the proposal is a provisional allocation of reading effort: one place per lever type present; reasons = distinct / widest implementation record / only option of its type / thin evidence, never a count (5b)\n· no 'most promising' and no conditional recommendation before assessment; sorts are sorts (5)\n· the do-nothing band is 'the situation these options would change', never a comparison; each effect carries its own comparator, population and period; no superlatives (6)\n· transferability: retrieved / stated by you / planned by you; the weakest leg decides; a plan becomes 'Conditional on: …'; no factor fractions (6, 7)\n· documents counted, not studies, until full text is read; no study-design labels (6, 6c)\n· the report stays linear text: verdict strips in the report, the comparison table as a working view (6, 6c; 2026-09-08)\n· unassessed kept options listed by theme; closing section 'what needs deciding or commissioning next' = unknowns only (3c, 6)\n· Sources = the Evidence search Sources component + statuses 'read in full / abstract only / not read under the cap / set aside: evidence scope' + a By option subview (6b; 2026-09-08)\n· one document: the child task's report is the profile, shown in place with the scoping frame around it; the child task adds Sources, plan and History (7b, 7c; 2026-09-08)\n· sense-check = an entry branch; rapid = the named option alone through 'Assess'; questions to put to the department (8)"
     },
     {
       "id": "note-alts",

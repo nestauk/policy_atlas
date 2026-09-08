@@ -776,3 +776,37 @@ until then the rulings win over the boards.
     declared now** in the data model: an option is a task-scoped entity with a stable id, a
     versioned specified design, typed relations, state and membership records and a child-task
     link; re-run matching stays open question 7.
+
+### Board-refinement rulings (owner, 2026-09-08)
+
+Made on the redrawn boards. They amend the rulings named; the boards were redrawn again to match.
+
+45. **The report stays linear; the comparison table is a working view** (amends ruling 32's
+    "assessed table embedded"; confirms ruling 7's "verdict strips stacked" as the report form).
+    In the report, "what the evidence base holds" carries **one verdict strip per assessed
+    option** in the prose column: the name and description; one line with how sure and the
+    document count, where tried, and the transferability verdict with its condition; then "how
+    big, as reported" and "key assumption" as sentences. The six-column **comparison table**
+    (Option · How big, as reported · How sure · Where tried · Transferability · Key assumption) is
+    the **longlist's shortlist view after assessment**, opened from the report ("Compare in a
+    table") and from the Longlist view, where wide content already lives. Same content, two
+    forms; sorts apply to both and remain displays, not rankings.
+46. **The Sources tab is the Evidence search's Sources component** (amends the 2026-09-03
+    navigation ruling's "what was searched / all sources / by option" and the prose form of board
+    6b). Subviews **By option** (in place of Themes) · **Landscape** · **All sources** (and
+    **Findings** when a deep Evidence search was inherited); the coverage header; the filter
+    chips; the document table with year, origin, evidence type, appraised strength and cited.
+    Two additions for scoping: **statuses** *set aside: outside evidence scope* · *read in full* ·
+    *abstract only* · *not read under the cap*, as chips and as a Read column; and an **Options**
+    column (which options a document mentions). The "what was searched" statement (ruling 16,
+    ruling 22's inherited versus added, ruling 43's baseline sources) is the coverage header
+    line, as in the Evidence search, not a prose page. Content unchanged; form reused.
+47. **One document, two homes** (amends rulings 9 and 41's "mirror"). The child Evidence search
+    task's report, written with the option-profile template and computed with the parent's
+    context passed in, **is the option profile** after a full run. The scoping task shows that
+    same document **in place**, tagged *full run*, with the scoping frame around it: the shortlist
+    place, the row in the scoping report, and "what changed since the scoping pass" drawn from
+    History. There is no mirror and no second document with the same template. What the child
+    task adds is what only a task has: its plan (Agent), its confirmed document set (Sources) and
+    its own History; its Result tab shows the same document. The scoping-pass profile is the
+    earlier version of that document, kept in History. Export attaches the one document.

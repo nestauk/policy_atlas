@@ -1,5 +1,15 @@
 # Spec update log
 
+## 2026-09-08
+* **Update**: Options scoping board refinement — concept rulings 45–47 (the report stays linear with
+  verdict strips, the comparison table is the shortlist view after assessment; the Sources tab is
+  the Evidence search's Sources component plus read-depth and set-aside statuses; one document after
+  a full run: the child task's report is the profile, shown in place, no mirror). Boards 6, 6b, 7b
+  and 7c redrawn, board 6c added; [capability.md](capabilities/options-scoping/capability.md)
+  (product surface, report sections, Sources tab, full evidence search) and
+  [components.md](capabilities/options-scoping/components.md) (⟨full run⟩) amended;
+  [source README](sources/options-scoping/README.md) updated.
+
 ## 2026-09-07 (boards redrawn)
 * **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction
   ([source README](sources/options-scoping/README.md); readable boards under

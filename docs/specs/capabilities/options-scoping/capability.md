@@ -262,10 +262,12 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   linked both ways, sharing its project and visibility. The child report, written with that
   template and given the scoping task's user context as input, **computes the profile's
   judgement cells itself** (how sure, transferability and its conditions, the key assumption)
-  under the OS trust rules; the scoping profile **mirrors them** ("full run"), keeps the
-  scoping-pass version in History, and the context stays owned by scoping (so a cap set by
-  unstated context survives). This widens the Evidence search's declared output boundary for the
-  profile-template case only.
+  under the OS trust rules; that report **is the option profile** after a full run, shown in
+  place in the scoping task tagged "full run" with the scoping frame around it (shortlist place,
+  row in the scoping report, "what changed" from History) — one document, two homes, no mirror
+  (ruling 47). The scoping-pass profile is its earlier version, kept in History, and the context
+  stays owned by scoping (so a cap set by unstated context survives). This widens the Evidence
+  search's declared output boundary for the profile-template case only.
 
 ### The sense-check branch (ruling 25)
 
@@ -297,9 +299,9 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   one-line takeaways. Sections: **top line** · **the problem and what is contested** · **the
   approaches** (a paragraph per theme: options in a sentence each, variants and packages,
   exclusions with their constraints) · **what the evidence base holds** (provisional: the
-  source-quality profile per option and thin coverage; assessed: the assessed table embedded,
-  each effect with its own comparator, population and period; the kept-but-unassessed options by
-  theme) · **transferability and assumptions** (assessed form) · **what needs deciding or
+  source-quality profile per option and thin coverage; assessed: one verdict strip per option,
+  each effect with its own comparator, population and period, with the comparison table as a
+  working view (ruling 45); the kept-but-unassessed options by theme) · **transferability and assumptions** (assessed form) · **what needs deciding or
   commissioning next** (plus the questions to put to the department in the sense-check) · **what
   was searched and not searched**. Exists from the longlist stage in a provisional form that says
   nothing has been assessed; rewritten by assessment. Baseline, Longlist (list · grid · shortlist
@@ -334,7 +336,9 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
 - ✅ **Shortlist view.** Before assessment, the places with their reasons and the assess action;
   after, the same options with their assessed rows, which live in the report's "what the
   evidence base holds" section (ruling 32).
-- ✅ **Assessed table = verdict strips stacked** (ruling 7). Six columns: Option (with its
+- ✅ **Assessed evidence = verdict strips in the report, a comparison table as a working view**
+  (rulings 7, 45). The report carries one strip per option in its prose column; the longlist's
+  shortlist view after assessment lays the same content out in six columns: Option (with its
   description) · How big, as reported · How sure · Where tried · Transferability · Key
   assumption. No study-design labels in the table ("15 studies", not "4 randomised"; owner
   2026-09-03, recorded in ruling 40). One provenance
@@ -370,9 +374,13 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   observational and quasi-experimental implementation accounts), **Overton grey literature (the
   workhorse and the USP)**, and supplementary verified web links (gap-filler, lowest tier). A
   case study never silently raises an evidence-strength rating (concept § Case-study sourcing).
-- ✅ **Sources tab**: what was searched (the coverage statement: documents retrieved and passed,
-  inherited versus added (ruling 22), grey literature, web, screens applied, what was read at
-  which depth (ruling 16), not searched) · all sources · sources by option.
+- ✅ **Sources tab = the Evidence search's Sources component** (ruling 46): By option · Landscape
+  · All sources (· Findings when a deep search was inherited), the coverage header stating what
+  was searched (documents retrieved and passed, inherited versus added (ruling 22), what was read
+  at which depth (ruling 16), set aside under the evidence scope, not read under the cap, not
+  searched), filter chips and the document table, plus scoping's statuses (*set aside: outside
+  evidence scope* · *read in full* · *abstract only* · *not read under the cap*) and an Options
+  column.
 - ✅ **Density rule.** Never all layers at once; collapsed headers carry their takeaways; detail
   on demand. Applies to every scoping surface (concept § Option click-through).
 
@@ -388,7 +396,8 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   column; the right column holds the current content and opens wide for the longlist, the grid
   and the profiles. ("Assessment" is a state the shortlist is in, not a place.) The grid view's
   rows are the fixed lever types (ruling 20). The boards were redrawn to rulings 15–44 on
-  2026-09-07; where a board and a ruling still differ, the ruling wins (source README).
+  2026-09-07 and refined to rulings 45–47 on 2026-09-08; where a board and a ruling still differ,
+  the ruling wins (source README).
 - ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
   document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints
   (each with when it is checked) · Plan steps · Check-ins, an Edit action per section, and one
