@@ -829,4 +829,31 @@ Made on the redrawn boards. They amend the rulings named; the boards were redraw
     beyond the inherited set; the child's Sources tab states inherited versus added, as the
     scoping task's does. One component owns the inherited-versus-added accounting in both
     directions.
+49. **Refinement pass on the redrawn boards** (owner, 2026-09-08; from a ChatGPT review pack the owner
+    approved, ported into the canonical boards in the ruled design language). Adopted, as
+    presentation and copy, not new capability: a **Hide chat** control on every task board (the
+    built app already collapses the chat); the plan's constraints as a table of what you asked
+    for, what happens and when it is checked, with "Question and intended change" as one section
+    and "Steps and check-ins" as one; the baseline's **"check the target population"** callout
+    ahead of the evidence, with "Change the plan" beside it; five **state boards**: the baseline
+    confirmed and the longlist generating with the next action in view, a direct edit on the
+    shortlist view with its consequence named and Undo, a plan change after assessment with the
+    prior report readable and labelled and "Refresh affected results", the refresh in progress, and
+    a History view of what changed after a full search (before and now); **counts corrected**:
+    fourteen included (a "no in-scope evidence" option is included, the condition is not a
+    membership state), seven reviewed of which five have outcome evidence, one implementation
+    evidence only and one where assessment was attempted and no matching evidence was found, seven
+    kept options unassessed; report **top lines lead with findings, a limitation and the next
+    decision**, each labelled as reasoning where it is; the grid's tiles carry separate open and
+    shortlist actions; **"source quality"** names the pre-assessment sort and the Sources column,
+    "how sure" only after assessment (ruling 33); the Sources filters grouped as Screening ·
+    Reading · Use; the profile opens with its how-sure and transferability block and the key
+    assumption and constraint conflict in a callout; the full-run profile states "how sure
+    unchanged" where it is unchanged and shows what changed as before and now; the sense-check's
+    **questions to put to the department follow the top line**. **Not adopted, by ruling:** the
+    pack's restyle (desaturated blue, Arial, radii, small text; the 2026-09-03 design-language
+    ruling stands), status chips (states stay words), viewport-clipped boards with detail
+    duplicates (boards stay full height), and renaming "Do nothing" (kept, as the page title "Do
+    nothing: current policy and trajectory"). The pack is kept in the gitignored review pack as
+    reference.
 

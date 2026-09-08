@@ -17,12 +17,14 @@
   .sk .card { border:1px solid #0f294a; padding:8px 10px; font-size:13px; background:#ffffff; }
   .sk .card strong { color:#0000ff; }</style>
 </helmet>
-<div class="sk" style="height:520px;">
-  <div class="bar"><span>Behaviour · one state, two controls</span></div>
-  <div style="flex:1; display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:16px; padding:20px;">
-    <div class="box"><strong>Say it in the chat</strong><div class="msg u">Add caseworker support and the youth guarantee to the shortlist.</div><span>The longlist view updates.</span><span>Agent confirms in one line with the new reason.</span></div>
-    <div class="box"><strong>Do it on the view</strong><span>click Add to shortlist · click Exclude · click Include again</span><span>Chat logs it as your turn: <em>“You added Intensive caseworker support to the shortlist”</em>.</span><span>Agent replies only if a consequence follows, such as a lever type losing its place.</span></div>
-    <div class="box"><strong>Re-runs apply deltas</strong><span>Change a constraint and only the affected options re-check.</span><span>what you added survives · exclusions keep their reasons · variants keep their own searches</span><span>every version stays in History with who changed what; you resume from the analysis, never by replaying the chat</span></div>
+<div class="sk" style="height:640px;">
+  <div class="bar"><span>Behaviour · one conversation, two ways to act, and revision</span></div>
+  <div style="flex:1; display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:16px; padding:20px;">
+    <div class="box"><strong>Say it in the chat</strong><div class="msg u">Add caseworker support to the shortlist.</div><span>The option's membership changes on the view. One brief reply confirms the change and any consequence.</span></div>
+    <div class="box"><strong>Do it on the view</strong><span>Remove from shortlist · Add to shortlist · Exclude · Include again, on every row and tile.</span><span>The chat logs it as your turn. Feedback names the consequence ("no information-lever option is on the shortlist now") with Undo; the agent replies only if a consequence follows.</span></div>
+    <div class="box"><strong>Confirm before proceeding</strong><span>The baseline pause and the shortlist confirmation each show one clear decision. Generating is a separate, visible state; the next action stays in view.</span></div>
+    <div class="box"><strong>Change the plan</strong><span>The prior report stays readable, labelled with its previous plan. Refresh affected results; selected options, exclusions and History are retained. You resume from the analysis, never by replaying the chat.</span></div>
+    <div class="box" style="grid-column:1 / -1;"><strong>Hide the chat</strong><span>The chat collapses, as in the built app, to give the document the width; reopening it keeps the conversation.</span></div>
   </div>
 </div>
 </x-dc>

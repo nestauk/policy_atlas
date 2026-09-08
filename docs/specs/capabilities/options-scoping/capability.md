@@ -396,7 +396,7 @@ Settled by the owner on the wireframes (rulings 1, 13; source
   column; the right column holds the current content and opens wide for the longlist, the grid
   and the profiles. ("Assessment" is a state the shortlist is in, not a place.) The grid view's
   rows are the fixed lever types (ruling 20). The boards were redrawn to rulings 15–44 on
-  2026-09-07 and refined to rulings 45–47 on 2026-09-08; where a board and a ruling still differ,
+  2026-09-07 and refined to rulings 45–49 on 2026-09-08; where a board and a ruling still differ,
   the ruling wins (source README).
 - ✅ **The plan is presented exactly like the EB search plan**, in the Agent tab: the navy plan
   document beside the planning conversation, with Question · What we are trying to change · Settings · Constraints

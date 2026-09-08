@@ -18,6 +18,12 @@
   amended; [OS components](capabilities/options-scoping/components.md) § 0 and ⟨full run⟩ amended;
   [execution-orchestration](system/execution-orchestration.md) names `inherit` as the first
   component both capabilities compose. Boards 7b, 7c, 7d updated.
+* **Update**: Options scoping board refinement pass (concept ruling 49): an owner-approved ChatGPT
+  review pack ported into the canonical boards in the ruled design language — Hide chat, the plan's
+  constraints as a table, the baseline's target-population callout, five state boards (generating,
+  direct edit with Undo, plan changed with refresh, refresh running, History), corrected counts, top
+  lines leading with findings, Sources filters grouped with a "source quality" column. Restyle, chips,
+  viewport clipping and the "Do nothing" rename not adopted. [Source README](sources/options-scoping/README.md).
 
 ## 2026-09-07 (boards redrawn)
 * **Update**: Options scoping wireframes redrawn to concept rulings 15–44 at the owner's direction

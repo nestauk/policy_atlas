@@ -18,7 +18,7 @@ record the decision.
 
 | File | What it is | How to use it |
 |---|---|---|
-| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07 and the board-refinement rulings 45–48 of 2026-09-08. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
+| [options-scoping-concept.md](options-scoping-concept.md) | The concept agreed with the owner on 2026-09-01/02, the fourteen wireframe-round rulings of 2026-09-03 and the review-round rulings 15–44 of 2026-09-07 and the board-refinement rulings 45–49 of 2026-09-08. | The canonical statement of intent and rulings; the spec distils it. Its last section wins over its earlier sections where they differ. |
 | [options-scoping-wireframes.html](options-scoping-wireframes.html) | The wireframe canvas as a bundled, viewable page (the same content as the live canvas linked from the concept). | Product intent only: screens, copy, states and interaction patterns. Never a schema or contract source. |
 | [boards/](boards/) | The readable source of every board on the canvas — one `.dc.html` per board plus `canvas.json` for layout and titles. | Read these rather than the bundled page. Each board is plain HTML with inline styles. |
 
@@ -37,7 +37,9 @@ with its source-quality profile) · 3c. Report, provisional: the Result from the
 assessed: the Result, one verdict strip per option · 6b. Sources: the Evidence search Sources component
 · 6c. Longlist, shortlist view after assessment: the comparison table · 7. Option profile, every
 section open (7b after a full evidence search, the child task's report shown in place; 7c the child
-task's Sources tab; 7d the tasks list) · 8. Sense-check one option, rapid.
+task's Sources tab; 7d the tasks list) · 8. Sense-check one option, rapid. A **States** page holds the
+moments between: 3b plan confirmed and generating · 5c a direct edit with its consequence and Undo ·
+the plan changed after assessment, the refresh in progress · History after a full search.
 
 The sample question throughout is reducing the number of 16 to 24 year olds who are not in
 education, employment or training. **Every figure, study count, quotation and named source on
@@ -75,3 +77,10 @@ shortlist view after assessment (new board 6c); the Sources tab is the Evidence 
 component with scoping's read-depth and set-aside statuses; and after a full evidence search there is
 one document, the child task's report shown in place as the profile, with the child task adding its
 plan, Sources and History; and `inherit` is a shared component, so the child Evidence search inherits the option's documents, light findings, user context and evidence scope from the scoping task. Boards 6, 6b, 7b, 7c and 7d were redrawn to match.
+
+**Refinement pass, 2026-09-08.** A ChatGPT review pack approved by the owner (kept in the gitignored
+review pack under `refinements/`) was ported into these boards as ruling 49: a Hide chat control, the
+plan's constraints as a table, the baseline's target-population callout, five state boards, corrected
+counts, top lines that lead with findings, grouped Sources filters and "source quality" before
+assessment. Its restyle, status chips, viewport clipping and the renaming of "Do nothing" were not
+adopted.
