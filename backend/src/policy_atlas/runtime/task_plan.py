@@ -12,9 +12,9 @@ from typing import Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.evidence_search.assess.screen import (
     CRITERIA_LIST_MAX,
+    SCREENING_CRITERION_MAX,
     ScreenDirectiveError,
     _compose_screen_intent,
 )
@@ -774,7 +774,8 @@ class TaskPlan(BaseModel):
                 grammar's caps (the compile target must accept every valid
                 plan by construction; live check 017 caught a >200-char
                 criterion validating here and rejecting at the screen
-                boundary).
+                boundary; task 039 bug 2 raised the per-entry cap to
+                ``SCREENING_CRITERION_MAX``).
         """
         if info.field_name == "screening_criteria":
             if len(values) > CRITERIA_LIST_MAX:
@@ -782,10 +783,10 @@ class TaskPlan(BaseModel):
                     f"screening_criteria must have at most {CRITERIA_LIST_MAX} entries"
                 )
             for value in values:
-                if len(value) > DIRECTIVE_STRING_MAX:
+                if len(value) > SCREENING_CRITERION_MAX:
                     raise ValueError(
                         "screening_criteria entries must be at most "
-                        f"{DIRECTIVE_STRING_MAX} characters"
+                        f"{SCREENING_CRITERION_MAX} characters"
                     )
         return [_require_clean_string(value, field_name=info.field_name) for value in values]
 
