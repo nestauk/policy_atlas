@@ -51,6 +51,19 @@ fixed at 390px viewport width, desktop/tablet visually unchanged (except D4b), a
 | D8 | Expand control, `ArtefactOutline.tsx` `SectionDisclosure` (L355-368) and `GatheredSection` (L425-436) | "Expand +" sits beside the section heading and crowds it. | Mobile: hide the heading-row control; show the expand affordance at the end of the collapsed summary instead. Heading row stays tappable. ≥md unchanged. |
 | D9 | Chat rail, `ChatSidePanel.tsx`, mounted `AppShell.tsx:436-440` | Expanding opens a ≥280px panel — unusable beside content on a 390px screen. | Mobile: tapping the rail navigates to the Agent tab instead of expanding. ≥md keeps the expanding panel. |
 
+## Owner amendments (2026-09-08, after the D1–D9 build)
+
+Same slice, same rules (mobile = `max-md:`, ≥768px unchanged unless said):
+
+| # | Surface | Fix |
+|---|---|---|
+| A1 | New Task view (`NewTaskView.tsx`) | Mobile: smaller eyebrow/title/body type; column uses full width (was `max-w-[50vw]`) — also stops the "Coming soon" chip crowding the row labels. |
+| A2 | Task list rows (`TaskListRow.tsx`, `listPageChrome.ts`) | Mobile: rows wrap — title takes the whole first line, metadata (capability, status, sources, date) flows below; fixes hidden project/title and overflowing right columns. |
+| A3 | Project list rows (`ProjectsView.tsx`) | Same multi-line treatment. |
+| A4 | Global bar row 2 (`AppShell.tsx`, `Nav.tsx`) | Mobile: nav links left-justified at default gap (not spread); account icon moves up to the logo row, top-right. Desktop DOM/visuals unchanged. |
+| A5 | Sources sub-tabs + Key-theme filter (`SourcesLayout.tsx`, `SourcesView.tsx`) | Mobile: smaller tab type (`text-caption`), tighter padding; the theme `<select>` width capped so long theme names can't overflow. |
+| A6 | Chat rail on mobile (`ChatSidePanel.tsx`) | **Supersedes D9's strip:** below md the rail hides with no stand-in — the bottom bar's Agent tab is the way in. Desktop unchanged. |
+
 ## Read first
 
 - [docs/specs/vocabulary.md](../../specs/vocabulary.md) — tab and nav labels (D1, D2) come

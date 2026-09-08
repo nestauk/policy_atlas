@@ -81,22 +81,6 @@ function usePanelWidth() {
 const HEADER_BUTTON =
   "pressable flex h-8 w-8 shrink-0 items-center justify-center text-grey hover:bg-blue-tint-2 hover:text-navy focus-visible:outline-2 focus-visible:outline-blue disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent";
 
-/** Below `md` the rail's four-plus controls are cramped and the open panel's
- *  280px floor eats a 390px phone, so both hide and this strip stands in:
- *  one tap target to the Agent tab, where the conversation is full width
- *  (task 040 phase 5, D9). A render switch — no `matchMedia`, no listeners. */
-function MobileAgentStrip({ taskId }: { taskId: string }) {
-  return (
-    <Link
-      to={`/tasks/${taskId}`}
-      aria-label={COPY.openAgent}
-      className="flex h-full w-12 shrink-0 flex-col items-center border-r border-line bg-paper py-3 text-grey md:hidden"
-    >
-      <ChatsIcon size={15} />
-    </Link>
-  );
-}
-
 /** The Agent overlay: side-by-side chat on every task view but the Agent tab
  *  (038 V8).
  *
@@ -144,23 +128,22 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   if (activeConversationId === null) {
     // Shut, the overlay is the same rail the Agent tab's sidebar shuts to
     // (owner request 2026-09-05): one object on every task tab.
+    // Below md the rail hides with no stand-in (task 040 amendment A6): the
+    // bottom tab bar's Agent tab is the mobile way into the conversation.
     return (
-      <>
-        <ConversationRail
-          toggleLabel={COPY.openAgent}
-          expanded={false}
-          toggleDisabled={!conversations.isSuccess}
-          onToggle={openLatestOrTaskAgent}
-          onNewChat={() => openDraftChat(null)}
-          chatsEnabled={chatsEnabled}
-          onTaskAgent={false}
-          onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
-          recent={recentChats(rows)}
-          onSelectChat={setActiveConversation}
-          className="h-full w-12 flex-col border-r py-2 max-md:hidden"
-        />
-        <MobileAgentStrip taskId={taskId} />
-      </>
+      <ConversationRail
+        toggleLabel={COPY.openAgent}
+        expanded={false}
+        toggleDisabled={!conversations.isSuccess}
+        onToggle={openLatestOrTaskAgent}
+        onNewChat={() => openDraftChat(null)}
+        chatsEnabled={chatsEnabled}
+        onTaskAgent={false}
+        onSelectTaskAgent={() => setActiveConversation(taskAgentId)}
+        recent={recentChats(rows)}
+        onSelectChat={setActiveConversation}
+        className="h-full w-12 flex-col border-r py-2 max-md:hidden"
+      />
     );
   }
 
@@ -176,8 +159,6 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
   const sectionTitles = (artefact.data?.sections ?? []).map((section) => section.title);
 
   return (
-    <>
-    <MobileAgentStrip taskId={taskId} />
     <aside
       aria-label={COPY.agentAriaLabel}
       style={{ width: panel.width }}
@@ -281,6 +262,5 @@ export function ChatSidePanel({ taskId, isOwner }: { taskId: string; isOwner: bo
         </div>
       )}
     </aside>
-    </>
   );
 }

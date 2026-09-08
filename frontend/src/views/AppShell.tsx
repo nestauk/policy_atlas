@@ -376,7 +376,11 @@ export function AppShell() {
     >
       <NavBar aria-label="App" className="shrink-0">
         <NavHomeLink running={anyRunning} />
-        <div className="flex items-center gap-5 max-md:w-full max-md:justify-between max-md:gap-3">
+        {/* Below md the link group wraps to its own second row (order-last +
+            w-full), left-justified, while the account icon stays on the logo
+            row; from md up the DOM order and right grouping are unchanged
+            (ml-auto pins the links against the account icon). */}
+        <div className="flex items-center gap-5 md:ml-auto max-md:order-last max-md:w-full">
           <NavItem to="/new" end>
             {COPY.navNew}
           </NavItem>
@@ -387,10 +391,10 @@ export function AppShell() {
             {TASK.many}
           </NavItem>
           <NavItem to="/projects">{PROJECT.many}</NavItem>
-          {/* 026 live-check gap: the AuthApi always had signOut; nothing
-              rendered it — Cognito users had no way out of a session. */}
-          {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
         </div>
+        {/* 026 live-check gap: the AuthApi always had signOut; nothing
+            rendered it — Cognito users had no way out of a session. */}
+        {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
       </NavBar>
       {base !== null && (
         <NavBar aria-label={TASK.one} className="shrink-0 bg-ground">

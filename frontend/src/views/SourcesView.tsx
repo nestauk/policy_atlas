@@ -628,12 +628,14 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-meta font-semibold text-grey">
+    <label className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey">
       {label}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="cursor-pointer border border-line-2 bg-paper px-2 py-1.5 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
+        // A <select> sizes to its longest option; capped below md so a long
+        // theme name can't overflow the filter row.
+        className="min-w-0 cursor-pointer border border-line-2 bg-paper px-2 py-1.5 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52"
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (

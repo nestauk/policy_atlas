@@ -160,7 +160,7 @@ export function ProjectsView() {
                   to={`/projects/${project.project_id}`}
                   className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-3.5 no-underline hover:bg-blue-tint-2"
                 >
-                  <span className="min-w-0 flex-1 text-body font-semibold text-navy">
+                  <span className="min-w-0 flex-1 text-body font-semibold text-navy max-md:w-full max-md:flex-none">
                     {scrub(project.name)}
                   </span>
                   {showOwner && (
@@ -175,7 +175,7 @@ export function ProjectsView() {
                   </span>
                   <time
                     dateTime={lastUpdated}
-                    className="w-28 shrink-0 text-right text-caption tabular-nums text-grey"
+                    className="w-28 shrink-0 text-right text-caption tabular-nums text-grey max-md:w-auto max-md:text-left"
                   >
                     {new Date(lastUpdated).toLocaleDateString()}
                   </time>

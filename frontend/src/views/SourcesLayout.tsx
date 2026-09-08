@@ -38,7 +38,7 @@ export function SourcesLayout() {
               end={tab.end}
               className={({ isActive }) =>
                 cn(
-                  "flex-1 px-4 py-2.5 text-center text-meta font-extrabold uppercase tracking-[0.06em] no-underline",
+                  "flex-1 px-4 py-2.5 text-center text-meta font-extrabold uppercase tracking-[0.06em] no-underline max-md:px-2 max-md:text-caption",
                   index > 0 && "border-l border-line",
                   isActive ? "bg-navy text-white" : "text-grey hover:text-navy",
                 )

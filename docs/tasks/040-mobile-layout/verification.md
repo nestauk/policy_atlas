@@ -56,6 +56,16 @@ Full-chain smoke (pinned): open task → all five tabs via the bottom bar (URLs
 logged) → claim citation opened → Download menu opened (PDF/Markdown,
 `download-menu-390.png`). ~2 min wall time.
 
+**Owner amendments A1–A6** (contract § Owner amendments), verified the same way:
+
+| Amendment | 390px observation | ≥768px unchanged |
+|---|---|---|
+| A1 | New Task full-width, smaller type, no "Coming soon" overlap (`a1-newtask-390.png`) | 1280 layout as before |
+| A2/A3 | Task and project rows wrap: title on its own line, metadata below (`a2-tasks-390.png`) | 1280 grid columns aligned as before (`a4-tasks-1280.png`) |
+| A4 | Nav links left-justified row 2; account icon on the logo row, top-right (`a1-newtask-390.png`) | 1280 header identical (`a4-tasks-1280.png`) |
+| A5 | Sources sub-tabs smaller; Key-theme select capped, no overflow (`a5-allsources-390.png`) | 1280 unchanged |
+| A6 | Chat strip removed; report full-width; Agent reachable via bottom bar (`a6-result-390.png`) | 1280 rail/panel unchanged |
+
 ## End-to-end command
 
 ```
@@ -89,6 +99,12 @@ node live.mjs && node live2.mjs && node smoke.mjs   # Playwright drives, scripts
   below md; one-tap `MobileAgentStrip` links to the Agent tab; no viewport JS
   (D9). Note: a `?chat=` deep link opened on a phone shows no panel — the
   conversation is reachable via the Agent tab (accepted, within D9's contract).
+- **Amendments A1–A6** (lead, owner-directed 2026-09-08): New Task mobile type +
+  full width (A1); task/project rows wrap to title + metadata lines (A2/A3);
+  nav links left-justified with the account icon on the logo row (A4); smaller
+  Sources sub-tabs and a capped Key-theme select (A5); the D9 mobile strip
+  removed — the bottom bar's Agent tab supersedes it (A6). `make frontend-verify`
+  green (568 tests) after the amendments.
 
 ## Review findings
 

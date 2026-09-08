@@ -15,7 +15,7 @@ export const BETA_CHIP_HINT =
 export function NavBar({ className, children, ...props }: HTMLAttributes<HTMLElement>) {
   return (
     <nav className={cn("w-full border-b border-line bg-paper", className)} {...props}>
-      <div className="flex h-16 w-full items-center justify-between px-6 max-md:h-auto max-md:min-h-14 max-md:flex-wrap max-md:gap-y-1 max-md:px-4 max-md:py-2">
+      <div className="flex h-16 w-full items-center justify-between gap-x-5 px-6 max-md:h-auto max-md:min-h-14 max-md:flex-wrap max-md:gap-y-1 max-md:px-4 max-md:py-2">
         {children}
       </div>
     </nav>
