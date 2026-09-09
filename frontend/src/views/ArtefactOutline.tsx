@@ -274,12 +274,12 @@ export function SectionDisclosure({
  * the report cites, with the compact whole-search funnel line and the
  * Landscape pointer for the full corpus. Counts label "Documents".
  */
-export function GatheredSection({ projectId, id }: { projectId: string; id: string }) {
+export function GatheredSection({ taskId, id }: { taskId: string; id: string }) {
   const [open, setOpen] = useState(false);
   useOpenWhenNavigated(id, setOpen);
   useExpandForPrint(setOpen);
-  const landscape = useLandscape(projectId, "cited");
-  const funnel = useFunnel(projectId);
+  const landscape = useLandscape(taskId, "cited");
+  const funnel = useFunnel(taskId);
   const cited = landscape.data;
   const distributions = useMemo(() => {
     if (cited === undefined) return [];
@@ -331,7 +331,7 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
               <span className="text-grey">
                 {" "}
                 · this section covers only the cited sources —{" "}
-                <Link to={`/projects/${projectId}/sources/landscape`} className="text-blue hover:underline">
+                <Link to={`/tasks/${taskId}/sources/landscape`} className="text-blue hover:underline">
                   the Landscape tab
                 </Link>{" "}
                 shows the whole search
@@ -368,7 +368,7 @@ export function GatheredSection({ projectId, id }: { projectId: string; id: stri
                     <span className="min-w-0 flex-1 truncate">{scrub(theme.name)}</span>
                     {theme.theme_id != null ? (
                       <Link
-                        to={`/projects/${projectId}/sources/all?theme=${theme.theme_id}`}
+                        to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`}
                         className="shrink-0 text-caption text-blue hover:underline"
                       >
                         {theme.size === 1 ? "1 document →" : `${theme.size} documents →`}

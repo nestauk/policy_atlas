@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useParams } from "react-router";
 
-import { useDecisions, usePlanningTurns, useProject } from "../api/queries";
+import { useDecisions, usePlanningTurns, useTask } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -22,12 +22,12 @@ const PAGE_SIZE = 200;
  * in here, so they appear above the run events rather than nowhere.
  */
 export function HistoryView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  const decisions = useDecisions(projectId, { page_size: PAGE_SIZE });
-  const turns = usePlanningTurns(projectId, { page_size: PAGE_SIZE });
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  const decisions = useDecisions(taskId, { page_size: PAGE_SIZE });
+  const turns = usePlanningTurns(taskId, { page_size: PAGE_SIZE });
   const [open, setOpen] = useState<string | null>(null);
-  useDocumentTitle(project.data?.name, LIFECYCLE_LABELS.history);
+  useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.history);
 
   const isPending = decisions.isPending || turns.isPending;
   const isError = decisions.isError || turns.isError;

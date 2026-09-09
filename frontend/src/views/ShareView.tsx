@@ -1,6 +1,6 @@
 import { useParams } from "react-router";
 
-import { useProject } from "../api/queries";
+import { useTask } from "../api/queries";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, LIFECYCLE_LABELS } from "../lib/vocabulary";
 import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
@@ -14,9 +14,9 @@ import { LIFECYCLE_PAGE_CLASS } from "./listPageChrome";
  * feature that is coming and one that was never planned.
  */
 export function ShareView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  useDocumentTitle(project.data?.name, LIFECYCLE_LABELS.share);
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, LIFECYCLE_LABELS.share);
 
   return (
     <main className={`${LIFECYCLE_PAGE_CLASS} py-8`}>

@@ -8,7 +8,7 @@ import {
   MOCK_CHAT_CITATION_QUOTE,
   MOCK_CHECK_IN_ID,
   MOCK_PLANNING_CONVERSATION_ID,
-  MOCK_PROJECT_ID,
+  MOCK_TASK_ID,
   MOCK_THEME_ID_ACTIVE_TRAVEL,
   MOCK_THEME_ID_SCHOOL_FOOD,
   mockEvidenceThemeIds,
@@ -29,7 +29,7 @@ async function readNdjson(response: Response): Promise<Record<string, unknown>[]
 
 describe("mock API", () => {
   it("serves deterministic, screened-in landscape fixtures", async () => {
-    const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/landscape`);
+    const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/landscape`);
     const landscape = await response.json() as { evidence_types: Record<string, number>; themes: { size: number }[] };
     expect(Object.values(landscape.evidence_types).reduce((total, count) => total + count, 0)).toBe(46);
     expect(landscape.themes.reduce((total, theme) => total + theme.size, 0)).toBe(46);
@@ -40,7 +40,7 @@ describe("mock API", () => {
   // doesn't diverge from `repository.evidence`'s real sort/filter logic.
   describe("evidence sort/order/theme (028 strand 7)", () => {
     it("sorts by year descending by default (the server's own default direction)", async () => {
-      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?sort=year`);
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?sort=year`);
       const { data } = await response.json() as { data: { year: number | null }[] };
       const years = data.map((item) => item.year);
       const nonNullYears = years.filter((year): year is number => year !== null);
@@ -51,7 +51,7 @@ describe("mock API", () => {
     });
 
     it("flips to ascending when `order=asc` is explicit, nulls still last", async () => {
-      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?sort=year&order=asc`);
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?sort=year&order=asc`);
       const { data } = await response.json() as { data: { year: number | null }[] };
       const nonNullYears = data.map((item) => item.year).filter((year): year is number => year !== null);
       expect(nonNullYears).toEqual([...nonNullYears].sort((a, b) => a - b));
@@ -59,14 +59,14 @@ describe("mock API", () => {
     });
 
     it("sorts by title case-insensitively", async () => {
-      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?sort=title&order=asc`);
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?sort=title&order=asc`);
       const { data } = await response.json() as { data: { title: string }[] };
       const titles = data.map((item) => item.title);
       expect(titles).toEqual([...titles].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
     });
 
     it("filters collection-true by theme id", async () => {
-      const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?theme=${MOCK_THEME_ID_SCHOOL_FOOD}`);
+      const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?theme=${MOCK_THEME_ID_SCHOOL_FOOD}`);
       const { data } = await response.json() as { data: { source_id: string }[] };
       const expectedIds = Object.entries(mockEvidenceThemeIds)
         .filter(([, themeIds]) => themeIds.includes(MOCK_THEME_ID_SCHOOL_FOOD))
@@ -77,7 +77,7 @@ describe("mock API", () => {
 
     it("combines theme and sort — a different theme returns a disjoint, still-sorted set", async () => {
       const response = await mockFetch(
-        `http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/evidence?theme=${MOCK_THEME_ID_ACTIVE_TRAVEL}&sort=title&order=asc`,
+        `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/evidence?theme=${MOCK_THEME_ID_ACTIVE_TRAVEL}&sort=title&order=asc`,
       );
       const { data } = await response.json() as { data: { source_id: string; title: string }[] };
       const expectedIds = Object.entries(mockEvidenceThemeIds)
@@ -93,14 +93,14 @@ describe("mock API", () => {
     resetMockScenario();
     // The event stream is gated behind a real run start (027 F.2): nothing
     // streams until "Start the analysis" — i.e. `POST .../runs` — succeeds.
-    const started = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/runs`, { method: "POST" });
+    const started = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/runs`, { method: "POST" });
     expect(started.status).toBe(201);
-    const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/events`);
+    const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/events`);
     const frames: SseFrame[] = [];
     const consumed = consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
     await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
     const answer = await mockFetch(
-      `http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`,
+      `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`,
       { method: "POST", body: JSON.stringify({ kind: "free_text", text: "Keep family support visible" }) },
     );
     expect(answer.status).toBe(202);
@@ -114,7 +114,7 @@ describe("mock API", () => {
 
   it("gates the stream until a run actually starts", async () => {
     resetMockScenario();
-    const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/events`);
+    const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/events`);
     const frames: SseFrame[] = [];
     void consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
     // Give the (already-open) stream a turn to misbehave before asserting
@@ -125,12 +125,12 @@ describe("mock API", () => {
 
   it("serves a ready plan and the durable transcript with an honest incomplete turn", async () => {
     resetMockScenario();
-    const planResponse = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/plan`);
+    const planResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/plan`);
     const plan = await planResponse.json() as { plan: { ready: boolean; search_effort: string } };
     expect(plan.plan.ready).toBe(true);
     expect(plan.plan.search_effort).toBe("rapid");
 
-    const turnsResponse = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/planning-turns`);
+    const turnsResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/planning-turns`);
     const turns = await turnsResponse.json() as {
       data: {
         status: string;
@@ -156,27 +156,27 @@ describe("mock API", () => {
 
   it("persists a PATCH onto the current mock plan", async () => {
     resetMockScenario();
-    const patched = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/plan`, {
+    const patched = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/plan`, {
       method: "PATCH",
       body: JSON.stringify({ backend_scope: "academic_only" }),
     });
     expect(patched.status).toBe(200);
     const body = await patched.json() as { plan: { backend_scope: string } };
     expect(body.plan.backend_scope).toBe("academic_only");
-    const reread = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/plan`);
+    const reread = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/plan`);
     const again = await reread.json() as { plan: { backend_scope: string } };
     expect(again.plan.backend_scope).toBe("academic_only");
   });
 
   it("streams a terminal-partial banner fixture (failed after a partial artefact)", async () => {
     resetMockScenario();
-    await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/runs`, { method: "POST" });
-    const response = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/events?mockScenario=failed-partial`);
+    await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/runs`, { method: "POST" });
+    const response = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/events?mockScenario=failed-partial`);
     const frames: SseFrame[] = [];
     const consumed = consumeEventStream(response.body!, 0, (frame) => frames.push(frame));
     await vi.waitFor(() => expect(frames.at(-1)?.type).toBe("checkin.pending"));
     await mockFetch(
-      `http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`,
+      `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/check-ins/${MOCK_CHECK_IN_ID}/response`,
       { method: "POST", body: JSON.stringify({ kind: "option", option_id: "suggested-balanced" }) },
     );
     await consumed;
@@ -190,7 +190,7 @@ describe("mock API", () => {
   describe("chat conversations", () => {
     it("lists the seeded planning conversation when kind is not filtered to chat", async () => {
       resetMockScenario();
-      const listed = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?status=active`);
+      const listed = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?status=active`);
       const { data } = await listed.json() as { data: { id: string; kind: string; title: string }[] };
       expect(data).toEqual(expect.arrayContaining([
         expect.objectContaining({
@@ -199,14 +199,14 @@ describe("mock API", () => {
           title: "Planning",
         }),
       ]));
-      const chatsOnly = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?kind=chat&status=active`);
+      const chatsOnly = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?kind=chat&status=active`);
       const { data: chats } = await chatsOnly.json() as { data: { id: string }[] };
       expect(chats.map((row) => row.id)).not.toContain(MOCK_PLANNING_CONVERSATION_ID);
     });
 
     it("creates, lists, updates, and archives/unarchives a conversation", async () => {
       resetMockScenario();
-      const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, {
+      const created = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations`, {
         method: "POST",
         body: JSON.stringify({ entry_artefact_id: "artefact-1" }),
       });
@@ -214,7 +214,7 @@ describe("mock API", () => {
       const conversation = await created.json() as { id: string; title: string; status: string; entry_artefact_id: string | null };
       expect(conversation).toMatchObject({ title: "New chat", status: "active", entry_artefact_id: "artefact-1" });
 
-      const listed = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?kind=chat&status=active`);
+      const listed = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?kind=chat&status=active`);
       const { data: active } = await listed.json() as { data: { id: string }[] };
       expect(active.map((row) => row.id)).toContain(conversation.id);
 
@@ -235,7 +235,7 @@ describe("mock API", () => {
 
       const archived = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/archive`, { method: "POST" });
       expect(await archived.json()).toMatchObject({ status: "archived" });
-      const afterArchive = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations?kind=chat&status=active`);
+      const afterArchive = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations?kind=chat&status=active`);
       const { data: activeAfterArchive } = await afterArchive.json() as { data: { id: string }[] };
       expect(activeAfterArchive.map((row) => row.id)).not.toContain(conversation.id);
 
@@ -245,7 +245,7 @@ describe("mock API", () => {
 
     it("streams progress + two deltas + a completed turn with a pending-enrichment citation, then flips to enriched on the second turns read", async () => {
       resetMockScenario();
-      const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, { method: "POST", body: JSON.stringify({}) });
+      const created = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations`, { method: "POST", body: JSON.stringify({}) });
       const conversation = await created.json() as { id: string };
 
       const streamed = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`, {
@@ -278,7 +278,7 @@ describe("mock API", () => {
 
     it("cancels a turn idempotently by its durable status", async () => {
       resetMockScenario();
-      const created = await mockFetch(`http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/conversations`, { method: "POST", body: JSON.stringify({}) });
+      const created = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/conversations`, { method: "POST", body: JSON.stringify({}) });
       const conversation = await created.json() as { id: string };
       const streamed = await mockFetch(`http://localhost/api/v1/conversations/${conversation.id}/turns`, {
         method: "POST",
@@ -293,7 +293,7 @@ describe("mock API", () => {
 
     it("resolves the chat citation's chunk-context read, distinct from the artefact citation-key read", async () => {
       const response = await mockFetch(
-        `http://localhost/api/v1/projects/${MOCK_PROJECT_ID}/chunks/${MOCK_CHAT_CITATION_CHUNK_ID}/context?quote=${encodeURIComponent(MOCK_CHAT_CITATION_QUOTE)}`,
+        `http://localhost/api/v1/tasks/${MOCK_TASK_ID}/chunks/${MOCK_CHAT_CITATION_CHUNK_ID}/context?quote=${encodeURIComponent(MOCK_CHAT_CITATION_QUOTE)}`,
       );
       const context = await response.json() as { context: string; clamped: boolean };
       expect(context.context).toContain(MOCK_CHAT_CITATION_QUOTE.slice(0, 30));

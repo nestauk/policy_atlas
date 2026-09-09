@@ -1,4 +1,4 @@
-"""Two-phase durable service for project-scoped read-only chat turns."""
+"""Two-phase durable service for task-scoped read-only chat turns."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ from sqlalchemy.engine import Connection, Engine, RowMapping
 
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.chat_scope import build_chat_readers, resolve_terminal_run_components
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._common import owned_task
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
-from policy_atlas.core.schema import capability_run, chat_turn, conversation, project
+from policy_atlas.core.schema import capability_run, chat_turn, conversation, task
 from policy_atlas.core.usage import usage_metadata
-from policy_atlas.evidence_base.extract.quote_verify import (
+from policy_atlas.evidence_search.extract.quote_verify import (
     BasisText,
     build_basis,
     locate_unique_span,
 )
-from policy_atlas.evidence_base.synthesis.synthesis_tools import (
+from policy_atlas.evidence_search.synthesis.synthesis_tools import (
     SECTION_TURN_CAP,
     ToolExchange,
     build_section_tools,
@@ -111,8 +111,8 @@ def _expire_stale_pending_turns(conn: Connection, *, user_id: str) -> None:
     """Mark this owner's expired pending chat turns failed in a short transaction."""
     owned_conversations = (
         select(conversation.c.id)
-        .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
-        .where(project.c.owner_user_id == user_id)
+        .select_from(conversation.join(task, conversation.c.task_id == task.c.task_id))
+        .where(task.c.owner_user_id == user_id)
     )
     conn.execute(
         update(chat_turn)
@@ -135,7 +135,7 @@ def _first_question_title(message: str) -> str:
 def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Map each citation's persisted ``appraisal_score`` to a read-time label.
 
-    ``evidence_base.assess.appraise`` pins labels as read-time copy, never
+    ``evidence_search.assess.appraise`` pins labels as read-time copy, never
     persisted (``SCORE_LABELS`` — "a stored label could drift from its
     score"). A chat citation therefore persists the numeric
     ``appraisal_score`` at answer time (like the judge verdicts, it is the
@@ -154,7 +154,7 @@ def apply_appraisal_labels(citations: list[dict[str, Any]]) -> list[dict[str, An
         present and known; ``appraisal_score`` itself is not re-exposed —
         the frontend contract has only ever carried the label.
     """
-    from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
+    from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
 
     labelled: list[dict[str, Any]] = []
     for citation in citations:
@@ -197,27 +197,27 @@ def _snapped_chunk_quote(basis: BasisText, quote: str) -> tuple[str, bool] | Non
 
 
 def _resolve_citation_sources(
-    engine: Engine, citations: list[dict[str, Any]], *, project_id: uuid.UUID
+    engine: Engine, citations: list[dict[str, Any]], *, task_id: uuid.UUID
 ) -> list[dict[str, Any]]:
     """Attach source display facts to floored citations (title + document id).
 
     References must read as documents, not durable ids (owner live check,
     2026-08-11). Bibliographic authority is the ENVELOPE snapshot per the
-    artefact read model's rule; the pss id joins to the sources/dossier
+    artefact read model's rule; the tss id joins to the sources/dossier
     surface. Resolution failure leaves the honest id-only citation.
 
-    Both branches are project-scoped (security review, 2026-08-11): a chunk's
-    source_snapshot is content-keyed and can be shared by another project's
-    project_source_snapshot, and a finding_id alone carries no project
-    boundary, so either lookup left unscoped could resolve another project's
-    document onto this project's citation (see
+    Both branches are task-scoped (security review, 2026-08-11): a chunk's
+    source_snapshot is content-keyed and can be shared by another task's
+    task_source_snapshot, and a finding_id alone carries no task
+    boundary, so either lookup left unscoped could resolve another task's
+    document onto this task's citation (see
     ``repository.chunk_quote_context_out`` for the same chunk-side filter).
 
     Also resolves the cited document's ``appraisal_score`` + ``evidence_type``
     (mirroring ``repository.artefact_out``'s CitationOut resolution exactly —
-    latest appraisal/classification row per project_source_snapshot_id,
-    project-scoped, no narrower join). The score, not the label, is what
-    persists here (``evidence_base.assess.appraise``'s read-time-copy pin —
+    latest appraisal/classification row per task_source_snapshot_id,
+    task-scoped, no narrower join). The score, not the label, is what
+    persists here (``evidence_search.assess.appraise``'s read-time-copy pin —
     ``apply_appraisal_labels`` derives ``appraisal_label`` fresh on every read
     instead). At persist time this also snaps a chunk citation's
     model-emitted ``quote`` to the verbatim source text when ``quote_verify``
@@ -229,8 +229,8 @@ def _resolve_citation_sources(
     from policy_atlas.core.schema import (
         implementation_context_finding,
         intervention_outcome_finding,
-        project_source_snapshot,
-        pss_owns_snapshot,
+        task_source_snapshot,
+        tss_owns_snapshot,
         source_appraisal_result,
         source_classification_result,
         source_extraction_record,
@@ -259,28 +259,28 @@ def _resolve_citation_sources(
                 select(
                     chunk_table.c.chunk_id,
                     chunk_table.c.content,
-                    project_source_snapshot.c.project_source_snapshot_id,
+                    task_source_snapshot.c.task_source_snapshot_id,
                     source_snapshot.c.metadata,
                     source_snapshot.c.source_locator,
                 )
                 .select_from(
                     chunk_table.join(
-                        project_source_snapshot,
-                        pss_owns_snapshot(chunk_table.c.source_snapshot_id),
+                        task_source_snapshot,
+                        tss_owns_snapshot(chunk_table.c.source_snapshot_id),
                     ).join(
                         source_snapshot,
                         source_snapshot.c.source_snapshot_id
-                        == project_source_snapshot.c.source_snapshot_id,
+                        == task_source_snapshot.c.source_snapshot_id,
                     )
                 )
                 .where(chunk_table.c.chunk_id.in_(chunk_ids))
-                .where(project_source_snapshot.c.project_id == project_id)
+                .where(task_source_snapshot.c.task_id == task_id)
             ):
                 meta = row.metadata if isinstance(row.metadata, dict) else {}
                 title = meta.get("title") or row.source_locator
                 facts[str(row.chunk_id)] = {
                     "source_title": title,
-                    "source_id": str(row.project_source_snapshot_id),
+                    "source_id": str(row.task_source_snapshot_id),
                 }
                 chunk_contents[str(row.chunk_id)] = row.content
         if finding_ids:
@@ -288,7 +288,7 @@ def _resolve_citation_sources(
                 for row in conn.execute(
                     select(
                         table.c.finding_id,
-                        project_source_snapshot.c.project_source_snapshot_id,
+                        task_source_snapshot.c.task_source_snapshot_id,
                         source_snapshot.c.metadata,
                         source_snapshot.c.source_locator,
                     )
@@ -299,63 +299,63 @@ def _resolve_citation_sources(
                             == source_extraction_record.c.extraction_record_id,
                         )
                         .join(
-                            project_source_snapshot,
-                            project_source_snapshot.c.project_source_snapshot_id
-                            == source_extraction_record.c.project_source_snapshot_id,
+                            task_source_snapshot,
+                            task_source_snapshot.c.task_source_snapshot_id
+                            == source_extraction_record.c.task_source_snapshot_id,
                         )
                         .join(
                             source_snapshot,
                             source_snapshot.c.source_snapshot_id
-                            == project_source_snapshot.c.source_snapshot_id,
+                            == task_source_snapshot.c.source_snapshot_id,
                         )
                     )
                     .where(table.c.finding_id.in_(finding_ids))
-                    .where(table.c.project_id == project_id)
+                    .where(table.c.task_id == task_id)
                 ):
                     meta = row.metadata if isinstance(row.metadata, dict) else {}
                     facts[str(row.finding_id)] = {
                         "source_title": meta.get("title") or row.source_locator,
-                        "source_id": str(row.project_source_snapshot_id),
+                        "source_id": str(row.task_source_snapshot_id),
                     }
-        resolved_pss_ids = {uuid.UUID(fact["source_id"]) for fact in facts.values()}
-        if resolved_pss_ids:
+        resolved_tss_ids = {uuid.UUID(fact["source_id"]) for fact in facts.values()}
+        if resolved_tss_ids:
             # Same join/effective-row rules as repository.artefact_out's
-            # CitationOut resolution: project-scoped, latest row per
-            # project_source_snapshot_id wins. Narrowed to the pss ids already
+            # CitationOut resolution: task-scoped, latest row per
+            # task_source_snapshot_id wins. Narrowed to the tss ids already
             # resolved above (task 029 delta-review) — cost proportional to
-            # citations, not to the whole project's appraisal/classification set.
+            # citations, not to the whole task's appraisal/classification set.
             appraisal = latest_row_by_id(
                 conn.execute(
                     select(
-                        source_appraisal_result.c.project_source_snapshot_id,
+                        source_appraisal_result.c.task_source_snapshot_id,
                         source_appraisal_result.c.quality_score,
                         source_appraisal_result.c.appraised_at,
                     )
-                    .where(source_appraisal_result.c.project_id == project_id)
+                    .where(source_appraisal_result.c.task_id == task_id)
                     .where(
-                        source_appraisal_result.c.project_source_snapshot_id.in_(
-                            resolved_pss_ids
+                        source_appraisal_result.c.task_source_snapshot_id.in_(
+                            resolved_tss_ids
                         )
                     )
                 ).all(),
-                "project_source_snapshot_id",
+                "task_source_snapshot_id",
                 "appraised_at",
             )
             classification = latest_row_by_id(
                 conn.execute(
                     select(
-                        source_classification_result.c.project_source_snapshot_id,
+                        source_classification_result.c.task_source_snapshot_id,
                         source_classification_result.c.primary_evidence_type,
                         source_classification_result.c.classified_at,
                     )
-                    .where(source_classification_result.c.project_id == project_id)
+                    .where(source_classification_result.c.task_id == task_id)
                     .where(
-                        source_classification_result.c.project_source_snapshot_id.in_(
-                            resolved_pss_ids
+                        source_classification_result.c.task_source_snapshot_id.in_(
+                            resolved_tss_ids
                         )
                     )
                 ).all(),
-                "project_source_snapshot_id",
+                "task_source_snapshot_id",
                 "classified_at",
             )
 
@@ -368,14 +368,14 @@ def _resolve_citation_sources(
 
         source_id = source_facts.get("source_id")
         if source_id is not None:
-            pss_id = uuid.UUID(source_id)
-            appraisal_row = appraisal.get(pss_id)
+            tss_id = uuid.UUID(source_id)
+            appraisal_row = appraisal.get(tss_id)
             if appraisal_row is not None:
-                # The score, not the label, persists (evidence_base.assess.appraise's
+                # The score, not the label, persists (evidence_search.assess.appraise's
                 # read-time-copy pin) — apply_appraisal_labels derives the label
                 # fresh on every read from this score.
                 merged["appraisal_score"] = appraisal_row.quality_score
-            classification_row = classification.get(pss_id)
+            classification_row = classification.get(tss_id)
             if classification_row is not None:
                 merged["evidence_type"] = classification_row.primary_evidence_type
 
@@ -419,20 +419,20 @@ def _appraised_chunk_ids(transcript: list[ToolExchange]) -> set[str]:
 def _phase_one_turn(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_id: str,
     message: str,
     client_turn_id: uuid.UUID,
     reserved_turn_id: uuid.UUID | None = None,
 ) -> ChatTurnResult | uuid.UUID:
-    """Reserve one chat row or replay a completed row under the project lock.
+    """Reserve one chat row or replay a completed row under the task lock.
 
     Args:
         conn: Open connection already inside the caller's transaction.
-        project_id: Owner-scoped project id.
+        task_id: Owner-scoped task id.
         conversation_id: Active chat conversation id.
-        user_id: Authenticated project owner.
+        user_id: Authenticated task owner.
         message: Current user question.
         client_turn_id: Client-minted idempotency key.
         reserved_turn_id: The turn id the caller itself already reserved for
@@ -443,12 +443,12 @@ def _phase_one_turn(
             instead of resetting — and possibly double-running — a turn that
             is not its own (security review, 2026-08-11).
     """
-    owned_project(conn, project_id=project_id, user_id=user_id, for_update=True)
+    owned_task(conn, task_id=task_id, user_id=user_id, for_update=True)
     chat = (
         conn.execute(
             select(conversation)
             .where(conversation.c.id == conversation_id)
-            .where(conversation.c.project_id == project_id)
+            .where(conversation.c.task_id == task_id)
         )
         .mappings()
         .one_or_none()
@@ -474,7 +474,7 @@ def _phase_one_turn(
 
     active_run = conn.execute(
         select(capability_run.c.capability_run_id)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.status.in_(("running", "paused")))
         .limit(1)
     ).scalar_one_or_none()
@@ -482,7 +482,7 @@ def _phase_one_turn(
         raise ApiConflict("run_active", "finish the active run before starting a chat turn")
     completed_run = conn.execute(
         select(capability_run.c.capability_run_id)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.status.in_(("succeeded", "degraded")))
         .limit(1)
     ).scalar_one_or_none()
@@ -542,10 +542,10 @@ def _phase_one_turn(
         select(func.count())
         .select_from(
             chat_turn.join(conversation, chat_turn.c.conversation_id == conversation.c.id).join(
-                project, conversation.c.project_id == project.c.project_id
+                task, conversation.c.task_id == task.c.task_id
             )
         )
-        .where(project.c.owner_user_id == user_id)
+        .where(task.c.owner_user_id == user_id)
         .where(chat_turn.c.status == "pending")
     ).scalar_one()
     if int(owner_pending) >= _OWNER_PENDING_CAP:
@@ -667,7 +667,7 @@ def _turn_was_cancelled(engine: Engine, *, turn_id: uuid.UUID) -> bool:
 def run_chat_turn(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_id: str,
     message: str,
@@ -684,9 +684,9 @@ def run_chat_turn(
 
     Args:
         engine: Database engine.
-        project_id: Owner-scoped project id.
+        task_id: Owner-scoped task id.
         conversation_id: Active chat conversation id.
-        user_id: Authenticated project owner.
+        user_id: Authenticated task owner.
         message: Current user question.
         client_turn_id: Client-minted idempotency key.
         chat_backend: Provider-neutral chat backend seam.
@@ -711,7 +711,7 @@ def run_chat_turn(
         with engine.begin() as conn:
             phase_one = _phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id=user_id,
                 message=message,
@@ -740,7 +740,7 @@ def run_chat_turn(
 
         try:
             _check_cancelled()
-            scope = resolve_terminal_run_components(engine, project_id=project_id)
+            scope = resolve_terminal_run_components(engine, task_id=task_id)
             if scope is None:
                 raise RuntimeError("completed capability run disappeared before chat execution")
             entry_artefact_id, prior_turns = _chat_inputs(
@@ -748,10 +748,10 @@ def run_chat_turn(
             )
             with engine.connect() as conn:
                 frame = assemble_chat_frame(
-                    conn, project_id=project_id, entry_artefact_id=entry_artefact_id
+                    conn, task_id=task_id, entry_artefact_id=entry_artefact_id
                 )
             retriever, findings_reader, lookup_reader = build_chat_readers(
-                engine, scope, project_id, embedding_backend=embedding_backend
+                engine, scope, task_id, embedding_backend=embedding_backend
             )
             tools = build_section_tools(
                 retriever=retriever,
@@ -831,7 +831,7 @@ def run_chat_turn(
             with tracing.component_span(
                 langfuse_client,
                 run_id=turn_id,
-                project_id=project_id,
+                task_id=task_id,
                 component="chat_v1",
                 session_id=conversation_id,
             ) as root_span:
@@ -870,7 +870,7 @@ def run_chat_turn(
             payload = {
                 "claims": floored.claims,
                 "citations": _resolve_citation_sources(
-                    engine, floored.citations, project_id=project_id
+                    engine, floored.citations, task_id=task_id
                 ),
                 "warning_not_evidence_checked": floored.warning_not_evidence_checked,
                 "stripped": floored.stripped,
@@ -928,7 +928,7 @@ def run_chat_turn(
             )
         except Exception:
             log.exception(
-                "chat_turn_failed", project_id=str(project_id), conversation_id=str(conversation_id)
+                "chat_turn_failed", task_id=str(task_id), conversation_id=str(conversation_id)
             )
             with engine.begin() as conn:
                 # Narrowed to "pending" only (security review, 2026-08-11): a

@@ -1,8 +1,8 @@
 import { useLayoutEffect, useState } from "react";
 import { Outlet, useLocation, useParams } from "react-router";
 
-import { useArchiveProject, useUpdateProject } from "../api/mutations";
-import { useCheckIns, useProject } from "../api/queries";
+import { useArchiveTask, useUpdateTask } from "../api/mutations";
+import { useCheckIns, useTask } from "../api/queries";
 import { useAuth } from "../auth";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
@@ -22,22 +22,22 @@ import { ToastProvider, useToast } from "../ui/radix/Toast";
 import { TooltipProvider } from "../ui/radix/Tooltip";
 
 /** Project settings affordance (028 F.5): rename + archive, wired to the
- *  existing project mutations — the project-card pattern,
+ *  existing task mutations — the task-card pattern,
  *  condensed into the header popover. Rename saves inline; archive takes an
  *  explicit confirm step before the mutation fires. */
-function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; projectName: string }) {
+function TaskSettingsMenu({ taskId, taskName }: { taskId: string; taskName: string }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirmingArchive, setConfirmingArchive] = useState(false);
-  const [draftName, setDraftName] = useState(projectName);
-  const update = useUpdateProject(projectId);
-  const archive = useArchiveProject(projectId);
+  const [draftName, setDraftName] = useState(taskName);
+  const update = useUpdateTask(taskId);
+  const archive = useArchiveTask(taskId);
   const toast = useToast();
 
   const reset = () => {
     setEditing(false);
     setConfirmingArchive(false);
-    setDraftName(projectName);
+    setDraftName(taskName);
   };
 
   const saveRename = () => {
@@ -50,7 +50,7 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
         onError: () =>
           toast.toast({
             title: "Rename failed",
-            description: "The project couldn't be renamed. Try again.",
+            description: "The task couldn't be renamed. Try again.",
             tone: "error",
           }),
       },
@@ -94,11 +94,11 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
               saveRename();
             }}
           >
-            <label className="sr-only" htmlFor="project-settings-name">
+            <label className="sr-only" htmlFor="task-settings-name">
               Project name
             </label>
             <input
-              id="project-settings-name"
+              id="task-settings-name"
               autoFocus
               value={draftName}
               onChange={(event) => setDraftName(event.target.value)}
@@ -109,7 +109,7 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
             />
             {update.isError && (
               <p role="alert" className="mt-2 text-body text-red">
-                The project couldn't be renamed. Try again.
+                The task couldn't be renamed. Try again.
               </p>
             )}
             <div className="mt-3 flex gap-2">
@@ -132,12 +132,12 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
             </button>
             {archive.isError && (
               <p role="alert" className="text-body text-red">
-                The project couldn't be archived. Try again.
+                The task couldn't be archived. Try again.
               </p>
             )}
             {confirmingArchive ? (
               <div className="space-y-2 text-body text-grey">
-                <p>Archiving removes this project from your active projects.</p>
+                <p>Archiving removes this task from your active tasks.</p>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -148,7 +148,7 @@ function ProjectSettingsMenu({ projectId, projectName }: { projectId: string; pr
                         onError: () =>
                           toast.toast({
                             title: "Archive failed",
-                            description: "The project couldn't be archived. Try again.",
+                            description: "The task couldn't be archived. Try again.",
                             tone: "error",
                           }),
                       })
@@ -218,15 +218,15 @@ function AccountMenu({ signOut }: { signOut: () => void }) {
 
 /** App chrome: global controls always; task stages on a second bar. */
 export function AppShell() {
-  const { projectId } = useParams();
+  const { taskId } = useParams();
   const location = useLocation();
   const auth = useAuth();
   // The run stream already invalidates this query on the pages that
   // mount it (Plan, Results, Sources), so polling only has to cover the
   // pages that don't — the same shape as the pending check-in poll below.
   // Mounting `useRunStream` here would double-connect on those pages.
-  const project = useProject(projectId ?? "", { pollWhileRunning: true });
-  const base = projectId === undefined ? null : `/projects/${projectId}`;
+  const task = useTask(taskId ?? "", { pollWhileRunning: true });
+  const base = taskId === undefined ? null : `/tasks/${taskId}`;
   const inWorkspace = base !== null && location.pathname === base;
   const showChatPanel = base !== null && !inWorkspace;
   // With a chat open beside the view, the two columns scroll independently —
@@ -242,7 +242,7 @@ export function AppShell() {
   // the workspace view (where the check-in card itself is the live source of
   // truth) — the nav badge and title marker exist precisely to be seen from
   // everywhere else.
-  const pendingCheckIns = useCheckIns(projectId ?? "", "pending", {
+  const pendingCheckIns = useCheckIns(taskId ?? "", "pending", {
     enabled: base !== null && !inWorkspace,
     refetchInterval: 15_000,
   });
@@ -274,11 +274,11 @@ export function AppShell() {
                 </NavItem>
                 <NavItem
                   to="/"
-                  match={(path) => path === "/" || path.startsWith("/projects/")}
+                  match={(path) => path === "/" || path.startsWith("/tasks/")}
                 >
                   {TASK.many}
                 </NavItem>
-                <NavItem to="/portfolios">{PROJECT.many}</NavItem>
+                <NavItem to="/projects">{PROJECT.many}</NavItem>
                 {/* 026 live-check gap: the AuthApi always had signOut; nothing
                     rendered it — Cognito users had no way out of a session. */}
                 {auth.user !== null && <AccountMenu signOut={() => auth.signOut()} />}
@@ -287,21 +287,21 @@ export function AppShell() {
             {base !== null && (
               <NavBar aria-label="Task" className="shrink-0 bg-ground">
                 <div className="flex min-w-0 items-center gap-2">
-                  {project.data !== undefined && (
+                  {task.data !== undefined && (
                     <>
                       <span className="truncate text-lead font-semibold text-navy">
-                        {scrub(project.data.name)}
+                        {scrub(task.data.name)}
                       </span>
-                      <ProjectSettingsMenu
-                        projectId={project.data.project_id}
-                        projectName={project.data.name}
+                      <TaskSettingsMenu
+                        taskId={task.data.task_id}
+                        taskName={task.data.name}
                       />
                     </>
                   )}
                 </div>
                 <LifecycleBar
                   hint={COPY.lockedHint}
-                  items={lifecycleTabs(base, project.data?.latest_run?.status).map((item) =>
+                  items={lifecycleTabs(base, task.data?.latest_run?.status).map((item) =>
                     item.tab === "plan" && hasPendingCheckIn
                       ? {
                           ...item,
@@ -330,9 +330,9 @@ export function AppShell() {
                 </NavItem>
               </div>
             )}
-            {/* Chat beside every project view outside the workspace (029
+            {/* Chat beside every task view outside the workspace (029
                 rev 3.4): the workspace already hosts the full conversation
-                rail, so the panel mounts everywhere else in the project. */}
+                rail, so the panel mounts everywhere else in the task. */}
             <div
               className={cn(
                 "flex min-w-0 flex-1",
@@ -344,8 +344,8 @@ export function AppShell() {
                   boundary: a render error in the chat subtree must not take
                   out the rest of the shell (nav, the routed view). */}
               {showChatPanel && (
-                <ErrorBoundary key={projectId}>
-                  <ChatSidePanel projectId={projectId ?? ""} />
+                <ErrorBoundary key={taskId}>
+                  <ChatSidePanel taskId={taskId ?? ""} />
                 </ErrorBoundary>
               )}
               <div

@@ -61,8 +61,8 @@ from policy_atlas.core.schema import (
     grouping_result,
     implementation_context_finding,
     intervention_outcome_finding,
-    project_source_snapshot,
-    pss_owns_snapshot,
+    task_source_snapshot,
+    tss_owns_snapshot,
     search_coverage_record,
     selection_result,
     source_appraisal_result,
@@ -72,9 +72,9 @@ from policy_atlas.core.schema import (
     source_tag,
     synthesis_result,
 )
-from policy_atlas.evidence_base.assess.appraise import SCORE_LABELS
-from policy_atlas.evidence_base.assess.screen import effective_screen_rows
-from policy_atlas.evidence_base.extract.quote_verify import build_basis, locate_unique_span
+from policy_atlas.evidence_search.assess.appraise import SCORE_LABELS
+from policy_atlas.evidence_search.assess.screen import effective_screen_rows
+from policy_atlas.evidence_search.extract.quote_verify import build_basis, locate_unique_span
 from policy_atlas.runtime.steering_history import steering_history
 
 
@@ -191,11 +191,11 @@ def latest_row_by_id(rows: Iterable[Any], id_key: str, time_key: str) -> dict[uu
     return latest
 
 
-def _latest_synthesis(conn: Connection, project_id: uuid.UUID) -> Any | None:
+def _latest_synthesis(conn: Connection, task_id: uuid.UUID) -> Any | None:
     return (
         conn.execute(
             select(synthesis_result)
-            .where(synthesis_result.c.project_id == project_id)
+            .where(synthesis_result.c.task_id == task_id)
             .order_by(
                 synthesis_result.c.created_at.desc(), synthesis_result.c.synthesis_result_id.desc()
             )
@@ -206,11 +206,11 @@ def _latest_synthesis(conn: Connection, project_id: uuid.UUID) -> Any | None:
     )
 
 
-def _latest_selection(conn: Connection, project_id: uuid.UUID) -> Any | None:
+def _latest_selection(conn: Connection, task_id: uuid.UUID) -> Any | None:
     return (
         conn.execute(
             select(selection_result)
-            .where(selection_result.c.project_id == project_id)
+            .where(selection_result.c.task_id == task_id)
             .order_by(
                 selection_result.c.created_at.desc(), selection_result.c.selection_result_id.desc()
             )
@@ -228,7 +228,7 @@ def _selected_ids(value: Any) -> set[uuid.UUID]:
     for item in value:
         if not isinstance(item, Mapping):
             continue
-        raw = item.get("pss_id")
+        raw = item.get("tss_id")
         try:
             selected.add(uuid.UUID(str(raw)))
         except (TypeError, ValueError):
@@ -251,68 +251,68 @@ def _cited_snapshot_ids(conn: Connection, artefact_id: uuid.UUID) -> set[uuid.UU
     )
 
 
-def _effective_screens(conn: Connection, project_id: uuid.UUID) -> dict[uuid.UUID, Any]:
+def _effective_screens(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, Any]:
     effective = effective_screen_rows()
-    rows = conn.execute(select(effective).where(effective.c.project_id == project_id)).all()
-    return latest_row_by_id(rows, "project_source_snapshot_id", "screened_at")
+    rows = conn.execute(select(effective).where(effective.c.task_id == task_id)).all()
+    return latest_row_by_id(rows, "task_source_snapshot_id", "screened_at")
 
 
-def funnel_out(conn: Connection, project_id: uuid.UUID) -> FunnelOut:
+def funnel_out(conn: Connection, task_id: uuid.UUID) -> FunnelOut:
     """Build full-flow counts, preserving missing-stage absence as ``None``."""
     found = int(
         conn.execute(
             select(func.count())
-            .select_from(project_source_snapshot)
-            .where(project_source_snapshot.c.project_id == project_id)
+            .select_from(task_source_snapshot)
+            .where(task_source_snapshot.c.task_id == task_id)
         ).scalar_one()
     )
     coverage_exists = (
         conn.execute(
             select(search_coverage_record.c.search_coverage_record_id)
-            .where(search_coverage_record.c.project_id == project_id)
+            .where(search_coverage_record.c.task_id == task_id)
             .limit(1)
         ).scalar_one_or_none()
         is not None
     )
-    effective = _effective_screens(conn, project_id)
+    effective = _effective_screens(conn, task_id)
     statuses = [row.status for row in effective.values()]
     appraised = int(
         conn.execute(
             select(func.count())
             .select_from(source_appraisal_result)
-            .where(source_appraisal_result.c.project_id == project_id)
+            .where(source_appraisal_result.c.task_id == task_id)
         ).scalar_one()
     )
     full_text_rows = int(
         conn.execute(
             select(func.count())
-            .select_from(project_source_snapshot)
+            .select_from(task_source_snapshot)
             .where(
-                project_source_snapshot.c.project_id == project_id,
-                project_source_snapshot.c.full_text_status != "not_attempted",
+                task_source_snapshot.c.task_id == task_id,
+                task_source_snapshot.c.full_text_status != "not_attempted",
             )
         ).scalar_one()
     )
-    selection = _latest_selection(conn, project_id)
+    selection = _latest_selection(conn, task_id)
     extraction = conn.execute(
         select(extraction_result.c.extraction_result_id)
-        .where(extraction_result.c.project_id == project_id)
+        .where(extraction_result.c.task_id == task_id)
         .limit(1)
     ).scalar_one_or_none()
     finding_count = int(
         conn.execute(
             select(func.count())
             .select_from(intervention_outcome_finding)
-            .where(intervention_outcome_finding.c.project_id == project_id)
+            .where(intervention_outcome_finding.c.task_id == task_id)
         ).scalar_one()
     ) + int(
         conn.execute(
             select(func.count())
             .select_from(implementation_context_finding)
-            .where(implementation_context_finding.c.project_id == project_id)
+            .where(implementation_context_finding.c.task_id == task_id)
         ).scalar_one()
     )
-    synthesis = _latest_synthesis(conn, project_id)
+    synthesis = _latest_synthesis(conn, task_id)
     return FunnelOut(
         found=found if found or coverage_exists else None,
         relevant=sum(status == "relevant" for status in statuses) if statuses else None,
@@ -321,10 +321,10 @@ def funnel_out(conn: Connection, project_id: uuid.UUID) -> FunnelOut:
         read_in_full=int(
             conn.execute(
                 select(func.count())
-                .select_from(project_source_snapshot)
+                .select_from(task_source_snapshot)
                 .where(
-                    project_source_snapshot.c.project_id == project_id,
-                    project_source_snapshot.c.full_text_status == "ingested",
+                    task_source_snapshot.c.task_id == task_id,
+                    task_source_snapshot.c.full_text_status == "ingested",
                 )
             ).scalar_one()
         )
@@ -339,13 +339,13 @@ def funnel_out(conn: Connection, project_id: uuid.UUID) -> FunnelOut:
 
 
 def landscape_out(
-    conn: Connection, project_id: uuid.UUID, *, scope: Literal["cited"] | None = None
+    conn: Connection, task_id: uuid.UUID, *, scope: Literal["cited"] | None = None
 ) -> LandscapeOut:
     """Return whole-screened-in or latest-artefact-cited distributions.
 
     Args:
         conn: Open database connection.
-        project_id: Owning project.
+        task_id: Owning task.
         scope: ``"cited"`` restricts distributions to latest-artefact citations.
 
     Returns:
@@ -353,27 +353,27 @@ def landscape_out(
     """
     relevant_ids = [
         key
-        for key, value in _effective_screens(conn, project_id).items()
+        for key, value in _effective_screens(conn, task_id).items()
         if value.status == "relevant"
     ]
     if scope == "cited":
-        synthesis = _latest_synthesis(conn, project_id)
+        synthesis = _latest_synthesis(conn, task_id)
         cited_snapshots = (
             _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
         )
         if cited_snapshots:
             relevant_ids = list(
                 conn.execute(
-                    select(project_source_snapshot.c.project_source_snapshot_id).where(
-                        project_source_snapshot.c.project_id == project_id,
-                        project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids),
+                    select(task_source_snapshot.c.task_source_snapshot_id).where(
+                        task_source_snapshot.c.task_id == task_id,
+                        task_source_snapshot.c.task_source_snapshot_id.in_(relevant_ids),
                         # Membership against a SET of candidate snapshots, not
-                        # equality against one column — pss_owns_snapshot's
+                        # equality against one column — tss_owns_snapshot's
                         # `==` shape doesn't fit; stays hand-written (task 029
                         # delta-review sweep).
                         (
-                            project_source_snapshot.c.source_snapshot_id.in_(cited_snapshots)
-                            | project_source_snapshot.c.full_text_snapshot_id.in_(cited_snapshots)
+                            task_source_snapshot.c.source_snapshot_id.in_(cited_snapshots)
+                            | task_source_snapshot.c.full_text_snapshot_id.in_(cited_snapshots)
                         ),
                     )
                 ).scalars()
@@ -384,29 +384,29 @@ def landscape_out(
         return LandscapeOut()
     base_rows = conn.execute(
         select(
-            project_source_snapshot.c.project_source_snapshot_id,
+            task_source_snapshot.c.task_source_snapshot_id,
             source_snapshot.c.metadata,
         )
         .select_from(
-            # Explicit onclause: project_source_snapshot carries TWO FKs into
+            # Explicit onclause: task_source_snapshot carries TWO FKs into
             # source_snapshot (envelope + full-text); the implicit join is ambiguous.
-            project_source_snapshot.join(
+            task_source_snapshot.join(
                 source_snapshot,
-                project_source_snapshot.c.source_snapshot_id
+                task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
             )
         )
-        .where(project_source_snapshot.c.project_source_snapshot_id.in_(relevant_ids))
+        .where(task_source_snapshot.c.task_source_snapshot_id.in_(relevant_ids))
     ).all()
     classifications = latest_row_by_id(
         conn.execute(
             select(
-                source_classification_result.c.project_source_snapshot_id,
+                source_classification_result.c.task_source_snapshot_id,
                 source_classification_result.c.primary_evidence_type,
                 source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.project_id == project_id)
+            ).where(source_classification_result.c.task_id == task_id)
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "classified_at",
     )
     types: Counter[str] = Counter()
@@ -414,7 +414,7 @@ def landscape_out(
     geographies: Counter[str] = Counter()
     for row in base_rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
-        classification = classifications.get(row.project_source_snapshot_id)
+        classification = classifications.get(row.task_source_snapshot_id)
         if classification is not None:
             types[classification.primary_evidence_type] += 1
         year = _year(metadata)
@@ -429,7 +429,7 @@ def landscape_out(
         geographies[geography if geography is not None else GEOGRAPHY_NOT_REPORTED] += 1
     characterisation = conn.execute(
         select(characterisation_result.c.themes)
-        .where(characterisation_result.c.project_id == project_id)
+        .where(characterisation_result.c.task_id == task_id)
         .order_by(characterisation_result.c.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -467,11 +467,11 @@ def landscape_out(
     )
 
 
-def groups_out(conn: Connection, project_id: uuid.UUID) -> GroupsOut:
+def groups_out(conn: Connection, task_id: uuid.UUID) -> GroupsOut:
     """Project the latest durable facet grouping payload."""
     payload = conn.execute(
         select(grouping_result.c.groups)
-        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.task_id == task_id)
         .order_by(grouping_result.c.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -525,7 +525,7 @@ def _screen_event_reason(payload: Mapping[str, Any], status: str) -> str | None:
 
 
 def _source_reason_maps(
-    conn: Connection, project_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID
 ) -> tuple[dict[uuid.UUID, str], dict[uuid.UUID, str]]:
     """Latest per-source screening/classification reasons from the event log.
 
@@ -537,7 +537,7 @@ def _source_reason_maps(
     rows = conn.execute(
         select(event_log.c.event_type, event_log.c.payload)
         .where(
-            event_log.c.project_id == project_id,
+            event_log.c.task_id == task_id,
             event_log.c.event_type.in_(("source.screened", "source.classified")),
         )
         .order_by(event_log.c.sequence)
@@ -547,20 +547,20 @@ def _source_reason_maps(
     for row in rows:
         payload = row.payload if isinstance(row.payload, Mapping) else {}
         try:
-            pss_id = uuid.UUID(str(payload.get("project_source_snapshot_id")))
+            tss_id = uuid.UUID(str(payload.get("task_source_snapshot_id")))
         except (TypeError, ValueError):
             continue
         if row.event_type == "source.classified":
             reason = payload.get("reason")
             if isinstance(reason, str) and reason:
-                classification_reasons[pss_id] = reason
+                classification_reasons[tss_id] = reason
         else:
             status = payload.get("status")
             if status not in ("relevant", "not_relevant"):
                 continue
             reason = _screen_event_reason(payload, status)
             if reason is not None:
-                screen_reasons[pss_id] = reason
+                screen_reasons[tss_id] = reason
     return screen_reasons, classification_reasons
 
 
@@ -577,7 +577,7 @@ def _expand_evidence_statuses(values: Iterable[str]) -> set[str]:
 
 def evidence_page(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     page: int,
     page_size: int,
     *,
@@ -592,87 +592,87 @@ def evidence_page(
     year_from: int | None = None,
     year_to: int | None = None,
 ) -> Page[EvidenceItemOut]:
-    """Return one evidence page, deriving status project-wide before paging.
+    """Return one evidence page, deriving status task-wide before paging.
 
     `status`/`cited`/`theme` filters are collection-true: status is derived for
-    every project source (bounded — one project's worth of rows, the
+    every task source (bounded — one task's worth of rows, the
     `funnel_out` precedent) before filtering and paginating, so
     `total_items` reflects the filtered collection, never the unfiltered
-    project total or the page size. Sorting likewise runs over that complete
+    task total or the page size. Sorting likewise runs over that complete
     collection before pagination; ingestion order remains the
     stable tie-breaker.
     """
     target_statuses = _expand_evidence_statuses(statuses) if statuses else None
     rows = conn.execute(
         select(
-            project_source_snapshot.c.project_source_snapshot_id,
-            project_source_snapshot.c.origin,
-            project_source_snapshot.c.source_snapshot_id,
-            project_source_snapshot.c.full_text_snapshot_id,
-            project_source_snapshot.c.full_text_status,
-            project_source_snapshot.c.full_text_error,
+            task_source_snapshot.c.task_source_snapshot_id,
+            task_source_snapshot.c.origin,
+            task_source_snapshot.c.source_snapshot_id,
+            task_source_snapshot.c.full_text_snapshot_id,
+            task_source_snapshot.c.full_text_status,
+            task_source_snapshot.c.full_text_error,
             source_snapshot.c.metadata,
             source_snapshot.c.source_locator,
         )
         .select_from(
             # Explicit onclause — same two-FK ambiguity as landscape_out.
-            project_source_snapshot.join(
+            task_source_snapshot.join(
                 source_snapshot,
-                project_source_snapshot.c.source_snapshot_id
+                task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
             )
         )
-        .where(project_source_snapshot.c.project_id == project_id)
+        .where(task_source_snapshot.c.task_id == task_id)
         .order_by(
-            project_source_snapshot.c.ingested_at.desc(),
-            project_source_snapshot.c.project_source_snapshot_id.desc(),
+            task_source_snapshot.c.ingested_at.desc(),
+            task_source_snapshot.c.task_source_snapshot_id.desc(),
         )
     ).all()
-    screens = _effective_screens(conn, project_id)
-    screen_reasons, classification_reasons = _source_reason_maps(conn, project_id)
+    screens = _effective_screens(conn, task_id)
+    screen_reasons, classification_reasons = _source_reason_maps(conn, task_id)
     classifications = latest_row_by_id(
         conn.execute(
             select(
-                source_classification_result.c.project_source_snapshot_id,
+                source_classification_result.c.task_source_snapshot_id,
                 source_classification_result.c.primary_evidence_type,
                 source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.project_id == project_id)
+            ).where(source_classification_result.c.task_id == task_id)
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "classified_at",
     )
     appraisals = latest_row_by_id(
         conn.execute(
             select(
-                source_appraisal_result.c.project_source_snapshot_id,
+                source_appraisal_result.c.task_source_snapshot_id,
                 source_appraisal_result.c.quality_score,
                 source_appraisal_result.c.appraised_at,
-            ).where(source_appraisal_result.c.project_id == project_id)
+            ).where(source_appraisal_result.c.task_id == task_id)
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "appraised_at",
     )
     extracted = set(
         conn.execute(
-            select(source_extraction_record.c.project_source_snapshot_id)
+            select(source_extraction_record.c.task_source_snapshot_id)
             .where(
-                source_extraction_record.c.project_id == project_id,
+                source_extraction_record.c.task_id == task_id,
                 source_extraction_record.c.finding_count > 0,
             )
             .distinct()
         ).scalars()
     )
-    selection = _latest_selection(conn, project_id)
+    selection = _latest_selection(conn, task_id)
     selected = _selected_ids(selection["selected"]) if selection is not None else set()
-    synthesis = _latest_synthesis(conn, project_id)
+    synthesis = _latest_synthesis(conn, task_id)
     cited_snapshots = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
     themed_sources = (
         set(
             conn.execute(
-                select(source_tag.c.project_source_snapshot_id).where(
-                    source_tag.c.project_id == project_id,
+                select(source_tag.c.task_source_snapshot_id).where(
+                    source_tag.c.task_id == task_id,
                     source_tag.c.theme_id == theme,
                 )
             ).scalars()
@@ -683,9 +683,9 @@ def evidence_page(
     sortable_items: list[tuple[EvidenceItemOut, int | None]] = []
     for row in rows:
         metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
-        screen = screens.get(row.project_source_snapshot_id)
+        screen = screens.get(row.task_source_snapshot_id)
         # Python-side membership over an already-fetched row + a precomputed
-        # set, not a SQL join — pss_owns_snapshot doesn't fit here (task 029
+        # set, not a SQL join — tss_owns_snapshot doesn't fit here (task 029
         # delta-review sweep).
         row_cited = (
             row.source_snapshot_id in cited_snapshots
@@ -693,9 +693,9 @@ def evidence_page(
         )
         if row_cited:
             status, reason = "cited", None
-        elif row.project_source_snapshot_id in extracted:
+        elif row.task_source_snapshot_id in extracted:
             status, reason = "findings_extracted", None
-        elif row.project_source_snapshot_id in selected:
+        elif row.task_source_snapshot_id in selected:
             status, reason = "selected", None
         elif row.full_text_status == "ingested":
             status, reason = "read_in_full", None
@@ -715,10 +715,10 @@ def evidence_page(
             continue
         if cited is not None and row_cited != cited:
             continue
-        if themed_sources is not None and row.project_source_snapshot_id not in themed_sources:
+        if themed_sources is not None and row.task_source_snapshot_id not in themed_sources:
             continue
-        classification = classifications.get(row.project_source_snapshot_id)
-        appraisal = appraisals.get(row.project_source_snapshot_id)
+        classification = classifications.get(row.task_source_snapshot_id)
+        appraisal = appraisals.get(row.task_source_snapshot_id)
         item_origin = _origin(row.origin, metadata)
         evidence_type_value = classification.primary_evidence_type if classification else None
         tier = SCORE_LABELS.get(appraisal.quality_score) if appraisal else None
@@ -740,7 +740,7 @@ def evidence_page(
         sortable_items.append(
             (
                 EvidenceItemOut(
-                    source_id=row.project_source_snapshot_id,
+                    source_id=row.task_source_snapshot_id,
                     title=_title(metadata, row.source_locator),
                     year=year_value,
                     venue=_venue(metadata),
@@ -758,9 +758,9 @@ def evidence_page(
                     if screen
                     and screen.status in {"relevant", "not_relevant", "excluded_retracted"}
                     else None,
-                    screen_reason=screen_reasons.get(row.project_source_snapshot_id),
+                    screen_reason=screen_reasons.get(row.task_source_snapshot_id),
                     classification_reason=classification_reasons.get(
-                        row.project_source_snapshot_id
+                        row.task_source_snapshot_id
                     ),
                     read_in_full=row.full_text_status == "ingested",
                 ),
@@ -852,10 +852,10 @@ def _compare_evidence_sort(
     return result if direction == "asc" else -result
 
 
-def _latest_relevance(conn: Connection, project_id: uuid.UUID) -> dict[str, str]:
+def _latest_relevance(conn: Connection, task_id: uuid.UUID) -> dict[str, str]:
     row = conn.execute(
         select(extraction_result.c.extraction_provenance)
-        .where(extraction_result.c.project_id == project_id)
+        .where(extraction_result.c.task_id == task_id)
         .order_by(extraction_result.c.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -871,7 +871,7 @@ def _latest_relevance(conn: Connection, project_id: uuid.UUID) -> dict[str, str]
 
 def _finding_ids_for_group(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     *,
     facet: str | None,
     group: str | None,
@@ -888,7 +888,7 @@ def _finding_ids_for_group(
         return None
     payload = conn.execute(
         select(grouping_result.c.groups)
-        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.task_id == task_id)
         .order_by(grouping_result.c.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -919,7 +919,7 @@ def _finding_ids_for_group(
 
 def findings_page(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     page: int,
     page_size: int,
     *,
@@ -937,16 +937,16 @@ def findings_page(
     """
 
     def where_clauses(finding: Any) -> list[Any]:
-        clauses: list[Any] = [finding.c.project_id == project_id]
+        clauses: list[Any] = [finding.c.task_id == task_id]
         if source_id is not None:
-            clauses.append(source_extraction_record.c.project_source_snapshot_id == source_id)
+            clauses.append(source_extraction_record.c.task_source_snapshot_id == source_id)
         return clauses
 
     iof_rows = (
         conn.execute(
             select(
                 intervention_outcome_finding,
-                source_extraction_record.c.project_source_snapshot_id,
+                source_extraction_record.c.task_source_snapshot_id,
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
             )
@@ -962,7 +962,7 @@ def findings_page(
         conn.execute(
             select(
                 implementation_context_finding,
-                source_extraction_record.c.project_source_snapshot_id,
+                source_extraction_record.c.task_source_snapshot_id,
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
             )
@@ -977,21 +977,21 @@ def findings_page(
     rows = [("iof", row) for row in iof_rows] + [("icf", row) for row in icf_rows]
     rows.sort(key=lambda item: (item[1]["created_at"], item[1]["finding_id"]), reverse=True)
     group_filter_ids = _finding_ids_for_group(
-        conn, project_id, facet=facet, group=group, group_id=group_id
+        conn, task_id, facet=facet, group=group, group_id=group_id
     )
     if group_filter_ids is not None:
         rows = [item for item in rows if item[1]["finding_id"] in group_filter_ids]
     total = len(rows)
     rows = rows[(page - 1) * page_size : page * page_size]
-    relevance = _latest_relevance(conn, project_id)
-    groups = _finding_groups(conn, project_id)
+    relevance = _latest_relevance(conn, task_id)
+    groups = _finding_groups(conn, task_id)
     items: list[FindingOut] = []
     for profile, row in rows:
         metadata = row["metadata"] if isinstance(row["metadata"], Mapping) else {}
         common = {
             "finding_id": row["finding_id"],
             "statement": row["intervention"] if profile == "iof" else row["claim"],
-            "source_id": row["project_source_snapshot_id"],
+            "source_id": row["task_source_snapshot_id"],
             "source_title": _title(metadata, row["source_locator"]),
             "relevance": cast(Any, relevance.get(str(row["finding_id"]))),
             "quote": _grounding_value(row["grounding"], "quote"),
@@ -1050,13 +1050,13 @@ def _finding_source_join(finding: Any) -> Any:
             finding.c.extraction_record_id == source_extraction_record.c.extraction_record_id,
         )
         .join(
-            project_source_snapshot,
-            project_source_snapshot.c.project_source_snapshot_id
-            == source_extraction_record.c.project_source_snapshot_id,
+            task_source_snapshot,
+            task_source_snapshot.c.task_source_snapshot_id
+            == source_extraction_record.c.task_source_snapshot_id,
         )
         .join(
             source_snapshot,
-            source_snapshot.c.source_snapshot_id == project_source_snapshot.c.source_snapshot_id,
+            source_snapshot.c.source_snapshot_id == task_source_snapshot.c.source_snapshot_id,
         )
     )
 
@@ -1071,11 +1071,11 @@ def _grounding_value(grounding: Any, key: str) -> Any | None:
     return value if isinstance(value, str) else None
 
 
-def _finding_groups(conn: Connection, project_id: uuid.UUID) -> dict[uuid.UUID, dict[str, str]]:
+def _finding_groups(conn: Connection, task_id: uuid.UUID) -> dict[uuid.UUID, dict[str, str]]:
     """Map latest grouping memberships to public facet-to-label values."""
     payload = conn.execute(
         select(grouping_result.c.groups)
-        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.task_id == task_id)
         .order_by(grouping_result.c.created_at.desc())
         .limit(1)
     ).scalar_one_or_none()
@@ -1104,8 +1104,8 @@ _EVENT_KINDS = {
     "component.failed",
     "component.skipped",
     "search.executed",
-    "project.renamed",
-    "project.archived",
+    "task.renamed",
+    "task.archived",
     "run.opened",
     "run.parked",
     "run.finished",
@@ -1118,13 +1118,13 @@ def _event_decision(row: Any) -> DecisionOut:
     payload = row.payload if isinstance(row.payload, Mapping) else {}
     actor = payload.get("actor") if isinstance(payload.get("actor"), str) else None
     text = {
-        "component.completed": "Completed an evidence-base step.",
-        "component.failed": "An evidence-base step failed.",
-        "component.skipped": "Skipped an evidence-base step.",
+        "component.completed": "Completed an evidence-search step.",
+        "component.failed": "An evidence-search step failed.",
+        "component.skipped": "Skipped an evidence-search step.",
         "search.executed": "Executed a search query.",
-        "project.renamed": "Renamed the project.",
-        "project.archived": "Archived the project.",
-        "run.opened": "Opened an evidence-base run.",
+        "task.renamed": "Renamed the task.",
+        "task.archived": "Archived the task.",
+        "run.opened": "Opened an evidence-search run.",
         "run.parked": "Parked the run for a check-in.",
         "run.finished": "Finished the run.",
         "run.interrupted": "Interrupted the run.",
@@ -1141,20 +1141,20 @@ def _event_decision(row: Any) -> DecisionOut:
 
 
 def decisions_page(
-    conn: Connection, project_id: uuid.UUID, page: int, page_size: int
+    conn: Connection, task_id: uuid.UUID, page: int, page_size: int
 ) -> Page[DecisionOut]:
     """Return steering-history decisions plus the explicitly allowlisted audit events."""
     allowed = (
         conn.execute(
             select(event_log).where(
-                event_log.c.project_id == project_id, event_log.c.event_type.in_(_EVENT_KINDS)
+                event_log.c.task_id == task_id, event_log.c.event_type.in_(_EVENT_KINDS)
             )
         )
         .mappings()
         .all()
     )
     decision_events: list[DecisionOut] = [_event_decision(row) for row in allowed]
-    for story in steering_history(conn, project_id):
+    for story in steering_history(conn, task_id):
         for event in story["events"]:
             if event["event_type"] != "steering.decision":
                 continue
@@ -1166,7 +1166,7 @@ def decisions_page(
                     kind="steering.decision",
                     summary="Recorded a steering decision.",
                     decided_by=cast(Any, payload.get("decided_by"))
-                    if payload.get("decided_by") in {"user", "orchestrator", "standing_default"}
+                    if payload.get("decided_by") in {"user", "agent", "standing_default"}
                     else None,
                     detail=dict(payload),
                 )
@@ -1178,9 +1178,9 @@ def decisions_page(
     )
 
 
-def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
+def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
     """Materialize the latest synthesis artefact with batched claims and citations."""
-    synthesis = _latest_synthesis(conn, project_id)
+    synthesis = _latest_synthesis(conn, task_id)
     if synthesis is None:
         return None
     artefact_row = (
@@ -1190,8 +1190,8 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     )
     if artefact_row is None:
         return None
-    characterisation_themes = _characterisation_theme_refs(conn, project_id, synthesis)
-    grouping_themes = _grouping_theme_refs(conn, project_id, synthesis)
+    characterisation_themes = _characterisation_theme_refs(conn, task_id, synthesis)
+    grouping_themes = _grouping_theme_refs(conn, task_id, synthesis)
     scope = conn.execute(
         select(evidence_scope.c.intent).where(
             evidence_scope.c.evidence_scope_id == synthesis["evidence_scope_id"]
@@ -1268,23 +1268,23 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     # full-text snapshot is only the textual authority (its metadata carries
     # fetch facts, never a title). Every display read resolves through the
     # envelope — unconditionally, not as a fallback.
-    snapshot_to_pss: dict[uuid.UUID, uuid.UUID] = {}
-    pss_to_envelope: dict[uuid.UUID, uuid.UUID] = {}
+    snapshot_to_tss: dict[uuid.UUID, uuid.UUID] = {}
+    tss_to_envelope: dict[uuid.UUID, uuid.UUID] = {}
     for row in conn.execute(
         select(
-            project_source_snapshot.c.project_source_snapshot_id,
-            project_source_snapshot.c.source_snapshot_id,
-            project_source_snapshot.c.full_text_snapshot_id,
-        ).where(project_source_snapshot.c.project_id == project_id)
+            task_source_snapshot.c.task_source_snapshot_id,
+            task_source_snapshot.c.source_snapshot_id,
+            task_source_snapshot.c.full_text_snapshot_id,
+        ).where(task_source_snapshot.c.task_id == task_id)
     ).all():
-        snapshot_to_pss[row.source_snapshot_id] = row.project_source_snapshot_id
-        pss_to_envelope[row.project_source_snapshot_id] = row.source_snapshot_id
+        snapshot_to_tss[row.source_snapshot_id] = row.task_source_snapshot_id
+        tss_to_envelope[row.task_source_snapshot_id] = row.source_snapshot_id
         if row.full_text_snapshot_id is not None:
-            snapshot_to_pss[row.full_text_snapshot_id] = row.project_source_snapshot_id
+            snapshot_to_tss[row.full_text_snapshot_id] = row.task_source_snapshot_id
 
     def _envelope_id(snapshot_id: uuid.UUID) -> uuid.UUID:
-        pss_id = snapshot_to_pss.get(snapshot_id)
-        return pss_to_envelope.get(pss_id, snapshot_id) if pss_id is not None else snapshot_id
+        tss_id = snapshot_to_tss.get(snapshot_id)
+        return tss_to_envelope.get(tss_id, snapshot_id) if tss_id is not None else snapshot_id
 
     envelope_ids = {_envelope_id(snapshot_id) for snapshot_id in snapshots}
     meta = (
@@ -1307,12 +1307,12 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     appraisal = latest_row_by_id(
         conn.execute(
             select(
-                source_appraisal_result.c.project_source_snapshot_id,
+                source_appraisal_result.c.task_source_snapshot_id,
                 source_appraisal_result.c.quality_score,
                 source_appraisal_result.c.appraised_at,
-            ).where(source_appraisal_result.c.project_id == project_id)
+            ).where(source_appraisal_result.c.task_id == task_id)
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "appraised_at",
     )
     # The classified evidence type is the appraisal rubric's scoring input —
@@ -1320,12 +1320,12 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     citation_classifications = latest_row_by_id(
         conn.execute(
             select(
-                source_classification_result.c.project_source_snapshot_id,
+                source_classification_result.c.task_source_snapshot_id,
                 source_classification_result.c.primary_evidence_type,
                 source_classification_result.c.classified_at,
-            ).where(source_classification_result.c.project_id == project_id)
+            ).where(source_classification_result.c.task_id == task_id)
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "classified_at",
     )
     citations_by_annotation: dict[uuid.UUID, list[Any]] = {}
@@ -1341,21 +1341,21 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         claim_citations: list[CitationOut] = []
         for cited in citations_by_annotation.get(row.annotation_id, []):
             snapshot_id = cited.source_snapshot_id
-            pss_id = snapshot_to_pss.get(snapshot_id)
+            tss_id = snapshot_to_tss.get(snapshot_id)
             # Reference identity is the DOCUMENT, not the snapshot: abstract-
             # and full-text-grounded quotes from one source share one entry.
-            doc_key = pss_id if pss_id is not None else snapshot_id
+            doc_key = tss_id if tss_id is not None else snapshot_id
             if doc_key not in refs:
                 refs[doc_key] = len(refs) + 1
                 reference_order.append(doc_key)
             source_meta, locator_text = meta.get(_envelope_id(snapshot_id), ({}, "Unknown source"))
-            score_row = appraisal.get(pss_id) if pss_id is not None else None
+            score_row = appraisal.get(tss_id) if tss_id is not None else None
             payload = row.payload if isinstance(row.payload, Mapping) else {}
             claim_citations.append(
                 CitationOut(
                     citation_id=cited.citation_id,
                     n=refs[doc_key],
-                    source_id=pss_id,
+                    source_id=tss_id,
                     source_title=_title(source_meta, locator_text),
                     quote=cited.quote,
                     grounding_tier=cast(str | None, payload.get("verdict"))
@@ -1369,8 +1369,8 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                     else None,
                     evidence_type=(
                         classification_row.primary_evidence_type
-                        if pss_id is not None
-                        and (classification_row := citation_classifications.get(pss_id)) is not None
+                        if tss_id is not None
+                        and (classification_row := citation_classifications.get(tss_id)) is not None
                         else None
                     ),
                 )
@@ -1436,9 +1436,9 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
         )
     refs_out = []
     for doc_key in reference_order:
-        # doc_key is a pss id (envelope via pss_to_envelope) or, for a
-        # snapshot with no project edge, the snapshot id itself.
-        ref_entry = meta.get(pss_to_envelope.get(doc_key, doc_key))
+        # doc_key is a tss id (envelope via tss_to_envelope) or, for a
+        # snapshot with no task edge, the snapshot id itself.
+        ref_entry = meta.get(tss_to_envelope.get(doc_key, doc_key))
         ref_meta, ref_locator = ref_entry if ref_entry is not None else ({}, "Unknown source")
         refs_out.append(
             ReferenceOut(
@@ -1458,7 +1458,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
                 source_classification_result.c.primary_evidence_type,
                 func.count(),
             )
-            .where(source_classification_result.c.project_id == project_id)
+            .where(source_classification_result.c.task_id == task_id)
             .where(
                 source_classification_result.c.evidence_scope_id == synthesis["evidence_scope_id"]
             )
@@ -1469,7 +1469,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
     screen_statuses = (
         conn.execute(
             select(effective.c.status)
-            .where(effective.c.project_id == project_id)
+            .where(effective.c.task_id == task_id)
             .where(effective.c.evidence_scope_id == synthesis["evidence_scope_id"])
         )
         .scalars()
@@ -1496,7 +1496,7 @@ def artefact_out(conn: Connection, project_id: uuid.UUID) -> ArtefactOut | None:
 
 
 def _weakly_grounded(payload: Any) -> bool | None:
-    """Project stored grounding warnings without inventing a verification result."""
+    """Task stored grounding warnings without inventing a verification result."""
     if not isinstance(payload, Mapping):
         return None
     for key in ("weakly_grounded", "quote_unverified"):
@@ -1534,7 +1534,7 @@ def _gap_out(payload: Any) -> GapOut | None:
 
 
 def _characterisation_theme_refs(
-    conn: Connection, project_id: uuid.UUID, synthesis: Mapping[str, Any]
+    conn: Connection, task_id: uuid.UUID, synthesis: Mapping[str, Any]
 ) -> dict[str, ThemeRefItemOut]:
     """Return the artefact's own characterisation themes keyed by durable ids.
 
@@ -1547,15 +1547,15 @@ def _characterisation_theme_refs(
         return {}
     payload = conn.execute(
         select(characterisation_result.c.themes)
-        .where(characterisation_result.c.project_id == project_id)
+        .where(characterisation_result.c.task_id == task_id)
         .where(characterisation_result.c.evidence_scope_id == synthesis["evidence_scope_id"])
         .where(characterisation_result.c.run_id == synthesis["characterisation_run_id"])
     ).scalar_one_or_none()
     if not isinstance(payload, Mapping) or not isinstance(payload.get("themes"), list):
         return {}
-    source_refs = _theme_sources_for_project_source_snapshots(
+    source_refs = _theme_sources_for_task_source_snapshots(
         conn,
-        project_id,
+        task_id,
         {
             member_id
             for item in payload["themes"]
@@ -1582,7 +1582,7 @@ def _characterisation_theme_refs(
 
 
 def _grouping_theme_refs(
-    conn: Connection, project_id: uuid.UUID, synthesis: Mapping[str, Any]
+    conn: Connection, task_id: uuid.UUID, synthesis: Mapping[str, Any]
 ) -> dict[str, ThemeRefItemOut]:
     """Return the artefact's own facet groups keyed by their durable group ids.
 
@@ -1593,7 +1593,7 @@ def _grouping_theme_refs(
         return {}
     payload = conn.execute(
         select(grouping_result.c.groups)
-        .where(grouping_result.c.project_id == project_id)
+        .where(grouping_result.c.task_id == task_id)
         .where(grouping_result.c.evidence_scope_id == synthesis["evidence_scope_id"])
         .where(grouping_result.c.run_id == synthesis["grouping_run_id"])
     ).scalar_one_or_none()
@@ -1608,7 +1608,7 @@ def _grouping_theme_refs(
         if isinstance(group, Mapping)
         for member_id in _uuid_members(group.get("member_finding_ids"))
     }
-    source_refs = _theme_sources_for_findings(conn, project_id, finding_ids)
+    source_refs = _theme_sources_for_findings(conn, task_id, finding_ids)
     result: dict[str, ThemeRefItemOut] = {}
     for facet, facet_payload in payload.items():
         if not isinstance(facet, str) or not isinstance(facet_payload, Mapping):
@@ -1652,7 +1652,7 @@ def _uuid_members(values: Any) -> list[uuid.UUID]:
 def _resolved_theme_sources(
     member_ids: Any, source_refs: Mapping[uuid.UUID, ThemeSourceOut]
 ) -> list[ThemeSourceOut] | None:
-    """Project resolvable member sources once, preserving stored member order."""
+    """Task resolvable member sources once, preserving stored member order."""
     if not isinstance(member_ids, list):
         return None
     result: list[ThemeSourceOut] = []
@@ -1666,33 +1666,33 @@ def _resolved_theme_sources(
     return result
 
 
-def _theme_sources_for_project_source_snapshots(
-    conn: Connection, project_id: uuid.UUID, source_ids: set[uuid.UUID]
+def _theme_sources_for_task_source_snapshots(
+    conn: Connection, task_id: uuid.UUID, source_ids: set[uuid.UUID]
 ) -> dict[uuid.UUID, ThemeSourceOut]:
-    """Map project-source-snapshot ids to the envelope source display details."""
+    """Map task-source-snapshot ids to the envelope source display details."""
     if not source_ids:
         return {}
     rows = conn.execute(
         select(
-            project_source_snapshot.c.project_source_snapshot_id,
+            task_source_snapshot.c.task_source_snapshot_id,
             source_snapshot.c.metadata,
             source_snapshot.c.source_locator,
         )
         .select_from(
-            project_source_snapshot.join(
+            task_source_snapshot.join(
                 source_snapshot,
-                project_source_snapshot.c.source_snapshot_id
+                task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(
-            project_source_snapshot.c.project_id == project_id,
-            project_source_snapshot.c.project_source_snapshot_id.in_(source_ids),
+            task_source_snapshot.c.task_id == task_id,
+            task_source_snapshot.c.task_source_snapshot_id.in_(source_ids),
         )
     ).all()
     return {
-        row.project_source_snapshot_id: ThemeSourceOut(
-            source_id=row.project_source_snapshot_id,
+        row.task_source_snapshot_id: ThemeSourceOut(
+            source_id=row.task_source_snapshot_id,
             title=_title(
                 row.metadata if isinstance(row.metadata, Mapping) else {}, row.source_locator
             ),
@@ -1702,7 +1702,7 @@ def _theme_sources_for_project_source_snapshots(
 
 
 def _theme_sources_for_findings(
-    conn: Connection, project_id: uuid.UUID, finding_ids: set[uuid.UUID]
+    conn: Connection, task_id: uuid.UUID, finding_ids: set[uuid.UUID]
 ) -> dict[uuid.UUID, ThemeSourceOut]:
     """Map finding ids to their sources through the findings read-model join."""
     if not finding_ids:
@@ -1712,17 +1712,17 @@ def _theme_sources_for_findings(
         rows = conn.execute(
             select(
                 finding.c.finding_id,
-                source_extraction_record.c.project_source_snapshot_id,
+                source_extraction_record.c.task_source_snapshot_id,
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
             )
             .select_from(_finding_source_join(finding))
-            .where(finding.c.project_id == project_id, finding.c.finding_id.in_(finding_ids))
+            .where(finding.c.task_id == task_id, finding.c.finding_id.in_(finding_ids))
         ).all()
         for row in rows:
             metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
             result[row.finding_id] = ThemeSourceOut(
-                source_id=row.project_source_snapshot_id,
+                source_id=row.task_source_snapshot_id,
                 title=_title(metadata, row.source_locator),
             )
     return result
@@ -1755,12 +1755,12 @@ def _theme_out(
     )
 
 
-def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
+def coverage_out(conn: Connection, task_id: uuid.UUID) -> CoverageOut | None:
     """Compose the latest coverage record as one sentence with its evidence base."""
     row = (
         conn.execute(
             select(search_coverage_record)
-            .where(search_coverage_record.c.project_id == project_id)
+            .where(search_coverage_record.c.task_id == task_id)
             .order_by(search_coverage_record.c.created_at.desc())
             .limit(1)
         )
@@ -1776,7 +1776,7 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
         "verdict_origin": row["verdict_origin"],
         "backends": backend_names,
     }
-    counts = funnel_out(conn, project_id).model_dump(include={"found", "relevant", "screened_out"})
+    counts = funnel_out(conn, task_id).model_dump(include={"found", "relevant", "screened_out"})
     base["counts"] = counts
     adequacy = (
         "Coverage was judged adequate."
@@ -1795,10 +1795,10 @@ def coverage_out(conn: Connection, project_id: uuid.UUID) -> CoverageOut | None:
         backends=backend_names,
         backends_detail=_backend_details(
             conn,
-            project_id,
+            task_id,
             # Same row the sentence and the backend list come from, so every
             # part of this card describes one question.
-            _acquire_run_ids(conn, project_id, row["evidence_scope_id"]),
+            _acquire_run_ids(conn, task_id, row["evidence_scope_id"]),
             backend_names,
         ),
     )
@@ -1810,7 +1810,7 @@ def _public_backend_name(value: str) -> str | None:
 
 
 def _acquire_run_ids(
-    conn: Connection, project_id: uuid.UUID, evidence_scope_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, evidence_scope_id: uuid.UUID
 ) -> list[uuid.UUID]:
     """Every acquire run of one evidence scope, oldest first.
 
@@ -1818,16 +1818,16 @@ def _acquire_run_ids(
     round (task 031) — all of them, which is what makes ``results`` cumulative
     across rounds instead of last-round-only.
 
-    Scoped to **one question**, not the whole project: approving a plan mints a
-    new ``evidence_scope`` (``orchestrate.py``), so a re-planned project holds
-    the superseded question's coverage records too. Project-wide here would put
+    Scoped to **one question**, not the whole task: approving a plan mints a
+    new ``evidence_scope`` (``agent.py``), so a re-planned task holds
+    the superseded question's coverage records too. Task-wide here would put
     the abandoned question's query strings and hits into this question's card,
     beside a ``sentence`` read from the current question's row. Round-cumulative
     is the fix task 031 wanted; question-cumulative is not (review stack).
 
-    ``relevant`` next door stays project-wide by design — screening re-screens
-    the whole project pool per question (docs/knowledge/
-    coverage-base-project-pool-wide.md), and the contract's invariant 3 requires
+    ``relevant`` next door stays task-wide by design — screening re-screens
+    the whole task pool per question (docs/knowledge/
+    coverage-base-task-pool-wide.md), and the contract's invariant 3 requires
     only that the copy never imply one number contains the other.
 
     The order here is for readability only — what makes the read model
@@ -1838,7 +1838,7 @@ def _acquire_run_ids(
         conn.execute(
             select(search_coverage_record.c.acquired_by_run_id)
             .where(
-                search_coverage_record.c.project_id == project_id,
+                search_coverage_record.c.task_id == task_id,
                 search_coverage_record.c.evidence_scope_id == evidence_scope_id,
             )
             .order_by(search_coverage_record.c.created_at)
@@ -1861,11 +1861,11 @@ def _coverage_backend_names(backends: Any) -> list[str]:
 
 def _backend_details(
     conn: Connection,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_ids: Sequence[uuid.UUID],
     backend_names: list[str],
 ) -> list[CoverageBackendDetailOut]:
-    """Query hits across every acquire round, beside project-wide relevance.
+    """Query hits across every acquire round, beside task-wide relevance.
 
     ``results`` sums the query hits of every acquire run given, not just the
     newest round's (task 031, defect 2). Before this slice the caller passed the
@@ -1873,14 +1873,14 @@ def _backend_details(
     round reported ~72 hits beside ~200 cumulative relevant sources — two grains
     on one line.
 
-    ``relevant`` stays the project-wide unique count per backend (the documented
+    ``relevant`` stays the task-wide unique count per backend (the documented
     task 027 §C.1 behaviour). The two numbers are now both cumulative, but they
     still count different things: hits are per call and pre-dedupe, so
     ``relevant`` is not a subset of ``results``.
 
     Args:
         conn: Open read connection.
-        project_id: Owning project.
+        task_id: Owning task.
         run_ids: Every acquire run whose query hits belong in the total. Empty
             yields empty query lists rather than a silent last-round figure.
         backend_names: Public backend names to report, in display order.
@@ -1892,7 +1892,7 @@ def _backend_details(
         conn.execute(
             select(event_log.c.payload)
             .where(
-                event_log.c.project_id == project_id,
+                event_log.c.task_id == task_id,
                 event_log.c.run_id.in_(run_ids),
                 event_log.c.event_type == "search.executed",
             )
@@ -1923,16 +1923,16 @@ def _backend_details(
             select(source_snapshot.c.metadata)
             .select_from(
                 effective.join(
-                    project_source_snapshot,
-                    effective.c.project_source_snapshot_id
-                    == project_source_snapshot.c.project_source_snapshot_id,
+                    task_source_snapshot,
+                    effective.c.task_source_snapshot_id
+                    == task_source_snapshot.c.task_source_snapshot_id,
                 ).join(
                     source_snapshot,
-                    project_source_snapshot.c.source_snapshot_id
+                    task_source_snapshot.c.source_snapshot_id
                     == source_snapshot.c.source_snapshot_id,
                 )
             )
-            .where(effective.c.project_id == project_id, effective.c.status == "relevant")
+            .where(effective.c.task_id == task_id, effective.c.status == "relevant")
         )
         .scalars()
         .all()
@@ -1955,31 +1955,31 @@ def _backend_details(
 
 
 def source_dossier_out(
-    conn: Connection, project_id: uuid.UUID, source_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, source_id: uuid.UUID
 ) -> SourceDossierOut | None:
     """Materialize one owner-authorized source dossier from durable records only."""
     row = (
         conn.execute(
             select(
-                project_source_snapshot.c.project_source_snapshot_id,
-                project_source_snapshot.c.origin,
-                project_source_snapshot.c.source_snapshot_id,
-                project_source_snapshot.c.full_text_snapshot_id,
-                project_source_snapshot.c.full_text_status,
-                project_source_snapshot.c.full_text_error,
+                task_source_snapshot.c.task_source_snapshot_id,
+                task_source_snapshot.c.origin,
+                task_source_snapshot.c.source_snapshot_id,
+                task_source_snapshot.c.full_text_snapshot_id,
+                task_source_snapshot.c.full_text_status,
+                task_source_snapshot.c.full_text_error,
                 source_snapshot.c.metadata,
                 source_snapshot.c.source_locator,
             )
             .select_from(
-                project_source_snapshot.join(
+                task_source_snapshot.join(
                     source_snapshot,
-                    project_source_snapshot.c.source_snapshot_id
+                    task_source_snapshot.c.source_snapshot_id
                     == source_snapshot.c.source_snapshot_id,
                 )
             )
             .where(
-                project_source_snapshot.c.project_id == project_id,
-                project_source_snapshot.c.project_source_snapshot_id == source_id,
+                task_source_snapshot.c.task_id == task_id,
+                task_source_snapshot.c.task_source_snapshot_id == source_id,
             )
         )
         .mappings()
@@ -1988,28 +1988,28 @@ def source_dossier_out(
     if row is None:
         return None
     metadata = row["metadata"] if isinstance(row["metadata"], Mapping) else {}
-    screen = _effective_screens(conn, project_id).get(source_id)
-    screen_reasons, classification_reasons = _source_reason_maps(conn, project_id)
-    selection = _latest_selection(conn, project_id)
+    screen = _effective_screens(conn, task_id).get(source_id)
+    screen_reasons, classification_reasons = _source_reason_maps(conn, task_id)
+    selection = _latest_selection(conn, task_id)
     selected = _selected_ids(selection["selected"]) if selection is not None else set()
     extracted = (
         conn.execute(
             select(source_extraction_record.c.extraction_record_id)
             .where(
-                source_extraction_record.c.project_id == project_id,
-                source_extraction_record.c.project_source_snapshot_id == source_id,
+                source_extraction_record.c.task_id == task_id,
+                source_extraction_record.c.task_source_snapshot_id == source_id,
                 source_extraction_record.c.finding_count > 0,
             )
             .limit(1)
         ).scalar_one_or_none()
         is not None
     )
-    synthesis = _latest_synthesis(conn, project_id)
+    synthesis = _latest_synthesis(conn, task_id)
     cited_ids = (
         _cited_snapshot_ids(conn, synthesis["artefact_id"]) if synthesis is not None else set()
     )
     # Python-side membership over an already-fetched row + a precomputed set,
-    # not a SQL join — pss_owns_snapshot doesn't fit here (task 029
+    # not a SQL join — tss_owns_snapshot doesn't fit here (task 029
     # delta-review sweep).
     cited = row["source_snapshot_id"] in cited_ids or row["full_text_snapshot_id"] in cited_ids
     if cited:
@@ -2035,29 +2035,29 @@ def source_dossier_out(
     classification = latest_row_by_id(
         conn.execute(
             select(
-                source_classification_result.c.project_source_snapshot_id,
+                source_classification_result.c.task_source_snapshot_id,
                 source_classification_result.c.primary_evidence_type,
                 source_classification_result.c.classified_at,
             ).where(
-                source_classification_result.c.project_id == project_id,
-                source_classification_result.c.project_source_snapshot_id == source_id,
+                source_classification_result.c.task_id == task_id,
+                source_classification_result.c.task_source_snapshot_id == source_id,
             )
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "classified_at",
     ).get(source_id)
     appraisal = latest_row_by_id(
         conn.execute(
             select(
-                source_appraisal_result.c.project_source_snapshot_id,
+                source_appraisal_result.c.task_source_snapshot_id,
                 source_appraisal_result.c.quality_score,
                 source_appraisal_result.c.appraised_at,
             ).where(
-                source_appraisal_result.c.project_id == project_id,
-                source_appraisal_result.c.project_source_snapshot_id == source_id,
+                source_appraisal_result.c.task_id == task_id,
+                source_appraisal_result.c.task_source_snapshot_id == source_id,
             )
         ).all(),
-        "project_source_snapshot_id",
+        "task_source_snapshot_id",
         "appraised_at",
     ).get(source_id)
     provider_value = metadata.get("provider_fields")
@@ -2069,8 +2069,8 @@ def source_dossier_out(
         for tag_row in conn.execute(
             select(source_tag.c.tag, source_tag.c.tag_type, source_tag.c.asserted_by)
             .where(
-                source_tag.c.project_id == project_id,
-                source_tag.c.project_source_snapshot_id == source_id,
+                source_tag.c.task_id == task_id,
+                source_tag.c.task_source_snapshot_id == source_id,
             )
             .order_by(source_tag.c.tag_type, source_tag.c.tag, source_tag.c.asserted_by)
         ).all()
@@ -2115,15 +2115,15 @@ def source_dossier_out(
         and not isinstance(provider.get("fwci"), bool)
         else None,
         tags=tags,
-        cited_in=_source_cited_in(conn, project_id, source_id),
+        cited_in=_source_cited_in(conn, task_id, source_id),
     )
 
 
 def _source_cited_in(
-    conn: Connection, project_id: uuid.UUID, source_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, source_id: uuid.UUID
 ) -> list[CitedInOut]:
     """Return only latest-synthesis claims citing either snapshot linked to a source."""
-    synthesis = _latest_synthesis(conn, project_id)
+    synthesis = _latest_synthesis(conn, task_id)
     if synthesis is None:
         return []
     specs = synthesis["blocks"] if isinstance(synthesis["blocks"], list) else []
@@ -2136,11 +2136,11 @@ def _source_cited_in(
         return []
     source = conn.execute(
         select(
-            project_source_snapshot.c.source_snapshot_id,
-            project_source_snapshot.c.full_text_snapshot_id,
+            task_source_snapshot.c.source_snapshot_id,
+            task_source_snapshot.c.full_text_snapshot_id,
         ).where(
-            project_source_snapshot.c.project_id == project_id,
-            project_source_snapshot.c.project_source_snapshot_id == source_id,
+            task_source_snapshot.c.task_id == task_id,
+            task_source_snapshot.c.task_source_snapshot_id == source_id,
         )
     ).one_or_none()
     if source is None:
@@ -2167,7 +2167,7 @@ def _source_cited_in(
 
 
 def chunk_context_out(
-    conn: Connection, project_id: uuid.UUID, citation_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, citation_id: uuid.UUID
 ) -> ChunkContextOut | None:
     """Return at most 800 characters either side of a cited, anchored source span."""
     row = conn.execute(
@@ -2178,7 +2178,7 @@ def chunk_context_out(
             .join(artefact, block.c.artefact_id == artefact.c.artefact_id)
             .join(chunk, chunk.c.chunk_id == citation.c.chunk_id)
         )
-        .where(citation.c.citation_id == citation_id, artefact.c.project_id == project_id)
+        .where(citation.c.citation_id == citation_id, artefact.c.task_id == task_id)
     ).one_or_none()
     if row is None:
         return None
@@ -2202,17 +2202,17 @@ def chunk_context_out(
         clamped=start_window > 0 or end_window < len(text),
         previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
         next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
-        year=_chunk_year(conn, project_id, row.source_snapshot_id),
-        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+        year=_chunk_year(conn, task_id, row.source_snapshot_id),
+        venue=_chunk_venue(conn, task_id, row.source_snapshot_id),
     )
 
 
 def chunk_quote_context_out(
-    conn: Connection, project_id: uuid.UUID, chunk_id: uuid.UUID, quote: str
+    conn: Connection, task_id: uuid.UUID, chunk_id: uuid.UUID, quote: str
 ) -> ChunkContextOut | None:
     """Return the clamped context window for a chat citation's chunk + quote.
 
-    The chunk must belong to the project's corpus (envelope or full-text
+    The chunk must belong to the task's corpus (envelope or full-text
     snapshot link) — the same ownership boundary every read model enforces.
     Chat quotes are raw model output, so this locates the quote via
     ``quote_verify.locate_unique_span`` — the canonical overlap-aware,
@@ -2231,12 +2231,12 @@ def chunk_quote_context_out(
         select(chunk.c.content, chunk.c.sequence, chunk.c.source_snapshot_id)
         .select_from(
             chunk.join(
-                project_source_snapshot,
-                pss_owns_snapshot(chunk.c.source_snapshot_id),
+                task_source_snapshot,
+                tss_owns_snapshot(chunk.c.source_snapshot_id),
             )
         )
         .where(chunk.c.chunk_id == chunk_id)
-        .where(project_source_snapshot.c.project_id == project_id)
+        .where(task_source_snapshot.c.task_id == task_id)
         .limit(1)
     ).one_or_none()
     if row is None:
@@ -2255,8 +2255,8 @@ def chunk_quote_context_out(
         clamped=start_window > 0 or end_window < len(text),
         previous=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence - 1),
         next=_adjacent_chunk(conn, row.source_snapshot_id, row.sequence + 1),
-        year=_chunk_year(conn, project_id, row.source_snapshot_id),
-        venue=_chunk_venue(conn, project_id, row.source_snapshot_id),
+        year=_chunk_year(conn, task_id, row.source_snapshot_id),
+        venue=_chunk_venue(conn, task_id, row.source_snapshot_id),
     )
 
 
@@ -2270,35 +2270,35 @@ def _adjacent_chunk(conn: Connection, source_snapshot_id: uuid.UUID, sequence: i
 
 
 def _chunk_metadata(
-    conn: Connection, project_id: uuid.UUID, source_snapshot_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
 ) -> Mapping[str, Any]:
-    """Find the envelope metadata for either immutable snapshot linked by a PSS."""
+    """Find the envelope metadata for either immutable snapshot linked by a TSS."""
     metadata = conn.execute(
         select(source_snapshot.c.metadata)
         .select_from(
-            project_source_snapshot.join(
+            task_source_snapshot.join(
                 source_snapshot,
-                project_source_snapshot.c.source_snapshot_id
+                task_source_snapshot.c.source_snapshot_id
                 == source_snapshot.c.source_snapshot_id,
             )
         )
         .where(
-            project_source_snapshot.c.project_id == project_id,
-            pss_owns_snapshot(source_snapshot_id),
+            task_source_snapshot.c.task_id == task_id,
+            tss_owns_snapshot(source_snapshot_id),
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}
 
 
 def _chunk_year(
-    conn: Connection, project_id: uuid.UUID, source_snapshot_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
 ) -> int | None:
-    """Read the publication year for a chunk through its project source link."""
-    return _year(_chunk_metadata(conn, project_id, source_snapshot_id))
+    """Read the publication year for a chunk through its task source link."""
+    return _year(_chunk_metadata(conn, task_id, source_snapshot_id))
 
 
 def _chunk_venue(
-    conn: Connection, project_id: uuid.UUID, source_snapshot_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
 ) -> str | None:
-    """Read the venue for a chunk through its project source link."""
-    return _venue(_chunk_metadata(conn, project_id, source_snapshot_id))
+    """Read the venue for a chunk through its task source link."""
+    return _venue(_chunk_metadata(conn, task_id, source_snapshot_id))

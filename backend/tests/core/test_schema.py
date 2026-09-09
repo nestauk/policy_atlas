@@ -20,8 +20,8 @@ from policy_atlas.core.schema import (
     artefact,
     block,
     event_log,
-    project,
-    project_source_snapshot,
+    task,
+    task_source_snapshot,
     runs,
     source_screening_result,
     source_snapshot,
@@ -34,41 +34,41 @@ from policy_atlas.core.schema import (
     citation as citation_table,
 )
 from policy_atlas.core.tags import insert_source_tags
-from policy_atlas.evidence_base.extract import iof_prompt
-from policy_atlas.evidence_base.extract.iof_records import EffectBasis
-from tests.helpers import now, seed_project_and_run, seed_scope, seed_source
+from policy_atlas.evidence_search.extract import iof_prompt
+from policy_atlas.evidence_search.extract.iof_records import EffectBasis
+from tests.helpers import now, seed_task_and_run, seed_scope, seed_source
 
 
 def test_all_fourteen_tables_exist(conn: Connection) -> None:
     inspector = inspect(conn)
     tables = set(inspector.get_table_names())
     expected = {
-        "project", "artefact", "block", "addressable_unit", "annotation", "runs", "event_log",
-        "source_snapshot", "project_source_snapshot", "chunk", "citation",
+        "task", "artefact", "block", "addressable_unit", "annotation", "runs", "event_log",
+        "source_snapshot", "task_source_snapshot", "chunk", "citation",
         "evidence_scope", "source_screening_result", "source_classification_result",
     }
     assert expected <= tables
 
 
-def test_event_log_unique_project_sequence(conn: Connection) -> None:
+def test_event_log_unique_task_sequence(conn: Connection) -> None:
     pid = uuid.uuid4()
     rid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(runs.insert().values(
-        run_id=rid, project_id=pid, status="running", started_at=now()
+        run_id=rid, task_id=pid, status="running", started_at=now()
     ))
 
     conn.execute(event_log.insert().values(
-        event_id=uuid.uuid4(), run_id=rid, project_id=pid,
+        event_id=uuid.uuid4(), run_id=rid, task_id=pid,
         sequence=1, event_type="run.started", occurred_at=now(), payload={},
     ))
-    with pytest.raises(Exception, match="uq_event_log_project_sequence"):
+    with pytest.raises(Exception, match="uq_event_log_task_sequence"):
         conn.execute(event_log.insert().values(
-            event_id=uuid.uuid4(), run_id=rid, project_id=pid,
+            event_id=uuid.uuid4(), run_id=rid, task_id=pid,
             sequence=1, event_type="duplicate", occurred_at=now(), payload={},
         ))
 
@@ -92,12 +92,12 @@ def test_block_version_defaults_to_one(conn: Connection) -> None:
     aid = uuid.uuid4()
     bid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(artefact.insert().values(
-        artefact_id=aid, project_id=pid, title="t", created_at=now()
+        artefact_id=aid, task_id=pid, title="t", created_at=now()
     ))
     conn.execute(block.insert().values(
         block_id=bid, artefact_id=aid, content="c", content_hash="h", created_at=now(),
@@ -112,12 +112,12 @@ def test_annotation_composite_fk_rejects_mismatch(conn: Connection) -> None:
     aid = uuid.uuid4()
     bid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(artefact.insert().values(
-        artefact_id=aid, project_id=pid, title="t", created_at=now()
+        artefact_id=aid, task_id=pid, title="t", created_at=now()
     ))
     conn.execute(block.insert().values(
         block_id=bid, artefact_id=aid, version=1,
@@ -168,12 +168,12 @@ def test_citation_chunk_fk_fails_with_phantom_chunk_id(conn: Connection) -> None
     bid = uuid.uuid4()
     uid = uuid.uuid4()
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
     conn.execute(artefact.insert().values(
-        artefact_id=aid, project_id=pid, title="t", created_at=now()
+        artefact_id=aid, task_id=pid, title="t", created_at=now()
     ))
     conn.execute(block.insert().values(
         block_id=bid, artefact_id=aid, version=1,
@@ -218,28 +218,28 @@ def test_chunk_unique_snapshot_sequence_constraint(conn: Connection) -> None:
         ))
 
 
-def test_project_source_snapshot_unique_constraint(conn: Connection) -> None:
-    """(project_id, source_snapshot_id) must be unique in project_source_snapshot."""
+def test_task_source_snapshot_unique_constraint(conn: Connection) -> None:
+    """(task_id, source_snapshot_id) must be unique in task_source_snapshot."""
     pid = uuid.uuid4()
     sid, _ = _seed_snapshot(conn)
     conn.execute(
-        project.insert().values(
-            project_id=pid, created_at=now(), name="Test project", status="active", updated_at=now()
+        task.insert().values(
+            task_id=pid, created_at=now(), name="Test task", status="active", updated_at=now()
         )
     )
-    conn.execute(project_source_snapshot.insert().values(
-        project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
+    conn.execute(task_source_snapshot.insert().values(
+        task_source_snapshot_id=uuid.uuid4(), task_id=pid, source_snapshot_id=sid,
         origin="uploaded", run_id=None, ingested_at=now(),
     ))
-    with pytest.raises(Exception, match="uq_project_source_snapshot"):
-        conn.execute(project_source_snapshot.insert().values(
-            project_source_snapshot_id=uuid.uuid4(), project_id=pid, source_snapshot_id=sid,
+    with pytest.raises(Exception, match="uq_task_source_snapshot"):
+        conn.execute(task_source_snapshot.insert().values(
+            task_source_snapshot_id=uuid.uuid4(), task_id=pid, source_snapshot_id=sid,
             origin="uploaded", run_id=None, ingested_at=now(),
         ))
 
 
-def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
-    """``b3c7d914e0a2`` (the portfolio layer) downgrades and upgrades cleanly.
+def test_migration_roundtrip_project_layer(engine: Engine) -> None:
+    """``b3c7d914e0a2`` (the project layer) downgrades and upgrades cleanly.
 
     Targets the revision by id rather than ``-1`` so the assertions cannot
     silently start exercising a different migration when the next one lands.
@@ -252,21 +252,21 @@ def test_migration_roundtrip_portfolio_layer(engine: Engine) -> None:
     command.downgrade(cfg, "d8e4a1c7f2b9")
     with engine.connect() as down_conn:
         inspector = inspect(down_conn)
-        assert "portfolio" not in inspector.get_table_names()
-        assert "portfolio_id" not in {c["name"] for c in inspector.get_columns("project")}
+        assert "project" not in inspector.get_table_names()
+        assert "project_id" not in {c["name"] for c in inspector.get_columns("task")}
 
     command.upgrade(cfg, "head")
     with engine.connect() as up_conn:
         inspector = inspect(up_conn)
-        assert "portfolio" in inspector.get_table_names()
-        assert {c["name"] for c in inspector.get_columns("portfolio")} == {
-            "portfolio_id",
+        assert "project" in inspector.get_table_names()
+        assert {c["name"] for c in inspector.get_columns("project")} == {
+            "project_id",
             "owner_user_id",
             "name",
             "description",
             "created_at",
         }
-        assert "portfolio_id" in {c["name"] for c in inspector.get_columns("project")}
+        assert "project_id" in {c["name"] for c in inspector.get_columns("task")}
 
 
 def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> None:
@@ -293,16 +293,16 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             cols = {c["name"] for c in inspector.get_columns("source_screening_result")}
             assert "screen_stage" in cols
 
-            pid, rid = seed_project_and_run(verify_conn)
+            pid, rid = seed_task_and_run(verify_conn)
             scope_id = seed_scope(verify_conn, pid)
-            _, pss_id = seed_source(verify_conn, pid)
+            _, tss_id = seed_source(verify_conn, pid)
 
             # ck_ssr_basis admits 'full_text' (a stage-2 row).
             verify_conn.execute(source_screening_result.insert().values(
                 source_screening_result_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_source_snapshot_id=pss_id,
-                project_id=pid,
+                task_source_snapshot_id=tss_id,
+                task_id=pid,
                 screened_by_run_id=rid,
                 status="relevant",
                 screen_basis="full_text",
@@ -317,8 +317,8 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
                 verify_conn.execute(source_screening_result.insert().values(
                     source_screening_result_id=uuid.uuid4(),
                     evidence_scope_id=scope_id,
-                    project_source_snapshot_id=pss_id,
-                    project_id=pid,
+                    task_source_snapshot_id=tss_id,
+                    task_id=pid,
                     screened_by_run_id=rid,
                     status="not_relevant",
                     screen_basis="full_text",
@@ -331,8 +331,8 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             verify_conn.execute(source_screening_result.insert().values(
                 source_screening_result_id=uuid.uuid4(),
                 evidence_scope_id=scope_id,
-                project_source_snapshot_id=pss_id,
-                project_id=pid,
+                task_source_snapshot_id=tss_id,
+                task_id=pid,
                 screened_by_run_id=rid,
                 status="failed",
                 screen_basis=None,
@@ -344,15 +344,15 @@ def test_migration_roundtrip_screen_stage_and_classify_tags(engine: Engine) -> N
             # ck_stag_tag_type admits 'methodological_structural'.
             insert_source_tags(
                 verify_conn,
-                project_id=pid,
+                task_id=pid,
                 run_id=rid,
                 now=now(),
-                assertions=[(pss_id, "rct", "test")],
+                assertions=[(tss_id, "rct", "test")],
                 tag_type=METHODOLOGICAL_STRUCTURAL,
             )
             tag_row = verify_conn.execute(
                 select(source_tag.c.tag_type).where(
-                    source_tag.c.project_source_snapshot_id == pss_id
+                    source_tag.c.task_source_snapshot_id == tss_id
                 )
             ).one()
             assert tag_row.tag_type == METHODOLOGICAL_STRUCTURAL

@@ -29,21 +29,21 @@ function routerWrapper(initialPath: string) {
 describe("useActiveConversation", () => {
   it("reads a non-empty chat id from the URL", () => {
     const { result } = renderHook(() => useActiveConversation(), {
-      wrapper: routerWrapper("/projects/p1?chat=c1"),
+      wrapper: routerWrapper("/tasks/p1?chat=c1"),
     });
     expect(result.current.activeConversationId).toBe("c1");
   });
 
   it('treats a present-but-empty "?chat=" as closed, not a panel bound to id ""', () => {
     const { result } = renderHook(() => useActiveConversation(), {
-      wrapper: routerWrapper("/projects/p1?chat="),
+      wrapper: routerWrapper("/tasks/p1?chat="),
     });
     expect(result.current.activeConversationId).toBeNull();
   });
 
   it("treats a missing chat param as closed", () => {
     const { result } = renderHook(() => useActiveConversation(), {
-      wrapper: routerWrapper("/projects/p1"),
+      wrapper: routerWrapper("/tasks/p1"),
     });
     expect(result.current.activeConversationId).toBeNull();
   });
@@ -52,7 +52,7 @@ describe("useActiveConversation", () => {
 describe("useConversationMutations", () => {
   it("invalidates the conversations root prefix, reaching filtered consumer queries", async () => {
     const queryClient = new QueryClient();
-    // Seeded the way `useConversations(projectId, { kind, status })` keys its
+    // Seeded the way `useConversations(taskId, { kind, status })` keys its
     // cache entry — the bug invalidated a 5-element key with explicit
     // `undefined`s that never partial-matches this filtered key.
     queryClient.setQueryData(queryKeys.conversations("p1", { kind: "chat", status: "active" }), { data: [] });

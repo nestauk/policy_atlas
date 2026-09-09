@@ -12,7 +12,7 @@ export const BACKEND_LABELS: Record<string, string> = {
 /** Look a backend key up in the locked map. Unknown key → null (the caller
  *  omits). Case-insensitive: the coverage read model serves public names
  *  ("OpenAlex"), the stream serves durable keys ("openalex") — the label-map
- *  mismatch left a completed project's "Where I looked" card nearly empty
+ *  mismatch left a completed task's "Where I looked" card nearly empty
  *  (owner finding, 2026-08-05) and, separately, left the P1 search-review
  *  card rendering raw keys outright. */
 export function backendLabel(backend: string): string | null {
@@ -122,7 +122,7 @@ export function triggerCopy(triggers: Array<{ trigger: string }> | undefined): s
 
 export const DECIDED_BY_LABEL: Record<string, string> = {
   user: "You decided",
-  orchestrator: "The orchestrator decided",
+  agent: "The orchestrator decided",
   standing_default: "Your standing rule decided",
 };
 

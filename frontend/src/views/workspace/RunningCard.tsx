@@ -33,20 +33,20 @@ function useElapsedSeconds(
 }
 
 function StepRow({
-  projectId,
+  taskId,
   row,
   expanded,
   hasFindings,
   onToggle,
 }: {
-  projectId: string;
+  taskId: string;
   row: StageRow;
   expanded: boolean;
   hasFindings: boolean;
   onToggle: () => void;
 }) {
   const done = row.status === "completed";
-  const signpost = done ? signpostForStage(row.stage, projectId, hasFindings) : null;
+  const signpost = done ? signpostForStage(row.stage, taskId, hasFindings) : null;
   const details = expanded && done ? stageDetailLines(row) : [];
   const statusLabel =
     row.status === "completed"
@@ -111,7 +111,7 @@ function StepRow({
  * scrolls out of view.
  */
 export function RunningCard({
-  projectId,
+  taskId,
   status,
   stages,
   plan,
@@ -122,7 +122,7 @@ export function RunningCard({
   onMinimisedChange,
   onSeePlan,
 }: {
-  projectId: string;
+  taskId: string;
   status: RunStatus | undefined;
   stages: StageEntry[];
   plan: PlanDraft | null | undefined;
@@ -138,7 +138,7 @@ export function RunningCard({
   const ticking = status === "running" || status === "paused";
   const elapsed = useElapsedSeconds(startedAt, endedAt, ticking);
   const elapsedLabel = formatElapsed(elapsed);
-  const results = resultsSignpost(projectId, status);
+  const results = resultsSignpost(taskId, status);
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
 
   if (minimised) {
@@ -182,7 +182,7 @@ export function RunningCard({
           {rows.map((row) => (
             <StepRow
               key={row.stage}
-              projectId={projectId}
+              taskId={taskId}
               row={row}
               expanded={expandedStage === row.stage}
               hasFindings={hasFindings}

@@ -5,7 +5,7 @@ import { hasTerminalPartialLiveArtefact, reduceRunStreamFrame } from "./reducer"
 import { createInitialRunStreamState } from "./types";
 import type { CheckInOut, PlanDraft, RunStreamState } from "./types";
 
-const PROJECT_RUN_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_RUN_ID = "11111111-1111-1111-1111-111111111111";
 const CHECK_IN_ID = "22222222-2222-2222-2222-222222222222";
 
 /** Minimal-but-complete draft plan (every field is a required, nullable
@@ -61,7 +61,7 @@ function sampleFrames(): SseFrame[] {
   return [
     {
       type: "run.status",
-      capability_run_id: PROJECT_RUN_ID,
+      capability_run_id: TASK_RUN_ID,
       status: "running",
       occurred_at: "2026-07-21T10:00:00Z",
       sequence: 1,
@@ -106,7 +106,7 @@ function sampleFrames(): SseFrame[] {
     },
     {
       type: "run.status",
-      capability_run_id: PROJECT_RUN_ID,
+      capability_run_id: TASK_RUN_ID,
       status: "succeeded",
       occurred_at: "2026-07-21T10:05:00Z",
       sequence: 7,
@@ -149,7 +149,7 @@ describe("reduceRunStreamFrame — equal-sequence distinct-type frames", () => {
     return [
       {
         type: "run.status",
-        capability_run_id: PROJECT_RUN_ID,
+        capability_run_id: TASK_RUN_ID,
         status: "running",
         occurred_at: "2026-07-21T10:00:00Z",
         sequence: 1,
@@ -199,7 +199,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
     let state = createInitialRunStreamState();
     state = reduceRunStreamFrame(state, {
       type: "run.status",
-      capability_run_id: PROJECT_RUN_ID,
+      capability_run_id: TASK_RUN_ID,
       status: "running",
       occurred_at: "2026-07-21T10:00:00Z",
       sequence: 1,
@@ -222,7 +222,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
     // The run is interrupted before finishing.
     state = reduceRunStreamFrame(state, {
       type: "run.status",
-      capability_run_id: PROJECT_RUN_ID,
+      capability_run_id: TASK_RUN_ID,
       status: "interrupted",
       occurred_at: "2026-07-21T10:00:03Z",
       sequence: 3,
@@ -247,7 +247,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       startedAt: "2026-07-21T10:05:00Z",
     });
     // The interrupted run's status is still recorded in the `runs` map.
-    expect(state.runs[PROJECT_RUN_ID]).toBe("interrupted");
+    expect(state.runs[TASK_RUN_ID]).toBe("interrupted");
   });
 
   it("the interrupted run's stages don't survive into the next run's timeline after replay", () => {
@@ -255,7 +255,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
     const frames: SseFrame[] = [
       {
         type: "run.status",
-        capability_run_id: PROJECT_RUN_ID,
+        capability_run_id: TASK_RUN_ID,
         status: "running",
         occurred_at: "2026-07-21T10:00:00Z",
         sequence: 1,
@@ -270,7 +270,7 @@ describe("reduceRunStreamFrame — new-run reset", () => {
       },
       {
         type: "run.status",
-        capability_run_id: PROJECT_RUN_ID,
+        capability_run_id: TASK_RUN_ID,
         status: "interrupted",
         occurred_at: "2026-07-21T10:00:03Z",
         sequence: 3,
@@ -312,7 +312,7 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
     return [
       {
         type: "run.status",
-        capability_run_id: PROJECT_RUN_ID,
+        capability_run_id: TASK_RUN_ID,
         status: "running",
         occurred_at: "2026-07-28T10:00:00Z",
         sequence: 1,
@@ -384,7 +384,7 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
     let state = fold(createInitialRunStreamState(), liveFrames());
     state = reduceRunStreamFrame(state, {
       type: "run.status",
-      capability_run_id: PROJECT_RUN_ID,
+      capability_run_id: TASK_RUN_ID,
       status: "interrupted",
       occurred_at: "2026-07-28T10:02:00Z",
       sequence: 5,
@@ -576,11 +576,11 @@ describe("reduceRunStreamFrame — stage lifecycle", () => {
   });
 });
 
-describe("reduceRunStreamFrame — project.updated partial merge", () => {
+describe("reduceRunStreamFrame — task.updated partial merge", () => {
   it("merges only the fields the event actually touched", () => {
     let state = createInitialRunStreamState();
     state = reduceRunStreamFrame(state, {
-      type: "project.updated",
+      type: "task.updated",
       name: "Original name",
       question: "Original question",
       status: "active",
@@ -589,7 +589,7 @@ describe("reduceRunStreamFrame — project.updated partial merge", () => {
     });
     // A rename-only event: question/status are `null` (not touched), not cleared.
     state = reduceRunStreamFrame(state, {
-      type: "project.updated",
+      type: "task.updated",
       name: "Renamed",
       question: null,
       status: null,
@@ -597,7 +597,7 @@ describe("reduceRunStreamFrame — project.updated partial merge", () => {
       sequence: 2,
     });
 
-    expect(state.project).toEqual({
+    expect(state.task).toEqual({
       name: "Renamed",
       question: "Original question",
       status: "active",

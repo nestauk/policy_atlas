@@ -38,7 +38,7 @@ export function LifecycleBar({ items, hint }: { items: readonly LifecycleBarItem
           <NavLink
             key={item.tab}
             to={item.to}
-            // Plan is the bare project path, so without `end` it would stay
+            // Plan is the bare task path, so without `end` it would stay
             // active on every stage beneath it.
             end={item.tab === "plan"}
             className={({ isActive }) =>

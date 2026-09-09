@@ -13,13 +13,13 @@ import { WIDE_PAGE_CLASS } from "./listPageChrome";
  * findings gets no tab to click into, not a disabled or empty one.
  */
 export function SourcesLayout() {
-  const { projectId = "" } = useParams();
-  const funnel = useFunnel(projectId);
+  const { taskId = "" } = useParams();
+  const funnel = useFunnel(taskId);
   // Keep Sources read models live while a run is in progress — Plan and
   // Results already mount the stream; without it here the list would stay
   // stale until remount.
-  useRunStream(projectId);
-  const base = `/projects/${projectId}/sources`;
+  useRunStream(taskId);
+  const base = `/tasks/${taskId}/sources`;
   const hasFindings = typeof funnel.data?.findings === "number" && funnel.data.findings > 0;
 
   const tabs = [

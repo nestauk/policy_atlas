@@ -5,12 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "./AppShell";
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 vi.mock("../api/queries", () => ({
-  useProject: () => ({ data: { project_id: PROJECT_ID, name: "Acme project" } }),
+  useTask: () => ({ data: { task_id: TASK_ID, name: "Acme task" } }),
   useCheckIns: () => ({ data: { data: [] } }),
-  // The header's project-settings popover wires rename/archive mutations,
+  // The header's task-settings popover wires rename/archive mutations,
   // which resolve their client through this hook.
   useApiClient: () => ({}),
 }));
@@ -41,7 +41,7 @@ function renderShell(initialPath: string) {
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
-          <Route path="/projects/:projectId/*" element={<AppShell />} />
+          <Route path="/tasks/:taskId/*" element={<AppShell />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -51,7 +51,7 @@ function renderShell(initialPath: string) {
 describe("AppShell — chat subtree error containment (029 fix 6)", () => {
   it("keeps the nav and routed view usable when the chat panel throws while rendering", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    renderShell(`/projects/${PROJECT_ID}/sources`);
+    renderShell(`/tasks/${TASK_ID}/sources`);
 
     // The chat's own boundary caught it — the last-resort fallback shows in
     // its place, not a full-page crash.

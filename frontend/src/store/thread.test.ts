@@ -20,7 +20,7 @@ function turn(turnIndex: number): PlanningThreadTurn {
 function run(id: string, startedAt: string): PlanningThreadRun {
   return {
     capability_run_id: id,
-    project_id: "project-1",
+    task_id: "task-1",
     plan_id: `plan-${id}`,
     plan_version: 1,
     status: "succeeded",

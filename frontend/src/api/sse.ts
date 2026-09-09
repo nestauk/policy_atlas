@@ -11,7 +11,7 @@ const MAX_BACKOFF_MS = 30000;
 
 export interface ConnectEventStreamOptions {
   /** Project whose event stream to open. */
-  projectId: string;
+  taskId: string;
   /** API base URL. Defaults to `VITE_API_BASE_URL`, falling back to same-origin. */
   baseUrl?: string;
   /** Starting cursor (last-seen `event_log` sequence). Defaults to 0 (full replay). */
@@ -46,8 +46,8 @@ export interface EventStreamConnection {
 }
 
 /**
- * Open the durable replay-then-tail SSE stream for one project
- * (`GET /api/v1/projects/{id}/events?cursor=`), authenticating via the
+ * Open the durable replay-then-tail SSE stream for one task
+ * (`GET /api/v1/tasks/{id}/events?cursor=`), authenticating via the
  * bearer header (never a query-string token) and reconnecting on drop with
  * exponential backoff + jitter. On a 401, attempts exactly one silent
  * refresh and retries at the same cursor before surfacing
@@ -56,7 +56,7 @@ export interface EventStreamConnection {
  */
 export function connectEventStream(options: ConnectEventStreamOptions): EventStreamConnection {
   const {
-    projectId,
+    taskId,
     baseUrl = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL,
     cursor: initialCursor = 0,
     getAccessToken,
@@ -80,7 +80,7 @@ export function connectEventStream(options: ConnectEventStreamOptions): EventStr
   let cursor = initialCursor;
 
   function buildUrl(): string {
-    return `${baseUrl}/api/v1/projects/${projectId}/events?cursor=${cursor}`;
+    return `${baseUrl}/api/v1/tasks/${taskId}/events?cursor=${cursor}`;
   }
 
   async function fetchWithToken(token: string | null): Promise<Response> {

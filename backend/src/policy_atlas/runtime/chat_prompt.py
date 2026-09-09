@@ -20,7 +20,7 @@ import os
 from pydantic import BaseModel, ConfigDict, Field
 
 from policy_atlas.core.prompt_fields import sanitize_prompt_field
-from policy_atlas.runtime.orchestrator_prompt import _SHARED_PREAMBLE
+from policy_atlas.runtime.agent_prompt import _SHARED_PREAMBLE
 
 CHAT_PROMPT_VERSION = "chat_v1"
 CHAT_MODEL = os.environ.get("POLICY_ATLAS_CHAT_MODEL", "gpt-5.6-terra")

@@ -49,7 +49,7 @@ function stageTone(status: StageEntry["status"]): "running" | "complete" | "fail
 /** The right workspace pane during a run: durable read models augment (but
  * never replace) the stream's authoritative status, stages and check-ins. */
 export function JourneyPane({
-  projectId,
+  taskId,
   stream,
   plan,
   funnel,
@@ -59,7 +59,7 @@ export function JourneyPane({
   checkIn,
   terminal,
 }: {
-  projectId: string;
+  taskId: string;
   stream: RunStreamState;
   plan: PlanDraft | null;
   funnel?: Funnel;
@@ -86,7 +86,7 @@ export function JourneyPane({
           step outputs in REVERSE chronological order — latest stages
           (themes/landscape) first, Where I looked (search) at the bottom. */}
       <div className="space-y-5">
-        <CompletionCard projectId={projectId} status={runStatus} funnel={funnel} />
+        <CompletionCard taskId={taskId} status={runStatus} funnel={funnel} />
         <section id="journey-timeline" className="scroll-mt-14">
           <Card className="anim-rise p-4">
             <PaneHeading className="mb-2 p-0">{runStatus === "succeeded" || runStatus === "degraded" || runStatus === "aborted" ? "How it got there" : "The plan in motion"}</PaneHeading>
@@ -94,7 +94,7 @@ export function JourneyPane({
           </Card>
         </section>
         {checkIn}
-        {hasLandscape && <LandscapeEmbed projectId={projectId} landscape={landscape!} />}
+        {hasLandscape && <LandscapeEmbed taskId={taskId} landscape={landscape!} />}
         {hasGroups && <GroupsCard groups={groups!} />}
         {funnel !== undefined && <FunnelCard funnel={funnel} />}
         {coverage !== undefined && <CoverageCard coverage={coverage} />}
@@ -194,14 +194,14 @@ function CoverageCard({ coverage }: { coverage: Coverage }) {
   return <section id="journey-coverage" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-2 p-0">Where I looked</PaneHeading>{details.length > 0 ? <><p className="mb-3 break-words text-body text-grey">{/* Task 031: the two numbers count different things and neither contains the other — hits are per search call and include duplicates, kept sources are counted once across every round. */}Query hits count every result a search returned, across all rounds, before duplicates are removed. Kept sources are counted once each.</p><div className="grid min-w-0 gap-3 sm:grid-cols-2">{details.flatMap((backend) => backendLabel(backend.backend) === null ? [] : [<div key={backend.backend} className="min-w-0 border border-line p-3"><div className="flex min-w-0 items-baseline justify-between gap-2"><span className="min-w-0 break-words text-caption font-bold text-navy">{backendLabel(backend.backend)}</span><span className="text-right text-caption text-grey"><CountUp value={backend.results} className="font-display text-body font-bold text-blue" /> query hits · <CountUp value={backend.relevant} className="font-display text-body font-bold text-blue" /> kept after screening</span></div><div className="mt-2 max-h-28 min-w-0 space-y-1 overflow-y-auto">{(backend.queries ?? []).map((query, index) => <div key={`${query.query}-${index}`} className="flex min-w-0 gap-2 text-meta"><span className="min-w-0 flex-1 truncate italic text-grey">“{scrub(query.query)}”</span><span className="shrink-0 text-navy">{query.results}</span></div>)}</div></div>])}</div></> : <p className="break-words text-caption text-navy">{(coverage.backends ?? []).map(backendLabel).filter((label): label is string => label !== null).join(" · ")}</p>}</Card></section>;
 }
 
-function CompletionCard({ projectId, status, funnel }: { projectId: string; status: string | undefined; funnel?: Funnel }) {
+function CompletionCard({ taskId, status, funnel }: { taskId: string; status: string | undefined; funnel?: Funnel }) {
   const copy = completionCopy(status);
   if (copy === null) return null;
   const counts = [typeof funnel?.relevant === "number" ? `${funnel.relevant} sources included` : null, typeof funnel?.cited === "number" ? `${funnel.cited} cited` : null].filter((count): count is string => count !== null);
   // No "Run the analysis again" control (owner, 2026-08-05): a replanned
   // ready plan starts from its inline plan card in the thread (batch 2
   // chronology — new approvals after a run keep their Start footer).
-  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-heading font-semibold text-navy">{copy.heading}</h3>{counts.length > 0 && <p className="mt-1 text-meta text-navy">{counts.join(", ")}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-meta font-bold text-white" to={`/projects/${projectId}/results`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-meta font-bold text-navy" to={`/projects/${projectId}/sources/all`}>All sources</Link></div></Card>;
+  return <Card className={`anim-rise border-l-[3px] p-5 ${status === "degraded" ? "border-l-orange" : "border-l-green"}`}><PaneHeading className="mb-2 p-0">Done</PaneHeading><h3 className="font-display text-heading font-semibold text-navy">{copy.heading}</h3>{counts.length > 0 && <p className="mt-1 text-meta text-navy">{counts.join(", ")}</p>}<div className="mt-4 flex flex-wrap gap-3"><Link className="cutout bg-blue px-3 py-2 text-meta font-bold text-white" to={`/tasks/${taskId}/results`}>Read the evidence base</Link><Link className="border border-line-2 bg-paper px-3 py-2 text-meta font-bold text-navy" to={`/tasks/${taskId}/sources/all`}>All sources</Link></div></Card>;
 }
 
 function GroupsCard({ groups }: { groups: Groups }) {
@@ -209,12 +209,12 @@ function GroupsCard({ groups }: { groups: Groups }) {
   return <section id="journey-groups" className="scroll-mt-14"><Card className="anim-rise p-4"><PaneHeading className="mb-3 p-0">Findings by group</PaneHeading><div className="space-y-4">{facets.map((facet) => { const top = [...(facet.groups ?? [])].sort((a, b) => b.size - a.size).slice(0, 8); const maximum = top[0]?.size ?? 1; return <div key={facet.facet}><p className="mb-1.5 text-caption font-bold uppercase tracking-[0.06em] text-grey">{scrub(facet.facet)}</p>{top.map((group) => <div key={group.label} className="mb-1 flex items-center gap-2"><Tooltip content={<p className="text-body text-navy">{scrub(group.description)}</p>}><span className="w-32 shrink-0 truncate text-right text-caption font-medium text-navy">{scrub(group.label)}</span></Tooltip><span className="h-2 flex-1 bg-ground"><span className="anim-bar block h-full bg-blue" style={{ width: `${funnelBarWidth(group.size, maximum)}%` }} /></span><span className="w-5 text-meta font-bold text-navy">{group.size}</span></div>)}</div>; })}</div></Card></section>;
 }
 
-function LandscapeEmbed({ projectId, landscape }: { projectId: string; landscape: Landscape }) {
+function LandscapeEmbed({ taskId, landscape }: { taskId: string; landscape: Landscape }) {
   const evidenceTypes = landscape.evidence_types ?? {};
   const years = landscape.years ?? {};
   const geographies = landscape.geographies === null || landscape.geographies === undefined ? {} : normaliseGeographies(landscape.geographies);
   const themes = orderThemes(landscape.themes ?? []);
   const hasDistributions = Object.keys(evidenceTypes).length > 0 || Object.keys(years).length > 0 || Object.keys(geographies).length > 0;
-  return <>{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-body text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/projects/${projectId}/sources/all?theme=${theme.theme_id}`} className="shrink-0 text-meta font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading>{/* One plot per row — side-by-side was unreadable next to the chat rail
+  return <>{themes.length > 0 && <section id="journey-themes" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Key themes</PaneHeading><ul role="list" className="space-y-2.5">{themes.map((theme) => <li key={theme.name} className="flex min-w-0 items-baseline gap-2.5"><div className="min-w-0 flex-1"><p className="break-words text-meta font-semibold text-navy">{scrub(theme.name)}</p><p className="break-words text-body text-grey">{scrub(theme.description)}</p></div>{theme.theme_id != null ? <Link to={`/tasks/${taskId}/sources/all?theme=${theme.theme_id}`} className="shrink-0 text-meta font-semibold text-blue hover:underline">{theme.size === 1 ? "1 document →" : `${theme.size} documents →`}</Link> : <span className="shrink-0 text-caption text-grey">{theme.size === 1 ? "1 document" : `${theme.size} documents`}</span>}</li>)}</ul></Card></section>}{hasDistributions && <section id="journey-landscape" className="scroll-mt-14"><Card className="anim-rise min-w-0 p-4"><PaneHeading className="mb-3 p-0">Evidence landscape</PaneHeading>{/* One plot per row — side-by-side was unreadable next to the chat rail
     (owner, 2026-08-05). */}<div className="grid min-w-0 gap-4">{Object.keys(evidenceTypes).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Evidence types</p><EvidenceDistributionChart data={evidenceTypes} size="compact" /></div>}{Object.keys(years).length > 0 && <div className="min-w-0"><p className="mb-2 text-caption font-bold text-navy">Publication years</p><PublicationYearsChart data={years} size="compact" /></div>}{Object.keys(geographies).length > 0 && <div className="min-w-0"><p className="mb-1 text-caption font-bold text-navy">Where sources were published</p><p className="mb-2 break-words text-body text-grey">Publisher country, when the database reports it. Otherwise “Not reported”.</p><EvidenceDistributionChart data={geographies} size="compact" /></div>}</div></Card></section>}</>;
 }

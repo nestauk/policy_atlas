@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { usePortfolios } from "../api/queries";
+import { useProjects } from "../api/queries";
 import { useCreateTask } from "../api/mutations";
 import { CAPABILITIES } from "../lib/capabilities";
 import { useDocumentTitle } from "../lib/title";
@@ -49,10 +49,10 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
   );
 }
 
-type PortfolioOption = { portfolio_id: string; name: string };
+type ProjectOption = { project_id: string; name: string };
 
 /** Project picker — Popover menu styled like the app chrome, not a native select. */
-function ProjectPicker({
+function TaskPicker({
   id,
   value,
   options,
@@ -60,15 +60,15 @@ function ProjectPicker({
 }: {
   id: string;
   value: string;
-  options: readonly PortfolioOption[];
-  onChange: (portfolioId: string) => void;
+  options: readonly ProjectOption[];
+  onChange: (projectId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((portfolio) => portfolio.portfolio_id === value);
-  const label = selected?.name ?? COPY.noProject;
+  const selected = options.find((project) => project.project_id === value);
+  const label = selected?.name ?? COPY.noTask;
 
-  const pick = (portfolioId: string) => {
-    onChange(portfolioId);
+  const pick = (projectId: string) => {
+    onChange(projectId);
     setOpen(false);
   };
 
@@ -110,22 +110,22 @@ function ProjectPicker({
                 value === "" && "bg-blue-tint-2 font-medium",
               )}
             >
-              {COPY.noProject}
+              {COPY.noTask}
             </button>
           </li>
-          {options.map((portfolio) => (
-            <li key={portfolio.portfolio_id} role="none">
+          {options.map((project) => (
+            <li key={project.project_id} role="none">
               <button
                 type="button"
                 role="option"
-                aria-selected={value === portfolio.portfolio_id}
-                onClick={() => pick(portfolio.portfolio_id)}
+                aria-selected={value === project.project_id}
+                onClick={() => pick(project.project_id)}
                 className={cn(
                   "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue",
-                  value === portfolio.portfolio_id && "bg-blue-tint-2 font-medium",
+                  value === project.project_id && "bg-blue-tint-2 font-medium",
                 )}
               >
-                {portfolio.name}
+                {project.name}
               </button>
             </li>
           ))}
@@ -138,10 +138,10 @@ function ProjectPicker({
 /** Step two: the question, and as little else as possible beside it. */
 function QuestionForm() {
   const [searchParams] = useSearchParams();
-  const presetPortfolio = searchParams.get("portfolio") ?? "";
+  const presetProject = searchParams.get("project") ?? "";
   const [question, setQuestion] = useState("");
-  const [portfolioId, setPortfolioId] = useState(presetPortfolio);
-  const portfolios = usePortfolios();
+  const [projectId, setProjectId] = useState(presetProject);
+  const projects = useProjects();
   const create = useCreateTask();
   const navigate = useNavigate();
   const canSend = question.trim().length > 0 && !create.isPending;
@@ -149,8 +149,8 @@ function QuestionForm() {
   const submit = () => {
     if (!canSend) return;
     create.mutate(
-      { question, portfolioId: portfolioId === "" ? null : portfolioId },
-      { onSuccess: (project) => void navigate(`/projects/${project.project_id}`) },
+      { question, projectId: projectId === "" ? null : projectId },
+      { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
     );
   };
 
@@ -203,16 +203,16 @@ function QuestionForm() {
         Enter to send · Shift+Enter for a new line
       </p>
 
-      {(portfolios.data?.data.length ?? 0) > 0 && (
+      {(projects.data?.data.length ?? 0) > 0 && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <label className="text-meta font-normal text-grey" htmlFor="new-task-portfolio">
+          <label className="text-meta font-normal text-grey" htmlFor="new-task-project">
             Add to a {PROJECT.lower}
           </label>
-          <ProjectPicker
-            id="new-task-portfolio"
-            value={portfolioId}
-            options={portfolios.data?.data ?? []}
-            onChange={setPortfolioId}
+          <TaskPicker
+            id="new-task-project"
+            value={projectId}
+            options={projects.data?.data ?? []}
+            onChange={setProjectId}
           />
         </div>
       )}
@@ -231,7 +231,7 @@ export function NewTaskView() {
   useDocumentTitle(COPY.newTask);
   const [searchParams, setSearchParams] = useSearchParams();
   // The chosen capability is URL-addressable, like every other view state.
-  const picked = searchParams.get("capability") === "evidence_base";
+  const picked = searchParams.get("capability") === "evidence_search";
 
   return (
     <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9">
@@ -249,7 +249,7 @@ export function NewTaskView() {
             <CapabilityList
               onPick={() => {
                 const next = new URLSearchParams(searchParams);
-                next.set("capability", "evidence_base");
+                next.set("capability", "evidence_search");
                 setSearchParams(next);
               }}
             />

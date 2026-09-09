@@ -18,7 +18,7 @@ class ConversationCreate(BaseModel):
     """Inbound body for creating a follow-up chat conversation.
 
     Args:
-        entry_artefact_id: Optional project-local artefact used as entry context.
+        entry_artefact_id: Optional task-local artefact used as entry context.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -34,7 +34,7 @@ class ConversationUpdate(BaseModel):
 
     Args:
         title: Replacement user-visible chat title.
-        entry_artefact_id: Replacement project-local entry context, or null to clear it.
+        entry_artefact_id: Replacement task-local entry context, or null to clear it.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -48,18 +48,18 @@ class ConversationOut(BaseModel):
 
     Args:
         id: Conversation identity.
-        project_id: Owning project identity.
+        task_id: Owning task identity.
         kind: Whether this is a planning conversation or a follow-up chat.
         title: User-visible conversation title.
         status: Current conversation lifecycle status.
-        entry_artefact_id: Optional project-local entry-context artefact.
+        entry_artefact_id: Optional task-local entry-context artefact.
         created_at: When the conversation was created.
         closed_at: When it closed, if applicable.
         archived_at: When it was archived, if applicable.
     """
 
     id: uuid.UUID
-    project_id: uuid.UUID
+    task_id: uuid.UUID
     kind: ConversationKind
     title: str
     status: ConversationStatus

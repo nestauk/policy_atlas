@@ -39,15 +39,15 @@ function findStageLabel(stages: StageEntry[], stage: string | null): string | nu
  * render before anything applies (the 024 fidelity mitigation).
  */
 export function CheckInCard({
-  projectId,
+  taskId,
   checkIn,
   stages,
 }: {
-  projectId: string;
+  taskId: string;
   checkIn: CheckInOut;
   stages: StageEntry[];
 }) {
-  const answer = useAnswerCheckIn(projectId);
+  const answer = useAnswerCheckIn(taskId);
   const toast = useToast();
   const [freeText, setFreeText] = useState("");
   const [changeModeOpen, setChangeModeOpen] = useState(false);

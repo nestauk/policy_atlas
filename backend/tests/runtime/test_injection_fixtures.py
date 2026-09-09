@@ -18,7 +18,7 @@ Three concerns, per the contract's acceptance checks:
 Every backend here is the deterministic stub — CI stays zero-egress. Layer 1
 (pure, no DB) covers the deliberation loop and the scrub-equality structural
 proof; Layer 2 (DB-backed) reuses the runner-level pattern from
-``test_orchestrator_backend.py::test_author_blind_out_of_grammar_delta_rejected_and_floor``,
+``test_agent_backend.py::test_author_blind_out_of_grammar_delta_rejected_and_floor``,
 parametrized with poisoned payloads.
 """
 
@@ -32,28 +32,28 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
-from policy_atlas.evidence_base.corpus import characterise as characterise_module
-from policy_atlas.evidence_base.extract import extract as extract_module
-from policy_atlas.evidence_base.group import facet_values
-from policy_atlas.evidence_base.sourcing import search_loop
-from policy_atlas.runtime import orchestrator_prompt, steering, steering_events
+from policy_atlas.evidence_search.corpus import characterise as characterise_module
+from policy_atlas.evidence_search.extract import extract as extract_module
+from policy_atlas.evidence_search.group import facet_values
+from policy_atlas.evidence_search.sourcing import search_loop
+from policy_atlas.runtime import agent_prompt, steering, steering_events
 from policy_atlas.runtime import runner as runner_module
-from policy_atlas.runtime.orchestrator_backend import (
+from policy_atlas.runtime.agent_backend import (
     FOLDED_RESULT_MAX,
     WATCH_FALLBACK_TOOL_CALLS,
-    StubOrchestratorBackend,
+    StubAgentBackend,
     build_watch_discretion_hook,
     run_watch_decision,
 )
-from policy_atlas.runtime.orchestrator_prompt import (
+from policy_atlas.runtime.agent_prompt import (
     RouterCompileWire,
     RouterFragmentWire,
     WatchDecisionWire,
 )
 from policy_atlas.runtime.runner import _DiscretionContext, run_plan
-from tests.runtime.test_orchestrator_backend import _SteerPointOrchestrator
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
-from tests.runtime.test_steering import _cleanup_project, _insert_plan_row
+from tests.runtime.test_agent_backend import _SteerPointAgent
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
+from tests.runtime.test_steering import _cleanup_task, _insert_plan_row
 
 # --------------------------------------------------------------------------
 # Fixture: the poisoned finding-shaped record (findings M7/n3)
@@ -103,7 +103,7 @@ def test_poisoned_query_findings_digest_is_bounded() -> None:
         needs_arguments={},
     )
     proceed = WatchDecisionWire(action="proceed", reasoning="clear now")
-    stub = StubOrchestratorBackend(decide_responses=[insufficient, proceed])
+    stub = StubAgentBackend(decide_responses=[insufficient, proceed])
     result = run_watch_decision(
         stub, request="r", header={}, payload={}, digest={}, read_tools=_hostile_read_tools()
     )
@@ -126,7 +126,7 @@ def test_poisoned_deliberation_caps_at_two_rounds_regardless_of_content() -> Non
         needs_tool="query_findings",
         needs_arguments={},
     )
-    stub = StubOrchestratorBackend(decide_responses=[insufficient])  # repeats forever
+    stub = StubAgentBackend(decide_responses=[insufficient])  # repeats forever
     result = run_watch_decision(
         stub, request="r", header={}, payload={}, digest={}, read_tools=_hostile_read_tools()
     )
@@ -147,7 +147,7 @@ def test_poisoned_content_cannot_redirect_the_loop_to_a_banned_tool() -> None:
         needs_tool="search",
         needs_arguments={"query": INJECTION_STRING},
     )
-    stub = StubOrchestratorBackend(decide_responses=[insufficient])
+    stub = StubAgentBackend(decide_responses=[insufficient])
     result = run_watch_decision(
         stub, request="r", header={}, payload={}, digest={}, read_tools=_hostile_read_tools()
     )
@@ -156,10 +156,10 @@ def test_poisoned_content_cannot_redirect_the_loop_to_a_banned_tool() -> None:
     assert result.deliberation == []  # no call was ever made — the allowlist held
 
 
-class _PayloadCapturingOrchestrator:
+class _PayloadCapturingAgent:
     """Records every payload handed to ``decide()`` (stub-capture test seam).
 
-    Unlike :class:`StubOrchestratorBackend`, which discards its arguments, this
+    Unlike :class:`StubAgentBackend`, which discards its arguments, this
     stub keeps the exact ``payload`` dict ``run_watch_decision`` re-invokes
     ``decide`` with on each round — including the mutated copy carrying the
     folded deliberation record — so a test can inspect what the re-invoked
@@ -222,7 +222,7 @@ def test_oversized_hostile_result_leaves_steer_point_and_triggers_in_bounded_pro
         needs_arguments={},
     )
     proceed = WatchDecisionWire(action="proceed", reasoning="clear now")
-    orch = _PayloadCapturingOrchestrator([insufficient, proceed])
+    orch = _PayloadCapturingAgent([insufficient, proceed])
     payload = {
         "steer_point": "deepening_selection",
         "boundary": "after_component",
@@ -248,8 +248,8 @@ def test_oversized_hostile_result_leaves_steer_point_and_triggers_in_bounded_pro
     # Reproduce the live path's own bounding (build_watch_messages ->
     # _bounded_json(payload, WATCH_PAYLOAD_MAX)) and confirm steer_point and
     # triggers survive in the actual prompt text sent to the model.
-    bounded = orchestrator_prompt._bounded_json(
-        re_invoked_payload, orchestrator_prompt.WATCH_PAYLOAD_MAX
+    bounded = agent_prompt._bounded_json(
+        re_invoked_payload, agent_prompt.WATCH_PAYLOAD_MAX
     )
     assert '"steer_point"' in bounded
     assert '"deepening_selection"' in bounded
@@ -263,7 +263,7 @@ def test_strip_control_drops_bidi_override_characters() -> None:
     (summary, refusal_reason, label/why) reach the confirm render through this
     exact seam, and a bidi override could visually reorder or hide text there.
     Mirrors the input-side ``sanitize_prompt_field`` (core/prompt_fields.py)."""
-    from policy_atlas.runtime.orchestrate import _strip_control
+    from policy_atlas.runtime.agent import _strip_control
 
     # RIGHT-TO-LEFT OVERRIDE (U+202E) ... POP DIRECTIONAL FORMATTING (U+202C),
     # plus a ZERO WIDTH SPACE (U+200B) — all Unicode format (Cf) characters,
@@ -313,7 +313,7 @@ def test_hook_after_poisoned_deliberation_hands_back_a_delta_that_fails_grammar(
         delta={"extract": {"not_a_real_key": True}},  # out-of-grammar by construction
         reasoning="influenced by injected content: " + INJECTION_STRING,
     )
-    stub = StubOrchestratorBackend(decide_responses=[insufficient, poisoned_author])
+    stub = StubAgentBackend(decide_responses=[insufficient, poisoned_author])
     hook = build_watch_discretion_hook(stub)
     outcome = hook(_ctx(read_tools=_hostile_read_tools()))
     assert outcome.interpreted_action == "apply"
@@ -349,9 +349,9 @@ def test_runner_rejects_out_of_grammar_delta_after_poisoned_deliberation(
     parametrized with poisoned payloads: whatever the watch returns AFTER
     seeing hostile content, an out-of-grammar delta is rejected (steering.rejected)
     and the run degrades to the floor — never crashing, never applying."""
-    project_id: uuid.UUID | None = None
+    task_id: uuid.UUID | None = None
     try:
-        project_id, scope_id = _seed_project(engine)
+        task_id, scope_id = _seed_task(engine)
         component = next(iter(poisoned_delta))
         bad = WatchDecisionWire(
             action="author",
@@ -362,12 +362,12 @@ def test_runner_rejects_out_of_grammar_delta_after_poisoned_deliberation(
                 + INJECTION_STRING
             ),
         )
-        orch = _SteerPointOrchestrator(at="deepening_selection", decide=bad)
+        orch = _SteerPointAgent(at="deepening_selection", decide=bad)
         plan = _base_plan(steering_mode="unattended", steer_point_defaults=[])
-        plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+        plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
         outcome = run_plan(
             engine,
-            project_id=project_id,
+            task_id=task_id,
             evidence_scope_id=scope_id,
             plan=plan,
             plan_id=plan_id,
@@ -375,13 +375,13 @@ def test_runner_rejects_out_of_grammar_delta_after_poisoned_deliberation(
             plan_row_id=plan_id,
             backends=_runner_backends(),
             io=runner_module.NullIO(),
-            orchestrator=orch,
+            agent=orch,
         )
         assert outcome.status in {"succeeded", "degraded"}  # never crashed
         with engine.connect() as conn:
             rejected = [
                 entry["payload"]
-                for entry in events.read(conn, project_id)
+                for entry in events.read(conn, task_id)
                 if entry["event_type"] == steering_events.STEERING_REJECTED
             ]
         assert rejected, f"expected a steering.rejected for {poisoned_delta!r}"
@@ -389,12 +389,12 @@ def test_runner_rejects_out_of_grammar_delta_after_poisoned_deliberation(
         # The hostile reasoning text is retained verbatim elsewhere on the
         # record (never laundered) but never influenced whether it applied.
     finally:
-        _cleanup_project(engine, project_id)
+        _cleanup_task(engine, task_id)
 
 
 # --------------------------------------------------------------------------
 # 3 — author-blind scrub equality: the SAME parser function object is
-# invoked for user-origin and orchestrator-origin input, for every guidance
+# invoked for user-origin and agent-origin input, for every guidance
 # channel (B1/B3/B5 + B2')
 # --------------------------------------------------------------------------
 
@@ -468,7 +468,7 @@ def test_author_blind_scrub_equality_accepts_boundary_length_identically(
     fan_out = _fan_out_for(component, delta)
     assert fan_out.compiled and not fan_out.refused, fan_out.refused
 
-    # Orchestrator origin: the exact seam runner._apply_watch_delta's
+    # Agent origin: the exact seam runner._apply_watch_delta's
     # apply_adjustment call reaches for a watch-authored delta.
     steering._validate_directive_delta(component, delta, backend_scope="both")  # no raise
 

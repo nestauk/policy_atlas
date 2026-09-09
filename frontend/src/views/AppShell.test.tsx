@@ -10,19 +10,19 @@ import { PrivacyView } from "./legal/PrivacyView";
 import { TermsView } from "./legal/TermsView";
 import { TASK } from "../lib/vocabulary";
 
-const PROJECT_ID = "11111111-1111-1111-1111-111111111111";
+const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
 const authState = vi.hoisted(() => ({ signOut: vi.fn() }));
 
 vi.mock("../api/queries", () => ({
-  useProject: (projectId: string) => ({
-    data: projectId ? { project_id: PROJECT_ID, name: "Acme project" } : undefined,
+  useTask: (taskId: string) => ({
+    data: taskId ? { task_id: TASK_ID, name: "Acme task" } : undefined,
   }),
   useCheckIns: () => ({ data: { data: [{ check_in_id: "pending-1" }] } }),
-  // The chat side panel (029 rev 3.4) mounts on non-workspace project routes.
+  // The chat side panel (029 rev 3.4) mounts on non-workspace task routes.
   useConversations: () => ({ data: { data: [] } }),
   useArtefact: () => ({ data: undefined }),
-  // The header's project-settings popover (028 F.5) wires the rename/archive
+  // The header's task-settings popover (028 F.5) wires the rename/archive
   // mutations, which resolve their API client through this hook — a bare
   // object is enough since these tests never open the popover.
   useApiClient: () => ({}),
@@ -40,7 +40,7 @@ vi.mock("../auth", () => ({
 }));
 
 function renderShell(initialPath: string) {
-  // The header's project-settings popover (028 F.5) wires rename/archive
+  // The header's task-settings popover (028 F.5) wires rename/archive
   // mutations, which resolve useQueryClient — a real QueryClient is needed
   // even though these tests never trigger a mutation.
   const queryClient = new QueryClient();
@@ -51,10 +51,10 @@ function renderShell(initialPath: string) {
           <Route element={<AppShell />}>
             <Route path="/" element={<div>tasks</div>} />
             <Route path="/new" element={<div>new</div>} />
-            <Route path="/portfolios" element={<div>projects</div>} />
+            <Route path="/projects" element={<div>tasks</div>} />
             <Route path="/privacy" element={<PrivacyView />} />
             <Route path="/terms" element={<TermsView />} />
-            <Route path="/projects/:projectId/*" element={<div>task</div>} />
+            <Route path="/tasks/:taskId/*" element={<div>task</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -68,12 +68,12 @@ describe("AppShell — pending check-in nav badge (027 strand 14)", () => {
   });
 
   it("shows the Workspace nav badge when a check-in is pending outside the workspace", () => {
-    renderShell(`/projects/${PROJECT_ID}/sources`);
+    renderShell(`/tasks/${TASK_ID}/sources`);
     expect(screen.getByText("Check-in pending")).toBeInTheDocument();
   });
 
   it("hides the badge while already on the workspace view", () => {
-    renderShell(`/projects/${PROJECT_ID}`);
+    renderShell(`/tasks/${TASK_ID}`);
     expect(screen.queryByText("Check-in pending")).not.toBeInTheDocument();
   });
 });
@@ -94,7 +94,7 @@ describe("AppShell — global chrome", () => {
   });
 
   it("underlines the active global nav item", () => {
-    renderShell("/portfolios");
+    renderShell("/projects");
     expect(screen.getByRole("link", { name: "Projects" }).className).toContain("border-blue");
     expect(screen.getByRole("link", { name: "New" }).className).not.toContain("border-blue");
     expect(screen.getByRole("link", { name: TASK.many }).className).not.toContain("border-blue");
@@ -109,22 +109,22 @@ describe("AppShell — global chrome", () => {
   });
 
   it("puts the task name and lifecycle tabs on a second bar, not the global one", () => {
-    renderShell(`/projects/${PROJECT_ID}/sources`);
+    renderShell(`/tasks/${TASK_ID}/sources`);
     const appNav = screen.getByRole("navigation", { name: "App" });
     const taskNav = screen.getByRole("navigation", { name: "Task" });
     expect(appNav).toHaveTextContent("New");
     expect(appNav).toHaveTextContent(TASK.many);
     expect(appNav).toHaveTextContent("Projects");
     expect(appNav).not.toHaveTextContent("Plan");
-    expect(taskNav).toHaveTextContent("Acme project");
+    expect(taskNav).toHaveTextContent("Acme task");
     expect(taskNav).toHaveTextContent("Plan");
     expect(taskNav).toHaveTextContent("Results");
   });
 
   it("hides the task bar on workspace-level pages", () => {
-    renderShell("/portfolios");
+    renderShell("/projects");
     expect(screen.queryByRole("navigation", { name: "Task" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Acme project")).not.toBeInTheDocument();
+    expect(screen.queryByText("Acme task")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Plan" })).not.toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe("AppShell — global chrome", () => {
   });
 
   it("shows the site footer inside a task", () => {
-    renderShell(`/projects/${PROJECT_ID}`);
+    renderShell(`/tasks/${TASK_ID}`);
     expect(screen.getByRole("contentinfo")).toHaveTextContent(SITE_DISCLAIMER);
   });
 

@@ -14,8 +14,8 @@ no framework, a plain reducer:
   `tick` frames are the one exception — no `sequence`, they only update the
   transient `liveness` slice.
 - `useRunStream.ts` — the React binding: opens `src/api/sse.ts`'s
-  connection for one project, folds every frame through the reducer, and
-  invalidates the project's read-model queries on `stage.completed` /
+  connection for one task, folds every frame through the reducer, and
+  invalidates the task's read-model queries on `stage.completed` /
   `run.status`.
 
 See `src/store/reducer.test.ts` for the replay-idempotence, pending→resolved,

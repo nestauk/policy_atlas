@@ -1,4 +1,4 @@
-"""Project-scoped planner turns backed by a durable transcript."""
+"""Task-scoped planner turns backed by a durable transcript."""
 
 from __future__ import annotations
 
@@ -32,15 +32,15 @@ from policy_atlas.api.contract import (
     PlanStep,
 )
 from policy_atlas.api.deps import get_current_user, get_engine, get_planner_backend
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._common import owned_task
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core.schema import (
     capability_run,
     conversation,
-    orchestration_plan,
+    task_plan,
     planning_transcript,
 )
-from policy_atlas.evidence_base.sourcing.country_filters import (
+from policy_atlas.evidence_search.sourcing.country_filters import (
     ISO_3166_ALPHA2,
     OVERTON_COUNTRY_DISPLAY,
     TIER1_GROUPS,
@@ -52,9 +52,9 @@ from policy_atlas.runtime.conversation_lifecycle import (
     ensure_active_planning_conversation,
     seed_draft_from_executed_plan,
 )
-from policy_atlas.runtime.orchestrate import build_plan, persist_approved_plan
-from policy_atlas.runtime.orchestration_plan import (
-    OrchestrationPlan,
+from policy_atlas.runtime.agent import build_plan, persist_approved_plan
+from policy_atlas.runtime.task_plan import (
+    TaskPlan,
     _enabled_components,
     compose,
     registry_component_for,
@@ -70,7 +70,7 @@ log = structlog.get_logger()
 _OPTION_ID_RE = re.compile(r"[a-z][a-z0-9_]*")
 
 router = APIRouter(
-    prefix="/api/v1/projects",
+    prefix="/api/v1/tasks",
     tags=["planning"],
     dependencies=[Depends(get_current_user)],
 )
@@ -78,22 +78,22 @@ router = APIRouter(
 _PENDING_TTL = timedelta(minutes=10)
 _turn_locks_guard = threading.Lock()
 _turn_locks: dict[uuid.UUID, threading.Lock] = {}
-# The registry is keyed by caller-supplied project ids BEFORE authz resolves,
+# The registry is keyed by caller-supplied task ids BEFORE authz resolves,
 # so it must stay bounded (the _sessions cache it replaced was LRU-128; the
 # bound was lost in the 027 port — security review, 2026-07-29). Evicting an
-# unheld lock is safe: correctness rests on the phase-1 project row lock and
+# unheld lock is safe: correctness rests on the phase-1 task row lock and
 # the transcript unique constraints, this lock only single-flights the
 # planner spend.
 _TURN_LOCKS_MAX = 256
 
 
-def _turn_lock(project_id: uuid.UUID) -> threading.Lock:
-    """Return the process-local concurrency guard for one project's planner turn."""
+def _turn_lock(task_id: uuid.UUID) -> threading.Lock:
+    """Return the process-local concurrency guard for one task's planner turn."""
     with _turn_locks_guard:
-        if project_id not in _turn_locks and len(_turn_locks) >= _TURN_LOCKS_MAX:
+        if task_id not in _turn_locks and len(_turn_locks) >= _TURN_LOCKS_MAX:
             for key in [k for k, v in _turn_locks.items() if not v.locked()]:
                 del _turn_locks[key]
-        return _turn_locks.setdefault(project_id, threading.Lock())
+        return _turn_locks.setdefault(task_id, threading.Lock())
 
 
 def _now() -> datetime:
@@ -101,12 +101,12 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _expire_stale_pending_turns(conn: Connection, project_id: uuid.UUID) -> None:
+def _expire_stale_pending_turns(conn: Connection, task_id: uuid.UUID) -> None:
     """Terminally fail pending transcript rows older than the retry window."""
     now = _now()
     conn.execute(
         update(planning_transcript)
-        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.task_id == task_id)
         .where(planning_transcript.c.status == "pending")
         .where(planning_transcript.c.created_at < now - _PENDING_TTL)
         .values(status="failed", completed_at=now)
@@ -139,7 +139,7 @@ def _draft_from_wire(draft: PlanDraftWire, *, ready: bool) -> PlanDraft:
     return PlanDraft.model_validate(values)
 
 
-def _draft_from_plan(plan: OrchestrationPlan) -> PlanDraft:
+def _draft_from_plan(plan: TaskPlan) -> PlanDraft:
     """Project a validated runtime plan into the API's approved draft shape."""
     values = plan.model_dump(mode="json")
     values.pop("steer_point_defaults", None)
@@ -219,12 +219,12 @@ def _validated_part(raw_part: object) -> PartProposalOut | None:
 
 
 def _planner_inputs(
-    conn: Connection, project_id: uuid.UUID, conversation_id: uuid.UUID
+    conn: Connection, task_id: uuid.UUID, conversation_id: uuid.UUID
 ) -> tuple[list[dict[str, str]], dict[str, object] | None]:
     """Rehydrate the exact planner context for one planning conversation."""
     rows = conn.execute(
         select(planning_transcript)
-        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.task_id == task_id)
         .where(planning_transcript.c.conversation_id == conversation_id)
         .where(planning_transcript.c.status == "completed")
         .order_by(planning_transcript.c.turn_index.asc())
@@ -246,7 +246,7 @@ def _planner_inputs(
 
     closed_predecessor = conn.execute(
         select(conversation.c.id)
-        .where(conversation.c.project_id == project_id)
+        .where(conversation.c.task_id == task_id)
         .where(conversation.c.kind == "planning")
         .where(conversation.c.status == "closed")
         .order_by(conversation.c.closed_at.desc())
@@ -256,14 +256,14 @@ def _planner_inputs(
         return turns, previous_draft
 
     plan_payload = conn.execute(
-        select(orchestration_plan.c.payload)
-        .where(orchestration_plan.c.project_id == project_id)
-        .where(orchestration_plan.c.status == "approved")
-        .order_by(orchestration_plan.c.version.desc())
+        select(task_plan.c.payload)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
         .limit(1)
     ).scalar_one_or_none()
     if plan_payload is not None:
-        seed = seed_draft_from_executed_plan(OrchestrationPlan.model_validate(plan_payload))
+        seed = seed_draft_from_executed_plan(TaskPlan.model_validate(plan_payload))
         return [], cast("dict[str, object]", seed.model_dump(mode="json"))
     return turns, previous_draft
 
@@ -287,7 +287,7 @@ def _transcript_out(row: RowMapping) -> PlanningTranscriptTurnOut:
 def _phase_one_turn(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user_id: str,
     payload: PlanningTurnCreate,
 ) -> PlanningTurnOut | uuid.UUID:
@@ -297,11 +297,11 @@ def _phase_one_turn(
     # the loser's INSERT dies on a unique constraint as a raw 500 (review
     # finding, 2026-07-29). The transaction is short — the LLM call stays
     # outside it (finding I2 rule).
-    owned_project(conn, project_id=project_id, user_id=user_id, for_update=True)
-    _expire_stale_pending_turns(conn, project_id)
+    owned_task(conn, task_id=task_id, user_id=user_id, for_update=True)
+    _expire_stale_pending_turns(conn, task_id)
     existing = conn.execute(
         select(planning_transcript)
-        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.task_id == task_id)
         .where(planning_transcript.c.client_turn_id == payload.client_turn_id)
     ).mappings().one_or_none()
     if existing is not None:
@@ -314,7 +314,7 @@ def _phase_one_turn(
 
     active = conn.execute(
         select(capability_run.c.status)
-        .where(capability_run.c.project_id == project_id)
+        .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.status.in_(("running", "paused")))
         .limit(1)
     ).scalar_one_or_none()
@@ -328,7 +328,7 @@ def _phase_one_turn(
     if existing is not None:
         latest_id = conn.execute(
             select(planning_transcript.c.id)
-            .where(planning_transcript.c.project_id == project_id)
+            .where(planning_transcript.c.task_id == task_id)
             .order_by(planning_transcript.c.turn_index.desc())
             .limit(1)
         ).scalar_one()
@@ -338,24 +338,24 @@ def _phase_one_turn(
 
     pending = conn.execute(
         select(planning_transcript.c.id)
-        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.task_id == task_id)
         .where(planning_transcript.c.status == "pending")
         .limit(1)
     ).scalar_one_or_none()
     if pending is not None:
         raise ApiConflict("planning_turn_in_progress", "a planning turn is already running")
 
-    conversation_id = ensure_active_planning_conversation(conn, project_id=project_id, now=_now())
+    conversation_id = ensure_active_planning_conversation(conn, task_id=task_id, now=_now())
     max_turn_index = conn.execute(
         select(func.coalesce(func.max(planning_transcript.c.turn_index), -1)).where(
-            planning_transcript.c.project_id == project_id
+            planning_transcript.c.task_id == task_id
         )
     ).scalar_one()
     transcript_id = uuid.uuid4()
     conn.execute(
         planning_transcript.insert().values(
             id=transcript_id,
-            project_id=project_id,
+            task_id=task_id,
             conversation_id=conversation_id,
             client_turn_id=payload.client_turn_id,
             turn_index=int(max_turn_index) + 1,
@@ -372,28 +372,28 @@ def _phase_one_turn(
     return transcript_id
 
 
-@router.post("/{project_id}/planning-turns", response_model=PlanningTurnOut)
+@router.post("/{task_id}/planning-turns", response_model=PlanningTurnOut)
 def create_planning_turn(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     payload: PlanningTurnCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     planner: Annotated[PlannerBackend, Depends(get_planner_backend)],
 ) -> PlanningTurnOut:
-    """Advance one project's durable planner conversation once per client turn id."""
-    lock = _turn_lock(project_id)
+    """Advance one task's durable planner conversation once per client turn id."""
+    lock = _turn_lock(task_id)
     if not lock.acquire(blocking=False):
         raise ApiConflict("planning_turn_in_progress", "a planning turn is already running")
     try:
         # Phase 1 is deliberately short. The planner call below must remain
-        # OUTSIDE any transaction: holding the project row lock (and a pool
+        # OUTSIDE any transaction: holding the task row lock (and a pool
         # connection) across a live LLM call blocked every mutation on the
-        # project — and via the global dispatch lock, run creation process-wide
+        # task — and via the global dispatch lock, run creation process-wide
         # (review finding I2, 2026-07-21).
         with engine.begin() as conn:
             phase_one = _phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 user_id=user.user_id,
                 payload=payload,
             )
@@ -408,7 +408,7 @@ def create_planning_turn(
             ).scalar_one()
             if conversation_id is None:
                 raise RuntimeError("planning transcript turn has no conversation")
-            turns, previous_draft = _planner_inputs(conn, project_id, conversation_id)
+            turns, previous_draft = _planner_inputs(conn, task_id, conversation_id)
         turns.append({"role": "user", "text": payload.message})
         try:
             turn = planner.plan_turn(turns, previous_draft, session_id=conversation_id)
@@ -417,14 +417,14 @@ def create_planning_turn(
                 conn.execute(
                     update(planning_transcript)
                     .where(planning_transcript.c.id == phase_one)
-                    .where(planning_transcript.c.project_id == project_id)
+                    .where(planning_transcript.c.task_id == task_id)
                     .where(planning_transcript.c.status.in_(("pending", "failed")))
                     .values(status="failed", completed_at=_now())
                 )
             raise
 
         ready = turn.ready
-        approved: OrchestrationPlan | None = None
+        approved: TaskPlan | None = None
         if ready:
             try:
                 approved = build_plan(turn.plan_draft)
@@ -455,8 +455,8 @@ def create_planning_turn(
         run_started_meanwhile = False
         with engine.begin() as conn:
             if approved is not None:
-                owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
-                # Re-check the run fence under the project row lock: a run may
+                owned_task(conn, task_id=task_id, user_id=user.user_id, for_update=True)
+                # Re-check the run fence under the task row lock: a run may
                 # have started during the out-of-transaction planner call, and
                 # persisting a new approved plan under a live walk would hand
                 # continuation an unrelated plan (adversarial review,
@@ -464,7 +464,7 @@ def create_planning_turn(
                 run_started_meanwhile = (
                     conn.execute(
                         select(capability_run.c.status)
-                        .where(capability_run.c.project_id == project_id)
+                        .where(capability_run.c.task_id == task_id)
                         .where(capability_run.c.status.in_(("running", "paused")))
                         .limit(1)
                     ).scalar_one_or_none()
@@ -481,7 +481,7 @@ def create_planning_turn(
                 completed = conn.execute(
                     update(planning_transcript)
                     .where(planning_transcript.c.id == phase_one)
-                    .where(planning_transcript.c.project_id == project_id)
+                    .where(planning_transcript.c.task_id == task_id)
                     # A fresh turn completes from "pending"; a retried latest turn
                     # re-runs in place from "failed" (retry rules, plan pin 2).
                     .where(planning_transcript.c.status.in_(("pending", "failed")))
@@ -498,14 +498,14 @@ def create_planning_turn(
                     approved.source_turn_index = int(turn_index)
                     persist_approved_plan(
                         conn,
-                        project_id=project_id,
+                        task_id=task_id,
                         plan=approved,
                         conversation_id=conversation_id,
                     )
                     conn.execute(
                         update(conversation)
                         .where(conversation.c.id == conversation_id)
-                        .where(conversation.c.project_id == project_id)
+                        .where(conversation.c.task_id == task_id)
                         .values(title=approved.title)
                     )
         if run_started_meanwhile:
@@ -519,9 +519,9 @@ def create_planning_turn(
         lock.release()
 
 
-@router.get("/{project_id}/planning-turns", response_model=Page[PlanningTranscriptTurnOut])
+@router.get("/{task_id}/planning-turns", response_model=Page[PlanningTranscriptTurnOut])
 def list_planning_turns(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     page: Annotated[int, Query(ge=1)] = 1,
@@ -529,16 +529,16 @@ def list_planning_turns(
 ) -> Page[PlanningTranscriptTurnOut]:
     """Return the durable planning transcript in ascending conversation order."""
     with engine.begin() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
-        _expire_stale_pending_turns(conn, project_id)
+        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        _expire_stale_pending_turns(conn, task_id)
         total_items = conn.execute(
             select(func.count())
             .select_from(planning_transcript)
-            .where(planning_transcript.c.project_id == project_id)
+            .where(planning_transcript.c.task_id == task_id)
         ).scalar_one()
         rows = conn.execute(
             select(planning_transcript)
-            .where(planning_transcript.c.project_id == project_id)
+            .where(planning_transcript.c.task_id == task_id)
             .order_by(planning_transcript.c.turn_index.asc())
             .offset((page - 1) * page_size)
             .limit(page_size)
@@ -549,33 +549,33 @@ def list_planning_turns(
     )
 
 
-@router.get("/{project_id}/plan", response_model=PlanOut)
+@router.get("/{task_id}/plan", response_model=PlanOut)
 def get_plan(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> PlanOut:
     """Return the durable approved plan or latest completed durable draft."""
     with engine.begin() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
-        _expire_stale_pending_turns(conn, project_id)
+        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        _expire_stale_pending_turns(conn, task_id)
         row = conn.execute(
-            select(orchestration_plan)
-            .where(orchestration_plan.c.project_id == project_id)
-            .where(orchestration_plan.c.status == "approved")
-            .order_by(orchestration_plan.c.version.desc())
+            select(task_plan)
+            .where(task_plan.c.task_id == task_id)
+            .where(task_plan.c.status == "approved")
+            .order_by(task_plan.c.version.desc())
             .limit(1)
         ).mappings().one_or_none()
         latest_completed = conn.execute(
             select(planning_transcript.c.turn_index, planning_transcript.c.response)
-            .where(planning_transcript.c.project_id == project_id)
+            .where(planning_transcript.c.task_id == task_id)
             .where(planning_transcript.c.status == "completed")
             .order_by(planning_transcript.c.turn_index.desc())
             .limit(1)
         ).mappings().one_or_none()
         approved_is_stale = False
         if row is not None:
-            approved_plan = OrchestrationPlan.model_validate(row["payload"])
+            approved_plan = TaskPlan.model_validate(row["payload"])
             approved_is_stale = (
                 approved_plan.source_turn_index is not None
                 and latest_completed is not None
@@ -608,7 +608,7 @@ _DISCRETIONARY_ORDER = (
 )
 
 
-def _runtime_plan_from_draft(draft: PlanDraft) -> OrchestrationPlan:
+def _runtime_plan_from_draft(draft: PlanDraft) -> TaskPlan:
     """Build an executable plan from the GET-plan draft projection."""
     values = draft.model_dump(mode="json", exclude_none=True)
     values.pop("steps", None)
@@ -706,7 +706,7 @@ def _drop_scope_incompatible_geo(constraints: dict[str, Any], backend_scope: str
         constraints["author_affiliation_countries"] = None
 
 
-def _apply_plan_patch(plan: OrchestrationPlan, patch: PlanPatchIn) -> OrchestrationPlan:
+def _apply_plan_patch(plan: TaskPlan, patch: PlanPatchIn) -> TaskPlan:
     """Merge a user patch onto an executable plan and re-validate."""
     fields = patch.model_fields_set
     data = plan.model_dump(mode="json")
@@ -746,18 +746,18 @@ def _apply_plan_patch(plan: OrchestrationPlan, patch: PlanPatchIn) -> Orchestrat
     if "search_effort" in fields or "analysis_depth" in fields:
         data["time_band"] = ""
         data["expected_artefact_shape"] = ""
-    return OrchestrationPlan.model_validate(data)
+    return TaskPlan.model_validate(data)
 
 
 def _load_editable_plan(
-    conn: Connection, project_id: uuid.UUID
-) -> tuple[OrchestrationPlan, uuid.UUID | None]:
-    """Return the plan GET would show, as an executable OrchestrationPlan."""
+    conn: Connection, task_id: uuid.UUID
+) -> tuple[TaskPlan, uuid.UUID | None]:
+    """Return the plan GET would show, as an executable TaskPlan."""
     row = conn.execute(
-        select(orchestration_plan)
-        .where(orchestration_plan.c.project_id == project_id)
-        .where(orchestration_plan.c.status == "approved")
-        .order_by(orchestration_plan.c.version.desc())
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
         .limit(1)
     ).mappings().one_or_none()
     latest_completed = conn.execute(
@@ -766,7 +766,7 @@ def _load_editable_plan(
             planning_transcript.c.response,
             planning_transcript.c.conversation_id,
         )
-        .where(planning_transcript.c.project_id == project_id)
+        .where(planning_transcript.c.task_id == task_id)
         .where(planning_transcript.c.status == "completed")
         .order_by(planning_transcript.c.turn_index.desc())
         .limit(1)
@@ -774,7 +774,7 @@ def _load_editable_plan(
     approved_is_stale = False
     conversation_id = row["conversation_id"] if row is not None else None
     if row is not None:
-        approved_plan = OrchestrationPlan.model_validate(row["payload"])
+        approved_plan = TaskPlan.model_validate(row["payload"])
         approved_is_stale = (
             approved_plan.source_turn_index is not None
             and latest_completed is not None
@@ -793,21 +793,21 @@ def _load_editable_plan(
         raise HTTPException(status_code=422, detail="plan is not ready to edit") from exc
 
 
-@router.patch("/{project_id}/plan", response_model=PlanOut)
+@router.patch("/{task_id}/plan", response_model=PlanOut)
 def patch_plan(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     payload: PlanPatchIn,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
 ) -> PlanOut:
     """Apply typed edits to the current plan and persist a new approved version."""
     with engine.begin() as conn:
-        owned_project(conn, project_id=project_id, user_id=user.user_id)
-        _expire_stale_pending_turns(conn, project_id)
+        owned_task(conn, task_id=task_id, user_id=user.user_id)
+        _expire_stale_pending_turns(conn, task_id)
         run_active = (
             conn.execute(
                 select(capability_run.c.status)
-                .where(capability_run.c.project_id == project_id)
+                .where(capability_run.c.task_id == task_id)
                 .where(capability_run.c.status.in_(("running", "paused")))
                 .limit(1)
             ).scalar_one_or_none()
@@ -818,33 +818,33 @@ def patch_plan(
                 "run_active",
                 "a run is in progress; finish or stop it, then edit the plan",
             )
-        current, conversation_id = _load_editable_plan(conn, project_id)
+        current, conversation_id = _load_editable_plan(conn, task_id)
         try:
             patched = _apply_plan_patch(current, payload)
         except (ValidationError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         latest_turn = conn.execute(
             select(func.max(planning_transcript.c.turn_index))
-            .where(planning_transcript.c.project_id == project_id)
+            .where(planning_transcript.c.task_id == task_id)
             .where(planning_transcript.c.status == "completed")
         ).scalar_one()
         if latest_turn is not None:
             patched.source_turn_index = int(latest_turn)
         if conversation_id is None:
             conversation_id = ensure_active_planning_conversation(
-                conn, project_id=project_id, now=_now()
+                conn, task_id=task_id, now=_now()
             )
         persist_approved_plan(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             plan=patched,
             conversation_id=conversation_id,
         )
         row = conn.execute(
-            select(orchestration_plan)
-            .where(orchestration_plan.c.project_id == project_id)
-            .where(orchestration_plan.c.status == "approved")
-            .order_by(orchestration_plan.c.version.desc())
+            select(task_plan)
+            .where(task_plan.c.task_id == task_id)
+            .where(task_plan.c.status == "approved")
+            .order_by(task_plan.c.version.desc())
             .limit(1)
         ).mappings().one()
     return PlanOut(

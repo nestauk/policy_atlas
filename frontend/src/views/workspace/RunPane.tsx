@@ -12,13 +12,13 @@ import { JourneyPane } from "./journey/JourneyPane";
  * position; artefact streaming deliberately remains owned by the artefact
  * view (027 E.3).
  */
-export function RunPane({ projectId, stream }: { projectId: string; stream: RunStreamState }) {
-  const startRun = useStartRun(projectId);
-  const plan = usePlan(projectId);
-  const funnel = useFunnel(projectId);
-  const coverage = useCoverage(projectId);
-  const groups = useGroups(projectId);
-  const landscape = useLandscape(projectId);
+export function RunPane({ taskId, stream }: { taskId: string; stream: RunStreamState }) {
+  const startRun = useStartRun(taskId);
+  const plan = usePlan(taskId);
+  const funnel = useFunnel(taskId);
+  const coverage = useCoverage(taskId);
+  const groups = useGroups(taskId);
+  const landscape = useLandscape(taskId);
   const runStatus = stream.run?.status;
 
   return (
@@ -35,7 +35,7 @@ export function RunPane({ projectId, stream }: { projectId: string; stream: RunS
       ) : (
         <div className="flex-1 overflow-hidden">
           <JourneyPane
-            projectId={projectId}
+            taskId={taskId}
             stream={stream}
             plan={stream.plan?.plan ?? plan.data?.plan ?? null}
             funnel={funnel.data}

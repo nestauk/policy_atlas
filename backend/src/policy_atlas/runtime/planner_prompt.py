@@ -30,7 +30,7 @@ from policy_atlas.core.prompt_fields import sanitize_prompt_field
 # synthesis / Findings synthesis); research-approach "report" not
 # "review"; search-scope acquire caps in thoroughness option subs.
 # Succeeds planner_v7 (plain reader language; ready-update copy).
-# The router and watch moments live in orchestrator_prompt.py.
+# The router and watch moments live in agent_prompt.py.
 PLANNER_PROMPT_VERSION = "planner_v8"
 
 # Input-side caps at prompt assembly. Generous for legitimate intents; a

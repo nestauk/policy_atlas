@@ -24,7 +24,7 @@ function turn(index: number, createdAt: string): PlanningThreadTurn {
 function run(id: string, startedAt: string, endedAt: string | null): PlanningThreadRun {
   return {
     capability_run_id: id,
-    project_id: "p1",
+    task_id: "p1",
     plan_id: `plan-${id}`,
     plan_version: 1,
     status: endedAt === null ? "running" : "succeeded",
@@ -66,8 +66,8 @@ describe("presentRunDecisions", () => {
     const entries: PlanningThreadDecision[] = [
       { kind: "search.executed", sequence: 1, occurred_at: "2026-07-28T10:00:00Z", summary: "Executed a search query." },
       { kind: "search.executed", sequence: 2, occurred_at: "2026-07-28T10:00:01Z", summary: "Executed a search query." },
-      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-base step.", detail: { component: "screen_full" } },
-      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-base step.", detail: { component: "unknown" } },
+      { kind: "component.completed", sequence: 3, occurred_at: "2026-07-28T10:00:02Z", summary: "Completed an evidence-search step.", detail: { component: "screen_full" } },
+      { kind: "component.completed", sequence: 4, occurred_at: "2026-07-28T10:00:03Z", summary: "Completed an evidence-search step.", detail: { component: "unknown" } },
     ];
 
     expect(presentRunDecisions(entries, [])).toEqual([

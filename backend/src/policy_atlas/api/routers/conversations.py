@@ -57,7 +57,7 @@ from policy_atlas.api.deps import (
     get_engine,
     get_grounding_judge_backend,
 )
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._common import owned_task
 from policy_atlas.core import tracing
 from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
@@ -65,9 +65,9 @@ from policy_atlas.core.schema import (
     chat_turn,
     conversation,
     planning_transcript,
-    project,
+    task,
 )
-from policy_atlas.evidence_base.synthesis.grounding_judge import GroundingJudgeBackend
+from policy_atlas.evidence_search.synthesis.grounding_judge import GroundingJudgeBackend
 from policy_atlas.runtime.chat_backend import ChatBackend
 
 log = structlog.get_logger()
@@ -78,8 +78,8 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
-project_router = APIRouter(
-    prefix="/api/v1/projects",
+task_router = APIRouter(
+    prefix="/api/v1/tasks",
     tags=["conversations"],
     dependencies=[Depends(get_current_user)],
 )
@@ -100,7 +100,7 @@ def _conversation_out(row: RowMapping) -> ConversationOut:
     """Project a durable conversation row into the public read shape."""
     return ConversationOut(
         id=row["id"],
-        project_id=row["project_id"],
+        task_id=row["task_id"],
         kind=cast(ConversationKind, row["kind"]),
         title=row["title"],
         status=cast(ConversationStatus, row["status"]),
@@ -122,10 +122,10 @@ def _owned_conversation(
     """Return an owned conversation, hiding unknown and cross-owner rows alike."""
     statement = (
         select(conversation)
-        .select_from(conversation.join(project, conversation.c.project_id == project.c.project_id))
+        .select_from(conversation.join(task, conversation.c.task_id == task.c.task_id))
         .where(conversation.c.id == conversation_id)
-        .where(project.c.owner_user_id == user_id)
-        .where(project.c.status == "active")
+        .where(task.c.owner_user_id == user_id)
+        .where(task.c.status == "active")
     )
     if not include_archived:
         statement = statement.where(conversation.c.status != "archived")
@@ -215,21 +215,21 @@ def _chat_turn_out(row: RowMapping) -> ChatTurnOut:
 
 
 def _assert_entry_artefact(
-    conn: Connection, *, project_id: uuid.UUID, entry_artefact_id: uuid.UUID
+    conn: Connection, *, task_id: uuid.UUID, entry_artefact_id: uuid.UUID
 ) -> None:
-    """Ensure an entry-context artefact belongs to the target project."""
+    """Ensure an entry-context artefact belongs to the target task."""
     exists = conn.execute(
         select(artefact.c.artefact_id)
         .where(artefact.c.artefact_id == entry_artefact_id)
-        .where(artefact.c.project_id == project_id)
+        .where(artefact.c.task_id == task_id)
     ).scalar_one_or_none()
     if exists is None:
         raise _not_found()
 
 
-@project_router.get("/{project_id}/conversations", response_model=Page[ConversationListItemOut])
+@task_router.get("/{task_id}/conversations", response_model=Page[ConversationListItemOut])
 def list_conversations(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     kind: ConversationKind | None = None,
@@ -239,9 +239,9 @@ def list_conversations(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[ConversationListItemOut]:
-    """List one owned project's conversations, newest first, with turn previews."""
-    owned_project(conn, project_id=project_id, user_id=user.user_id)
-    where = [conversation.c.project_id == project_id]
+    """List one owned task's conversations, newest first, with turn previews."""
+    owned_task(conn, task_id=task_id, user_id=user.user_id)
+    where = [conversation.c.task_id == task_id]
     if kind is not None:
         where.append(conversation.c.kind == kind)
     if status_filter is None:
@@ -268,29 +268,29 @@ def list_conversations(
     )
 
 
-@project_router.post(
-    "/{project_id}/conversations",
+@task_router.post(
+    "/{task_id}/conversations",
     response_model=ConversationOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_conversation(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     payload: ConversationCreate,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ConversationOut:
     """Create one active chat conversation with optional entry context."""
-    owned_project(conn, project_id=project_id, user_id=user.user_id, for_update=True)
+    owned_task(conn, task_id=task_id, user_id=user.user_id, for_update=True)
     if payload.entry_artefact_id is not None:
         _assert_entry_artefact(
-            conn, project_id=project_id, entry_artefact_id=payload.entry_artefact_id
+            conn, task_id=task_id, entry_artefact_id=payload.entry_artefact_id
         )
     now = datetime.now(UTC)
     conversation_id = uuid.uuid4()
     conn.execute(
         conversation.insert().values(
             id=conversation_id,
-            project_id=project_id,
+            task_id=task_id,
             kind="chat",
             title="New chat",
             entry_artefact_id=payload.entry_artefact_id,
@@ -339,7 +339,7 @@ def update_conversation(
     entry_artefact_id = changes.get("entry_artefact_id")
     if entry_artefact_id is not None:
         _assert_entry_artefact(
-            conn, project_id=row["project_id"], entry_artefact_id=entry_artefact_id
+            conn, task_id=row["task_id"], entry_artefact_id=entry_artefact_id
         )
     if changes:
         conn.execute(
@@ -523,28 +523,28 @@ async def create_chat_turn_stream(
     with engine.begin() as conn:
         row = (
             conn.execute(
-                select(conversation.c.project_id)
+                select(conversation.c.task_id)
                 .select_from(
-                    conversation.join(project, conversation.c.project_id == project.c.project_id)
+                    conversation.join(task, conversation.c.task_id == task.c.task_id)
                 )
                 .where(conversation.c.id == conversation_id)
-                .where(project.c.owner_user_id == user.user_id)
-                .where(project.c.status == "active")
+                .where(task.c.owner_user_id == user.user_id)
+                .where(task.c.status == "active")
             )
             .scalar_one_or_none()
         )
         if row is None:
             raise HTTPException(status_code=404, detail="resource not found")
-        project_id = row
+        task_id = row
         # The pending-row pre-check that used to live here read before the
-        # project row lock's serialization point (TOCTOU) and duplicated a
+        # task row lock's serialization point (TOCTOU) and duplicated a
         # check `_phase_one_turn` already makes correctly inside that lock —
         # dropped in favour of the single locked-and-swept check (security
         # review, 2026-08-11).
         try:
             phase_one = _phase_one_turn(
                 conn,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id=user.user_id,
                 message=body.message,
@@ -575,7 +575,7 @@ async def create_chat_turn_stream(
         try:
             result = run_chat_turn(
                 engine,
-                project_id=project_id,
+                task_id=task_id,
                 conversation_id=conversation_id,
                 user_id=user.user_id,
                 message=body.message,
@@ -680,11 +680,11 @@ def cancel_chat_turn(
                 .select_from(
                     chat_turn.join(
                         conversation, chat_turn.c.conversation_id == conversation.c.id
-                    ).join(project, conversation.c.project_id == project.c.project_id)
+                    ).join(task, conversation.c.task_id == task.c.task_id)
                 )
                 .where(chat_turn.c.id == turn_id)
                 .where(chat_turn.c.conversation_id == conversation_id)
-                .where(project.c.owner_user_id == user.user_id)
+                .where(task.c.owner_user_id == user.user_id)
             )
             .scalar_one_or_none()
         )

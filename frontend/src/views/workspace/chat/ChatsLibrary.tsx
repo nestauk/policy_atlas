@@ -8,7 +8,7 @@ import { addOpenChatTab, useActiveConversation, useConversationMutations } from 
 
 type LibraryRow = components["schemas"]["ConversationListItemOut"];
 
-/** Overlay listing active and archived project chats.
+/** Overlay listing active and archived task chats.
  *
  * Args:
  *   props: Project identity and overlay visibility controls.
@@ -16,17 +16,17 @@ type LibraryRow = components["schemas"]["ConversationListItemOut"];
  * Returns:
  *   The active and archived conversation library when open.
  */
-export function ChatsLibrary({ projectId, open, onClose }: { projectId: string; open: boolean; onClose: () => void }) {
-  const active = useConversations(projectId, { status: "active" });
-  const archived = useConversations(projectId, { status: "archived" });
+export function ChatsLibrary({ taskId, open, onClose }: { taskId: string; open: boolean; onClose: () => void }) {
+  const active = useConversations(taskId, { status: "active" });
+  const archived = useConversations(taskId, { status: "archived" });
   const { setActiveConversation } = useActiveConversation();
-  const { archive, unarchive, update } = useConversationMutations(projectId);
+  const { archive, unarchive, update } = useConversationMutations(taskId);
   const [editing, setEditing] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   if (!open) return null;
 
   const openRow = (row: LibraryRow) => {
-    if (row.kind !== "planning") addOpenChatTab(projectId, row.id);
+    if (row.kind !== "planning") addOpenChatTab(taskId, row.id);
     setActiveConversation(row.id);
     onClose();
   };

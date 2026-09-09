@@ -58,7 +58,7 @@ describe("OidcAuthProvider cold-visit gating (026 live-check finding)", () => {
   it("renders a manual sign-in retry — not the shell, not a redirect loop — when the OIDC layer errors", () => {
     // A restored/back-navigated callback URL: consumed code/state params plus
     // a legitimate query param and hash that must survive the retry.
-    window.history.replaceState({}, "", "/projects/1?code=stale&state=stale&tab=runs#top");
+    window.history.replaceState({}, "", "/tasks/1?code=stale&state=stale&tab=runs#top");
     oidcState = {
       isLoading: false,
       isAuthenticated: false,
@@ -76,6 +76,6 @@ describe("OidcAuthProvider cold-visit gating (026 live-check finding)", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign in again/i }));
     expect(signinRedirect).toHaveBeenCalledOnce();
     // code/state stripped so the retry can't restore the poisoned callback URL.
-    expect(sessionStorage.getItem("policy-atlas.auth-return-to")).toBe("/projects/1?tab=runs#top");
+    expect(sessionStorage.getItem("policy-atlas.auth-return-to")).toBe("/tasks/1?tab=runs#top");
   });
 });

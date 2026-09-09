@@ -1,6 +1,6 @@
 """Steering-event emission chassis (task 024, decision 1).
 
-Every human-in-the-loop steering moment — pause, decision (user, orchestrator or
+Every human-in-the-loop steering moment — pause, decision (user, agent or
 standing-default), rejected adjustment, refused intent, skip and the boundary
 watch's judgement routing — becomes a canonical ``event_log`` event keyed to a
 ``capability_run`` walk identity. This module is the single append surface for
@@ -45,7 +45,7 @@ COMPONENT_SKIPPED = "component.skipped"
 AGENT_JUDGEMENT_ROUTED = "agent_judgement_routed"
 
 Boundary = Literal["after_component", "before_component", "walk"]
-DecidedBy = Literal["user", "orchestrator", "standing_default"]
+DecidedBy = Literal["user", "agent", "standing_default"]
 DecisionResponse = Literal["continue", "adjust", "abort", "mode_change"]
 RerunMode = Literal["additive", "replacement"]
 
@@ -105,7 +105,7 @@ def decision_payload(
 
     Args:
         base: The :func:`base_payload` result to extend (copied, not mutated).
-        decided_by: Who answered the decision — ``user``, ``orchestrator`` or
+        decided_by: Who answered the decision — ``user``, ``agent`` or
             ``standing_default``.
         authored_by: Who authored the options/action (attribution seam,
             decision 9); ``user`` for a live user answer.
@@ -136,7 +136,7 @@ def decision_payload(
 def emit(
     conn: Connection,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     event_type: str,
     payload: dict[str, Any],
@@ -149,7 +149,7 @@ def emit(
 
     Args:
         conn: Open connection whose transaction the event joins.
-        project_id: Project the event belongs to.
+        task_id: Task the event belongs to.
         run_id: The resolved attachment run id. MUST NOT be ``None``.
         event_type: One of the module's event-type constants.
         payload: The event body.
@@ -172,7 +172,7 @@ def emit(
     )
     return events.append(
         conn,
-        project_id=project_id,
+        task_id=task_id,
         run_id=run_id,
         event_type=event_type,
         payload=payload,
@@ -182,7 +182,7 @@ def emit(
 def emit_standalone(
     engine: Engine,
     *,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     run_id: uuid.UUID | None,
     event_type: str,
     payload: dict[str, Any],
@@ -194,7 +194,7 @@ def emit_standalone(
 
     Args:
         engine: Engine to open the short transaction on.
-        project_id: Project the event belongs to.
+        task_id: Task the event belongs to.
         run_id: The resolved attachment run id. MUST NOT be ``None``.
         event_type: One of the module's event-type constants.
         payload: The event body.
@@ -210,7 +210,7 @@ def emit_standalone(
     with engine.begin() as conn:
         return emit(
             conn,
-            project_id=project_id,
+            task_id=task_id,
             run_id=run_id,
             event_type=event_type,
             payload=payload,

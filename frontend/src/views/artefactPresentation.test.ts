@@ -216,6 +216,6 @@ describe("downloadFilename", () => {
     expect(downloadFilename("What retains early years staff?", "md")).toBe(
       "what-retains-early-years-staff.md",
     );
-    expect(downloadFilename("???", "pdf")).toBe("evidence-base.pdf");
+    expect(downloadFilename("???", "pdf")).toBe("evidence-search.pdf");
   });
 });

@@ -1,7 +1,7 @@
 import { useParams } from "react-router";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { useFunnel, useGroups, useLandscape, useProject } from "../api/queries";
+import { useFunnel, useGroups, useLandscape, useTask } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -38,12 +38,12 @@ const CHART_TOKENS = {
  * never faked.
  */
 export function LandscapeView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  useDocumentTitle(project.data?.name, "Landscape");
-  const landscape = useLandscape(projectId);
-  const funnel = useFunnel(projectId);
-  const groups = useGroups(projectId);
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Landscape");
+  const landscape = useLandscape(taskId);
+  const funnel = useFunnel(taskId);
+  const groups = useGroups(taskId);
 
   const funnelRows = FUNNEL_ORDER.flatMap(([key, label]) => {
     const count = funnel.data?.[key];

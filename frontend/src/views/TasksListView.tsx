@@ -1,4 +1,4 @@
-import { usePortfolios, useProjects } from "../api/queries";
+import { useProjects, useTasks } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { useDocumentTitle } from "../lib/title";
 import { TASK } from "../lib/vocabulary";
@@ -9,15 +9,15 @@ import { TaskListActions, TaskListPanel } from "./TaskListPanel";
 /** Every task, with where it got to and what it belongs to. */
 export function TasksListView() {
   useDocumentTitle(TASK.many);
+  const tasks = useTasks();
   const projects = useProjects();
-  const portfolios = usePortfolios();
 
-  const rows = projects.data?.data ?? [];
-  const portfolioName = new Map(
-    (portfolios.data?.data ?? []).map((portfolio) => [portfolio.portfolio_id, portfolio.name]),
+  const rows = tasks.data?.data ?? [];
+  const projectName = new Map(
+    (projects.data?.data ?? []).map((project) => [project.project_id, project.name]),
   );
 
-  if (projects.isError && errorCode(projects.error) === "unauthenticated") {
+  if (tasks.isError && errorCode(tasks.error) === "unauthenticated") {
     return <ReauthRedirect />;
   }
 
@@ -27,20 +27,20 @@ export function TasksListView() {
         <h1 className={listPageTitleClass}>{TASK.many}</h1>
         <TaskListActions
           rows={rows}
-          portfolioNames={portfolioName}
-          showProjectPrefix
+          projectNames={projectName}
+          showTaskPrefix
           newTaskHref={newTaskHref()}
         />
       </header>
 
       <TaskListPanel
         rows={rows}
-        portfolioNames={portfolioName}
-        showProjectPrefix
-        isPending={projects.isPending}
-        isError={projects.isError}
-        onRetry={() => void projects.refetch()}
-        loaded={projects.data !== undefined}
+        projectNames={projectName}
+        showTaskPrefix
+        isPending={tasks.isPending}
+        isError={tasks.isError}
+        onRetry={() => void tasks.refetch()}
+        loaded={tasks.data !== undefined}
       />
     </main>
   );

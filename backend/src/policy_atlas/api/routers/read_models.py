@@ -28,57 +28,57 @@ from policy_atlas.api.contract import (
 )
 from policy_atlas.api.deps import get_conn, get_current_user
 from policy_atlas.api.readmodels import repository
-from policy_atlas.api.routers._common import owned_project
+from policy_atlas.api.routers._common import owned_task
 
 router = APIRouter(
-    prefix="/api/v1/projects",
+    prefix="/api/v1/tasks",
     tags=["read-models"],
     dependencies=[Depends(get_current_user)],
 )
 
 
-def _owned(conn: Connection, project_id: uuid.UUID, user: AuthenticatedUser) -> None:
+def _owned(conn: Connection, task_id: uuid.UUID, user: AuthenticatedUser) -> None:
     """Enforce the API's indistinguishable missing/cross-owner 404 once per route."""
-    owned_project(conn, project_id=project_id, user_id=user.user_id)
+    owned_task(conn, task_id=task_id, user_id=user.user_id)
 
 
-@router.get("/{project_id}/funnel", response_model=FunnelOut)
+@router.get("/{task_id}/funnel", response_model=FunnelOut)
 def funnel(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> FunnelOut:
     """Return the durable acquisition-to-citation funnel."""
-    _owned(conn, project_id, user)
-    return repository.funnel_out(conn, project_id)
+    _owned(conn, task_id, user)
+    return repository.funnel_out(conn, task_id)
 
 
-@router.get("/{project_id}/landscape", response_model=LandscapeOut)
+@router.get("/{task_id}/landscape", response_model=LandscapeOut)
 def landscape(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     scope: Annotated[Literal["cited"] | None, Query()] = None,
 ) -> LandscapeOut:
     """Return screened-in-only or cited-only landscape distributions."""
-    _owned(conn, project_id, user)
-    return repository.landscape_out(conn, project_id, scope=scope)
+    _owned(conn, task_id, user)
+    return repository.landscape_out(conn, task_id, scope=scope)
 
 
-@router.get("/{project_id}/groups", response_model=GroupsOut)
+@router.get("/{task_id}/groups", response_model=GroupsOut)
 def groups(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> GroupsOut:
     """Return the latest grouping facets and residual counts."""
-    _owned(conn, project_id, user)
-    return repository.groups_out(conn, project_id)
+    _owned(conn, task_id, user)
+    return repository.groups_out(conn, task_id)
 
 
-@router.get("/{project_id}/evidence", response_model=Page[EvidenceItemOut])
+@router.get("/{task_id}/evidence", response_model=Page[EvidenceItemOut])
 def evidence(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     page: Annotated[int, Query(ge=1)] = 1,
@@ -99,12 +99,12 @@ def evidence(
     year_to: Annotated[int | None, Query(ge=1000, le=3000)] = None,
 ) -> Page[EvidenceItemOut]:
     """Return a bounded page from the evidence status ladder, optionally filtered."""
-    _owned(conn, project_id, user)
+    _owned(conn, task_id, user)
     if order is not None and sort is None:
         raise HTTPException(status_code=422, detail="order requires sort")
     return repository.evidence_page(
         conn,
-        project_id,
+        task_id,
         page,
         page_size,
         statuses=status,
@@ -120,9 +120,9 @@ def evidence(
     )
 
 
-@router.get("/{project_id}/findings", response_model=Page[FindingOut])
+@router.get("/{task_id}/findings", response_model=Page[FindingOut])
 def findings(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     page: Annotated[int, Query(ge=1)] = 1,
@@ -134,14 +134,14 @@ def findings(
     source_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> Page[FindingOut]:
     """Return a bounded page of IOF and ICF findings, optionally filtered."""
-    _owned(conn, project_id, user)
+    _owned(conn, task_id, user)
     if group_id is not None and (facet is not None or group is not None):
         raise HTTPException(status_code=422, detail="group_id cannot be combined with facet/group")
     if (facet is None) != (group is None):
         raise HTTPException(status_code=422, detail="facet and group must be provided together")
     return repository.findings_page(
         conn,
-        project_id,
+        task_id,
         page,
         page_size,
         profile=profile,
@@ -152,79 +152,79 @@ def findings(
     )
 
 
-@router.get("/{project_id}/sources/{source_id}", response_model=SourceDossierOut)
+@router.get("/{task_id}/sources/{source_id}", response_model=SourceDossierOut)
 def source_dossier(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     source_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> SourceDossierOut:
     """Return one owner-scoped source dossier or an indistinguishable 404."""
-    _owned(conn, project_id, user)
-    result = repository.source_dossier_out(conn, project_id, source_id)
+    _owned(conn, task_id, user)
+    result = repository.source_dossier_out(conn, task_id, source_id)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result
 
 
-@router.get("/{project_id}/decisions", response_model=Page[DecisionOut])
+@router.get("/{task_id}/decisions", response_model=Page[DecisionOut])
 def decisions(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=PAGE_SIZE_MAX)] = PAGE_SIZE_DEFAULT,
 ) -> Page[DecisionOut]:
     """Return the allowlisted audit and steering decision history."""
-    _owned(conn, project_id, user)
-    return repository.decisions_page(conn, project_id, page, page_size)
+    _owned(conn, task_id, user)
+    return repository.decisions_page(conn, task_id, page, page_size)
 
 
-@router.get("/{project_id}/artefact", response_model=ArtefactOut)
+@router.get("/{task_id}/artefact", response_model=ArtefactOut)
 def artefact(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ArtefactOut:
     """Return the latest persisted synthesis artefact or a shaped absence."""
-    _owned(conn, project_id, user)
-    result = repository.artefact_out(conn, project_id)
+    _owned(conn, task_id, user)
+    result = repository.artefact_out(conn, task_id)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result
 
 
-@router.get("/{project_id}/coverage", response_model=CoverageOut)
+@router.get("/{task_id}/coverage", response_model=CoverageOut)
 def coverage(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> CoverageOut:
     """Return the composed latest search coverage statement."""
-    _owned(conn, project_id, user)
-    result = repository.coverage_out(conn, project_id)
+    _owned(conn, task_id, user)
+    result = repository.coverage_out(conn, task_id)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result
 
 
-@router.get("/{project_id}/citations/{citation_key}/context", response_model=ChunkContextOut)
+@router.get("/{task_id}/citations/{citation_key}/context", response_model=ChunkContextOut)
 def chunk_context(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     citation_key: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
 ) -> ChunkContextOut:
     """Return a clamped context window for an artefact citation id."""
-    _owned(conn, project_id, user)
-    result = repository.chunk_context_out(conn, project_id, citation_key)
+    _owned(conn, task_id, user)
+    result = repository.chunk_context_out(conn, task_id, citation_key)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result
 
-@router.get("/{project_id}/chunks/{chunk_id}/context", response_model=ChunkContextOut)
+@router.get("/{task_id}/chunks/{chunk_id}/context", response_model=ChunkContextOut)
 def chat_chunk_context(
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     chunk_id: uuid.UUID,
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     conn: Annotated[Connection, Depends(get_conn)],
@@ -238,10 +238,10 @@ def chat_chunk_context(
     ``quote`` is validated AFTER ownership so cross-owner and unknown ids stay
     404-indistinguishable (the conformance sweep's byte-identical rule).
     """
-    _owned(conn, project_id, user)
+    _owned(conn, task_id, user)
     if quote is None:
         raise HTTPException(status_code=422, detail="quote is required")
-    result = repository.chunk_quote_context_out(conn, project_id, chunk_id, quote)
+    result = repository.chunk_quote_context_out(conn, task_id, chunk_id, quote)
     if result is None:
         raise HTTPException(status_code=404, detail="resource not found")
     return result

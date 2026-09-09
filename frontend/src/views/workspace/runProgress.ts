@@ -147,26 +147,26 @@ export function stageDetailLines(row: StageRow): string[] {
 /** Link to a lifecycle tab that now has something to read. */
 export function signpostForStage(
   stage: string,
-  projectId: string,
+  taskId: string,
   hasFindings: boolean,
 ): StageSignpost | null {
   if (stage === "acquire") {
     return {
-      href: `/projects/${projectId}/sources/all`,
+      href: `/tasks/${taskId}/sources/all`,
       label: "Sources are ready",
       message: "Searching has finished.",
     };
   }
   if (stage === "characterise") {
     return {
-      href: `/projects/${projectId}/sources/landscape`,
+      href: `/tasks/${taskId}/sources/landscape`,
       label: "The landscape is ready",
       message: "Mapping has finished.",
     };
   }
   if (stage === "extract" && hasFindings) {
     return {
-      href: `/projects/${projectId}/sources/findings`,
+      href: `/tasks/${taskId}/sources/findings`,
       label: "Findings are ready",
       message: "Findings are ready.",
     };
@@ -177,14 +177,14 @@ export function signpostForStage(
 /** Completed-stage signposts in timeline order, one per destination. */
 export function completedSignposts(
   stages: StageEntry[],
-  projectId: string,
+  taskId: string,
   hasFindings: boolean,
 ): StageSignpost[] {
   const out: StageSignpost[] = [];
   const seen = new Set<string>();
   for (const entry of stages) {
     if (entry.status !== "completed") continue;
-    const signpost = signpostForStage(entry.stage, projectId, hasFindings);
+    const signpost = signpostForStage(entry.stage, taskId, hasFindings);
     if (signpost === null || seen.has(signpost.href)) continue;
     seen.add(signpost.href);
     out.push(signpost);
@@ -194,12 +194,12 @@ export function completedSignposts(
 
 /** Results link once the write-up exists. */
 export function resultsSignpost(
-  projectId: string,
+  taskId: string,
   status: RunStatus | undefined,
 ): StageSignpost | null {
   if (status === "succeeded" || status === "degraded") {
     return {
-      href: `/projects/${projectId}/results`,
+      href: `/tasks/${taskId}/results`,
       label: "Read the evidence base",
       message: "The evidence base is ready.",
     };

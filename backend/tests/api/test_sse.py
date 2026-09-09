@@ -23,11 +23,11 @@ from policy_atlas.api.dev_issuer import init, mint_token
 from policy_atlas.api.settings import Settings
 from policy_atlas.core import events
 from policy_atlas.core.liveness import tick_hub
-from policy_atlas.core.schema import event_log, project
+from policy_atlas.core.schema import event_log, task
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime.runner import NullIO, WalkParked, run_plan
-from tests.helpers import delete_project_data
-from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_project
+from tests.helpers import delete_task_data
+from tests.runtime.test_runner import _base_plan, _runner_backends, _seed_task
 from tests.runtime.test_steering import _insert_plan_row
 
 
@@ -214,11 +214,11 @@ class _ApiSession:
     other_headers: dict[str, str]
     owner_id: str
 
-    async def open_stream(self, project_id: uuid.UUID, *, cursor: int = 0) -> _SseStream:
+    async def open_stream(self, task_id: uuid.UUID, *, cursor: int = 0) -> _SseStream:
         """Open an owner-authenticated SSE response and return its incremental parser."""
         context = self.client.stream(
             "GET",
-            f"/api/v1/projects/{project_id}/events?cursor={cursor}",
+            f"/api/v1/tasks/{task_id}/events?cursor={cursor}",
             headers=self.owner_headers,
         )
         response = await context.__aenter__()
@@ -260,20 +260,20 @@ async def _api_session(
 
 
 def _owned_seed(engine: Engine, owner_id: str) -> tuple[uuid.UUID, uuid.UUID]:
-    """Create the fixture corpus project and attach it to the API-session owner."""
-    project_id, scope_id = _seed_project(engine)
+    """Create the fixture corpus task and attach it to the API-session owner."""
+    task_id, scope_id = _seed_task(engine)
     with engine.begin() as conn:
         conn.execute(
-            update(project)
-            .where(project.c.project_id == project_id)
+            update(task)
+            .where(task.c.task_id == task_id)
             .values(owner_user_id=owner_id)
         )
-    return project_id, scope_id
+    return task_id, scope_id
 
 
 def _plan_walk(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     *,
     steering: str,
@@ -285,13 +285,13 @@ def _plan_walk(
         grouping_facets=None,
         steering_mode=steering,
     )
-    plan_id = _insert_plan_row(engine, project_id=project_id, scope_id=scope_id, plan=plan)
+    plan_id = _insert_plan_row(engine, task_id=task_id, scope_id=scope_id, plan=plan)
     return plan, plan_id
 
 
 def _run_walk(
     engine: Engine,
-    project_id: uuid.UUID,
+    task_id: uuid.UUID,
     scope_id: uuid.UUID,
     plan: Any,
     plan_id: uuid.UUID,
@@ -301,7 +301,7 @@ def _run_walk(
     """Run one fixture walk through the real runner seam."""
     return run_plan(
         engine,
-        project_id=project_id,
+        task_id=task_id,
         evidence_scope_id=scope_id,
         plan=plan,
         plan_id=plan_id,
@@ -312,11 +312,11 @@ def _run_walk(
     )
 
 
-def _cleanup(engine: Engine, project_id: uuid.UUID | None) -> None:
+def _cleanup(engine: Engine, task_id: uuid.UUID | None) -> None:
     """Delete committed fixture data after a streaming test."""
-    if project_id is not None:
+    if task_id is not None:
         with engine.begin() as conn:
-            delete_project_data(conn, project_id)
+            delete_task_data(conn, task_id)
 
 
 def _persisted(items: list[_SseItem]) -> list[_SseItem]:
@@ -344,20 +344,20 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
     """Replay rebuilds the same durable narrative and cursors select its exact suffix."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, scope_id = _owned_seed(engine, api.owner_id)
-                plan, plan_id = _plan_walk(engine, project_id, scope_id, steering="unattended")
+                task_id, scope_id = _owned_seed(engine, api.owner_id)
+                plan, plan_id = _plan_walk(engine, task_id, scope_id, steering="unattended")
                 outcome = await asyncio.to_thread(
-                    _run_walk, engine, project_id, scope_id, plan, plan_id
+                    _run_walk, engine, task_id, scope_id, plan, plan_id
                 )
                 assert outcome.status == "succeeded"
 
-                first_stream = await api.open_stream(project_id)
+                first_stream = await api.open_stream(task_id)
                 first = _persisted(await first_stream.collect_until(_finished))
                 await first_stream.aclose()
-                second_stream = await api.open_stream(project_id)
+                second_stream = await api.open_stream(task_id)
                 second = _persisted(await second_stream.collect_until(_finished))
                 await second_stream.aclose()
 
@@ -372,13 +372,13 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                 with engine.connect() as conn:
                     started = sum(
                         event["event_type"] == "run.started"
-                        for event in events.read(conn, project_id)
+                        for event in events.read(conn, task_id)
                     )
                 assert sum(item.event == "stage.started" for item in first) == started
 
                 cursor = first[len(first) // 2].sequence
                 assert cursor is not None
-                suffix_stream = await api.open_stream(project_id, cursor=cursor)
+                suffix_stream = await api.open_stream(task_id, cursor=cursor)
                 suffix = _persisted(await suffix_stream.collect_until(_finished))
                 await suffix_stream.aclose()
                 assert [(item.sequence, item.event, item.data) for item in suffix] == [
@@ -387,7 +387,7 @@ def test_sse_replay_idempotence_and_cursor_suffix(engine: Engine, tmp_path: Path
                     if _sequence(item) > cursor
                 ]
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -398,7 +398,7 @@ def test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences(
     """A stream crossing its snapshot cutoff observes every mapped durable event once."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         original = runner_module._run_step_attempt
         entered = threading.Event()
 
@@ -410,25 +410,25 @@ def test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences(
         monkeypatch.setattr(runner_module, "_run_step_attempt", slow_attempt)
         try:
             async with _api_session(tmp_path) as api:
-                project_id, scope_id = _owned_seed(engine, api.owner_id)
-                plan, plan_id = _plan_walk(engine, project_id, scope_id, steering="unattended")
+                task_id, scope_id = _owned_seed(engine, api.owner_id)
+                plan, plan_id = _plan_walk(engine, task_id, scope_id, steering="unattended")
                 walk = asyncio.create_task(
-                    asyncio.to_thread(_run_walk, engine, project_id, scope_id, plan, plan_id)
+                    asyncio.to_thread(_run_walk, engine, task_id, scope_id, plan, plan_id)
                 )
                 assert await asyncio.to_thread(entered.wait, 2.0)
-                stream = await api.open_stream(project_id)
+                stream = await api.open_stream(task_id)
                 observed = _persisted(await stream.collect_until(_finished, timeout=10.0))
                 await stream.aclose()
                 assert (await walk).status == "succeeded"
 
                 with engine.connect() as conn:
-                    rows = events.read(conn, project_id)
+                    rows = events.read(conn, task_id)
                     from policy_atlas.api.routers import sse
 
                     expected = [
                         frame["sequence"]
                         for frame in sse._map_rows(
-                            conn, project_id=project_id, rows=rows, through=None
+                            conn, task_id=task_id, rows=rows, through=None
                         )
                     ]
                 observed_ids = [_sequence(item) for item in observed]
@@ -436,7 +436,7 @@ def test_sse_backlog_to_tail_has_no_duplicate_or_missing_mapped_sequences(
                 assert len(observed_ids) == len(set(observed_ids))
                 assert set(observed_ids) == set(expected)
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -462,18 +462,18 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
     """A parked replay ends pending; after continuation it replays pending then resolved."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, scope_id = _owned_seed(engine, api.owner_id)
-                plan, plan_id = _plan_walk(engine, project_id, scope_id, steering="frequent")
+                task_id, scope_id = _owned_seed(engine, api.owner_id)
+                plan, plan_id = _plan_walk(engine, task_id, scope_id, steering="frequent")
                 parked = await asyncio.to_thread(
-                    _run_walk, engine, project_id, scope_id, plan, plan_id, io=_ParkOnceIO()
+                    _run_walk, engine, task_id, scope_id, plan, plan_id, io=_ParkOnceIO()
                 )
                 assert parked.status == "paused"
                 assert parked.capability_run_id is not None
 
-                stream = await api.open_stream(project_id)
+                stream = await api.open_stream(task_id)
                 before = _persisted(
                     await stream.collect_until(
                         lambda item: item.event == "run.status"
@@ -491,7 +491,7 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                 answer = await asyncio.to_thread(
                     continuation.answer_check_in,
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     check_in_id=check_in_id,
                     response={"kind": "option", "option_id": "continue"},
                     actor=api.owner_id,
@@ -499,7 +499,7 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                 claim = await asyncio.to_thread(
                     continuation.claim_continuation,
                     engine,
-                    project_id=project_id,
+                    task_id=task_id,
                     capability_run_id=answer.capability_run_id,
                 )
                 assert claim is not None
@@ -507,14 +507,14 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                     await asyncio.to_thread(
                         continuation.execute_continuation,
                         engine,
-                        project_id=project_id,
+                        task_id=task_id,
                         capability_run_id=answer.capability_run_id,
                         backends=_runner_backends(),
                         io=NullIO(),
                     )
                 ).status == "succeeded"
 
-                history_stream = await api.open_stream(project_id)
+                history_stream = await api.open_stream(task_id)
                 history = _persisted(await history_stream.collect_until(_finished, timeout=10.0))
                 await history_stream.aclose()
                 pending_index = next(
@@ -533,50 +533,50 @@ def test_sse_parked_pending_then_resolved_history(engine: Engine, tmp_path: Path
                 )
                 assert pending_index < resolved_index
                 response = await api.client.get(
-                    f"/api/v1/projects/{project_id}/check-ins", headers=api.owner_headers
+                    f"/api/v1/tasks/{task_id}/check-ins", headers=api.owner_headers
                 )
                 assert response.status_code == 200
                 assert response.json()["data"] == []
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
 
 def test_sse_idle_stream_emits_a_heartbeat(engine: Engine, tmp_path: Path) -> None:
-    """The injectable heartbeat interval produces an SSE comment for an idle project."""
+    """The injectable heartbeat interval produces an SSE comment for an idle task."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path, heartbeat_seconds=0.05) as api:
-                project_id, _ = _owned_seed(engine, api.owner_id)
-                stream = await api.open_stream(project_id)
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                stream = await api.open_stream(task_id)
                 item = await stream.next(timeout=1.0)
                 await stream.aclose()
                 assert item.comment == "keep-alive"
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
 
 def test_sse_requires_authentication_and_owner_scope(engine: Engine, tmp_path: Path) -> None:
-    """The stream rejects missing credentials and hides another owner's project."""
+    """The stream rejects missing credentials and hides another owner's task."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, _ = _owned_seed(engine, api.owner_id)
-                unauthenticated = await api.client.get(f"/api/v1/projects/{project_id}/events")
+                task_id, _ = _owned_seed(engine, api.owner_id)
+                unauthenticated = await api.client.get(f"/api/v1/tasks/{task_id}/events")
                 cross_owner = await api.client.get(
-                    f"/api/v1/projects/{project_id}/events", headers=api.other_headers
+                    f"/api/v1/tasks/{task_id}/events", headers=api.other_headers
                 )
                 assert unauthenticated.status_code == 401
                 assert cross_owner.status_code == 404
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())
 
@@ -585,28 +585,28 @@ def test_sse_tick_is_ephemeral_and_has_no_cursor_id(engine: Engine, tmp_path: Pa
     """A liveness tick reaches a live stream without adding an event-log row."""
 
     async def exercise() -> None:
-        project_id: uuid.UUID | None = None
+        task_id: uuid.UUID | None = None
         try:
             async with _api_session(tmp_path) as api:
-                project_id, _ = _owned_seed(engine, api.owner_id)
+                task_id, _ = _owned_seed(engine, api.owner_id)
                 with engine.connect() as conn:
                     before = conn.execute(
-                        select(event_log.c.event_id).where(event_log.c.project_id == project_id)
+                        select(event_log.c.event_id).where(event_log.c.task_id == task_id)
                     ).all()
-                stream = await api.open_stream(project_id)
+                stream = await api.open_stream(task_id)
                 await asyncio.sleep(0.02)
-                tick_hub.publish(project_id, stage="acquire", note="Test tick")
+                tick_hub.publish(task_id, stage="acquire", note="Test tick")
                 item = await stream.next(timeout=1.0)
                 await stream.aclose()
                 with engine.connect() as conn:
                     after = conn.execute(
-                        select(event_log.c.event_id).where(event_log.c.project_id == project_id)
+                        select(event_log.c.event_id).where(event_log.c.task_id == task_id)
                     ).all()
                 assert item.event == "tick"
                 assert item.sequence is None
                 assert item.data is not None and item.data["note"] == "Test tick"
                 assert after == before
         finally:
-            _cleanup(engine, project_id)
+            _cleanup(engine, task_id)
 
     asyncio.run(exercise())

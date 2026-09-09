@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useEvidence, useFindings, useLandscape, useProject, useSourceDossier } from "../api/queries";
+import { useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
@@ -36,10 +36,10 @@ const STATUS_FILTERS = [
 
 /** Sources: collection-true server filters and a URL-addressable source dossier. */
 export function SourcesView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  const landscape = useLandscape(projectId);
-  useDocumentTitle(project.data?.name, "Sources");
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  const landscape = useLandscape(taskId);
+  useDocumentTitle(task.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
   const statusFilter =
@@ -68,13 +68,13 @@ export function SourcesView() {
     (theme): theme is typeof theme & { theme_id: string } => Boolean(theme.theme_id),
   );
   // Evidence-type filter options come from the landscape distribution — the
-  // same closed set the classification wrote for this project.
+  // same closed set the classification wrote for this task.
   const evidenceTypeOptions = Object.keys(landscape.data?.evidence_types ?? {}).sort();
   // No explicit sort → the relevance spectrum, descending (owner default:
   // confidently relevant → uncertain → confidently irrelevant).
   const effectiveSort = sortField ?? "relevance";
   const effectiveOrder = sortField !== null ? sortOrder : "desc";
-  const evidence = useEvidence(projectId, {
+  const evidence = useEvidence(taskId, {
     page,
     page_size: 50,
     status: statusFilter === "all" ? undefined : [statusFilter],
@@ -88,8 +88,8 @@ export function SourcesView() {
     year_from: yearFrom,
     year_to: yearTo,
   });
-  const dossier = useSourceDossier(projectId, sourceId);
-  const findings = useFindings(projectId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
+  const dossier = useSourceDossier(taskId, sourceId);
+  const findings = useFindings(taskId, sourceId ? { page_size: 200, source_id: sourceId } : undefined);
   const totalPages = evidence.data === undefined
     ? 0
     : Math.ceil(evidence.data.pagination.total_items / evidence.data.pagination.page_size);

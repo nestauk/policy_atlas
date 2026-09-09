@@ -12,23 +12,23 @@ type PlanDraft = components["schemas"]["PlanDraft"];
  * document, or start the search. Local plan edits apply on start, not on each save.
  */
 export function PlanCard({
-  projectId,
+  taskId,
   runActive,
   started = false,
   onReviewPlan,
   overlay = {},
   onOverlayApplied,
 }: {
-  projectId: string;
+  taskId: string;
   runActive: boolean;
   started?: boolean;
   onReviewPlan?: () => void;
   overlay?: PlanOverlay;
   onOverlayApplied?: () => void;
 }) {
-  const planQuery = usePlan(projectId);
+  const planQuery = usePlan(taskId);
   const { start, startNotice, disabled, label } = usePlanStart({
-    projectId,
+    taskId,
     overlay,
     runActive,
     onStarted: onOverlayApplied,

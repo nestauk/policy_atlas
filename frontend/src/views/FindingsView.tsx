@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 
 import type { components } from "../api/gen/types";
-import { useFindings, useGroups, useProject } from "../api/queries";
+import { useFindings, useGroups, useTask } from "../api/queries";
 import { errorCode } from "../lib/errors";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
@@ -198,13 +198,13 @@ function FindingRow({
   showKind,
   expanded,
   onToggle,
-  projectId,
+  taskId,
 }: {
   finding: FindingOut;
   showKind: boolean;
   expanded: boolean;
   onToggle: () => void;
-  projectId: string;
+  taskId: string;
 }) {
   const group = groupLabel(finding);
   const directionLabel =
@@ -268,7 +268,7 @@ function FindingRow({
         </td>
         <td className="max-w-[220px] px-3 py-3 text-body leading-snug">
           <Link
-            to={`/projects/${projectId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
+            to={`/tasks/${taskId}/sources/all?source=${encodeURIComponent(finding.source_id)}`}
             className="text-grey hover:text-blue hover:underline"
           >
             {scrub(finding.source_title)}
@@ -299,22 +299,22 @@ function FindingRow({
  * are server-side and URL-addressable (`?profile=`, `?facet=` + `?group=`).
  */
 export function FindingsView() {
-  const { projectId = "" } = useParams();
-  const project = useProject(projectId);
-  useDocumentTitle(project.data?.name, "Findings");
+  const { taskId = "" } = useParams();
+  const task = useTask(taskId);
+  useDocumentTitle(task.data?.name, "Findings");
   const [searchParams, setSearchParams] = useSearchParams();
   const profileParam = searchParams.get("profile");
   const profile = profileParam === "iof" || profileParam === "icf" ? profileParam : undefined;
   const facet = searchParams.get("facet") ?? undefined;
   const group = searchParams.get("group") ?? undefined;
 
-  const findings = useFindings(projectId, {
+  const findings = useFindings(taskId, {
     page_size: 200,
     profile,
     facet,
     group: group,
   });
-  const groups = useGroups(projectId);
+  const groups = useGroups(taskId);
   const [open, setOpen] = useState<string | null>(null);
 
   const setParam = (key: string, value: string | null) => {
@@ -472,7 +472,7 @@ export function FindingsView() {
                       onToggle={() =>
                         setOpen(open === finding.finding_id ? null : finding.finding_id)
                       }
-                      projectId={projectId}
+                      taskId={taskId}
                     />
                   </Fragment>
                 ))}

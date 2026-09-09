@@ -8,7 +8,7 @@ import * as queries from "../api/queries";
 import { NewTaskView } from "./NewTaskView";
 
 vi.mock("../api/queries", () => ({
-  usePortfolios: vi.fn(),
+  useProjects: vi.fn(),
 }));
 
 vi.mock("../api/mutations", () => ({
@@ -34,8 +34,8 @@ beforeEach(() => {
       typeof mutations.useCreateTask
     >,
   );
-  vi.mocked(queries.usePortfolios).mockReturnValue(
-    { data: { data: [] } } as unknown as ReturnType<typeof queries.usePortfolios>,
+  vi.mocked(queries.useProjects).mockReturnValue(
+    { data: { data: [] } } as unknown as ReturnType<typeof queries.useProjects>,
   );
 });
 
@@ -67,14 +67,14 @@ describe("NewTaskView — capability step", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps a project preset when opened from a project, and still starts on the capability picker", async () => {
+  it("keeps a task preset when opened from a task, and still starts on the capability picker", async () => {
     const user = userEvent.setup();
-    vi.mocked(queries.usePortfolios).mockReturnValue(
+    vi.mocked(queries.useProjects).mockReturnValue(
       {
         data: {
           data: [
             {
-              portfolio_id: "portfolio-1",
+              project_id: "project-1",
               name: "Housing",
               description: null,
               created_at: "2026-01-01T00:00:00Z",
@@ -82,14 +82,14 @@ describe("NewTaskView — capability step", () => {
             },
           ],
         },
-      } as unknown as ReturnType<typeof queries.usePortfolios>,
+      } as unknown as ReturnType<typeof queries.useProjects>,
     );
-    renderNewTask("/new?portfolio=portfolio-1");
+    renderNewTask("/new?project=project-1");
     expect(
       screen.getByRole("heading", { name: "What would you like to do?" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Evidence search/ }));
-    expect(screen.getByLabelText(/Add to a project/)).toHaveTextContent("Housing");
+    expect(screen.getByLabelText(/Add to a task/)).toHaveTextContent("Housing");
   });
 
   it("shows the capability-picker eyebrow and prompt", () => {
@@ -104,7 +104,7 @@ describe("NewTaskView — capability step", () => {
 describe("NewTaskView — question step", () => {
   it("disables Send while the box is empty and enables it once text is typed", async () => {
     const user = userEvent.setup();
-    renderNewTask("/new?capability=evidence_base");
+    renderNewTask("/new?capability=evidence_search");
     const send = screen.getByRole("button", { name: "Start" });
     expect(send).toBeDisabled();
     await user.type(screen.getByLabelText("Your question"), "Hello");
@@ -113,7 +113,7 @@ describe("NewTaskView — question step", () => {
 
   it("submits on Enter but not on Shift+Enter", async () => {
     const user = userEvent.setup();
-    renderNewTask("/new?capability=evidence_base");
+    renderNewTask("/new?capability=evidence_search");
     const textarea = screen.getByLabelText("Your question");
     await user.type(textarea, "What works for X?");
 
@@ -124,30 +124,30 @@ describe("NewTaskView — question step", () => {
     expect(mutate).toHaveBeenCalledOnce();
     expect(mutate.mock.calls[0][0]).toMatchObject({
       question: "What works for X?",
-      portfolioId: null,
+      projectId: null,
     });
   });
 
   it("states the Enter / Shift+Enter key hint", () => {
-    renderNewTask("/new?capability=evidence_base");
+    renderNewTask("/new?capability=evidence_search");
     expect(screen.getByText(/Shift\+Enter/)).toBeInTheDocument();
   });
 });
 
-describe("NewTaskView — project selector", () => {
-  it("has no project selector when there are no projects", () => {
-    renderNewTask("/new?capability=evidence_base");
-    expect(screen.queryByLabelText(/Add to a project/)).not.toBeInTheDocument();
+describe("NewTaskView — task selector", () => {
+  it("has no task selector when there are no tasks", () => {
+    renderNewTask("/new?capability=evidence_search");
+    expect(screen.queryByLabelText(/Add to a task/)).not.toBeInTheDocument();
   });
 
-  it("offers the project selector when a project exists, and passes the choice to mutate", async () => {
+  it("offers the task selector when a task exists, and passes the choice to mutate", async () => {
     const user = userEvent.setup();
-    vi.mocked(queries.usePortfolios).mockReturnValue(
+    vi.mocked(queries.useProjects).mockReturnValue(
       {
         data: {
           data: [
             {
-              portfolio_id: "portfolio-1",
+              project_id: "project-1",
               name: "Housing",
               description: null,
               created_at: "2026-01-01T00:00:00Z",
@@ -155,11 +155,11 @@ describe("NewTaskView — project selector", () => {
             },
           ],
         },
-      } as unknown as ReturnType<typeof queries.usePortfolios>,
+      } as unknown as ReturnType<typeof queries.useProjects>,
     );
-    renderNewTask("/new?capability=evidence_base");
+    renderNewTask("/new?capability=evidence_search");
 
-    await user.click(screen.getByLabelText(/Add to a project/));
+    await user.click(screen.getByLabelText(/Add to a task/));
     await user.click(screen.getByRole("option", { name: "Housing" }));
     await user.type(screen.getByLabelText("Your question"), "A question");
     await user.click(screen.getByRole("button", { name: "Start" }));
@@ -167,7 +167,7 @@ describe("NewTaskView — project selector", () => {
     expect(mutate).toHaveBeenCalledOnce();
     expect(mutate.mock.calls[0][0]).toMatchObject({
       question: "A question",
-      portfolioId: "portfolio-1",
+      projectId: "project-1",
     });
   });
 });

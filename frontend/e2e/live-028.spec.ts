@@ -37,7 +37,7 @@ function log(message: string) {
 
 async function apiStatus(page: Page): Promise<number> {
   try {
-    const response = await page.request.get(`${API}/api/v1/projects`, {
+    const response = await page.request.get(`${API}/api/v1/tasks`, {
       headers: { Authorization: `Bearer ${process.env.LIVE_TOKEN ?? ""}` },
       timeout: 2_000,
     });
@@ -207,12 +207,12 @@ async function driveToReady(page: Page, thoroughness: string, maxSteps = 8) {
   await expect(page.getByTestId("plan-ready-actions")).toBeVisible({ timeout: 30_000 });
 }
 
-async function newProject(page: Page, name: string): Promise<string> {
+async function newTask(page: Page, name: string): Promise<string> {
   await page.goto("/");
-  await page.getByRole("button", { name: "New project" }).first().click();
+  await page.getByRole("button", { name: "New task" }).first().click();
   await page.getByLabel("Project name").fill(name);
-  await page.getByRole("button", { name: "Create project" }).click();
-  await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+  await page.getByRole("button", { name: "Create task" }).click();
+  await expect(page).toHaveURL(/\/tasks\/[^/]+$/);
   return page.url();
 }
 
@@ -221,7 +221,7 @@ test.describe.serial("task 028 live check", () => {
 
   test("leg A · Quick look, unattended, end to end", async ({ page }) => {
     test.setTimeout(45 * 60 * 1000);
-    const projectUrl = await newProject(page, "028 live leg A");
+    const taskUrl = await newTask(page, "028 live leg A");
 
     // Pre-run the workspace is a centred single-column chat: no rail toggle.
     await expect(page.getByRole("button", { name: /collapse the planning rail/i })).toHaveCount(0);
@@ -340,9 +340,9 @@ test.describe.serial("task 028 live check", () => {
     await shot(page, "a-11-sections-sidebar");
 
     // Ordinary-section budget: quick look = 3 ordinary + structural.
-    const projectId = new URL(projectUrl).pathname.split("/").at(-1) ?? "";
+    const taskId = new URL(taskUrl).pathname.split("/").at(-1) ?? "";
     const token = process.env.LIVE_TOKEN ?? "";
-    const artefact = await page.request.get(`${API}/api/v1/projects/${projectId}/artefact`, {
+    const artefact = await page.request.get(`${API}/api/v1/tasks/${taskId}/artefact`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(artefact.status()).toBe(200);
@@ -375,8 +375,8 @@ test.describe.serial("task 028 live check — leg B", () => {
 
   test("leg B · Standard review, frequent (requested in words)", async ({ page }) => {
     test.setTimeout(60 * 60 * 1000);
-    const projectUrl = await newProject(page, "028 live leg B");
-    const projectId = new URL(projectUrl).pathname.split("/").at(-1) ?? "";
+    const taskUrl = await newTask(page, "028 live leg B");
+    const taskId = new URL(taskUrl).pathname.split("/").at(-1) ?? "";
 
     // Compound opening (fast path): several parts answered in one message,
     // check-ins REQUESTED IN WORDS (standard preset per the contract pin).
@@ -419,7 +419,7 @@ test.describe.serial("task 028 live check — leg B", () => {
      *  invisibly). Returns null when nothing is pending. */
     const pendingCheckIn = async (): Promise<Record<string, unknown> | null> => {
       const response = await page.request
-        .get(`${API}/api/v1/projects/${projectId}/check-ins?status=pending`, {
+        .get(`${API}/api/v1/tasks/${taskId}/check-ins?status=pending`, {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 5_000,
         })
@@ -580,7 +580,7 @@ test.describe.serial("task 028 live check — leg B", () => {
 
     // The edited section title made it into the written artefact.
     if (sectionEdited) {
-      const artefact = await page.request.get(`${API}/api/v1/projects/${projectId}/artefact`, {
+      const artefact = await page.request.get(`${API}/api/v1/tasks/${taskId}/artefact`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       expect(artefact.status()).toBe(200);
@@ -594,14 +594,14 @@ test.describe.serial("task 028 live check — leg B", () => {
     // collapsed ordinary section's first-sentence fallback UNMARKED (owner
     // ruling, batch 12 — the checked/fallback distinction is provenance for
     // reviewers, not users). Mirrors ArtefactOutline.tsx's sectionSummary().
-    const projects = await page.request.get(`${API}/api/v1/projects?page_size=50`, {
+    const tasks = await page.request.get(`${API}/api/v1/tasks?page_size=50`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const rows = ((await projects.json()).data ?? []) as Array<Record<string, unknown>>;
+    const rows = ((await tasks.json()).data ?? []) as Array<Record<string, unknown>>;
     for (const row of rows) {
-      if (row.project_id === projectId) continue;
+      if (row.task_id === taskId) continue;
       const artefact = await page.request.get(
-        `${API}/api/v1/projects/${row.project_id}/artefact`,
+        `${API}/api/v1/tasks/${row.task_id}/artefact`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (artefact.status() !== 200) continue;
@@ -621,10 +621,10 @@ test.describe.serial("task 028 live check — leg B", () => {
       const line = prose.split("\n").find((candidate) => candidate.trim() !== "") ?? "";
       const sentence = /^.*?[.!?](?=\s|$)/.exec(line.trim())?.[0] ?? line.trim();
       if (sentence === "") continue;
-      await page.goto(`/projects/${row.project_id}/evidence-base`);
+      await page.goto(`/tasks/${row.task_id}/evidence-search`);
       await expect(page.getByText(sentence, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
       await expect(page.getByText(/no checked summary/)).toHaveCount(0);
-      log(`legacy artefact ${row.project_id} renders the fallback unmarked`);
+      log(`legacy artefact ${row.task_id} renders the fallback unmarked`);
       await shot(page, "b-13-legacy-fallback");
       break;
     }

@@ -7,7 +7,7 @@ import { FindingsView } from "./views/FindingsView";
 import { HistoryView } from "./views/HistoryView";
 import { LifecycleRoute, RedirectToPath } from "./views/LifecycleRoute";
 import { NewTaskView } from "./views/NewTaskView";
-import { PortfolioDetailView, PortfoliosView } from "./views/PortfoliosView";
+import { ProjectDetailView, ProjectsView } from "./views/ProjectsView";
 import { ShareView } from "./views/ShareView";
 import { SourcesLayout } from "./views/SourcesLayout";
 import { SourcesView } from "./views/SourcesView";
@@ -41,17 +41,17 @@ export const router = createBrowserRouter([
     children: [
       { path: "/", element: <TasksListView /> },
       { path: "/new", element: <NewTaskView /> },
-      { path: "/portfolios", element: <PortfoliosView /> },
-      { path: "/portfolios/:portfolioId", element: <PortfolioDetailView /> },
+      { path: "/projects", element: <ProjectsView /> },
+      { path: "/projects/:projectId", element: <ProjectDetailView /> },
       { path: "/privacy", element: <PrivacyView /> },
       { path: "/terms", element: <TermsView /> },
 
       // The task lifecycle: Plan · Results · Sources · Share · History.
       // Every stage past Plan is gated on run state, so a locked stage is
       // unreachable by URL as well as by click.
-      { path: "/projects/:projectId", element: <WorkspaceView /> },
+      { path: "/tasks/:taskId", element: <WorkspaceView /> },
       {
-        path: "/projects/:projectId/results",
+        path: "/tasks/:taskId/results",
         element: (
           <LifecycleRoute tab="results">
             <ArtefactView />
@@ -59,7 +59,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "/projects/:projectId/sources",
+        path: "/tasks/:taskId/sources",
         element: (
           <LifecycleRoute tab="sources">
             <SourcesLayout />
@@ -80,7 +80,7 @@ export const router = createBrowserRouter([
         ],
       },
       {
-        path: "/projects/:projectId/share",
+        path: "/tasks/:taskId/share",
         element: (
           <LifecycleRoute tab="share">
             <ShareView />
@@ -88,7 +88,7 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: "/projects/:projectId/history",
+        path: "/tasks/:taskId/history",
         element: (
           <LifecycleRoute tab="history">
             <HistoryView />
@@ -99,10 +99,10 @@ export const router = createBrowserRouter([
       // Retired paths. Every URL that was bookmarkable before the reshape
       // still resolves — a reorganisation is not a reason to break someone's
       // saved link.
-      { path: "/projects/:projectId/evidence-base", element: <RedirectToPath suffix="/results" /> },
-      { path: "/projects/:projectId/findings", element: <RedirectToPath suffix="/sources/findings" /> },
-      { path: "/projects/:projectId/landscape", element: <RedirectToPath suffix="/sources/landscape" /> },
-      { path: "/projects/:projectId/decisions", element: <RedirectToPath suffix="/history" /> },
+      { path: "/tasks/:taskId/evidence-search", element: <RedirectToPath suffix="/results" /> },
+      { path: "/tasks/:taskId/findings", element: <RedirectToPath suffix="/sources/findings" /> },
+      { path: "/tasks/:taskId/landscape", element: <RedirectToPath suffix="/sources/landscape" /> },
+      { path: "/tasks/:taskId/decisions", element: <RedirectToPath suffix="/history" /> },
 
       // Catch-all: an unknown URL still gets the app chrome and an honest
       // "nothing here" view rather than a router error page.

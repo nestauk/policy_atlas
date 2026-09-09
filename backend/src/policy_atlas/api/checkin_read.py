@@ -63,7 +63,7 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
         render=_render(payload),
         options=options,
         triggers=triggers,
-        bundle=_project_bundle(payload),
+        bundle=_task_bundle(payload),
         segment_reentry_allowed=payload.get("segment_reentry_allowed") is True,
         rerun_component=(
             payload.get("rerun_component")
@@ -76,7 +76,7 @@ def _check_in(row: dict[str, Any], *, decided: bool) -> CheckInOut:
     )
 
 
-def _project_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
+def _task_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
     """Project only the owner-approved display fields from a durable bundle."""
     bundle = payload.get("bundle")
     point = payload.get("steer_point")
@@ -90,7 +90,7 @@ def _project_bundle(payload: dict[str, Any]) -> dict[str, Any] | None:
             if isinstance(bundle.get("sample_titles"), list)
             else [],
         }
-    if point == "evidence_base_coverage":
+    if point == "evidence_search_coverage":
         themes = bundle.get("themes")
         return {"themes": themes if isinstance(themes, list) else []}
     if point == "deepening_selection":

@@ -21,7 +21,7 @@ load_dotenv()
 # The suite is zero-egress by policy (socket-deny) and every live/stub switch
 # keys off these variables — a developer's real backend/.env must never flip
 # a test onto a live code path (task 025 live-check finding: the CLI pin
-# test drove `orchestrate.main` straight into the OpenAI branch). Scrub the
+# test drove `agent.main` straight into the OpenAI branch). Scrub the
 # product-egress keys the .env may carry; DATABASE_URL and friends survive.
 for _egress_key in (
     "OPENAI_API_KEY",

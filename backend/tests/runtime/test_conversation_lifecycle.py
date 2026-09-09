@@ -8,20 +8,20 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.engine import Connection, Engine
 
-from policy_atlas.core.schema import conversation, project
+from policy_atlas.core.schema import conversation, task
 from policy_atlas.runtime.conversation_lifecycle import (
     close_planning_conversation,
     ensure_active_planning_conversation,
 )
 
 
-def _seed_project(conn: Connection) -> uuid.UUID:
-    """Insert the minimum project row required by lifecycle tests."""
-    project_id = uuid.uuid4()
+def _seed_task(conn: Connection) -> uuid.UUID:
+    """Insert the minimum task row required by lifecycle tests."""
+    task_id = uuid.uuid4()
     now = datetime.now(UTC)
     conn.execute(
-        project.insert().values(
-            project_id=project_id,
+        task.insert().values(
+            task_id=task_id,
             created_at=now,
             name="Conversation lifecycle test",
             question="What works?",
@@ -31,24 +31,24 @@ def _seed_project(conn: Connection) -> uuid.UUID:
             owner_user_id="test-owner",
         )
     )
-    return project_id
+    return task_id
 
 
 def test_ensure_reuses_active_conversation_and_close_is_idempotent(conn: Connection) -> None:
     """Active planning conversations are reused, closed, then cleanly succeeded."""
-    project_id = _seed_project(conn)
+    task_id = _seed_task(conn)
     created_at = datetime.now(UTC)
 
     first_id = ensure_active_planning_conversation(
-        conn, project_id=project_id, now=created_at
+        conn, task_id=task_id, now=created_at
     )
     assert ensure_active_planning_conversation(
-        conn, project_id=project_id, now=datetime.now(UTC)
+        conn, task_id=task_id, now=datetime.now(UTC)
     ) == first_id
 
     closed_at = datetime.now(UTC)
-    close_planning_conversation(conn, project_id=project_id, closed_at=closed_at)
-    close_planning_conversation(conn, project_id=project_id, closed_at=datetime.now(UTC))
+    close_planning_conversation(conn, task_id=task_id, closed_at=closed_at)
+    close_planning_conversation(conn, task_id=task_id, closed_at=datetime.now(UTC))
     predecessor = conn.execute(
         select(conversation).where(conversation.c.id == first_id)
     ).one()
@@ -56,12 +56,12 @@ def test_ensure_reuses_active_conversation_and_close_is_idempotent(conn: Connect
     assert predecessor.closed_at == closed_at
 
     successor_id = ensure_active_planning_conversation(
-        conn, project_id=project_id, now=datetime.now(UTC)
+        conn, task_id=task_id, now=datetime.now(UTC)
     )
     assert successor_id != first_id
     active_ids = conn.execute(
         select(conversation.c.id)
-        .where(conversation.c.project_id == project_id)
+        .where(conversation.c.task_id == task_id)
         .where(conversation.c.kind == "planning")
         .where(conversation.c.status == "active")
     ).scalars().all()
@@ -80,20 +80,20 @@ def test_finish_run_closes_planning_conversation_in_terminal_transaction(
     """
     from policy_atlas.core.schema import capability_run, event_log, evidence_scope
     from policy_atlas.runtime.runner import _finish_run
-    from tests.helpers import delete_project_data
+    from tests.helpers import delete_task_data
 
-    project_id = None
+    task_id = None
     try:
         with engine.begin() as conn:
-            project_id = _seed_project(conn)
+            task_id = _seed_task(conn)
             conversation_id = ensure_active_planning_conversation(
-                conn, project_id=project_id, now=datetime.now(UTC)
+                conn, task_id=task_id, now=datetime.now(UTC)
             )
             scope_id = uuid.uuid4()
             conn.execute(
                 evidence_scope.insert().values(
                     evidence_scope_id=scope_id,
-                    project_id=project_id,
+                    task_id=task_id,
                     intent="closure test",
                     context={},
                     created_at=datetime.now(UTC),
@@ -105,9 +105,9 @@ def test_finish_run_closes_planning_conversation_in_terminal_transaction(
                 conn.execute(
                     capability_run.insert().values(
                         capability_run_id=run_id,
-                        project_id=project_id,
+                        task_id=task_id,
                         evidence_scope_id=scope_id,
-                        capability="evidence_base",
+                        capability="evidence_search",
                         plan_id=uuid.uuid4(),
                         plan_version=1,
                         status="running",
@@ -125,7 +125,7 @@ def test_finish_run_closes_planning_conversation_in_terminal_transaction(
             [],
             status="failed",
             capability_run_id=failed_run_id,
-            project_id=project_id,
+            task_id=task_id,
         )
         with engine.connect() as conn:
             row = conn.execute(
@@ -139,7 +139,7 @@ def test_finish_run_closes_planning_conversation_in_terminal_transaction(
             [],
             status="succeeded",
             capability_run_id=succeeded_run_id,
-            project_id=project_id,
+            task_id=task_id,
         )
         with engine.connect() as conn:
             closed = conn.execute(
@@ -154,13 +154,13 @@ def test_finish_run_closes_planning_conversation_in_terminal_transaction(
             ).scalar_one()
             finished_events = conn.execute(
                 select(event_log.c.event_id)
-                .where(event_log.c.project_id == project_id)
+                .where(event_log.c.task_id == task_id)
                 .where(event_log.c.event_type == "run.finished")
             ).scalars().all()
         assert closed.status == "closed"
         assert closed.closed_at == run_ended_at
         assert len(finished_events) == 2
     finally:
-        if project_id is not None:
+        if task_id is not None:
             with engine.begin() as conn:
-                delete_project_data(conn, project_id)
+                delete_task_data(conn, task_id)
