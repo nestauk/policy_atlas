@@ -1249,6 +1249,36 @@ def test_binary_content_is_reason_coded_not_chunked() -> None:
     assert all("\x00" not in c["content"] for c in result["chunks"])
 
 
+def test_javascript_wall_is_blocked_by_host_not_full_text() -> None:
+    """Issue #74: a publisher's "JavaScript is disabled" page is 284 characters, so
+    it cleared the 200-character thin-text floor and was stored as the document's
+    full text (6 of 21 documents "read in full" in the options-scoping checks were
+    this page). The spec's rule is that a bot block is ``blocked_by_host`` and
+    never full text."""
+    wall = (
+        b"<html><body><article><p>JavaScript is disabled in your browser. "
+        b"Please enable JavaScript to proceed. A required part of this site "
+        b"couldn't load. This may be due to a browser extension, network issue, "
+        b"or browser setting. Please check your connection and try again.</p>"
+        b"</article></body></html>"
+    )
+    assert parse_and_segment(wall, "text/html", thin_min=200) == {
+        "status": "error",
+        "reason": "blocked_by_host",
+    }
+
+    # A real document that happens to discuss JavaScript is untouched: the marker
+    # scan only applies below the stub-page ceiling.
+    real = (
+        b"<html><body><article><p>JavaScript is disabled by default in the "
+        b"departmental browser build, which this evaluation treats as a "
+        b"digital-access barrier.</p><p>"
+        + b"The programme measured take-up across every local authority. " * 60
+        + b"</p></article></body></html>"
+    )
+    assert parse_and_segment(real, "text/html", thin_min=200)["status"] == "ok"
+
+
 def test_success_metadata_complete(ingested_corpus: CorpusFixture, engine: Engine) -> None:
     task_id, _, _, _, _ = ingested_corpus
     with engine.connect() as conn:

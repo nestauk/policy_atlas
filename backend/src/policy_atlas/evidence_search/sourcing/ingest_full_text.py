@@ -125,6 +125,23 @@ FAILURE_REASONS = (
 # a JPEG routed to the plain path and its NUL bytes killed the whole run at INSERT).
 _NON_TEXT_TYPE_PREFIXES = ("image/", "audio/", "video/", "font/", "model/")
 
+# A short page telling the client to enable JavaScript or cookies is the host
+# blocking a bot, not the document — record it as blocked_by_host, never as full
+# text (issue #74: a 284-char "JavaScript is disabled" wall cleared the 200-char
+# thin-text floor and 6 of 21 "read in full" documents were that page). Only
+# consulted below the ceiling, so a real paper that discusses JavaScript is
+# unaffected.
+_STUB_PAGE_CEILING_CHARS = 2000
+_STUB_PAGE_MARKERS = (
+    "javascript is disabled",
+    "javascript is required",
+    "enable javascript",
+    "cookies are disabled",
+    "enable cookies",
+    "checking your browser",
+    "verify you are a human",
+)
+
 _HTTP_STATUS_REASONS = {401: "paywall", 403: "blocked_by_host", 404: "not_found", 410: "not_found"}
 FETCH_FAILURE_REASON_PRIORITY = (
     "paywall",
@@ -745,6 +762,10 @@ def parse_and_segment(body: bytes, content_type: str, thin_min: int) -> dict[str
     if total_chars == 0:
         reason = "no_text_layer" if base_type == "application/pdf" else "empty"
         return {"status": "error", "reason": reason}
+    if total_chars < _STUB_PAGE_CEILING_CHARS:
+        lowered = "\n".join(c["content"] for c in result["chunks"]).lower()
+        if any(marker in lowered for marker in _STUB_PAGE_MARKERS):
+            return {"status": "error", "reason": "blocked_by_host"}
     if total_chars < thin_min:
         return {"status": "error", "reason": "thin_text"}
     return result
