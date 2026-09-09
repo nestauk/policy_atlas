@@ -88,7 +88,10 @@ the adversarial findings A1–A18 and the terms are defined in
 13. [ ] Prompt hashes: three new entries (`task_agent_scoping_v1`, the
         baseline template, the gate sort); the ES Task Agent entry's path
         moved with its byte-identical file, hash unchanged (C14); the ES section proposer changed only if template mode needed
-        it, versioned if so; every other hash unchanged; the ES chain and
+        it, versioned if so; the section writer's prompt is template-keyed
+        with the ES preamble rendering byte-identical messages (owner ruling
+        2026-09-09, contract § Constraints) and its module re-pinned once as a
+        words-only diff; every other hash unchanged; the ES chain and
         the ES's card-based steering behave as before, pinned by the
         existing tests.
 14. [ ] No tests deleted, skipped or weakened without written justification.

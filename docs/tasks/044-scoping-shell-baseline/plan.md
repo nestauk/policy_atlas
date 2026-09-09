@@ -96,7 +96,13 @@ scope, then the plan) updates the scope with `purpose="baseline"` and the new
 `evidence_scope_id` is one-to-one) and `POST /runs` opens the walk on it.
 Tests: first plan, amended plan, rebuild.
 
-S3. **Baseline mode in synthesise** (A7, C7). The supplied-sections path at
+S3. **Baseline mode in synthesise** (A7, C7). *(Amended 2026-09-09 at the
+owner's build-time ruling, contract § Constraints — prompts:)* the section
+writer's system prompt in `synthesis_backend.py` is split into a shared core
+plus a per-template preamble (`report` = today's text, byte-identical when
+assembled; `baseline` = new, its own version string in `baseline_prompt.py`);
+`_section_system_prompt` selects the preamble from the seed's `template`; a
+test pins the ES assembly byte-for-byte. The supplied-sections path at
 `synthesise_scope` (`:5431`, `directive.sections is not None`) already
 bypasses proposal. Baseline mode (`template == "baseline"`): the supplied
 eight `SectionSpec`s (from `baseline_prompt.BASELINE_SECTIONS`, in the ruled
@@ -418,7 +424,10 @@ Gate: `make verify-fast` + `make prompt-guard` + `make drift-check` +
 
 ## Phase 4 — Baseline mode, the walk and the Result view (deliverables 7, 9)
 
-4.1 **Baseline template — `lead`.** Reason: prompt-bearing. `synthesis/
+4.1 **Baseline template — `lead`.** Reason: prompt-bearing. The baseline
+preamble for the template-keyed section writer (owner ruling 2026-09-09) and
+the core/preamble split of the existing text, with the ES byte-identity test;
+plus `synthesis/
 baseline_prompt.py`: the eight `SectionSpec`s with instruction and cap, the
 proposal instruction (bounded, problem-specific), the reasoning labels for
 the key assumption and what is contested, the not-found rule, the Sources

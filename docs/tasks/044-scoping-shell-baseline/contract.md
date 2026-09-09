@@ -685,7 +685,19 @@ Hard gates this slice touches — approval is this contract's sign-off:
   the earlier words-only allowance — the rename touches no prompt text). The ES section proposer's
   prompt changes only if template mode needs a bounded-extras instruction,
   versioned and re-pinned if so (A7). The router and boundary-triage prompts
-  are reused unchanged. Every other pinned hash unchanged.
+  are reused unchanged. **The section writer's system prompt becomes
+  template-keyed** *(owner ruling 2026-09-09, during the build: "For the
+  synthesise, let's go with option 2")*: one writer, one shared core (tools,
+  claim types, anchoring, honesty) plus one short preamble per output kind —
+  the Evidence search report (the current text, so the assembled ES messages
+  are **byte-identical** before and after, pinned by a test) and the baseline
+  (its own version string); the profile and scoping-report preambles arrive
+  with tasks 3 and 5. The `synthesis_backend.py` hash therefore changes once
+  as a words-only re-pin recorded in `verification.md`. Rejected: one prompt
+  with the baseline's rules carried in each section's seed focus (fights the
+  report preamble and does not scale to the later templates); a separate
+  prompt module per template (mirrors the writer). Every other pinned hash
+  unchanged.
 - **Production config:** one environment-variable rename,
   `POLICY_ATLAS_PLANNER_MODEL` → `POLICY_ATLAS_TASK_AGENT_MODEL`, in
   `infra/DEPLOYMENT.md` and the staging environment (approved with this
