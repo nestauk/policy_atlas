@@ -26,7 +26,7 @@ the registry's ``options_scoping`` entry.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -402,8 +402,13 @@ class ScopingPlan(BaseModel):
     your_context: list[YourContextEntry] = Field(default_factory=list)
     entry_branch: Literal["explore"] = "explore"
     # Lax for the same reason ``BaselineConfirmed`` is: the stored payload
-    # carries these as strings.
-    linked_task_ids: list[uuid.UUID] = Field(default_factory=list, strict=False)
+    # carries these as strings. The relaxation must sit on the ITEM type — a
+    # ``strict=False`` on the list field alone leaves the inner UUID strict, and
+    # the 044 live check's first linked plan could not be read back (500 on
+    # ``GET /plan``).
+    linked_task_ids: list[Annotated[uuid.UUID, Field(strict=False)]] = Field(
+        default_factory=list
+    )
     steering_mode: SteeringMode = "moderate"
     steer_point_defaults: list[ScopingSteerPointDefault] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)

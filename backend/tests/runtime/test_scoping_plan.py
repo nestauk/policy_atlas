@@ -335,3 +335,15 @@ def test_a_scoping_payload_round_trips_through_the_registry() -> None:
 def test_an_unknown_capability_is_still_a_typed_error() -> None:
     with pytest.raises(UnknownCapability):
         validate_plan("options_appraisal", {})
+
+
+def test_a_linked_plan_round_trips_through_its_stored_json_payload() -> None:
+    """044 live check: the stored payload carries UUIDs as strings; a strict
+    item type made every linked scoping plan unreadable (500 on ``GET /plan``)."""
+    from policy_atlas.runtime.capability_registry import OPTIONS_SCOPING, validate_plan
+
+    source = uuid.uuid4()
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[source])
+    back = validate_plan(OPTIONS_SCOPING, plan.model_dump(mode="json"))
+    assert isinstance(back, ScopingPlan)
+    assert back.linked_task_ids == [source]
