@@ -12,14 +12,15 @@ from sqlalchemy.engine import Engine
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, runs, task_plan
 from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    AnyPlan,
     capability_of_task,
     compose_plan,
-    expect_task_plan,
     lattice_for,
     validate_plan,
 )
 from policy_atlas.runtime.steering import PausePoint, pause_points
-from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan
+from policy_atlas.runtime.task_plan import ComposedChain
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,10 @@ class ContinuationState:
 
     Args:
         capability_run_id: Identity of the parked capability walk.
-        plan: Version-max approved plan.
+        capability: The owning task's capability — which plan model read the
+            payload, which chain it composed to, and which steering lattice the
+            resumed walk's boundaries use (task 044).
+        plan: Version-max approved plan, of ``capability``'s model.
         plan_id: Persisted plan id.
         plan_version: Persisted plan version.
         plan_row_id: Current plan row id.
@@ -71,7 +75,7 @@ class ContinuationState:
     """
 
     capability_run_id: uuid.UUID
-    plan: TaskPlan
+    plan: AnyPlan
     plan_id: uuid.UUID
     plan_version: int
     plan_row_id: uuid.UUID | None
@@ -90,6 +94,9 @@ class ContinuationState:
     parked_component: str | None
     most_recent_attempted_run_id: uuid.UUID | None
     session_id: uuid.UUID | None
+    # Last, with a default, so the Evidence search constructions in the parity
+    # tests stay as they are; :func:`build` always passes the task's own value.
+    capability: str = EVIDENCE_SEARCH
 
 
 def build(
@@ -162,7 +169,7 @@ def build(
     # and which chain it composes to (C9); it is read inside the connection
     # above rather than guessed from the walk row, because the task row is the
     # single authority (D2).
-    plan = expect_task_plan(validate_plan(capability, plan_data["payload"]))
+    plan = validate_plan(capability, plan_data["payload"])
     chain = compose_plan(capability, plan)
     scoped_events = [
         entry
@@ -285,6 +292,7 @@ def build(
         most_recent = attempts[-1][1]["run_id"] if attempts else None
     return ContinuationState(
         capability_run_id=capability_run_id,
+        capability=capability,
         plan=plan,
         plan_id=plan_data["plan_id"],
         plan_version=plan_data["version"],

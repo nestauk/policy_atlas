@@ -53,6 +53,14 @@ EVIDENCE_SEARCH = "evidence_search"
 #: The options-scoping capability key.
 OPTIONS_SCOPING = "options_scoping"
 
+#: Either capability's plan model. The runner and the continuation reducer are
+#: capability-agnostic *chassis* — they carry a plan without knowing which kind
+#: it is — while almost everything they hand it to is Evidence search code
+#: typed on ``TaskPlan``. Those hand-offs go through :func:`expect_task_plan`,
+#: so a scoping plan reaching an Evidence search path is a loud ``TypeError``
+#: and not a silent wrong answer.
+AnyPlan = TaskPlan | ScopingPlan
+
 
 class UnknownCapability(LookupError):
     """A capability this build has no spec for.
@@ -84,7 +92,7 @@ class CapabilitySpec:
     """
 
     key: str
-    plan_model: type[BaseModel]
+    plan_model: type[AnyPlan]
     compose: Callable[[Any], ComposedChain]
     task_agent_prompt_module: str
     steer_points: frozenset[str]
@@ -137,7 +145,7 @@ def spec_for(capability: str) -> CapabilitySpec:
         ) from None
 
 
-def validate_plan(capability: str, payload: Mapping[str, Any] | Any) -> BaseModel:
+def validate_plan(capability: str, payload: Mapping[str, Any] | Any) -> AnyPlan:
     """Validate a stored plan payload against its capability's model.
 
     Args:
@@ -154,7 +162,7 @@ def validate_plan(capability: str, payload: Mapping[str, Any] | Any) -> BaseMode
     return spec_for(capability).plan_model.model_validate(payload)
 
 
-def compose_plan(capability: str, plan: BaseModel) -> ComposedChain:
+def compose_plan(capability: str, plan: AnyPlan) -> ComposedChain:
     """Compose a validated plan into its capability's component chain.
 
     Args:

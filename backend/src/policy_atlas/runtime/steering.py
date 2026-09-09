@@ -164,6 +164,13 @@ DEEPENING_SELECTION = "deepening_selection"
 FINDING_GROUPS = "finding_groups"
 SYNTHESIS_SHAPE = "synthesis_shape"
 
+# Task 044's options-scoping gate. The NAME lives here beside the Evidence
+# search point names because :data:`_LATTICE_MODE_POLICY` is keyed by name; the
+# POINT itself is registered on the scoping lattice alone
+# (``capability_registry``), so :func:`lattice_policy` answers ``"off"`` for it
+# on an Evidence search walk however the mode table reads (A2).
+BASELINE_CONFIRM = "baseline_confirm"
+
 # Retained for callers/tests that name the existing P3 point directly.
 DEEPENING_SELECTION_STEER_POINT = DEEPENING_SELECTION
 
@@ -180,6 +187,10 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "always",
         FINDING_GROUPS: "always",
         SYNTHESIS_SHAPE: "always",
+        # The baseline gate is structural, not a floor trigger: a scoping walk
+        # stops for the user before any option is generated (D11), so it is
+        # "always" in every attended mode and never "fired".
+        BASELINE_CONFIRM: "always",
     },
     "moderate": {
         SEARCH_REVIEW: "always",
@@ -187,6 +198,7 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "fired",
         FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "always",
+        BASELINE_CONFIRM: "always",
     },
     "minimal": {
         SEARCH_REVIEW: "fired",
@@ -194,6 +206,7 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "fired",
         FINDING_GROUPS: "fired",
         SYNTHESIS_SHAPE: "fired",
+        BASELINE_CONFIRM: "always",
     },
     "unattended": {
         SEARCH_REVIEW: "off",
@@ -201,6 +214,9 @@ _LATTICE_MODE_POLICY: dict[SteeringMode, dict[str, LatticePolicy]] = {
         DEEPENING_SELECTION: "off",
         FINDING_GROUPS: "off",
         SYNTHESIS_SHAPE: "off",
+        # Unattended does not pause; the gate becomes a recorded standing-default
+        # decision at the boundary instead (runner ``_resolve_unattended_boundary``).
+        BASELINE_CONFIRM: "off",
     },
 }
 
@@ -671,7 +687,42 @@ def build_steer_point_options(
         return _groups_options()
     if point == SYNTHESIS_SHAPE:
         return _p4_options()
+    if point == BASELINE_CONFIRM:
+        return baseline_confirm_options()
     raise ValueError(f"unknown steer point: {point!r}")
+
+
+def baseline_confirm_options() -> list[dict[str, Any]]:
+    """Return the two options the options-scoping baseline gate offers (D12).
+
+    Both ids are deliberately distinct from the durable response vocabulary
+    (``continue | adjust | abort | mode_change``, X10): the id names the user's
+    decision, the response names what the walk then does. Neither option
+    carries a delta — the gate does not amend the plan, it ends the walk one
+    way or the other.
+
+    Returns:
+        ``confirm_plan`` (the walk finishes) and ``change_plan`` (the walk ends
+        and the plan stays editable), in that order.
+    """
+    return [
+        {
+            "id": "confirm_plan",
+            "intent": "Confirm the plan",
+            "label": "Confirm plan and build longlist",
+            "description": "Accept the plan as it stands and go on to the longlist.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+        {
+            "id": "change_plan",
+            "intent": "Change the plan",
+            "label": "Change the plan",
+            "description": "Stop here and edit the plan; the baseline you have read is kept.",
+            "delta": {},
+            "requires_user_input": False,
+        },
+    ]
 
 
 def generic_floor_options() -> list[dict[str, Any]]:

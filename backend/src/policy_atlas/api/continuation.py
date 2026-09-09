@@ -30,11 +30,13 @@ from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     capability_of_task,
     compose_plan,
+    expect_task_plan,
     lattice_for,
 )
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
+    BASELINE_CONFIRM,
     Adjust,
     FanOut,
     PausePoint,
@@ -209,6 +211,16 @@ def answer_check_in(
 
         option = _offered_option(pause.payload, _require_str(response, "option_id"))
         params = _field(response, "params")
+        if _is_baseline_gate(pause.payload):
+            # The gate's two options are ends, not amendments: the pause payload
+            # names the steer point, so neither branch is keyed off the option
+            # id alone.
+            if params is not None:
+                raise InvalidResponseError("the baseline gate does not accept parameters")
+            if option.get("id") == "change_plan":
+                return _persist_change_plan(
+                    conn, task_id=task_id, pause=pause, state=state, actor=actor
+                )
         _validate_offered_authored_delta(option, state=state, pause_payload=pause.payload)
         intent = _canonical_intent(option, params=params)
         renames = _theme_renames(params, pause.payload)
@@ -220,6 +232,11 @@ def answer_check_in(
                 state=state,
                 intent=intent,
                 actor=actor,
+                decision_extra=(
+                    _baseline_gate_decision(pause.payload, state)
+                    if _is_baseline_gate(pause.payload)
+                    else None
+                ),
             )
             if renames:
                 _apply_theme_renames(
@@ -266,6 +283,7 @@ def compile_free_text(
     )
     router_state = runner_module._SteeringState(
         plan=state.plan,
+        capability=state.capability,
         plan_id=state.plan_id,
         plan_version=state.plan_version,
         plan_row_id=state.plan_row_id,
@@ -287,7 +305,7 @@ def compile_free_text(
     compiled = agent.route(text, context, session_id=state.session_id)
     fanout = compile_fanout(
         compiled,
-        backend_scope=state.plan.backend_scope,
+        backend_scope=expect_task_plan(state.plan).backend_scope,
         current_components=set(state.chain.components),
         completed_components=state.completed_components,
         rerun_surface=RerunSurface(
@@ -729,6 +747,7 @@ def _persist_intent(
     state: Any,
     intent: tuple[str, Any],
     actor: str,
+    decision_extra: dict[str, Any] | None = None,
 ) -> AnswerResult:
     """Persist one validated canonical-menu intent in the caller transaction."""
     kind, value = intent
@@ -736,7 +755,13 @@ def _persist_intent(
         return _persist_abort(conn, task_id=task_id, pause=pause, state=state, actor=actor)
     if kind == "continue":
         decision_id = _append_decision(
-            conn, task_id=task_id, pause=pause, state=state, response="continue", action=None
+            conn,
+            task_id=task_id,
+            pause=pause,
+            state=state,
+            response="continue",
+            action=None,
+            extra=decision_extra,
         )
         return _request_continuation(
             conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
@@ -816,6 +841,96 @@ def _persist_intent(
             conn, task_id=task_id, pause=pause, decision_event_id=decision_id, actor=actor
         )
     raise AssertionError(f"unknown validated intent {kind!r}")
+
+
+def _is_baseline_gate(pause_payload: dict[str, Any]) -> bool:
+    """Whether a pause is the options-scoping baseline gate.
+
+    Args:
+        pause_payload: The durable ``steering.pause`` payload.
+
+    Returns:
+        ``True`` when the pause names ``baseline_confirm`` as its steer point.
+    """
+    return canonical_steer_point(pause_payload.get("steer_point")) == BASELINE_CONFIRM
+
+
+def _baseline_gate_decision(pause_payload: dict[str, Any], state: Any) -> dict[str, Any]:
+    """The record a baseline-gate decision carries beyond the canonical fields.
+
+    Args:
+        pause_payload: The durable pause payload (source of the artefact id the
+            card actually showed).
+        state: Continuation state for the parked walk.
+
+    Returns:
+        The plan version the user answered for and the baseline artefact they
+        read; ``artefact_id`` is ``None`` when the bundle could not be built.
+    """
+    bundle = pause_payload.get("bundle")
+    artefact_id = bundle.get("artefact_id") if isinstance(bundle, dict) else None
+    return {
+        "plan_version": state.plan_version,
+        "artefact_id": artefact_id if isinstance(artefact_id, str) else None,
+    }
+
+
+def _persist_change_plan(
+    conn: Connection,
+    *,
+    task_id: uuid.UUID,
+    pause: _Pause,
+    state: Any,
+    actor: str,
+) -> AnswerResult:
+    """End the walk at the baseline gate and leave the plan editable (D12).
+
+    Everything :func:`_persist_abort` does except the one thing that would make
+    the plan unreachable: the plan row is **not** flipped to ``abandoned``,
+    because "change the plan" is a request to edit it and
+    ``_load_editable_plan`` reads only ``approved`` rows. The walk itself is
+    over — status ``aborted``, ``run.finished`` with the reason on it, no
+    continuation requested — so history shows it ended by the user's choice to
+    change the plan rather than by a plain stop.
+
+    Args:
+        conn: Open connection whose transaction this joins.
+        task_id: Task owning the parked walk.
+        pause: The pending gate pause.
+        state: Continuation state for the parked walk.
+        actor: Authenticated actor recorded in logs.
+
+    Returns:
+        The committed answer result; no continuation is requested.
+    """
+    decision_id = _append_decision(
+        conn,
+        task_id=task_id,
+        pause=pause,
+        state=state,
+        response="abort",
+        action=None,
+        extra={"action": "change_plan", **_baseline_gate_decision(pause.payload, state)},
+    )
+    conn.execute(
+        update(capability_run)
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability_run_id == pause.capability_run_id)
+        .values(status="aborted", ended_at=datetime.now(UTC))
+    )
+    events.append(
+        conn,
+        task_id=task_id,
+        run_id=pause.run_id,
+        event_type="run.finished",
+        payload={
+            "capability_run_id": str(pause.capability_run_id),
+            "status": "aborted",
+            "reason": "change_plan",
+        },
+    )
+    log.info("continuation.change_plan", task_id=str(task_id), actor=actor)
+    return AnswerResult(pause.capability_run_id, decision_id, False)
 
 
 def _persist_abort(
@@ -1150,8 +1265,14 @@ def _append_decision(
     action: Any,
     rerun_mode: Literal["replacement", "additive"] | None = None,
     user_text: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> uuid.UUID:
-    """Use the shared steering payload builder for one durable decision."""
+    """Use the shared steering payload builder for one durable decision.
+
+    ``extra`` carries the point-specific record a decision needs beyond the
+    canonical attribution fields — at the baseline gate, the plan version and
+    the baseline artefact the user answered against.
+    """
     base = steering_events.base_payload(
         capability_run_id=pause.capability_run_id,
         plan_id=state.plan_id,
@@ -1169,6 +1290,8 @@ def _append_decision(
         user_text=user_text,
         rerun_mode=rerun_mode,
     )
+    if extra:
+        payload.update(extra)
     return steering_events.emit(
         conn,
         task_id=task_id,
@@ -1243,6 +1366,7 @@ def _with_plan(
     chain = compose_plan(capability, plan)
     return type(state)(
         capability_run_id=state.capability_run_id,
+        capability=capability,
         plan=plan,
         plan_id=plan_id,
         plan_version=version,
