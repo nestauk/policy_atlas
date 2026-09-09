@@ -96,7 +96,10 @@ Evidence search direction (from a scoping task, the child full run's normal case
 [../evidence-search/components.md § 0](../evidence-search/components.md).
 
 
-- **In:** a linked Evidence search task. **Out:** a draft plan seeded from its question; its
+- **In:** one or more linked Evidence search tasks (links are many-to-many; owner amendment
+  2026-09-09 on decision-sheet row A6 — where several feed one, the plan takes the user's own ask
+  and the linked questions are context, the pool is the union, each suggestion carries its
+  task). **Out:** a draft plan seeded from its question; its
   screened documents queued into the pool, flagged *inherited* for re-screening against the
   scoping plan; its report's theme claims and grouping rows queued as longlist suggestions
   labelled "from your evidence search" (the report holds no list of named interventions; `longlist`

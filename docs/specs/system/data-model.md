@@ -118,7 +118,14 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   rests on. Identity rests on **content hash (at ingest) + the §9 search-governance
   event + source locator**. A corrected re-upload is a **new snapshot**, optionally carrying a
   human-asserted `supersedes(source_snapshot_id)` edge (a link only — no diffing, no
-  monitoring).
+  monitoring). *(Known issue, owner ruling on decision-sheet row A8, 2026-09-09: one document
+  fetched from two backends or in two versions is two snapshots and today counts twice in
+  coverage; a corpus-level **document identity** — dedup at acquire or ingest, and whether it
+  should precede the chunk index for retrieval diversity — is **deferred to a standalone Evidence
+  search slice after the options-scoping build**, DOI-only as its first rule; recorded in
+  `docs/deferred.md`. Until then, options scoping's task 2 counts documents **by DOI where one
+  exists** at the point of counting — denominators, membership, cap places — with no schema or
+  ingestion change.)*
 - **Acquired snapshots are a shared, content-addressed, cross-task substrate** (key =
   content hash × parse-profile × segmentation-policy × embedding-model version); derived
   substrate computed **once per unique key**; reference-counted GC; reference edges
@@ -315,10 +322,18 @@ Matching a regenerated option to an existing id after a plan change (deltas, not
 ### Links between tasks (declared 2026-09-09; owner ruling on decision-sheet row A6)
 
 "Link" and "Context" in [vocabulary.md](../vocabulary.md) had no record. **`task_link`** — source
-task · target task · kind · optional option id · pinned source run ids · created by · created at —
-is the input the shared `inherit` component reads in both directions, and the row the option
-entity's child-task link is. Two tasks may be linked only while they **share a project**, so they
-share visibility and organisation; a link that stops satisfying this is flagged, not broken.
+task (the one read from) · target task (the one that inherits) · optional option id · pinned source
+run ids · created by · created at — is the input the shared `inherit` component reads in both
+directions, and the row the option entity's child-task link is. What a link is *for* follows from
+the linked tasks' capabilities and whether an option is named (search → scoping is the scoping
+direction; scoping → search with an option is a full-run child; without one, a search started from
+a scoping task); there is **no purpose column** until two links between the same kinds of task mean
+different things. Links are **many-to-many**: a task may read from several linked tasks and be read
+by several. Where several tasks feed one, the plan takes the **user's own ask** and the linked
+tasks' questions are offered to the planning conversation as context; the pool is the union; each
+suggestion carries the task it came from *(owner amendment 2026-09-09)*. Two tasks may be linked
+only while they **share a project**, so they share visibility and organisation; a link that stops
+satisfying this is flagged, not broken.
 `inherit` **reads across a link; it does not copy**: snapshots, chunks, embeddings and findings are
 read by snapshot id; classification and appraisal rows are read from the pinned source run and
 shown as inherited; the receiving task writes only its own document rows and its own screening
