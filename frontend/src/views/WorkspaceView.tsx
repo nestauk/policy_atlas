@@ -133,6 +133,7 @@ export function WorkspaceView() {
                 onReviewPlan={openPlan}
                 planOverlay={planOverlay}
                 onOverlayApplied={() => setPlanOverlay({})}
+                onDiscardOverlay={() => setPlanOverlay({})}
                 onAtBottomChange={setFooterOpen}
               />
             ) : chatId === DRAFT_CHAT_ID ? (

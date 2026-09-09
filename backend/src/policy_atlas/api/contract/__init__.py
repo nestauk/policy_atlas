@@ -81,6 +81,7 @@ from .projects import (
 from .read_models import (
     EVIDENCE_STATUS_INCLUDED,
     ArtefactOut,
+    AuthorshipOut,
     BlockOut,
     CaseStudyCardOut,
     ChunkContextOut,
@@ -173,6 +174,7 @@ __all__ = [
     "AbortResponse",
     "AnalysisDepth",
     "ArtefactOut",
+    "AuthorshipOut",
     "BackendScope",
     "BlockOut",
     "CaseStudyCardOut",

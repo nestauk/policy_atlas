@@ -270,7 +270,7 @@ export function ContentsSidebar({
   return (
     <nav
       aria-label="Contents"
-      className="mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
+      className="max-md:hidden mb-6 w-full shrink-0 pt-4 md:sticky md:top-0 md:mb-0 md:max-h-[calc(100svh-10rem)] md:w-56 md:self-start md:overflow-y-auto md:pr-4"
     >
       <ul className="space-y-1 border-l border-line">
         {entries.map((entry, index) =>
@@ -362,7 +362,7 @@ export function SectionDisclosure({
           <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>
             {scrub(section.title)}
           </h2>
-          <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+          <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
             {expanded ? "Collapse −" : "Expand +"}
           </span>
         </button>
@@ -373,10 +373,39 @@ export function SectionDisclosure({
           fallback distinction is provenance for reviewers, not users
           (owner, 2026-08-05). */}
       {!expanded && summary !== null && (
-        <p className="mt-1.5 max-w-prose-measure text-lead text-grey">{scrub(summary.text)}</p>
+        <p className="mt-1.5 max-w-prose-measure text-lead text-grey max-md:text-body">{scrub(summary.text)}</p>
       )}
+      {!expanded && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {expanded && <div className="mt-3 space-y-4">{children}</div>}
+      {expanded && collapsible && (
+        <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />
+      )}
     </section>
+  );
+}
+
+/**
+ * Mobile-only secondary disclosure toggle (040 D8): the heading row hides its
+ * Expand/Collapse label below md, so collapsible sections render this tappable
+ * twin after the summary (collapsed) or at the section end (expanded). The
+ * heading row remains a toggle too; this one carries its own aria-expanded.
+ */
+export function MobileDisclosureToggle({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className={`${SECTION_EXPAND_LINK_CLASS} block md:hidden ${expanded ? "mt-3" : "mt-1.5"}`}
+    >
+      {expanded ? "Collapse −" : "Expand +"}
+    </button>
   );
 }
 
@@ -426,16 +455,17 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
         onClick={() => setOpen((value) => !value)}
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
-        <h2 className="flex-1 text-heading font-bold text-navy">
+        <h2 className="flex-1 text-heading font-bold text-navy max-md:text-[20px]">
           How the evidence was gathered
         </h2>
-        <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && funnelLine !== null && (
         <p className="mt-1.5 text-body text-grey">{funnelLine}</p>
       )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
         <div className="mt-3 space-y-4">
           {funnelLine !== null && (
@@ -498,6 +528,7 @@ export function GatheredSection({ taskId, id }: { taskId: string; id: string }) 
           )}
         </div>
       )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

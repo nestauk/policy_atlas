@@ -624,6 +624,7 @@ def build_plan(
         "published_after",
         "published_before",
         "publisher_country",
+        "publisher_source",
         "author_affiliation_countries",
     ):
         if key in data:
@@ -688,6 +689,8 @@ def _render_scope_constraints(plan: TaskPlan) -> list[str]:
         lines.append(f"    published_before: {constraints.published_before}")
     if constraints.publisher_country is not None:
         lines.append(f"    publisher_country: {constraints.publisher_country}")
+    if constraints.publisher_source is not None:
+        lines.append(f"    publisher_source: {constraints.publisher_source}")
     if constraints.author_affiliation_countries is not None:
         lines.append(
             "    author_affiliation_countries: "

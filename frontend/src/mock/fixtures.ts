@@ -129,9 +129,18 @@ export const mockEvidenceThemeIds: Record<string, string[]> = {
   [mockEvidence[6].source_id]: [MOCK_THEME_ID_ACTIVE_TRAVEL],
 };
 
+/** Shared + distinct institutions: markers 1, 1-2 — the D5 numbering path.
+ *  One copy feeds the dossier, the reference list and both chunk-context
+ *  handlers so the surfaces can never silently disagree. */
+export const mockAuthorships: components["schemas"]["AuthorshipOut"][] = [
+  { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+  { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+];
+
 export const mockSourceDossiers: Record<string, components["schemas"]["SourceDossierOut"]> = {
   [mockEvidence[2].source_id]: {
     ...mockEvidence[2],
+    authorships: mockAuthorships,
     abstract: "A cohort study of universal breakfast provision and regular breakfast consumption.",
     abstract_source: "provider",
     publisher: "BMJ",
@@ -152,6 +161,8 @@ export const mockSourceDossiers: Record<string, components["schemas"]["SourceDos
   // the "grouped by asserter, never merged" rendering (contract strand 7).
   [mockEvidence[7].source_id]: {
     ...mockEvidence[7],
+    // Corporate author (042 D2): one name, no institutions, no markers.
+    authorships: [{ name: "Example Policy Institute" }],
     abstract: "An AI-generated summary: measures near the school gate that make the healthy choice the easy choice.",
     abstract_source: "llm_description",
     publisher: null,
@@ -303,7 +314,14 @@ export const mockArtefact: components["schemas"]["ArtefactOut"] = {
       }],
     },
   ],
-  references: [{ n: 1, title: mockEvidence[2].title, year: 2022, venue: "BMJ Open", url: null }],
+  references: [{
+    n: 1,
+    title: mockEvidence[2].title,
+    year: 2022,
+    venue: "BMJ Open",
+    url: null,
+    authorships: mockAuthorships,
+  }],
 };
 
 /** The live-artefact skeleton (contract strand 13), display-index ordered —
@@ -400,6 +418,7 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
     published_after: "2019-01-01",
     published_before: null,
     publisher_country: null,
+    publisher_source: null,
     author_affiliation_countries: null,
     country_group: { label: "United Kingdom", countries: ["GB"], authorship: "planner-proposed" },
   },

@@ -235,6 +235,27 @@
         "title": "ArtefactSkeletonFrame",
         "type": "object"
       },
+      "AuthorshipOut": {
+        "description": "One author and their institutions, for display.\n\nArgs:\n    name: Author display name. For a policy document with no named\n        people this is the issuing organisation (corporate author).\n    institutions: Institution display names, possibly empty.",
+        "properties": {
+          "institutions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Institutions",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "AuthorshipOut",
+        "type": "object"
+      },
       "BlockOut": {
         "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Deprecated legacy coverage gaps. New structured gaps are carried\n        by `ClaimOut.gap`; this field remains empty for new artefacts.",
         "properties": {
@@ -846,8 +867,15 @@
         "type": "object"
       },
       "ChunkContextOut": {
-        "description": "The chunk-context read model for a cited span (the 008 seam).\n\nArgs:\n    context: Context text, clamped to a character window around the\n        cited span. Truncated edges are snapped to a word boundary and\n        marked with ``...``.\n    span_start: Start offset of the clamped context.\n    span_end: End offset of the clamped context.\n    clamped: Whether the window was clamped (hit a chunk boundary).\n    previous: Short tail of the previous chunk, only when the window\n        reaches the start of this chunk; otherwise omitted.\n    next: Short head of the next chunk, only when the window reaches\n        the end of this chunk; otherwise omitted.",
+        "description": "The chunk-context read model for a cited span (the 008 seam).\n\nArgs:\n    context: Context text, clamped to a character window around the\n        cited span. Truncated edges are snapped to a word boundary and\n        marked with ``...``.\n    span_start: Start offset of the clamped context.\n    span_end: End offset of the clamped context.\n    clamped: Whether the window was clamped (hit a chunk boundary).\n    previous: Short tail of the previous chunk, only when the window\n        reaches the start of this chunk; otherwise omitted.\n    next: Short head of the next chunk, only when the window reaches\n        the end of this chunk; otherwise omitted.\n    authorships: Authors and their institutions, for display.",
         "properties": {
+          "authorships": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorshipOut"
+            },
+            "title": "Authorships",
+            "type": "array"
+          },
           "clamped": {
             "title": "Clamped",
             "type": "boolean"
@@ -1665,6 +1693,32 @@
       "EvidenceItemOut": {
         "description": "One row of the paginated evidence/source list.\n\nArgs:\n    source_id: The source's identity.\n    title: Source title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    origin: Acquisition backend.\n    status: Position on the evidence status ladder.\n    status_reason: Optional human-readable reason for the current status\n        (e.g. why screened out).\n    evidence_type: Optional evidence type label.\n    appraisal_tier: Optional appraisal tier label.\n    cited: Whether this source is cited in the artefact.\n    url: Optional source URL.",
         "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "abstract_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "provider",
+                  "llm_description"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract Source"
+          },
           "appraisal_tier": {
             "anyOf": [
               {
@@ -4258,8 +4312,15 @@
         "type": "object"
       },
       "ReferenceOut": {
-        "description": "One numbered reference in the artefact's reference list.\n\nArgs:\n    n: Reference number.\n    title: Reference title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    url: Optional reference URL.",
+        "description": "One numbered reference in the artefact's reference list.\n\nArgs:\n    n: Reference number.\n    title: Reference title.\n    year: Publication year, or `None` if unknown.\n    venue: Publication venue, or `None` if unknown.\n    url: Optional reference URL.\n    authorships: Authors and their institutions, for display.",
         "properties": {
+          "authorships": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorshipOut"
+            },
+            "title": "Authorships",
+            "type": "array"
+          },
           "n": {
             "title": "N",
             "type": "integer"
@@ -4427,7 +4488,7 @@
         "type": "object"
       },
       "ScopeConstraintsDraft": {
-        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.",
+        "description": "Draft mirror of the runtime `ScopeConstraints`.\n\nArgs:\n    published_after: Optional lower publication-date bound (`YYYY-MM-DD`).\n    published_before: Optional upper publication-date bound (`YYYY-MM-DD`).\n    publisher_country: Optional Overton publisher-country filter.\n    author_affiliation_countries: Optional OpenAlex author-affiliation\n        country filter (2-letter alpha codes).\n    country_group: Optional named group applied to both search backends.\n    publisher_source: Optional Overton source-collection filter; the only\n        supported value is `apo` (Australian Policy Online).",
         "properties": {
           "author_affiliation_countries": {
             "anyOf": [
@@ -4490,6 +4551,19 @@
             ],
             "default": null,
             "title": "Publisher Country"
+          },
+          "publisher_source": {
+            "anyOf": [
+              {
+                "const": "apo",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Publisher Source"
           }
         },
         "title": "ScopeConstraintsDraft",
@@ -4622,6 +4696,13 @@
               }
             ],
             "title": "Appraisal Tier"
+          },
+          "authorships": {
+            "items": {
+              "$ref": "#/components/schemas/AuthorshipOut"
+            },
+            "title": "Authorships",
+            "type": "array"
           },
           "cited": {
             "title": "Cited",

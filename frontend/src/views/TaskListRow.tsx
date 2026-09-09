@@ -52,7 +52,9 @@ export function TaskListRow({
       aria-label={ariaLabel}
       className={`${showOwner ? taskListRowGridClassWithOwner : taskListRowGridClass} px-4 py-3.5 no-underline hover:bg-blue-tint-2`}
     >
-      <span className="min-w-0 truncate text-body">
+      {/* Below md the row is a wrapping flex line: the name takes the whole
+          first line, the metadata flows onto the line(s) below. */}
+      <span className="min-w-0 truncate text-body max-md:w-full">
         {showProjectPrefix && safeProject != null && (
           <>
             <span className="font-normal text-grey">{safeProject}</span>

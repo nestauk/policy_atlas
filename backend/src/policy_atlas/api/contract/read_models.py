@@ -211,6 +211,10 @@ class EvidenceItemOut(BaseModel):
     screen_reason: str | None = None
     classification_reason: str | None = None
     read_in_full: bool = False
+    # The document's own description — the provider abstract, a snippet, or
+    # the provider's LLM-written description (flagged as such).
+    abstract: str | None = None
+    abstract_source: Literal["provider", "llm_description"] | None = None
 
 
 class FindingBaseOut(BaseModel):
@@ -300,6 +304,19 @@ class IcfFindingOut(FindingBaseOut):
 type FindingOut = Annotated[IofFindingOut | IcfFindingOut, Field(discriminator="profile")]
 
 
+class AuthorshipOut(BaseModel):
+    """One author and their institutions, for display.
+
+    Args:
+        name: Author display name. For a policy document with no named
+            people this is the issuing organisation (corporate author).
+        institutions: Institution display names, possibly empty.
+    """
+
+    name: str
+    institutions: list[str] = Field(default_factory=list)
+
+
 class SourceTagOut(BaseModel):
     """One source tag assertion and its provenance."""
 
@@ -319,8 +336,6 @@ class CitedInOut(BaseModel):
 class SourceDossierOut(EvidenceItemOut):
     """The optional source dossier, including provenance and latest citations."""
 
-    abstract: str | None = None
-    abstract_source: Literal["provider", "llm_description"] | None = None
     publisher: str | None = None
     record_type: str | None = None
     language: str | None = None
@@ -329,6 +344,7 @@ class SourceDossierOut(EvidenceItemOut):
     fwci: float | None = None
     tags: list[SourceTagOut] = Field(default_factory=list)
     cited_in: list[CitedInOut] = Field(default_factory=list)
+    authorships: list[AuthorshipOut] = Field(default_factory=list)
 
 
 class DecisionOut(BaseModel):
@@ -540,6 +556,7 @@ class ReferenceOut(BaseModel):
         year: Publication year, or `None` if unknown.
         venue: Publication venue, or `None` if unknown.
         url: Optional reference URL.
+        authorships: Authors and their institutions, for display.
     """
 
     n: int
@@ -547,6 +564,7 @@ class ReferenceOut(BaseModel):
     year: int | None = None
     venue: str | None = None
     url: str | None = None
+    authorships: list[AuthorshipOut] = Field(default_factory=list)
 
 
 class CoverageSnapshotOut(BaseModel):
@@ -656,6 +674,7 @@ class ChunkContextOut(BaseModel):
             reaches the start of this chunk; otherwise omitted.
         next: Short head of the next chunk, only when the window reaches
             the end of this chunk; otherwise omitted.
+        authorships: Authors and their institutions, for display.
     """
 
     context: str
@@ -666,3 +685,4 @@ class ChunkContextOut(BaseModel):
     next: str | None = None
     year: int | None = None
     venue: str | None = None
+    authorships: list[AuthorshipOut] = Field(default_factory=list)

@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 from policy_atlas.api.contract import (
     EVIDENCE_STATUS_INCLUDED,
     ArtefactOut,
+    AuthorshipOut,
     BlockOut,
     CaseStudyCardOut,
     ChunkContextOut,
@@ -91,6 +92,17 @@ def _title(metadata: Mapping[str, Any], locator: str) -> str:
     return _metadata_text(metadata, "title") or locator
 
 
+def _abstract_fields(
+    metadata: Mapping[str, Any],
+) -> tuple[str | None, Literal["provider", "llm_description"] | None]:
+    """The document's description and its provenance label, dossier-identical."""
+    abstract = _metadata_text(metadata, "abstract")
+    if abstract is None:
+        return None, None
+    raw_source = _metadata_text(metadata, "abstract_source")
+    return abstract, "llm_description" if raw_source == "llm_description" else "provider"
+
+
 def _year(metadata: Mapping[str, Any]) -> int | None:
     value = metadata.get("publication_year", metadata.get("year"))
     return value if isinstance(value, int) and not isinstance(value, bool) else None
@@ -98,6 +110,56 @@ def _year(metadata: Mapping[str, Any]) -> int | None:
 
 def _venue(metadata: Mapping[str, Any]) -> str | None:
     return _metadata_text(metadata, "venue") or _metadata_text(metadata, "journal")
+
+
+def _institution_names(raw: Any) -> list[str]:
+    """Return string institution names; a non-list shape (e.g. a bare string,
+    which would iterate per character) is malformed and yields none."""
+    if not isinstance(raw, list):
+        return []
+    return [i for i in raw if isinstance(i, str) and i]
+
+
+def _authorships(metadata: Mapping[str, Any]) -> list[AuthorshipOut]:
+    """Return display authorships for a source, first non-empty rung wins.
+
+    Args:
+        metadata: Envelope (or chunk-owning envelope) metadata.
+
+    Returns:
+        Named authors with their institutions (OpenAlex-shaped provider
+        data), else bare author names (a plainer provider shape), else a
+        single Overton corporate author (the issuing organisation), else
+        an empty list. Malformed provider shapes are skipped, never raised.
+    """
+    provider = metadata.get("provider_fields")
+    provider = provider if isinstance(provider, Mapping) else {}
+    raw_authorships = provider.get("authorships")
+    if isinstance(raw_authorships, list):
+        named = [
+            AuthorshipOut(
+                name=entry["author_name"],
+                institutions=_institution_names(entry.get("institutions")),
+            )
+            for entry in raw_authorships
+            if isinstance(entry, Mapping)
+            and isinstance(entry.get("author_name"), str)
+            and entry.get("author_name")
+        ]
+        if named:
+            return named
+    raw_authors = provider.get("authors")
+    names: list[str] = []
+    if isinstance(raw_authors, str) and raw_authors:
+        names = [raw_authors]
+    elif isinstance(raw_authors, list):
+        names = [a for a in raw_authors if isinstance(a, str) and a]
+    if names:
+        return [AuthorshipOut(name=name) for name in names]
+    publisher_org = _metadata_text(metadata, "publisher_org")
+    if _metadata_text(metadata, "backend") == "overton" and publisher_org:
+        return [AuthorshipOut(name=publisher_org)]
+    return []
 
 
 def _provider_landing_page(metadata: Mapping[str, Any]) -> str | None:
@@ -747,6 +809,7 @@ def evidence_page(
             or (year_to is not None and year_value > year_to)
         ):
             continue
+        abstract, abstract_source = _abstract_fields(metadata)
         sortable_items.append(
             (
                 EvidenceItemOut(
@@ -773,6 +836,8 @@ def evidence_page(
                         row.task_source_snapshot_id
                     ),
                     read_in_full=row.full_text_status == "ingested",
+                    abstract=abstract,
+                    abstract_source=abstract_source,
                 ),
                 appraisal.quality_score if appraisal is not None else None,
             )
@@ -1464,12 +1529,6 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                     for raw_card in raw_cards:
                         if not isinstance(raw_card, dict):
                             continue
-                        result_claim_str = raw_card.get("result_claim_id")
-                        result_claim_uuid = (
-                            claim_id_map.get(result_claim_str)
-                            if isinstance(result_claim_str, str)
-                            else None
-                        )
                         card_id_str = raw_card.get("card_id")
                         try:
                             card_uuid = (
@@ -1483,6 +1542,22 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                         card_claims = _task_card_claims(
                             raw_card, block_claim_by_id,
                         )
+                        result_claim_str = raw_card.get("result_claim_id")
+                        result_claim_uuid = (
+                            claim_id_map.get(result_claim_str)
+                            if isinstance(result_claim_str, str)
+                            else None
+                        )
+                        if result_claim_uuid not in {claim.claim_id for claim in card_claims}:
+                            result_ordinal = raw_card.get("result_ordinal")
+                            if (
+                                isinstance(result_ordinal, int)
+                                and not isinstance(result_ordinal, bool)
+                                and 0 <= result_ordinal < len(card_claims)
+                            ):
+                                result_claim_uuid = card_claims[result_ordinal].claim_id
+                            else:
+                                result_claim_uuid = None
                         strength, design, since_year = _card_evidence_fields(
                             raw_card, card_claims,
                         )
@@ -1534,6 +1609,7 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
                 # A missed metadata lookup has only the display placeholder —
                 # never let that fall through _url's locator rung as a "URL".
                 url=_url(ref_meta, ref_locator) if ref_entry is not None else None,
+                authorships=_authorships(ref_meta),
             )
         )
     study_types = {
@@ -1656,6 +1732,7 @@ def _task_card_claims(
 
     if isinstance(stored_ids, list) and stored_ids:
         span_by_id: dict[str, tuple[int, int] | None] = {}
+        null_span_ids: set[str] = set()
         if isinstance(stored_spans, list):
             for entry in stored_spans:
                 if isinstance(entry, dict):
@@ -1663,7 +1740,10 @@ def _task_card_claims(
                     sp = entry.get("span")
                     if isinstance(cid, str) and isinstance(sp, (list, tuple)) and len(sp) == 2:
                         span_by_id[cid] = (int(sp[0]), int(sp[1]))
+                    elif isinstance(cid, str) and sp is None:
+                        null_span_ids.add(cid)
         result: list[ClaimOut] = []
+        trusted: list[bool] = []
         for cid in stored_ids:
             if not isinstance(cid, str):
                 continue
@@ -1681,7 +1761,20 @@ def _task_card_claims(
                 gap=block_claim.gap,
                 theme=block_claim.theme,
             ))
-        return result
+            # A stored entry with an explicitly-null span is the write path's
+            # own record that this claim's text bound into the card title, not
+            # the prose (synthesise.py stores span=None on a prose miss) —
+            # trust it rather than treating the miss as collision evidence.
+            trusted.append(block_claim.text in card_prose or cid in null_span_ids)
+        # Old case-study rollups minted aliases afresh for each card.  The
+        # block alias map then resolves every colliding id to one claim, which
+        # may not belong to this card.  Only trust stored aliases when their
+        # resolved text is actually present in the card prose (or the write
+        # path recorded the miss deliberately). An empty resolution means the
+        # aliases are unusable — fall through to prose matching, don't return
+        # an empty card.
+        if result and all(trusted):
+            return result
 
     # Fallback: match block claims whose text is a substring of card prose.
     # The lookup holds each claim under both its UUID and its synthesis alias,
@@ -1701,6 +1794,7 @@ def _task_card_claims(
                 gap=claim.gap,
                 theme=claim.theme,
             ))
+    result.sort(key=lambda claim: claim.span[0] if claim.span is not None else -1)
     return result
 
 
@@ -2271,8 +2365,7 @@ def source_dossier_out(
     ).get(source_id)
     provider_value = metadata.get("provider_fields")
     provider: Mapping[str, Any] = provider_value if isinstance(provider_value, Mapping) else {}
-    abstract = _metadata_text(metadata, "abstract")
-    raw_abstract_source = _metadata_text(metadata, "abstract_source")
+    abstract, abstract_source = _abstract_fields(metadata)
     tags = [
         SourceTagOut(tag=tag_row.tag, tag_type=tag_row.tag_type, asserted_by=tag_row.asserted_by)
         for tag_row in conn.execute(
@@ -2306,11 +2399,7 @@ def source_dossier_out(
         classification_reason=classification_reasons.get(source_id),
         read_in_full=row["full_text_status"] == "ingested",
         abstract=abstract,
-        abstract_source="llm_description"
-        if raw_abstract_source == "llm_description"
-        else "provider"
-        if abstract is not None
-        else None,
+        abstract_source=abstract_source,
         publisher=_metadata_text(metadata, "publisher_org"),
         record_type=_metadata_text(metadata, "record_type"),
         language=_metadata_text(metadata, "language"),
@@ -2325,6 +2414,7 @@ def source_dossier_out(
         else None,
         tags=tags,
         cited_in=_source_cited_in(conn, task_id, source_id),
+        authorships=_authorships(metadata),
     )
 
 
@@ -2498,6 +2588,7 @@ def _clamped_quote_window(
     end_window = _snap_end(text, end_window, not_before=end)
     prefix = _ELLIPSIS if start_window > 0 else ""
     suffix = _ELLIPSIS if end_window < len(text) else ""
+    chunk_meta = _chunk_metadata(conn, task_id, source_snapshot_id)
     return ChunkContextOut(
         context=prefix + text[start_window:end_window] + suffix,
         span_start=position - start_window + len(prefix),
@@ -2505,8 +2596,9 @@ def _clamped_quote_window(
         clamped=start_window > 0 or end_window < len(text),
         previous=previous,
         next=following,
-        year=_chunk_year(conn, task_id, source_snapshot_id),
-        venue=_chunk_venue(conn, task_id, source_snapshot_id),
+        year=_year(chunk_meta),
+        venue=_venue(chunk_meta),
+        authorships=_authorships(chunk_meta),
     )
 
 
@@ -2600,17 +2692,3 @@ def _chunk_metadata(
         )
     ).scalar_one_or_none()
     return metadata if isinstance(metadata, Mapping) else {}
-
-
-def _chunk_year(
-    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
-) -> int | None:
-    """Read the publication year for a chunk through its task source link."""
-    return _year(_chunk_metadata(conn, task_id, source_snapshot_id))
-
-
-def _chunk_venue(
-    conn: Connection, task_id: uuid.UUID, source_snapshot_id: uuid.UUID
-) -> str | None:
-    """Read the venue for a chunk through its task source link."""
-    return _venue(_chunk_metadata(conn, task_id, source_snapshot_id))

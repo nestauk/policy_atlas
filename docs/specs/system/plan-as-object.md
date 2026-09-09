@@ -67,6 +67,13 @@ referent). Instead:
   convenience, **never a user-facing absolute dial**.
 - *(Maps the wireframe's **Quick / Deep** control: treat it as a `search_effort_signal` /
   `search_breadth_signal`, **not** a hard public depth ladder — EB handoff §7.1.)*
+- **As enacted (flow-back, 2026-09-07):** the shipped Evidence search planning chat offers the
+  user a choice of **rapid / standard / deep** (a bundle of analysis depth and search depth;
+  the backend's `AnalysisDepth` is `landscape | standard | deep`). The "never a user-entered
+  field" rule above therefore describes the intent of 2026-06, not the product; the relative
+  nudge survives as the *edit* path beside the chosen level. Options scoping uses the **same
+  three words** (owner ruling 2026-09-07), so this is one vocabulary across capabilities, not an
+  exception. Reconcile this section when the plan contract is next revised.
 
 ## Source / evidence policy
 
@@ -74,7 +81,10 @@ A plan-level declared constraint expressing the **evidentiary standard** (e.g. "
 statistics and peer-reviewed evaluations only"). Two faces:
 - **Acquisition face — already covered**: which backends / **trust classes** may be searched
   (existing `search` machinery; open-web behind its seam). Bundles an existing capability, no new
-  mechanism.
+  mechanism. *(Options scoping adds a third, distinct thing — an **evidence-scope constraint**
+  such as "OECD evidence only", checked at retrieval and screening — which is neither the
+  acquisition face nor the citable-quality policy and must never be compiled into either; OS
+  ruling 23, seam recorded 2026-09-07.)*
 - **Use face — the new bit: a grounding standard, not a retrieval boundary**. The agent may
   still **retrieve and read** any in-corpus source (never penned in), but the policy sets the
   **appraisal tier** (source *quality*, **not** the grounding/inference tier) a source must meet

@@ -1,15 +1,17 @@
-import type { ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useParams, useSearchParams } from "react-router";
 
-import { useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
+import { useApiClient, useCoverage, useEvidence, useFindings, useLandscape, useTask, useSourceDossier } from "../api/queries";
 import type { components } from "../api/gen/types";
 import { errorCode } from "../lib/errors";
 import { safeHref } from "../lib/safeHref";
 import { scrub } from "../lib/scrub";
 import { useDocumentTitle } from "../lib/title";
+import { Button } from "../ui/brand/Button";
 import { Card, Divider, PaneHeading } from "../ui/brand/Card";
 import { Chip } from "../ui/brand/Chip";
 import { ReauthRedirect } from "../ui/feedback";
+import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 import { Sheet, SheetContent } from "../ui/radix/Sheet";
 import { Tooltip } from "../ui/radix/Tooltip";
@@ -29,6 +31,7 @@ import {
   type EvidenceSortField,
   type SortOrder,
 } from "./sourcesPresentation";
+import { numberedAuthorships } from "./artefactPresentation";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -45,8 +48,9 @@ export function SourcesView() {
   useDocumentTitle(task.data?.name, "Sources");
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedStatus = searchParams.get("status");
+  // No explicit status → Included (the screened-in set), the owner default.
   const statusFilter =
-    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "all";
+    STATUS_FILTERS.find((filter) => filter.key === requestedStatus)?.key ?? "Included";
   const citedFilter = searchParams.get("cited") === "true";
   const originFilter = ORIGIN_FILTER_OPTIONS.find((value) => value === searchParams.get("origin"));
   const typeFilter = searchParams.get("type") ?? undefined;
@@ -124,7 +128,7 @@ export function SourcesView() {
 
   return (
     <main className="py-8">
-      <header className="mb-5">
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div role="group" aria-label="Filter sources" className="flex flex-wrap gap-1.5">
           {STATUS_FILTERS.map((filter) => (
             <button
@@ -132,8 +136,7 @@ export function SourcesView() {
               type="button"
               aria-pressed={statusFilter === filter.key}
               onClick={() => updateParams((next) => {
-                if (filter.key === "all") next.delete("status");
-                else next.set("status", filter.key);
+                next.set("status", filter.key);
                 next.delete("page");
               })}
               className={`${FILTER_CHIP_CLASS} ${
@@ -173,6 +176,7 @@ export function SourcesView() {
             })}
           />
         </div>
+        <DownloadSourcesButton taskId={taskId} taskName={task.data?.name} />
       </header>
 
       {evidence.isPending && <SourceLoading />}
@@ -226,7 +230,7 @@ export function SourcesView() {
                     })}
                   />
                 </SortableColumnHeader>
-                <th className="px-3 py-3">
+                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">
                   Origin
                   <HeaderFilter
                     label="Filter by origin"
@@ -288,25 +292,19 @@ export function SourcesView() {
                   activeOrder={effectiveOrder}
                   onSort={handleSort}
                 />
-                <th className="px-3 py-3">Cited</th>
+                <th className="px-3 py-3 max-md:px-2 max-md:py-2.5">Cited</th>
               </tr>
             </thead>
             <tbody>
               {evidence.data.data.map((item) => (
                 <tr key={item.source_id} className="border-b border-line last:border-b-0">
-                  <td className="max-w-md px-4 py-3 align-top">
-                    <button
-                      type="button"
-                      onClick={() => updateParams((next) => next.set("source", item.source_id))}
-                      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue"
-                    >
-                      {scrub(item.title)}
-                    </button>
-                    {item.venue && <p className="mt-0.5 text-body text-grey">{scrub(item.venue)}</p>}
+                  <td className="max-w-md px-4 py-3 align-top max-md:px-3 max-md:py-2.5">
+                    <TitleWithDescription item={item} onOpen={() => updateParams((next) => next.set("source", item.source_id))} />
+                    {item.venue && <p className="mt-0.5 text-body text-grey max-md:text-caption">{scrub(item.venue)}</p>}
                   </td>
-                  <td className="px-3 py-3 align-top text-body text-navy">{item.year ?? ""}</td>
-                  <td className="px-3 py-3 align-top"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top text-body text-navy max-md:px-2 max-md:py-2.5 max-md:text-meta">{item.year ?? ""}</td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><Chip tone="soft">{scrub(item.origin)}</Chip></td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.evidence_type && (
                       item.classification_reason ? (
                         <Tooltip content={<p>{scrub(item.classification_reason)}</p>}>
@@ -319,7 +317,7 @@ export function SourcesView() {
                       )
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.appraisal_tier && (
                       <Tooltip content={<p>{scrub(strengthHint(item))}</p>}>
                         <button type="button" aria-label={`${item.appraisal_tier}: how strength is appraised`} className="cursor-help focus-visible:outline-2 focus-visible:outline-blue">
@@ -328,8 +326,8 @@ export function SourcesView() {
                       </Tooltip>
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top"><RelevantCell item={item} /></td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5"><RelevantCell item={item} /></td>
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {readDepthLabel(item) !== null && (
                       item.read_in_full ? (
                         <Chip tone="blue">{readDepthLabel(item)}</Chip>
@@ -342,7 +340,7 @@ export function SourcesView() {
                       )
                     )}
                   </td>
-                  <td className="px-3 py-3 align-top">
+                  <td className="px-3 py-3 align-top max-md:px-2 max-md:py-2.5">
                     {item.cited && <Chip tone="green">Cited</Chip>}
                   </td>
                 </tr>
@@ -402,8 +400,8 @@ export function SourcesView() {
                     <tbody>
                       {(backend.queries ?? []).map((item) => (
                         <tr key={item.query} className="border-b border-line last:border-b-0">
-                          <td className="break-all px-4 py-3 text-body text-navy">{scrub(item.query)}</td>
-                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy">
+                          <td className="break-all px-4 py-3 text-body text-navy max-md:text-meta">{scrub(item.query)}</td>
+                          <td className="px-4 py-3 text-right text-body tabular-nums text-navy max-md:text-meta">
                             {typeof item.results === "number" ? item.results : "—"}
                           </td>
                         </tr>
@@ -427,6 +425,111 @@ export function SourcesView() {
         onClose={() => updateParams((next) => next.delete("source"))}
       />
     </main>
+  );
+}
+
+/** The title cell's button: opens the dossier on click and, when the source
+ *  carries a description, previews it (clamped) on hover. */
+function TitleWithDescription({ item, onOpen }: { item: Parameters<typeof screeningDetails>[0] & { title: string; abstract?: string | null; abstract_source?: string | null }; onOpen: () => void }) {
+  const button = (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="cursor-pointer text-left text-body font-semibold leading-snug text-navy hover:text-blue hover:underline focus-visible:outline-2 focus-visible:outline-blue max-md:text-meta"
+    >
+      {scrub(item.title)}
+    </button>
+  );
+  if (!item.abstract) return button;
+  const clamped = item.abstract.length > 300 ? `${item.abstract.slice(0, 300)}…` : item.abstract;
+  return (
+    <Tooltip
+      content={
+        <p className="max-w-prose-measure">
+          {item.abstract_source === "llm_description" && <span className="font-semibold">AI description — </span>}
+          {scrub(clamped)}
+        </p>
+      }
+    >
+      {button}
+    </Tooltip>
+  );
+}
+
+/** A CSV cell: quoted/escaped, and defused against spreadsheet formula
+ *  injection — titles and venues arrive from external sources. */
+function csvCell(value: string | number | boolean | null | undefined): string {
+  let text = value === null || value === undefined ? "" : String(value);
+  // Also defuse markers behind leading whitespace ("\t=SUM…").
+  if (/^\s*[=+\-@]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+/** Downloads the whole source list (every page, no filters) as a CSV file. */
+function DownloadSourcesButton({ taskId, taskName }: { taskId: string; taskName?: string }) {
+  const client = useApiClient();
+  const [downloading, setDownloading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const download = async () => {
+    setDownloading(true);
+    setFailed(false);
+    try {
+      const rows = [];
+      // ponytail: offset pagination, no snapshot — a source arriving mid-download
+      // can shift pages; add a cursor if downloads during active runs matter.
+      for (let page = 1; ; page += 1) {
+        const { data, error } = await client.GET("/api/v1/tasks/{task_id}/evidence", {
+          params: { path: { task_id: taskId }, query: { page, page_size: 200 } },
+        });
+        if (data === undefined) throw error;
+        rows.push(...data.data);
+        if (page * data.pagination.page_size >= data.pagination.total_items) break;
+      }
+      const header = ["Title", "Venue", "Year", "Origin", "Status", "Status reason", "Evidence type", "Evidence type reason", "Strength", "Screening", "Screening confidence", "Screening reason", "Read in full", "Cited", "URL", "Description", "Description source"];
+      const csv = [
+        header.map(csvCell).join(","),
+        ...rows.map((item) => [
+          item.title,
+          item.venue,
+          item.year,
+          item.origin,
+          item.status,
+          item.status_reason,
+          item.evidence_type,
+          item.classification_reason,
+          item.appraisal_tier,
+          item.screen_status,
+          item.screen_confidence,
+          item.screen_reason,
+          item.read_in_full,
+          item.cited,
+          item.url,
+          item.abstract,
+          item.abstract_source === "llm_description" ? "AI description" : item.abstract_source,
+        ].map(csvCell).join(",")),
+      ].join("\r\n");
+      // UTF-8 BOM so spreadsheet apps decode non-ASCII source text correctly.
+      const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${(taskName ?? "Task").replaceAll(/[\\/]/g, "-")} - sources.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setFailed(true);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <span className="flex items-center gap-2">
+      {failed && <span role="alert" className="text-caption text-red">The download failed. Try again.</span>}
+      <Button type="button" variant="primary" size="sm" disabled={downloading} onClick={() => void download()}>
+        {downloading ? "Preparing…" : "Download CSV"}
+      </Button>
+    </span>
   );
 }
 
@@ -627,20 +730,119 @@ function FilterSelect({
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
+  // App-styled Popover listbox (the NewTaskView ProjectPicker pattern), not a
+  // native <select>: consistent chrome at every width, and long theme names
+  // wrap in the menu instead of sizing (and overflowing) the closed control.
+  const [open, setOpen] = useState(false);
+  const triggerId = useId();
+  const labelId = useId();
+  const valueId = useId();
+  const listRef = useRef<HTMLUListElement>(null);
+  const selected = options.find((option) => option.value === value);
+  const pick = (next: string) => {
+    onChange(next);
+    setOpen(false);
+  };
+  const optionButtons = () =>
+    Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? []);
+  // The native <select> this replaced gave arrow-key navigation for free;
+  // Radix Popover only owns Esc/dismiss/focus-return, so the listbox moves
+  // focus itself (040 review finding).
+  const onListKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const buttons = optionButtons();
+    if (buttons.length === 0) return;
+    const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    const next =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : event.key === "ArrowDown"
+            ? Math.min(current + 1, buttons.length - 1)
+            : Math.max(current - 1, 0);
+    buttons[next]?.focus();
+  };
+  const optionClass = (active: boolean) =>
+    cn(
+      "block w-full cursor-pointer px-3 py-2 text-left text-body font-normal text-navy hover:bg-blue-tint-2 hover:text-blue max-md:text-meta",
+      active && "bg-blue-tint-2 font-medium",
+    );
   return (
-    <label className="flex items-center gap-1.5 text-meta font-semibold text-grey">
-      {label}
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="cursor-pointer border border-line-2 bg-paper px-2 py-1.5 text-meta font-semibold text-navy focus-visible:outline-2 focus-visible:outline-blue"
-      >
-        <option value="">{allLabel}</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
-    </label>
+    <span className="flex min-w-0 max-w-full items-center gap-1.5 text-meta font-semibold text-grey max-md:text-caption">
+      <label id={labelId} htmlFor={triggerId} className="cursor-pointer">
+        {label}
+      </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            id={triggerId}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-labelledby={`${labelId} ${valueId}`}
+            className="inline-flex min-w-0 cursor-pointer items-center justify-between gap-2 border border-line-2 bg-paper px-2.5 py-1.5 text-meta font-semibold text-navy hover:border-navy focus-visible:outline-2 focus-visible:outline-blue max-md:max-w-52 max-md:px-2 max-md:py-1 max-md:text-caption"
+          >
+            <span id={valueId} className="truncate">{selected?.label ?? allLabel}</span>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 shrink-0 text-grey"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="start"
+          className="w-72 max-w-[calc(100vw-2rem)] p-1"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            const buttons = optionButtons();
+            (buttons.find((button) => button.getAttribute("aria-selected") === "true") ?? buttons[0])?.focus();
+          }}
+        >
+          <ul
+            ref={listRef}
+            role="listbox"
+            aria-labelledby={labelId}
+            onKeyDown={onListKeyDown}
+            className="flex max-h-80 flex-col overflow-y-auto"
+          >
+            <li role="none">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === ""}
+                onClick={() => pick("")}
+                className={optionClass(value === "")}
+              >
+                {allLabel}
+              </button>
+            </li>
+            {options.map((option) => (
+              <li key={option.value} role="none">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={value === option.value}
+                  onClick={() => pick(option.value)}
+                  className={optionClass(value === option.value)}
+                >
+                  {option.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </PopoverContent>
+      </Popover>
+    </span>
   );
 }
 
@@ -699,12 +901,60 @@ function SourceDossier({
   if (!sourceId) return null;
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent title={source ? scrub(source.title) : "Source dossier"} description="Source dossier">
+      <SheetContent title={source ? scrub(source.title) : "Source dossier"}>
         {isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
         {isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {source && <SourceDossierBody source={source} findings={findings} findingsPending={findingsPending} />}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/** The authors line with superscript affiliation markers (042 D5). Renders
+ *  nothing when the source carries no authors (honest absence). Shared by the
+ *  dossier header and the citation block in ArtefactView. */
+export function AuthorsLine({
+  authorships,
+  className,
+}: {
+  authorships: components["schemas"]["AuthorshipOut"][] | undefined;
+  className?: string;
+}) {
+  const numbered = numberedAuthorships(authorships);
+  if (numbered.authors.length === 0) return null;
+  return (
+    <p className={className}>
+      {numbered.authors.map((author, index) => (
+        <span key={`${author.name}-${index}`}>
+          {index > 0 && ", "}
+          {scrub(author.name)}
+          {author.markers.length > 0 && <sup>{author.markers.join(",")}</sup>}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** The numbered institutions under the year line (042 D5): deduped, ordered
+ *  by first appearance, numbers matching the AuthorsLine markers. */
+export function InstitutionsLine({
+  authorships,
+  className,
+}: {
+  authorships: components["schemas"]["AuthorshipOut"][] | undefined;
+  className?: string;
+}) {
+  const numbered = numberedAuthorships(authorships);
+  if (numbered.institutions.length === 0) return null;
+  return (
+    <p className={className}>
+      {numbered.institutions.map((institution, index) => (
+        <span key={institution}>
+          {index > 0 && " · "}
+          <sup>{index + 1}</sup> {scrub(institution)}
+        </span>
+      ))}
+    </p>
   );
 }
 
@@ -735,8 +985,11 @@ export function SourceDossierBody({
   return (
     <div className="space-y-6 text-caption">
       <header>
-        <p className="font-display text-body font-bold leading-snug text-navy">{scrub(source.title)}</p>
+        {/* The sheet header already shows the title (042 item 4) — the body
+            starts at the authors line. */}
+        <AuthorsLine authorships={source.authorships} className="text-grey" />
         {(source.year || source.venue) && <p className="mt-1 text-grey">{[source.year, source.venue].filter(Boolean).map(String).map(scrub).join(" · ")}</p>}
+        <InstitutionsLine authorships={source.authorships} className="mt-1 text-grey" />
         <div className="mt-3 flex flex-wrap gap-1.5">
           <Chip tone="soft">{scrub(source.origin)}</Chip>
           {source.appraisal_tier && <Chip tone="soft">{scrub(source.appraisal_tier)}</Chip>}

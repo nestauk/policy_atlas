@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 
 import { createInitialRunStreamState } from "../store";
 import type { LiveSection, RunStreamState } from "../store";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { AnnotatedProse, highlightParts, LiveArtefactBody, orderSections, showLiveArtefact } from "./ArtefactView";
+import { AnnotatedProse, CitationProvenanceBlock, highlightParts, LiveArtefactBody, orderSections, ProvenanceSheet, ReferencesSection, showLiveArtefact } from "./ArtefactView";
 
 describe("highlightParts", () => {
   it("finds an exact quote", () => {
@@ -297,5 +298,101 @@ describe("showLiveArtefact", () => {
         ended_at: "2026-07-21T10:12:00Z",
       }),
     ).toBe(true);
+  });
+});
+
+describe("CitationProvenanceBlock authorships (042)", () => {
+  const baseContext = {
+    isPending: false,
+    isError: false,
+    data: {
+      context: "The quoted passage sits here.",
+      span_start: 0,
+      span_end: 10,
+      clamped: false,
+      year: 2022,
+      venue: "BMJ Open",
+      authorships: [
+        { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+        { name: "Casey Mockford", institutions: ["University of Exampleshire", "Institute of Fictional Studies"] },
+      ],
+    },
+  };
+
+  it("renders authors with markers between the title and the year line, institutions below", () => {
+    const { container } = render(
+      <CitationProvenanceBlock
+        n={1}
+        sourceTitle="A study"
+        sourceRef={null}
+        onOpenDossier={() => {}}
+        context={baseContext}
+        quote="The quoted"
+      />,
+    );
+    expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
+    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
+    expect(screen.getAllByText(/University of Exampleshire/).length).toBeGreaterThan(0);
+    const markers = [...container.querySelectorAll("sup")].map((sup) => sup.textContent);
+    expect(markers).toEqual(["1", "1,2", "1", "2"]);
+  });
+
+  it("renders no author or institution lines when the context carries none", () => {
+    const { container } = render(
+      <CitationProvenanceBlock
+        n={1}
+        sourceTitle="A study"
+        sourceRef={null}
+        onOpenDossier={() => {}}
+        context={{ ...baseContext, data: { ...baseContext.data, authorships: [] } }}
+        quote="The quoted"
+      />,
+    );
+    expect(container.querySelector("sup")).toBeNull();
+    expect(screen.getByText("2022 · BMJ Open")).toBeInTheDocument();
+  });
+});
+
+describe("ReferencesSection authors (042 item 1)", () => {
+  const references = [
+    {
+      n: 1,
+      title: "Universal breakfast clubs and diet quality",
+      year: 2022,
+      venue: "BMJ Open",
+      authorships: [
+        { name: "Alex Sampleton", institutions: ["University of Exampleshire"] },
+        { name: "Casey Mockford", institutions: [] },
+      ],
+    },
+    // Corporate author (D2): the issuing organisation in the author slot.
+    { n: 2, title: "School food policy brief", year: 2023, venue: null, authorships: [{ name: "Example Policy Institute", institutions: [] }] },
+    // Honest absence (D1): no authors line, no separator.
+    { n: 3, title: "Uploaded evidence note", year: null, venue: null, authorships: [] },
+  ];
+
+  it("renders names-only author lines between title and year, nothing when absent", async () => {
+    const user = userEvent.setup();
+    render(<ReferencesSection references={references} onOpenReference={() => {}} />);
+    await user.click(screen.getByRole("button", { name: /References/ }));
+    const items = screen.getAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Universal breakfast clubs and diet quality — Alex Sampleton, Casey Mockford (2022) · BMJ Open");
+    expect(items[1]).toHaveTextContent("School food policy brief — Example Policy Institute (2023)");
+    expect(items[2]).toHaveTextContent("Uploaded evidence note");
+    expect(items[2].textContent).not.toContain("—");
+    // Names only in the list (D4) — superscript markers belong to the sheets.
+    expect(items[0].querySelector("sup")).toBeNull();
+  });
+});
+
+describe("ProvenanceSheet footer (042 item 5)", () => {
+  it("renders the claim without the removed tagline", () => {
+    render(
+      <ProvenanceSheet claimTexts={["A claim."]} onClose={() => {}}>
+        {null}
+      </ProvenanceSheet>,
+    );
+    expect(screen.getByText("A claim.")).toBeInTheDocument();
+    expect(screen.queryByText(/Every claim links to the exact passage/)).toBeNull();
   });
 });

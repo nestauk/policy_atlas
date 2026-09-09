@@ -41,6 +41,7 @@ import {
   FullReportExpandAllButton,
   FullReportExpandProvider,
   GatheredSection,
+  MobileDisclosureToggle,
   type OutlineSection,
   SectionDisclosure,
   SECTION_EXPAND_LINK_CLASS,
@@ -51,7 +52,8 @@ import {
   useExpandForPrint,
 } from "./ArtefactOutline";
 import { Tooltip } from "../ui/radix/Tooltip";
-import { SourceDossierBody } from "./SourcesView";
+import { AuthorsLine, InstitutionsLine, SourceDossierBody } from "./SourcesView";
+import { referenceAuthorsLine } from "./artefactPresentation";
 import { useActiveConversation } from "./workspace/chat/conversationState";
 
 type CitationOut = components["schemas"]["CitationOut"];
@@ -167,7 +169,7 @@ export const TIER_LABEL: Record<string, string> = {
   tier_2: "Tier 2 · grounded",
   tier_3: "Tier 3 · supported",
   tier_4: "Tier 4 · reasoning",
-  unsupported_mis_cited: "Unsupported — flagged",
+  unsupported_mis_cited: "Unsupported",
 };
 
 export const TIER_TEXT: Record<string, string> = {
@@ -350,9 +352,11 @@ export function CitationProvenanceBlock({
           <span>{scrub(sourceTitle)}</span>
         )}
       </p>
+      <AuthorsLine authorships={context.data?.authorships} className="mt-0.5 text-body text-grey" />
       {meta.length > 0 && (
         <p className="mt-0.5 text-body text-grey">{meta.map((m) => scrub(String(m))).join(" · ")}</p>
       )}
+      <InstitutionsLine authorships={context.data?.authorships} className="mt-0.5 text-caption text-grey" />
       <div className="mt-2 flex flex-wrap gap-1.5">{chips}</div>
       <div className="mt-3 space-y-2 text-body leading-relaxed">
         {context.isPending && (
@@ -491,9 +495,6 @@ export function ProvenanceSheet({
             ))}
           {extras}
           {children}
-          <p className="border-t border-line pt-3 text-body text-grey">
-            Every claim links to the exact passage it came from.
-          </p>
         </div>
       </SheetContent>
     </Sheet>
@@ -972,7 +973,7 @@ export function AnnotatedProse({
     }
     if (current.length > 0) bullets.push(current);
     return (
-      <div className="max-w-prose-measure text-lead text-ink">
+      <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
         <ul className="list-none space-y-1.5">
           {bullets.map((bullet, bulletIndex) => {
             const isGap = bullet.some(
@@ -990,12 +991,12 @@ export function AnnotatedProse({
           })}
         </ul>
         {crossing.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
         {unspanned.map((claim) => (
-          <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+          <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
             <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
           </p>
         ))}
@@ -1004,7 +1005,7 @@ export function AnnotatedProse({
   }
 
   return (
-    <div className="max-w-prose-measure text-lead text-ink">
+    <div className={`max-w-prose-measure ${REPORT_BODY_CLASS}`}>
       <p className="whitespace-pre-line">
         {segments.map((segment, index) => {
           if (segment.kind === "plain") {
@@ -1016,7 +1017,7 @@ export function AnnotatedProse({
         })}
       </p>
       {unspanned.map((claim) => (
-        <p key={claim.claim_id} className="mt-2 text-lead text-grey">
+        <p key={claim.claim_id} className="mt-2 text-lead text-grey max-md:text-body">
           <ClaimSpan claim={claim} text={claim.text} onOpen={onOpenClaim} />
         </p>
       ))}
@@ -1057,7 +1058,6 @@ export function SourceDossier({
     >
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
-        description="Source dossier"
       >
         {evidence.isPending && (
           <p role="status" className="animate-pulse text-body text-grey">
@@ -1119,7 +1119,7 @@ export function LiveArtefactBody({ stream }: { stream: RunStreamState }) {
     (section: LiveSection) => !(section.state === "filled" && (section.prose ?? "") === ""),
   );
   return (
-    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
+    <main className={`artefact-page anim-rise mx-auto my-8 ${READING_COLUMN_MAX_W} bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
       {terminalPartial ? (
         <div
           role="alert"
@@ -1505,21 +1505,19 @@ export function ArtefactView() {
   ];
 
   return (
-    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 md:flex-row">
+    <div className="mx-auto flex w-full flex-col justify-center gap-6 px-6 max-md:gap-0 max-md:px-0 md:flex-row">
       <ContentsSidebar entries={outlineEntries} />
-      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line`}>
+      <main className={`artefact-page anim-rise my-8 min-w-0 ${READING_COLUMN_MAX_W} flex-1 bg-paper px-10 py-9 shadow-sm ring-1 ring-line max-md:my-0 max-md:px-4 max-md:py-6 max-md:shadow-none max-md:ring-0`}>
       <header id="answer" className="mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
-              Report
-            </p>
-            <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy">
-              {scrub(data.title)}
-            </h1>
-          </div>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-meta font-extrabold uppercase tracking-[0.06em] text-grey">
+            Report
+          </p>
           <ArtefactDownload artefact={data} />
         </div>
+        <h1 className="mt-1 text-display font-extrabold leading-tight tracking-[-0.5px] text-navy max-md:text-title">
+          {scrub(data.title)}
+        </h1>
         {snapshotCells.length > 0 && (
           <div className="mt-4 grid grid-cols-2 border border-line sm:grid-cols-4">
             {snapshotCells.map(([label, value, href]) => {
@@ -1654,11 +1652,17 @@ export function ArtefactView() {
 /** References as a collapsible entry with an always-visible summary line —
  *  it is the ArtefactOut.references collection, not a synthesis section
  *  (028 strand 10, binding record). */
-function ReferencesSection({
+export function ReferencesSection({
   references,
   onOpenReference,
 }: {
-  references: Array<{ n: number; title: string; year?: number | null; venue?: string | null }>;
+  references: Array<{
+    n: number;
+    title: string;
+    year?: number | null;
+    venue?: string | null;
+    authorships?: components["schemas"]["AuthorshipOut"][];
+  }>;
   onOpenReference: (title: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1674,40 +1678,46 @@ function ReferencesSection({
         className="flex w-full cursor-pointer items-baseline gap-2 text-left"
       >
         <h2 className={`flex-1 ${REPORT_SECTION_HEADING_CLASS}`}>References</h2>
-        <span aria-hidden="true" className={SECTION_EXPAND_LINK_CLASS}>
+        <span aria-hidden="true" className={`${SECTION_EXPAND_LINK_CLASS} max-md:hidden`}>
           {open ? "Collapse −" : "Expand +"}
         </span>
       </button>
       {!open && (
-        <p className="mt-1.5 text-lead text-grey">
+        <p className="mt-1.5 text-lead text-grey max-md:text-body">
           {references.length === 1 ? "1 numbered source" : `${references.length} numbered sources`} cited
           in this report
         </p>
       )}
+      {!open && <MobileDisclosureToggle expanded={false} onToggle={() => setOpen(true)} />}
       {open && (
-        <ol className="mt-3 space-y-1.5 text-lead text-ink">
-          {references.map((reference) => (
-            <li key={reference.n} className="flex gap-2">
-              <span className="font-bold text-blue">[{reference.n}]</span>
-              <span>
-                <button
-                  type="button"
-                  className="cursor-pointer text-left hover:underline"
-                  onClick={() => onOpenReference(reference.title)}
-                >
-                  {scrub(reference.title)}
-                </button>
-                {reference.year !== null && reference.year !== undefined && (
-                  <span className="text-grey"> ({reference.year})</span>
-                )}
-                {reference.venue !== null && reference.venue !== undefined && (
-                  <span className="text-grey"> · {scrub(reference.venue)}</span>
-                )}
-              </span>
-            </li>
-          ))}
+        <ol className="mt-3 space-y-1.5 text-lead text-ink max-md:text-body">
+          {references.map((reference) => {
+            const authors = referenceAuthorsLine(reference.authorships);
+            return (
+              <li key={reference.n} className="flex gap-2">
+                <span className="font-bold text-blue">[{reference.n}]</span>
+                <span>
+                  <button
+                    type="button"
+                    className="cursor-pointer text-left hover:underline"
+                    onClick={() => onOpenReference(reference.title)}
+                  >
+                    {scrub(reference.title)}
+                  </button>
+                  {authors !== null && <span className="text-grey"> — {scrub(authors)}</span>}
+                  {reference.year !== null && reference.year !== undefined && (
+                    <span className="text-grey"> ({reference.year})</span>
+                  )}
+                  {reference.venue !== null && reference.venue !== undefined && (
+                    <span className="text-grey"> · {scrub(reference.venue)}</span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       )}
+      {open && <MobileDisclosureToggle expanded onToggle={() => setOpen(false)} />}
     </section>
   );
 }

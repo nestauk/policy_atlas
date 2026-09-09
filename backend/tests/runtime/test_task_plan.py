@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from policy_atlas.evidence_search.assess.screen import SCREENING_CRITERION_MAX
 from policy_atlas.evidence_search.extract.extract import KNOWN_PROFILE_IDS
 from policy_atlas.evidence_search.sourcing.country_filters import ISO_3166_ALPHA2
 from policy_atlas.runtime.task_plan import (
@@ -250,6 +251,25 @@ def test_spine_is_present_in_order_for_valid_plan_matrix() -> None:
         {
             "backend_scope": "grey_lit_only",
             "scope_constraints": {"author_affiliation_countries": ["GB"]},
+        },
+        {
+            "backend_scope": "grey_lit_only",
+            "scope_constraints": {
+                "publisher_source": "apo",
+                "publisher_country": "UK",
+            },
+        },
+        {
+            "backend_scope": "academic_only",
+            "scope_constraints": {"publisher_source": "apo"},
+        },
+        {
+            "backend_scope": "both",
+            "scope_constraints": {"publisher_source": "apo"},
+        },
+        {
+            "backend_scope": "grey_lit_only",
+            "scope_constraints": {"publisher_source": "xyz"},
         },
     ],
 )
@@ -536,6 +556,18 @@ def test_scope_constraints_compile_into_two_level_search_filters() -> None:
     }
 
 
+def test_publisher_source_compiles_to_overton_filter() -> None:
+    """publisher_source='apo' with a grey_lit_only scope is valid and compiles
+    to the overton block that acquire-time validation and the search loop
+    expect. Test mod, task 039."""
+    plan = _plan(
+        backend_scope="grey_lit_only",
+        scope_constraints={"publisher_source": "apo"},
+    )
+
+    assert plan.scope_constraints.to_filters() == {"overton": {"publisher_source": "apo"}}
+
+
 def test_author_affiliation_countries_normalised_to_upper_case() -> None:
     plan = _plan(scope_constraints={"author_affiliation_countries": ["gb", "us"]})
 
@@ -723,11 +755,16 @@ def test_screening_criteria_caps_mirror_screen_directive_grammar() -> None:
 
     Live check 017: a >200-char criterion validated on the plan, composed,
     and rejected at the screen boundary mid-run. The plan model must reject
-    anything its compile target rejects.
+    anything its compile target rejects. Task 039 bug 2 raised the per-entry
+    cap from 200 to ``SCREENING_CRITERION_MAX`` (1000) — real screening rules
+    outgrew 200 chars.
     """
-    with pytest.raises(ValidationError, match="at most 200 characters"):
-        _plan(screening_criteria=["x" * 201])
+    with pytest.raises(ValidationError, match=f"at most {SCREENING_CRITERION_MAX} characters"):
+        _plan(screening_criteria=["x" * (SCREENING_CRITERION_MAX + 1)])
     with pytest.raises(ValidationError, match="at most 50 entries"):
         _plan(screening_criteria=[f"criterion {i}" for i in range(51)])
-    ok = _plan(screening_criteria=["x" * 200] + [f"criterion {i}" for i in range(49)])
+    ok = _plan(
+        screening_criteria=["x" * SCREENING_CRITERION_MAX]
+        + [f"criterion {i}" for i in range(49)]
+    )
     assert len(ok.screening_criteria) == 50

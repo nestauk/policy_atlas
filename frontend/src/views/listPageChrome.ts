@@ -29,12 +29,12 @@ export const listSecondaryActionClass =
  * even when labels differ in length.
  */
 export const taskListRowGridClass =
-  "grid grid-cols-[minmax(0,1fr)_auto_12rem_5.5rem_7rem] items-center gap-x-4";
+  "grid grid-cols-[minmax(0,1fr)_auto_12rem_5.5rem_7rem] items-center gap-x-4 max-md:flex max-md:flex-wrap max-md:gap-x-3 max-md:gap-y-1";
 
 /** Same grid, with an owner column before the source count (task 033 phase
  *  10b) — only used where the caller has decided to show `owner_display`. */
 export const taskListRowGridClassWithOwner =
-  "grid grid-cols-[minmax(0,1fr)_auto_12rem_8rem_5.5rem_7rem] items-center gap-x-4";
+  "grid grid-cols-[minmax(0,1fr)_auto_12rem_8rem_5.5rem_7rem] items-center gap-x-4 max-md:flex max-md:flex-wrap max-md:gap-x-3 max-md:gap-y-1";
 
 /**
  * Whether a list page shows the `owner_display` column (task 033 phase

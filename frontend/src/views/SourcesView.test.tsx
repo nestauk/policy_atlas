@@ -3,12 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mockCoverage, mockEvidence, mockFunnel, mockLandscape } from "../mock/fixtures";
+import { mockCoverage, mockEvidence, mockFunnel, mockLandscape, mockSourceDossiers } from "../mock/fixtures";
 import { TooltipProvider } from "../ui/radix/Tooltip";
-import { SourcesView } from "./SourcesView";
+import { SourceDossierBody, SourcesView } from "./SourcesView";
 import * as queries from "../api/queries";
 
 vi.mock("../api/queries", () => ({
+  useApiClient: vi.fn(() => ({ GET: vi.fn() })),
   useTask: vi.fn(),
   useLandscape: vi.fn(),
   useCoverage: vi.fn(),
@@ -146,21 +147,43 @@ describe("SourcesView — sortable table (028 strand 7)", () => {
     expect(lastEvidenceQuery()).toMatchObject({ sort: "status", order: "asc" });
   });
 
-  it("offers a theme select scoped to themes carrying a theme_id, defaulting to All themes", () => {
+  // The theme filter is an app-styled Popover listbox (040 amendment), not a
+  // native <select> — options exist only while the menu is open. The trigger's
+  // accessible name is label + current selection ("Key theme All themes").
+  it("offers a theme select scoped to themes carrying a theme_id, defaulting to All themes", async () => {
+    const user = userEvent.setup();
     renderSources();
-    const select = screen.getByRole("combobox", { name: "Key theme" });
-    expect(within(select).getByRole("option", { name: "All themes" })).toBeInTheDocument();
-    expect(within(select).getByRole("option", { name: "School food environments" })).toBeInTheDocument();
+    const trigger = screen.getByRole("button", { name: /^Key theme/ });
+    expect(trigger).toHaveTextContent("All themes");
+    await user.click(trigger);
+    const listbox = screen.getByRole("listbox", { name: "Key theme" });
+    expect(within(listbox).getByRole("option", { name: "All themes" })).toBeInTheDocument();
+    expect(within(listbox).getByRole("option", { name: "School food environments" })).toBeInTheDocument();
     // "Family support" carries no theme_id in the fixture — it must not
     // offer a selection that can never round-trip against the API.
-    expect(within(select).queryByRole("option", { name: "Family support" })).toBeNull();
+    expect(within(listbox).queryByRole("option", { name: "Family support" })).toBeNull();
   });
 
   it("sets the theme param and the evidence query when a theme is chosen", async () => {
     const user = userEvent.setup();
     renderSources();
-    const select = screen.getByRole("combobox", { name: "Key theme" });
-    await user.selectOptions(select, SCHOOL_FOOD_THEME_ID);
+    await user.click(screen.getByRole("button", { name: /^Key theme/ }));
+    await user.click(screen.getByRole("option", { name: "School food environments" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(`theme=${SCHOOL_FOOD_THEME_ID}`);
+    expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
+  });
+
+  // 040 review finding: the native <select> gave arrow keys for free — the
+  // popover listbox must keep the keyboard path (focus opens on the current
+  // option, arrows move, Enter picks).
+  it("supports keyboard selection: focus lands in the listbox, arrows move, Enter picks", async () => {
+    const user = userEvent.setup();
+    renderSources();
+    await user.click(screen.getByRole("button", { name: /^Key theme/ }));
+    expect(screen.getByRole("option", { name: "All themes" })).toHaveFocus();
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("option", { name: "School food environments" })).toHaveFocus();
+    await user.keyboard("{Enter}");
     expect(screen.getByTestId("location")).toHaveTextContent(`theme=${SCHOOL_FOOD_THEME_ID}`);
     expect(lastEvidenceQuery()).toMatchObject({ theme: SCHOOL_FOOD_THEME_ID });
   });
@@ -208,14 +231,14 @@ describe("SourcesView — fixture-driven render (mock mode)", () => {
 });
 
 describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", () => {
-  it("defaults to All on the relevance spectrum, Relevant header marked descending", () => {
+  it("defaults to Included on the relevance spectrum, Relevant header marked descending", () => {
     renderSources();
     expect(lastEvidenceQuery()).toMatchObject({
-      status: undefined,
+      status: ["Included"],
       sort: "relevance",
       order: "desc",
     });
-    expect(screen.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Included" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("columnheader", { name: /Relevant/ })).toHaveAttribute(
       "aria-sort",
       "descending",
@@ -285,5 +308,76 @@ describe("SourcesView — refinement batch (owner live-demo list, 2026-08-05)", 
     expect(screen.getAllByText("Read in full").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Abstract only").length).toBeGreaterThan(0);
     expect(screen.queryByText("Cited in the evidence base")).toBeNull();
+  });
+});
+
+describe("SourceDossierBody authorships (042)", () => {
+  const authored = mockSourceDossiers[mockEvidence[2].source_id];
+  const corporate = mockSourceDossiers[mockEvidence[7].source_id];
+
+  it("renders authors with superscript markers and numbered, deduped institutions", () => {
+    const { container } = render(
+      <SourceDossierBody source={authored} findings={[]} findingsPending={false} />,
+    );
+    expect(screen.getAllByText(/Alex Sampleton/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Casey Mockford/).length).toBeGreaterThan(0);
+    // The sheet header owns the title (042 item 4): the body never repeats it.
+    expect(screen.queryByText(authored.title)).toBeNull();
+    expect(screen.getAllByText(/Institute of Fictional Studies/).length).toBeGreaterThan(0);
+    // Marker sequence proves the shared institution deduped to number 1 and
+    // listed once: two author markers, then the two numbered institution rows.
+    const markers = [...container.querySelectorAll("sup")].map((sup) => sup.textContent);
+    expect(markers).toEqual(["1", "1,2", "1", "2"]);
+  });
+
+  it("renders a corporate author with no markers and no institutions line", () => {
+    const { container } = render(
+      <SourceDossierBody source={corporate} findings={[]} findingsPending={false} />,
+    );
+    expect(screen.getAllByText(/Example Policy Institute/).length).toBeGreaterThan(0);
+    expect(container.querySelector("sup")).toBeNull();
+  });
+
+  it("renders no authors line at all when the source carries none", () => {
+    const { container } = render(
+      <SourceDossierBody
+        source={{ ...authored, authorships: [] }}
+        findings={[]}
+        findingsPending={false}
+      />,
+    );
+    expect(screen.queryByText(/Sampleton/)).toBeNull();
+    expect(container.querySelector("sup")).toBeNull();
+  });
+});
+
+describe("SourcesView — Download CSV", () => {
+  it("fetches every page unfiltered and builds an escaped CSV", async () => {
+    const rowA = { ...mockEvidence[0], title: 'A "quoted", title', url: "https://a.example" };
+    const rowB = { ...mockEvidence[0], source_id: "22222222-2222-2222-2222-222222222222", title: "\t=SUM(1)" };
+    const get = vi.fn()
+      .mockResolvedValueOnce({ data: { data: [rowA], pagination: { page: 1, page_size: 1, total_items: 2 } } })
+      .mockResolvedValueOnce({ data: { data: [rowB], pagination: { page: 2, page_size: 1, total_items: 2 } } });
+    vi.mocked(queries.useApiClient).mockReturnValue({ GET: get } as never);
+    let blob: Blob | undefined;
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL: vi.fn((value: Blob) => { blob = value; return "blob:mock"; }),
+      revokeObjectURL: vi.fn(),
+    });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    renderSources();
+    await userEvent.click(screen.getByRole("button", { name: "Download CSV" }));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls[0][1].params.query).toEqual({ page: 1, page_size: 200 });
+    const csv = await blob!.text();
+    expect(csv).toContain("Screening reason");
+    expect(csv).toContain("Description");
+    expect(csv).toContain('"A ""quoted"", title"');
+    expect(csv).toContain("\"'\t=SUM(1)\"");
+    expect(click).toHaveBeenCalled();
+    expect((click.mock.instances[0] as HTMLAnchorElement).download).toBe("Tower Hamlets task - sources.csv");
+    click.mockRestore();
+    vi.unstubAllGlobals();
   });
 });

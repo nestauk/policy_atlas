@@ -12,9 +12,9 @@ from typing import Any, Literal, Self, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from policy_atlas.core.schema import DIRECTIVE_STRING_MAX
 from policy_atlas.evidence_search.assess.screen import (
     CRITERIA_LIST_MAX,
+    SCREENING_CRITERION_MAX,
     ScreenDirectiveError,
     _compose_screen_intent,
 )
@@ -428,6 +428,9 @@ class ScopeConstraints(BaseModel):
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter, as 2-letter alpha codes normalised to upper-case.
         country_group: Optional named group applied to both search backends.
+        publisher_source: Optional Overton source-collection filter; the only
+            supported value is ``apo`` (Australian Policy Online). Test mod,
+            task 039.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -437,6 +440,7 @@ class ScopeConstraints(BaseModel):
     publisher_country: str | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroup | None = None
+    publisher_source: Literal["apo"] | None = None
 
     @field_validator("published_after", "published_before")
     @classmethod
@@ -538,6 +542,15 @@ class ScopeConstraints(BaseModel):
                 "country_group is mutually exclusive with publisher_country "
                 "and author_affiliation_countries"
             )
+        if self.publisher_source is not None and (
+            self.publisher_country is not None
+            or self.author_affiliation_countries is not None
+            or self.country_group is not None
+        ):
+            raise ValueError(
+                "publisher_source is mutually exclusive with publisher_country, "
+                "author_affiliation_countries and country_group"
+            )
         return self
 
     def to_filters(self) -> dict[str, dict[str, Any]]:
@@ -545,8 +558,9 @@ class ScopeConstraints(BaseModel):
 
         Returns:
             A ``filters`` object with recency under ``shared``, publisher
-            geography under ``overton``, and author-affiliation geography
-            under ``openalex``. Empty constraints compile to ``{}``.
+            geography or source collection under ``overton`` (the latter as
+            ``publisher_source``), and author-affiliation geography under
+            ``openalex``. Empty constraints compile to ``{}``.
         """
         filters: dict[str, dict[str, Any]] = {}
         shared: dict[str, str] = {}
@@ -571,6 +585,8 @@ class ScopeConstraints(BaseModel):
             return filters
         if self.publisher_country is not None:
             filters["overton"] = {"publisher_country": self.publisher_country}
+        elif self.publisher_source is not None:
+            filters["overton"] = {"publisher_source": self.publisher_source}
         if self.author_affiliation_countries is not None:
             filters["openalex"] = {
                 "author_affiliation_countries": self.author_affiliation_countries
@@ -758,7 +774,8 @@ class TaskPlan(BaseModel):
                 grammar's caps (the compile target must accept every valid
                 plan by construction; live check 017 caught a >200-char
                 criterion validating here and rejecting at the screen
-                boundary).
+                boundary; task 039 bug 2 raised the per-entry cap to
+                ``SCREENING_CRITERION_MAX``).
         """
         if info.field_name == "screening_criteria":
             if len(values) > CRITERIA_LIST_MAX:
@@ -766,10 +783,10 @@ class TaskPlan(BaseModel):
                     f"screening_criteria must have at most {CRITERIA_LIST_MAX} entries"
                 )
             for value in values:
-                if len(value) > DIRECTIVE_STRING_MAX:
+                if len(value) > SCREENING_CRITERION_MAX:
                     raise ValueError(
                         "screening_criteria entries must be at most "
-                        f"{DIRECTIVE_STRING_MAX} characters"
+                        f"{SCREENING_CRITERION_MAX} characters"
                     )
         return [_require_clean_string(value, field_name=info.field_name) for value in values]
 
@@ -917,7 +934,7 @@ class TaskPlan(BaseModel):
             and self.backend_scope == "academic_only"
         ):
             raise ValueError(
-                "publisher_country filters the grey-literature backend, which "
+                "publisher_country filters the policy-literature backend, which "
                 "backend_scope 'academic_only' excludes"
             )
 
@@ -928,6 +945,15 @@ class TaskPlan(BaseModel):
             raise ValueError(
                 "author_affiliation_countries filters the academic backend, "
                 "which backend_scope 'grey_lit_only' excludes"
+            )
+
+        if (
+            self.scope_constraints.publisher_source is not None
+            and self.backend_scope != "grey_lit_only"
+        ):
+            raise ValueError(
+                "publisher_source restricts the policy-literature backend; "
+                "backend_scope must be 'grey_lit_only'"
             )
 
         # Compile-target parity for the screen prompt: the composed intent

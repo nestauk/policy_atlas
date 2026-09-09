@@ -220,6 +220,10 @@ def test_validate_scope_filters_full_example_both_backends() -> None:
         ({"overton": {"publisher_country": "United Kingdom"}}, ["overton"]),
         # overton unknown region
         ({"overton": {"publisher_region": "Mars"}}, ["overton"]),
+        # overton publisher_source: only "apo" is allowlisted (task 039)
+        ({"overton": {"publisher_source": "xyz"}}, ["overton"]),
+        # an unrelated unknown key still raises alongside the new key
+        ({"overton": {"bogus_source_key": "apo"}}, ["overton"]),
         # overton unknown publisher type
         ({"overton": {"publisher_type": "nonprofit"}}, ["overton"]),
         # backend block supplied outside declared backend scope
@@ -285,6 +289,18 @@ def test_source_country_post_filter_validates_but_never_maps_to_wire() -> None:
 
     assert validated["overton"] == {"source_country_post_filter": ["UK", "France"]}
     assert to_wire_params("overton", validated["overton"]) == {}
+
+
+def test_validate_scope_filters_accepts_publisher_source_apo() -> None:
+    """Test mod, task 039: the APO source-collection filter validates and
+    maps to the Overton wire param `source`."""
+    validated = validate_scope_filters(
+        {"overton": {"publisher_source": "apo"}},
+        backend_names=["overton"],
+    )
+
+    assert validated["overton"] == {"publisher_source": "apo"}
+    assert to_wire_params("overton", validated["overton"]) == {"source": "apo"}
 
 
 def test_openalex_country_filter_variants_split_after_100_codes() -> None:
