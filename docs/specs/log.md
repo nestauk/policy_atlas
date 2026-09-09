@@ -11,6 +11,11 @@
   [OS components](capabilities/options-scoping/components.md) — the two structural gates pass on
   standing defaults in unattended mode, recorded and flagged; unattended is never the default.
   [vocabulary.md](vocabulary.md) — the Task Agent's code names (`task_agent`).
+* **Update** (owner rulings at the task 043 contract re-approval, after the adversarial reviews):
+  [plan-as-object § Plan vs config](system/plan-as-object.md) — plan ↔ turn provenance is at
+  **version grain**, not field grain; [plan-as-object § Thoroughness](system/plan-as-object.md) —
+  the baseline is written sequentially, with a development-time feasibility check against a
+  parallel version; no parallel mode in the product without a revision of the durability contract.
 
 ## 2026-09-09
 * **Update**: Owner rulings on the sixteen pre-task-1 rows of the options-scoping decision sheet

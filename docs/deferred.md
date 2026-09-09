@@ -46,12 +46,15 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     scope re-screens the linked task's documents (D4). Task 1 pins the source runs and seeds the
     Task Agent only.
   - **`task_link.option_id`** — added in task 2 with the option table it references (D13).
-  - **Per-field turn provenance on the plan** beyond Your context and `source_turn_index` — neither
-    plan carries it yet (plan-as-object § Plan vs config).
+  - **Per-field turn provenance on the plan** — resolved, not deferred: the owner revised
+    plan-as-object § Plan vs config to version grain (2026-09-09); reopen only if a reader asks.
   - **Baseline latency levers not taken in task 1** — show sections as they finish; start the
     longlist's retrieval while the user reads the baseline (task 2; wastes some egress when the
     plan changes at the gate); a faster model tier for the baseline sections when Bedrock lands,
-    quality-tested first, fresh minimal prompt per the doctrine (D7).
+    quality-tested first, fresh minimal prompt per the doctrine (D7); parallel section writing in
+    the product, only by an owner revision of the durability contract after the task 043
+    feasibility check (C6); rebuilding only the baseline sections a plan change touched (open
+    question 7 — task 043 offers a full rebuild or going on with the existing baseline).
   - **The Task Agent as the Evidence search's control surface** — owner: the Evidence search's
     card-based steering "is maybe not optimal, because ideally … the user could control the task
     through the task agent chat". Task 043 builds routed turns at a pause for scoping only, hung on

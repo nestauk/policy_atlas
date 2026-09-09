@@ -9,8 +9,7 @@ the adversarial findings A1–A18 and the terms are defined in
 
 1. [ ] **1 Task kind** lands: `task.capability` written at creation, never
        derived (D2); the card, list and header say "Options scoping" (D5);
-       the list shows a scoping task's depth from the derived nullable
-       `TaskOut.depth` (C17).
+       the list shows no depth (owner).
 2. [ ] **2 Task Agent rename** lands as one commit reviewed on its own before
        feature code, complete per the contract's list (A10): conversation
        kind, transcript table and column, routes, models, frontend consumers,
@@ -35,8 +34,8 @@ the adversarial findings A1–A18 and the terms are defined in
        citations and the coverage statement, fenced once and stable across
        turns; nothing is copied into the receiving task's rows (D4).
 5. [ ] **5 Scoping plan**: the § Plan object fields validate as specified
-       through the capability registry (C9); every compiled field carries its
-       `turn_index` (C16); an ES task rejects a scoping payload and the
+       through the capability registry (C9); provenance is at version grain
+       (C16); an ES task rejects a scoping payload and the
        reverse (D1); the plan document renders every scoping section with its
        Edit action (C18).
 6. [ ] **6 Task Agent for a scoping task**: `task_agent_scoping_v1` offers
@@ -51,7 +50,8 @@ the adversarial findings A1–A18 and the terms are defined in
        (A7); the baseline's own Sources section names what was not searched
        (A14); the intent record carries `purpose=baseline` and its `plan_id`
        (A16); sections are written sequentially with the ES-only passes off
-       (C6, C7); compute time measured and recorded.
+       (C6, C7); the sequential-versus-parallel feasibility check is recorded
+       and none of it ships; compute time measured and recorded.
 8. [ ] **8 The gate**: `baseline_confirm` exists only in the scoping chain
        and an ES walk in frequent mode never names it (A2); it pauses in
        frequent, moderate and minimal; in unattended it writes a recorded,
@@ -60,8 +60,9 @@ the adversarial findings A1–A18 and the terms are defined in
        admitted while paused, sorted into question · decision and dispatched
        to the answer core or the existing check-in response transaction bound
        to run, check-in and plan version (A12, C2, C5); Change the plan ends
-       the walk, the next Task Agent turn mints a new plan version and Confirm
-       and build baseline rebuilds under it (C1, C3); the steering router is
+       the walk, the next Task Agent turn mints a new plan version and the
+       user chooses Rebuild baseline or Confirm plan and build longlist (C1,
+       C3); the steering router is
        untouched; the approving branch and `PATCH /plan` stay fenced (A6); a
        decision from chat or card lands in one transaction (A13); an ES pause
        still refuses turns; nothing after the gate runs (D12).
@@ -98,7 +99,7 @@ the adversarial findings A1–A18 and the terms are defined in
         `task_link.option_id` (task 2, D13) · scoping deep (D6) · the later
         latency levers (D7) · the Task Agent as the Evidence search's control
         surface and any chat carrying Task Agent turns (D9).
-17. [ ] The spec changes in contract § Spec changes are applied with the
+17. [ ] The six spec changes in contract § Spec changes are applied with the
         owner's words quoted and logged in `docs/specs/log.md`; sources
         untouched.
 18. [ ] ADR 0037 written and Accepted with sign-off date, with the rollback

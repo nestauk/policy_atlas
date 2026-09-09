@@ -31,9 +31,13 @@ may be refined as implementation lands.
   capability agent's just-in-time selection is the **commit** (the execution-bearing layer that
   compiles, by construction). Two tiers, staged compilation: the plan spine's
   sequence/wiring compiles up front; each commit compiles **just-in-time** once its inputs exist.
-- **Plan-field ↔ chat-turn provenance** — each compiled field back-references the conversation
-  turn(s) that produced it (raw prose retained behind the structured field), so the plan carries
-  its own "why" into the decision log without coupling compilation to free text.
+- **Plan ↔ chat-turn provenance at version grain** *(owner ruling 2026-09-09, task 043 contract,
+  revising the 2026-06 field-grain wording)* — each plan **version** records the conversation turn
+  that produced it (`source_turn_index`), the transcript is durable and ordered, and Your-context
+  entries carry their own turn; so "when did the user set X" is answerable between two versions
+  without a per-field reference. Owner: "do we even really need that?" — nothing in the product
+  reads a per-field reference and neither plan carries one. Field grain stays open as a refinement
+  if a reader asks for it.
 
 ## What a plan contains 🟡 *(candidate, per §5)*
 
@@ -117,8 +121,11 @@ referent). Instead:
   difference the user feels", so the section count is not the lever. The baseline has one shape at
   rapid and standard and **one measured compute target**, aimed at three to four minutes, verified
   on the NEET question during the build. The levers are a small acquisition target, a per-section
-  tool-call cap, and the writing mode — sequential or parallel-with-join — chosen from a build-time
-  trial on quality, the losing mode deleted. Later levers, recorded in `docs/deferred.md`: showing
+  tool-call cap; writing is **sequential**, as the Evidence search writes today — the durability
+  contract's "never fan out the conclusion" holds — and a development-time **feasibility check**
+  compares it with a parallel version before the baseline is finalised (owner, 2026-09-09: "let's go
+  with sequential, but we should also do some sort of test comparing it to a parallel version
+  before finalising"); a parallel mode in the product would be a revision of that contract. Later levers, recorded in `docs/deferred.md`: showing
   sections as they finish; starting the longlist's retrieval while the user reads the baseline;
   a faster model tier for the sections when Bedrock lands, quality-tested first. The owner's
   expectation for a whole rapid path is about 15 to 20 minutes.)* The option profile's

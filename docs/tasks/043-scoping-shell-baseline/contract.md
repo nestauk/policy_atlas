@@ -14,14 +14,16 @@ against the baseline before any option is generated.
 > relaunched Codex lane, read-only, on the pre-fold commit): 18 + 18
 > findings, both verdicts "material change needed", all accepted and folded
 > (§ Adversarial findings; seven Codex findings restate fallback ones).
-> Three Codex folds are **proposals pending the owner's ruling** at
-> re-approval: C1 (Change the plan aborts the walk and rebuilds), C6 (drop
-> the parallel-writing trial), C16 (per-field turn provenance built now). The material folds — the
+> The three Codex proposals were ruled 2026-09-09 (C1: after a plan change
+> the user chooses rebuild or go on; C6: sequential writing, with a
+> development-time feasibility check against a parallel version; C16: not
+> built, spec revised to version grain) and the tasks-list depth chip was
+> dropped. **Re-approved as folded 2026-09-09 · owner.** The material folds — the
 > lattice gains a capability dimension (A2), the steering router is modified
 > not reused (A3), a third prompt surface for the gate sort (A4), the gate
 > built on the existing check-in response path (A12), the rollback predicate
 > (A5), the complete rename list (A10), `evidence_scope.plan_id` (A16) —
-> **reopen the 🛑: re-approval pending · owner.**
+> reopened the 🛑 and were re-approved.
 > Plan approved (before implementation): _pending_ ·
 > ADR: **0037** (to be written at step 4 — task kind, `task_link`, the
 > baseline gate, the Task Agent rename, rollback).
@@ -53,10 +55,9 @@ ADR:
 1. **Task kind.** A task carries its capability (`evidence_search` or
    `options_scoping`), written at creation, never changed and never derived
    (D2). Existing tasks are Evidence search. The New task card, the tasks
-   list and the task header say "Options scoping" (D5); the list shows a
-   scoping task's depth from a **derived, nullable `depth`** on the task read
-   model, read from the approved plan payload and null while there is no
-   approved plan (C17).
+   list and the task header say "Options scoping" (D5). The tasks list shows
+   no depth (owner, 2026-09-09: "we don't need depth in the tasks list";
+   C17 dropped).
 2. **Task Agent rename (phase one, fenced).** The conversation kind
    `planning` becomes `task_agent`; `planning_transcript` becomes
    `task_agent_transcript`; `/planning-turns` becomes `/task-agent-turns`;
@@ -133,8 +134,12 @@ ADR:
    Starts from · Question and intended change · Settings (who or what should
    change · where · outcomes · depth) · Constraints and preferences (a table:
    what you asked for · what happens · checked at) · Your context · Steps and
-   check-ins. One start action: **Confirm and build baseline**, with a coarse
-   time band.
+   check-ins. One start action before the first baseline: **Confirm and
+   build baseline**, with a coarse time band. After a plan change at the gate
+   (deliverable 8) the document offers two: **Rebuild baseline** and
+   **Confirm plan and build longlist** (owner ruling on C1, 2026-09-09: "the
+   user should have the choice of whether they want to build another
+   baseline after changing the plan or just go to the longlist").
 6. **The Task Agent for a scoping task** (not a "planner": the thread carries
    through to the gate). Prompt surface `task_agent_scoping_v1` in
    `runtime/task_agent_scoping_prompt.py`, lead-authored, hash-pinned. It
@@ -197,7 +202,7 @@ ADR:
    `capability_run_id`, the `check_in_id` and the plan version and
    re-validated under the task lock, so the second is 409 `already_answered`
    (A13, C5). **An instruction at the gate is the decision "Change the
-   plan"** *(C1 — proposal pending the owner's ruling)*: the existing
+   plan"** *(C1, ruled 2026-09-09)*: the existing
    steering path cannot take it, because at this gate every component has
    run and the stability rule refuses any change to a run component, and a
    change to Where or the outcomes would leave the baseline stale against
@@ -205,11 +210,16 @@ ADR:
    (decision recorded, walk `aborted` by the user's choice), the fence lifts
    because no walk is active, the instruction is applied as an ordinary Task
    Agent planning turn minting a new plan version, the baseline artefact
-   stays visible marked *built from plan version N*, and **Confirm and build
-   baseline** rebuilds it under the new version (a supersede-by-rerun; the
-   new walk's intent record points at the new plan row, and so does
-   `plan.evidence_scope_id` — C3). In this slice every plan change rebuilds;
-   rebuilding only when the change touches the baseline's inputs is open
+   stays visible marked *built from plan version N*, and the user chooses
+   (owner ruling, C1): **Rebuild baseline** starts a new walk under the new
+   version (a supersede-by-rerun; the new walk's intent record points at the
+   new plan row, and so does `plan.evidence_scope_id` — C3), or **Confirm
+   plan and build longlist** confirms the new plan against the existing
+   baseline, the decision recording both versions (in this slice it records
+   and ends; task 2 wires it to the longlist). The Task Agent says in the
+   thread whether the change touched the baseline's inputs (question,
+   intended change, target unit, Where, outcomes, evidence restriction) so
+   the choice is informed. Rebuilding only the affected sections is open
    question 7 (deltas, not restarts), recorded in `docs/deferred.md`. The
    steering router is therefore **not used at the gate and not modified**
    (this retires fallback finding A3's modification). A turn that is a
@@ -333,14 +343,14 @@ the Frame board):
 | `time_band` | coarse compute band for the baseline, "then a check-in" | — | display |
 | `source_turn_index` | as ES | — | as ES |
 
-**Per-field turn provenance** *(C16 — proposal pending the owner's ruling)*:
-plan-as-object requires every compiled field to back-reference the turn that
-produced it, and the ES plan does not do this (only `source_turn_index`, a
-latest-turn watermark). For the scoping plan each compiled field carries
-`turn_index`, stamped deterministically by diffing the draft between turns at
-write time; the plan document can show "from turn N" on request. The
-alternative is an owner revision of plan-as-object; deferring silently is not
-open, because the field-level rule is the audit contract.
+**Turn provenance is at version grain** *(C16, owner ruling 2026-09-09:
+"do we even really need that?" — no)*: nothing in the product reads a
+per-field turn reference, the transcript is durable and ordered, and each plan
+version records the turn that produced it (`source_turn_index`), so "when did
+the user set X" is answerable between two versions. Per-field references are
+not built; plan-as-object § Plan vs config is revised to version grain with
+the ruling quoted (§ Spec changes). `your_context` entries keep their own
+`turn_index` because the trust rules use it.
 
 **Execution-bearing baseline parameters that are not plan fields** (C8) are
 compile constants in the baseline template, named here so nothing hides: the
@@ -372,16 +382,22 @@ levers in this slice:
 - a small acquisition target for the baseline (a narrow question about the
   status quo, not a broad search) — a plan-time number, measured;
 - a per-section tool-call cap in the template;
-- **sequential writing, as the ES writes today** *(C6 — proposal pending the
-  owner's ruling)*. The parallel-writing trial is withdrawn: the execution
-  contract's durability section rules "never fan out the conclusion", the
-  synthesiser writes sections in order over an accumulating claim ledger,
-  and the owner's own concern was consistency between sections. Reinstating
-  a parallel mode would be an owner revision of that system contract with a
-  durable join design, not a build-time trial. Sections are **shown as they
-  finish** so the user reads while the rest writes (perceived time, not
-  compute) if the build finds it cheap; otherwise it stays on the deferred
-  list.
+- **sequential writing, as the ES writes today** *(C6, owner ruling
+  2026-09-09: "let's go with sequential, but we should also do some sort of
+  test comparing it to a parallel version before finalising")*. The product
+  ships one mode, sequential: the execution contract's durability section
+  rules "never fan out the conclusion", the synthesiser writes sections in
+  order over an accumulating claim ledger, and the owner's concern was
+  consistency between sections. The comparison is a **feasibility check**,
+  not product code: a script under `scripts/feasibility_checks/`, in the
+  035 pattern, writes the same baseline sequentially and in parallel on the
+  NEET question and one thin-evidence question, records compute time and a
+  side-by-side consistency reading in `verification.md`, and nothing of it
+  ships. A parallel mode in the product would then be an owner revision of
+  the durability contract with a durable join design. Sections are **shown
+  as they finish** so the user reads while the rest writes (perceived time,
+  not compute) if the build finds it cheap; otherwise it stays on the
+  deferred list.
 
 Design target: as low as sequential writing over a small corpus allows,
 measured on the NEET question during the build and reported honestly (the
@@ -414,7 +430,7 @@ Rows marked **keep** must not change behaviour. File paths are as built at
 |---|---|---|---|---|
 | 1 | `task` row | no kind | `capability` text, check constraint, default `evidence_search` | `backend/src/policy_atlas/core/schema.py` (task); new alembic revision after `c1a7f4e9b0d2` |
 | 1 | `capability_run.capability` | `evidence_search` only | + `options_scoping` | `schema.py` `ck_capr_capability`; `runtime/runner.py` `_open_capability_run` literal |
-| 1 | Tasks list row | label from a key the API does not send | label from `TaskOut.capability`; depth chip from the derived nullable `TaskOut.depth` (C17) | `frontend/src/views/TaskListRow.tsx`, `lib/capabilities.ts` (key `options_scoping`, D5), `api/contract/tasks.py`, `api/readmodels/` |
+| 1 | Tasks list row | label from a key the API does not send | label from `TaskOut.capability`; no depth (owner) | `frontend/src/views/TaskListRow.tsx`, `lib/capabilities.ts` (key `options_scoping`, D5), `api/contract/tasks.py` |
 | 2 | Conversation kind | `planning` \| `chat` | `task_agent` \| `chat`; stored values rewritten | `schema.py` (conversation), migration, `api/contract/conversations.py`, readers |
 | 2 | Transcript table | `planning_transcript` | `task_agent_transcript` | `schema.py`, migration, `runtime/agent.py`, `api/routers/planning.py` |
 | 2 | Turn routes | `/tasks/{id}/planning-turns` | `/tasks/{id}/task-agent-turns`; models `TaskAgentTurn*`; no redirect | `api/routers/planning.py` (renamed), `api/contract/planning.py`, `frontend/src/api/*`, `web-api.md` |
@@ -476,9 +492,9 @@ Rows marked **keep** must not change behaviour. File paths are as built at
 - **D7 — the baseline's depth grading. Replaced (owner):** one shape at both
   depths (§ Baseline); a small acquisition target and a per-section cap; a
   measured compute target reported honestly; later levers recorded. The
-  writing-mode trial the interview agreed was withdrawn by Codex finding C6
-  (the durability contract forbids fanning out the conclusion) — proposal
-  pending the owner's ruling at re-approval.
+  writing mode is sequential (C6); the sequential-versus-parallel comparison
+  the interview agreed runs as a development-time feasibility check, not as
+  product code (owner, 2026-09-09).
 - **D8 — evidence restrictions apply to the baseline's acquire. Accepted
   (owner: "for simplicity … a user who applied a restriction at planning time
   would expect it applied throughout the task").** Plus the planner warns
@@ -553,6 +569,10 @@ Applied to the specs with the owner's words quoted and a line in
 4. vocabulary.md: the Task Agent's code names after deliverable 2.
 5. EB → ES across the living specs, in the rename phase (deliverable 2); the
    spec log gets one line when it lands.
+6. plan-as-object § Plan vs config: plan-field ↔ chat-turn provenance is at
+   **version grain** (C16 ruling), and § Thoroughness: the writing-mode trial
+   sentence replaced by sequential writing plus a feasibility check (C6
+   ruling). Applied with this re-approval.
 
 ## Adversarial findings (contract stage, 2026-09-09)
 
@@ -588,12 +608,12 @@ are proposals pending the owner's ruling at re-approval (C1, C6, C16).
 
 | # | Finding | Severity | Fold |
 |---|---|---|---|
-| C1 | A gate edit cannot use the steering path (the stability rule refuses changes to run components, and every component has run) and would leave the baseline stale | material | **proposal:** Change the plan ends the walk; the plan is edited by an ordinary Task Agent turn; Confirm and build baseline rebuilds; retires A3 |
+| C1 | A gate edit cannot use the steering path (the stability rule refuses changes to run components, and every component has run) and would leave the baseline stale | material | **ruled:** Change the plan ends the walk; the plan is edited by an ordinary Task Agent turn; the user then chooses Rebuild baseline or Confirm plan and build longlist; retires A3 |
 | C2 | The chat answer path refuses paused walks; the Task Agent turn model has no citations | material | shared answer core; discriminated turn projection |
 | C3 | `evidence_scope` has no plan FK; `_persist_new_plan_version` copies the old scope id | material | = A16, plus supersession: a rebuild's intent record and the plan row point at the new version |
 | C4 | No three-way triage exists | material | = A4; the sort is question · decision under C1 |
 | C5 | Task Agent turns race the check-in response endpoint | material | bind the turn to run, check-in and plan version; barrier test |
-| C6 | Parallel section writing contradicts the durability contract ("never fan out the conclusion") | material | **proposal:** trial withdrawn; sequential writing; parallel only by owner spec revision |
+| C6 | Parallel section writing contradicts the durability contract ("never fan out the conclusion") | material | **ruled:** sequential ships; a development-time feasibility check compares the two; parallel in the product only by owner spec revision |
 | C7 | synthesise cannot produce fixed-plus-optional sections; injects Conclusions and runs ES-only passes; one global cap | material | baseline mode defined with those passes off and per-section caps |
 | C8 | `ScopeConstraints` has no language filter; acquisition target and writing mode absent from the plan | material | languages stored, not applied, recorded as an ES gap; constants named |
 | C9 | Capability-specific validation is scattered over six readers; `STEER_POINTS` and `LATTICE_POINTS` are global | material | one capability registry; = A2/A18d mechanism |
@@ -603,8 +623,8 @@ are proposals pending the owner's ruling at re-approval (C1, C6, C16).
 | C13 | Rename inventory narrower than 038's | material | = A10 plus a rename manifest at plan time |
 | C14 | `planner_v11`; a re-pin and an unchanged hash cannot both hold; the deployment guide omits the old variable | material | = A1; byte-identical move, hash unchanged; no fallback code, guide updated |
 | C15 | The downgrade remedy cannot satisfy its predicate | material | = A5 |
-| C16 | Per-field turn provenance deferred against the plan-as-object rule | material | **proposal:** stamp `turn_index` per compiled field now |
-| C17 | Tasks-list depth has no API source | material | derived nullable `TaskOut.depth` |
+| C16 | Per-field turn provenance deferred against the plan-as-object rule | material | **ruled:** not built; plan-as-object revised to version grain |
+| C17 | Tasks-list depth has no API source | material | **dropped by the owner:** the tasks list shows no depth |
 | C18 | Missing checks: Edit per plan section, `scoping pass` label, visible source-tier skew | minor | added to deliverables 6 and 7 and the acceptance checks |
 
 ## Scope / Out of scope
@@ -639,8 +659,8 @@ Hard gates this slice touches — approval is this contract's sign-off:
   (triage, router) reuse the existing agent backend.
 - **Public interface:** `capability` and `from_task_ids` on task create/read;
   `capability` on plan read/patch bodies with the scoping fields; check-in
-  kind `baseline_confirm`; `project_ids` on task create (C10); a derived
-  nullable `depth` on task read (C17); the Task Agent turn response becomes
+  kind `baseline_confirm`; `project_ids` on task create (C10); the Task
+  Agent turn response becomes
   a discriminated projection (reply · answer with citations · decision) as
   additive fields (C2); the path
   rename `/planning-turns` → `/task-agent-turns` with no redirect (the one
@@ -711,8 +731,8 @@ written by a model.
   recorded and flagged (D11).
 - **Generation is free, interpretation is labelled, assessment is grounded**
   (OS trust). The baseline asserts nothing about options.
-- **No code bloat (owner).** One writing mode (sequential, C6); no trial
-  code ships.
+- **No code bloat (owner).** One writing mode (sequential, C6); the
+  comparison lives in `scripts/feasibility_checks/`, never in the product.
 - Deferred seams go to [docs/deferred.md](../../deferred.md): per-field turn
   provenance; Search further; inherited document rows (task 2 pointer);
   `task_link.option_id`; scoping deep; the later latency levers; the Task
@@ -765,8 +785,9 @@ turn/token budget is spent.
     defaults to United Kingdom tagged assumed; constraint kinds and
     `checked_at` closed; Your context entries keep verbatim text and turn
     index; an ES task rejects a scoping payload and the reverse; the default
-    steering mode is moderate and is never asked; every compiled field
-    carries its `turn_index` (C16); a language restriction is stored and
+    steering mode is moderate and is never asked; each plan version records
+    its `source_turn_index` and Your context entries their `turn_index`
+    (C16); a language restriction is stored and
     shown as not applied at retrieval (C8); every reader validates through
     the capability registry (C9 — a test that no caller imports
     `TaskPlan.model_validate` directly).
@@ -802,9 +823,10 @@ turn/token budget is spent.
     against `POST .../check-ins/{id}/response` yields exactly one durable
     decision (A13, C5); "Change the plan" (card or words) ends the walk
     `aborted` with the decision recorded, the next Task Agent turn is
-    accepted and mints a new plan version, and Confirm and build baseline
-    starts a new walk whose intent record and `plan.evidence_scope_id` point
-    at the new version (C1, C3); a mixed turn answers first and never infers
+    accepted and mints a new plan version, the plan document then offers
+    Rebuild baseline and Confirm plan and build longlist; Rebuild starts a
+    new walk whose intent record and `plan.evidence_scope_id` point at the
+    new version, and Confirm records both versions and ends (C1, C3); a mixed turn answers first and never infers
     a decision; an unsortable turn is asked back; the approving branch and
     `PATCH /plan` are 409 `run_active` while paused (A6); a turn while
     running is 409 `run_active`; an ES task's pause still refuses turns (ES
@@ -814,8 +836,8 @@ turn/token budget is spent.
   - frontend (vitest): New task form states (question and Starts from only,
     Starts from restricted to same-project Evidence search tasks; no depth
     or job control; one create request); plan document renders every scoping
-    section with its Edit action (C18); the tasks list shows the derived
-    depth and nothing when there is no approved plan (C17); the Task Agent
+    section with its Edit action (C18); the tasks list shows the kind and no
+    depth; the Task Agent
     thread renders a gate question with citations, a Change-the-plan decision
     and the check-in card with two options; Result shows the band, the run
     state and the "built from plan version N" mark after a plan change.
@@ -823,7 +845,8 @@ turn/token budget is spent.
   to the eval slice. `verification.md` records three live baselines (NEET;
   one thin-evidence structural question; one linked start) with their
   compute times, read against the trust rules as a qualitative note, not a
-  pass/fail gate.
+  pass/fail gate — plus the sequential-versus-parallel feasibility check's
+  numbers and reading (C6).
 - **Live check (pinned scope, ~25 minutes):** local app, real egress.
   (a) Seed one Evidence search task on NEET with a completed report.
   (b) New task → Options scoping → question · Starts from the seeded task →
@@ -835,10 +858,12 @@ turn/token budget is spent.
   band and its Sources section naming what was not searched, the Sources tab
   lists the documents; compute time recorded. (e) In the same thread: one question about the baseline
   answered with citations; then "change Where to England" → the walk ends,
-  the Task Agent applies the change as a new plan version, Confirm and build
-  baseline rebuilds (second compute time recorded). (f) Confirm → History
-  shows both decisions; the Result says the longlist arrives with the next
-  stage. (g) ES smoke: New task → Evidence search → two Task Agent turns →
+  the Task Agent applies the change as a new plan version and says the
+  baseline's inputs changed; Rebuild baseline (second compute time recorded).
+  (f) Confirm → History shows both decisions; the Result says the longlist
+  arrives with the next stage. Then one more change that does not touch the
+  baseline's inputs (add a preference) → Confirm plan and build longlist
+  without a rebuild. (g) ES smoke: New task → Evidence search → two Task Agent turns →
   an approved plan (no run; the shared turn path is what this slice
   touches; the ES walk is covered by tests). No full ES live e2e.
 
