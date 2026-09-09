@@ -809,8 +809,9 @@ turn/token budget is spent.
     `decided_by: standing_default` and a flag is written at the boundary
     (A9); choosing unattended in the plan writes the standing default for
     this point; the card carries the two options; Confirm ends the walk
-    `succeeded` with a decision event; Change the plan writes a new plan
-    version through the steering path and keeps the walk paused.
+    `succeeded` with a decision event; Change the plan ends the walk
+    `aborted` with the decision recorded and leaves the plan approved and
+    editable (C1; the steering router is not involved).
   - lattice (A2): an ES walk in frequent mode still pauses generically after
     synthesise and `lattice_name_for` never returns `baseline_confirm` for
     it; an ES plan rejects a `baseline_confirm` standing default (A18d); the
