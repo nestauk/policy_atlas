@@ -126,7 +126,11 @@ supported sentence, and the sentence is what gets copied into advice.
   rules, entitlements, duties, universal provisions — while aggregates, averages and
   implementation observations are shown as context with their level and date and the factor
   stays Unknown; ruling 34), **stated by you** (a fact about the present) or **planned by you** (a
-  commitment). Never inferred. Unknown stays unknown. Only the first two can lift a cap; a
+  commitment). Never inferred. *(Owner ruling on decision-sheet row C3, 2026-09-09: stated and
+  planned entries are the plan's **Your context** section, typed present fact or commitment with
+  the user's verbatim words and turn provenance — [plan-as-object](../../system/plan-as-object.md);
+  retrieved context is an ordinary grounded claim; "you" is rendered from the user id.)* Unknown
+  stays unknown. Only the first two can lift a cap; a
   commitment becomes a named condition of a conditional verdict ("Conditional on: local
   delivery funded"). A stated intention never acquires the force of verified capacity.
 - ✅ **Ceiling rule: the weakest leg decides.** The verdict word is set by the weakest of the

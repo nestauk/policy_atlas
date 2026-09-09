@@ -2348,3 +2348,16 @@ deliberately left, each with its reason:
   exists, so V9's `session_id = task id` covers the API path only (planning turn, run
   start, steering continuation, chat turn). Restructure if CLI traces ever need to group
   with a Task (038 review stack, Codex).
+
+## Document identity across snapshots (deferred 2026-09-09; owner ruling on OS decision-sheet row A8)
+
+Tracked as issue #75.
+
+One document fetched from two backends, or in two versions, is two content-addressed snapshots and
+counts twice in coverage, selection and inherited counts (the options-scoping feasibility checks
+found one Cochrane review as five snapshots; run 6 spent cap places on copies). A corpus-level
+**document identity** — DOI-only as the first rule; dedup at acquire or ingest; whether it should
+precede the chunk index to improve retrieval diversity — is its own Evidence search slice after the
+options-scoping build. Interim: options scoping's task 2 groups by DOI where present at the point
+of counting, no schema or ingestion change. Source: `docs/tasks/035-options-scoping/checks/`
+(check 2 C2-5; extra-runs.md § 1, § 4).
