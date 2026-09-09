@@ -168,6 +168,15 @@ fingerprint)`. Capabilities consume via pinned **evidence dataset snapshots** (p
 **Model/prompt upgrades set future defaults; they never invalidate existing findings or
 historical state.**
 
+*(Owner ruling on OS decision-sheet row A4, 2026-09-09.)* A linked task's findings are readable
+across the Link like any other record (§ Links between tasks); no change to the extraction memo is
+needed to read them. Reusing them is piecemeal: a finding only ever stands in for the fields it
+actually holds, for the same document snapshot and a compatible design, keeping its original claim
+and provenance; the rest is extracted or marked missing, and values are never mixed across
+different comparators or time periods. Which fields options scoping's light profile can take from
+an existing finding is decided with that profile (task 3). Letting extract skip snapshots another
+task already extracted is a separate Evidence search change, not needed by options scoping.
+
 - **Where a finding is multidimensional, preserve it as one coherent typed record with its
   dimensions intact and queryable** — never flattened to disconnected fields or prose.
 - **First reusable schema: `intervention_outcome_finding`**. **Grain:** one *(intervention,
