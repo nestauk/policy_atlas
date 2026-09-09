@@ -13,11 +13,15 @@ type PlanOut = components["schemas"]["PlanOut"];
 
 vi.mock("../../api/queries", () => ({
   usePlan: vi.fn(),
+  useTask: vi.fn(),
+  useRuns: vi.fn(),
+  useArtefact: vi.fn(),
 }));
 
 vi.mock("../../api/mutations", () => ({
   useStartRun: () => ({ mutate: vi.fn(), isPending: false }),
   usePatchPlan: () => ({ mutate: vi.fn(), isPending: false }),
+  useConfirmBaseline: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
@@ -85,7 +89,7 @@ function mockUsePlan(overrides: { data?: PlanOut | null; isPending?: boolean; is
 }
 
 function planOut(plan: PlanDraft): PlanOut {
-  return { plan, status: "approved", version: 1 };
+  return { capability: "evidence_search", plan, status: "approved", version: 1 };
 }
 
 function renderPlan(onOverlayChange = vi.fn(), overlay = {}) {
@@ -101,8 +105,121 @@ function renderPlan(onOverlayChange = vi.fn(), overlay = {}) {
   );
 }
 
+// --- Options scoping fixtures (task 044) ----------------------------------
+
+type ScopingPlanDraft = components["schemas"]["ScopingPlanDraft"];
+type TaskLinkOut = components["schemas"]["TaskLinkOut"];
+type RunOut = components["schemas"]["RunOut"];
+
+function fullScopingPlan(overrides: Partial<ScopingPlanDraft> = {}): ScopingPlanDraft {
+  return {
+    title: "Cutting NEET numbers",
+    question: "How can we reduce the number of young people not in education, employment or training?",
+    intended_change: { text: "Fewer young people are NEET six months after leaving school.", origin: "from_your_question" },
+    target_unit: { text: "16-24 year-olds at risk of becoming NEET", origin: "assumed" },
+    where: { text: "United Kingdom", origin: "assumed" },
+    outcomes: [{ text: "NEET rate at 6 months", origin: "from_your_question" }],
+    depth: "standard",
+    constraints: [
+      {
+        text: "Only options a council can fund directly",
+        kind: "requirement",
+        origin: "your_call",
+        checked_at: "longlist",
+        country_group: null,
+        published_after: null,
+        published_before: null,
+        languages: null,
+      },
+      {
+        text: "Prefer a lower cost per participant",
+        kind: "preference",
+        origin: "your_call",
+        checked_at: "assessment",
+        country_group: null,
+        published_after: null,
+        published_before: null,
+        languages: null,
+      },
+      {
+        text: "UK evidence only",
+        kind: "evidence_restriction",
+        origin: "assumed",
+        checked_at: "retrieval",
+        country_group: null,
+        published_after: null,
+        published_before: null,
+        languages: ["English"],
+      },
+    ],
+    your_context: [
+      { text: "We already run a careers service in every school.", type: "present_fact", turn_index: 1, test_as_condition: false },
+      { text: "We plan to expand apprenticeships next year.", type: "commitment", turn_index: 2, test_as_condition: true },
+    ],
+    entry_branch: "explore",
+    linked_task_ids: [],
+    steering_mode: "moderate",
+    steer_point_defaults: [],
+    assumptions: [],
+    steps: [
+      { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
+      { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+    ],
+    time_band: "10-15 minutes",
+    baseline_confirmed: null,
+    ready: true,
+    ...overrides,
+  };
+}
+
+function scopingPlanOut(overrides: Partial<ScopingPlanDraft> = {}, version = 1): PlanOut {
+  return {
+    capability: "options_scoping",
+    plan: null,
+    scoping: fullScopingPlan(overrides),
+    status: "approved",
+    version,
+  };
+}
+
+function mockUseTask(links: TaskLinkOut[] = []) {
+  vi.mocked(queries.useTask).mockReturnValue(
+    { data: { links } } as unknown as ReturnType<typeof queries.useTask>,
+  );
+}
+
+function mockUseRuns(runs: RunOut[] = []) {
+  vi.mocked(queries.useRuns).mockReturnValue(
+    { data: { data: runs } } as unknown as ReturnType<typeof queries.useRuns>,
+  );
+}
+
+function mockUseArtefact(artefactId: string | null) {
+  vi.mocked(queries.useArtefact).mockReturnValue(
+    { data: artefactId != null ? { artefact_id: artefactId } : null } as unknown as ReturnType<
+      typeof queries.useArtefact
+    >,
+  );
+}
+
+function baselineRun(overrides: Partial<RunOut> = {}): RunOut {
+  return {
+    capability_run_id: "run-1",
+    task_id: TASK_ID,
+    plan_id: "plan-1",
+    plan_version: 1,
+    status: "succeeded",
+    started_at: "2026-09-01T00:00:00Z",
+    ended_at: "2026-09-01T00:20:00Z",
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   vi.mocked(queries.usePlan).mockReset();
+  mockUseTask([]);
+  mockUseRuns([]);
+  mockUseArtefact(null);
 });
 
 describe("PlanDocument", () => {
@@ -391,5 +508,206 @@ describe("PlanDocument", () => {
     expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Start search" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Research question" })).toBeInTheDocument();
+  });
+});
+
+describe("PlanDocument — options scoping (task 044)", () => {
+  it("renders every scoping section with its Edit action (C18)", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    renderPlan();
+
+    expect(screen.getByRole("heading", { name: "Scoping plan" })).toBeInTheDocument();
+    const sectionLabels = [
+      "Question and intended change",
+      "Settings",
+      "Constraints and preferences",
+      "Your context",
+      "Steps and check-ins",
+    ];
+    for (const label of sectionLabels) {
+      expect(screen.getByRole("heading", { name: label })).toBeInTheDocument();
+    }
+    // Steps and check-ins has no Edit action, matching the ES's own Plan
+    // steps section — every other section has one.
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(sectionLabels.length - 1);
+  });
+
+  it("puts text in the Task Agent composer rather than opening an inline editor", async () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    const user = userEvent.setup();
+    const seeded: string[] = [];
+    window.addEventListener("policy-atlas:seed-composer", (event) => {
+      seeded.push((event as CustomEvent<string>).detail);
+    });
+    renderPlan();
+
+    await user.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    expect(seeded).toEqual(["Change the question or intended change: "]);
+    // No inline form appeared — the section still shows its read view.
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("hides Starts from with no links", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    mockUseTask([]);
+    renderPlan();
+    expect(screen.queryByRole("heading", { name: "Starts from" })).toBeNull();
+  });
+
+  it("shows a flagged link", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    mockUseTask([
+      {
+        link_id: "link-1",
+        source_task_id: "source-1",
+        source_task_name: "Childhood obesity in Tower Hamlets",
+        source_capability_run_id: "run-1",
+        flagged: true,
+      },
+    ]);
+    renderPlan();
+    expect(screen.getByRole("heading", { name: "Starts from" })).toBeInTheDocument();
+    const linkItem = screen
+      .getAllByRole("listitem")
+      .find((item) => item.textContent?.includes("Evidence search:") === true);
+    expect(linkItem?.textContent).toContain("Evidence search: Childhood obesity in Tower Hamlets · linked");
+    expect(linkItem?.textContent).toContain("no longer shares a project");
+  });
+
+  it("shows the depth screen label, never the internal key", () => {
+    mockUsePlan({ data: scopingPlanOut({ depth: "rapid" }) });
+    renderPlan();
+    expect(screen.getByText("Rapid scoping")).toBeInTheDocument();
+    expect(screen.queryByText("rapid")).toBeNull();
+  });
+
+  it("shows the check-ins steering words, never the internal key", () => {
+    mockUsePlan({ data: scopingPlanOut({ steering_mode: "unattended" }) });
+    renderPlan();
+    expect(screen.getByText("Run through without asking")).toBeInTheDocument();
+  });
+
+  it("renders origin tags with the ES's provenance words", () => {
+    mockUsePlan({
+      data: scopingPlanOut({
+        target_unit: { text: "16-24 year-olds", origin: "assumed" },
+        where: { text: "United Kingdom", origin: "your_call" },
+      }),
+    });
+    renderPlan();
+    expect(screen.getByText("(assumed, please check)")).toBeInTheDocument();
+    expect(screen.getByText("(your choice)")).toBeInTheDocument();
+  });
+
+  it("renders the constraints table with the fixed effect sentence per kind and the right Checked at", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    renderPlan();
+
+    expect(screen.getByText("Only options a council can fund directly")).toBeInTheDocument();
+    expect(
+      screen.getByText("Options that conflict are excluded, with the reason shown. You can include them again."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Longlist")).toBeInTheDocument();
+
+    expect(
+      screen.getByText(
+        "Checked after assessment where costs or effects are comparable; until then a labelled guess that sorts and never excludes.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Assessment")).toBeInTheDocument();
+
+    expect(screen.getByText("Retrieval")).toBeInTheDocument();
+    expect(screen.getByText("Language: not yet applied at retrieval")).toBeInTheDocument();
+  });
+
+  it("renders Your context entries with their type word and test-as-condition flag", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    renderPlan();
+    expect(screen.getByText(/We already run a careers service/)).toBeInTheDocument();
+    expect(screen.getByText("(present fact)")).toBeInTheDocument();
+    expect(screen.getByText("(commitment, test as a condition)")).toBeInTheDocument();
+  });
+
+  it("hides Your context entirely when there are none", () => {
+    mockUsePlan({ data: scopingPlanOut({ your_context: [] }) });
+    renderPlan();
+    expect(screen.queryByRole("heading", { name: "Your context" })).toBeNull();
+  });
+
+  describe("start actions (owner correction 2026-09-09)", () => {
+    it("no baseline walk yet: one primary action with the time band under it", () => {
+      mockUsePlan({ data: scopingPlanOut() });
+      mockUseRuns([]);
+      renderPlan();
+      expect(screen.getByRole("button", { name: "Confirm and build baseline" })).toBeInTheDocument();
+      expect(screen.getByText("10-15 minutes")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Confirm plan and build longlist" })).toBeNull();
+    });
+
+    it("the latest walk is running or paused: no start actions — the gate's card and chat decide", () => {
+      mockUsePlan({ data: scopingPlanOut(undefined, 1) });
+      mockUseRuns([baselineRun({ status: "paused", plan_version: 1 })]);
+      renderPlan();
+      expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Confirm plan and build longlist" })).toBeNull();
+      expect(screen.queryByText("Plan confirmed", { exact: false })).toBeNull();
+    });
+
+    it("the latest walk finished and the plan has since moved to a later version: two actions", () => {
+      mockUsePlan({ data: scopingPlanOut(undefined, 2) });
+      mockUseRuns([baselineRun({ plan_version: 1 })]);
+      mockUseArtefact("artefact-1");
+      renderPlan();
+      expect(screen.getByRole("button", { name: "Rebuild baseline" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
+    });
+
+    it("an aborted walk (Change the plan) at the same version: also two actions", () => {
+      mockUsePlan({ data: scopingPlanOut(undefined, 1) });
+      mockUseRuns([baselineRun({ status: "aborted", plan_version: 1 })]);
+      mockUseArtefact("artefact-1");
+      renderPlan();
+      expect(screen.getByRole("button", { name: "Rebuild baseline" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Confirm plan and build longlist" })).toBeInTheDocument();
+    });
+
+    it("once baseline_confirmed names the current version: no button", () => {
+      mockUsePlan({
+        data: scopingPlanOut({ baseline_confirmed: { artefact_id: "artefact-1", plan_version: 1 } }, 1),
+      });
+      mockUseRuns([baselineRun({ plan_version: 1 })]);
+      mockUseArtefact("artefact-1");
+      renderPlan();
+      expect(
+        screen.getByText("Plan confirmed · the longlist arrives with the next stage"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Rebuild baseline" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
+    });
+
+    it("the latest walk succeeded and the plan hasn't moved since: confirmed, even with no baseline_confirmed record yet", () => {
+      mockUsePlan({ data: scopingPlanOut({ baseline_confirmed: null }, 1) });
+      mockUseRuns([baselineRun({ plan_version: 1 })]);
+      mockUseArtefact("artefact-1");
+      renderPlan();
+      expect(
+        screen.getByText("Plan confirmed · the longlist arrives with the next stage"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("hides Edit and the start area when the plan is a read-only record", () => {
+    mockUsePlan({ data: scopingPlanOut() });
+    render(
+      <TooltipProvider delayDuration={0}>
+        <PlanDocument taskId={TASK_ID} readOnly onClose={vi.fn()} overlay={{}} onOverlayChange={vi.fn()} />
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Confirm and build baseline" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "Question and intended change" })).toBeInTheDocument();
   });
 });

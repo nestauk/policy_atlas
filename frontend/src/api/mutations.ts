@@ -242,6 +242,29 @@ export function useStartRun(taskId: string) {
   });
 }
 
+/** `POST .../plan/confirm-baseline` — record that a plan version was
+ *  confirmed against its baseline (task 044, S4): a plan-scoped record, not a
+ *  steering decision, so it works whether or not a walk is active for it to
+ *  hang on. Idempotent on the same `(artefact_id, plan_version)` pair. */
+export function useConfirmBaseline(taskId: string) {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: components["schemas"]["ConfirmBaselineIn"]) => {
+      const { data, error, response } = await client.POST(
+        "/api/v1/tasks/{task_id}/plan/confirm-baseline",
+        {
+          params: { path: { task_id: taskId } },
+          body,
+        },
+      );
+      if (data === undefined) raise(error, response.status);
+      return data;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.taskRoot(taskId) }),
+  });
+}
+
 /** `POST .../check-ins/{id}/response` — option/abort answers and the free-text
  *  compile→confirm ladder (202 carries the compiled render + confirm token). */
 export function useAnswerCheckIn(taskId: string) {

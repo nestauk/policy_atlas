@@ -375,4 +375,68 @@ describe("mock API", () => {
       expect(task.visibility).toBe("org");
     });
   });
+
+  // Task 044, phase 3.4: POST /tasks with from_task_ids builds a Link and a
+  // ready scoping plan, so mock mode and the e2e can show the plan document
+  // without scripting every intermediate Task Agent turn.
+  describe("options scoping: create with Starts from (task 044)", () => {
+    it("builds a Link carrying the previous task's name, and a ready scoping plan", async () => {
+      resetMockScenario();
+      const sourceName = (await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}`)).json() as { name: string }).name;
+
+      const response = await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Cutting NEET numbers",
+          question: "How can we reduce NEET numbers?",
+          capability: "options_scoping",
+          project_ids: [MOCK_PROJECT_ID],
+          from_task_ids: [MOCK_TASK_ID],
+        }),
+      });
+      expect(response.status).toBe(201);
+      const task = await response.json() as {
+        capability: string;
+        links: { source_task_name: string; flagged: boolean }[];
+      };
+      expect(task.capability).toBe("options_scoping");
+      expect(task.links).toHaveLength(1);
+      expect(task.links[0].source_task_name).toBe(sourceName);
+      expect(task.links[0].flagged).toBe(false);
+
+      const planResponse = await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/plan`);
+      const plan = await planResponse.json() as {
+        capability: string;
+        plan: unknown;
+        scoping: { ready: boolean } | null;
+      };
+      expect(plan.capability).toBe("options_scoping");
+      expect(plan.plan).toBeNull();
+      expect(plan.scoping?.ready).toBe(true);
+    });
+
+    it("carries no link when from_task_ids is empty", async () => {
+      resetMockScenario();
+      const response = await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "A scoping task with no source", capability: "options_scoping" }),
+      });
+      const task = await response.json() as { links: unknown[] };
+      expect(task.links).toEqual([]);
+    });
+
+    it("starts the new task's Task Agent transcript empty — no stale turns from a previous task", async () => {
+      resetMockScenario();
+      const before = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)).json() as { data: unknown[] };
+      expect(before.data.length).toBeGreaterThan(0);
+
+      await mockFetch("http://localhost/api/v1/tasks", {
+        method: "POST",
+        body: JSON.stringify({ name: "A fresh task", capability: "evidence_search" }),
+      });
+
+      const after = await (await mockFetch(`http://localhost/api/v1/tasks/${MOCK_TASK_ID}/task-agent-turns`)).json() as { data: unknown[] };
+      expect(after.data).toEqual([]);
+    });
+  });
 });

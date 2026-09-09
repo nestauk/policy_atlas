@@ -54,9 +54,11 @@ function basePlan(overrides: Partial<PlanDraft> = {}): PlanDraft {
   } as PlanDraft;
 }
 
-function mockPlanQuery(data: PlanOut | undefined) {
+function mockPlanQuery(data: (Omit<PlanOut, "capability"> & { capability?: string }) | undefined) {
   vi.mocked(queries.usePlan).mockReturnValue(
-    { data } as unknown as ReturnType<typeof queries.usePlan>,
+    {
+      data: data === undefined ? undefined : { capability: "evidence_search", ...data },
+    } as unknown as ReturnType<typeof queries.usePlan>,
   );
 }
 
@@ -138,5 +140,39 @@ describe("PlanCard — non-owner read-only (task 033 phase 10c, rubric 37)", () 
     renderCard({ isOwner: false, onReviewPlan });
     await user.click(screen.getByRole("button", { name: "Review the plan" }));
     expect(onReviewPlan).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("PlanCard — options scoping (task 044)", () => {
+  function scopingPlanOut(overrides: { ready?: boolean; status?: string } = {}): PlanOut {
+    return {
+      capability: "options_scoping",
+      plan: null,
+      scoping: { ready: overrides.ready ?? true, steps: [] },
+      status: overrides.status ?? "approved",
+      version: 1,
+    } as unknown as PlanOut;
+  }
+
+  it("offers only Review the plan — its own start actions live in the opened document", async () => {
+    mockPlanQuery(scopingPlanOut());
+    const onReviewPlan = vi.fn();
+    const user = userEvent.setup();
+    renderCard({ onReviewPlan });
+    await user.click(screen.getByRole("button", { name: "Review the plan" }));
+    expect(onReviewPlan).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Start search" })).not.toBeInTheDocument();
+  });
+
+  it("stays hidden until the scoping draft is ready", () => {
+    mockPlanQuery(scopingPlanOut({ ready: false }));
+    const { container } = renderCard();
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("stays hidden while the plan is a draft, not yet approved", () => {
+    mockPlanQuery(scopingPlanOut({ status: "draft" }));
+    const { container } = renderCard();
+    expect(container).toBeEmptyDOMElement();
   });
 });

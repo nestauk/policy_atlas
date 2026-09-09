@@ -117,6 +117,31 @@ describe("PartCard", () => {
     expect(onPrefill).toHaveBeenCalledWith("Change it: ");
   });
 
+  it("renders every option as secondary when none is primary (task 044: scoping depth has no default, ruling 25)", () => {
+    const part = proposal("depth", {
+      options: [
+        { id: "rapid", label: "Rapid scoping", sub: null, primary: false, reason: null },
+        { id: "standard", label: "Standard scoping", sub: null, primary: false, reason: null },
+      ],
+    });
+    render(
+      <PartCard
+        part={part}
+        state={{ live: true, confirmedOptionId: null }}
+        disabled={false}
+        onSend={vi.fn()}
+        onPrefill={vi.fn()}
+      />,
+    );
+    const rapid = screen.getByRole("button", { name: "Rapid scoping" });
+    const standard = screen.getByRole("button", { name: "Standard scoping" });
+    expect(rapid.dataset.partOption).toBe("secondary");
+    expect(standard.dataset.partOption).toBe("secondary");
+    // Neither option carries the primary button's solid-blue treatment.
+    expect(rapid.className).not.toContain("bg-blue");
+    expect(standard.className).not.toContain("bg-blue");
+  });
+
   it("options carrying a sub line (presets) send directly even when secondary", async () => {
     const user = userEvent.setup();
     const onSend = vi.fn();

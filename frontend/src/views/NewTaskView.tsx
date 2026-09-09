@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 
-import { useProjects } from "../api/queries";
+import { useProjects, useTasks } from "../api/queries";
 import { useCreateTask } from "../api/mutations";
 import {
   CAPABILITIES,
@@ -139,13 +139,77 @@ function ProjectPicker({
   );
 }
 
+/**
+ * Options scoping's "Starts from" control (contract deliverable 3): zero or
+ * more Evidence search tasks in the chosen project. Disabled with an
+ * explanatory line until a project is chosen — a Link can only ever name a
+ * same-project source (C11), so there is nothing to offer before then. Not a
+ * popover like the project picker: every candidate is worth seeing at once,
+ * and there are normally few enough that a checklist costs nothing.
+ */
+function StartsFromPicker({
+  projectId,
+  selected,
+  onChange,
+}: {
+  projectId: string;
+  selected: string[];
+  onChange: (taskIds: string[]) => void;
+}) {
+  const tasksQuery = useTasks(projectId !== "" ? { project_id: projectId, status: "active" } : undefined);
+  const disabled = projectId === "";
+  // The server has no capability filter (task 044 shipped the create-time
+  // link rules, not a list query) — filtered here, over the one project's
+  // rows the query already narrowed to.
+  const candidates = (tasksQuery.data?.data ?? []).filter(
+    (task) => task.capability === "evidence_search",
+  );
+
+  const toggle = (taskId: string) => {
+    onChange(selected.includes(taskId) ? selected.filter((id) => id !== taskId) : [...selected, taskId]);
+  };
+
+  return (
+    <div className="mt-6">
+      <p id="starts-from-label" className="text-meta font-normal text-grey">
+        Starts from
+      </p>
+      {disabled ? (
+        <p className="mt-1.5 text-meta text-grey">Choose a project to start from its Evidence searches</p>
+      ) : candidates.length === 0 ? (
+        <p className="mt-1.5 text-meta text-grey">No Evidence searches in this project yet</p>
+      ) : (
+        <ul
+          role="group"
+          aria-labelledby="starts-from-label"
+          className="mt-1.5 flex max-w-md flex-col gap-1.5 border border-line-2 bg-paper p-2"
+        >
+          {candidates.map((task) => (
+            <li key={task.task_id}>
+              <label className="flex cursor-pointer items-center gap-2 px-1 py-1 text-body font-normal text-navy">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(task.task_id)}
+                  onChange={() => toggle(task.task_id)}
+                />
+                {task.name}
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /** Per-capability copy for step two. The form SHAPE is the same for both in
- *  this slice — question and project, no depth or job control (contract
- *  second-round amendment 2) — so only the words differ. The scoping form's
- *  "Starts from" control lands in phase 3.4. */
+ *  this slice — question, project and (scoping only) Starts from, no depth
+ *  or job control (contract second-round amendment 2) — so only the words
+ *  differ. Options scoping's submit reads "Prepare plan" (task 044, phase
+ *  3.4): the task's own plan is what the next screen opens on. */
 const FORM_COPY: Record<
   SelectableCapabilityKey,
-  { eyebrow: string; heading: string; blurb: string; placeholder: string }
+  { eyebrow: string; heading: string; blurb: string; placeholder: string; submitLabel: string }
 > = {
   evidence_search: {
     eyebrow: "Evidence search",
@@ -153,6 +217,7 @@ const FORM_COPY: Record<
     blurb:
       "Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.",
     placeholder: "e.g. What works to reduce childhood obesity in the UK?",
+    submitLabel: "Start",
   },
   options_scoping: {
     eyebrow: "Options scoping",
@@ -160,6 +225,7 @@ const FORM_COPY: Record<
     blurb:
       "Describe the change you want. Policy Atlas will clarify what you need, draft a plan for your review, then set out what happens if nothing changes.",
     placeholder: "e.g. How can we reduce the number of young people not in education, employment or training?",
+    submitLabel: "Prepare plan",
   },
 };
 
@@ -169,6 +235,9 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const presetProject = searchParams.get("project") ?? "";
   const [question, setQuestion] = useState("");
   const [projectId, setProjectId] = useState(presetProject);
+  // Options scoping only (contract deliverable 3); an Evidence search form
+  // never renders the control that would set this.
+  const [fromTaskIds, setFromTaskIds] = useState<string[]>([]);
   const projects = useProjects();
   // Every task this caller can read is a valid target: assignment
   // resolves under the colleague-mutation grade (owner ruling 2026-08-27),
@@ -183,7 +252,14 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const submit = () => {
     if (!canSend) return;
     create.mutate(
-      { question, projectId: projectId === "" ? null : projectId, capability },
+      {
+        question,
+        projectId: projectId === "" ? null : projectId,
+        capability,
+        // Omitted rather than sent empty: keeps the create body identical to
+        // before this control existed for every caller that picks nothing.
+        ...(capability === "options_scoping" && fromTaskIds.length > 0 ? { fromTaskIds } : {}),
+      },
       { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
     );
   };
@@ -230,7 +306,7 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
           disabled={!canSend}
           className="shrink-0 px-6 py-3.5 text-body"
         >
-          {create.isPending ? "Starting…" : "Start"}
+          {create.isPending ? "Starting…" : copy.submitLabel}
         </Button>
       </div>
       <p className="mt-2 text-meta font-normal leading-5 text-grey">
@@ -246,9 +322,19 @@ function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
             id="new-task-project"
             value={projectId}
             options={assignableProjects}
-            onChange={setProjectId}
+            onChange={(id) => {
+              setProjectId(id);
+              // A "Starts from" pick is only ever valid for the project it
+              // was made under (C11, same-project only) — changing the
+              // project must not leave a stale, now-invisible selection.
+              setFromTaskIds([]);
+            }}
           />
         </div>
+      )}
+
+      {capability === "options_scoping" && (
+        <StartsFromPicker projectId={projectId} selected={fromTaskIds} onChange={setFromTaskIds} />
       )}
 
       {create.isError && (

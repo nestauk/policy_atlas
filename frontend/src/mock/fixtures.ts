@@ -449,6 +449,92 @@ export const mockPlanReady: components["schemas"]["PlanDraft"] = {
   ready: true,
 };
 
+export const MOCK_LINK_ID = "70000000-0000-4000-8000-000000000001";
+export const MOCK_LINK_SOURCE_RUN_ID = "70000000-0000-4000-8000-000000000002";
+
+/**
+ * A ready options-scoping plan (task 044, contract deliverable 5), one link
+ * and one of each constraint kind so every plan-document section has
+ * something to render. Mirrors `mockPlanReady`'s role for the ES fixture:
+ * the mock's task_agent turn transcript is scripted as already having
+ * reached this shape, so mock mode and the e2e journey can show the
+ * finished plan document without scripting every intermediate turn.
+ */
+export const mockScopingPlanReady: components["schemas"]["ScopingPlanDraft"] = {
+  title: "Cutting NEET numbers in Tower Hamlets",
+  question: "How can we reduce the number of young people not in education, employment or training?",
+  intended_change: {
+    text: "Fewer 16-24 year-olds are NEET six months after leaving school.",
+    origin: "from_your_question",
+  },
+  target_unit: { text: "16-24 year-olds at risk of becoming NEET", origin: "assumed" },
+  where: { text: "United Kingdom", origin: "assumed" },
+  outcomes: [
+    { text: "NEET rate at 6 months", origin: "from_your_question" },
+    { text: "Sustained employment or training at 12 months", origin: "assumed" },
+  ],
+  depth: "standard",
+  constraints: [
+    {
+      text: "Only include options a local authority can fund directly",
+      kind: "requirement",
+      origin: "your_call",
+      checked_at: "longlist",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+    },
+    {
+      text: "Prefer options with a lower cost per participant",
+      kind: "preference",
+      origin: "your_call",
+      checked_at: "assessment",
+      country_group: null,
+      published_after: null,
+      published_before: null,
+      languages: null,
+    },
+    {
+      text: "Evidence from the UK and other high-income countries only",
+      kind: "evidence_restriction",
+      origin: "assumed",
+      checked_at: "retrieval",
+      country_group: { label: "United Kingdom", countries: ["GB"], authorship: "planner-proposed" },
+      published_after: null,
+      published_before: null,
+      languages: ["English"],
+    },
+  ],
+  your_context: [
+    {
+      text: "We already run a careers-advice service in every secondary school.",
+      type: "present_fact",
+      turn_index: 1,
+      test_as_condition: false,
+    },
+    {
+      text: "We plan to expand apprenticeship places next year.",
+      type: "commitment",
+      turn_index: 2,
+      test_as_condition: true,
+    },
+  ],
+  entry_branch: "explore",
+  linked_task_ids: [],
+  steering_mode: "moderate",
+  steer_point_defaults: [],
+  assumptions: ["The United Kingdom is the right jurisdiction unless you say otherwise."],
+  steps: [
+    { stage: "acquire", label: "Searching sources", blurb: "Queries out to academic and policy databases." },
+    { stage: "screen", label: "Screening sources", blurb: "Checking relevance to the plan's scope." },
+    { stage: "synthesise", label: "Writing the baseline", blurb: "Setting out what happens if nothing changes." },
+  ],
+  time_band: "10-15 minutes",
+  baseline_confirmed: null,
+  ready: true,
+};
+
 const MOCK_TASK_AGENT_TURN_IDS = {
   first: "60000000-0000-4000-8000-000000000001",
   second: "60000000-0000-4000-8000-000000000002",

@@ -19,6 +19,7 @@ import {
   mockMeUnenrolled,
   mockPlanReady,
   mockProject,
+  mockScopingPlanReady,
   mockTask,
   mockSourceDossiers,
   seedTaskAgentTurns,
@@ -29,6 +30,8 @@ import {
   MOCK_CHAT_CLAIM_TEXT,
   MOCK_CHAT_PROGRESS_LABEL,
   MOCK_CHECK_IN_ID,
+  MOCK_LINK_ID,
+  MOCK_LINK_SOURCE_RUN_ID,
   MOCK_PLAN_ID,
   MOCK_TASK_AGENT_CONVERSATION_ID,
   MOCK_TASK_ID,
@@ -173,6 +176,9 @@ let chatTurnsByConversation = new Map<string, ChatTurnOut[]>();
 // which this flips to `enriched` — the scripted async-judge fixture.
 let chatTurnEnrichmentReads = new Map<string, number>();
 let currentPlan: components["schemas"]["PlanDraft"] = { ...mockPlanReady };
+// Task 044: the mock's scoping-plan counterpart to `currentPlan`, read only
+// while `mockTask.capability === "options_scoping"`.
+let currentScopingPlan: components["schemas"]["ScopingPlanDraft"] = { ...mockScopingPlanReady };
 
 // --- Identity + projects (task 033 phase 10a) --------------------------
 // `currentMe` defaults to the unenrolled fixture — dark launch: every
@@ -200,6 +206,7 @@ export function resetMockScenario() {
   chatTurnsByConversation = new Map();
   chatTurnEnrichmentReads = new Map();
   currentPlan = { ...mockPlanReady };
+  currentScopingPlan = { ...mockScopingPlanReady };
   currentMe = { ...mockMeUnenrolled };
   mockProjects = [{ ...mockProject }];
 }
@@ -268,6 +275,14 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       isRecord(body) && body.capability === "options_scoping"
         ? "options_scoping"
         : "evidence_search";
+    const fromTaskIds =
+      isRecord(body) && Array.isArray(body.from_task_ids)
+        ? body.from_task_ids.filter((value): value is string => typeof value === "string")
+        : [];
+    // Task 044 (C10, C11): the mock's single-task world only ever offers the
+    // current task as a "Starts from" candidate — its name is captured here,
+    // before the same object below is overwritten to become the new task.
+    const sourceTaskName = mockTask.name;
     const created = new Date().toISOString();
     const task: TaskOut = {
       ...mockTask,
@@ -285,10 +300,38 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
         isRecord(body) && Array.isArray(body.project_ids)
           ? body.project_ids.filter((value): value is string => typeof value === "string")
           : [],
-      from_task_ids: [],
-      links: [],
+      from_task_ids: fromTaskIds,
+      links:
+        fromTaskIds.length > 0
+          ? [
+              {
+                link_id: MOCK_LINK_ID,
+                source_task_id: fromTaskIds[0],
+                source_task_name: sourceTaskName,
+                source_capability_run_id: MOCK_LINK_SOURCE_RUN_ID,
+                flagged: false,
+              },
+            ]
+          : [],
     };
     Object.assign(mockTask, task);
+    // A fresh task starts a fresh session in the mock's single-task world —
+    // the previous task's transcript, run and chats must not bleed into it.
+    // The task_agent transcript is then re-seeded to a pre-scripted ready
+    // plan for the chosen capability (like `currentPlan` above) so the New
+    // task journey can show a finished plan document without scripting
+    // every intermediate turn.
+    taskAgentTurns = [];
+    nextTurnIndex = 1;
+    currentRun = null;
+    chatConversations = seedConversations();
+    chatTurnsByConversation = new Map();
+    chatTurnEnrichmentReads = new Map();
+    currentPlan = { ...mockPlanReady };
+    currentScopingPlan =
+      capability === "options_scoping"
+        ? { ...mockScopingPlanReady, linked_task_ids: fromTaskIds }
+        : { ...mockScopingPlanReady };
     return json(task, 201);
   }
 
@@ -359,13 +402,43 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       });
       nextTurnIndex += 1;
     }
-    return json({ plan: currentPlan, reply, suggestions: [] });
+    // Task 044: a scoping task's turn carries `scoping_plan`, never `plan`
+    // (`PlanOut`'s own capability-keyed shape, mirrored here).
+    if (mockTask.capability === "options_scoping") {
+      return json({ scoping_plan: currentScopingPlan, reply, suggestions: [], capability: "options_scoping" });
+    }
+    return json({ plan: currentPlan, reply, suggestions: [], capability: "evidence_search" });
   }
 
   // --- Plan (a resumed session: the transcript above already reached
-  // `ready` — see mockPlanReady) ------------------------------------------
+  // `ready` — see mockPlanReady / mockScopingPlanReady) -------------------
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
-    return json({ plan: currentPlan, version: 1, status: "approved" });
+    if (mockTask.capability === "options_scoping") {
+      return json({
+        capability: "options_scoping",
+        plan: null,
+        scoping: currentScopingPlan,
+        version: 1,
+        status: "approved",
+      });
+    }
+    return json({ capability: "evidence_search", plan: currentPlan, version: 1, status: "approved" });
+  }
+  if (method === "POST" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan/confirm-baseline`)) {
+    const body = await requestBody(request, init);
+    const planVersion = isRecord(body) && typeof body.plan_version === "number" ? body.plan_version : 1;
+    const artefactId = isRecord(body) && typeof body.artefact_id === "string" ? body.artefact_id : "";
+    currentScopingPlan = {
+      ...currentScopingPlan,
+      baseline_confirmed: { artefact_id: artefactId, plan_version: planVersion },
+    };
+    return json({
+      capability: "options_scoping",
+      plan: null,
+      scoping: currentScopingPlan,
+      version: planVersion,
+      status: "approved",
+    });
   }
   if (method === "PATCH" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/plan`)) {
     const body = await requestBody(request, init);

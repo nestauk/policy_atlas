@@ -4,6 +4,7 @@ import { Outlet, useLocation, useParams } from "react-router";
 import { useArchiveTask, useUpdateTask } from "../api/mutations";
 import { useCheckIns, useMe, useTask, useTasks } from "../api/queries";
 import { useAuth } from "../auth";
+import { capabilityLabel } from "../lib/capabilities";
 import { TitleMarkerProvider } from "../lib/title";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
@@ -409,6 +410,13 @@ export function AppShell() {
               <>
                 <span className="truncate text-lead font-semibold text-navy">
                   {scrub(task.data.name)}
+                </span>
+                {/* The kind of work this task is (task 044, X12; Frame board):
+                    "Options scoping" or "Evidence search", read straight off
+                    the row so a colleague never has to open the plan to tell
+                    the two kinds apart. */}
+                <span className="shrink-0 text-caption font-semibold uppercase tracking-[0.06em] text-grey">
+                  {capabilityLabel(task.data.capability)}
                 </span>
                 <TaskSettingsMenu
                   taskId={task.data.task_id}

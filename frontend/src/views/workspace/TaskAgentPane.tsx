@@ -463,8 +463,12 @@ export function TaskAgentPane({
 }) {
   const transcript = useTaskAgentTranscript(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const planQuery = usePlan(taskId);
+  // `PlanOut.plan` is null on a scoping task (task 044) — `scoping` carries
+  // its own `ready` flag instead. Only one of the two is ever non-null for a
+  // given task, so reading both costs nothing on the branch that doesn't apply.
   const planReady =
-    planQuery.data?.status === "approved" && planQuery.data.plan.ready === true;
+    planQuery.data?.status === "approved" &&
+    (planQuery.data.plan?.ready === true || planQuery.data.scoping?.ready === true);
   const runsQuery = useRuns(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const decisionsQuery = useDecisions(taskId, { page_size: TRANSCRIPT_PAGE_SIZE });
   const checkInsQuery = useCheckIns(taskId, "all");

@@ -27,3 +27,14 @@ export function useComposerSeed(apply: (text: string) => void): void {
     return () => window.removeEventListener(SEED_EVENT, handle);
   }, [apply]);
 }
+
+/**
+ * Put text in the Task Agent composer from elsewhere on the page (task 044,
+ * C18: a scoping plan section's Edit action has no inline editor of its own —
+ * the fields are Task Agent-negotiated, so "editing" them is a conversational
+ * turn, seeded here rather than built as a second typed-field editor).
+ */
+export function seedComposer(text: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent<string>(SEED_EVENT, { detail: text }));
+}
