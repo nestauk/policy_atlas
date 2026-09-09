@@ -111,9 +111,17 @@ referent). Instead:
   reads every document whose evaluated mention belongs to the option; a high safety ceiling (a
   plan setting decided in task 3, of the order of 25 documents) applies stratified selection only
   above it, with omissions listed. Time is managed by **design targets verified during
-  development, never by run-time cut-offs**: the baseline's section list is graded by depth as the
-  Evidence search's reports are — a named subset of its ruled sections at **rapid, within about two
-  minutes of compute**; all eight at **standard, within about five** — and the option profile's
+  development, never by run-time cut-offs**. *(Revised by the owner on 2026-09-09 at the task 043
+  contract: the baseline is **not graded by depth** — dropping two of eight sections saved about
+  95 s of a roughly 380 s sequential write against a retrieval spine of about 4.6 min, "not a
+  difference the user feels", so the section count is not the lever. The baseline has one shape at
+  rapid and standard and **one measured compute target**, aimed at three to four minutes, verified
+  on the NEET question during the build. The levers are a small acquisition target, a per-section
+  tool-call cap, and the writing mode — sequential or parallel-with-join — chosen from a build-time
+  trial on quality, the losing mode deleted. Later levers, recorded in `docs/deferred.md`: showing
+  sections as they finish; starting the longlist's retrieval while the user reads the baseline;
+  a faster model tier for the sections when Bedrock lands, quality-tested first. The owner's
+  expectation for a whole rapid path is about 15 to 20 minutes.)* The option profile's
   targets are set in task 3. A section is never left incomplete for time; "not found" is a content
   state (OS ruling 40). No rapid number is promised until the real path is timed; the plan shows a
   coarse time band (OS open question 3 stays open).

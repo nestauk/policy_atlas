@@ -1,6 +1,18 @@
 # Spec update log
 
 ## 2026-09-09
+* **Update** (owner rulings at the task 043 contract interview; applied with the owner's words
+  quoted): [OS capability § Output structure](capabilities/options-scoping/capability.md) and
+  [OS components § 11](capabilities/options-scoping/components.md) — the baseline's eight sections are
+  required and the writer may add up to two problem-specific sections; one shape at every depth.
+  [plan-as-object § Thoroughness](system/plan-as-object.md) — the baseline is not graded by depth
+  (revises decision-sheet row E12's baseline part); one measured compute target; the latency
+  levers. [OS capability § Check-in points](capabilities/options-scoping/capability.md) and
+  [OS components](capabilities/options-scoping/components.md) — the two structural gates pass on
+  standing defaults in unattended mode, recorded and flagged; unattended is never the default.
+  [vocabulary.md](vocabulary.md) — the Task Agent's code names (`task_agent`).
+
+## 2026-09-09
 * **Update**: Owner rulings on the sixteen pre-task-1 rows of the options-scoping decision sheet
   (`docs/tasks/035-options-scoping/checks/decision-sheet.md`), decided one at a time and applied
   with the ruling quoted. [data-model](system/data-model.md): a generic task-to-task **`task_link`**

@@ -46,7 +46,9 @@ across capabilities (ruling 40).
 
 - ✅ **Two gates are structural, not discretionary.** Nothing after the baseline runs until the
   user confirms the plan against it; nothing after `shortlist` runs until the user says assess
-  (rulings 2, 3). Re-runs after a plan change apply deltas (❓ granularity, concept open
+  (rulings 2, 3). *(Owner ruling 2026-09-09, task 043: structural in every attended mode; under
+  **unattended** both gates pass on standing defaults, recorded and flagged, and unattended is
+  never the default — [capability.md § Check-in points](capability.md).)* Re-runs after a plan change apply deltas (❓ granularity, concept open
   question 7).
 - ✅ **The spine runs over every option; ⟨assess⟩ runs over the shortlist only.** This is the cost
   model: everything before the second gate is the EB's cheap per-document envelope work plus
@@ -301,7 +303,9 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   (ruling 25), bounded by ruling 39 (structure unlabelled; no unsupported proposition, even
   inside a question). Not user-editable in v1 (ruling 14). ✅ **synthesise(baseline)** writes the
   "Do nothing" profile (what is in place · trend if nothing changes · who is affected · what is
-  already changing · what is contested · cost of inaction · key assumption · sources), empirical
+  already changing · what is contested · cost of inaction · key assumption · sources — the eight
+  required sections — **plus up to two writer-proposed problem-specific sections**, one shape at
+  every depth; owner ruling 2026-09-09, task 043), empirical
   premises sourced and interpretations labelled reasoning (ruling 40), every statement
   provenance-carrying, "not found" stated as such; the run **pauses** after it and the
   pause is a place to question it in chat (rulings 2, 24). ❓ Baseline sourcing mechanics (open

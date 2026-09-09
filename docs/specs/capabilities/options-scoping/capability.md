@@ -325,7 +325,11 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   option's because the question is different: what is in place · trend if nothing changes · who
   is affected (where the target unit is checked against the data) · what is already changing ·
   **what is contested** (rival explanations of the problem; disagreements between sources) ·
-  cost of inaction · key assumption · sources. Empirical premises sourced; the key assumption
+  cost of inaction · key assumption · sources. *(Owner ruling 2026-09-09, task 043 contract: these
+  eight are **required**; the writer may **add up to two problem-specific sections**, labelled and
+  placed after "what is contested" — "a fixed list may miss what a domain needs, while the eight are
+  questions any status quo can answer". The baseline has **one shape at every depth**: depth does
+  not remove sections, revising decision-sheet row E12's rapid subset.)* Empirical premises sourced; the key assumption
   and what is contested are labelled reasoning (ruling 40); the tool does not forecast. In v1 the
   baseline searches Overton and OpenAlex only, and its coverage statement names live official
   statistics and departmental pages as not searched; the user may supply them as stated facts
@@ -436,6 +440,14 @@ Settled by the owner on the wireframes (rulings 1, 13; source
 - ✅ **"Assess these N"** — the second gate, the only point after the longlist where the user
   commits real time and money on options other than those they chose to keep.
 - ✅ **Full evidence search** — per option, always the user's call.
+- ✅ **The two gates and the steering mode** *(owner ruling 2026-09-09, task 043 contract)*: the
+  gates pause in every attended mode. In **unattended** the run passes them on standing defaults —
+  the plan confirmed against the baseline as it stands, "Assess these N" with the proposed
+  shortlist as it stands — each recorded as `decided_by: standing_default` and flagged in the
+  end-of-run review. Owner: "allow the user to have an unattended mode where it goes all the way to
+  the assessed shortlist and report without input, however this shouldn't be the default." The
+  default mode is "At the key decisions". Substance is never silent: the mode moves the decider,
+  never the visibility.
 - ✅ Everything else is iteration on living artefacts, not a gate: add or remove from the
   shortlist, exclude or include again, revise the plan (deltas), ask for a per-axis sort or a
   conditional recommendation.
