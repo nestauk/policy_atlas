@@ -78,14 +78,20 @@ referent). Instead:
 ## Source / evidence policy
 
 A plan-level declared constraint expressing the **evidentiary standard** (e.g. "official
-statistics and peer-reviewed evaluations only"). Two faces:
-- **Acquisition face — already covered**: which backends / **trust classes** may be searched
-  (existing `search` machinery; open-web behind its seam). Bundles an existing capability, no new
-  mechanism. *(Options scoping adds a third, distinct thing — an **evidence-scope constraint**
-  such as "OECD evidence only", checked at retrieval and screening — which is neither the
-  acquisition face nor the citable-quality policy and must never be compiled into either; OS
-  ruling 23, seam recorded 2026-09-07.)*
-- **Use face — the new bit: a grounding standard, not a retrieval boundary**. The agent may
+statistics and peer-reviewed evaluations only"). Two parts *("face" retired, owner 2026-09-09)*:
+- **Where we search — already covered**: which backends / **trust classes** may be searched
+  (existing `search` machinery; open-web behind its seam), and the search directive's filters —
+  **country group** (pinned groups such as "OECD members", G7, EU27, or a custom list), publisher
+  country, years, languages — applied at retrieval on both backends and echoed onto the coverage
+  record. *(Owner ruling on OS decision-sheet rows C1 and C2, 2026-09-09: OS ruling 23's third kind
+  of constraint — an **evidence restriction** such as "OECD evidence only" — is realised by these
+  existing filters, reused unchanged in the scoping plan; it never touches options (OS ruling 36);
+  the Sources statement says the filter acts on where a source was published or produced, not
+  where a study was done, and filtering by stated study geography is a **known gap** for after
+  user testing; inherited documents from a linked search run under a different restriction are
+  labelled as such on Sources, not re-filtered; no new constraint object, so no code name. The
+  earlier seam note of 2026-09-07 is closed.)*
+- **What may be cited as support — the new bit: a grounding standard, not a retrieval boundary**. The agent may
   still **retrieve and read** any in-corpus source (never penned in), but the policy sets the
   **appraisal tier** (source *quality*, **not** the grounding/inference tier) a source must meet
   to be cited as **grounding support**, enforced at the `produce-grounded-block` verify boundary.
