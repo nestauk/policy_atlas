@@ -10,22 +10,27 @@ not done. Deliverables 1–10, decisions D1–D13 and the terms are defined in
        § Acceptance checks is present and green; the pinned live check (a)–(g)
        ran with notes, screenshots and the measured compute time recorded.
 3. [ ] Schema changes are exactly those named in the contract § Constraints
-       (`task.capability`, `task_link` without an option id, `evidence_scope.role`,
+       (`task.capability`, `task_link` without an option id, `evidence_scope.purpose`,
        `evidence_scope.plan_version`, the widened check constraint, the
        deliverable-2 renames), in one reversible migration whose downgrade
        reverses the stored values and refuses while a scoping task exists.
 4. [ ] The rename (deliverable 2) is one commit reviewed on its own before
        feature code; the sweep test finds no `planning_transcript`,
-       `/planning-turns` or `PlanningTurn` left in `backend/src`,
-       `frontend/src` or `web-api.md`; the conversation kind is `task_agent`,
+       `/planning-turns`, `PlanningTurn`, `PlannerBackend`, `planner_prompt`
+       or `POLICY_ATLAS_PLANNER_MODEL` left in `backend/src`, `frontend/src`,
+       `infra/DEPLOYMENT.md` or `web-api.md`; the version string `planner_v1`
+       still stands; "EB" is gone from the living specs, skills, templates and
+       code comments (grep recorded); the conversation kind is `task_agent`,
        not `agent`.
 5. [ ] The OpenAPI diff is additive apart from the path rename;
        `frontend/openapi.json` and `frontend/src/api/gen/types.ts` changed
        only via `make openapi-sync`; no generated files or secrets edited by
        hand.
-6. [ ] Prompt hashes: two new entries (`scoping_planner_v1`, the baseline
-       template), every existing hash unchanged; the EB planner prompt, the EB
-       chain and the EB's card-based steering behave byte-for-byte as before.
+6. [ ] Prompt hashes: two new entries (`task_agent_scoping_v1`, the baseline
+       template); the ES Task Agent prompt's entry moved with its file and its
+       text and `planner_v1` version string are unchanged; every other hash
+       unchanged; the ES chain and the ES's card-based steering behave
+       byte-for-byte as before.
 7. [ ] The gate `baseline_confirm` pauses in frequent, moderate and minimal,
        passes on a recorded and flagged standing default in unattended (D11),
        and the default mode is moderate; nothing after the gate runs (D12);
