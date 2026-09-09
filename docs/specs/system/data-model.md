@@ -252,7 +252,11 @@ historical state.**
   source names it (the CFIR inner-setting rule, carried near-verbatim in both prompts: the
   setting where recipients *experience* the intervention, never the institution that created
   or mandated it — a parliament passing a school nutrition policy means "school") — is **new
-  to the stored vocabulary on BOTH schemas**: a nullable finding-grain column on ICF from
+  to the stored vocabulary on BOTH schemas** *(owner ruling 2026-09-09, parity with the
+  options-scoping plan's setting constraint: `setting` is where the **target unit** experiences the
+  intervention — the delivery point or channel — generalised from the CFIR "recipients" wording as
+  target unit was from population; the source-named field is unchanged, and the extraction prompts
+  adopt the wording when task 3 next revises them)*: a nullable finding-grain column on ICF from
   day one, and a nullable top-level column added to IOF by the same flow-back (the `iof_v3`
   rider — see Edit 1 above). Cross-schema linkage between IOF and ICF stays
   **reference-mediated via `group`** (no explicit link objects) — the shared vocabulary

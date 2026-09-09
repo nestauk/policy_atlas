@@ -168,7 +168,18 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   change · **who or what should change** (the target unit — people, firms, places,
   organisations, systems; PICO's "population" is the special case) · where · outcomes · depth ·
   constraints, each tagged *from your question* / *assumed* / *your call*. Presented exactly like
-  the EB search plan (ruling 1; see § Product surface). Non-linear: the user revises the plan
+  the EB search plan (ruling 1; see § Product surface). *(Owner ruling 2026-09-09, with
+  decision-sheet row D3.)* **Where** is the jurisdiction the policy would apply to — country, UK
+  nation, region or local authority — and **defaults to the United Kingdom**; the user narrows or
+  changes it, and the agent asks when the question implies a nation or place. **Setting** is where
+  the **target unit** experiences the intervention — the delivery point or channel: schools,
+  workplaces, primary care, an employer's payroll, the planning system — generalised from the
+  finding field's people-centric wording as target unit was from population. It is **not a
+  mandatory slot**: a user with a preference states it as a scope-shaped constraint (ruling 12),
+  which the planning conversation offers and which is checked against the specified design;
+  without one the longlist spans settings and shows setting as a facet. Where and setting are
+  never conflated. The UK default is a candidate for the Evidence search's planning chat, not
+  applied there in this ruling. Non-linear: the user revises the plan
   after seeing evidence and re-runs apply **deltas, not restarts** (concept § Shape 1; ❓ delta
   granularity and working-set versioning are open question 7).
 - ✅ **Baseline, and it pauses** (rulings 2, 24). Confirming the plan builds the baseline only. The
