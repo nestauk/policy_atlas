@@ -49,6 +49,19 @@ may be refined as implementation lands.
 - **Depth per section** — the thoroughness gradation + compile target (see below).
 - **Steering & check-ins** — mode + expected pauses, including mandatory gates.
 - **Assumptions & boundaries** — surfaced so the user corrects cheaply before the run.
+- **Your context** *(owner ruling on OS decision-sheet row C3, 2026-09-09)* — the user's context for
+  transferability: entries typed **present fact** or **commitment**, each with the user's words
+  verbatim and the conversation turn that produced it, like every plan field. No new record and no
+  annotation: the type alone decides whether an entry can lift a transferability cap (a commitment
+  never can); the date is the turn's time and the place is the plan's target place; anything more
+  specific stays in the user's words. A user's account of a source they have not supplied is a
+  *present fact* naming a source, not a retrieved fact; *retrieved* context is an ordinary grounded
+  claim cited to its source, with the source's own date and the finding's own study geography.
+  Entries can be added mid-run through the planning chat or a check-in and are versioned with the
+  plan; a child task reads them through the Link as input (OS ruling 41). **Attribution is by user
+  id** through the turn's conversation, never a literal "you": every user-originated label ("stated
+  by you", "planned by you", "added by you") is rendered from the id — "you" when it is the
+  viewer, the person's name otherwise.
 - **Source / evidence policy** — the evidentiary standard (see below).
 
 ## Thoroughness as a relative nudge, not an absolute level
