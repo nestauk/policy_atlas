@@ -716,7 +716,7 @@ def test_multi_facet_grouping_row_consumed_with_per_facet_honesty() -> None:
     draft = _validate_theme_claim(
         ClaimWire(
             claim_type="theme",
-            text="The barrier grouping identifies task_agent delays.",
+            text="The barrier grouping identifies planning delays.",
             theme=ThemePayloadWire(
                 source="grouping",
                 referenced_ids=["barrier_theme:g01"],

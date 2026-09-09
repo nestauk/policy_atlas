@@ -426,6 +426,20 @@ TABLES = RenameTables(
     ledger=DEFAULT_LEDGER,
     phase_labels={3: "backend", 4: "frontend"},
     watch_label="`orchestr`/`project`/`portfolio`/`oplan`/`pss`",
+    unmapped_heading="## Unmapped identifiers — lead decision (plan D1)",
+    prose_intro=(
+        "Single-word matches (`project`, `Project`, `portfolio`, `orchestrator`, …) that fall "
+        "inside a docstring, string literal or comment. Compound identifiers are omitted — they "
+        "cannot be prose. In this repo a backend docstring's `project` is the *code word* and "
+        "renaming it is correct; the risk is the English noun or verb."
+    ),
+    titlecase_heading="Title-case `Project`/`Portfolio`/… in prose",
+    titlecase_note=(
+        "The ambiguous set: `project_id: Project owning the run` is the code word and must "
+        'change, `"""Project a row onto the wire shape"""` is the English verb and must not.'
+    ),
+    resweep_warning="Sweeping it again would rename the Project entity on to `task`.",
+    resweep_advice="Run the sweep on the pre-038 branch, or pass --force if you are sure.",
     report_intro=(
         "Read with plan § D1–D4: the identifier table below is the reviewed input to "
         "`--apply`; nothing outside it is rewritten."

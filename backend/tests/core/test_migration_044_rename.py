@@ -12,6 +12,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from alembic import command
 from sqlalchemy import inspect, select, text
 from sqlalchemy.engine import Connection, Engine
@@ -292,3 +293,38 @@ def test_044_renames_the_catalog_and_moves_both_stored_values(engine: Engine) ->
     finally:
         command.upgrade(cfg, "head")
         _delete(engine, ids)
+
+
+def test_a_diverged_catalog_fails_with_the_missing_constraint_named(engine: Engine) -> None:
+    """The revision renames by name, so it checks the whole set first."""
+    cfg = _alembic_cfg()
+    command.downgrade(cfg, PRE_044_REVISION)
+    dropped = "ck_ptr_suggestions_array"
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(f'ALTER TABLE planning_transcript DROP CONSTRAINT "{dropped}"')
+            )
+        with pytest.raises(RuntimeError) as caught:
+            command.upgrade(cfg, "head")
+        message = str(caught.value)
+        assert dropped in message
+        assert f"planning_transcript.{dropped}" in message
+        assert "diverged catalog" in message
+    finally:
+        with engine.begin() as conn:
+            present = conn.execute(
+                text(
+                    "SELECT 1 FROM pg_constraint WHERE conname = :name "
+                    "AND conrelid = to_regclass('planning_transcript')"
+                ),
+                {"name": dropped},
+            ).scalar()
+            if present is None:
+                conn.execute(
+                    text(
+                        f'ALTER TABLE planning_transcript ADD CONSTRAINT "{dropped}" '
+                        "CHECK (jsonb_typeof(suggestions) = 'array')"
+                    )
+                )
+        command.upgrade(cfg, "head")

@@ -43,7 +43,9 @@ _KEPT: tuple[re.Pattern[str], ...] = (
     # Stored `country_group.authorship` value inside plan payloads.
     re.compile(r"planner-proposed"),
     re.compile(r"planner_v\d+"),
-    re.compile(r"[\"']role[\"'][)\]]?\s*[:=]=?\s*[\"']planner[\"']"),
+    # The kept wire role literal, in every shape: `role` on the same line.
+    re.compile(r"\brole\b[^\n]{0,80}?[\"']planner[\"']"),
+    re.compile(r"[\"']planner[\"'][^\n]{0,80}?\brole\b"),
     # `infra/DEPLOYMENT.md` names the old variable once, in the note that says
     # the rename happened and that no fallback read was added.
     re.compile(r"`POLICY_ATLAS_PLANNER_MODEL` became"),

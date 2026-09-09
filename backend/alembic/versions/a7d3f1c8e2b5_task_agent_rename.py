@@ -16,7 +16,10 @@ older revisions drop by name. Two names here live only in the catalog:
     planning_transcript_pkey           (metadata: unnamed primary key)
     planning_transcript_task_id_fkey   (auto-named; follows the table)
 
-Renamed by name. Renaming a UNIQUE or PRIMARY KEY *constraint* renames its
+Renamed by name, after :func:`_verify_constraints` has confirmed all eight are
+present (a diverged catalog fails with a diagnostic naming the missing set,
+not a bare "constraint does not exist"). Renaming a UNIQUE or PRIMARY KEY
+*constraint* renames its
 backing index with it, so the three indexes of ``planning_transcript`` need no
 statement of their own.
 
@@ -62,6 +65,7 @@ Create Date: 2026-09-09 00:00:00.000000
 
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 revision: str = "a7d3f1c8e2b5"
@@ -101,9 +105,55 @@ _CONSTRAINTS: tuple[tuple[str, str, str], ...] = (
     ),
 )
 
+# Where each renamed constraint lives *before* the step that renames it: on the
+# upgrade the transcript table still has its old name, on the downgrade its new
+# one (the downgrade renames constraints before it renames the table back).
+_TABLE_BEFORE: dict[str, str] = {new: old for old, new in _TABLES}
+
 _KIND_CHECK = "ck_conversation_kind"
 _ACTIVE_INDEX_OLD = "uq_conversation_one_active_planning"
 _ACTIVE_INDEX_NEW = "uq_conversation_one_active_task_agent"
+
+
+def _verify_constraints(*, reverse: bool) -> None:
+    """Fail with a named diagnostic when the catalog is not what this expects.
+
+    Every rename below addresses a constraint by name, and Postgres answers a
+    name it does not hold with a bare "constraint ... does not exist". On a
+    catalog that has diverged (a hand-patched database, a partial restore) that
+    error names one object and explains nothing, so the whole set is checked
+    first and the missing ones are reported together.
+
+    Args:
+        reverse: Check the post-rename names, for the downgrade.
+
+    Raises:
+        RuntimeError: When any expected constraint is absent, naming all of them.
+    """
+    bind = op.get_bind()
+    missing: list[str] = []
+    for table, old, new in _CONSTRAINTS:
+        name = new if reverse else old
+        live_table = table if reverse else _TABLE_BEFORE.get(table, table)
+        found = bind.execute(
+            sa.text(
+                "SELECT 1 FROM pg_constraint "
+                "WHERE conname = :name AND conrelid = to_regclass(:table)"
+            ),
+            {"name": name, "table": live_table},
+        ).scalar()
+        if found is None:
+            missing.append(f"{live_table}.{name}")
+    if missing:
+        direction = "downgrade" if reverse else "upgrade"
+        raise RuntimeError(
+            f"a7d3f1c8e2b5 {direction}: the catalog is missing "
+            f"{len(missing)} of {len(_CONSTRAINTS)} expected constraint(s): "
+            + ", ".join(missing)
+            + ". This revision renames by name and cannot run against a "
+            "diverged catalog; reconcile the database with the migration "
+            "chain before retrying."
+        )
 
 
 def _rename_tables(*, reverse: bool) -> None:
@@ -166,6 +216,7 @@ def _rewrite_plan_created_by(*, reverse: bool) -> None:
 def upgrade() -> None:
     """Rename the transcript objects and move the two stored values forward."""
     op.execute("SET LOCAL lock_timeout = '5s'")
+    _verify_constraints(reverse=False)
     _rename_tables(reverse=False)
     _rename_columns(reverse=False)
     _rename_constraints(reverse=False)
@@ -176,6 +227,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Reverse every rename and both stored values, in the opposite order."""
     op.execute("SET LOCAL lock_timeout = '5s'")
+    _verify_constraints(reverse=True)
     _rewrite_plan_created_by(reverse=True)
     _rewrite_conversation_kind(reverse=True)
     _rename_constraints(reverse=True)

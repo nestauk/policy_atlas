@@ -46,6 +46,14 @@ Modes::
     uv run --project backend python scripts/rename_044.py --scan --docs
     uv run --project backend python scripts/rename_044.py --apply --phase 4
 
+**Post-steps the sweep does not do.** ``--apply`` rewrites tokens, not import
+*order*: renaming `planner` to `task_agent` moves a name past its neighbours in
+an alphabetised import block, so a replay must finish with
+``uv run ruff check --fix src tests`` (from ``backend/``) to reproduce the
+committed formatting, and then ``make openapi-sync`` for the path and model
+renames in the generated client. Neither is a rename decision; both are
+deterministic.
+
 ``--scan`` emits the reviewable markdown report (identifier table, unmapped
 hits, never-mapped hits, prose contexts, collisions) and exits non-zero on any
 collision. ``--apply`` refuses while a collision remains and is idempotent via
@@ -99,7 +107,9 @@ RULES: tuple[Rule, ...] = (
     ),
 )
 
-STEPS: tuple[int, ...] = (1,)
+# Two steps. Step 1 is the whole rename; step 2 is one cosmetic pass that can
+# only run after it, because it rewrites what step 1's identifier pass produced.
+STEPS: tuple[int, ...] = (1, 2)
 
 ALL_PHASES = frozenset({3, 4, 5})
 
@@ -124,13 +134,21 @@ BASE_NEVER_MAPPED: dict[str, frozenset[int]] = {
 NEVER_MAPPED_CONTEXTS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # The transcript rehydration role, whose consumer is the kept prompt module
     # (P2). Only the *value* is protected; the surrounding code renames.
+    # The transcript rehydration role, whose consumer is the kept prompt module
+    # (P2). The bare literal `"planner"` is protected wherever the word `role`
+    # sits on the same line, which is every shape the codebase uses: the dict
+    # key, `==`/`!=`/`===`/`!==`, `in (...)`, `Literal[...]` and the docstring
+    # union `{"role": "user"|"planner"}`. Anchoring on `role` is what keeps
+    # `schema.py`'s `# 'user'|'planner' attribution` OUT of the exclusion: that
+    # comment describes `plan.created_by`, a value the revision DOES rewrite.
     (
-        "wire role literal `\"role\": \"planner\"`",
-        re.compile(r"[\"']?\brole[\"']?[\)\]]?\s*[:=]=?\s*[\"']planner[\"']"),
+        'wire role literal `"planner"` (`role` earlier on the line)',
+        re.compile(r"\brole\b[^\n]{0,80}?[\"']planner[\"']"),
     ),
-    # The docstring role union describing the kept literal, so the prose stays
-    # truthful about what the wire actually carries (lead ruling 2, 2026-09-09).
-    ("docstring role union `|\"planner\"`", re.compile(r"\|\s*[\"']planner[\"']")),
+    (
+        'wire role literal `"planner"` (`role` later on the line)',
+        re.compile(r"[\"']planner[\"'][^\n]{0,80}?\brole\b"),
+    ),
     # The bare quoted string `"Planning"`: a stored conversation title and the
     # History category, never a Task Agent label (the screen uses the
     # vocabulary module) and ordinary English (lead ruling 1a, 2026-09-09).
@@ -148,7 +166,9 @@ NEVER_MAPPED_CONTEXTS: tuple[tuple[str, re.Pattern[str]], ...] = (
     # from the identifier, so the five sites are listed by phrase.
     ("fixture prose `Environmental planning`", re.compile(r"\bEnvironmental planning\b")),
     ("fixture prose `Strategic planning`", re.compile(r"\bStrategic planning\b")),
-    ("fixture prose `Planning delays`", re.compile(r"\bPlanning delays\b")),
+    ("fixture prose `planning delays`", re.compile(r"\b[Pp]lanning delays\b")),
+    # The search loop's own English: fan-out planning is not the Task Agent.
+    ("ordinary English `fan-out planning`", re.compile(r"\bfan-out planning\b")),
     ("fixture prose `planning requirements`", re.compile(r"\bplanning requirements\b")),
 )
 
@@ -214,6 +234,32 @@ LITERAL_RULES: tuple[LiteralRule, ...] = (
         pattern=re.compile(r"(?<![\w-])planning-turns(?![\w-])"),
         repl="task-agent-turns",
     ),
+    # The prose form of the conversation, in docstrings, comments and copy
+    # strings: `Planning turn` reads as `Task Agent turn`, with the space. The
+    # `(?<![\w-])` lookbehind is the one the hyphenated route rule uses, so
+    # `re-planning turns` is left alone.
+    LiteralRule(
+        step=1,
+        name="prose `Planning/Planner <noun>` -> `Task Agent <noun>` (comments and strings)",
+        pattern=re.compile(
+            r"(?<![\w-])[Pp]lann(?:ing|er) (?P<word>turn|conversation|message|rail)"
+        ),
+        repl="Task Agent {word}",
+        phases=frozenset({3, 4}),
+        where="comment_or_string",
+    ),
+    # Step 2, after the identifier pass has produced them: a `TaskAgent` that
+    # runs into an ordinary English word in prose is the product's name, so it
+    # takes the space back. Code identifiers are untouched (the rule needs a
+    # trailing space and a lower-case word).
+    LiteralRule(
+        step=2,
+        name="prose `TaskAgent <word>` -> `Task Agent <word>`",
+        pattern=re.compile(r"\bTaskAgent (?=[a-z])"),
+        repl="Task Agent ",
+        phases=frozenset({3, 4}),
+        where="comment_or_string",
+    ),
     # Lead ruling 1b (2026-09-09): the frontend's user-visible `Planning
     # conversation` (the pane's aria-label and the assertions that read it)
     # becomes `Task Agent conversation`, with the space -- nothing renders as
@@ -231,7 +277,7 @@ LITERAL_RULES: tuple[LiteralRule, ...] = (
     LiteralRule(
         step=1,
         name="prose `planning turn` -> `Task Agent turn`",
-        pattern=re.compile(r"\b[Pp]lanning turn"),
+        pattern=re.compile(r"(?<![\w-])[Pp]lanning turn"),
         repl="Task Agent turn",
         paths=("*.md",),
         phases=frozenset({DOCS_PHASE}),
@@ -240,7 +286,7 @@ LITERAL_RULES: tuple[LiteralRule, ...] = (
     LiteralRule(
         step=1,
         name="prose `planning conversation` -> `Task Agent conversation`",
-        pattern=re.compile(r"\b[Pp]lanning conversation"),
+        pattern=re.compile(r"(?<![\w-])[Pp]lanning conversation"),
         repl="Task Agent conversation",
         paths=("*.md",),
         phases=frozenset({DOCS_PHASE}),
@@ -522,6 +568,7 @@ def build_tables(root: Path) -> RenameTables:
         phase_identifier_suffixes=PHASE_IDENTIFIER_SUFFIXES,
         phase_code_span_only_suffixes=PHASE_CODE_SPAN_ONLY_SUFFIXES,
         suppress_unmapped_in_contexts=True,
+        ledger_scoped_by_phase=True,
         watch_label="`planning`/`planner`/`ptr`",
         report_intro=(
             "Read with `docs/tasks/044-scoping-shell-baseline/rename-rules.md`: the "

@@ -191,6 +191,66 @@ def test_the_version_string_and_the_fixture_prose_are_kept(tmp_path: Path) -> No
     assert "def test_task_agent_reply() -> None:" in out
 
 
+def test_the_role_literal_is_kept_in_every_shape_the_codebase_uses(tmp_path: Path) -> None:
+    """The kept wire role literal, wherever `role` sits on the same line."""
+    rel = "backend/src/policy_atlas/runtime/task_agent.py"
+    _write(
+        tmp_path,
+        rel,
+        'HISTORY = [{"role": "planner", "text": reply}]\n'
+        'def check(turn: dict[str, str], role: str) -> bool:\n'
+        '    """Turns arrive as ``{"role": "user"|"planner", "text": ...}`` dicts."""\n'
+        '    if turn["role"] != "planner":\n'
+        '        return False\n'
+        '    if role not in ("user", "planner"):\n'
+        '        return False\n'
+        '    return True\n'
+        'Role = Literal["user", "planner"]  # the role union\n'
+        'COMMENT = 1  # \'user\'|\'planner\' attribution of the plan row\n',
+    )
+
+    assert sweep.main(["--apply", "--phase", "3", "--root", str(tmp_path)]) == 0
+    out = (tmp_path / rel).read_text(encoding="utf-8")
+
+    assert '{"role": "planner", "text": reply}' in out
+    assert '``{"role": "user"|"planner", "text": ...}``' in out
+    assert 'if turn["role"] != "planner":' in out
+    assert 'if role not in ("user", "planner"):' in out
+    assert 'Literal["user", "planner"]  # the role union' in out
+    # `plan.created_by` IS rewritten by the revision, and its comment names no
+    # `role`, so the sweep must move it (schema.py's line, in miniature).
+    assert "# 'user'|'task_agent' attribution of the plan row" in out
+
+
+def test_prose_reads_task_agent_with_the_space(tmp_path: Path) -> None:
+    """Docstrings and comments say `Task Agent turn`, never `TaskAgent turn`."""
+    rel = "backend/src/policy_atlas/api/routers/task_agent.py"
+    _write(
+        tmp_path,
+        rel,
+        '"""Planning turns and the planning conversation.\n'
+        "\n"
+        "    conversation_id: Planning conversation that produced this turn.\n"
+        "    Re-planning turns are the owner's, and a planning message is one.\n"
+        '"""\n'
+        "PLANNING_ROUTE = planning_turn\n",
+    )
+
+    assert sweep.main(["--apply", "--phase", "3", "--root", str(tmp_path)]) == 0
+    out = (tmp_path / rel).read_text(encoding="utf-8")
+
+    assert '"""Task Agent turns and the Task Agent conversation.' in out
+    assert "conversation_id: Task Agent conversation that produced this turn." in out
+    assert "a Task Agent message is one." in out
+    # The lookbehind keeps the hyphenated compound out of the PHRASE rule, so
+    # `Re-planning turns` never becomes the two-word product name. (The bare
+    # token after the hyphen is still an identifier to the engine; the real
+    # word this codebase uses, `Replanning`, is a never-mapped context.)
+    assert "Re-Task Agent turns" not in out
+    # Code is untouched by the prose rules and swept by the identifier pass.
+    assert "TASK_AGENT_ROUTE = task_agent_turn" in out
+
+
 def test_the_stored_authorship_value_is_kept(tmp_path: Path) -> None:
     """`planner-proposed` is a stored `country_group.authorship` value (kept)."""
     rel = "backend/src/policy_atlas/runtime/task_plan.py"

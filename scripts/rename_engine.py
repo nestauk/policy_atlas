@@ -90,8 +90,10 @@ class LiteralRule:
         paths: Repo-relative paths (or ``*``-globs) the rule applies to; empty
             means every file in the set.
         phases: Phases the rule applies to; ``None`` means every phase.
-        where: ``"any"`` (the whole file) or ``"prose"`` (outside the markdown
-            code spans; unrestricted for non-markdown files).
+        where: ``"any"`` (the whole file), ``"prose"`` (outside the markdown
+            code spans; unrestricted for non-markdown files) or
+            ``"comment_or_string"`` (wholly inside a docstring, comment or
+            string literal — for phrase rules that must not touch code).
     """
 
     step: int
@@ -148,6 +150,11 @@ class RenameTables:
             pass is confined to markdown code spans.
         suppress_unmapped_in_contexts: Whether an unmapped identifier sitting
             inside a never-mapped context is left out of the report.
+        ledger_scoped_by_phase: Whether a ledger entry is keyed by phase as well
+            as path. Needed when two phases share a file and do different work
+            to it -- 044's docs phase carries five backend modules for the
+            abbreviation sweep alone, and without this the code phase's entry
+            would mark them settled and the abbreviation would never run.
         watch_label: How the report describes the watched tokens.
         report_intro: A sentence under the report heading.
     """
@@ -179,8 +186,18 @@ class RenameTables:
     phase_identifier_suffixes: dict[int, tuple[str, ...]] = field(default_factory=dict)
     phase_code_span_only_suffixes: dict[int, tuple[str, ...]] = field(default_factory=dict)
     suppress_unmapped_in_contexts: bool = False
+    ledger_scoped_by_phase: bool = False
     watch_label: str = "watched"
     report_intro: str = ""
+    unmapped_heading: str = "## Unmapped identifiers — lead decision"
+    prose_intro: str = (
+        "Single-word matches that fall inside a docstring, string literal or comment. "
+        "Compound identifiers are omitted — they cannot be prose."
+    )
+    titlecase_heading: str = "Title-case bare tokens in prose"
+    titlecase_note: str = ""
+    resweep_warning: str = "Sweeping it again would rename settled vocabulary a second time."
+    resweep_advice: str = "Run the sweep on the pre-rename branch, or pass --force if you are sure."
 
     @property
     def phases(self) -> tuple[int, ...]:
@@ -796,6 +813,10 @@ class Engine:
 
     # -- file sets ---------------------------------------------------------
 
+    def ledger_key(self, rel: str, phase: int) -> str:
+        """The ledger key for one file in one phase."""
+        return f"{phase}:{rel}" if self.tables.ledger_scoped_by_phase else rel
+
     def is_excluded(self, rel: str) -> bool:
         """Whether a repo-relative path is on the always-excluded list."""
         tables = self.tables
@@ -844,7 +865,7 @@ class Engine:
         rel, needle = self.tables.swept_sentinels[phase]
         path = root / rel
         if needle is None:
-            return path.exists()
+            return path.is_dir()
         if not path.is_file():
             return False
         try:
@@ -887,6 +908,9 @@ class Engine:
             hand_edited = SpanSet([])
 
         code = SpanSet(markdown_code_spans(text) if path.endswith(".md") else [])
+        # Docstrings, comments and string literals: where a prose phrase rule
+        # may act without ever touching code.
+        wordy = SpanSet(string_list + comment_list)
         code_only_suffixes = tables.phase_code_span_only_suffixes.get(phase, ())
         code_only = bool(code_only_suffixes) and path.endswith(code_only_suffixes)
         identifier_suffixes = tables.phase_identifier_suffixes.get(phase)
@@ -907,6 +931,10 @@ class Engine:
                 if protected.overlaps(match.start(), match.end()):
                     continue
                 if lit.where == "prose" and code.overlaps(match.start(), match.end()):
+                    continue
+                if lit.where == "comment_or_string" and not wordy.contains(
+                    match.start(), match.end()
+                ):
                     continue
                 groups = {key: (value or "") for key, value in match.groupdict().items()}
                 new = lit.repl.format(**groups)
@@ -1072,7 +1100,7 @@ class Engine:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            if is_settled(settled, rel, text, steps):
+            if is_settled(settled, self.ledger_key(rel, phase), text, steps):
                 report.files_settled += 1
                 continue
             report.files_scanned += 1
@@ -1164,7 +1192,7 @@ class Engine:
             out.append(f"| … | … | | | _{omitted} further rows omitted (raise `--max-rows`)_ |")
         out.append("")
 
-        out.append("## Unmapped identifiers — lead decision")
+        out.append(tables.unmapped_heading)
         out.append("")
         if not report.unmapped:
             out.append("None.")
@@ -1246,13 +1274,13 @@ class Engine:
 
         out.append("## Prose-context review")
         out.append("")
-        out.append(
-            "Single-word matches that fall inside a docstring, string literal or comment. "
-            "Compound identifiers are omitted — they cannot be prose."
-        )
+        out.append(tables.prose_intro)
         out.append("")
-        out.append(f"### Title-case bare tokens in prose ({len(report.prose_titlecase)})")
+        out.append(f"### {tables.titlecase_heading} ({len(report.prose_titlecase)})")
         out.append("")
+        if tables.titlecase_note:
+            out.append(tables.titlecase_note)
+            out.append("")
         if not report.prose_titlecase:
             out.append("None.")
         else:
@@ -1338,8 +1366,7 @@ class Engine:
             print(
                 f"refusing to apply: this tree already looks swept for phase {phase} "
                 f"({carries}) but has no ledger at {ledger_path}.\n"
-                "Sweeping it again would rename settled vocabulary a second time. "
-                "Run the sweep on the pre-rename branch, or pass --force if you are sure.",
+                f"{self.tables.resweep_warning} {self.tables.resweep_advice}",
                 file=sys.stderr,
             )
             return 2
@@ -1362,7 +1389,8 @@ class Engine:
                 text = path.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError):
                 continue
-            if is_settled(ledger, rel, text, steps):
+            key = self.ledger_key(rel, phase)
+            if is_settled(ledger, key, text, steps):
                 settled += 1
                 continue
             new_text, plans = self.sweep_text(rel, text, phase, steps)
@@ -1372,10 +1400,10 @@ class Engine:
                 for edit in plan.edits:
                     per_rule[(edit.step, edit.rule)] += 1
             path.write_text(new_text, encoding="utf-8")
-            done = ledger[rel][1] if rel in ledger else frozenset()
-            swept[rel] = (file_digest(new_text), done | set(steps))
+            done = ledger[key][1] if key in ledger else frozenset()
+            swept[key] = (file_digest(new_text), done | set(steps))
             changed.append(rel)
-            if rel in ledger and ledger[rel][0] != file_digest(text):
+            if key in ledger and ledger[key][0] != file_digest(text):
                 reswept.append(rel)
 
         if changed:
