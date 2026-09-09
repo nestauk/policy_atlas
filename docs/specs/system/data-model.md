@@ -115,7 +115,10 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   grounding and audit. **A source whose full text can't be fetched (paywall, dead link) is
   snapshotted on the text in hand** (abstract + metadata), **not dropped** — each snapshot carries
   a **`text_basis`** (`full_text` | `abstract_only`) so grounding and coverage know what a finding
-  rests on. Identity rests on **content hash (at ingest) + the §9 search-governance
+  rests on. *(Known defect, issue #74, 2026-09-09: a publisher's "JavaScript is disabled" stub page
+  passes the ingest's 200-character thin-text floor and is labelled `full_text`; the spec's rule —
+  bot blocks are `blocked_by_host`, never full text — stands, the code does not honour it for this
+  page. Fix in the Evidence search before options scoping's task 1 relies on the label.)* Identity rests on **content hash (at ingest) + the §9 search-governance
   event + source locator**. A corrected re-upload is a **new snapshot**, optionally carrying a
   human-asserted `supersedes(source_snapshot_id)` edge (a link only — no diffing, no
   monitoring). *(Known issue, owner ruling on decision-sheet row A8, 2026-09-09: one document
