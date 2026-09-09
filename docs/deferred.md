@@ -36,8 +36,8 @@ architectural decision to defer, not an omission. Sources: architecture referenc
 - **Options scoping: "Assess all kept options"** (owner, 2026-09-07): a whole-longlist
   assessment action beside "Assess these N". Deferred on inference cost; revisit after live
   runs show what a standard run costs (concept ruling 19).
-- **Options scoping, seams left by task 043 (owner rulings 2026-09-09, contract
-  `docs/tasks/043-scoping-shell-baseline/contract.md`):**
+- **Options scoping, seams left by task 044 (owner rulings 2026-09-09, contract
+  `docs/tasks/044-scoping-shell-baseline/contract.md`):**
   - **Deep depth for scoping** — not shown anywhere until it exists (D6).
   - **"Search further" at the baseline gate** — an additive re-acquire that rewrites the sections
     that gained sources; build once for the longlist too (D10). A request in words is refused as
@@ -52,12 +52,12 @@ architectural decision to defer, not an omission. Sources: architecture referenc
     longlist's retrieval while the user reads the baseline (task 2; wastes some egress when the
     plan changes at the gate); a faster model tier for the baseline sections when Bedrock lands,
     quality-tested first, fresh minimal prompt per the doctrine (D7); parallel section writing in
-    the product, only by an owner revision of the durability contract after the task 043
+    the product, only by an owner revision of the durability contract after the task 044
     feasibility check (C6); rebuilding only the baseline sections a plan change touched (open
-    question 7 — task 043 offers a full rebuild or going on with the existing baseline).
+    question 7 — task 044 offers a full rebuild or going on with the existing baseline).
   - **The Task Agent as the Evidence search's control surface** — owner: the Evidence search's
     card-based steering "is maybe not optimal, because ideally … the user could control the task
-    through the task agent chat". Task 043 builds routed turns at a pause for scoping only, hung on
+    through the task agent chat". Task 044 builds routed turns at a pause for scoping only, hung on
     the turn rather than the conversation kind; a later Evidence search slice adopts them (D9).
   - **Any chat carrying Task Agent turns** — owner direction: "any chat would be able to create
     plans, edit artefacts, produce cited responses". The `task_agent` conversation kind then

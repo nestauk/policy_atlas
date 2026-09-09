@@ -31,7 +31,7 @@ may be refined as implementation lands.
   capability agent's just-in-time selection is the **commit** (the execution-bearing layer that
   compiles, by construction). Two tiers, staged compilation: the plan spine's
   sequence/wiring compiles up front; each commit compiles **just-in-time** once its inputs exist.
-- **Plan ↔ chat-turn provenance at version grain** *(owner ruling 2026-09-09, task 043 contract,
+- **Plan ↔ chat-turn provenance at version grain** *(owner ruling 2026-09-09, task 044 contract,
   revising the 2026-06 field-grain wording)* — each plan **version** records the conversation turn
   that produced it (`source_turn_index`), the transcript is durable and ordered, and Your-context
   entries carry their own turn; so "when did the user set X" is answerable between two versions
@@ -115,7 +115,7 @@ referent). Instead:
   reads every document whose evaluated mention belongs to the option; a high safety ceiling (a
   plan setting decided in task 3, of the order of 25 documents) applies stratified selection only
   above it, with omissions listed. Time is managed by **design targets verified during
-  development, never by run-time cut-offs**. *(Revised by the owner on 2026-09-09 at the task 043
+  development, never by run-time cut-offs**. *(Revised by the owner on 2026-09-09 at the task 044
   contract: the baseline is **not graded by depth** — dropping two of eight sections saved about
   95 s of a roughly 380 s sequential write against a retrieval spine of about 4.6 min, "not a
   difference the user feels", so the section count is not the lever. The baseline has one shape at

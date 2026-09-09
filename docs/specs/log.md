@@ -1,7 +1,7 @@
 # Spec update log
 
 ## 2026-09-09
-* **Update** (owner rulings at the task 043 contract interview; applied with the owner's words
+* **Update** (owner rulings at the task 044 contract interview; applied with the owner's words
   quoted): [OS capability § Output structure](capabilities/options-scoping/capability.md) and
   [OS components § 11](capabilities/options-scoping/components.md) — the baseline's eight sections are
   required and the writer may add up to two problem-specific sections; one shape at every depth.
@@ -11,7 +11,7 @@
   [OS components](capabilities/options-scoping/components.md) — the two structural gates pass on
   standing defaults in unattended mode, recorded and flagged; unattended is never the default.
   [vocabulary.md](vocabulary.md) — the Task Agent's code names (`task_agent`).
-* **Update** (owner rulings at the task 043 contract re-approval, after the adversarial reviews):
+* **Update** (owner rulings at the task 044 contract re-approval, after the adversarial reviews):
   [plan-as-object § Plan vs config](system/plan-as-object.md) — plan ↔ turn provenance is at
   **version grain**, not field grain; [plan-as-object § Thoroughness](system/plan-as-object.md) —
   the baseline is written sequentially, with a development-time feasibility check against a

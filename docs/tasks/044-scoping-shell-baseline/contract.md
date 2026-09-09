@@ -1,4 +1,4 @@
-# Task contract: 043-scoping-shell-baseline
+# Task contract: 044-scoping-shell-baseline
 
 One implementation slice: the first of the five options-scoping build tasks
 (PR #69 "Task 1 — the task shell and the baseline"). It lands the second task
@@ -31,7 +31,7 @@ against the baseline before any option is generated.
 > **Plan approved 2026-09-09 · owner.** Design phase closed; the build runs in
 > a fresh conversation with `task-cycle-build`.
 >
-> **Branching:** `task/043-scoping-shell-baseline` from `feat/options-scoping`
+> **Branching:** `task/044-scoping-shell-baseline` from `feat/options-scoping`
 > at `7e31c373` (dev merged in after tasks 039–042; issue #74 fix included).
 > PR target: `feat/options-scoping`, merge commit (not squash), per PR #69.
 >
@@ -257,7 +257,7 @@ ADR:
 
 ## Deliverable
 
-A PR on `task/043-scoping-shell-baseline` into `feat/options-scoping`: one
+A PR on `task/044-scoping-shell-baseline` into `feat/options-scoping`: one
 alembic migration, the rename phase, the scoping plan model and planner, the
 baseline template and walk, the gate with its routed turns, the frontend
 shell, tests, `verification.md`, ADR 0037, the spec changes in § Spec changes,

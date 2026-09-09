@@ -1,4 +1,4 @@
-# Rubric: 043-scoping-shell-baseline
+# Rubric: 044-scoping-shell-baseline
 
 The task is **done only if every box holds** — otherwise it is in progress,
 not done. Deliverables 1–10, decisions D1–D13, the second-round amendments,

@@ -46,7 +46,7 @@ across capabilities (ruling 40).
 
 - ✅ **Two gates are structural, not discretionary.** Nothing after the baseline runs until the
   user confirms the plan against it; nothing after `shortlist` runs until the user says assess
-  (rulings 2, 3). *(Owner ruling 2026-09-09, task 043: structural in every attended mode; under
+  (rulings 2, 3). *(Owner ruling 2026-09-09, task 044: structural in every attended mode; under
   **unattended** both gates pass on standing defaults, recorded and flagged, and unattended is
   never the default — [capability.md § Check-in points](capability.md).)* Re-runs after a plan change apply deltas (❓ granularity, concept open
   question 7).
@@ -305,7 +305,7 @@ output is still called *the proposal* — the proposed shortlist the user adds t
   "Do nothing" profile (what is in place · trend if nothing changes · who is affected · what is
   already changing · what is contested · cost of inaction · key assumption · sources — the eight
   required sections — **plus up to two writer-proposed problem-specific sections**, one shape at
-  every depth; owner ruling 2026-09-09, task 043), empirical
+  every depth; owner ruling 2026-09-09, task 044), empirical
   premises sourced and interpretations labelled reasoning (ruling 40), every statement
   provenance-carrying, "not found" stated as such; the run **pauses** after it and the
   pause is a place to question it in chat (rulings 2, 24). ❓ Baseline sourcing mechanics (open

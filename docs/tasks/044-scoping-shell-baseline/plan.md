@@ -1,4 +1,4 @@
-# Plan: 043-scoping-shell-baseline
+# Plan: 044-scoping-shell-baseline
 
 Deliverables 1–10, decisions D1–D13, the second-round amendments, the
 adversarial folds A1–A18 and C1–C18, and every term are defined in
@@ -237,7 +237,7 @@ engine reads its tables from module constants in every hot path
 sub-task: extract `scripts/rename_engine.py` (identifier splitting, span-safe
 editing, ledger, scan/apply, with rules, literals, exclusions and phases
 **injected**), make `rename_038.py` a thin caller of it with its tables (its
-tests must pass unchanged), and write `rename_043.py` with the 043 tables.
+tests must pass unchanged), and write `rename_044.py` with the 044 tables.
 Rules (compound before bare): `planning_transcript` →
 `task_agent_transcript`; `planner_state` → `task_agent_state`; `ptr`
 constraint infix → `tat` (manifest proposal, confirmed here); `planning`
@@ -264,7 +264,7 @@ Stored values rewritten in the rename revision and reversed on downgrade:
 `task_agent` (production writes only `user` today — the manifest found the
 value in tests and a schema comment; the one-line rewrite stays for safety).
 The revision renames the table, the column and every constraint and index
-in the manifest. The EB → ES sweep is `rename_043.py --docs` over the
+in the manifest. The EB → ES sweep is `rename_044.py --docs` over the
 manifest's file list, markdown-aware, skipping quoted owner rulings and the
 two "EB handoff" citations of a frozen source the manifest flags.
 
@@ -315,12 +315,12 @@ post-038 checkout — X2 — so the check is a one-off inline iteration over
 `schema.metadata`, not that script); confirm the manifest's open items (the
 `tat` infix; the two router/contract module renames; the kept prompt
 interior and role literal; the two "EB handoff" citations kept); write the
-043 rule table and literal list; decide every unmapped `--scan` hit.
+044 rule table and literal list; decide every unmapped `--scan` hit.
 
 1.2 **Engine extraction and sweep tool — `deep-reasoner`.** Brief: S9's
 `rename_engine.py` extraction with tables injected; `rename_038.py` becomes a
-thin caller and its existing tests pass unchanged; `rename_043.py` with the
-043 tables; `--scan` lists identifiers, literals, unmapped hits and
+thin caller and its existing tests pass unchanged; `rename_044.py` with the
+044 tables; `--scan` lists identifiers, literals, unmapped hits and
 collisions; `--apply` refuses on collisions and is idempotent; `--docs` does
 the EB → ES sweep. Done when `--scan` on the branch reports zero unmapped
 hits after the lead's table, `--apply` twice reports zero changes the second
@@ -339,7 +339,7 @@ value did not change; `make openapi-sync` for the path rename. Done when
 full `make verify` and `pnpm e2e` are green.
 
 1.4 **Docs sweep — `fast-worker`, quotations adjudicated by `lead`.**
-`rename_043.py --docs` over the manifest's file list for **both** renames:
+`rename_044.py --docs` over the manifest's file list for **both** renames:
 the Task Agent tokens in `docs/knowledge/**` content, `web-api.md` and
 `infra/DEPLOYMENT.md` (filenames of knowledge concepts never change), and
 EB → ES; `make okf-validate`. The fast-worker runs the deterministic sweep

@@ -1,11 +1,11 @@
 # ADR 0037 — A second task kind: options scoping's shell, links and baseline gate
 
-- **Status:** Accepted — 2026-09-09 (owner, at the task 043 plan gate; the
+- **Status:** Accepted — 2026-09-09 (owner, at the task 044 plan gate; the
   decisions below were ruled one by one in the contract interview and the
   two adversarial reviews the same day)
 - **Date:** 2026-09-09
-- **Task:** 043-scoping-shell-baseline (options scoping build task 1;
-  contract and plan under `docs/tasks/043-scoping-shell-baseline/`)
+- **Task:** 044-scoping-shell-baseline (options scoping build task 1;
+  contract and plan under `docs/tasks/044-scoping-shell-baseline/`)
 - **Relates to:** [ADR 0036](0036-one-vocabulary-across-code-schema-api-and-screen.md)
   (the vocabulary rename this one extends to the Task Agent and to "ES");
   [ADR 0033](0033-organisation-tenancy-and-global-admin-read.md) (tenancy;
