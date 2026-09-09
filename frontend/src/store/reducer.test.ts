@@ -363,6 +363,55 @@ describe("reduceRunStreamFrame — live artefact sections", () => {
     });
   });
 
+  // Task 044 (X8): an options-scoping baseline streams no "Key findings"
+  // section. The reducer must render exactly the titles the server sent, in
+  // the order it sent them — it inserts nothing of its own, and a section
+  // turns into its prose as its own `section_completed` arrives.
+  it("renders exactly the skeleton the server sent, in order, for a baseline walk", () => {
+    const titles = [
+      "What is in place",
+      "Trend if nothing changes",
+      "Who is affected",
+      "What is already changing",
+      "What is contested",
+      "How the transition is tracked",
+      "Cost of inaction",
+      "Key assumption",
+      "Sources",
+    ];
+    const skeleton = fold(createInitialRunStreamState(), [
+      liveFrames()[0],
+      {
+        type: "artefact.skeleton",
+        sections: titles.map((title, index) => ({ index, title, focus: `${title} focus.` })),
+        occurred_at: "2026-07-28T10:01:00Z",
+        sequence: 2,
+      },
+    ]);
+    const ordered = Object.values(skeleton.liveSections).sort((a, b) => a.index - b.index);
+    expect(ordered.map((section) => section.title)).toEqual(titles);
+    expect(ordered.every((section) => section.state === "planned")).toBe(true);
+
+    // The fourth section finishes before the others: only that slot fills.
+    const filled = fold(skeleton, [
+      {
+        type: "artefact.section_completed",
+        index: 3,
+        title: "What is already changing",
+        prose: "A devolved adult-skills settlement takes effect next year.",
+        occurred_at: "2026-07-28T10:02:00Z",
+        sequence: 3,
+      },
+    ]);
+    expect(filled.liveSections[3].state).toBe("filled");
+    expect(filled.liveSections[4].state).toBe("planned");
+    expect(
+      Object.values(filled.liveSections)
+        .sort((a, b) => a.index - b.index)
+        .map((section) => section.title),
+    ).toEqual(titles);
+  });
+
   it("drops a completed empty-prose slot instead of inventing section content", () => {
     const state = fold(createInitialRunStreamState(), [
       ...liveFrames().slice(0, 2),

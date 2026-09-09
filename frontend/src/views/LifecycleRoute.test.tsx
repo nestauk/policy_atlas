@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as queries from "../api/queries";
 import { LifecycleRoute } from "./LifecycleRoute";
 
-vi.mock("../api/queries", () => ({ useTask: vi.fn() }));
+vi.mock("../api/queries", () => ({ useTask: vi.fn(), useArtefact: vi.fn() }));
 
 const TASK_ID = "11111111-1111-1111-1111-111111111111";
 
@@ -14,7 +14,16 @@ function LocationProbe() {
   return <div data-testid="path">{location.pathname}</div>;
 }
 
-function mockTask(status: string | null, { pending = false, access = "full" } = {}) {
+function mockTask(
+  status: string | null,
+  { pending = false, access = "full", capability = "evidence_search", artefact = null } = {},
+) {
+  // Task 044: only a scoping task reads the artefact, and only to learn
+  // whether a baseline exists.
+  vi.mocked(queries.useArtefact).mockReturnValue({
+    isLoading: false,
+    data: artefact,
+  } as unknown as ReturnType<typeof queries.useArtefact>);
   vi.mocked(queries.useTask).mockReturnValue({
     isPending: pending,
     data: pending
@@ -22,6 +31,7 @@ function mockTask(status: string | null, { pending = false, access = "full" } = 
       : {
           task_id: TASK_ID,
           access,
+          capability,
           latest_run: status === null ? null : { status },
         },
   } as unknown as ReturnType<typeof queries.useTask>);

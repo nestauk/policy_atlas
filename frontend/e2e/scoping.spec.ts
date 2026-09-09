@@ -55,4 +55,36 @@ test.describe("mock options-scoping journey", () => {
     await expect(plan.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(plan.getByRole("heading", { name: "Constraints and preferences" })).toBeVisible();
   });
+
+  /**
+   * Phase 4.3: Result is the baseline. The mock serves `mockBaselineArtefact`
+   * for a scoping task, and the Result tab opens on it even though the mock's
+   * new task has no run yet — A17's unlock is the baseline's existence, not
+   * the walk's ending.
+   */
+  test("the scoping task's Result shows the baseline under its band", async ({ page }) => {
+    await page.goto("/new");
+    await page.getByRole("button", { name: "Options scoping" }).click();
+    await page
+      .getByLabel("Your question")
+      .fill("How can we reduce the number of young people not in education, employment or training?");
+    await page.getByRole("button", { name: "Prepare plan" }).click();
+    await expect(page.getByRole("region", { name: "Task Agent conversation" })).toBeVisible();
+
+    await page.getByRole("link", { name: "Result" }).first().click();
+
+    await expect(
+      page.getByRole("heading", { name: "Do nothing: current policy and trajectory" }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Baseline · the situation these options would change · ready · awaiting your confirmation",
+      ),
+    ).toBeVisible();
+    await expect(page.getByText("scoping pass")).toBeVisible();
+    // A baseline has no Key findings and no Executive summary / Full report
+    // parts framing it.
+    await expect(page.getByRole("heading", { name: "Executive summary" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Sources", exact: true }).first()).toBeVisible();
+  });
 });

@@ -612,6 +612,12 @@ class ArtefactOut(BaseModel):
         full_report_intro: Generated introduction to the full-report body, when present.
         summary: Artefact-level summary, if produced.
         summary_status: Artefact-level summary production state.
+        template: Which write-up template produced this artefact
+            (`"baseline"` for an options-scoping baseline; absent on every
+            Evidence search report). Read straight off the roll-up — the
+            client never derives it (task 044, C18).
+        depth_label: How deep the pass behind this artefact went, in the
+            words the roll-up recorded (`"scoping pass"` for a baseline).
     """
 
     artefact_id: uuid.UUID
@@ -624,6 +630,8 @@ class ArtefactOut(BaseModel):
     full_report_intro: str | None = None
     summary: str | None = None
     summary_status: Literal["pending", "verified", "failed"] | None = None
+    template: str | None = None
+    depth_label: str | None = None
 
 
 class CoverageOut(BaseModel):

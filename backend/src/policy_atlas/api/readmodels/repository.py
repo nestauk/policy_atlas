@@ -1662,6 +1662,12 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         if isinstance(raw_full_report_intro, str) and raw_full_report_intro.strip() != ""
         else None
     )
+    # What kind of artefact this is and how deep its pass went, exactly as the
+    # roll-up recorded them (task 044, C18): "baseline" / "scoping pass" for an
+    # options-scoping baseline, absent for every Evidence search report. The
+    # Result view reads these words; it never derives them.
+    raw_template = raw_counts.get("template") if isinstance(raw_counts, Mapping) else None
+    raw_depth_label = raw_counts.get("depth_label") if isinstance(raw_counts, Mapping) else None
 
     return ArtefactOut(
         artefact_id=artefact_row["artefact_id"],
@@ -1680,6 +1686,8 @@ def artefact_out(conn: Connection, task_id: uuid.UUID) -> ArtefactOut | None:
         references=refs_out,
         most_relevant_notes=mrs_notes_out,
         full_report_intro=full_report_intro_out,
+        template=raw_template if isinstance(raw_template, str) else None,
+        depth_label=raw_depth_label if isinstance(raw_depth_label, str) else None,
     )
 
 

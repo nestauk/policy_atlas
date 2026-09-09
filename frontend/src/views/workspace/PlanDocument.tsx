@@ -21,7 +21,7 @@ import {
   screeningOverlayError,
   type PlanOverlay,
 } from "./planOverlay";
-import { START_SEARCH_CLASS, usePlanStart, useScopingPlanStart } from "./planStart";
+import { SCOPING_CONFIRMED_LINE, START_SEARCH_CLASS, usePlanStart, useScopingPlanStart } from "./planStart";
 import {
   ANALYSIS_DEPTH_LABEL,
   ANALYSIS_QUESTION,
@@ -601,7 +601,7 @@ function ScopingStartActions({
   }
 
   if (state.kind === "confirmed") {
-    return <p className="text-lead text-white">Plan confirmed · the longlist arrives with the next stage</p>;
+    return <p className="text-lead text-white">{SCOPING_CONFIRMED_LINE}</p>;
   }
 
   if (state.kind === "build") {

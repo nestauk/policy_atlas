@@ -144,6 +144,12 @@ export function usePlanStart({
  *   - anything else (a `failed`/`interrupted` walk with nothing usable to
  *     confirm or rebuild from) → `build`, the same fresh-start action.
  */
+/** The one sentence that says the plan is settled and what happens next.
+ *  Shared by the plan document's start area and the Result band so the two
+ *  surfaces can never word the same state differently (task 044, C18). */
+export const SCOPING_CONFIRMED_LINE =
+  "Plan confirmed · the longlist arrives with the next stage";
+
 export type ScopingStartState =
   | {
       kind: "build";
@@ -172,6 +178,66 @@ function baselineProduced(status: string): boolean {
   return status === "succeeded" || status === "degraded";
 }
 
+/** One scoping walk, in the fields every state rule below reads. */
+interface ScopingWalk {
+  status: string;
+  started_at: string;
+  plan_version: number;
+}
+
+/**
+ * The scoping task's walk status: the latest walk and how the current plan
+ * version stands against it.
+ *
+ * The one place the walk-status rule lives. `useScopingPlanStart` turns it
+ * into the plan document's actions and `baselineBandState` turns it into the
+ * Result band's words — neither re-derives it, so the two surfaces cannot
+ * disagree about whether a plan is confirmed (task 044, C18).
+ *
+ * Args:
+ *   runs: The task's walks, in any order.
+ *   currentVersion: The plan's current version, or null while it loads.
+ *   baselineConfirmed: The plan's `baseline_confirmed` record, if any.
+ *
+ * Returns:
+ *   The latest-started walk and the three version comparisons the rules use.
+ */
+export function scopingWalkStatus({
+  runs,
+  currentVersion,
+  baselineConfirmed,
+}: {
+  runs: readonly ScopingWalk[];
+  currentVersion: number | null;
+  baselineConfirmed: { plan_version: number } | null;
+}) {
+  // The most recently STARTED walk, whatever its status — the gate's own
+  // pause/finish state decides what these surfaces say, not just the walks
+  // that happen to have produced a result.
+  const latestRun =
+    [...runs].sort((left, right) => right.started_at.localeCompare(left.started_at))[0] ?? null;
+  const confirmedForCurrentVersion =
+    baselineConfirmed !== null &&
+    currentVersion !== null &&
+    baselineConfirmed.plan_version === currentVersion;
+  const sameVersionAsLatestWalk =
+    latestRun !== null && currentVersion !== null && currentVersion === latestRun.plan_version;
+  const newerVersionThanLatestWalk =
+    latestRun !== null && currentVersion !== null && currentVersion > latestRun.plan_version;
+  return {
+    latestRun,
+    confirmedForCurrentVersion,
+    sameVersionAsLatestWalk,
+    newerVersionThanLatestWalk,
+    /** The plan is settled for the version on screen: either the record says
+     *  so, or a walk that produced a baseline finished on this very version
+     *  (it can only have finished through Confirm or the standing default). */
+    confirmed:
+      confirmedForCurrentVersion ||
+      (latestRun !== null && baselineProduced(latestRun.status) && sameVersionAsLatestWalk),
+  };
+}
+
 export function useScopingPlanStart({
   taskId,
   runActive,
@@ -191,21 +257,16 @@ export function useScopingPlanStart({
   const planOut = planQuery.data;
   const scoping = planOut?.scoping ?? null;
   const currentVersion = planOut?.version ?? null;
-  const runs = runsQuery.data?.data ?? [];
-  // The most recently STARTED walk, whatever its status — the gate's own
-  // pause/finish state decides what this card offers, not just the walks
-  // that happen to have produced a result.
-  const latestRun =
-    [...runs].sort((left, right) => right.started_at.localeCompare(left.started_at))[0] ?? null;
-  const baselineConfirmed = scoping?.baseline_confirmed ?? null;
-  const confirmedForCurrentVersion =
-    baselineConfirmed !== null &&
-    currentVersion !== null &&
-    baselineConfirmed.plan_version === currentVersion;
-  const sameVersionAsLatestWalk =
-    latestRun !== null && currentVersion !== null && currentVersion === latestRun.plan_version;
-  const newerVersionThanLatestWalk =
-    latestRun !== null && currentVersion !== null && currentVersion > latestRun.plan_version;
+  const {
+    latestRun,
+    confirmedForCurrentVersion,
+    sameVersionAsLatestWalk,
+    newerVersionThanLatestWalk,
+  } = scopingWalkStatus({
+    runs: runsQuery.data?.data ?? [],
+    currentVersion,
+    baselineConfirmed: scoping?.baseline_confirmed ?? null,
+  });
 
   const beginRun = () => {
     setNotice(null);

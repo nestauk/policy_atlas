@@ -1,5 +1,6 @@
 import type { components } from "../api/gen/types";
 import { TASK } from "../lib/vocabulary";
+import type { ArtefactTemplateFields } from "../views/baselineBand";
 
 export const MOCK_TASK_ID = "0d91c2e7-9b9b-4f4d-bd20-1f6819fb3425";
 export const MOCK_RUN_ID = "7b40cc12-c3a7-4457-92fc-23d15a26d433";
@@ -340,6 +341,135 @@ export const mockArtefactSkeleton: Array<{ index: number; title: string; focus: 
 export const mockArtefactSectionProse: Record<number, string> = {
   0: "Universal breakfast provision can support more consistent breakfast consumption when access is non-stigmatising.",
   1: "Pair school food action with safer active-travel routes and practical family support, while monitoring local reach.",
+};
+
+/**
+ * The options-scoping baseline (task 044, deliverable 9) the mock serves as
+ * the scoping task's Result: the seven written sections in their fixed order,
+ * one proposed section inserted after "What is contested", and the
+ * code-rendered Sources section last. No key findings, no conclusions, no
+ * case studies — a baseline mints none of them.
+ *
+ * `role` is `"standard"` throughout because that is what the read model
+ * returns: the Sources block is written with role `"sources"` and coerced
+ * (`api/readmodels/repository.py`). The section ORDER is what puts Sources
+ * last, not its role.
+ */
+export const mockBaselineArtefact: components["schemas"]["ArtefactOut"] &
+  ArtefactTemplateFields = {
+  artefact_id: "00000000-0000-4000-8000-00000000b001",
+  title: "Do nothing: current policy and trajectory",
+  question:
+    "How can we reduce the number of young people not in education, employment or training?",
+  template: "baseline",
+  depth_label: "scoping pass",
+  coverage_snapshot: {
+    source_count: 18,
+    included: 18,
+    screened_out: 24,
+    study_types: { "policy report": 11, analysis: 5, evaluation: 2 },
+    year_range: [2020, 2026],
+  },
+  sections: [
+    {
+      title: "What is in place",
+      nav_label: "In place",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000001",
+        prose: "The borough runs a youth employment hub, a supported-internship offer through the further education college, and the national Youth Offer through Jobcentre Plus. Careers advice reaches school leavers through the schools themselves; there is no single referral route for young people who have already left.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Trend if nothing changes",
+      nav_label: "Trend",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000002",
+        prose: "The NEET and not-known rate for 16-17 year-olds has moved little across the last four years, sitting a little above the London average. No source in the set projects the rate forward beyond the current academic year.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Who is affected",
+      nav_label: "Who",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000003",
+        prose: "Young people with a recorded special educational need, those known to children's social care, and those who left school without a level 2 qualification are over-represented. The plan names 16-24 year-olds; the published figures measure 16-17 year-olds, so the older half of the group is not described by this data.",
+        claims: [],
+      }],
+    },
+    {
+      title: "What is already changing",
+      nav_label: "Changing",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000004",
+        prose: "A devolved adult-skills settlement takes effect from the next financial year, and the college's supported-internship places are due to expand. One employer-partnership programme closes at the end of the current cohort.",
+        claims: [],
+      }],
+    },
+    {
+      title: "What is contested",
+      nav_label: "Contested",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000005",
+        prose: "Sources disagree about whether the binding constraint is the supply of entry-level jobs or the transition support around them. They also disagree about the not-known cohort: one reading treats it as measurement error, another as unrecorded disengagement.",
+        claims: [],
+      }],
+    },
+    {
+      title: "How the transition is tracked",
+      nav_label: "Tracking",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000006",
+        prose: "Destination data is collected at two points in the year and reconciled against school records. Two sources describe the reconciliation as incomplete for young people who move borough.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Cost of inaction",
+      nav_label: "Cost of inaction",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000007",
+        prose: "One national estimate puts the lifetime public-finance cost of a sustained NEET spell in the tens of thousands of pounds per person, at 2021 prices. No source in this set costs the status quo for this borough.",
+        claims: [{
+          claim_id: "41000000-0000-4000-8000-000000000001",
+          claim_type: "gap",
+          text: "No source in this set costs the status quo for this borough.",
+          span: [138, 195],
+          citations: [],
+          gap: { grade: "corpus_absence", caveat: null },
+        }],
+      }],
+    },
+    {
+      title: "Key assumption",
+      nav_label: "Key assumption",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000008",
+        prose: "The assumption most worth checking is that the current offer does not reach the young people driving the trend, rather than reaching them and failing. This rests on the absence of a referral route for those who have already left, and on the incomplete destination reconciliation reported above.",
+        claims: [],
+      }],
+    },
+    {
+      title: "Sources",
+      nav_label: "Sources",
+      role: "standard",
+      blocks: [{
+        block_id: "31000000-0000-4000-8000-000000000009",
+        prose: "18 sources from Overton and OpenAlex, searched for the situation and trend this plan describes, limited to the United Kingdom and other high-income countries.\nLive official statistics and departmental pages were not searched; figures come from the documents above, as at their publication dates.\nSource mix: 13 grey literature (policy reports, official and organisational publications) and 5 academic articles. The profile leans on grey sources.\nA language restriction is recorded in the plan and not yet applied at retrieval.",
+        claims: [],
+      }],
+    },
+  ],
+  references: [],
 };
 
 export const mockCoverage: components["schemas"]["CoverageOut"] = {

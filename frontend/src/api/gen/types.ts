@@ -1041,6 +1041,49 @@ export interface components {
             kind: "abort";
         };
         /**
+         * AnswerPayloadOut
+         * @description The cited half of one grounded answer, shared by every turn that has one.
+         *
+         *     These are the citation fields ``ChatTurnOut`` has always carried, named
+         *     once so a Task Agent turn that answers from the evidence (task 044) can
+         *     carry the same shape instead of a second, drifting copy. Every field keeps
+         *     its chat default, so a turn with no answer serialises exactly as before.
+         *
+         *     Args:
+         *         claims: Structured claims backing the prose.
+         *         citations: Resolved citations, each with its read-time source facts.
+         *         enrichment: Downstream enrichment status for those citations.
+         *         warning_not_evidence_checked: Whether the evidence check could not run.
+         *         handoff: The handoff hint, when the answer held no evidence.
+         *         stopped_before_evidence_check: Whether the answer was stopped early.
+         */
+        AnswerPayloadOut: {
+            /** Citations */
+            citations?: {
+                [key: string]: unknown;
+            }[];
+            /** Claims */
+            claims?: {
+                [key: string]: unknown;
+            }[];
+            /** Enrichment */
+            enrichment?: {
+                [key: string]: unknown;
+            } | null;
+            /** Handoff */
+            handoff?: "evidence_not_held" | null;
+            /**
+             * Stopped Before Evidence Check
+             * @default false
+             */
+            stopped_before_evidence_check: boolean;
+            /**
+             * Warning Not Evidence Checked
+             * @default false
+             */
+            warning_not_evidence_checked: boolean;
+        };
+        /**
          * ArtefactOut
          * @description The `artefact` read model — the synthesised evidence base.
          *
@@ -1056,6 +1099,12 @@ export interface components {
          *         full_report_intro: Generated introduction to the full-report body, when present.
          *         summary: Artefact-level summary, if produced.
          *         summary_status: Artefact-level summary production state.
+         *         template: Which write-up template produced this artefact
+         *             (`"baseline"` for an options-scoping baseline; absent on every
+         *             Evidence search report). Read straight off the roll-up — the
+         *             client never derives it (task 044, C18).
+         *         depth_label: How deep the pass behind this artefact went, in the
+         *             words the roll-up recorded (`"scoping pass"` for a baseline).
          */
         ArtefactOut: {
             /**
@@ -1064,6 +1113,8 @@ export interface components {
              */
             artefact_id: string;
             coverage_snapshot: components["schemas"]["CoverageSnapshotOut"];
+            /** Depth Label */
+            depth_label?: string | null;
             /** Full Report Intro */
             full_report_intro?: string | null;
             /** Most Relevant Notes */
@@ -1078,6 +1129,8 @@ export interface components {
             summary?: string | null;
             /** Summary Status */
             summary_status?: ("pending" | "verified" | "failed") | null;
+            /** Template */
+            template?: string | null;
             /** Title */
             title: string;
         };
@@ -1289,6 +1342,9 @@ export interface components {
         /**
          * ChatTurnOut
          * @description Durable public projection of one chat turn.
+         *
+         *     Carries its answer's citation fields inline (from ``AnswerPayloadOut``),
+         *     exactly as it always has — the extraction is a refactor, not a wire change.
          */
         ChatTurnOut: {
             /** Answer */
@@ -3621,8 +3677,13 @@ export interface components {
          *         status: Durable execution state for this turn.
          *         created_at: Receipt timestamp, retained as display metadata.
          *         completed_at: Terminal timestamp, absent while still pending.
+         *         kind: What this turn is. Absent on turns stored before task 044,
+         *             which are all replies.
+         *         answer: The cited answer, on an `answer` turn.
+         *         decision: The recorded gate decision, on a `decision` turn.
          */
         TaskAgentTranscriptTurnOut: {
+            answer?: components["schemas"]["AnswerPayloadOut"] | null;
             /** Capability */
             capability?: string | null;
             /**
@@ -3639,6 +3700,9 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            decision?: components["schemas"]["TurnDecisionOut"] | null;
+            /** Kind */
+            kind?: ("reply" | "answer" | "decision") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             /** Reply */
             reply: string | null;
@@ -3677,6 +3741,12 @@ export interface components {
          * TaskAgentTurnOut
          * @description Response body for one task_agent turn.
          *
+         *     A turn is one of three things, named by ``kind``: a planning ``reply``, a
+         *     grounded ``answer`` from the paused walk's evidence, or a recorded
+         *     ``decision`` at a gate. The three are additive optional fields rather than
+         *     a discriminated union, so every existing reader keeps working and a turn
+         *     stored before task 044 stays valid with ``kind`` absent.
+         *
          *     Args:
          *         reply: The task_agent's conversational reply for this turn.
          *         plan: The full current draft plan.
@@ -3689,12 +3759,20 @@ export interface components {
          *         scoping_plan: The full current scoping draft, on an options-scoping
          *             turn. `plan` is null for those turns, and this is null for
          *             Evidence search turns.
+         *         kind: What this turn is. Absent on turns stored before task 044,
+         *             which are all replies.
+         *         answer: The cited answer, on an `answer` turn.
+         *         decision: The recorded gate decision, on a `decision` turn.
          */
         TaskAgentTurnOut: {
+            answer?: components["schemas"]["AnswerPayloadOut"] | null;
             /** Capability */
             capability?: string | null;
             /** Conversation Id */
             conversation_id?: string | null;
+            decision?: components["schemas"]["TurnDecisionOut"] | null;
+            /** Kind */
+            kind?: ("reply" | "answer" | "decision") | null;
             part?: components["schemas"]["PartProposalOut"] | null;
             plan?: components["schemas"]["PlanDraft"] | null;
             /** Reply */
@@ -4071,6 +4149,35 @@ export interface components {
              * @enum {string}
              */
             type: "tick";
+        };
+        /**
+         * TurnDecisionOut
+         * @description The recorded decision a gate turn resolved a paused walk with.
+         *
+         *     Args:
+         *         option_id: The check-in option the user chose.
+         *         label: That option's user-visible label, as offered.
+         *         check_in_id: The check-in the decision answered.
+         *         capability_run_id: The walk the check-in belongs to.
+         *         plan_version: The plan version the decision was taken against.
+         */
+        TurnDecisionOut: {
+            /**
+             * Capability Run Id
+             * Format: uuid
+             */
+            capability_run_id: string;
+            /**
+             * Check In Id
+             * Format: uuid
+             */
+            check_in_id: string;
+            /** Label */
+            label: string;
+            /** Option Id */
+            option_id: string;
+            /** Plan Version */
+            plan_version: number;
         };
         /** ValidationError */
         ValidationError: {

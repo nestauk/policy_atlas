@@ -37,6 +37,7 @@ import {
   MOCK_TASK_ID,
   MOCK_RUN_ID,
   mockAuthorships,
+  mockBaselineArtefact,
 } from "./fixtures";
 
 type MeOut = components["schemas"]["MeOut"];
@@ -633,7 +634,11 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
     return json(page(rows));
   }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/decisions`)) return json(page(mockDecisions));
-  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) return json(mockArtefact);
+  // Task 044 (deliverable 9): a scoping task's Result is its baseline, not an
+  // Evidence search report.
+  if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/artefact`)) {
+    return json(mockTask.capability === "options_scoping" ? mockBaselineArtefact : mockArtefact);
+  }
   if (method === "GET" && path.endsWith(`/api/v1/tasks/${MOCK_TASK_ID}/coverage`)) return json(mockCoverage);
 
   // --- Conversations + chat turns (task 029 phase G3 mock) ---------------
