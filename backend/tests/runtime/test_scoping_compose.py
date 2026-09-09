@@ -20,6 +20,7 @@ from policy_atlas.evidence_search.sourcing.search_loop import (
 )
 from policy_atlas.evidence_search.synthesis.baseline_prompt import (
     BASELINE_PROPOSED_SECTIONS_MAX,
+    BASELINE_SECTION_TURN_CAP,
     BASELINE_SECTIONS,
     SOURCES_SECTION_TITLE,
 )
@@ -225,6 +226,13 @@ def test_synthesise_carries_the_baseline_template_and_its_sections() -> None:
         SOURCES_SECTION_TITLE
     ]
     assert all(section["nav_label"] for section in synthesis["sections"])
+    # The per-section turn cap travels with the section (task 044 phase 4.2);
+    # the code-rendered Sources section runs no loop, so it carries none.
+    written = synthesis["sections"][:-1]
+    assert [section["turn_cap"] for section in written] == [
+        BASELINE_SECTION_TURN_CAP
+    ] * len(BASELINE_SECTIONS)
+    assert "turn_cap" not in synthesis["sections"][-1]
 
 
 def test_the_supplied_sections_fit_the_section_cap() -> None:
@@ -244,6 +252,7 @@ def test_the_synthesise_directive_parses_under_the_synthesis_grammar() -> None:
     # The nav labels survive the parse: before task 044 the key set rejected
     # them, so a supplied section could never carry one.
     assert directive.sections[0]["nav_label"] == BASELINE_SECTIONS[0].nav_label
+    assert directive.sections[0]["turn_cap"] == BASELINE_SECTION_TURN_CAP
 
 
 def test_an_unknown_template_is_refused() -> None:

@@ -206,7 +206,9 @@ BASELINE_INTENT_TEMPLATE = (
     "interest: {outcomes}."
 )
 
-# The Result band and the depth label every scoping profile carries (C18).
+# The artefact title (Baseline board), the Result band and the depth label
+# every scoping profile carries (C18).
+BASELINE_ARTEFACT_TITLE = "Do nothing: current policy and trajectory"
 BASELINE_BAND = "the situation these options would change"
 BASELINE_DEPTH_LABEL = "scoping pass"
 

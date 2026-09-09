@@ -650,15 +650,22 @@ def scope_constraints_for(plan: ScopingPlan) -> ScopeConstraints:
     return ScopeConstraints.model_validate(values)
 
 
-def _baseline_section_directives() -> list[dict[str, str]]:
+def _baseline_section_directives() -> list[dict[str, Any]]:
     """Return the supplied baseline section specs, in the ruled order.
 
     Returns:
-        One ``{title, focus, nav_label}`` object per required section, with the
-        code-rendered Sources section last.
+        One ``{title, focus, nav_label, turn_cap}`` object per model-written
+        section, with the code-rendered Sources section last. The per-section
+        turn cap travels with the section rather than being inferred at
+        execution: the plan's directive is the whole of what synthesise runs.
     """
-    sections = [
-        {"title": s.title, "focus": s.focus, "nav_label": s.nav_label}
+    sections: list[dict[str, Any]] = [
+        {
+            "title": s.title,
+            "focus": s.focus,
+            "nav_label": s.nav_label,
+            "turn_cap": s.turn_cap,
+        }
         for s in BASELINE_SECTIONS
     ]
     sections.append(

@@ -335,6 +335,9 @@ class SynthesisDirective:
         return {
             "sections_source": "scope_context" if self.sections is not None else "proposal",
             "section_budget": self.section_budget,
+            # The output kind the run executed (task 044): ``None`` is the
+            # Evidence search report. Recorded so replay never has to infer it.
+            "template": self.template,
             "retrieval_boosts": {
                 "columns": self.column_boosts,
                 "tags": self.tag_boosts,
@@ -497,13 +500,12 @@ _SECTION_KEYS_WITH_GROUPS = {"title", "focus", "group_ids"}
 #: ``nav_label`` is an optional extra on any section spec. ``SectionSpec`` and
 #: ``_sections_from_directive`` have always read it; before task 044 the key
 #: set below rejected it first, so a supplied section could never carry one.
-_SECTION_KEYS_OPTIONAL: set[str] = {"nav_label"}
-_SECTION_KEY_SETS: tuple[set[str], ...] = (
-    _SECTION_KEYS_REQUIRED,
-    _SECTION_KEYS_REQUIRED | _SECTION_KEYS_OPTIONAL,
-    _SECTION_KEYS_WITH_GROUPS,
-    _SECTION_KEYS_WITH_GROUPS | _SECTION_KEYS_OPTIONAL,
-)
+#: ``turn_cap`` joined it in phase 4.2: a template's sections carry their own
+#: generation-loop bound (the baseline's is
+#: ``baseline_prompt.BASELINE_SECTION_TURN_CAP``), and a supplied section that
+#: omits it falls back to the template default / ``SECTION_TURN_CAP``.
+_SECTION_KEYS_OPTIONAL: set[str] = {"nav_label", "turn_cap"}
+_SECTION_KEYS_ALLOWED: set[str] = _SECTION_KEYS_WITH_GROUPS | _SECTION_KEYS_OPTIONAL
 _BOOST_KEYS = {"columns", "tags", "appraisal_tier", "screen_confidence"}
 _TOKEN_RE = re.compile(r"[0-9A-Za-z]+")
 GROUP_ID_EXPECTED_FORM = "<facet>:gNN"
@@ -838,7 +840,7 @@ def _parse_sections(
         if not isinstance(item, dict):
             _directive_fail(f"synthesis directive sections[{index}] must be an object")
         keys = set(item)
-        if keys not in _SECTION_KEY_SETS:
+        if not _SECTION_KEYS_REQUIRED <= keys <= _SECTION_KEYS_ALLOWED:
             _directive_fail(f"synthesis directive sections[{index}] has invalid keys")
         title = _bounded_string(item["title"], field=f"sections[{index}].title")
         if title.casefold() in forbidden:
@@ -853,6 +855,8 @@ def _parse_sections(
             section["nav_label"] = _bounded_string(
                 item["nav_label"], field=f"sections[{index}].nav_label"
             )
+        if "turn_cap" in item:
+            section["turn_cap"] = _parse_section_turn_cap(item["turn_cap"], index)
         if "group_ids" in item:
             if grouping_group_ids is None and not defer_group_membership:
                 _directive_fail("synthesis directive group_ids require grouping")
@@ -885,6 +889,31 @@ def _parse_sections(
             section["group_ids"] = group_ids
         parsed.append(section)
     return parsed
+
+
+def _parse_section_turn_cap(value: Any, index: int) -> int:
+    """Validate one supplied section's generation-loop turn cap.
+
+    Args:
+        value: Candidate JSON directive value.
+        index: Position of the section in the supplied list, for the message.
+
+    Returns:
+        The validated 1..``SECTION_TURN_CAP`` turn cap.
+
+    Raises:
+        SynthesisDirectiveError: If it is not an integer in range. Fail-closed
+            rather than clamped: a cap is execution-bearing (it bounds provider
+            calls), so a malformed one must not silently become a larger one.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        _directive_fail(f"synthesis directive sections[{index}].turn_cap must be an integer")
+    if not 1 <= int(value) <= SECTION_TURN_CAP:
+        _directive_fail(
+            f"synthesis directive sections[{index}].turn_cap must be between 1 "
+            f"and {SECTION_TURN_CAP}"
+        )
+    return int(value)
 
 
 def _parse_retrieval_boosts(

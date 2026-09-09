@@ -47,6 +47,7 @@ from policy_atlas.core.schema import (
     source_extraction_record,
     source_snapshot,
     synthesis_result,
+    task_plan,
     task_source_snapshot,
 )
 from policy_atlas.core.schema import chunk as chunk_table
@@ -59,6 +60,24 @@ from policy_atlas.evidence_search.extract.extract import record_ids_by_profile
 from policy_atlas.evidence_search.extract.icf_records import PROFILE_ID as ICF_PROFILE_ID
 from policy_atlas.evidence_search.extract.iof_records import PROFILE_ID as IOF_PROFILE_ID
 from policy_atlas.evidence_search.extract.quote_verify import BasisText, QuoteMatcher, build_basis
+from policy_atlas.evidence_search.synthesis.baseline_prompt import (
+    BASELINE_ARTEFACT_TITLE,
+    BASELINE_DEPTH_LABEL,
+    BASELINE_PROMPT_VERSION,
+    BASELINE_PROPOSED_INSERT_AFTER,
+    BASELINE_PROPOSED_SECTIONS_MAX,
+    BASELINE_SECTION_TURN_CAP,
+    BASELINE_TEMPLATE_KEY,
+    SOURCES_LANGUAGE_NOT_APPLIED_LINE,
+    SOURCES_NOT_SEARCHED_LINE,
+    SOURCES_RESTRICTION_TEMPLATE,
+    SOURCES_SEARCHED_TEMPLATE,
+    SOURCES_SECTION_NAV_LABEL,
+    SOURCES_SECTION_TITLE,
+    SOURCES_SKEW_TEMPLATE,
+    SOURCES_UNKNOWN_TEMPLATE,
+    is_forbidden_proposed_title,
+)
 from policy_atlas.evidence_search.synthesis.grounding_judge import (
     ENVELOPE_VERSION,
     JUDGE_MODEL,
@@ -368,8 +387,14 @@ class SectionSpec:
     nav_label: str | None = None
     # Composition role (ADR 0015 §8): "standard" for proposed/directive
     # sections, "conclusions" for the code-injected foot section, "key_findings"
-    # for the final key-findings pass. Roll-up only — never a block-table column.
+    # for the final key-findings pass, "sources" for the baseline's
+    # code-rendered coverage foot (task 044). Roll-up only — never a
+    # block-table column, and the read model coerces an unknown role to
+    # "standard" so a new one never hides a block.
     role: str = "standard"
+    # Per-section generation-loop bound. ``None`` means the run-level default
+    # (``SECTION_TURN_CAP``); a template's sections carry their own (task 044).
+    turn_cap: int | None = None
 
     def as_seed(self) -> dict[str, Any]:
         """Return the prompt-facing section record."""
@@ -635,7 +660,7 @@ def derive_artefact_title(intent: str) -> str:
     return f"{stripped[: ARTEFACT_TITLE_MAX - 1]}…"
 
 
-def generation_budget_max() -> int:
+def generation_budget_max(section_turn_caps: Sequence[int] | None = None) -> int:
     """Return the binding maximum generation-call count for this slice.
 
     Two proposal calls (propose + one bounded repair), one generation lane per
@@ -646,7 +671,24 @@ def generation_budget_max() -> int:
     case-studies pass (one emission plus up to ``CASE_STUDIES_MAX_CARDS``
     judge-only card lanes — failing cards are dropped, never repaired), plus up
     to ``MRS_NOTE_MAX`` most-relevant-source note calls.
+
+    Args:
+        section_turn_caps: The run's actual per-section turn caps, in section
+            order. Given by an output kind whose section list is known up front
+            and whose sections carry their own caps (the baseline, task 044
+            phase 4.2): the section term is then the sum of the real lanes
+            rather than the worst case, and every Evidence-search-shaped pass
+            the baseline does not run — key findings, case studies, the
+            most-relevant-source notes and the full-report intro — drops out of
+            the sum. The code-rendered Sources block costs nothing: it is not
+            a lane. What remains is the two proposal calls plus the sections.
+
+    Returns:
+        The maximum number of generation calls the run may make before
+        ``budget_exceeded``.
     """
+    if section_turn_caps is not None:
+        return 2 + sum(cap + 3 for cap in section_turn_caps)
     return (
         2
         + (SECTION_CAP + 1) * (SECTION_TURN_CAP + 3)
@@ -1860,16 +1902,373 @@ def _validate_sections(
     return parsed, reasons, normalisations
 
 
-def _sections_from_directive(sections: list[dict[str, Any]]) -> list[SectionSpec]:
+def _sections_from_directive(
+    sections: list[dict[str, Any]], *, default_turn_cap: int | None = None
+) -> list[SectionSpec]:
+    """Build section specs from the validated supplied-section directive.
+
+    Args:
+        sections: Validated section objects from the directive grammar.
+        default_turn_cap: Turn cap for a section that supplies none — the
+            template's own cap in template mode, ``None`` (meaning
+            ``SECTION_TURN_CAP``) otherwise.
+
+    Returns:
+        One spec per supplied section, in the supplied order.
+    """
     return [
         SectionSpec(
             title=cast("str", section["title"]),
             focus=cast("str", section["focus"]),
             group_ids=list(cast("list[str]", section.get("group_ids", []))),
             nav_label=cast("str | None", section.get("nav_label")),
+            turn_cap=cast("int | None", section.get("turn_cap", default_turn_cap)),
         )
         for section in sections
     ]
+
+
+# --- Baseline mode (task 044 phase 4.2; contract § Baseline, ADR 0037) ---
+
+
+def _baseline_rejections(
+    sections: Sequence[SectionSpec], *, required_titles: Sequence[str]
+) -> list[str]:
+    """Return the baseline-specific rejection reasons for proposed extras.
+
+    A proposed section may not take one of the template's own titles, nor one
+    of the structural titles the baseline has no room for ("Conclusions", "Key
+    findings", "Recommendations", "Options" …): the baseline profiles the
+    status quo and mints no options. Reasons are instructive sentences, fed
+    back verbatim as the one bounded repair call's ``rejection``.
+
+    Args:
+        sections: The validated proposal.
+        required_titles: The supplied section titles, in order.
+
+    Returns:
+        One reason per offending section; empty when every extra is admissible.
+    """
+    taken = {title.casefold() for title in required_titles}
+    reasons: list[str] = []
+    for index, section in enumerate(sections):
+        if section.title.casefold() in taken:
+            reasons.append(
+                f"sections[{index}].title_duplicates_required: the baseline already "
+                f"has a section titled {section.title!r} — propose a "
+                "problem-specific section this baseline does not already cover, "
+                "or propose none"
+            )
+        elif is_forbidden_proposed_title(section.title):
+            reasons.append(
+                f"sections[{index}].title_forbidden: {section.title!r} is not a "
+                "baseline section — the baseline describes the situation as it "
+                "is and never concludes, summarises or proposes options"
+            )
+    return reasons
+
+
+def _baseline_extra_sections(
+    *,
+    intent: str,
+    summaries: dict[str, Any],
+    required: Sequence[SectionSpec],
+    synthesis_backend: SynthesisBackend,
+    grouping_group_ids: set[str] | None,
+    call_counts: dict[str, int],
+    usage_totals: UsageAccumulator,
+) -> tuple[list[SectionSpec], list[str]]:
+    """Propose the baseline's at-most-two problem-specific extra sections.
+
+    The baseline's required sections are supplied, never proposed; the proposer
+    runs only for the extras, under ``BASELINE_PROPOSED_SECTIONS_MAX``. Invalid
+    extras drive the one bounded repair call the Evidence search path already
+    owns; extras that are still invalid after it degrade to **none** rather
+    than failing the run — the baseline's deliverable is its required sections,
+    and a writer that cannot name an admissible extra has said, badly, that
+    there is none.
+
+    Args:
+        intent: The scope's compiled intent, verbatim.
+        summaries: Id-keyed substrate summaries, as the ES proposer takes them.
+        required: The supplied model-written sections, in order.
+        synthesis_backend: The proposal seam.
+        grouping_group_ids: Valid grouping ids, or ``None``.
+        call_counts: Mutated generation-call ledger.
+        usage_totals: Mutated provider-usage accumulator.
+
+    Returns:
+        ``(extras, notes)`` — the admissible extras (at most
+        ``BASELINE_PROPOSED_SECTIONS_MAX``) and the deterministic notes to
+        record in ``section_set.proposal_normalisations``.
+    """
+    required_titles = [section.title for section in required]
+    notes: list[str] = []
+
+    def _propose(rejection: list[str] | None) -> SectionProposalWire | None:
+        phase = "proposal_repair" if rejection else "proposal"
+        try:
+            _reserve_generation(call_counts, phase)
+            proposal, usage = synthesis_backend.propose_sections(
+                intent=intent,
+                substrate=summaries,
+                rejection=rejection,
+                section_budget=BASELINE_PROPOSED_SECTIONS_MAX,
+            )
+        except RuntimeError as exc:
+            # The extras are optional by construction: a provider failure on
+            # them degrades to none and is recorded, never fatal (the required
+            # sections are the artefact).
+            log.warning(
+                "synthesise.baseline_extras_failed",
+                error=f"{type(exc).__name__}: {str(exc)[:200]}",
+            )
+            notes.append(f"baseline_extras_backend_error: {type(exc).__name__}")
+            return None
+        usage_totals.add(usage)
+        return proposal
+
+    def _validate(proposal: SectionProposalWire) -> tuple[list[SectionSpec], list[str]]:
+        if not proposal.sections:
+            # Proposing no extra section is a legitimate answer here (unlike the
+            # Evidence search report, whose whole section list is proposed), so
+            # it is never repaired.
+            return [], []
+        sections, reasons, normalisations = _validate_sections(
+            proposal,
+            grouping_group_ids=grouping_group_ids,
+            section_budget=BASELINE_PROPOSED_SECTIONS_MAX,
+        )
+        notes.extend(normalisations)
+        return sections, reasons + _baseline_rejections(
+            sections, required_titles=required_titles
+        )
+
+    proposal = _propose(None)
+    if proposal is None:
+        return [], notes
+    extras, reasons = _validate(proposal)
+    if reasons:
+        repaired = _propose(reasons)
+        if repaired is None:
+            return [], notes
+        extras, reasons = _validate(repaired)
+        if reasons:
+            log.warning("synthesise.baseline_extras_rejected", reasons=reasons[:5])
+            notes.append("baseline_extras_dropped: " + "; ".join(reasons)[:400])
+            return [], notes
+    return list(extras[:BASELINE_PROPOSED_SECTIONS_MAX]), notes
+
+
+def _baseline_section_order(
+    required: Sequence[SectionSpec], extras: Sequence[SectionSpec]
+) -> list[SectionSpec]:
+    """Insert the proposed extras after the template's insertion point.
+
+    Args:
+        required: The supplied model-written sections, in order.
+        extras: The admissible proposed sections.
+
+    Returns:
+        The final model-written section order. When the insertion point is not
+        present (a supplied list that has drifted from the template), the
+        extras go last rather than being dropped.
+    """
+    if not extras:
+        return list(required)
+    titles = [section.title for section in required]
+    try:
+        cut = titles.index(BASELINE_PROPOSED_INSERT_AFTER) + 1
+    except ValueError:
+        cut = len(required)
+    return [*required[:cut], *extras, *required[cut:]]
+
+
+#: Search backends, as ``source_snapshot.metadata["backend"]`` records them,
+#: mapped to the two kinds of literature the Sources block reports. Nothing
+#: else is inferred: an unrecorded or unrecognised backend counts as
+#: undetermined rather than being assigned to a side.
+_SOURCE_KIND_BY_BACKEND = {"overton": "grey", "openalex": "academic"}
+
+
+def _baseline_source_mix(
+    conn: Connection, *, task_id: uuid.UUID, tss_ids: set[str]
+) -> dict[str, int]:
+    """Count the appraised documents by the literature kind of their backend.
+
+    Args:
+        conn: Open read connection.
+        task_id: Owning task.
+        tss_ids: The appraised (screened-in) documents.
+
+    Returns:
+        ``{"grey": n, "academic": n, "undetermined": n}``.
+    """
+    counts = {"grey": 0, "academic": 0, "undetermined": 0}
+    if not tss_ids:
+        return counts
+    rows = conn.execute(
+        sa_select(source_snapshot.c.metadata)
+        .select_from(task_source_snapshot)
+        .join(
+            source_snapshot,
+            source_snapshot.c.source_snapshot_id
+            == task_source_snapshot.c.source_snapshot_id,
+        )
+        .where(task_source_snapshot.c.task_id == task_id)
+        .where(
+            task_source_snapshot.c.task_source_snapshot_id.in_(
+                [uuid.UUID(tss_id) for tss_id in sorted(tss_ids)]
+            )
+        )
+    ).fetchall()
+    for row in rows:
+        metadata = row.metadata if isinstance(row.metadata, Mapping) else {}
+        backend = metadata.get("backend")
+        kind = _SOURCE_KIND_BY_BACKEND.get(backend) if isinstance(backend, str) else None
+        counts[kind or "undetermined"] += 1
+    return counts
+
+
+def _baseline_evidence_restrictions(
+    conn: Connection, *, task_id: uuid.UUID, scope_id: uuid.UUID
+) -> dict[str, Any]:
+    """Read the scoping plan's evidence restrictions for the Sources block.
+
+    The restrictions live on the approved plan the scope points at, not in the
+    scope context: the two that reach retrieval are compiled into the acquire
+    search filters (``country_group`` and the publication-date bounds) and the
+    language restriction deliberately is not (C8), so the plan row is the one
+    place that carries both what was applied and what was recorded and not
+    applied. Read defensively — a scope with no plan row, or a payload shape
+    this component does not recognise, yields no restrictions rather than
+    raising: the Sources block is a run fact, and a missing fact is stated by
+    omission.
+
+    Args:
+        conn: Open read connection.
+        task_id: Owning task.
+        scope_id: The scope being synthesised.
+
+    Returns:
+        ``{"country_group": str | None, "published_after": str | None,
+        "published_before": str | None, "languages": list[str]}``.
+    """
+    empty: dict[str, Any] = {
+        "country_group": None,
+        "published_after": None,
+        "published_before": None,
+        "languages": [],
+    }
+    row = conn.execute(
+        sa_select(task_plan.c.payload)
+        .select_from(evidence_scope)
+        .join(
+            task_plan,
+            (task_plan.c.plan_id == evidence_scope.c.plan_id)
+            & (task_plan.c.task_id == evidence_scope.c.task_id),
+        )
+        .where(evidence_scope.c.evidence_scope_id == scope_id)
+        .where(evidence_scope.c.task_id == task_id)
+    ).first()
+    if row is None or not isinstance(row.payload, Mapping):
+        return empty
+    constraints = row.payload.get("constraints")
+    if not isinstance(constraints, list):
+        return empty
+    languages: list[str] = []
+    found = dict(empty)
+    for constraint in constraints:
+        if not isinstance(constraint, Mapping):
+            continue
+        if constraint.get("kind") != "evidence_restriction":
+            continue
+        for key in ("country_group", "published_after", "published_before"):
+            value = constraint.get(key)
+            if isinstance(value, str) and value:
+                found[key] = value
+        raw_languages = constraint.get("languages")
+        if isinstance(raw_languages, list):
+            languages.extend(item for item in raw_languages if isinstance(item, str) and item)
+    found["languages"] = languages
+    return found
+
+
+def _baseline_restriction_clause(restrictions: Mapping[str, Any]) -> str:
+    """Render the applied-restriction clause of the searched-sources sentence.
+
+    Only the restrictions the search grammar actually applies are named — the
+    source-origin group and the publication-date bounds. A language
+    restriction is reported on its own line as recorded and not applied.
+
+    Args:
+        restrictions: The plan's evidence restrictions.
+
+    Returns:
+        The clause, or an empty string when nothing was restricted.
+    """
+    parts: list[str] = []
+    country_group = restrictions.get("country_group")
+    if isinstance(country_group, str) and country_group:
+        parts.append(f"sources from {country_group.replace('_', ' ')}")
+    after = restrictions.get("published_after")
+    before = restrictions.get("published_before")
+    if isinstance(after, str) and isinstance(before, str) and after and before:
+        parts.append(f"publication dates from {after} to {before}")
+    elif isinstance(after, str) and after:
+        parts.append(f"publication dates from {after}")
+    elif isinstance(before, str) and before:
+        parts.append(f"publication dates up to {before}")
+    if not parts:
+        return ""
+    return SOURCES_RESTRICTION_TEMPLATE.format(restriction_text=" and ".join(parts))
+
+
+def _baseline_sources_prose(
+    *, document_count: int, mix: Mapping[str, int], restrictions: Mapping[str, Any]
+) -> str:
+    """Render the baseline's Sources section from the run's own coverage facts.
+
+    Every sentence is a fact about the run — how many documents were read,
+    where they came from, what was not searched — so the block carries no
+    claims and is never written by a model.
+
+    Args:
+        document_count: Documents the baseline could read (the appraised,
+            screened-in set).
+        mix: Grey / academic / undetermined counts over the same set.
+        restrictions: The plan's evidence restrictions.
+
+    Returns:
+        The block prose.
+    """
+    grey = int(mix.get("grey", 0))
+    academic = int(mix.get("academic", 0))
+    unknown = int(mix.get("undetermined", 0))
+    if grey > academic:
+        skew_word = "grey-literature"
+    elif academic > grey:
+        skew_word = "academic"
+    else:
+        skew_word = "mixed"
+    lines = [
+        SOURCES_SEARCHED_TEMPLATE.format(
+            document_count=document_count,
+            restriction_clause=_baseline_restriction_clause(restrictions),
+        ),
+        SOURCES_NOT_SEARCHED_LINE,
+        SOURCES_SKEW_TEMPLATE.format(
+            grey_count=grey,
+            academic_count=academic,
+            unknown_clause=(
+                SOURCES_UNKNOWN_TEMPLATE.format(unknown_count=unknown) if unknown else ""
+            ),
+            skew_word=skew_word,
+        ),
+    ]
+    if restrictions.get("languages"):
+        lines.append(SOURCES_LANGUAGE_NOT_APPLIED_LINE)
+    return "\n\n".join(lines)
 
 
 # --- The pre-synthesise steer surface (022 item 14 / F5, § Steer schemas) ---
@@ -4406,7 +4805,14 @@ def _rollup_flags(
         flags["repair_count_mismatch"] = True
     if repair_unparseable:
         flags["repair_unparseable"] = True
-    if any(block["citations_verified"] == 0 for block in section_blocks):
+    if any(
+        block["citations_verified"] == 0
+        # A code-rendered block (the baseline's Sources foot) states facts about
+        # the run and carries no claims by construction, so "no citations" is
+        # its correct state, not a grounding shortfall.
+        and block.get("role") != "sources"
+        for block in section_blocks
+    ):
         flags["uncited_sections"] = True
     return flags
 
@@ -4415,8 +4821,11 @@ def _generation_call_count(call_counts: Mapping[str, int]) -> int:
     return sum(call_counts.values())
 
 
-def _reserve_generation(call_counts: dict[str, int], phase: str) -> None:
-    if _generation_call_count(call_counts) + 1 > generation_budget_max():
+def _reserve_generation(
+    call_counts: dict[str, int], phase: str, *, budget_max: int | None = None
+) -> None:
+    ceiling = generation_budget_max() if budget_max is None else budget_max
+    if _generation_call_count(call_counts) + 1 > ceiling:
         raise SynthesiseFailure("budget_exceeded")
     call_counts[phase] = call_counts.get(phase, 0) + 1
 
@@ -5413,6 +5822,14 @@ def synthesise_scope(
 
     created_at = datetime.now(UTC)
     artefact_id = uuid.uuid4()
+    # Baseline mode (task 044 phase 4.2). One flag, read below wherever an
+    # Evidence-search-shaped pass would otherwise run: the code-injected
+    # Conclusions section, the key-findings pass, the case-studies pass, the
+    # most-relevant-source notes and the full-report intro. Everything else
+    # about the run is the same machinery.
+    baseline_mode = directive.template == BASELINE_TEMPLATE_KEY
+    es_passes = not baseline_mode
+    sources_section: SectionSpec | None = None
     conn.execute(
         artefact.insert().values(
             artefact_id=artefact_id,
@@ -5422,20 +5839,60 @@ def synthesise_scope(
                 .where(runs.c.run_id == run_id)
                 .where(runs.c.task_id == task_id)
             ).scalar_one_or_none(),
-            title=derive_artefact_title(context.intent),
+            # A baseline always profiles the same thing, so it is titled for
+            # what it is; an Evidence search report is titled by its question.
+            title=(
+                BASELINE_ARTEFACT_TITLE
+                if baseline_mode
+                else derive_artefact_title(context.intent)
+            ),
             created_at=created_at,
         )
     )
 
     proposal_normalisations: list[str] = []
     if directive.sections is not None:
-        # TODO(task 044 phase 4.2): baseline mode. ``directive.template`` is
-        # parsed and accepted from phase 3.2 but changes nothing here yet — the
-        # scoping chain's supplied eight sections take this existing path, and
-        # the baseline preamble, the bounded proposer, the per-section turn cap
-        # and the three ES-only passes arrive with 4.2.
-        sections = _sections_from_directive(directive.sections)
+        supplied = _sections_from_directive(
+            directive.sections,
+            default_turn_cap=BASELINE_SECTION_TURN_CAP if baseline_mode else None,
+        )
         section_source = "scope_context"
+        if baseline_mode:
+            # The Sources entry travels in the supplied list (so the plan's
+            # section order is one list) but is rendered by code from the
+            # coverage record after the writing loop — counts are facts about
+            # the run, not claims about the evidence.
+            required = [
+                section for section in supplied if section.title != SOURCES_SECTION_TITLE
+            ]
+            sources_section = next(
+                (
+                    replace(section, role="sources", turn_cap=None)
+                    for section in supplied
+                    if section.title == SOURCES_SECTION_TITLE
+                ),
+                SectionSpec(
+                    title=SOURCES_SECTION_TITLE,
+                    focus="Rendered by code from the run's coverage record.",
+                    nav_label=SOURCES_SECTION_NAV_LABEL,
+                    role="sources",
+                ),
+            )
+            extras, baseline_notes = _baseline_extra_sections(
+                intent=context.intent,
+                summaries=summaries,
+                required=required,
+                synthesis_backend=synthesis_backend,
+                grouping_group_ids=(
+                    substrate.grouping_group_ids if substrate.grouping else None
+                ),
+                call_counts=call_counts,
+                usage_totals=usage_totals,
+            )
+            proposal_normalisations.extend(baseline_notes)
+            sections = _baseline_section_order(required, extras)
+        else:
+            sections = supplied
     else:
         try:
             _reserve_generation(call_counts, "proposal")
@@ -5499,18 +5956,36 @@ def synthesise_scope(
     # construction — proposals are validated BEFORE this injection, so a
     # PROPOSED "Conclusion(s)" title is still rejected; only this role-injected
     # section carries the "Conclusions" title. It runs through the normal
-    # section loop (tools + ledger; its claims enter the ledger).
-    sections = [
-        *sections,
-        SectionSpec(
-            title=CONCLUSIONS_TITLE,
-            focus=_conclusions_focus(context.intent),
-            role="conclusions",
-        ),
-    ]
+    # section loop (tools + ledger; its claims enter the ledger). The baseline
+    # concludes nothing (guard 1 of 3): it profiles the status quo and the
+    # reader decides.
+    if es_passes:
+        sections = [
+            *sections,
+            SectionSpec(
+                title=CONCLUSIONS_TITLE,
+                focus=_conclusions_focus(context.intent),
+                role="conclusions",
+            ),
+        ]
+    # The generation loop writes these; the code-rendered Sources foot is
+    # appended to the presentation list only (it costs no generation call).
+    written_sections = sections
+    if sources_section is not None:
+        sections = [*sections, sources_section]
+    budget_max = (
+        generation_budget_max(
+            [section.turn_cap or SECTION_TURN_CAP for section in written_sections]
+        )
+        if baseline_mode
+        else generation_budget_max()
+    )
     if progress_emitter is not None:
+        # X8: the skeleton IS the run's own section list. "Key findings" leads
+        # it only when the key-findings pass will actually run.
         progress_emitter.emit_skeleton(
-            [{"title": section.title, "focus": section.focus} for section in sections]
+            [{"title": section.title, "focus": section.focus} for section in sections],
+            key_findings=es_passes,
         )
 
     assigned_groups = {group_id for section in sections for group_id in section.group_ids}
@@ -5563,7 +6038,7 @@ def synthesise_scope(
     repair_count_mismatch_any = False
     repair_unparseable_any = False
 
-    for section_index, section in enumerate(sections):
+    for section_index, section in enumerate(written_sections):
         if progress_emitter is not None:
             progress_emitter.section_started(section_index)
         member_findings = _group_member_findings(section, substrate=substrate)
@@ -5595,6 +6070,9 @@ def synthesise_scope(
             # system prompt (a control flag on the seed, never a data-payload
             # field — see synthesis_backend._section_system_prompt).
             "priority_block_active": priority_block_active,
+            # Output kind (task 044): selects the section writer's preamble.
+            # ``None`` is the Evidence search report — today's prompt, unchanged.
+            "template": directive.template,
         }
         tools = build_section_tools(
             retriever=retriever,
@@ -5607,13 +6085,14 @@ def synthesise_scope(
                 synthesis_backend,
                 seed=seed,
                 tools=tools,
+                turn_cap=section.turn_cap or SECTION_TURN_CAP,
                 retriever=retriever,
             )
             usage_totals.add_payload(loop_result["usage_totals"])
         except RuntimeError as exc:
             raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
         call_counts["section_turns"] += int(loop_result["turns_used"])
-        if _generation_call_count(call_counts) > generation_budget_max():
+        if _generation_call_count(call_counts) > budget_max:
             raise SynthesiseFailure("budget_exceeded", blocks_written=blocks_written)
         transcript = loop_result["transcript"]
         ids = gathered_ids(transcript)
@@ -5663,7 +6142,7 @@ def synthesise_scope(
             raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
         for phase, count in section_call_counts.items():
             call_counts[phase] += count
-        if _generation_call_count(call_counts) > generation_budget_max():
+        if _generation_call_count(call_counts) > budget_max:
             raise SynthesiseFailure("budget_exceeded", blocks_written=blocks_written)
         block_id = _write_section(
             conn,
@@ -5714,146 +6193,237 @@ def synthesise_scope(
         section_claim_groups.append((section, claims))
         run_chunk_content.update(_chunk_content_by_id(transcript))
 
+    # --- The baseline's code-rendered Sources foot (task 044 § Baseline) ---
+    #
+    # Written from the coverage record, never by a model, and carrying no
+    # claims: how many documents were read, what was not searched and how the
+    # mix leans are facts about the run, not evidential propositions about the
+    # world. Its "sources" role keeps the grounding roll-up from reading a
+    # claim-less block as an uncited section.
+    if sources_section is not None:
+        sources_index = len(written_sections)
+        if progress_emitter is not None:
+            progress_emitter.section_started(sources_index)
+        sources_prose = _baseline_sources_prose(
+            document_count=corpus.appraised_docs,
+            mix=_baseline_source_mix(
+                conn, task_id=task_id, tss_ids=corpus.appraised_tss_ids
+            ),
+            restrictions=_baseline_evidence_restrictions(
+                conn, task_id=task_id, scope_id=context.scope_id
+            ),
+        )
+        sources_block_id = _write_section(
+            conn,
+            artefact_id=artefact_id,
+            prose=sources_prose,
+            claims=[],
+            unspanned=[],
+            substrate=substrate,
+            created_at=created_at,
+        )
+        blocks_written.append(sources_block_id)
+        if progress_emitter is not None:
+            progress_emitter.section_completed(sources_index, prose=sources_prose)
+        sources_accounting = SectionAccounting(
+            tool_call_counts={},
+            tool_call_count=0,
+            gathered_id_hash=_gathered_hash({"chunk_ids": set(), "finding_ids": set()}),
+            turns_used=0,
+            turn_cap_hit=False,
+        )
+        section_rollups.append(
+            _blocks_rollup(
+                section=sources_section,
+                block_id=sources_block_id,
+                claims=[],
+                accounting=sources_accounting,
+            )
+        )
+        section_provenance.append(
+            {
+                "title": sources_section.title,
+                "rendered_by": "code",
+                "tool_call_counts": {},
+                "tool_call_count": 0,
+                "turns_used": 0,
+                "turn_cap_hit": False,
+                "gathered_id_hash": sources_accounting.gathered_id_hash,
+            }
+        )
+
     # The final key-findings pass (ADR 0015 §8): produced LAST (after every
     # section incl. conclusions), shown FIRST. Conditional-required — an empty
-    # emission mints no block and nothing is forced.
-    if progress_emitter is not None:
-        progress_emitter.key_findings_started()
-    try:
-        key_findings_result = _key_findings_pass(
-            conn,
-            artefact_id=artefact_id,
-            intent=context.intent,
-            section_claim_groups=section_claim_groups,
-            all_claims=all_claims,
-            substrate=substrate,
-            synthesis_backend=synthesis_backend,
-            grounding_judge_backend=grounding_judge_backend,
-            run_chunk_content=run_chunk_content,
-            available_claim_types=available_claim_types,
-            kf_section_index=len(sections),
-            created_at=created_at,
-        )
-    except SynthesiseFailure as exc:
-        raise SynthesiseFailure(
-            exc.error, blocks_written=blocks_written or exc.blocks_written
-        ) from exc
-    except RuntimeError as exc:
-        raise SynthesiseFailure(type(exc).__name__, blocks_written=blocks_written) from exc
-    call_counts["key_findings"] += int(key_findings_result.get("emission_calls", 0))
-    usage_totals.add_payload(key_findings_result.get("usage", UsageAccumulator().payload()))
-    key_findings_rollup: dict[str, Any]
-    if key_findings_result["present"]:
-        kf_call_counts = key_findings_result["call_counts"]
-        call_counts["key_findings_judge"] += kf_call_counts.get("judge", 0)
-        call_counts["key_findings_repair"] += kf_call_counts.get("repair", 0)
-        call_counts["key_findings_rejudge"] += kf_call_counts.get("rejudge", 0)
-        kf_accounting: SectionAccounting = key_findings_result["accounting"]
-        kf_claims: list[ClaimDraft] = list(key_findings_result["claims"])
-        # Roll-up order is presentation order: the key-findings block leads.
-        # Production order stays evidenced by provenance (it was written last).
-        section_rollups.insert(0, key_findings_result["block_rollup"])
-        blocks_written.append(key_findings_result["block_id"])
-        total_chunk_rejections += kf_accounting.chunk_claims_rejected
-        total_structural_rejections += kf_accounting.claims_rejected_structural
-        total_gap_degraded += kf_accounting.gap_claims_degraded
-        total_span_bind_failures += kf_accounting.span_bind_failures
-        total_unspanned_assertions += kf_accounting.unspanned_assertions
-        total_unspanned_overlap_filtered += kf_accounting.unspanned_overlap_filtered
-        total_unspanned_duplicate_stale += kf_accounting.unspanned_duplicate_stale
-        total_unspanned_unlocated += kf_accounting.unspanned_unlocated
-        repair_path_taken = repair_path_taken or kf_accounting.repair_taken
-        repair_count_mismatch_any = (
-            repair_count_mismatch_any or kf_accounting.repair_count_mismatch
-        )
-        repair_unparseable_any = repair_unparseable_any or kf_accounting.repair_unparseable
-        all_claims.extend(kf_claims)
-        key_findings_rollup = {"present": True}
+    # emission mints no block and nothing is forced. Guard 2 of 3: the baseline
+    # has no headline block — its reader wants the situation, in order, not a
+    # digest of it.
+    key_findings_rollup: dict[str, Any] = {
+        "present": False,
+        "reason": "template_has_no_key_findings",
+    }
+    key_findings_present = False
+    if es_passes:
         if progress_emitter is not None:
-            progress_emitter.key_findings_completed(prose=key_findings_result["prose"])
-    else:
-        key_findings_rollup = {
-            "present": False,
-            "reason": key_findings_result["reason"],
-        }
-        if progress_emitter is not None:
-            progress_emitter.key_findings_completed(prose="")
+            progress_emitter.key_findings_started()
+        try:
+            key_findings_result = _key_findings_pass(
+                conn,
+                artefact_id=artefact_id,
+                intent=context.intent,
+                section_claim_groups=section_claim_groups,
+                all_claims=all_claims,
+                substrate=substrate,
+                synthesis_backend=synthesis_backend,
+                grounding_judge_backend=grounding_judge_backend,
+                run_chunk_content=run_chunk_content,
+                available_claim_types=available_claim_types,
+                kf_section_index=len(sections),
+                created_at=created_at,
+            )
+        except SynthesiseFailure as exc:
+            raise SynthesiseFailure(
+                exc.error, blocks_written=blocks_written or exc.blocks_written
+            ) from exc
+        except RuntimeError as exc:
+            raise SynthesiseFailure(
+                type(exc).__name__, blocks_written=blocks_written
+            ) from exc
+        call_counts["key_findings"] += int(key_findings_result.get("emission_calls", 0))
+        usage_totals.add_payload(
+            key_findings_result.get("usage", UsageAccumulator().payload())
+        )
+        if key_findings_result["present"]:
+            kf_call_counts = key_findings_result["call_counts"]
+            call_counts["key_findings_judge"] += kf_call_counts.get("judge", 0)
+            call_counts["key_findings_repair"] += kf_call_counts.get("repair", 0)
+            call_counts["key_findings_rejudge"] += kf_call_counts.get("rejudge", 0)
+            kf_accounting: SectionAccounting = key_findings_result["accounting"]
+            kf_claims: list[ClaimDraft] = list(key_findings_result["claims"])
+            # Roll-up order is presentation order: the key-findings block leads.
+            # Production order stays evidenced by provenance (written last).
+            section_rollups.insert(0, key_findings_result["block_rollup"])
+            blocks_written.append(key_findings_result["block_id"])
+            total_chunk_rejections += kf_accounting.chunk_claims_rejected
+            total_structural_rejections += kf_accounting.claims_rejected_structural
+            total_gap_degraded += kf_accounting.gap_claims_degraded
+            total_span_bind_failures += kf_accounting.span_bind_failures
+            total_unspanned_assertions += kf_accounting.unspanned_assertions
+            total_unspanned_overlap_filtered += kf_accounting.unspanned_overlap_filtered
+            total_unspanned_duplicate_stale += kf_accounting.unspanned_duplicate_stale
+            total_unspanned_unlocated += kf_accounting.unspanned_unlocated
+            repair_path_taken = repair_path_taken or kf_accounting.repair_taken
+            repair_count_mismatch_any = (
+                repair_count_mismatch_any or kf_accounting.repair_count_mismatch
+            )
+            repair_unparseable_any = (
+                repair_unparseable_any or kf_accounting.repair_unparseable
+            )
+            all_claims.extend(kf_claims)
+            key_findings_present = True
+            key_findings_rollup = {"present": True}
+            if progress_emitter is not None:
+                progress_emitter.key_findings_completed(
+                    prose=key_findings_result["prose"]
+                )
+        else:
+            key_findings_rollup = {
+                "present": False,
+                "reason": key_findings_result["reason"],
+            }
+            if progress_emitter is not None:
+                progress_emitter.key_findings_completed(prose="")
 
     # --- Case studies pass (task 034 S4) ---
+    #
+    # Guard 3 of 3: a baseline profiles one situation in one place, so there is
+    # no comparator case to card up.
     doc_meta = _build_doc_meta(conn, task_id, substrate)
-    case_studies_rollup: dict[str, Any]
-    try:
-        case_studies_result = _case_studies_pass(
-            conn,
-            artefact_id=artefact_id,
-            intent=context.intent,
-            section_claim_groups=section_claim_groups,
-            all_claims=all_claims,
-            substrate=substrate,
-            synthesis_backend=synthesis_backend,
-            grounding_judge_backend=grounding_judge_backend,
-            run_chunk_content=run_chunk_content,
-            available_claim_types=available_claim_types,
-            cs_section_index=len(sections) + 1,
-            created_at=created_at,
-            doc_meta=doc_meta,
+    case_studies_rollup: dict[str, Any] = {
+        "present": False,
+        "reason": "template_has_no_case_studies",
+    }
+    if es_passes:
+        try:
+            case_studies_result = _case_studies_pass(
+                conn,
+                artefact_id=artefact_id,
+                intent=context.intent,
+                section_claim_groups=section_claim_groups,
+                all_claims=all_claims,
+                substrate=substrate,
+                synthesis_backend=synthesis_backend,
+                grounding_judge_backend=grounding_judge_backend,
+                run_chunk_content=run_chunk_content,
+                available_claim_types=available_claim_types,
+                cs_section_index=len(sections) + 1,
+                created_at=created_at,
+                doc_meta=doc_meta,
+            )
+        except Exception:  # noqa: BLE001 - case studies fail-soft
+            log.warning("synthesis.case_studies.failed", exc_info=True)
+            case_studies_result = {
+                "present": False,
+                "reason": "backend_error",
+                "emission_calls": 0,
+                "usage": UsageAccumulator().payload(),
+            }
+        call_counts["case_studies"] += int(case_studies_result.get("emission_calls", 0))
+        usage_totals.add_payload(
+            case_studies_result.get("usage", UsageAccumulator().payload())
         )
-    except Exception:  # noqa: BLE001 - case studies fail-soft
-        log.warning("synthesis.case_studies.failed", exc_info=True)
-        case_studies_result = {
-            "present": False,
-            "reason": "backend_error",
-            "emission_calls": 0,
-            "usage": UsageAccumulator().payload(),
-        }
-    call_counts["case_studies"] += int(case_studies_result.get("emission_calls", 0))
-    usage_totals.add_payload(case_studies_result.get("usage", UsageAccumulator().payload()))
-    if case_studies_result["present"]:
-        cs_call_counts = case_studies_result.get("call_counts", {})
-        call_counts["case_studies_judge"] += cs_call_counts.get("judge", 0)
-        call_counts["case_studies_repair"] += cs_call_counts.get("repair", 0)
-        call_counts["case_studies_rejudge"] += cs_call_counts.get("rejudge", 0)
-        cs_accounting: SectionAccounting = case_studies_result["accounting"]
-        cs_claims: list[ClaimDraft] = list(case_studies_result["claims"])
-        # Insert after key_findings (index 0 if kf present, else index 0)
-        kf_insert = 1 if key_findings_result["present"] else 0
-        section_rollups.insert(kf_insert, case_studies_result["block_rollup"])
-        blocks_written.append(case_studies_result["block_id"])
-        total_chunk_rejections += cs_accounting.chunk_claims_rejected
-        total_structural_rejections += cs_accounting.claims_rejected_structural
-        repair_path_taken = repair_path_taken or cs_accounting.repair_taken
-        all_claims.extend(cs_claims)
-        case_studies_rollup = {"present": True}
-    else:
-        case_studies_rollup = {
-            "present": False,
-            "reason": case_studies_result.get("reason", "unknown"),
-        }
+        if case_studies_result["present"]:
+            cs_call_counts = case_studies_result.get("call_counts", {})
+            call_counts["case_studies_judge"] += cs_call_counts.get("judge", 0)
+            call_counts["case_studies_repair"] += cs_call_counts.get("repair", 0)
+            call_counts["case_studies_rejudge"] += cs_call_counts.get("rejudge", 0)
+            cs_accounting: SectionAccounting = case_studies_result["accounting"]
+            cs_claims: list[ClaimDraft] = list(case_studies_result["claims"])
+            # Insert after key_findings (index 0 if kf present, else index 0)
+            kf_insert = 1 if key_findings_present else 0
+            section_rollups.insert(kf_insert, case_studies_result["block_rollup"])
+            blocks_written.append(case_studies_result["block_id"])
+            total_chunk_rejections += cs_accounting.chunk_claims_rejected
+            total_structural_rejections += cs_accounting.claims_rejected_structural
+            repair_path_taken = repair_path_taken or cs_accounting.repair_taken
+            all_claims.extend(cs_claims)
+            case_studies_rollup = {"present": True}
+        else:
+            case_studies_rollup = {
+                "present": False,
+                "reason": case_studies_result.get("reason", "unknown"),
+            }
+
 
     # --- Most-relevant-source notes (task 034 S5) ---
+    #
+    # These last two are Evidence-search-shaped too: a per-source note ranked
+    # over the report's citations, and an intro to a full report. A baseline
+    # has neither — it opens on the situation and ends in its Sources foot.
     mrs_notes: list[dict[str, Any]] = []
-    try:
-        mrs_notes, mrs_note_calls, mrs_note_usage = _write_mrs_notes(
-            _ranked_top_sources(all_claims, substrate, doc_meta),
-            synthesis_backend,
-        )
-        call_counts["mrs_notes"] += mrs_note_calls
-        usage_totals.add_payload(mrs_note_usage)
-    except Exception:  # noqa: BLE001 - MRS notes fail-soft
-        log.warning("synthesis.mrs_notes.failed", exc_info=True)
+    if es_passes:
+        try:
+            mrs_notes, mrs_note_calls, mrs_note_usage = _write_mrs_notes(
+                _ranked_top_sources(all_claims, substrate, doc_meta),
+                synthesis_backend,
+            )
+            call_counts["mrs_notes"] += mrs_note_calls
+            usage_totals.add_payload(mrs_note_usage)
+        except Exception:  # noqa: BLE001 - MRS notes fail-soft
+            log.warning("synthesis.mrs_notes.failed", exc_info=True)
 
     full_report_intro: str | None = None
-    try:
-        intro_text, intro_calls, intro_usage = _write_full_report_intro(
-            intent=context.intent,
-            sections=sections,
-            synthesis_backend=synthesis_backend,
-        )
-        call_counts["full_report_intro"] += intro_calls
-        usage_totals.add_payload(intro_usage)
-        full_report_intro = intro_text
-    except Exception:  # noqa: BLE001 - full-report intro fail-soft
-        log.warning("synthesis.full_report_intro.failed", exc_info=True)
+    if es_passes:
+        try:
+            intro_text, intro_calls, intro_usage = _write_full_report_intro(
+                intent=context.intent,
+                sections=sections,
+                synthesis_backend=synthesis_backend,
+            )
+            call_counts["full_report_intro"] += intro_calls
+            usage_totals.add_payload(intro_usage)
+            full_report_intro = intro_text
+        except Exception:  # noqa: BLE001 - full-report intro fail-soft
+            log.warning("synthesis.full_report_intro.failed", exc_info=True)
 
     retrieval_provenance = retriever.provenance() if retriever is not None else {}
     retrieval_scope_payload = {
@@ -5887,6 +6457,9 @@ def synthesise_scope(
                 "version_note": "versioned with section prompt",
                 "schema_count": len(SECTION_TOOL_SCHEMAS),
             },
+            # The output kind's own versioned text (preamble + section foci +
+            # the Sources templates), present only when a template ran.
+            **({"template": BASELINE_PROMPT_VERSION} if baseline_mode else {}),
         },
         "models": {
             "synthesis": SYNTHESIS_MODEL,
@@ -5903,7 +6476,7 @@ def synthesise_scope(
             "reranker": getattr(reranker, "mode", "none"),
         },
         "call_counts": call_counts,
-        "generation_budget_max": generation_budget_max(),
+        "generation_budget_max": budget_max,
         "substrate_profile": _substrate_profile(refs, corpus),
         "resolved_references": _resolved_reference_payload(refs),
         "retrieval_scope": retrieval_scope_payload,
@@ -5957,6 +6530,11 @@ def synthesise_scope(
     # block was minted; the absence path records why nothing was forced.
     counts["key_findings"] = key_findings_rollup
     counts["case_studies"] = case_studies_rollup
+    if baseline_mode:
+        # What kind of artefact this is, and how deep the pass behind it went
+        # (C18). The Result view reads the label; it is never derived there.
+        counts["template"] = BASELINE_TEMPLATE_KEY
+        counts["depth_label"] = BASELINE_DEPTH_LABEL
     if mrs_notes:
         counts["most_relevant_notes"] = mrs_notes
     if full_report_intro:
