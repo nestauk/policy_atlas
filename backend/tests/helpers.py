@@ -286,6 +286,7 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         synthesis_result,
         task,
         task_agent_transcript,
+        task_link,
         task_plan,
         task_source_snapshot,
     )
@@ -411,6 +412,10 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
         conn.execute(delete(source_snapshot).where(
             source_snapshot.c.source_snapshot_id.in_(snapshot_ids)
         ))
+    # Links in BOTH directions before their task parent (task 044): a link
+    # row names two tasks, and either end blocks the delete.
+    conn.execute(delete(task_link).where(task_link.c.source_task_id == task_id))
+    conn.execute(delete(task_link).where(task_link.c.target_task_id == task_id))
     # Durable task_agent turns before their task parent.
     conn.execute(delete(task_agent_transcript).where(
         task_agent_transcript.c.task_id == task_id

@@ -508,7 +508,7 @@ def test_newer_turn_demotes_approved_plan_and_reapproval_clears_start_fence(
         assert stale_start.status_code == 409
         assert stale_start.json()["error"] == {
             "code": "plan_stale",
-            "message": "the plan predates your latest task_agent message — review it, then start",
+            "message": "the plan predates your latest Task Agent message — review it, then start",
         }
 
         reapproved = client.post(

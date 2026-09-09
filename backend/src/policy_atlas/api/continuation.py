@@ -27,6 +27,11 @@ from policy_atlas.core.tags import has_control_character
 from policy_atlas.runtime import runner as runner_module
 from policy_atlas.runtime import steering_events
 from policy_atlas.runtime.agent_backend import AgentBackend
+from policy_atlas.runtime.capability_registry import (
+    capability_of_task,
+    compose_plan,
+    lattice_for,
+)
 from policy_atlas.runtime.continuation_state import ResumeDecision, build
 from policy_atlas.runtime.runner import RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
@@ -46,7 +51,7 @@ from policy_atlas.runtime.steering import (
     render_fanout_confirmation,
     validate_steering_delta,
 )
-from policy_atlas.runtime.task_plan import canonical_steer_point, compose
+from policy_atlas.runtime.task_plan import canonical_steer_point
 
 log = structlog.get_logger()
 
@@ -893,7 +898,9 @@ def _persist_fanout(
             action=action,
             user_text=user_text,
         )
-        current_state = _with_plan(current_state, amended, plan_id, version)
+        current_state = _with_plan(
+            current_state, amended, plan_id, version, capability_of_task(conn, task_id)
+        )
     rerun = fanout.rerun
     if rerun is not None:
         if rerun.kind == "replacement_rerun":
@@ -1220,16 +1227,28 @@ def _current_plan_row(conn: Connection, *, task_id: uuid.UUID, state: Any) -> An
     return row
 
 
-def _with_plan(state: Any, plan: Any, plan_id: uuid.UUID, version: int) -> Any:
-    """Return minimal continuation state with the just-persisted plan identity."""
+def _with_plan(
+    state: Any, plan: Any, plan_id: uuid.UUID, version: int, capability: str
+) -> Any:
+    """Return minimal continuation state with the just-persisted plan identity.
+
+    Args:
+        state: The continuation state being replaced.
+        plan: The freshly persisted plan.
+        plan_id: Its row identity.
+        version: Its version number.
+        capability: The owning task's capability — it decides which chain the
+            plan composes to and which lattice its pauses come from (C9, A2).
+    """
+    chain = compose_plan(capability, plan)
     return type(state)(
         capability_run_id=state.capability_run_id,
         plan=plan,
         plan_id=plan_id,
         plan_version=version,
         plan_row_id=plan_id,
-        chain=compose(plan),
-        pause_points=pause_points(plan.steering_mode, compose(plan)),
+        chain=chain,
+        pause_points=pause_points(plan.steering_mode, chain, lattice_for(capability)),
         pending_overlays=state.pending_overlays,
         remaining_steps=state.remaining_steps,
         step_outcomes=state.step_outcomes,

@@ -482,7 +482,7 @@ def update_conversation(
         for_update=True,
     )
     if row["kind"] != "chat":
-        raise HTTPException(status_code=422, detail="task_agent conversations cannot be renamed")
+        raise HTTPException(status_code=422, detail="Task Agent conversations cannot be renamed")
     changes = payload.model_dump(exclude_unset=True)
     if "title" in changes and changes["title"] is None:
         # Unlike entry_artefact_id, title has no clearable meaning — a chat's
@@ -519,7 +519,7 @@ def archive_conversation(
         for_update=True,
     )
     if row["kind"] != "chat":
-        raise HTTPException(status_code=422, detail="task_agent conversations cannot be archived")
+        raise HTTPException(status_code=422, detail="Task Agent conversations cannot be archived")
     if row["status"] != "archived":
         conn.execute(
             update(conversation)
@@ -548,7 +548,7 @@ def unarchive_conversation(
         for_update=True,
     )
     if row["kind"] != "chat":
-        raise HTTPException(status_code=422, detail="task_agent conversations cannot be unarchived")
+        raise HTTPException(status_code=422, detail="Task Agent conversations cannot be unarchived")
     if row["status"] == "archived":
         conn.execute(
             update(conversation)

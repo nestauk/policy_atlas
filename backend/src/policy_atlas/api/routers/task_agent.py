@@ -49,6 +49,13 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
     validate_iso_alpha2,
 )
 from policy_atlas.runtime.agent import build_plan, persist_approved_plan
+from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    capability_of_task,
+    compose_plan,
+    expect_task_plan,
+    validate_plan,
+)
 from policy_atlas.runtime.conversation_lifecycle import (
     ensure_active_task_agent_conversation,
     seed_draft_from_executed_plan,
@@ -58,7 +65,6 @@ from policy_atlas.runtime.task_agent_prompt import PlanDraftWire
 from policy_atlas.runtime.task_plan import (
     TaskPlan,
     _enabled_components,
-    compose,
     registry_component_for,
     time_band_for,
 )
@@ -158,7 +164,10 @@ def _draft_from_plan(plan: TaskPlan) -> PlanDraft:
     values.pop("source_turn_index", None)
     steps: list[PlanStep] = []
     seen_stages: set[str] = set()
-    for step in compose(plan).steps:
+    # Constant capability: the argument is already an Evidence search
+    # ``TaskPlan``, and the scoping plan document is a different projection
+    # (phase 3). Through the registry so the composition seam holds (C9).
+    for step in compose_plan(EVIDENCE_SEARCH, plan).steps:
         registry_component = registry_component_for(step.component)
         # Ingest is unmapped from public acquire so Searching is not overwritten
         # by full-text fetch (033 S5). Skip any registry component with no
@@ -278,7 +287,11 @@ def _task_agent_inputs(
         .limit(1)
     ).scalar_one_or_none()
     if plan_payload is not None:
-        seed = seed_draft_from_executed_plan(TaskPlan.model_validate(plan_payload))
+        seed = seed_draft_from_executed_plan(
+            expect_task_plan(
+                validate_plan(capability_of_task(conn, task_id), plan_payload)
+            )
+        )
         return [], cast("dict[str, object]", seed.model_dump(mode="json"))
     return turns, previous_draft
 
@@ -348,7 +361,7 @@ def _phase_one_turn(
             .limit(1)
         ).scalar_one()
         if latest_id != existing["id"]:
-            raise ApiConflict("stale_turn", "only the latest task_agent turn may be retried")
+            raise ApiConflict("stale_turn", "only the latest Task Agent turn may be retried")
         return cast(uuid.UUID, existing["id"])
 
     pending = conn.execute(
@@ -358,7 +371,7 @@ def _phase_one_turn(
         .limit(1)
     ).scalar_one_or_none()
     if pending is not None:
-        raise ApiConflict("task_agent_turn_in_progress", "a task_agent turn is already running")
+        raise ApiConflict("task_agent_turn_in_progress", "a Task Agent turn is already running")
 
     conversation_id = ensure_active_task_agent_conversation(conn, task_id=task_id, now=_now())
     max_turn_index = conn.execute(
@@ -398,7 +411,7 @@ def create_task_agent_turn(
     """Advance one task's durable task_agent conversation once per client turn id."""
     lock = _turn_lock(task_id)
     if not lock.acquire(blocking=False):
-        raise ApiConflict("task_agent_turn_in_progress", "a task_agent turn is already running")
+        raise ApiConflict("task_agent_turn_in_progress", "a Task Agent turn is already running")
     try:
         # Phase 1 is deliberately short. The task_agent call below must remain
         # OUTSIDE any transaction: holding the task row lock (and a pool
@@ -614,7 +627,9 @@ def get_plan(
         ).mappings().one_or_none()
         approved_is_stale = False
         if row is not None:
-            approved_plan = TaskPlan.model_validate(row["payload"])
+            approved_plan = expect_task_plan(
+                validate_plan(capability_of_task(conn, task_id), row["payload"])
+            )
             approved_is_stale = (
                 approved_plan.source_turn_index is not None
                 and latest_completed is not None
@@ -801,7 +816,10 @@ def _apply_plan_patch(plan: TaskPlan, patch: PlanPatchIn) -> TaskPlan:
     if "search_effort" in fields or "analysis_depth" in fields:
         data["time_band"] = ""
         data["expected_artefact_shape"] = ""
-    return TaskPlan.model_validate(data)
+    # Constant capability: the patch shape and the plan it amends are both
+    # Evidence search (the caller passed a ``TaskPlan``). Through the registry
+    # all the same (C9).
+    return expect_task_plan(validate_plan(EVIDENCE_SEARCH, data))
 
 
 def _load_editable_plan(
@@ -829,7 +847,9 @@ def _load_editable_plan(
     approved_is_stale = False
     conversation_id = row["conversation_id"] if row is not None else None
     if row is not None:
-        approved_plan = TaskPlan.model_validate(row["payload"])
+        approved_plan = expect_task_plan(
+            validate_plan(capability_of_task(conn, task_id), row["payload"])
+        )
         approved_is_stale = (
             approved_plan.source_turn_index is not None
             and latest_completed is not None

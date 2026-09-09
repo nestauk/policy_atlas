@@ -37,6 +37,11 @@ export const mockTask: components["schemas"]["TaskOut"] = {
   // Assigned to `mockProject` below so `GET /tasks?project_id=` has a
   // real member to return (task 033 phase 10a; membership is a list, ADR 0032).
   project_ids: [MOCK_PROJECT_ID],
+  // Task 044: the kind of work. The mock's task is an Evidence search; a
+  // scoping task is created through the mock's `POST /tasks`.
+  capability: "evidence_search",
+  from_task_ids: [],
+  links: [],
 };
 
 /** Task 033 phase 10a: the one project the mock serves. `task_count`

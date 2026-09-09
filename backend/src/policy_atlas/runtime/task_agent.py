@@ -283,7 +283,7 @@ class StubTaskAgentBackend:
             intent = turns[0]["text"] if turns else ""
             return PlannerTurnWire(
                 reply=(
-                    "Deterministic stub task_agent: before proposing a plan, I need "
+                    "Deterministic stub Task Agent: before proposing a plan, I need "
                     "to know what decision this evidence review should inform."
                 ),
                 plan_draft=PlanDraftWire(question=intent, backend_scope="both"),
@@ -296,7 +296,7 @@ class StubTaskAgentBackend:
         latest_text = turns[-1]["text"]
         if _STUB_LANDSCAPE_SENTINEL in latest_text:
             return PlannerTurnWire(
-                reply="Deterministic stub task_agent: landscape-only draft proposed.",
+                reply="Deterministic stub Task Agent: landscape-only draft proposed.",
                 plan_draft=PlanDraftWire(
                     title="Evidence review",
                     question=first_text,
@@ -316,7 +316,7 @@ class StubTaskAgentBackend:
 
         components = ["characterise", "screen_full", "select", "extract", "group"]
         return PlannerTurnWire(
-            reply="Deterministic stub task_agent: complete draft proposed.",
+            reply="Deterministic stub Task Agent: complete draft proposed.",
             plan_draft=PlanDraftWire(
                 title="Evidence review",
                 question=first_text,

@@ -43,14 +43,14 @@ describe("NewTaskView — capability step", () => {
   it("lists all four capabilities", () => {
     renderNewTask();
     expect(screen.getByText("Evidence search")).toBeInTheDocument();
-    expect(screen.getByText("Scoping policy options")).toBeInTheDocument();
+    expect(screen.getByText("Options scoping")).toBeInTheDocument();
     expect(screen.getByText("Theory of change")).toBeInTheDocument();
     expect(screen.getByText("Mapping stakeholders")).toBeInTheDocument();
   });
 
-  it("renders the three unavailable capabilities as inert, not as buttons", () => {
+  it("renders the two unavailable capabilities as inert, not as buttons", () => {
     renderNewTask();
-    for (const name of ["Scoping policy options", "Theory of change", "Mapping stakeholders"]) {
+    for (const name of ["Theory of change", "Mapping stakeholders"]) {
       const li = screen.getByText(name).closest("li");
       expect(li).not.toBeNull();
       expect(within(li!).getByText("Coming soon")).toBeInTheDocument();
@@ -202,6 +202,40 @@ describe("NewTaskView — project selector", () => {
     renderNewTask("/new?capability=evidence_search");
     await user.click(screen.getByLabelText(/Add to a project/));
     expect(screen.getByRole("option", { name: "A colleague's project" })).toBeInTheDocument();
+  });
+
+  // Task 044: the second selectable kind. Same form shape (question and
+  // project; "Starts from" arrives in a later slice), one create request,
+  // and the capability travels in it.
+  it("moves to the question step when Options scoping is picked", async () => {
+    const user = userEvent.setup();
+    renderNewTask();
+    await user.click(screen.getByRole("button", { name: /Options scoping/ }));
+    expect(
+      screen.getByRole("heading", { name: "What are you trying to change?" }),
+    ).toBeInTheDocument();
+  });
+
+  it("creates a scoping task with one request carrying its capability", async () => {
+    const user = userEvent.setup();
+    renderNewTask("/new?capability=options_scoping");
+    await user.type(
+      screen.getByLabelText("Your question"),
+      "How do we cut the number of young people not in work or study?",
+    );
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(mutate).toHaveBeenCalledTimes(1);
+    expect(mutate.mock.calls[0][0]).toEqual({
+      question: "How do we cut the number of young people not in work or study?",
+      projectId: null,
+      capability: "options_scoping",
+    });
+  });
+
+  it("falls back to the picker for a capability that cannot be created", () => {
+    renderNewTask("/new?capability=theory_of_change");
+    expect(screen.getByText("Options scoping")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Your question")).not.toBeInTheDocument();
   });
 
   it("keeps the project selector when every project is colleague-owned", () => {

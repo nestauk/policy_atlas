@@ -143,8 +143,10 @@ from .task_agent import (
 )
 from .tasks import (
     TASK_NAME_MAX,
+    Capability,
     LatestRun,
     TaskCreate,
+    TaskLinkOut,
     TaskOut,
     TaskStatus,
     TaskUpdate,
@@ -260,7 +262,9 @@ __all__ = [
     "ProjectCreate",
     "ProjectOut",
     "ProjectUpdate",
+    "Capability",
     "TaskCreate",
+    "TaskLinkOut",
     "TaskOut",
     "TaskStatus",
     "TaskUpdate",

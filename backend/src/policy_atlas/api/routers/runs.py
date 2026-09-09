@@ -29,8 +29,8 @@ from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
+from policy_atlas.runtime.capability_registry import expect_task_plan, validate_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
-from policy_atlas.runtime.task_plan import TaskPlan
 
 log = structlog.get_logger()
 
@@ -61,6 +61,7 @@ def _dispatch_run(
     engine: Engine,
     *,
     task_id: uuid.UUID,
+    capability: str,
     plan_row: dict[str, object],
     backends: RunnerBackends,
 ) -> None:
@@ -70,7 +71,10 @@ def _dispatch_run(
             engine,
             task_id=task_id,
             evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
-            plan=TaskPlan.model_validate(plan_row["payload"]),
+            # The task row's capability, read on the request path and carried
+            # here rather than re-queried: it decides which model reads the
+            # payload (C9).
+            plan=expect_task_plan(validate_plan(capability, plan_row["payload"])),
             plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
             plan_version=plan_row["version"],  # type: ignore[arg-type]
             plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
@@ -127,7 +131,7 @@ def create_run(
     """Dispatch an approved plan off the request path and return its walk row."""
     with _dispatch_lock:
         with engine.begin() as conn:
-            accessible_task(
+            access = accessible_task(
                 conn, task_id=task_id, user_id=user.user_id, write=True, for_update=True
             )
             active = conn.execute(
@@ -153,7 +157,9 @@ def create_run(
             ).mappings().one_or_none()
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
-            approved_plan = TaskPlan.model_validate(plan_row["payload"])
+            approved_plan = expect_task_plan(
+                validate_plan(access.row["capability"], plan_row["payload"])
+            )
             latest_completed_turn = conn.execute(
                 select(func.max(task_agent_transcript.c.turn_index))
                 .where(task_agent_transcript.c.task_id == task_id)
@@ -166,7 +172,7 @@ def create_run(
             ):
                 raise ApiConflict(
                     "plan_stale",
-                    "the plan predates your latest task_agent message — review it, then start",
+                    "the plan predates your latest Task Agent message — review it, then start",
                 )
             existing_ids = {
                 row[0]
@@ -181,6 +187,7 @@ def create_run(
             _dispatch_run,
             engine,
             task_id=task_id,
+            capability=access.row["capability"],
             plan_row=dict(plan_row),
             backends=backends,
         )

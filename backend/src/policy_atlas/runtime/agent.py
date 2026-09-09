@@ -64,6 +64,11 @@ from policy_atlas.runtime.agent_backend import (
     OpenAIAgentBackend,
     StubAgentBackend,
 )
+from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    expect_task_plan,
+    validate_plan,
+)
 from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
 from policy_atlas.runtime.steering import (
     Abort,
@@ -654,7 +659,12 @@ def build_plan(
                     rule["delta"] = json.loads(raw)
                 except (TypeError, ValueError):
                     rule["delta"] = raw
-    return TaskPlan.model_validate(data)
+    # Constant capability, not a lookup: the input is a ``PlanDraftWire``, the
+    # Evidence search Task Agent's own draft shape, so this function is
+    # Evidence search by its argument type. The scoping draft gets its own
+    # builder in phase 3. Routed through the registry all the same, so the
+    # single validation seam holds (C9).
+    return expect_task_plan(validate_plan(EVIDENCE_SEARCH, data))
 
 
 # Kept as a compatibility alias for the established CLI/test seam. New API

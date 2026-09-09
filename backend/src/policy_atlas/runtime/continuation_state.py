@@ -11,8 +11,15 @@ from sqlalchemy.engine import Engine
 
 from policy_atlas.core import events
 from policy_atlas.core.schema import capability_run, runs, task_plan
+from policy_atlas.runtime.capability_registry import (
+    capability_of_task,
+    compose_plan,
+    expect_task_plan,
+    lattice_for,
+    validate_plan,
+)
 from policy_atlas.runtime.steering import PausePoint, pause_points
-from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan, compose
+from policy_atlas.runtime.task_plan import ComposedChain, TaskPlan
 
 
 @dataclass(frozen=True)
@@ -138,6 +145,7 @@ def build(
         ).first()
         if plan_row is None:
             raise LookupError("parked walk has no approved task plan")
+        capability = capability_of_task(conn, task_id)
         event_rows = events.read(conn, task_id)
         run_rows = [
             dict(row._mapping)
@@ -150,8 +158,12 @@ def build(
 
     cap = dict(cap_row._mapping)
     plan_data = dict(plan_row._mapping)
-    plan = TaskPlan.model_validate(plan_data["payload"])
-    chain = compose(plan)
+    # The parked walk's own capability decides which model reads its payload
+    # and which chain it composes to (C9); it is read inside the connection
+    # above rather than guessed from the walk row, because the task row is the
+    # single authority (D2).
+    plan = expect_task_plan(validate_plan(capability, plan_data["payload"]))
+    chain = compose_plan(capability, plan)
     scoped_events = [
         entry
         for entry in event_rows
@@ -278,7 +290,7 @@ def build(
         plan_version=plan_data["version"],
         plan_row_id=plan_data["plan_id"],
         chain=chain,
-        pause_points=pause_points(plan.steering_mode, chain),
+        pause_points=pause_points(plan.steering_mode, chain, lattice_for(capability)),
         pending_overlays=overlays,
         remaining_steps=_remaining_steps(chain, completed_components=completed_components),
         step_outcomes=outcomes,

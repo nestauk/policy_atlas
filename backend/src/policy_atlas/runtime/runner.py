@@ -75,6 +75,12 @@ from policy_atlas.runtime.agent_backend import (
     run_watch_decision,
 )
 from policy_atlas.runtime.agent_prompt import WATCH_AUTHORING_PROMPT_VERSION
+from policy_atlas.runtime.capability_registry import (
+    EVIDENCE_SEARCH,
+    capability_of_task,
+    compose_plan,
+    lattice_for,
+)
 from policy_atlas.runtime.continuation_state import ContinuationState, ResumeDecision
 from policy_atlas.runtime.conversation_lifecycle import close_task_agent_conversation
 from policy_atlas.runtime.harness import run_harness
@@ -138,7 +144,6 @@ from policy_atlas.runtime.task_plan import (
     ComponentStep,
     ComposedChain,
     TaskPlan,
-    compose,
     registry_component_for,
 )
 
@@ -652,7 +657,7 @@ def _run_plan_impl(
         discretion = _deterministic_discretion_floor
     if resume_from is None:
         capability_run_id = uuid.uuid4()
-        _open_capability_run(
+        capability = _open_capability_run(
             engine,
             capability_run_id=capability_run_id,
             task_id=task_id,
@@ -661,14 +666,16 @@ def _run_plan_impl(
             plan_version=plan_version,
             session_id=session_id,
         )
-        initial_chain = compose(plan)
+        initial_chain = compose_plan(capability, plan)
         steering_state = _SteeringState(
             plan=plan,
             plan_id=plan_id,
             plan_version=plan_version,
             plan_row_id=plan_row_id,
             chain=initial_chain,
-            pause_points=pause_points(plan.steering_mode, initial_chain),
+            pause_points=pause_points(
+                plan.steering_mode, initial_chain, lattice_for(capability)
+            ),
         )
         remaining_steps = list(initial_chain.steps)
         step_outcomes: list[RunStepOutcome] = []
@@ -3152,7 +3159,9 @@ def _apply_runner_adjustment(
             event_type=steering_events.STEERING_DECISION,
             payload=decision,
         )
-    amended_chain = compose(amended_plan)
+    # Constant capability: this is the Evidence search steering router's own
+    # amendment path, typed on ``TaskPlan`` and untouched by task 044 (C1).
+    amended_chain = compose_plan(EVIDENCE_SEARCH, amended_plan)
     # Commit-layer deltas for not-yet-run components have no plan-field mapping
     # (validated + recorded above, but the payload carries them forward
     # unchanged): stash them as a pending overlay so the component actually
@@ -3164,7 +3173,9 @@ def _apply_runner_adjustment(
         plan_version=amended_version,
         plan_row_id=amended_plan_id,
         chain=amended_chain,
-        pause_points=pause_points(amended_plan.steering_mode, amended_chain),
+        pause_points=pause_points(
+            amended_plan.steering_mode, amended_chain, lattice_for(EVIDENCE_SEARCH)
+        ),
         pending_overlays=new_overlays,
     )
 
@@ -5024,15 +5035,23 @@ def _open_capability_run(
     plan_id: uuid.UUID,
     plan_version: int,
     session_id: uuid.UUID | None,
-) -> None:
-    """Open the walk-identity row before the step loop (contract decision 2)."""
+) -> str:
+    """Open the walk-identity row before the step loop (contract decision 2).
+
+    Returns:
+        The task's capability, read from the task row in the same transaction
+        that writes the walk (task 044): the walk is a walk *of* the task's
+        kind, so the two can never disagree, and the caller needs the value
+        anyway to compose the chain.
+    """
     with engine.begin() as conn:
+        capability = capability_of_task(conn, task_id)
         conn.execute(
             capability_run.insert().values(
                 capability_run_id=capability_run_id,
                 task_id=task_id,
                 evidence_scope_id=evidence_scope_id,
-                capability="evidence_search",
+                capability=capability,
                 plan_id=plan_id,
                 plan_version=plan_version,
                 status="running",
@@ -5051,6 +5070,7 @@ def _open_capability_run(
                 "plan_version": plan_version,
             },
         )
+    return capability
 
 
 def _finish_run(

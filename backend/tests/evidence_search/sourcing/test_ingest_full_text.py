@@ -1386,8 +1386,9 @@ def test_licence_guard() -> None:
 def test_migration_roundtrip_and_checks(conn: Connection) -> None:
     # 33 -> 36: task 033 adds `organisation` and `app_user` (tenancy above the
     # entity hierarchy) and ADR 0032 adds `project_membership`; 36 -> 37:
-    # task 036 adds `waitlist_entry`; no evidence-search table changed.
-    assert len(metadata.tables) == 37
+    # task 036 adds `waitlist_entry`; 37 -> 38: task 044 adds `task_link` (the
+    # Link between two tasks); no evidence-search table changed.
+    assert len(metadata.tables) == 38
     task_id, _ = seed_task_and_run(conn)
     snap_id, tss_id = seed_source(conn, task_id)
 

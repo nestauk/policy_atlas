@@ -13,7 +13,9 @@ type ConflictCode =
   | "no_completed_run"
   | "chat_turn_in_progress"
   | "chat_capacity"
-  | "visibility_conflict";
+  | "visibility_conflict"
+  | "link_project_mismatch"
+  | "link_source_unfinished";
 
 /** Human-readable, trigger-local conflict copy — the one place this
  *  copy lives; call sites wire it in rather than inlining their own. */
@@ -32,6 +34,10 @@ export const conflictSentences: Record<ConflictCode, string> = {
   // visibility can't diverge from the Project it belongs to.
   visibility_conflict:
     `This ${TASK.one} is in a ${PROJECT.one}. Change the ${PROJECT.one}'s visibility, or leave the ${TASK.one} out of the ${PROJECT.one}.`,
+  // Task 044 (C11, C12): the two rules a Link must satisfy when it is written.
+  link_project_mismatch:
+    `A ${TASK.one} can only start from a ${TASK.one} in the same ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
+  link_source_unfinished: `That ${TASK.one}'s latest run hasn't finished yet. Wait for it, then try again.`,
 };
 
 /**

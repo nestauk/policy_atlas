@@ -131,7 +131,7 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
     expect(invalidatedKeys).toContainEqual(["projects"]);
   });
 
-  it("useCreateTask invalidates both families when it assigns a project (its PATCH changes that project's task_count)", async () => {
+  it("useCreateTask invalidates both families when it assigns a project (the assignment changes that project's task_count)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -152,11 +152,6 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
             }),
             { headers: { "Content-Type": "application/json" } },
           );
-        }
-        if (request.method === "PATCH" && request.url.endsWith("/api/v1/tasks/proj-1")) {
-          return new Response(JSON.stringify({ task_id: "proj-1" }), {
-            headers: { "Content-Type": "application/json" },
-          });
         }
         if (request.method === "POST" && request.url.endsWith("/task-agent-turns")) {
           return new Response(JSON.stringify({ turn_index: 1 }), {
@@ -179,12 +174,15 @@ describe("cross-family cache invalidation (task 033 phase 10a)", () => {
   });
 });
 
-// The project-assignment PATCH inside `useCreateTask` used to fire and
-// forget: openapi-fetch never throws on a 4xx of its own, so an unchecked
-// result left a colleague picking a colleague-owned (readable but not
-// writable) task with a task created and silently left unassigned.
-describe("useCreateTask — the project-assignment PATCH result is checked", () => {
-  function taskResponse() {
+// Task 044 (C10): the project assignment is no longer a follow-on PATCH — it
+// travels in the create body and is written in the same transaction. What
+// these tests pin is unchanged in substance: a refused assignment is
+// surfaced rather than silently leaving a task behind, and the opening turn
+// never fires after a refusal. The refusal now comes back on the create
+// itself, which is the point — there is no half-created state left to
+// describe.
+describe("useCreateTask — one create request carrying projects and links", () => {
+  function taskResponse(extra: Record<string, unknown> = {}) {
     return new Response(
       JSON.stringify({
         task_id: "proj-1",
@@ -193,22 +191,68 @@ describe("useCreateTask — the project-assignment PATCH result is checked", () 
         created_at: "2026-01-01T00:00:00Z",
         updated_at: "2026-01-01T00:00:00Z",
         latest_run: null,
-        project_id: null,
+        project_ids: [],
         visibility: "org",
         is_owner: true,
         owner_display: "Ada Lovelace",
+        capability: "evidence_search",
+        from_task_ids: [],
+        links: [],
+        ...extra,
       }),
       { headers: { "Content-Type": "application/json" } },
     );
   }
 
-  it("surfaces the PATCH's error instead of silently leaving the task unassigned", async () => {
+  it("sends the capability, the chosen project and the links in one request", async () => {
+    const bodies: unknown[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const request = input as Request;
       if (request.method === "POST" && request.url.endsWith("/api/v1/tasks")) {
-        return taskResponse();
+        bodies.push(await request.clone().json());
+        return taskResponse({ capability: "options_scoping" });
       }
-      if (request.method === "PATCH" && request.url.endsWith("/api/v1/tasks/proj-1")) {
+      if (request.method === "POST" && request.url.endsWith("/task-agent-turns")) {
+        return new Response(JSON.stringify({ turn_index: 1 }), {
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      throw new Error(`unexpected fetch: ${request.method} ${request.url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    const { result } = renderHook(() => useCreateTask(), { wrapper: wrapper(queryClient) });
+    result.current.mutate({
+      question: "A question",
+      projectId: "project-1",
+      capability: "options_scoping",
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(bodies).toEqual([
+      {
+        name: "A question",
+        question: "A question",
+        capability: "options_scoping",
+        project_ids: ["project-1"],
+        from_task_ids: [],
+      },
+    ]);
+    // Exactly one task-shaped write: no follow-on PATCH.
+    const taskWrites = fetchMock.mock.calls.filter(
+      ([req]) => (req as Request).url.endsWith("/api/v1/tasks"),
+    );
+    expect(taskWrites).toHaveLength(1);
+    expect(
+      fetchMock.mock.calls.some(([req]) => (req as Request).method === "PATCH"),
+    ).toBe(false);
+  });
+
+  it("surfaces a refused assignment instead of leaving a task behind", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const request = input as Request;
+      if (request.method === "POST" && request.url.endsWith("/api/v1/tasks")) {
         return new Response(
           JSON.stringify({ error: { code: "forbidden", message: "Not the owner." } }),
           { status: 403, headers: { "Content-Type": "application/json" } },
@@ -225,21 +269,16 @@ describe("useCreateTask — the project-assignment PATCH result is checked", () 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect((result.current.error as { code?: string } | null)?.code).toBe("forbidden");
 
-    // The opening task_agent turn never fires once the assignment is refused.
+    // The opening task_agent turn never fires once the create is refused.
     const calledUrls = fetchMock.mock.calls.map(([req]) => (req as Request).url);
     expect(calledUrls.some((url) => url.includes("/task-agent-turns"))).toBe(false);
   });
 
-  it("still succeeds when the caller owns the chosen task", async () => {
+  it("still succeeds when the caller may assign the chosen project", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const request = input as Request;
       if (request.method === "POST" && request.url.endsWith("/api/v1/tasks")) {
-        return taskResponse();
-      }
-      if (request.method === "PATCH" && request.url.endsWith("/api/v1/tasks/proj-1")) {
-        return new Response(JSON.stringify({ task_id: "proj-1" }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return taskResponse({ project_ids: ["project-1"] });
       }
       if (request.method === "POST" && request.url.endsWith("/task-agent-turns")) {
         return new Response(JSON.stringify({ turn_index: 1 }), {

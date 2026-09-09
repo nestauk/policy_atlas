@@ -40,6 +40,7 @@ type MeOut = components["schemas"]["MeOut"];
 type ProjectOut = components["schemas"]["ProjectOut"];
 
 type RunOut = components["schemas"]["RunOut"];
+type TaskOut = components["schemas"]["TaskOut"];
 type TaskAgentTranscriptTurnOut = components["schemas"]["TaskAgentTranscriptTurnOut"];
 type EvidenceItemOut = components["schemas"]["EvidenceItemOut"];
 type ConversationOut = components["schemas"]["ConversationOut"];
@@ -254,6 +255,41 @@ export async function mockFetch(input: RequestInfo | URL, init?: RequestInit): P
       }, 202);
     }
     return json({ accepted: true });
+  }
+
+  // Task 044 (C10): create is ONE request carrying the kind of work, the
+  // projects and the tasks it starts from. The mock stores the capability so
+  // the New task screen's two paths are exercisable without a backend; it
+  // does not simulate the Link rules, which are server-side invariants with
+  // their own backend tests.
+  if (method === "POST" && path.endsWith("/api/v1/tasks")) {
+    const body = await requestBody(request, init);
+    const capability =
+      isRecord(body) && body.capability === "options_scoping"
+        ? "options_scoping"
+        : "evidence_search";
+    const created = new Date().toISOString();
+    const task: TaskOut = {
+      ...mockTask,
+      task_id: MOCK_TASK_ID,
+      name: isRecord(body) && typeof body.name === "string" ? body.name : mockTask.name,
+      question:
+        isRecord(body) && typeof body.question === "string" ? body.question : null,
+      capability,
+      status: "active",
+      created_at: created,
+      updated_at: created,
+      archived_at: null,
+      latest_run: null,
+      project_ids:
+        isRecord(body) && Array.isArray(body.project_ids)
+          ? body.project_ids.filter((value): value is string => typeof value === "string")
+          : [],
+      from_task_ids: [],
+      links: [],
+    };
+    Object.assign(mockTask, task);
+    return json(task, 201);
   }
 
   // --- Project lifecycle (landing rename/archive, contract strand 8) ------

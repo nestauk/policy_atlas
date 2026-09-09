@@ -60,7 +60,11 @@ from policy_atlas.core import events
 from policy_atlas.core.liveness import Tick, tick_hub
 from policy_atlas.core.schema import event_log, task_plan
 from policy_atlas.runtime import steering_events
-from policy_atlas.runtime.task_plan import TaskPlan
+from policy_atlas.runtime.capability_registry import (
+    capability_of_task,
+    expect_task_plan,
+    validate_plan,
+)
 
 log = structlog.get_logger()
 
@@ -531,7 +535,9 @@ def _plan_frame(
     ).mappings().one_or_none()
     if row is None or not isinstance(row["payload"], dict):
         return None
-    plan = _draft_from_plan(TaskPlan.model_validate(row["payload"]))
+    plan = _draft_from_plan(
+        expect_task_plan(validate_plan(capability_of_task(conn, task_id), row["payload"]))
+    )
     return PlanUpdatedFrame(type="plan.updated", plan=plan, version=version, **persisted)
 
 

@@ -57,7 +57,49 @@ table, column and the ten catalog-named constraints and indexes, moves both
 stored values; downgrade restores the seeded fixture byte-identically; upgrade
 again.
 
-_(Phase 2 … Phase 7 rows are appended as each phase closes.)_
+### Phase 2 — task kind, links, registry, slice revision (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (full) | pass | backend 2674 passed (8:01); frontend 625 tests / 80 files; okf 143/0; mypy 320 files clean; ruff clean; infra 46; audit-paths 0; prompt-guard unchanged; `drift-check: OK`; build OK |
+
+Revision `b5e1d7a4c026` (revises `a7d3f1c8e2b5`): `task.capability` +
+`ck_task_capability`; `ck_capr_capability` widened; `uq_plan_id_task`;
+`evidence_scope.purpose` + `ck_scope_purpose`; `evidence_scope.plan_id` +
+composite `fk_scope_plan_task`; `task_link` with `fk_task_link_source_run_task`,
+`uq_task_link_pair`, `ck_task_link_distinct`, `ix_task_link_target_task_id`.
+Downgrade refuses while any `task` or `capability_run` row carries
+`options_scoping`, naming `scripts/ops_remove_scoping_tasks.py` (A5); the
+round-trip test proves the refusal and the operator script's FK order.
+
+**Registry (S1):** all ten validate sites and seven compose sites route through
+`runtime/capability_registry.py`; `_open_capability_run` writes the task's
+capability; `pause_points` / `lattice_name_for` / `lattice_policy` take the
+capability's lattice (`lattice_policy` returns `off` for a name outside the
+given lattice — A2's protection). **Deviation from S1 as written:**
+`SteerPointDefault`'s validator was not routed through the registry —
+`task_plan.py` cannot import the registry (cycle via `steering`); the ES
+validator keeps checking `STEER_POINTS`, the registry's ES `steer_points` is
+`frozenset(STEER_POINTS)` and a test pins the two together; the scoping plan
+gets its own set the same way (Phase 3.2).
+
+**Left for Phase 5, deliberately:** the four `lattice_name_for` /
+`lattice_policy` calls inside the runner's boundary loop still take the ES
+default because `_SteeringState` carries no capability; identical behaviour
+today (`lattice_for("evidence_search") is LATTICE_POINTS`). Phase 5.2 must
+put the capability on `_SteeringState` or `baseline_confirm` never fires.
+
+**OpenAPI diff:** additive only — `TaskLinkOut`; `TaskCreate.capability`,
+`.project_ids`, `.from_task_ids`; `TaskOut.capability`, `.from_task_ids`,
+`.links`; three description strings replaced. No path or field removed or
+retyped.
+
+**Gotcha recorded:** the downgrade refusal bites the whole migration-test
+family when any test commits a scoping task and leaves it — an autouse
+cleanup in `test_task_links.py` deletes links then tasks. Any later test that
+commits a scoping task must clean it up.
+
+_(Phase 3 … Phase 7 rows are appended as each phase closes.)_
 
 ## Checks beyond the build
 
@@ -196,6 +238,16 @@ _(step 7)_
     plan payloads) went through the 044 sweep and surfaced only as an enum
     change in the OpenAPI diff. Review every changed quoted literal in the
     sweep diff against the migration's rewrite list before the gate.
+  - The slice revision's downgrade refusal (A5) turns every migration
+    round-trip test red behind any test that commits an `options_scoping`
+    task and leaves it; shared-Postgres suites need the scoping fixtures
+    cleaned up in the test that made them.
+  - `capability_registry` cannot be imported from `task_plan.py` (registry →
+    steering → task_plan); per-capability validators therefore hold their own
+    steer-point sets, pinned equal to the registry's by test.
+  - `make -C backend typecheck` runs `mypy src tests` from `backend/`, so
+    repo-root `scripts/*.py` (now including a destructive operator script)
+    is never typechecked.
   - `scripts/prompt_hash_guard.py` pins by filename (`*prompt*`), so the two
     inline prompt carriers (`synthesis_backend.py`, `finding_vetter.py`) are
     outside the guard; a prompt edit there is invisible to `make prompt-guard`.

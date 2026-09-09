@@ -15,6 +15,9 @@ type LatestRun = components["schemas"]["TaskOut"]["latest_run"];
 type TaskListItem = {
   task_id: string;
   name: string;
+  /** The kind of work (task 044). Optional so a caller assembling rows by
+   *  hand need not invent one; the row's label falls back. */
+  capability?: string | null;
   updated_at: string;
   latest_run?: LatestRun;
   project_ids?: string[];
@@ -219,6 +222,7 @@ export function TaskListPanel({
           <TaskListRow
             to={taskDestination(row.task_id, row.latest_run?.status)}
             name={row.name}
+            capabilityKey={row.capability}
             projectName={
               showProjectPrefix ? projectPrefix(row.project_ids, projectNames) || null : null
             }

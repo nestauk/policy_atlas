@@ -3,7 +3,11 @@ import { useNavigate, useSearchParams } from "react-router";
 
 import { useProjects } from "../api/queries";
 import { useCreateTask } from "../api/mutations";
-import { CAPABILITIES } from "../lib/capabilities";
+import {
+  CAPABILITIES,
+  type SelectableCapabilityKey,
+  isSelectableCapability,
+} from "../lib/capabilities";
 import { useDocumentTitle } from "../lib/title";
 import { COPY, PROJECT, TASK } from "../lib/vocabulary";
 import { Button } from "../ui/brand/Button";
@@ -11,8 +15,8 @@ import { Card } from "../ui/brand/Card";
 import { cn } from "../ui/brand/cn";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/radix/Popover";
 
-/** Step one: pick a kind of work. Only one of the four can run. */
-function CapabilityList({ onPick }: { onPick: () => void }) {
+/** Step one: pick a kind of work. Two of the four can run. */
+function CapabilityList({ onPick }: { onPick: (key: SelectableCapabilityKey) => void }) {
   return (
     <ul role="list" className="mt-10 flex flex-col">
       {CAPABILITIES.map((capability) =>
@@ -20,7 +24,7 @@ function CapabilityList({ onPick }: { onPick: () => void }) {
           <li key={capability.key}>
             <button
               type="button"
-              onClick={onPick}
+              onClick={() => onPick(capability.key as SelectableCapabilityKey)}
               className="flex w-full cursor-pointer items-center justify-between gap-4 border-b border-line px-0.5 py-3.5 text-left text-lead font-normal leading-[25px] text-navy max-md:text-body max-md:leading-snug hover:text-blue focus-visible:outline-2 focus-visible:outline-blue"
             >
               <span>{capability.name}</span>
@@ -135,8 +139,32 @@ function ProjectPicker({
   );
 }
 
+/** Per-capability copy for step two. The form SHAPE is the same for both in
+ *  this slice — question and project, no depth or job control (contract
+ *  second-round amendment 2) — so only the words differ. The scoping form's
+ *  "Starts from" control lands in phase 3.4. */
+const FORM_COPY: Record<
+  SelectableCapabilityKey,
+  { eyebrow: string; heading: string; blurb: string; placeholder: string }
+> = {
+  evidence_search: {
+    eyebrow: "Evidence search",
+    heading: "What do you need evidence on?",
+    blurb:
+      "Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.",
+    placeholder: "e.g. What works to reduce childhood obesity in the UK?",
+  },
+  options_scoping: {
+    eyebrow: "Options scoping",
+    heading: "What are you trying to change?",
+    blurb:
+      "Describe the change you want. Policy Atlas will clarify what you need, draft a plan for your review, then set out what happens if nothing changes.",
+    placeholder: "e.g. How can we reduce the number of young people not in education, employment or training?",
+  },
+};
+
 /** Step two: the question, and as little else as possible beside it. */
-function QuestionForm() {
+function QuestionForm({ capability }: { capability: SelectableCapabilityKey }) {
   const [searchParams] = useSearchParams();
   const presetProject = searchParams.get("project") ?? "";
   const [question, setQuestion] = useState("");
@@ -150,11 +178,12 @@ function QuestionForm() {
   const create = useCreateTask();
   const navigate = useNavigate();
   const canSend = question.trim().length > 0 && !create.isPending;
+  const copy = FORM_COPY[capability];
 
   const submit = () => {
     if (!canSend) return;
     create.mutate(
-      { question, projectId: projectId === "" ? null : projectId },
+      { question, projectId: projectId === "" ? null : projectId, capability },
       { onSuccess: (task) => void navigate(`/tasks/${task.task_id}`) },
     );
   };
@@ -167,13 +196,13 @@ function QuestionForm() {
       }}
     >
       <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
-        Evidence search
+        {copy.eyebrow}
       </p>
       <h1 className="mt-2 text-display font-extrabold tracking-[-0.5px] text-navy text-pretty max-md:text-title">
-        What do you need evidence on?
+        {copy.heading}
       </h1>
       <p className="mt-3 max-w-prose text-lead font-normal leading-[25px] text-grey text-pretty max-md:text-body max-md:leading-snug">
-      Ask a policy question. Policy Atlas will clarify what you need, draft a search plan for your review, then find the evidence.
+        {copy.blurb}
       </p>
 
       <div className="mt-6 flex items-end gap-3 border border-line-2 bg-paper px-[18px] py-3.5 focus-within:outline-2 focus-within:outline-blue">
@@ -184,7 +213,7 @@ function QuestionForm() {
           id="new-task-question"
           autoFocus
           rows={3}
-          placeholder="e.g. What works to reduce childhood obesity in the UK?"
+          placeholder={copy.placeholder}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
           onKeyDown={(event) => {
@@ -236,13 +265,17 @@ export function NewTaskView() {
   useDocumentTitle(COPY.newTask);
   const [searchParams, setSearchParams] = useSearchParams();
   // The chosen capability is URL-addressable, like every other view state.
-  const picked = searchParams.get("capability") === "evidence_search";
+  // A key that is not one of the selectable ones — an old bookmark, a typo —
+  // falls back to the picker rather than rendering a form for work the
+  // server would refuse to create.
+  const requested = searchParams.get("capability");
+  const picked = isSelectableCapability(requested) ? requested : null;
 
   return (
     <main className="mx-auto flex max-w-[1180px] justify-center px-6 py-9 max-md:px-4 max-md:py-6">
       <div className="w-full max-w-[50vw] min-w-0 max-md:max-w-full">
-        {picked ? (
-          <QuestionForm />
+        {picked !== null ? (
+          <QuestionForm capability={picked} />
         ) : (
           <>
             <p className="text-body font-semibold uppercase tracking-[0.06em] text-grey max-md:text-meta">
@@ -252,9 +285,9 @@ export function NewTaskView() {
               {COPY.newTaskPrompt}
             </h1>
             <CapabilityList
-              onPick={() => {
+              onPick={(key) => {
                 const next = new URLSearchParams(searchParams);
-                next.set("capability", "evidence_search");
+                next.set("capability", key);
                 setSearchParams(next);
               }}
             />

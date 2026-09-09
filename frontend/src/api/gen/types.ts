@@ -358,6 +358,19 @@ export interface paths {
          *     the creator is unenrolled, which leaves the row reachable by its owner
          *     alone. `visibility` takes the column default `private` (owner amendment
          *     2026-08-26 — new work is unshared until its owner deliberately shares it).
+         *
+         *     Task 044 (C10): projects and Links arrive in the **same** request and are
+         *     written in the **same** transaction. The old create-then-patch flow could
+         *     leave a real, unassigned task behind, and "Starts from" cannot be built on
+         *     a flow with that failure mode — a scoping task linked to nothing has lost
+         *     the thing it was created for. So any refusal below rolls the task row back
+         *     with it.
+         *
+         *     Raises:
+         *         HTTPException: 404 when a named source task is not readable by the
+         *             caller.
+         *         ApiConflict: 409 ``visibility_conflict``, ``link_project_mismatch`` or
+         *             ``link_source_unfinished``.
          */
         post: operations["create_task_api_v1_tasks_post"];
         delete?: never;
@@ -3419,23 +3432,95 @@ export interface components {
          * TaskCreate
          * @description Inbound body for `POST /api/v1/tasks`.
          *
+         *     Everything a task needs to exist arrives in **one** request (C10). Before
+         *     task 044 the frontend created the task and then patched its projects,
+         *     which cannot be atomic: a failed patch left a real, unassigned task, and
+         *     "Starts from" would have had the same shape with a worse failure — a
+         *     scoping task linked to nothing.
+         *
          *     Args:
          *         name: Task display name, 1-200 characters. Outer whitespace is
          *             stripped before the length constraint is applied
          *             (`str_strip_whitespace`).
          *         question: Optional initial evidence question.
+         *         capability: The kind of work. Defaults to `evidence_search`, so every
+         *             pre-044 caller is unchanged.
+         *         project_ids: Projects to assign the new task to, under exactly the
+         *             rules `PATCH` applies (dedupe, colleague-mutation grade, the
+         *             multi-organisation 409, the visibility derivation). Empty means
+         *             unassigned, which is a normal state.
+         *         from_task_ids: Tasks this one starts from — one `task_link` row each,
+         *             written in the same transaction. Refused 422 on an
+         *             `evidence_search` create: in this slice a Link is how a scoping
+         *             task inherits an Evidence search, and the reverse direction lands
+         *             with task 5.
          */
         TaskCreate: {
+            /**
+             * Capability
+             * @default evidence_search
+             * @enum {string}
+             */
+            capability: "evidence_search" | "options_scoping";
+            /** From Task Ids */
+            from_task_ids?: string[];
             /** Name */
             name: string;
+            /** Project Ids */
+            project_ids?: string[];
             /** Question */
             question?: string | null;
+        };
+        /**
+         * TaskLinkOut
+         * @description One Link, read from the target's side ("Starts from").
+         *
+         *     Args:
+         *         link_id: The link row's identity.
+         *         source_task_id: The task this one starts from.
+         *         source_task_name: That task's display name, so the plan document can
+         *             render the link without a second request per source.
+         *         source_capability_run_id: The **pinned** walk of the source (C11).
+         *             What the target inherited cannot change under it when the source
+         *             runs again.
+         *         flagged: Whether the two tasks currently share no project (C12).
+         *             Derived at read time, not stored: the link is never broken by a
+         *             membership change, only marked, because the inheritance already
+         *             happened and deleting it would silently rewrite the target's
+         *             provenance.
+         */
+        TaskLinkOut: {
+            /** Flagged */
+            flagged: boolean;
+            /**
+             * Link Id
+             * Format: uuid
+             */
+            link_id: string;
+            /**
+             * Source Capability Run Id
+             * Format: uuid
+             */
+            source_capability_run_id: string;
+            /**
+             * Source Task Id
+             * Format: uuid
+             */
+            source_task_id: string;
+            /** Source Task Name */
+            source_task_name: string;
         };
         /**
          * TaskOut
          * @description A task resource.
          *
          *     Args:
+         *         capability: The kind of work this task does. Every pre-044 row reads
+         *             `evidence_search`.
+         *         from_task_ids: The tasks this one starts from, oldest link first —
+         *             the source ids of `links`, for callers that need nothing else.
+         *         links: The same Links in full, including each source's name and
+         *             whether it is currently flagged.
          *         task_id: The task's identity.
          *         name: Current display name.
          *         question: Current evidence question, or `None` if not yet set.
@@ -3479,15 +3564,25 @@ export interface components {
             /** Archived At */
             archived_at?: string | null;
             /**
+             * Capability
+             * @default evidence_search
+             * @enum {string}
+             */
+            capability: "evidence_search" | "options_scoping";
+            /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** From Task Ids */
+            from_task_ids?: string[];
             /** Is Owner */
             is_owner: boolean;
             /** Is Public */
             is_public: boolean;
             latest_run?: components["schemas"]["LatestRun"] | null;
+            /** Links */
+            links?: components["schemas"]["TaskLinkOut"][];
             /** Name */
             name: string;
             /** Owner Display */

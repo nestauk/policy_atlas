@@ -112,7 +112,16 @@ task = Table(
     Column("org_id", UUID(as_uuid=True), ForeignKey("organisation.org_id"), nullable=True),
     Column("visibility", Text, nullable=False, server_default="private"),
     Column("is_public", Boolean, nullable=False, server_default=text("false")),
+    # The kind of work the task does (task 044, ADR 0037 decision 1). Written
+    # at creation and never changed — turning one task into another is what a
+    # ``task_link`` row is for. Every pre-044 row is an Evidence search, which
+    # is what the server default backfills.
+    Column("capability", Text, nullable=False, server_default="evidence_search"),
     CheckConstraint("status IN ('active', 'archived')", name="ck_task_status"),
+    CheckConstraint(
+        "capability IN ('evidence_search', 'options_scoping')",
+        name="ck_task_capability",
+    ),
     CheckConstraint(
         "(status = 'archived') = (archived_at IS NOT NULL)",
         name="ck_task_archived_at",
@@ -412,8 +421,29 @@ evidence_scope = Table(
     Column("intent", Text, nullable=False),
     Column("context", JSONB, nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    # What this intent record is for (task 044, ADR 0037 decision 4). NULL on
+    # every pre-044 row and on every Evidence search record: a plan had exactly
+    # one scope before options scoping made several per plan.
+    Column("purpose", Text, nullable=True),
+    # The plan VERSION this record belongs to (A16/C3: ``plan_version`` alone
+    # is a weak pointer, and ``plan.evidence_scope_id`` only says which record
+    # the plan row points back at). Composite with ``task_id`` so a record can
+    # never name a plan of a different task.
+    Column("plan_id", UUID(as_uuid=True), nullable=True),
     # Composite unique target for source_screening_result FK
     UniqueConstraint("evidence_scope_id", "task_id", name="uq_evidence_scope_id_task"),
+    CheckConstraint(
+        "purpose IN ('baseline', 'longlist', 'variant', 'targeted')",
+        name="ck_scope_purpose",
+    ),
+    # MATCH SIMPLE, per the ``plan.evidence_scope_id`` precedent above it: a
+    # NULL ``plan_id`` skips the check, so the guard binds only once set.
+    ForeignKeyConstraint(
+        ["plan_id", "task_id"],
+        ["plan.plan_id", "plan.task_id"],
+        name="fk_scope_plan_task",
+        match="SIMPLE",
+    ),
 )
 
 source_screening_result = Table(
@@ -1236,6 +1266,9 @@ task_plan = Table(
     ),
     # One plan lineage per task in v1 — amendments append new-version rows.
     UniqueConstraint("task_id", "version", name="uq_plan_task_version"),
+    # Composite-FK target for ``evidence_scope.plan_id`` (task 044): an intent
+    # record may name a plan version only of its own task.
+    UniqueConstraint("plan_id", "task_id", name="uq_plan_id_task"),
     CheckConstraint(
         "status IN ('proposed', 'approved', 'superseded', 'abandoned')",
         name="ck_plan_status",
@@ -1309,12 +1342,56 @@ capability_run = Table(
     ),
     # Composite-FK target for runs.capability_run_id.
     UniqueConstraint("capability_run_id", "task_id", name="uq_capr_id_task"),
-    CheckConstraint("capability IN ('evidence_search')", name="ck_capr_capability"),
+    CheckConstraint(
+        "capability IN ('evidence_search', 'options_scoping')",
+        name="ck_capr_capability",
+    ),
     CheckConstraint(
         "status IN ('running', 'paused', 'succeeded', 'degraded', 'failed', "
         "'aborted', 'interrupted')",
         name="ck_capr_status",
     ),
+)
+
+# --- Links between tasks (task 044, ADR 0037 decision 2) -------------------
+#
+# A Link says "this task starts from that one". Many-to-many, one row per
+# ordered pair, source never itself, and the source's contribution pinned to
+# ONE finished walk (`source_capability_run_id`) so what the target inherited
+# cannot change under it when the source runs again.
+#
+# Two rules are deliberately NOT columns. Both tasks must share a project when
+# the link is written, but a link whose tasks later stop sharing one is
+# **flagged on read, never deleted** (C12) — the check lives in
+# `task_links_for`. And a link grants no access at all: reading the target
+# tells the caller nothing about the source they could not already read.
+#
+# The option id the data model declares arrives in task 2 with the option
+# table (D13).
+
+task_link = Table(
+    "task_link",
+    metadata,
+    Column("link_id", UUID(as_uuid=True), primary_key=True),
+    Column("source_task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("target_task_id", UUID(as_uuid=True), ForeignKey("task.task_id"), nullable=False),
+    Column("source_capability_run_id", UUID(as_uuid=True), nullable=False),
+    Column("created_by", Text, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    # The pinned walk must belong to the source task — the same cross-task FK
+    # guard every composite reference in this schema uses, over
+    # ``uq_capr_id_task``.
+    ForeignKeyConstraint(
+        ["source_capability_run_id", "source_task_id"],
+        ["capability_run.capability_run_id", "capability_run.task_id"],
+        name="fk_task_link_source_run_task",
+    ),
+    UniqueConstraint("source_task_id", "target_task_id", name="uq_task_link_pair"),
+    CheckConstraint("source_task_id <> target_task_id", name="ck_task_link_distinct"),
+    # The read direction is target → sources ("Starts from"), so the target
+    # side is the one that needs an index; the source side is covered by
+    # ``uq_task_link_pair``'s leading column.
+    Index("ix_task_link_target_task_id", "target_task_id"),
 )
 
 chat_turn = Table(

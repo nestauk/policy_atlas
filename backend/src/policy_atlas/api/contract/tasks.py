@@ -24,20 +24,65 @@ TaskStatus = Literal["active", "archived"]
 TASK_NAME_MAX = 200
 
 
+#: The kinds of work a task can do (task 044, ADR 0037 decision 1). Written at
+#: creation and never changed — turning one task into another is what a Link
+#: is for (D2).
+Capability = Literal["evidence_search", "options_scoping"]
+
+
 class TaskCreate(BaseModel):
     """Inbound body for `POST /api/v1/tasks`.
+
+    Everything a task needs to exist arrives in **one** request (C10). Before
+    task 044 the frontend created the task and then patched its projects,
+    which cannot be atomic: a failed patch left a real, unassigned task, and
+    "Starts from" would have had the same shape with a worse failure — a
+    scoping task linked to nothing.
 
     Args:
         name: Task display name, 1-200 characters. Outer whitespace is
             stripped before the length constraint is applied
             (`str_strip_whitespace`).
         question: Optional initial evidence question.
+        capability: The kind of work. Defaults to `evidence_search`, so every
+            pre-044 caller is unchanged.
+        project_ids: Projects to assign the new task to, under exactly the
+            rules `PATCH` applies (dedupe, colleague-mutation grade, the
+            multi-organisation 409, the visibility derivation). Empty means
+            unassigned, which is a normal state.
+        from_task_ids: Tasks this one starts from — one `task_link` row each,
+            written in the same transaction. Refused 422 on an
+            `evidence_search` create: in this slice a Link is how a scoping
+            task inherits an Evidence search, and the reverse direction lands
+            with task 5.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str = Field(min_length=1, max_length=TASK_NAME_MAX)
     question: str | None = None
+    capability: Capability = "evidence_search"
+    project_ids: list[uuid.UUID] = Field(default_factory=list)
+    from_task_ids: list[uuid.UUID] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def reject_links_on_an_evidence_search(self) -> TaskCreate:
+        """Refuse `from_task_ids` on an Evidence search create.
+
+        Returns:
+            The validated model.
+
+        Raises:
+            ValueError: When an Evidence search create names a source task.
+                FastAPI renders this as the contract's 422
+                `validation_error`.
+        """
+        if self.capability != "options_scoping" and self.from_task_ids:
+            raise ValueError(
+                "from_task_ids is for options-scoping tasks — an Evidence "
+                "search does not start from another task in this release"
+            )
+        return self
 
 
 class TaskUpdate(BaseModel):
@@ -142,10 +187,41 @@ class LatestRun(BaseModel):
     ended_at: datetime | None = None
 
 
+class TaskLinkOut(BaseModel):
+    """One Link, read from the target's side ("Starts from").
+
+    Args:
+        link_id: The link row's identity.
+        source_task_id: The task this one starts from.
+        source_task_name: That task's display name, so the plan document can
+            render the link without a second request per source.
+        source_capability_run_id: The **pinned** walk of the source (C11).
+            What the target inherited cannot change under it when the source
+            runs again.
+        flagged: Whether the two tasks currently share no project (C12).
+            Derived at read time, not stored: the link is never broken by a
+            membership change, only marked, because the inheritance already
+            happened and deleting it would silently rewrite the target's
+            provenance.
+    """
+
+    link_id: uuid.UUID
+    source_task_id: uuid.UUID
+    source_task_name: str
+    source_capability_run_id: uuid.UUID
+    flagged: bool
+
+
 class TaskOut(BaseModel):
     """A task resource.
 
     Args:
+        capability: The kind of work this task does. Every pre-044 row reads
+            `evidence_search`.
+        from_task_ids: The tasks this one starts from, oldest link first —
+            the source ids of `links`, for callers that need nothing else.
+        links: The same Links in full, including each source's name and
+            whether it is currently flagged.
         task_id: The task's identity.
         name: Current display name.
         question: Current evidence question, or `None` if not yet set.
@@ -196,3 +272,6 @@ class TaskOut(BaseModel):
     owner_display: str | None
     is_public: bool
     access: Literal["full", "public"]
+    capability: Capability = "evidence_search"
+    from_task_ids: list[uuid.UUID] = Field(default_factory=list)
+    links: list[TaskLinkOut] = Field(default_factory=list)
