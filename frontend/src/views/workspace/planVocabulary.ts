@@ -315,7 +315,7 @@ export const CONSTRAINT_CHECKED_AT_LABEL: Record<string, string> = {
 const CONSTRAINT_KIND_EFFECT: Record<ScopingConstraint["kind"], string> = {
   requirement: "Options that conflict are excluded, with the reason shown. You can include them again.",
   preference:
-    "Checked after assessment where costs or effects are comparable; until then a labelled guess that sorts and never excludes.",
+    "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
   evidence_restriction:
     'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',
 };

@@ -54,7 +54,7 @@ describe("baselineBand", () => {
 
   it("says the plan is confirmed once the record names the current plan version", () => {
     expect(band([PAUSED_AT_GATE], 1, { plan_version: 1 })).toEqual({
-      line: "Baseline · the situation these options would change · Plan confirmed · the longlist arrives with the next stage",
+      line: "Baseline · the situation these options would change · plan confirmed · the longlist arrives with the next stage",
       planVersionMark: null,
     });
   });
@@ -63,14 +63,14 @@ describe("baselineBand", () => {
     // "Confirm plan and build longlist" after a plan edit: the plan is
     // settled, but the profile on screen is still the one v1 produced.
     const both = band([PAUSED_AT_GATE], 2, { plan_version: 2 });
-    expect(both.line).toContain("Plan confirmed");
+    expect(both.line).toContain("plan confirmed");
     expect(both.planVersionMark).toBe("built from plan version 1");
   });
 
   it("says the plan is confirmed when a finished walk ran on the version on screen", () => {
     // A walk can only reach `succeeded` through the gate's Confirm option or
     // the standing default — the same rule the plan document's start area uses.
-    expect(band([FINISHED], 1).line).toContain("Plan confirmed");
+    expect(band([FINISHED], 1).line).toContain("plan confirmed");
   });
 
   it("marks the plan version only after the plan has moved on", () => {
@@ -83,7 +83,7 @@ describe("baselineBand", () => {
   it("reads the most recently started walk when several exist", () => {
     const older = { status: "aborted", started_at: "2026-09-08T09:00:00Z", plan_version: 1 };
     const newer = { status: "succeeded", started_at: "2026-09-09T09:00:00Z", plan_version: 2 };
-    expect(band([older, newer], 2).line).toContain("Plan confirmed");
+    expect(band([older, newer], 2).line).toContain("plan confirmed");
   });
 
   it("holds the awaiting wording with no walk loaded rather than claiming confirmation", () => {

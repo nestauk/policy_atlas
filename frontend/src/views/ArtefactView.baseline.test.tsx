@@ -150,7 +150,7 @@ describe("ArtefactView — the options-scoping baseline", () => {
     });
     expect(
       screen.getByText(
-        "Baseline · the situation these options would change · Plan confirmed · the longlist arrives with the next stage",
+        "Baseline · the situation these options would change · plan confirmed · the longlist arrives with the next stage",
       ),
     ).toBeInTheDocument();
   });

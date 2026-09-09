@@ -611,7 +611,7 @@ describe("PlanDocument — options scoping (task 044)", () => {
 
     expect(
       screen.getByText(
-        "Checked after assessment where costs or effects are comparable; until then a labelled guess that sorts and never excludes.",
+        "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Assessment")).toBeInTheDocument();

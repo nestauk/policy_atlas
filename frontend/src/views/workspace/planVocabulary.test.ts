@@ -236,7 +236,7 @@ describe("options-scoping plan vocabulary (task 044)", () => {
       "Options that conflict are excluded, with the reason shown. You can include them again.",
     ]);
     expect(constraintEffectLines(constraint({ kind: "preference" }))).toEqual([
-      "Checked after assessment where costs or effects are comparable; until then a labelled guess that sorts and never excludes.",
+      "Checked after assessment where costs or effects are comparable. Until then, a labelled guess that sorts and never excludes.",
     ]);
     expect(constraintEffectLines(constraint({ kind: "evidence_restriction" }))).toEqual([
       'Other documents are set aside and counted. Known options stay, marked "no in-scope evidence" if none of their evidence is in scope.',

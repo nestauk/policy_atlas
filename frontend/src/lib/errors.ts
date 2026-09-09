@@ -35,9 +35,8 @@ export const conflictSentences: Record<ConflictCode, string> = {
   visibility_conflict:
     `This ${TASK.one} is in a ${PROJECT.one}. Change the ${PROJECT.one}'s visibility, or leave the ${TASK.one} out of the ${PROJECT.one}.`,
   // Task 044 (C11, C12): the two rules a Link must satisfy when it is written.
-  link_project_mismatch:
-    `A ${TASK.one} can only start from a ${TASK.one} in the same ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
-  link_source_unfinished: `That ${TASK.one}'s latest run hasn't finished yet. Wait for it, then try again.`,
+  link_project_mismatch: `That Evidence search is in a different ${PROJECT.one}. Put both in the same ${PROJECT.one} first.`,
+  link_source_unfinished: "That Evidence search has not finished a run yet. Wait for it, then try again.",
 };
 
 /**

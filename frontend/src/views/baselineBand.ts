@@ -76,7 +76,11 @@ export interface BaselineBand {
  *   The band's line and its optional plan-version mark.
  */
 export function baselineBand(status: ReturnType<typeof scopingWalkStatus>): BaselineBand {
-  const state = status.confirmed ? SCOPING_CONFIRMED_LINE : BASELINE_AWAITING_LINE;
+  // Mid-band the confirmed line reads on from the purpose clause, so it drops
+  // its standalone capital (the plan document keeps it as a line of its own).
+  const state = status.confirmed
+    ? SCOPING_CONFIRMED_LINE.charAt(0).toLowerCase() + SCOPING_CONFIRMED_LINE.slice(1)
+    : BASELINE_AWAITING_LINE;
   return {
     line: `Baseline · ${BASELINE_PURPOSE} · ${state}`,
     planVersionMark:
