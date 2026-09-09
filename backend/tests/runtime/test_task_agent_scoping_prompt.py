@@ -82,7 +82,7 @@ def test_planner_turns_become_assistant_messages_and_draft_rides_a_trailing_user
         {"role": "user", "text": "Options for NEET"},
         {"role": "planner", "text": "Here is the plan."},
     ]
-    draft = {"question": "Options for NEET"}
+    draft: dict[str, object] = {"question": "Options for NEET"}
     messages = build_scoping_messages(
         turns, draft, baseline_state="a baseline exists, built from plan version 1"
     )
