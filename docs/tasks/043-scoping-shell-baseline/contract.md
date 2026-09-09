@@ -10,9 +10,13 @@ against the baseline before any option is generated.
 > one in an interview the same day, plus seven second-round amendments;
 > rulings folded in below and quoted where they change a spec).
 > **Contract-stage adversarial review ran 2026-09-09** (fallback lane,
-> `deep-reasoner`, read-only, after the Codex lane stalled; a relaunched Codex
-> lane is pending): 18 findings, verdict "material change needed", all 18
-> accepted and folded (§ Adversarial findings). The material folds — the
+> `deep-reasoner`, read-only, after the first Codex lane stalled; then the
+> relaunched Codex lane, read-only, on the pre-fold commit): 18 + 18
+> findings, both verdicts "material change needed", all accepted and folded
+> (§ Adversarial findings; seven Codex findings restate fallback ones).
+> Three Codex folds are **proposals pending the owner's ruling** at
+> re-approval: C1 (Change the plan aborts the walk and rebuilds), C6 (drop
+> the parallel-writing trial), C16 (per-field turn provenance built now). The material folds — the
 > lattice gains a capability dimension (A2), the steering router is modified
 > not reused (A3), a third prompt surface for the gate sort (A4), the gate
 > built on the existing check-in response path (A12), the rollback predicate
@@ -50,7 +54,9 @@ ADR:
    `options_scoping`), written at creation, never changed and never derived
    (D2). Existing tasks are Evidence search. The New task card, the tasks
    list and the task header say "Options scoping" (D5); the list shows a
-   scoping task's depth.
+   scoping task's depth from a **derived, nullable `depth`** on the task read
+   model, read from the approved plan payload and null while there is no
+   approved plan (C17).
 2. **Task Agent rename (phase one, fenced).** The conversation kind
    `planning` becomes `task_agent`; `planning_transcript` becomes
    `task_agent_transcript`; `/planning-turns` becomes `/task-agent-turns`;
@@ -79,7 +85,12 @@ ADR:
    about 25 files). **Kept as they are**, because they are stored
    fingerprints or legacy ids with read-side compatibility, never rewritten:
    `eb_iof_base_v1`, `eb_icf_base_v1`, the legacy steer-point id
-   `evidence_base_coverage`. The same phase sweeps the abbreviation **EB → ES** in
+   `evidence_base_coverage`. The plan phase produces a **rename manifest**
+   like 038's (C13): the schema names from the catalog, and a repository
+   token and path list covering `backend/src`, `backend/tests`,
+   `frontend/src`, `frontend/e2e`, mocks, scripts, generated outputs and the
+   content of `docs/knowledge/` (its filenames are concept ids and are never
+   renamed), with the exclusions stated. The same phase sweeps the abbreviation **EB → ES** in
    the living specs (`docs/specs/**` except `sources/`), `AGENTS.md`, the
    skills and templates, `docs/agentic-ops/`, and code comments and
    docstrings. **Excluded, by path and by token** (A11): `docs/adr/**`,
@@ -93,7 +104,11 @@ ADR:
 3. **Start a scoping task.** The New task screen, with the same shape as the
    Evidence search's: the question and one scoping-specific control, **Starts
    from** — zero or more Evidence search tasks in the same project (links
-   must exist before the first turn). No depth control and no job control on
+   must exist before the first turn). Today the frontend creates the task,
+   then patches its projects, then posts the first turn (C10); this slice
+   makes `POST /tasks` take `project_ids` and `from_task_ids` in **one
+   transaction**, so the same-project rule is checked when the link is
+   written and a failed request leaves no half-made task. No depth control and no job control on
    the form (owner, second round: parity with ES, where depth is agreed in
    the conversation): depth is offered in the Task Agent conversation
    (deliverable 6); the scoping job (explore · sense-check) is not shown until
@@ -101,7 +116,11 @@ ADR:
    Agent tab.
 4. **Link and inherit.** Each "starts from" choice is a `task_link` row:
    many-to-many, same-project only, archive-not-delete, changes no access.
-   `inherit` (task-1 part, D4) pins the source run ids on the link and gives
+   The pinned source run is the source task's **`capability_run_id`** (C11):
+   one walk, from which its plan version and component runs resolve; only a
+   `succeeded` or `degraded` walk is eligible; one row per (source, target)
+   pair; a link whose tasks stop sharing a project is flagged on read, never
+   deleted (C12). `inherit` (task-1 part, D4) pins that run on the link and gives
    the Task Agent, as context: the linked task's **whole plan**, its
    **report body with citations stripped**, and its **coverage statement**,
    each fenced once after the system instructions and rehydrated on every
@@ -123,7 +142,8 @@ ADR:
    *from your question* / *assumed* / *your call*, asks who or what should
    change when the question leaves it open, defaults Where to the United
    Kingdom (assumed, please check), offers setting as an optional
-   constraint, asks which kind a constraint sentence is when it is ambiguous
+   constraint, gives every plan section its **Edit** action as the ES plan
+   has (C18), asks which kind a constraint sentence is when it is ambiguous
    ("limit the evidence I read, or the options you would consider?"), and
    says so before confirmation when an evidence restriction would exclude the
    plan's Where (D8). **Depth** is offered the way ES offers it: two labelled
@@ -148,7 +168,13 @@ ADR:
    baseline. Its own **Sources section** (required section 8) states what
    was searched and that live official statistics and departmental pages
    were not (A14); the Sources tab stays unchanged. Evidence restrictions
-   apply to this acquire like any other (D8).
+   apply to this acquire like any other (D8). The **baseline mode** of
+   synthesise (C7) supplies the eight sections, admits zero to two validated
+   proposals, carries a per-section instruction and turn cap on the section
+   spec, orders the sections, renders the not-found state, and **disables
+   the ES-only passes** — the injected Conclusions section, the key-findings
+   pass and the case-study pass. The baseline carries the **`scoping pass`**
+   depth label like every scoping profile (C18).
 8. **The gate.** The walk pauses after the baseline in every attended
    steering mode; in unattended it does not pause: the runner writes the
    decision event at the boundary — `decided_by: standing_default`, flagged
@@ -159,22 +185,41 @@ ADR:
    open at the gate** (D9), built on what exists (A12): the thread's one
    composer posts to the Task Agent turn route; while the walk is paused the
    turn is admitted and **sorted** by a small lead-authored mini-class prompt
-   (the third prompt surface, A4) into question · instruction · decision, then
-   dispatched — a question to the grounded chat answer over the baseline
-   artefact, rendered in the thread; an instruction to the existing check-in
-   free-text path (router compile → confirm render → apply on confirm, which
-   writes the new plan version through the steering path that pins the
-   walk's lineage); a decision in words to the check-in option response. The
-   two decisions, **Confirm plan and build longlist** and **Change the
-   plan**, are also options on the check-in card in the same thread; a
-   decision from either surface lands in the **same check-in response
-   transaction**, so the second is 409 `already_answered` (A13). A turn that
-   is two things at once is handled in order: the answer first, then the
-   instruction's confirm render; a decision is never inferred from a mixed
-   turn — the user is asked. The **approving branch** of a Task Agent turn
-   and `PATCH /plan` stay fenced while a walk is running or paused (A6): at
-   the gate a plan version is minted only through the steering path. A turn
-   while the walk is *running* stays 409 `run_active`. The card quotes the
+   (the third prompt surface, A4) into **question · decision** — a question
+   goes to a **shared read-only answer core** (C2: the chat's grounded
+   answer, lifted out of the chat-turn route so it can target the paused
+   baseline's pinned scope; the chat route itself refuses paused walks and
+   is unchanged), rendered in the thread with its citations; a decision in
+   words goes to the check-in option response. The two decisions, **Confirm
+   plan and build longlist** and **Change the plan**, are also options on
+   the check-in card in the same thread; a decision from either surface
+   lands in the **same check-in response transaction**, bound to the
+   `capability_run_id`, the `check_in_id` and the plan version and
+   re-validated under the task lock, so the second is 409 `already_answered`
+   (A13, C5). **An instruction at the gate is the decision "Change the
+   plan"** *(C1 — proposal pending the owner's ruling)*: the existing
+   steering path cannot take it, because at this gate every component has
+   run and the stability rule refuses any change to a run component, and a
+   change to Where or the outcomes would leave the baseline stale against
+   the plan that did not produce it. So Change the plan **ends the walk**
+   (decision recorded, walk `aborted` by the user's choice), the fence lifts
+   because no walk is active, the instruction is applied as an ordinary Task
+   Agent planning turn minting a new plan version, the baseline artefact
+   stays visible marked *built from plan version N*, and **Confirm and build
+   baseline** rebuilds it under the new version (a supersede-by-rerun; the
+   new walk's intent record points at the new plan row, and so does
+   `plan.evidence_scope_id` — C3). In this slice every plan change rebuilds;
+   rebuilding only when the change touches the baseline's inputs is open
+   question 7 (deltas, not restarts), recorded in `docs/deferred.md`. The
+   steering router is therefore **not used at the gate and not modified**
+   (this retires fallback finding A3's modification). A turn that is a
+   question and a decision at once is answered first and then asked to
+   confirm the decision; a decision is never inferred. The **approving
+   branch** of a Task Agent turn and `PATCH /plan` stay fenced while a walk
+   is running or paused (A6). A turn while the walk is *running* stays 409
+   `run_active`. The Task Agent turn's durable row and read model become a
+   **discriminated projection** (C2): a planning reply, an answer with
+   citations, or a decision. The card quotes the
    baseline's key assumption and the plan's Settings. Confirm records the
    decision and ends the walk (D12); the Result says the longlist arrives
    with the next stage. Routing hangs on the turn, not on the conversation
@@ -222,7 +267,9 @@ and the decisions below quoted where they are applied.
 | **baseline** | The profile of "Do nothing": eight required sections plus up to two the writer proposes (§ Baseline). The Result of this slice. |
 | **the gate** | The pause after the baseline where the user confirms the plan. Steer point `baseline_confirm`; the first of the two structural gates (OS capability § Pipeline and gates). |
 | **steer point** | A named pause on the steering lattice (`runtime/steering.py` `LATTICE_POINTS`). ES has five; this slice adds one and gives the lattice a **capability dimension** (A2): a point belongs to a capability's chain, so `baseline_confirm` never names an ES pause after synthesise. |
-| **gate sort** | The mini-class prompt surface that sorts a Task Agent turn at a pause into question · instruction · decision (A4). Lead-authored, hash-pinned. The ES's boundary triage (`WatchTriageWire`, a notable-or-not verdict) is a different call and is reused unchanged. |
+| **gate sort** | The mini-class prompt surface that sorts a Task Agent turn at a pause into question · decision (A4, C1); an instruction is the decision "Change the plan" carrying its text. Lead-authored, hash-pinned. Fails safe: an unsortable turn is asked back, never applied. The ES's boundary triage (`WatchTriageWire`, a notable-or-not verdict) is a different call and is reused unchanged. |
+| **answer core** | The grounded read-only answer the chat produces over a task's artefact, lifted into a shared function so a Task Agent turn can call it against the paused baseline (C2). The chat-turn route keeps its own guards. |
+| **capability registry** | One module that says, per capability, which plan model validates the payload, which chain composes, and which steer points exist (C9). Every reader of a plan goes through it. |
 | **router** | The `agent_v1` moment that compiles a free-text instruction at a pause into plan deltas, each re-validated fail-closed and applied only after the user confirms (task 024). |
 | **walk** | One run of a capability's chain: a `capability_run` row plus its component `runs`. |
 | **depth** | The plan's one dial, internal key `rapid \| standard`; shown with screen labels in the ES's pattern, never the key (A8). Offered as options in the conversation, every time, no default (ruling 25). Deep is ⏸ later for scoping and is not shown (D6). |
@@ -277,7 +324,7 @@ the Frame board):
 | `where` | the jurisdiction the policy applies to; default "United Kingdom" tagged *assumed* | yes | intent context; screen prompt input |
 | `outcomes[]` | the outcomes evidence is read against | yes | intent context |
 | `depth` | rapid \| standard (D6), chosen from the Task Agent's offered options | *your call* | stored; tasks 2–3 read it; the baseline has one shape at both (D7) |
-| `constraints[]` | `{text, kind, origin, checked_at}`; kind ∈ requirement \| preference \| evidence_restriction; checked_at ∈ longlist \| assessment \| retrieval | yes | evidence restrictions → the ES `ScopeConstraints` (country group · years · languages) on every acquire, the baseline's included (D8); the other kinds are stored for tasks 2–3. Evidence restrictions sit in the plan's Constraints table, not in Settings — the placement the spec kept when it rejected "evidence restrictions as plan Settings" |
+| `constraints[]` | `{text, kind, origin, checked_at}`; kind ∈ requirement \| preference \| evidence_restriction; checked_at ∈ longlist \| assessment \| retrieval | yes | evidence restrictions → the ES `ScopeConstraints` on every acquire, the baseline's included (D8) — **country group and publication years only**: the ES model has no language filter (C8), so a language restriction is stored, shown as *not yet applied at retrieval* and recorded as an ES gap; the other kinds are stored for tasks 2–3. Evidence restrictions sit in the plan's Constraints table, not in Settings — the placement the spec kept when it rejected "evidence restrictions as plan Settings" |
 | `your_context[]` | `{text verbatim, type: present_fact \| commitment, turn_index, test_as_condition}` | — | stored; read by task 3 |
 | `entry_branch` | `explore` (only value in this slice) | — | — |
 | `linked_task_ids[]` | from `task_link` | — | plan "Starts from" |
@@ -286,9 +333,19 @@ the Frame board):
 | `time_band` | coarse compute band for the baseline, "then a check-in" | — | display |
 | `source_turn_index` | as ES | — | as ES |
 
-Per-field turn provenance beyond `your_context` and `source_turn_index` is not
-built in this slice (the ES plan does not carry it either) — a deferred seam,
-recorded in `docs/deferred.md`.
+**Per-field turn provenance** *(C16 — proposal pending the owner's ruling)*:
+plan-as-object requires every compiled field to back-reference the turn that
+produced it, and the ES plan does not do this (only `source_turn_index`, a
+latest-turn watermark). For the scoping plan each compiled field carries
+`turn_index`, stamped deterministically by diffing the draft between turns at
+write time; the plan document can show "from turn N" on request. The
+alternative is an owner revision of plan-as-object; deferring silently is not
+open, because the field-level rule is the audit contract.
+
+**Execution-bearing baseline parameters that are not plan fields** (C8) are
+compile constants in the baseline template, named here so nothing hides: the
+acquisition target per backend, the per-section turn cap, the proposed-section
+limit (two), and the section order. Depth does not change them in this slice.
 
 ## Baseline
 
@@ -315,22 +372,25 @@ levers in this slice:
 - a small acquisition target for the baseline (a narrow question about the
   status quo, not a broad search) — a plan-time number, measured;
 - a per-section tool-call cap in the template;
-- the **writing mode**, chosen from a build-time trial: sequential (as the ES
-  writes today) against parallel sections with a **join step** that repairs
-  any statement that conflicts with another section, in the section where it
-  sits, and writes nothing of its own (A15) (genuine disagreement between
-  sources belongs in "what is contested" and nowhere else; no
-  labelled-disagreement device). The trial runs on the NEET question and one
-  thin-evidence question; compute time and a side-by-side consistency
-  reading go in `verification.md`; the owner picks at step 6; **the losing
-  mode is deleted before the PR**.
+- **sequential writing, as the ES writes today** *(C6 — proposal pending the
+  owner's ruling)*. The parallel-writing trial is withdrawn: the execution
+  contract's durability section rules "never fan out the conclusion", the
+  synthesiser writes sections in order over an accumulating claim ledger,
+  and the owner's own concern was consistency between sections. Reinstating
+  a parallel mode would be an owner revision of that system contract with a
+  durable join design, not a build-time trial. Sections are **shown as they
+  finish** so the user reads while the rest writes (perceived time, not
+  compute) if the build finds it cheap; otherwise it stays on the deferred
+  list.
 
-Design target: about 3 to 4 minutes of compute, verified on the NEET question
-during the build, never a run-time cut-off; the plan shows a coarse band and
-promises no number (open question 3 stays open). Levers recorded for later in
-`docs/deferred.md`: showing sections as they finish; starting the longlist's
-retrieval while the user reads the baseline (task 2); a faster model tier for
-the baseline sections when Bedrock lands, quality-tested first.
+Design target: as low as sequential writing over a small corpus allows,
+measured on the NEET question during the build and reported honestly (the
+3-to-4-minute aim assumed parallel writing and may not hold); never a run-time
+cut-off; the plan shows a coarse band and promises no number (open question 3
+stays open). Levers recorded for later in `docs/deferred.md`: starting the
+longlist's retrieval while the user reads the baseline (task 2); a faster
+model tier for the baseline sections when Bedrock lands, quality-tested
+first; a parallel writing mode if the owner revises the durability contract.
 
 Rules the template carries: empirical premises cited to sources (chunk
 claims; the baseline has no pattern or theme claims — A7); the key assumption
@@ -338,11 +398,12 @@ and what is contested are tier-4 reasoning claims labelled as such; "not
 found" is a content state, never a hedge; Policy Atlas does not forecast; the
 baseline's Sources section names Overton and OpenAlex as searched and live
 official statistics and departmental pages as not searched (A14); the
-grey-literature skew is shown, not hidden. **Template mode** (A7): the
+grey-literature skew is shown, not hidden, as a **visible source-tier skew**
+line in the baseline's Sources section (C18). **Template mode** (A7, C7): the
 required sections are supplied, not proposed; the ES section proposer runs
 only for the up-to-two extra sections, bounded — if that needs a change to
 its pinned prompt text, the change is versioned and re-pinned like any
-prompt edit.
+prompt edit; the ES-only injected sections and passes are off.
 
 ## Surface map
 
@@ -353,7 +414,7 @@ Rows marked **keep** must not change behaviour. File paths are as built at
 |---|---|---|---|---|
 | 1 | `task` row | no kind | `capability` text, check constraint, default `evidence_search` | `backend/src/policy_atlas/core/schema.py` (task); new alembic revision after `c1a7f4e9b0d2` |
 | 1 | `capability_run.capability` | `evidence_search` only | + `options_scoping` | `schema.py` `ck_capr_capability`; `runtime/runner.py` `_open_capability_run` literal |
-| 1 | Tasks list row | label from a key the API does not send | label from `TaskOut.capability`; depth chip for scoping | `frontend/src/views/TaskListRow.tsx`, `lib/capabilities.ts` (key `options_scoping`, D5) |
+| 1 | Tasks list row | label from a key the API does not send | label from `TaskOut.capability`; depth chip from the derived nullable `TaskOut.depth` (C17) | `frontend/src/views/TaskListRow.tsx`, `lib/capabilities.ts` (key `options_scoping`, D5), `api/contract/tasks.py`, `api/readmodels/` |
 | 2 | Conversation kind | `planning` \| `chat` | `task_agent` \| `chat`; stored values rewritten | `schema.py` (conversation), migration, `api/contract/conversations.py`, readers |
 | 2 | Transcript table | `planning_transcript` | `task_agent_transcript` | `schema.py`, migration, `runtime/agent.py`, `api/routers/planning.py` |
 | 2 | Turn routes | `/tasks/{id}/planning-turns` | `/tasks/{id}/task-agent-turns`; models `TaskAgentTurn*`; no redirect | `api/routers/planning.py` (renamed), `api/contract/planning.py`, `frontend/src/api/*`, `web-api.md` |
@@ -361,23 +422,23 @@ Rows marked **keep** must not change behaviour. File paths are as built at
 | 2 | ES Task Agent code names | `runtime/planner.py`, `planner_prompt.py`, `PlannerBackend`, `POLICY_ATLAS_PLANNER_MODEL`, `planner_state`, `created_by='planner'`, constraint names | `runtime/task_agent.py`, `task_agent_prompt.py`, `TaskAgentBackend`, `POLICY_ATLAS_TASK_AGENT_MODEL`, `task_agent_state`, `created_by='task_agent'`, renamed constraints; version string `planner_v11` unchanged | those modules, their tests, `schema.py`, migration, `scripts/prompt_hashes.json` (path), `infra/DEPLOYMENT.md`, the staging environment value |
 | 2 | Abbreviation EB | "EB" in living specs, skills, templates, agentic-ops, code comments | "ES" | `docs/specs/**` except `sources/`; `AGENTS.md`; `.claude/skills/`; `docs/tasks/_templates/`; `docs/agentic-ops/`; five backend modules' comments. ADRs, merged task docs, past log entries and frozen sources untouched |
 | 3 | New task screen | capability cards; scoping card keyed `scoping_policy_options`, `available: false`; `NewTaskView` hard-codes `capability === "evidence_search"` | card key renamed to `options_scoping` and selectable; the hard-coded check becomes a capability switch in the form; scoping form: question · Starts from (no depth or job control) | `frontend/src/views/NewTaskView.tsx`, `lib/capabilities.ts`, `api/mutations.ts` `useCreateTask` |
-| 3 | `POST /tasks` | name, question | + `capability`, `from_task_ids[]` (additive) | `api/routers/tasks.py`, `api/contract/tasks.py` |
-| 4 | `task_link` | does not exist | new table (no option id, D13); a link whose tasks stop sharing a project is **flagged, not broken** — a read-model check at render, no column | `schema.py`, migration; API read on the plan ("Starts from") and the tasks list |
+| 3 | `POST /tasks` | name, question; projects patched afterwards by the frontend | + `capability`, `project_ids[]`, `from_task_ids[]` in one transaction (additive; C10); `useCreateTask` drops its separate patch step | `api/routers/tasks.py`, `api/contract/tasks.py`, `frontend/src/api/mutations.ts` |
+| 4 | `task_link` | does not exist | new table: `link_id`, `source_task_id`, `target_task_id`, `source_capability_run_id` (the pinned walk, C11), `created_by`, `created_at`; unique (source, target); no option id (D13); a link whose tasks stop sharing a project is **flagged, not broken** — a read-model check at render, no column (C12) | `schema.py`, migration; API read on the plan ("Starts from") and the tasks list |
 | 4 | inherit | does not exist | task-1 part: pinned runs; linked plan, report body without citations, coverage statement as Task Agent context | new module under `backend/src/policy_atlas/runtime/` (name at plan time); read models in `api/readmodels/repository.py` |
-| 5 | `plan` payload | `TaskPlan` only | `TaskPlan` or the scoping plan, chosen by `task.capability`; plan read/patch bodies gain `capability` | `runtime/task_plan.py`, `api/routers/planning.py`, `api/contract/planning.py` |
+| 5 | `plan` payload | `TaskPlan` only; `TaskPlan.model_validate` called from six readers (`runtime/agent.py`, `continuation_state.py`, `steering.py`, `api/routers/runs.py`, `sse.py`, `planning.py`) | `TaskPlan` or the scoping plan, chosen by `task.capability` through **one capability registry** (C9) that every reader uses for validation, composition and lattice membership; plan read/patch bodies gain `capability` | new `runtime/capability_registry.py` (name at plan time), `runtime/task_plan.py`, the six readers, `api/contract/planning.py` |
 | 5 | Plan document | ES sections | scoping sections (§ Plan object) | `frontend/src/views/workspace/PlanDocument.tsx`, `planVocabulary.ts`, `planStart.ts` |
 | 6 | Task Agent prompt | one prompt, `planner_v11` | prompt chosen by capability; new `task_agent_scoping_v1` offering the two depths as options | `runtime/task_agent.py` (renamed), new `runtime/task_agent_scoping_prompt.py`; `scripts/prompt_hashes.json` |
 | 7 | Chain compile | `compose(TaskPlan)` | `compose` for the scoping plan → spine + synthesise(baseline) | `runtime/task_plan.py` `compose`, `runtime/run_spec.py` |
-| 7 | synthesise | model-proposed sections validated against a cap; claim types gated by substrate | + template mode: required section list supplied, proposer bounded to ≤2 extras, per-section instruction and tool cap, not-found state, the chosen writing mode; chunk/reasoning/gap claims only for the baseline | `evidence_search/synthesis/synthesise.py` (`_validate_sections`, `available_claim_types_for_substrate`), `synthesis_backend.py`; new `synthesis/baseline_prompt.py` |
+| 7 | synthesise | model-proposed sections validated against a cap; injects Conclusions, runs key-findings and case-study passes; one global turn cap; claim types gated by substrate | + **baseline mode** (C7): required section list supplied, proposer bounded to ≤2 extras, per-section instruction and turn cap on `SectionSpec`, fixed order, not-found state, sequential writing, ES-only passes off; chunk/reasoning/gap claims only for the baseline | `evidence_search/synthesis/synthesise.py` (`synthesise_scope`, `_validate_sections`, `SectionSpec`, `available_claim_types_for_substrate`), `synthesis_backend.py`; new `synthesis/baseline_prompt.py` |
 | 7 | `evidence_scope` | intent + context; no plan pointer | + `purpose` (baseline \| longlist \| variant \| targeted; nullable) + `plan_id` (nullable FK to `plan`, composite with `task_id`) | `schema.py`, migration |
 | 8 | Steering lattice | five points, one flat table; frequent pauses after every component; `STEER_POINTS` validates every plan's standing defaults | lattice keyed by capability (A2): `baseline_confirm` after synthesise exists only in the scoping chain; `always` in attended modes; a recorded non-pausing decision in unattended (A9); the standing-default validator is capability-aware (A18d) | `runtime/steering.py` `LATTICE_POINTS`, `pause_points`, `lattice_name_for`, `lattice_policy`; `runtime/task_plan.py` `STEER_POINTS`; `api/checkin_read.py`, `api/stage_vocabulary.py` |
-| 8 | Task Agent turn at a pause | 409 `run_active` (both fences: turn and `PATCH /plan`) | non-approving turns accepted while the walk is **paused**; sorted by the gate sort (new surface) and dispatched to the chat answer path or the **existing check-in response** path; the approving branch and `PATCH /plan` stay fenced; still 409 while **running** | `api/routers/planning.py` (renamed), new gate-sort prompt + `runtime/agent_backend.py` method, `api/continuation.py` (`compile_free_text`, `confirm_free_text`, `answer_check_in`), `api/routers/check_ins.py`, the chat answer path |
-| 8 | Steering router | typed on `TaskPlan` (`apply_adjustment`, `compile_fanout`, `build_steer_point_options`); reads `backend_scope`, ES components | **modified, not reused** (A3): the plan-facing calls take a plan protocol (the fields they read) or a scoping delta grammar; ES behaviour unchanged, pinned by the existing steering tests. The largest hidden item in the slice; sized at plan time | `runtime/steering.py`, `api/continuation.py` |
+| 8 | Task Agent turn at a pause | 409 `run_active` (both fences: turn and `PATCH /plan`); `PlanningTurnOut` carries a reply only | non-approving turns accepted while the walk is **paused**; sorted by the gate sort (new surface) into question · decision and dispatched to the **answer core** (C2) or the **existing check-in response** transaction bound to run, check-in and plan version (C5); the turn row and read model become a discriminated projection (reply · answer with citations · decision); the approving branch and `PATCH /plan` stay fenced; still 409 while **running** | `api/routers/planning.py` (renamed), new gate-sort prompt + `runtime/agent_backend.py` method, `api/chat_turns.py` (answer core lifted out; route unchanged), `api/continuation.py` (`answer_check_in`), `api/routers/check_ins.py`, `api/contract/planning.py` |
+| 8 | Steering router | typed on `TaskPlan`; refuses changes to run components | **unchanged and not used at the gate** (C1 retires A3): Change the plan ends the walk and the plan is edited through the ordinary Task Agent turn | — |
 | 8 | Check-in card | ES renders | baseline card: key assumption + Settings + two options, in the Task Agent thread | `frontend/src/views/workspace/CheckInCard.tsx`, `checkInPresentation.ts` |
 | 9 | Result tab | ES artefact | baseline artefact with the band and run state | `frontend/src/views/ArtefactView.tsx`, `views/lifecycle.ts` `openTabs` |
 | 9 | Sources tab | **keep** | unchanged; shows the baseline's documents | `frontend/src/views/Sources*.tsx` |
 | 9 | Share, History tabs | **keep** | unchanged | `ShareView.tsx`, `HistoryView.tsx` |
-| — | ES Task Agent prompt, ES walk, ES Result | **keep** | prompt text word-for-word unchanged (`planner_v11`; identifier-only edits from the rename reviewed as words-only); the ES chain composes as before; ES pauses keep their card-based steering | `runtime/task_agent_prompt.py` (renamed), `runner.py`, `harness.py` |
+| — | ES Task Agent prompt, ES walk, ES Result | **keep** | the prompt file moves **byte-identical** (C14): its hash is unchanged and only the pin entry's path changes; `planner_v11` stands; the ES chain composes as before; ES pauses keep their card-based steering | `runtime/task_agent_prompt.py` (renamed), `runner.py`, `harness.py` |
 | — | Generated | via `make openapi-sync` only | OpenAPI diff: additive except the deliverable-2 path rename | `frontend/openapi.json`, `frontend/src/api/gen/types.ts` |
 
 ## Decisions (ruled by the owner, 2026-09-09)
@@ -413,9 +474,11 @@ Rows marked **keep** must not change behaviour. File paths are as built at
   at all** on the New task screen, in the plan document or in the planner's
   offer until scoping deep exists. Deferred seam.
 - **D7 — the baseline's depth grading. Replaced (owner):** one shape at both
-  depths (§ Baseline); the writing mode chosen from a build-time trial with
-  the loser deleted; a small acquisition target and a per-section cap; a
-  measured target aimed at 3 to 4 minutes; later levers recorded.
+  depths (§ Baseline); a small acquisition target and a per-section cap; a
+  measured compute target reported honestly; later levers recorded. The
+  writing-mode trial the interview agreed was withdrawn by Codex finding C6
+  (the durability contract forbids fanning out the conclusion) — proposal
+  pending the owner's ruling at re-approval.
 - **D8 — evidence restrictions apply to the baseline's acquire. Accepted
   (owner: "for simplicity … a user who applied a restriction at planning time
   would expect it applied throughout the task").** Plus the planner warns
@@ -519,6 +582,31 @@ in the code before folding. Ids A1–A18 are cited above where folded.
 | A17 | Ruling 50 (Result before assessment = longlist) and the restriction placement unflagged | minor | interim state noted; placement clause added |
 | A18 | a) card key is a rename, `NewTaskView` hard-codes the capability; b) no flag for a link whose tasks stop sharing a project; c) "none changed" vs words-only re-pin; d) `STEER_POINTS` validates any plan; e) rubric item 1 collapses ten deliverables | minor | all folded; rubric split per deliverable |
 
+Relaunched Codex lane (read-only, on commit `358e474d`, before the A-folds).
+Eighteen findings; seven restate A-findings and are marked so. Three folds
+are proposals pending the owner's ruling at re-approval (C1, C6, C16).
+
+| # | Finding | Severity | Fold |
+|---|---|---|---|
+| C1 | A gate edit cannot use the steering path (the stability rule refuses changes to run components, and every component has run) and would leave the baseline stale | material | **proposal:** Change the plan ends the walk; the plan is edited by an ordinary Task Agent turn; Confirm and build baseline rebuilds; retires A3 |
+| C2 | The chat answer path refuses paused walks; the Task Agent turn model has no citations | material | shared answer core; discriminated turn projection |
+| C3 | `evidence_scope` has no plan FK; `_persist_new_plan_version` copies the old scope id | material | = A16, plus supersession: a rebuild's intent record and the plan row point at the new version |
+| C4 | No three-way triage exists | material | = A4; the sort is question · decision under C1 |
+| C5 | Task Agent turns race the check-in response endpoint | material | bind the turn to run, check-in and plan version; barrier test |
+| C6 | Parallel section writing contradicts the durability contract ("never fan out the conclusion") | material | **proposal:** trial withdrawn; sequential writing; parallel only by owner spec revision |
+| C7 | synthesise cannot produce fixed-plus-optional sections; injects Conclusions and runs ES-only passes; one global cap | material | baseline mode defined with those passes off and per-section caps |
+| C8 | `ScopeConstraints` has no language filter; acquisition target and writing mode absent from the plan | material | languages stored, not applied, recorded as an ES gap; constants named |
+| C9 | Capability-specific validation is scattered over six readers; `STEER_POINTS` and `LATTICE_POINTS` are global | material | one capability registry; = A2/A18d mechanism |
+| C10 | "Starts from" cannot be atomic with the create-then-patch flow | material | `project_ids` and `from_task_ids` on `POST /tasks` in one transaction |
+| C11 | "Pinned source run ids" has no column, eligibility or selection rule | material | `source_capability_run_id`; succeeded or degraded only; one row per pair |
+| C12 | Same-project invariant enforced only at creation | material | = A18b; flag on read, membership-change test |
+| C13 | Rename inventory narrower than 038's | material | = A10 plus a rename manifest at plan time |
+| C14 | `planner_v11`; a re-pin and an unchanged hash cannot both hold; the deployment guide omits the old variable | material | = A1; byte-identical move, hash unchanged; no fallback code, guide updated |
+| C15 | The downgrade remedy cannot satisfy its predicate | material | = A5 |
+| C16 | Per-field turn provenance deferred against the plan-as-object rule | material | **proposal:** stamp `turn_index` per compiled field now |
+| C17 | Tasks-list depth has no API source | material | derived nullable `TaskOut.depth` |
+| C18 | Missing checks: Edit per plan section, `scoping pass` label, visible source-tier skew | minor | added to deliverables 6 and 7 and the acceptance checks |
+
 ## Scope / Out of scope
 
 - **In:** the surface-map rows above; the migration; ADR 0037; the spec
@@ -551,25 +639,29 @@ Hard gates this slice touches — approval is this contract's sign-off:
   (triage, router) reuse the existing agent backend.
 - **Public interface:** `capability` and `from_task_ids` on task create/read;
   `capability` on plan read/patch bodies with the scoping fields; check-in
-  kind `baseline_confirm`; the Task Agent turn response gains the sorted
-  outcome (answer · confirm render · decision) as additive fields; the path
+  kind `baseline_confirm`; `project_ids` on task create (C10); a derived
+  nullable `depth` on task read (C17); the Task Agent turn response becomes
+  a discriminated projection (reply · answer with citations · decision) as
+  additive fields (C2); the path
   rename `/planning-turns` → `/task-agent-turns` with no redirect (the one
   non-additive change, the 038 pattern; the frontend is the only consumer).
   Everything else additive.
 - **Prompts:** three new surfaces (`task_agent_scoping_v1`; the baseline
   template; the gate sort — A4); re-pin with
   `python3 scripts/prompt_hash_guard.py --update`. The ES Task Agent prompt's
-  version string `planner_v11` is unchanged; its hash entry moves with the
-  renamed file and any text change inside it is identifier-only, reviewed as
-  a words-only diff under 038 rule R1 (A18c). The ES section proposer's
+  version string `planner_v11` is unchanged; the file moves byte-identical,
+  so its hash is unchanged and only the pin's path changes (C14, replacing
+  the earlier words-only allowance — the rename touches no prompt text). The ES section proposer's
   prompt changes only if template mode needs a bounded-extras instruction,
   versioned and re-pinned if so (A7). The router and boundary-triage prompts
   are reused unchanged. Every other pinned hash unchanged.
 - **Production config:** one environment-variable rename,
   `POLICY_ATLAS_PLANNER_MODEL` → `POLICY_ATLAS_TASK_AGENT_MODEL`, in
   `infra/DEPLOYMENT.md` and the staging environment (approved with this
-  contract; the deploy-side value change is the owner's at merge time; the
-  code default is unchanged, so a missing value behaves as today).
+  contract; the deploy-side value change is the owner's at merge time). The
+  code default is the same model as today, so a deploy that still sets only
+  the old name behaves as before; the guide says so, and no fallback code
+  is added (C14).
   **Dependencies, CI, auth:** none. Tenancy (ADR
   0033) and public read (ADR 0035) predicates are untouched; a scoping task
   reads and shares like any task.
@@ -582,8 +674,8 @@ Contract, rubric, plan, ADR and `verification.md` are public-safe. Live-check
 evidence: screenshots of the plan and baseline on the NEET question are
 public-safe (the question is the design reference); raw acquired text, traces
 and credentials stay private. Recorded provider fixtures follow the sanitized
-fixtures policy. The writing-mode trial's sample baselines are public-safe
-once their source quotes are checked against the fixtures policy.
+fixtures policy. The three recorded baselines are public-safe once their
+source quotes are checked against the fixtures policy.
 
 ## Model route
 
@@ -591,17 +683,18 @@ OpenAI under the approved controls, behind the existing routing seam (the
 Bedrock migration is untouched). Prompt-bearing, lead-authored:
 
 - `task_agent_scoping_v1` — the Task Agent for a scoping task (deliverable 6).
-- The gate sort — question · instruction · decision on a Task Agent turn at
-  a pause (deliverable 8, A4). Mini-class, one narrow job, constrained
-  output.
+- The gate sort — question · decision on a Task Agent turn at a pause
+  (deliverable 8, A4, C1). Mini-class, one narrow job, constrained output,
+  asks back when unsure.
 - The baseline template — required and proposed sections, per-section
-  instructions and caps, the reasoning labels, the not-found rule, the join
-  step if parallel writing ships (deliverable 7).
+  instructions and caps, the reasoning labels, the not-found rule
+  (deliverable 7).
 
 Reused unchanged: screen, classify, appraise, the synthesise section writer
-and grounding judge, the boundary triage, the chat answer path. Modified, not
-reused: the steering router's plan-facing calls (A3) and synthesise's section
-selection (template mode, A7).
+and grounding judge, the boundary triage, the steering router (not used at
+the gate — C1). Modified, not reused: synthesise's section selection and
+passes (baseline mode, A7, C7) and the chat's answer, lifted into a shared
+answer core (C2).
 The intent record's text is compiled deterministically from the plan, not
 written by a model.
 
@@ -618,8 +711,8 @@ written by a model.
   recorded and flagged (D11).
 - **Generation is free, interpretation is labelled, assessment is grounded**
   (OS trust). The baseline asserts nothing about options.
-- **No code bloat (owner).** The writing-mode trial ships one mode; the other
-  is deleted, with the samples kept in `verification.md`.
+- **No code bloat (owner).** One writing mode (sequential, C6); no trial
+  code ships.
 - Deferred seams go to [docs/deferred.md](../../deferred.md): per-field turn
   provenance; Search further; inherited document rows (task 2 pointer);
   `task_link.option_id`; scoping deep; the later latency levers; the Task
@@ -657,10 +750,13 @@ turn/token budget is spent.
     path is 404; the version string `planner_v11` is still emitted.
     The EB → ES sweep is checked once by grep and recorded in
     `verification.md`, not as a permanent test.
-  - `task_link`: source ≠ target; unique pair; same-project rule (409);
-    archive of a task with inbound links keeps the row; a link whose tasks no
-    longer share a project renders flagged and is not deleted (A18b); a link
-    grants no read (an org-scoped read test in the ADR 0033 style).
+  - `task_link`: source ≠ target; unique pair; same-project rule (409)
+    checked inside the one-transaction create (C10); the pinned
+    `source_capability_run_id` must be a `succeeded` or `degraded` walk of
+    the source task (C11); archive of a task with inbound links keeps the
+    row; a link whose tasks no longer share a project renders flagged and is
+    not deleted (A18b, C12); a link grants no read (an org-scoped read test
+    in the ADR 0033 style).
   - inherit context: the fenced documents carry the linked plan, the report
     body with no citation markers and no reference list, and the coverage
     statement; one block per linked task; stable position after the system
@@ -669,7 +765,11 @@ turn/token budget is spent.
     defaults to United Kingdom tagged assumed; constraint kinds and
     `checked_at` closed; Your context entries keep verbatim text and turn
     index; an ES task rejects a scoping payload and the reverse; the default
-    steering mode is moderate and is never asked.
+    steering mode is moderate and is never asked; every compiled field
+    carries its `turn_index` (C16); a language restriction is stored and
+    shown as not applied at retrieval (C8); every reader validates through
+    the capability registry (C9 — a test that no caller imports
+    `TaskPlan.model_validate` directly).
   - compile: the scoping plan composes acquire → screen → classify →
     appraise → ingest → synthesise(baseline) and nothing else; the intent
     record carries `purpose=baseline` and the `plan_id` of the approved
@@ -680,8 +780,9 @@ turn/token budget is spent.
     after "what is contested"; a section with no support renders the
     not-found state; the key assumption and what is contested carry the
     tier-4 label; the baseline's claims are chunk, reasoning or gap only
-    (A7); if parallel ships, the join step's repair changes a conflicting
-    section, writes no new element and never emits a disagreement label.
+    (A7); the Conclusions injection, key-findings and case-study passes do
+    not run in baseline mode (C7); the baseline carries the `scoping pass`
+    label and a visible source-tier skew line (C18).
   - gate: `baseline_confirm` pauses under frequent, moderate and minimal;
     under unattended no pause occurs and a decision event with
     `decided_by: standing_default` and a flag is written at the boundary
@@ -694,27 +795,35 @@ turn/token budget is spent.
     it; an ES plan rejects a `baseline_confirm` standing default (A18d); the
     existing steering tests pass unchanged.
   - gate turns: a non-approving Task Agent turn while paused is accepted and
-    sorted; a question produces a grounded answer citing baseline sources; an
-    instruction produces the check-in path's compiled deltas and confirm
-    token and applies only on confirm; a decision in words lands in the
-    check-in response transaction, and a concurrent card answer is 409
-    `already_answered` (A13); a mixed turn answers first and never infers a
-    decision; the approving branch and `PATCH /plan` are 409 `run_active`
-    while paused (A6); a turn while running is 409 `run_active`; an ES
-    task's pause still refuses turns (ES unchanged).
+    sorted; a question produces a grounded answer citing baseline sources
+    through the answer core, and the chat route still refuses a paused walk
+    (C2); a decision in words lands in the check-in response transaction
+    bound to run, check-in and plan version, and a barrier test racing it
+    against `POST .../check-ins/{id}/response` yields exactly one durable
+    decision (A13, C5); "Change the plan" (card or words) ends the walk
+    `aborted` with the decision recorded, the next Task Agent turn is
+    accepted and mints a new plan version, and Confirm and build baseline
+    starts a new walk whose intent record and `plan.evidence_scope_id` point
+    at the new version (C1, C3); a mixed turn answers first and never infers
+    a decision; an unsortable turn is asked back; the approving branch and
+    `PATCH /plan` are 409 `run_active` while paused (A6); a turn while
+    running is 409 `run_active`; an ES task's pause still refuses turns (ES
+    unchanged).
   - ES regression: `planner_v11` version string and prompt text unchanged; `compose(TaskPlan)` output
     unchanged (existing tests); ES steering tests unchanged.
   - frontend (vitest): New task form states (question and Starts from only,
     Starts from restricted to same-project Evidence search tasks; no depth
-    or job control); plan document
-    renders every scoping section; tasks list shows kind and depth; the Task
-    Agent thread renders a gate question, an instruction's confirm render and
-    the check-in card with two options; Result shows the band and run state.
+    or job control; one create request); plan document renders every scoping
+    section with its Edit action (C18); the tasks list shows the derived
+    depth and nothing when there is no approved plan (C17); the Task Agent
+    thread renders a gate question with citations, a Change-the-plan decision
+    and the check-in card with two options; Result shows the band, the run
+    state and the "built from plan version N" mark after a plan change.
 - **No AI eval in this slice.** Baseline quality is judge behaviour and goes
-  to the eval slice. `verification.md` records the writing-mode trial (two
-  questions, both modes, compute times, consistency reading) and three live
-  baselines (NEET; one thin-evidence structural question; one linked start)
-  read against the trust rules as a qualitative note, not a pass/fail gate.
+  to the eval slice. `verification.md` records three live baselines (NEET;
+  one thin-evidence structural question; one linked start) with their
+  compute times, read against the trust rules as a qualitative note, not a
+  pass/fail gate.
 - **Live check (pinned scope, ~25 minutes):** local app, real egress.
   (a) Seed one Evidence search task on NEET with a completed report.
   (b) New task → Options scoping → question · Starts from the seeded task →
@@ -725,9 +834,10 @@ turn/token budget is spent.
   and build baseline: the walk runs, Result opens on the baseline with the
   band and its Sources section naming what was not searched, the Sources tab
   lists the documents; compute time recorded. (e) In the same thread: one question about the baseline
-  answered with citations; one instruction ("change Where to England")
-  compiled, confirmed, new plan version, still paused. (f) Confirm → History
-  shows the decision; the Result says the longlist arrives with the next
+  answered with citations; then "change Where to England" → the walk ends,
+  the Task Agent applies the change as a new plan version, Confirm and build
+  baseline rebuilds (second compute time recorded). (f) Confirm → History
+  shows both decisions; the Result says the longlist arrives with the next
   stage. (g) ES smoke: New task → Evidence search → two Task Agent turns →
   an approved plan (no run; the shared turn path is what this slice
   touches; the ES walk is covered by tests). No full ES live e2e.
@@ -736,8 +846,8 @@ turn/token budget is spent.
 
 Command tails; the migration round-trip output; the rename sweep result; the
 OpenAPI diff (additive except the path rename); the prompt-hash diff (three
-new entries; the ES Task Agent entry moved, any text change identifier-only); the writing-mode trial record and the owner's pick;
-measured triage and router latency at the gate; live-check notes and
+new entries; the ES Task Agent entry's path moved, hash unchanged); the
+rename manifest (C13); measured gate-sort latency; live-check notes and
 screenshots for (a)–(g); the three baselines' qualitative note; the spec
 diffs with quoted rulings; the `docs/deferred.md` delta; known gaps.
 
