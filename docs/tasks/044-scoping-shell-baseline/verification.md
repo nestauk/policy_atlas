@@ -118,6 +118,29 @@ revision, its round-trip and the hand-edited historical tests). Dispositions:
 | 7 | Migration docstring claimed a `pg_constraint` pre-check that did not exist | **fixed**: the check is implemented (upgrade and downgrade), with a test |
 | 8 | Engine extraction changed the 038 tool's scan headings, refusal text and `is_dir` sentinel | **fixed**: carried as table fields with the 038 values |
 
+### Phase 1 hand-edit record (replay of the sweep against the commit)
+
+Replayed from `5854676a` (the last commit with `planner.py`) with the fixed
+tools (`fed7622f`): `git mv` list → `--apply` phases 3, 4, 5 → `ruff --fix` →
+`make openapi-sync`, diffed against `e4128528`. Thirty-two files differ only
+where the fixed tool now writes "Task Agent <noun>" in prose that the commit
+had left as `task_agent <noun>` — the replay is the better text and those
+strings were hand-fixed afterwards (`fed7622f` and the Phase 2 commit). The
+edits the sweep does not reproduce, by design:
+
+| File | Hand edit |
+|---|---|
+| `tests/core/test_migration_038.py` | catalog assertion moved to `c1a7f4e9b0d2`; deploy-window write `created_by="task_agent"` |
+| `tests/core/test_migrations_029.py`, `test_migrations_028.py`, `test_planning_transcript_migration.py` | head-side reads on the new table and kind; `legacy_table` below the revision |
+| `tests/api/test_api_conformance.py` | the `agent` leaked-name invariant strips the product words `task-agent`/`task_agent`/`taskagent` first |
+| `infra/DEPLOYMENT.md` | the "Renamed in task 044" note (old name written by hand after the sweep mangled it) |
+| `frontend/src/views/workspace/chat/conversationState.ts` | `const taskAgent` (a snake-case TS local) |
+| `docs/knowledge/synthesise-is-run-terminus.md`, `coverage-base-project-pool-wide.md` | EB → ES (outside the manifest's 13-file list; deviation 4) |
+| `docs/specs/capabilities/options-scoping/{components,capability}.md` | EB → ES inside fenced ASCII diagrams (the tool skips code fences) |
+| `frontend/src/views/historyPresentation.{ts,test.ts}`, `chat/ChatMessages.{tsx,test.tsx}` | "The Task Agent replied", "Open Task Agent" |
+| `tests/api/test_task_agent_router.py` | one signature wrapped for the line limit |
+| `runtime/task_agent.py` | module docstring "``planner_v1`` planning call" |
+
 ### Phase 4.1 — the template-keyed section writer (2026-09-09, lead)
 
 `synthesis_backend.py`'s `SECTION_SYSTEM_PROMPT` is now `SECTION_REPORT_PREAMBLE
