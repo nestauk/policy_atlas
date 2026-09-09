@@ -318,7 +318,7 @@ def test_the_card_quotes_the_key_assumption_when_the_artefact_has_one() -> None:
     assert render.splitlines()[0] == GATE_HEADING
     assert "Key assumption: The current offer does not reach" in render
     assert "Outcomes: the NEET rate; youth wages" in render
-    assert "Depth: rapid" in render
+    assert "Depth: Rapid scoping" in render
 
 
 def test_the_card_states_an_absent_key_assumption(engine: Engine) -> None:
@@ -326,3 +326,17 @@ def test_the_card_states_an_absent_key_assumption(engine: Engine) -> None:
     del engine
     assert KEY_ASSUMPTION_ABSENT in render_baseline_gate({"settings": {}})
     assert KEY_ASSUMPTION_ABSENT in render_baseline_gate({"key_assumption": "   "})
+
+
+def test_render_shows_the_depth_screen_label_not_the_key() -> None:
+    """A8: the card of record never prints the internal depth key."""
+    from policy_atlas.runtime.baseline_gate import render_baseline_gate
+
+    text = render_baseline_gate(
+        {
+            "key_assumption": None,
+            "settings": {"target_unit": "x", "where": "y", "outcomes": ["z"], "depth": "standard"},
+        }
+    )
+    assert "Depth: Standard scoping" in text
+    assert "Depth: standard" not in text

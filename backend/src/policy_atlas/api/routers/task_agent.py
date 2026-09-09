@@ -92,6 +92,8 @@ from policy_atlas.runtime.scoping_plan import (
     SCOPING_STEPS,
     BaselineConfirmed,
     ScopingPlan,
+    baseline_inputs_changed,
+    baseline_inputs_sentence,
     build_scoping_plan,
 )
 from policy_atlas.runtime.task_agent import TaskAgentBackend
@@ -293,17 +295,56 @@ def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
             "paused on the baseline, which was built from plan version "
             f"{int(paused_version)}"
         )
+    version = _baseline_built_from(conn, task_id)
+    if version is None:
+        return NO_BASELINE_STATE
+    return f"a baseline exists, built from plan version {int(version)}"
+
+
+def _baseline_built_from(conn: Connection, task_id: uuid.UUID) -> int | None:
+    """Return the plan version the latest existing baseline was built from.
+
+    A baseline exists once its walk finished writing it: ``succeeded`` (the
+    gate confirmed), ``degraded``, or ``aborted`` by "Change the plan" — the
+    artefact stays on screen marked *built from plan version N* (C1), so a
+    later edit is still measured against it.
+    """
     version = conn.execute(
         select(capability_run.c.plan_version)
         .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.capability == OPTIONS_SCOPING)
-        .where(capability_run.c.status == "succeeded")
+        .where(capability_run.c.status.in_(("succeeded", "degraded", "aborted")))
         .order_by(capability_run.c.started_at.desc())
         .limit(1)
     ).scalar_one_or_none()
-    if version is None:
-        return NO_BASELINE_STATE
-    return f"a baseline exists, built from plan version {int(version)}"
+    return int(version) if version is not None else None
+
+
+def _inputs_changed_sentence(
+    conn: Connection, task_id: uuid.UUID, approved: ScopingPlan
+) -> str | None:
+    """The deterministic "did the change touch the baseline's inputs" sentence (S4).
+
+    Returns ``None`` when no baseline exists yet or the baseline's own plan
+    version cannot be read.
+    """
+    built_from = _baseline_built_from(conn, task_id)
+    if built_from is None:
+        return None
+    row = conn.execute(
+        select(task_plan.c.payload)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.version == built_from)
+    ).mappings().one_or_none()
+    if row is None:
+        return None
+    try:
+        previous = validate_plan(OPTIONS_SCOPING, row["payload"])
+    except ValidationError:
+        return None
+    if not isinstance(previous, ScopingPlan):
+        return None
+    return baseline_inputs_sentence(baseline_inputs_changed(previous, approved), built_from)
 
 
 def _load_approved_scoping_plan(
@@ -1046,6 +1087,14 @@ def create_task_agent_turn(
             except (ValidationError, ValueError):
                 ready = False
         part = _validated_part(turn.part, scoping=scoping)
+        reply_text = turn.reply
+        if scoping and approved is not None:
+            # A plan change after a baseline exists: say, deterministically,
+            # whether it touched what the baseline was built from (S4, C1).
+            with engine.connect() as conn:
+                sentence = _inputs_changed_sentence(conn, task_id, cast(ScopingPlan, approved))
+            if sentence is not None:
+                reply_text = f"{turn.reply.rstrip()}\n\n{sentence}"
         if scoping:
             scoping_draft = (
                 _scoping_draft_from_plan(cast(ScopingPlan, approved))
@@ -1053,7 +1102,7 @@ def create_task_agent_turn(
                 else _scoping_draft_from_wire(turn.plan_draft, ready=ready)
             )
             result = TaskAgentTurnOut(
-                reply=turn.reply,
+                reply=reply_text,
                 plan=None,
                 scoping_plan=scoping_draft,
                 capability=OPTIONS_SCOPING,
@@ -1080,7 +1129,7 @@ def create_task_agent_turn(
                 conversation_id=conversation_id,
             )
         phase_two_values = {
-            "reply": turn.reply,
+            "reply": result.reply,
             "task_agent_state": turn.plan_draft.model_dump(mode="json"),
             "response": result.model_dump(mode="json"),
             "part": part.model_dump(mode="json") if part is not None else None,

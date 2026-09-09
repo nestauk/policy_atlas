@@ -545,6 +545,74 @@ def _constraint_from_wire(wire: ScopingConstraintWire, index: int) -> ScopingCon
     )
 
 
+# The six inputs the baseline is built from (contract deliverable 8, plan S4):
+# a change to any of them leaves the baseline stale against the plan that did
+# not produce it. Compared deterministically between plan versions; the
+# sentence is code-authored so the Task Agent never guesses at it.
+BASELINE_INPUT_NAMES: dict[str, str] = {
+    "question": "the question",
+    "intended_change": "the intended change",
+    "target_unit": "who or what should change",
+    "where": "Where",
+    "outcomes": "the outcomes",
+    "evidence_restrictions": "an evidence restriction",
+}
+
+
+def baseline_inputs_changed(previous: ScopingPlan, current: ScopingPlan) -> list[str]:
+    """Return the screen names of the baseline inputs that differ between two plans.
+
+    Args:
+        previous: The plan version the baseline was built from.
+        current: The plan version just approved.
+
+    Returns:
+        Names in ``BASELINE_INPUT_NAMES`` order; empty when no input moved.
+    """
+
+    def restrictions(plan: ScopingPlan) -> list[tuple[Any, ...]]:
+        return sorted(
+            (
+                c.text,
+                c.country_group.model_dump(mode="json") if c.country_group else None,
+                c.published_after,
+                c.published_before,
+                tuple(c.languages or ()),
+            )
+            for c in plan.constraints
+            if c.kind == "evidence_restriction"
+        )
+
+    probes: dict[str, tuple[Any, Any]] = {
+        "question": (previous.question, current.question),
+        "intended_change": (previous.intended_change.text, current.intended_change.text),
+        "target_unit": (previous.target_unit.text, current.target_unit.text),
+        "where": (previous.where.text, current.where.text),
+        "outcomes": ([o.text for o in previous.outcomes], [o.text for o in current.outcomes]),
+        "evidence_restrictions": (restrictions(previous), restrictions(current)),
+    }
+    return [BASELINE_INPUT_NAMES[k] for k, (a, b) in probes.items() if a != b]
+
+
+def baseline_inputs_sentence(changed: list[str], built_from: int) -> str:
+    """The code-authored sentence the Task Agent's reply carries after a plan change.
+
+    Args:
+        changed: The output of :func:`baseline_inputs_changed`.
+        built_from: The plan version the existing baseline was built from.
+    """
+    if changed:
+        return (
+            f"This change touches what the baseline (built from plan version {built_from}) "
+            f"was built from: {', '.join(changed)}. You can rebuild the baseline, or confirm "
+            "the plan against it as it stands."
+        )
+    return (
+        f"This change does not touch what the baseline (built from plan version {built_from}) "
+        "was built from. You can confirm the plan against it as it stands, or rebuild it."
+    )
+
+
 def build_scoping_plan(
     draft: ScopingPlanDraftWire,
     *,

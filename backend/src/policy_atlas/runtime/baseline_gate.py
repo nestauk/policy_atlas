@@ -130,6 +130,10 @@ def build_baseline_bundle(
     }
 
 
+# Screen words for the one dial (A8: never the internal key on a rendered card).
+DEPTH_LABEL: dict[str, str] = {"rapid": "Rapid scoping", "standard": "Standard scoping"}
+
+
 def render_baseline_gate(bundle: dict[str, Any]) -> str:
     """Render the gate card deterministically from its bundle.
 
@@ -157,7 +161,7 @@ def render_baseline_gate(bundle: dict[str, Any]) -> str:
                 f"Where: {settings.get('where')}",
                 "Outcomes: "
                 + ("; ".join(str(item) for item in outcomes) if isinstance(outcomes, list) else ""),
-                f"Depth: {settings.get('depth')}",
+                f"Depth: {DEPTH_LABEL.get(str(settings.get('depth')), settings.get('depth'))}",
             ]
         )
     return "\n".join(lines)

@@ -482,7 +482,9 @@ def test_change_the_plan_with_an_instruction_ends_the_walk_and_replans(
         assert body["decision"]["capability_run_id"] == str(walk_id)
         assert body["decision"]["check_in_id"] == str(check_in_id)
         assert body["scoping_plan"]["ready"] is True
-        assert body["reply"] == "Plan updated."
+        assert body["reply"].startswith("Plan updated.")
+        # S4: the code-authored sentence names the baseline input that moved.
+        assert "built from plan version 1) was built from: Where" in body["reply"]
         # The planner answered the carried instruction, not the whole utterance.
         assert agent.messages == [_CHANGE_WHERE]
 

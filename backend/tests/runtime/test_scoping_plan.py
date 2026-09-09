@@ -347,3 +347,24 @@ def test_a_linked_plan_round_trips_through_its_stored_json_payload() -> None:
     back = validate_plan(OPTIONS_SCOPING, plan.model_dump(mode="json"))
     assert isinstance(back, ScopingPlan)
     assert back.linked_task_ids == [source]
+
+
+def test_baseline_inputs_changed_names_only_the_inputs_that_moved() -> None:
+    """S4: the six baseline inputs are compared deterministically; a preference
+    is not one of them, Where is."""
+    from policy_atlas.runtime.scoping_plan import (
+        baseline_inputs_changed,
+        baseline_inputs_sentence,
+    )
+
+    base = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    same = base.model_copy(deep=True)
+    assert baseline_inputs_changed(base, same) == []
+    moved = base.model_copy(
+        deep=True, update={"where": base.where.model_copy(update={"text": "Scotland"})}
+    )
+    assert baseline_inputs_changed(base, moved) == ["Where"]
+    assert "touches what the baseline (built from plan version 2)" in baseline_inputs_sentence(
+        ["Where"], 2
+    )
+    assert "does not touch" in baseline_inputs_sentence([], 2)
