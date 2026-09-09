@@ -138,7 +138,38 @@ commits a scoping task must clean it up.
 **Counts pinned:** the supplied baseline section list is seven model-written
 sections plus the code-rendered Sources = 8 = `SECTION_CAP`.
 
-_(Phase 3 frontend, Phase 4 … Phase 7 rows are appended as each phase closes.)_
+### Phase 3 (frontend: 3.4) — commit f2c89752 (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make frontend-verify` | pass | 676 tests / 80 files; lint 0 errors; build clean |
+| `cd frontend && pnpm e2e` | pass | 12/12 (new `scoping.spec.ts`: New task → Options scoping → Prepare plan → plan document) |
+
+Start-action states are driven by the latest baseline walk's own status
+(build · none while running or paused · confirmed · rebuild-or-confirm); the
+lead corrected the worker's first "newer version" heuristic, which would have
+offered `confirm-baseline` while the walk was paused (409). Commit gated by
+the frontend lane only: the backend suite was under concurrent Phase 5
+edits at the time; the full `make verify` follows at the Phase 5 boundary.
+
+### Phase 4.2 — baseline mode — commit cd92b1e8 (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `pytest tests/evidence_search/synthesis tests/runtime/test_scoping_compose.py tests/runtime/test_scoping_plan.py tests/runtime/test_runner.py tests/runtime/test_progress.py` (fresh DB) | pass | 331 passed; 15 baseline tests |
+| `make prompt-guard` | pass | 16 unchanged after the `BASELINE_ARTEFACT_TITLE` re-pin |
+| `make verify-fast` (shared DB, concurrent edits) | red, attributed | 45 failures, all from Phase 5.2's in-flight `ContinuationState(capability)` change and the stranded-row cascade it caused; none in synthesis. Full gate at the Phase 5 boundary |
+
+**Lead rulings during 4.2:** the two further ES-shaped passes (most-relevant-
+source notes, full-report intro) are off in baseline mode as well (five
+passes total); `turn_cap` is emitted by the compiler so the grammar key is
+live; the artefact title is the Baseline board's; `section_set.source`
+unchanged. Sources counts come from the appraised set (grey vs academic by
+acquisition backend — the only honest signal; no literature-kind column
+exists) and the restrictions from the approved plan row, since the scope
+context carries only target unit, where and outcomes.
+
+_(Phase 4.3/4.4, Phase 5 … Phase 7 rows are appended as each phase closes.)_
 
 ## Checks beyond the build
 
