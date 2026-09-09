@@ -368,3 +368,17 @@ def test_baseline_inputs_changed_names_only_the_inputs_that_moved() -> None:
         ["Where"], 2
     )
     assert "does not touch" in baseline_inputs_sentence([], 2)
+
+
+def test_wire_draft_from_plan_round_trips_into_a_ready_build() -> None:
+    """After a finished walk the successor conversation is seeded from the
+    executed plan; the seed must be a wire draft the builder accepts again."""
+    from policy_atlas.runtime.scoping_plan import wire_draft_from_plan
+    from policy_atlas.runtime.task_agent_scoping_prompt import ScopingPlanDraftWire
+
+    plan = build_scoping_plan(_ready_draft(), linked_task_ids=[])
+    wire = ScopingPlanDraftWire.model_validate(wire_draft_from_plan(plan))
+    again = build_scoping_plan(wire, linked_task_ids=[])
+    assert again.where == plan.where
+    assert again.depth == plan.depth
+    assert [c.text for c in again.constraints] == [c.text for c in plan.constraints]

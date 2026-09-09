@@ -613,6 +613,63 @@ def baseline_inputs_sentence(changed: list[str], built_from: int) -> str:
     )
 
 
+def wire_draft_from_plan(plan: ScopingPlan) -> dict[str, Any]:
+    """Project an approved scoping plan back into the Task Agent's wire draft.
+
+    The successor conversation after a finished walk is seeded from the
+    executed plan (as the Evidence search seeds from ``TaskPlan``): the draft
+    the model sees is the plan's own fields in ``ScopingPlanDraftWire`` shape,
+    so an edit after the baseline starts from what ran, not from nothing.
+
+    Args:
+        plan: The approved scoping plan.
+
+    Returns:
+        A ``ScopingPlanDraftWire``-shaped dict (JSON types only).
+    """
+    payload = plan.model_dump(mode="json")
+    constraints = []
+    for c in payload.get("constraints", []):
+        group = c.get("country_group")
+        constraints.append(
+            {
+                "text": c["text"],
+                "kind": c["kind"],
+                "origin": c["origin"],
+                "checked_at": c["checked_at"],
+                "country_group": (
+                    {"label": group["label"], "countries": group.get("countries")}
+                    if isinstance(group, dict)
+                    else None
+                ),
+                "published_after": c.get("published_after"),
+                "published_before": c.get("published_before"),
+                "languages": c.get("languages"),
+            }
+        )
+    return {
+        "title": payload.get("title"),
+        "question": payload.get("question"),
+        "intended_change": payload.get("intended_change"),
+        "target_unit": payload.get("target_unit"),
+        "where": payload.get("where"),
+        "outcomes": payload.get("outcomes"),
+        "depth": payload.get("depth"),
+        "constraints": constraints,
+        "your_context": [
+            {"text": e["text"], "type": e["type"], "test_as_condition": e["test_as_condition"]}
+            for e in payload.get("your_context", [])
+        ],
+        "steering_mode": payload.get("steering_mode"),
+        "steer_point_defaults": [
+            {"steer_point": d["steer_point"], "action": d["action"]}
+            for d in payload.get("steer_point_defaults", [])
+        ]
+        or None,
+        "assumptions": payload.get("assumptions") or None,
+    }
+
+
 def build_scoping_plan(
     draft: ScopingPlanDraftWire,
     *,

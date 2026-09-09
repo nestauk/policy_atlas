@@ -95,6 +95,7 @@ from policy_atlas.runtime.scoping_plan import (
     baseline_inputs_changed,
     baseline_inputs_sentence,
     build_scoping_plan,
+    wire_draft_from_plan,
 )
 from policy_atlas.runtime.task_agent import TaskAgentBackend
 from policy_atlas.runtime.task_agent_prompt import PlanDraftWire
@@ -546,11 +547,12 @@ def _task_agent_inputs(
         .limit(1)
     ).scalar_one_or_none()
     if plan_payload is not None:
-        seed = seed_draft_from_executed_plan(
-            expect_task_plan(
-                validate_plan(capability_of_task(conn, task_id), plan_payload)
-            )
-        )
+        executed = validate_plan(capability_of_task(conn, task_id), plan_payload)
+        if isinstance(executed, ScopingPlan):
+            # The scoping successor is seeded from the plan that ran (task 044);
+            # the ES seed below is the Evidence search's own projection.
+            return [], cast("dict[str, object]", wire_draft_from_plan(executed))
+        seed = seed_draft_from_executed_plan(expect_task_plan(executed))
         return [], cast("dict[str, object]", seed.model_dump(mode="json"))
     return turns, previous_draft
 
