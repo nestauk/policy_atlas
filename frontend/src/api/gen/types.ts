@@ -816,6 +816,38 @@ export interface paths {
         patch: operations["patch_plan_api_v1_tasks__task_id__plan_patch"];
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/plan/confirm-baseline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Baseline
+         * @description Record that a plan version was confirmed against its baseline.
+         *
+         *     "Confirm plan and build longlist" cannot be a steering event: by the time
+         *     the user presses it the walk has ended, and a steering event needs a
+         *     ``capability_run`` to hang on (S4, X5). So the confirmation is
+         *     **plan-scoped** — a new approved plan version carrying
+         *     ``baseline_confirmed`` — which History already renders and which task 2's
+         *     longlist walk will read as its opening decision.
+         *
+         *     Idempotent by construction: confirming the same ``(artefact_id,
+         *     plan_version)`` pair that the current version already records returns that
+         *     version unchanged rather than minting an identical one, so a double-tap
+         *     does not fill the plan's history with duplicates.
+         */
+        post: operations["confirm_baseline_api_v1_tasks__task_id__plan_confirm_baseline_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}/runs": {
         parameters: {
             query?: never;
@@ -905,6 +937,13 @@ export interface paths {
         /**
          * Create Task Agent Turn
          * @description Advance one task's durable task_agent conversation once per client turn id.
+         *
+         *     Two capabilities share this route, and everything durable about it — the
+         *     phase-one reservation, the idempotency key, the run fences, the transaction
+         *     that joins the turn to the plan it approved — is shared with them. What the
+         *     capability picks is which Task Agent is called, which plan model validates
+         *     what it returns, and which of the two draft projections the turn carries
+         *     back (task 044, C9).
          */
         post: operations["create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post"];
         delete?: never;
@@ -1132,6 +1171,23 @@ export interface components {
             institutions?: string[];
             /** Name */
             name: string;
+        };
+        /**
+         * BaselineConfirmedOut
+         * @description The record that a plan version was confirmed against a baseline.
+         *
+         *     Args:
+         *         artefact_id: The baseline artefact the user read.
+         *         plan_version: The plan version they confirmed.
+         */
+        BaselineConfirmedOut: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             */
+            artefact_id: string;
+            /** Plan Version */
+            plan_version: number;
         };
         /**
          * BlockOut
@@ -1622,6 +1678,23 @@ export interface components {
              * @constant
              */
             type: "completed";
+        };
+        /**
+         * ConfirmBaselineIn
+         * @description Inbound body for `POST /api/v1/tasks/{id}/plan/confirm-baseline`.
+         *
+         *     Args:
+         *         artefact_id: The baseline artefact the user read.
+         *         plan_version: The plan version they are confirming.
+         */
+        ConfirmBaselineIn: {
+            /**
+             * Artefact Id
+             * Format: uuid
+             */
+            artefact_id: string;
+            /** Plan Version */
+            plan_version: number;
         };
         /**
          * ConversationCreate
@@ -2751,12 +2824,22 @@ export interface components {
          * @description Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.
          *
          *     Args:
-         *         plan: The current plan (draft or approved).
+         *         plan: The current Evidence search plan, or null on a scoping task.
+         *         scoping: The current options-scoping plan, or null on an Evidence
+         *             search task.
+         *         capability: Which of the two the task is, so a reader never has to
+         *             infer it from which field is null.
          *         version: Plan row version.
          *         status: Plan status (e.g. `draft`, `approved`).
          */
         PlanOut: {
-            plan: components["schemas"]["PlanDraft"];
+            /**
+             * Capability
+             * @default evidence_search
+             */
+            capability: string;
+            plan?: components["schemas"]["PlanDraft"] | null;
+            scoping?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Status */
             status: string;
             /** Version */
@@ -2783,6 +2866,9 @@ export interface components {
          *             empty to clear.
          *         geography: Country, ISO code, or pinned group label, or empty to
          *             clear geography filters.
+         *         scoping: Options-scoping edits. Mutually exclusive with every field
+         *             above: an Evidence search field on a scoping task, or `scoping` on
+         *             an Evidence search task, is a 422.
          */
         PlanPatchIn: {
             /** Analysis Depth */
@@ -2797,6 +2883,7 @@ export interface components {
             published_before?: string | null;
             /** Question */
             question?: string | null;
+            scoping?: components["schemas"]["ScopingPlanPatch"] | null;
             /** Screening Criteria */
             screening_criteria?: string[] | null;
             /** Search Effort */
@@ -3126,6 +3213,166 @@ export interface components {
             publisher_source: "apo" | null;
         };
         /**
+         * ScopingConstraintOut
+         * @description One typed constraint or preference on a scoping plan.
+         *
+         *     Args:
+         *         text: The user's ask.
+         *         kind: What the constraint is about.
+         *         origin: Where it came from.
+         *         checked_at: When it bites; fixed by `kind`.
+         *         country_group: Source-origin restriction, when there is one.
+         *         published_after: ISO date floor, when there is one.
+         *         published_before: ISO date ceiling, when there is one.
+         *         languages: Language names. Stored and shown as not yet applied at
+         *             retrieval — the search grammar has no language filter.
+         */
+        ScopingConstraintOut: {
+            /**
+             * Checked At
+             * @enum {string}
+             */
+            checked_at: "longlist" | "assessment" | "retrieval";
+            country_group?: components["schemas"]["CountryGroupDraft"] | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "requirement" | "preference" | "evidence_restriction";
+            /** Languages */
+            languages?: string[] | null;
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "from_your_question" | "assumed" | "your_call";
+            /** Published After */
+            published_after?: string | null;
+            /** Published Before */
+            published_before?: string | null;
+            /** Text */
+            text: string;
+        };
+        /**
+         * ScopingPlanDraft
+         * @description Draft or approved options-scoping plan, as surfaced to the client.
+         *
+         *     Mirrors the runtime `ScopingPlan` field-by-field. Every field except
+         *     `steps`/`ready` may be `None`/absent while drafting.
+         *
+         *     Args:
+         *         title: Short user-visible name for the task.
+         *         question: The user's ask.
+         *         intended_change: What we are trying to change.
+         *         target_unit: Who or what should change.
+         *         where: The jurisdiction the policy would apply to.
+         *         outcomes: The outcomes evidence is read against.
+         *         depth: The scoping depth the user chose.
+         *         constraints: Typed constraints and preferences.
+         *         your_context: The user's own situation, verbatim.
+         *         entry_branch: `explore` is the only branch in this release.
+         *         linked_task_ids: The tasks this plan starts from.
+         *         steering_mode: Check-in cadence for the run.
+         *         steer_point_defaults: Standing instructions.
+         *         assumptions: Every guess the plan is making.
+         *         steps: The three display steps, in order.
+         *         time_band: The coarse compute band for the baseline.
+         *         baseline_confirmed: The confirm-baseline record, once written.
+         *         ready: Whether the draft has validated into an executable plan.
+         */
+        ScopingPlanDraft: {
+            /** Assumptions */
+            assumptions?: string[] | null;
+            baseline_confirmed?: components["schemas"]["BaselineConfirmedOut"] | null;
+            /** Constraints */
+            constraints?: components["schemas"]["ScopingConstraintOut"][] | null;
+            /** Depth */
+            depth?: ("rapid" | "standard") | null;
+            /** Entry Branch */
+            entry_branch?: "explore" | null;
+            intended_change?: components["schemas"]["TaggedOut"] | null;
+            /** Linked Task Ids */
+            linked_task_ids?: string[] | null;
+            /** Outcomes */
+            outcomes?: components["schemas"]["TaggedOut"][] | null;
+            /** Question */
+            question?: string | null;
+            /**
+             * Ready
+             * @default false
+             */
+            ready: boolean;
+            /** Steer Point Defaults */
+            steer_point_defaults?: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
+            /** Steering Mode */
+            steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
+            /** Steps */
+            steps?: components["schemas"]["PlanStep"][];
+            target_unit?: components["schemas"]["TaggedOut"] | null;
+            /** Time Band */
+            time_band?: string | null;
+            /** Title */
+            title?: string | null;
+            where?: components["schemas"]["TaggedOut"] | null;
+            /** Your Context */
+            your_context?: components["schemas"]["YourContextOut"][] | null;
+        };
+        /**
+         * ScopingPlanPatch
+         * @description Typed replace-field edits for a scoping plan.
+         *
+         *     Omitted fields stay as they are; a supplied field replaces its counterpart
+         *     outright. The merged result must still be a valid executable scoping plan.
+         *
+         *     Args:
+         *         intended_change: Replacement intended change.
+         *         target_unit: Replacement target unit.
+         *         where: Replacement jurisdiction.
+         *         outcomes: Replacement outcome list.
+         *         depth: Replacement depth.
+         *         constraints: Replacement constraint list.
+         *         your_context: Replacement Your context list.
+         *         steering_mode: Replacement check-in cadence.
+         *         steer_point_defaults: Replacement standing instructions.
+         *         assumptions: Replacement assumptions.
+         */
+        ScopingPlanPatch: {
+            /** Assumptions */
+            assumptions?: string[] | null;
+            /** Constraints */
+            constraints?: components["schemas"]["ScopingConstraintOut"][] | null;
+            /** Depth */
+            depth?: ("rapid" | "standard") | null;
+            intended_change?: components["schemas"]["TaggedOut"] | null;
+            /** Outcomes */
+            outcomes?: components["schemas"]["TaggedOut"][] | null;
+            /** Steer Point Defaults */
+            steer_point_defaults?: components["schemas"]["ScopingSteerPointDefaultOut"][] | null;
+            /** Steering Mode */
+            steering_mode?: ("frequent" | "moderate" | "minimal" | "unattended") | null;
+            target_unit?: components["schemas"]["TaggedOut"] | null;
+            where?: components["schemas"]["TaggedOut"] | null;
+            /** Your Context */
+            your_context?: components["schemas"]["YourContextOut"][] | null;
+        };
+        /**
+         * ScopingSteerPointDefaultOut
+         * @description One standing instruction on a scoping plan.
+         *
+         *     Args:
+         *         steer_point: The check-in point the rule covers.
+         *         action: `proceed_flag` or `stop`.
+         */
+        ScopingSteerPointDefaultOut: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "proceed_flag" | "stop";
+            /** Steer Point */
+            steer_point: string;
+        };
+        /**
          * SectionOut
          * @description One artefact section.
          *
@@ -3341,6 +3588,23 @@ export interface components {
             type: "stage.started";
         };
         /**
+         * TaggedOut
+         * @description One scoping plan field with the origin tag the user sees.
+         *
+         *     Args:
+         *         text: The field's content, in plain words.
+         *         origin: Where it came from.
+         */
+        TaggedOut: {
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "from_your_question" | "assumed" | "your_call";
+            /** Text */
+            text: string;
+        };
+        /**
          * TaskAgentTranscriptTurnOut
          * @description One durable task_agent-transcript turn shown in chronological order.
          *
@@ -3353,11 +3617,14 @@ export interface components {
          *         reply: Task Agent reply, absent until a pending turn completes.
          *         suggestions: Task Agent quick-reply suggestions, if the turn completed.
          *         part: Structured sequential-task_agent proposal, absent for legacy turns.
+         *         capability: The owning task's capability, absent on legacy turns.
          *         status: Durable execution state for this turn.
          *         created_at: Receipt timestamp, retained as display metadata.
          *         completed_at: Terminal timestamp, absent while still pending.
          */
         TaskAgentTranscriptTurnOut: {
+            /** Capability */
+            capability?: string | null;
             /**
              * Client Turn Id
              * Format: uuid
@@ -3417,14 +3684,22 @@ export interface components {
          *             question, rendered as tappable quick replies. Empty when none.
          *         part: Structured sequential-task_agent proposal, when this turn carries one.
          *         conversation_id: Task Agent conversation that produced this turn.
+         *         capability: The owning task's capability, when known. Absent on turns
+         *             stored before task 044.
+         *         scoping_plan: The full current scoping draft, on an options-scoping
+         *             turn. `plan` is null for those turns, and this is null for
+         *             Evidence search turns.
          */
         TaskAgentTurnOut: {
+            /** Capability */
+            capability?: string | null;
             /** Conversation Id */
             conversation_id?: string | null;
             part?: components["schemas"]["PartProposalOut"] | null;
-            plan: components["schemas"]["PlanDraft"];
+            plan?: components["schemas"]["PlanDraft"] | null;
             /** Reply */
             reply: string;
+            scoping_plan?: components["schemas"]["ScopingPlanDraft"] | null;
             /** Suggestions */
             suggestions?: string[];
         };
@@ -3860,6 +4135,32 @@ export interface components {
              * Format: uuid
              */
             entry_id: string;
+        };
+        /**
+         * YourContextOut
+         * @description One entry of the user's own context, verbatim.
+         *
+         *     Args:
+         *         text: The user's words, exactly as written.
+         *         type: Something true now, or something they plan or promise.
+         *         turn_index: The Task Agent turn the entry came from.
+         *         test_as_condition: Whether they asked for it to be tested.
+         */
+        YourContextOut: {
+            /**
+             * Test As Condition
+             * @default false
+             */
+            test_as_condition: boolean;
+            /** Text */
+            text: string;
+            /** Turn Index */
+            turn_index: number;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "present_fact" | "commitment";
         };
     };
     responses: never;
@@ -4976,6 +5277,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PlanPatchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_baseline_api_v1_tasks__task_id__plan_confirm_baseline_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmBaselineIn"];
             };
         };
         responses: {

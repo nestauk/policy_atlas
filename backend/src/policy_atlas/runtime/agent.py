@@ -70,6 +70,7 @@ from policy_atlas.runtime.capability_registry import (
     validate_plan,
 )
 from policy_atlas.runtime.runner import RunnerBackends, RunPlanOutcome, run_plan
+from policy_atlas.runtime.scoping_plan import ScopingPlan
 from policy_atlas.runtime.steering import (
     Abort,
     Adjust,
@@ -866,19 +867,66 @@ def _seed_stub_corpus(engine: Engine, task_id: uuid.UUID) -> None:
             )
 
 
+def _scoping_scope_fields(plan: Any) -> dict[str, Any]:
+    """Compile a scoping plan's intent record (task 044, X7).
+
+    The intent text is deterministic — compiled from the plan by
+    ``baseline_prompt.compile_intent``, never written by a model (contract
+    § Model route) — and the context carries the four fields the baseline's
+    screening and section writing read back.
+
+    Args:
+        plan: A validated ``ScopingPlan``.
+
+    Returns:
+        The ``intent``, ``context`` and ``purpose`` column values.
+    """
+    from policy_atlas.evidence_search.synthesis.baseline_prompt import compile_intent
+
+    outcomes = [outcome.text for outcome in plan.outcomes]
+    return {
+        "intent": compile_intent(
+            target_unit=plan.target_unit.text,
+            where=plan.where.text,
+            intended_change=plan.intended_change.text,
+            outcomes=outcomes,
+        ),
+        "context": {
+            "target_unit": plan.target_unit.text,
+            "where": plan.where.text,
+            "outcomes": outcomes,
+            "capability": "options_scoping",
+        },
+        "purpose": "baseline",
+    }
+
+
 def persist_approved_plan(
     conn: Connection,
     *,
     task_id: uuid.UUID,
-    plan: TaskPlan,
+    plan: Any,
     conversation_id: uuid.UUID | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID]:
     """Persist an approved plan and its execution scope for an existing task.
 
+    Both plan shapes take this one path (task 044, X7). A scoping plan differs
+    in what its intent record says and in two columns the Evidence search
+    leaves null: ``purpose='baseline'`` and ``plan_id``, pointing back at the
+    plan row minted in this very call. Because ``evidence_scope.plan_id``
+    carries a composite FK to ``(plan.plan_id, plan.task_id)``, the scope is
+    inserted first without it and updated once the plan row exists — one
+    transaction, so no reader ever sees a scope whose ``plan_id`` is missing.
+
+    A **new scope row per plan version** is deliberate (C3): the plan row's
+    ``evidence_scope_id`` is one-to-one, so an amended plan or a rebuild must
+    not inherit the previous version's scope — otherwise "which plan version
+    was this baseline built from" has two answers.
+
     Args:
         conn: Open transaction that owns the task and plan writes.
         task_id: Existing task receiving the approved plan.
-        plan: Validated plan approved by the caller.
+        plan: Validated ``TaskPlan`` or ``ScopingPlan`` approved by the caller.
         conversation_id: Task Agent conversation that owns this plan lineage.
 
     Returns:
@@ -898,13 +946,18 @@ def persist_approved_plan(
         .where(task_plan.c.status == "approved")
         .values(status="superseded")
     )
+    is_scoping = isinstance(plan, ScopingPlan)
+    scope_fields: dict[str, Any] = (
+        _scoping_scope_fields(plan)
+        if is_scoping
+        else {"intent": plan.question, "context": {}, "purpose": None}
+    )
     conn.execute(
         evidence_scope.insert().values(
             evidence_scope_id=scope_id,
             task_id=task_id,
-            intent=plan.question,
-            context={},
             created_at=now,
+            **scope_fields,
         )
     )
     conn.execute(
@@ -921,6 +974,13 @@ def persist_approved_plan(
             approved_at=now,
         )
     )
+    if is_scoping:
+        # The composite FK holds only now that the plan row exists.
+        conn.execute(
+            evidence_scope.update()
+            .where(evidence_scope.c.evidence_scope_id == scope_id)
+            .values(plan_id=plan_id)
+        )
     events.append(
         conn,
         task_id=task_id,

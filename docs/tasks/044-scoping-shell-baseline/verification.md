@@ -99,7 +99,46 @@ family when any test commits a scoping task and leaves it — an autouse
 cleanup in `test_task_links.py` deletes links then tasks. Any later test that
 commits a scoping task must clean it up.
 
-_(Phase 3 … Phase 7 rows are appended as each phase closes.)_
+### Phase 3 (backend: 3.1 prompt, 3.2 plan/chain/router, 3.3 inherit) (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify-fast` | pass | backend 2740 passed (8:05); mypy 327 files clean; ruff clean |
+| `make prompt-guard` | pass | 16 modules unchanged (the three new surfaces pinned at 91beec2a) |
+| `make openapi-sync` + `make drift-check` | pass | `drift-check: OK` |
+| `tests/runtime/test_inherit.py` | pass | 5 tests, rolled-back fixtures |
+
+**Flagged deviations (3.2):**
+7. **`PlanOut.plan` and `TaskAgentTurnOut.plan` became nullable** — a scoping
+   plan has no Evidence search payload. The contract asked for additive
+   fields only; nullability of an existing field is a type widening the
+   frontend must null-check (done in 3.4). Everything else in the diff is
+   additive (`ScopingPlanDraft`, `ScopingPlanPatch`, `TaggedOut`,
+   `ScopingConstraintOut`, `YourContextOut`, `ScopingSteerPointDefaultOut`,
+   `BaselineConfirmedOut`, `ConfirmBaselineIn`; `capability`, `scoping`,
+   `scoping_plan` fields).
+8. **One new acquire directive key, `search.record_cap`** (plan S2 allowed
+   it): the grammar had no per-backend cap key (caps came from
+   `DEPTH_CONSTANTS`); fail-closed integer `1..200`, absent = today's
+   behaviour; `BASELINE_ACQUISITION_TARGET = 25` per backend (measured in
+   Phase 7).
+9. **`synthesis_tools` grammar widened for template mode only:** `nav_label`
+   accepted on supplied sections (it was read but unreachable); `section_budget`
+   no longer caps the supplied list when `template` is present (P14: it means
+   "proposals allowed"); `DIRECTIVE_TEMPLATE_FOCUS_MAX = 600` for template
+   foci (lead-authored code, not untrusted directive text — the 200-char
+   bound stays for everything else). Lead confirms all three.
+10. **`tests/helpers.delete_task_data`** nulls `evidence_scope.plan_id`
+    before deleting plans (the new composite FK); shared helper, additive.
+11. **Inherit coverage statement** ports the existing `coverage_out`
+    sentence ("Searching completed. Coverage was judged adequate."), not the
+    spec's aspirational "documents retrieved and passed … not searched"
+    wording, which no read model builds yet.
+
+**Counts pinned:** the supplied baseline section list is seven model-written
+sections plus the code-rendered Sources = 8 = `SECTION_CAP`.
+
+_(Phase 3 frontend, Phase 4 … Phase 7 rows are appended as each phase closes.)_
 
 ## Checks beyond the build
 

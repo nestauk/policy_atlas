@@ -182,6 +182,200 @@ class PlanDraft(BaseModel):
     ready: bool = False
 
 
+# --- Options scoping (task 044) --------------------------------------------
+#
+# The second plan shape. It mirrors the runtime `ScopingPlan` field-by-field
+# the way `PlanDraft` mirrors `TaskPlan`, and — like it — this package imports
+# no runtime module: the vocabularies below are independent copies pinned by a
+# guard test.
+
+#: Where a scoping plan field came from. Mirrors `scoping_plan.Origin`.
+Origin = Literal["from_your_question", "assumed", "your_call"]
+
+#: What a constraint is about. Mirrors `scoping_plan.ConstraintKind`.
+ConstraintKind = Literal["requirement", "preference", "evidence_restriction"]
+
+#: When a constraint bites. Mirrors `scoping_plan.CheckedAt`.
+CheckedAt = Literal["longlist", "assessment", "retrieval"]
+
+#: Scoping depth. Mirrors `scoping_plan.ScopingPlan.depth`.
+ScopingDepth = Literal["rapid", "standard"]
+
+#: One entry's kind in Your context. Mirrors `scoping_plan.YourContextEntry`.
+YourContextType = Literal["present_fact", "commitment"]
+
+
+class TaggedOut(BaseModel):
+    """One scoping plan field with the origin tag the user sees.
+
+    Args:
+        text: The field's content, in plain words.
+        origin: Where it came from.
+    """
+
+    text: str
+    origin: Origin
+
+
+class ScopingConstraintOut(BaseModel):
+    """One typed constraint or preference on a scoping plan.
+
+    Args:
+        text: The user's ask.
+        kind: What the constraint is about.
+        origin: Where it came from.
+        checked_at: When it bites; fixed by `kind`.
+        country_group: Source-origin restriction, when there is one.
+        published_after: ISO date floor, when there is one.
+        published_before: ISO date ceiling, when there is one.
+        languages: Language names. Stored and shown as not yet applied at
+            retrieval — the search grammar has no language filter.
+    """
+
+    text: str
+    kind: ConstraintKind
+    origin: Origin
+    checked_at: CheckedAt
+    country_group: CountryGroupDraft | None = None
+    published_after: str | None = None
+    published_before: str | None = None
+    languages: list[str] | None = None
+
+
+class YourContextOut(BaseModel):
+    """One entry of the user's own context, verbatim.
+
+    Args:
+        text: The user's words, exactly as written.
+        type: Something true now, or something they plan or promise.
+        turn_index: The Task Agent turn the entry came from.
+        test_as_condition: Whether they asked for it to be tested.
+    """
+
+    text: str
+    type: YourContextType
+    turn_index: int
+    test_as_condition: bool = False
+
+
+class ScopingSteerPointDefaultOut(BaseModel):
+    """One standing instruction on a scoping plan.
+
+    Args:
+        steer_point: The check-in point the rule covers.
+        action: `proceed_flag` or `stop`.
+    """
+
+    steer_point: str
+    action: Literal["proceed_flag", "stop"]
+
+
+class BaselineConfirmedOut(BaseModel):
+    """The record that a plan version was confirmed against a baseline.
+
+    Args:
+        artefact_id: The baseline artefact the user read.
+        plan_version: The plan version they confirmed.
+    """
+
+    artefact_id: uuid.UUID
+    plan_version: int
+
+
+class ScopingPlanDraft(BaseModel):
+    """Draft or approved options-scoping plan, as surfaced to the client.
+
+    Mirrors the runtime `ScopingPlan` field-by-field. Every field except
+    `steps`/`ready` may be `None`/absent while drafting.
+
+    Args:
+        title: Short user-visible name for the task.
+        question: The user's ask.
+        intended_change: What we are trying to change.
+        target_unit: Who or what should change.
+        where: The jurisdiction the policy would apply to.
+        outcomes: The outcomes evidence is read against.
+        depth: The scoping depth the user chose.
+        constraints: Typed constraints and preferences.
+        your_context: The user's own situation, verbatim.
+        entry_branch: `explore` is the only branch in this release.
+        linked_task_ids: The tasks this plan starts from.
+        steering_mode: Check-in cadence for the run.
+        steer_point_defaults: Standing instructions.
+        assumptions: Every guess the plan is making.
+        steps: The three display steps, in order.
+        time_band: The coarse compute band for the baseline.
+        baseline_confirmed: The confirm-baseline record, once written.
+        ready: Whether the draft has validated into an executable plan.
+    """
+
+    title: str | None = None
+    question: str | None = None
+    intended_change: TaggedOut | None = None
+    target_unit: TaggedOut | None = None
+    where: TaggedOut | None = None
+    outcomes: list[TaggedOut] | None = None
+    depth: ScopingDepth | None = None
+    constraints: list[ScopingConstraintOut] | None = None
+    your_context: list[YourContextOut] | None = None
+    entry_branch: Literal["explore"] | None = None
+    linked_task_ids: list[uuid.UUID] | None = None
+    steering_mode: SteeringMode | None = None
+    steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
+    assumptions: list[str] | None = None
+    steps: list[PlanStep] = Field(default_factory=list)
+    time_band: str | None = None
+    baseline_confirmed: BaselineConfirmedOut | None = None
+    ready: bool = False
+
+
+class ScopingPlanPatch(BaseModel):
+    """Typed replace-field edits for a scoping plan.
+
+    Omitted fields stay as they are; a supplied field replaces its counterpart
+    outright. The merged result must still be a valid executable scoping plan.
+
+    Args:
+        intended_change: Replacement intended change.
+        target_unit: Replacement target unit.
+        where: Replacement jurisdiction.
+        outcomes: Replacement outcome list.
+        depth: Replacement depth.
+        constraints: Replacement constraint list.
+        your_context: Replacement Your context list.
+        steering_mode: Replacement check-in cadence.
+        steer_point_defaults: Replacement standing instructions.
+        assumptions: Replacement assumptions.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    intended_change: TaggedOut | None = None
+    target_unit: TaggedOut | None = None
+    where: TaggedOut | None = None
+    outcomes: list[TaggedOut] | None = None
+    depth: ScopingDepth | None = None
+    constraints: list[ScopingConstraintOut] | None = None
+    your_context: list[YourContextOut] | None = None
+    steering_mode: SteeringMode | None = None
+    steer_point_defaults: list[ScopingSteerPointDefaultOut] | None = None
+    assumptions: list[str] | None = None
+
+
+class ConfirmBaselineIn(BaseModel):
+    """Inbound body for `POST /api/v1/tasks/{id}/plan/confirm-baseline`.
+
+    Args:
+        artefact_id: The baseline artefact the user read.
+        plan_version: The plan version they are confirming.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    artefact_id: uuid.UUID
+    plan_version: int = Field(ge=1)
+
+
 class TaskAgentTurnCreate(BaseModel):
     """Inbound body for `POST /api/v1/tasks/{id}/task-agent-turns`.
 
@@ -263,13 +457,20 @@ class TaskAgentTurnOut(BaseModel):
             question, rendered as tappable quick replies. Empty when none.
         part: Structured sequential-task_agent proposal, when this turn carries one.
         conversation_id: Task Agent conversation that produced this turn.
+        capability: The owning task's capability, when known. Absent on turns
+            stored before task 044.
+        scoping_plan: The full current scoping draft, on an options-scoping
+            turn. `plan` is null for those turns, and this is null for
+            Evidence search turns.
     """
 
     reply: str
-    plan: PlanDraft
+    plan: PlanDraft | None = None
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
     conversation_id: uuid.UUID | None = None
+    capability: str | None = None
+    scoping_plan: ScopingPlanDraft | None = None
 
 
 class TaskAgentTranscriptTurnOut(BaseModel):
@@ -284,6 +485,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
         reply: Task Agent reply, absent until a pending turn completes.
         suggestions: Task Agent quick-reply suggestions, if the turn completed.
         part: Structured sequential-task_agent proposal, absent for legacy turns.
+        capability: The owning task's capability, absent on legacy turns.
         status: Durable execution state for this turn.
         created_at: Receipt timestamp, retained as display metadata.
         completed_at: Terminal timestamp, absent while still pending.
@@ -296,6 +498,7 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     reply: str | None
     suggestions: list[str] = Field(default_factory=list)
     part: PartProposalOut | None = None
+    capability: str | None = None
     status: Literal["pending", "completed", "failed"]
     created_at: datetime
     completed_at: datetime | None
@@ -305,12 +508,18 @@ class PlanOut(BaseModel):
     """Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.
 
     Args:
-        plan: The current plan (draft or approved).
+        plan: The current Evidence search plan, or null on a scoping task.
+        scoping: The current options-scoping plan, or null on an Evidence
+            search task.
+        capability: Which of the two the task is, so a reader never has to
+            infer it from which field is null.
         version: Plan row version.
         status: Plan status (e.g. `draft`, `approved`).
     """
 
-    plan: PlanDraft
+    plan: PlanDraft | None = None
+    scoping: ScopingPlanDraft | None = None
+    capability: str = "evidence_search"
     version: int
     status: str
 
@@ -335,6 +544,9 @@ class PlanPatchIn(BaseModel):
             empty to clear.
         geography: Country, ISO code, or pinned group label, or empty to
             clear geography filters.
+        scoping: Options-scoping edits. Mutually exclusive with every field
+            above: an Evidence search field on a scoping task, or `scoping` on
+            an Evidence search task, is a 422.
     """
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -348,3 +560,4 @@ class PlanPatchIn(BaseModel):
     published_after: str | None = None
     published_before: str | None = None
     geography: str | None = None
+    scoping: ScopingPlanPatch | None = None

@@ -15,9 +15,9 @@ So: one :class:`CapabilitySpec` per capability, and four lookups
 a typed error, never a default — a row whose ``capability`` this build does not
 know is a row this build must not run.
 
-This module is the **chassis** as of phase 2 of task 044: only the Evidence
-search entry is registered. The options-scoping entry arrives with
-``ScopingPlan`` in phase 3, and adds nothing here but a second dict entry.
+Phase 2 of task 044 built this as the chassis with the Evidence search entry
+alone; phase 3.2 added the options-scoping entry, and — as designed — it cost
+one more dict entry and nothing else.
 
 A test (``tests/runtime/test_capability_registry.py``) asserts by AST scan that
 ``TaskPlan.model_validate`` and bare ``compose(`` appear nowhere else in
@@ -36,6 +36,12 @@ from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
 from policy_atlas.core.schema import task
+from policy_atlas.runtime.scoping_plan import (
+    BASELINE_CONFIRM,
+    SCOPING_STEER_POINTS,
+    ScopingPlan,
+    compose_scoping,
+)
 from policy_atlas.runtime.steering import LATTICE_POINTS, PausePoint
 from policy_atlas.runtime.task_plan import STEER_POINTS, ComposedChain, TaskPlan, compose
 
@@ -44,9 +50,7 @@ from policy_atlas.runtime.task_plan import STEER_POINTS, ComposedChain, TaskPlan
 #: already Evidence search — a ``PlanDraftWire``, a ``TaskPlan``) are greppable.
 EVIDENCE_SEARCH = "evidence_search"
 
-#: The options-scoping capability key. Declared here because the task row and
-#: the create contract already carry it in phase 2; its registry entry lands in
-#: phase 3 with ``ScopingPlan``.
+#: The options-scoping capability key.
 OPTIONS_SCOPING = "options_scoping"
 
 
@@ -87,7 +91,7 @@ class CapabilitySpec:
     lattice: dict[str, PausePoint]
 
 
-#: The registry. Evidence search only until phase 3 (X3).
+#: The registry. Both capabilities as of phase 3.2 (X3).
 CAPABILITIES: dict[str, CapabilitySpec] = {
     EVIDENCE_SEARCH: CapabilitySpec(
         key=EVIDENCE_SEARCH,
@@ -96,6 +100,18 @@ CAPABILITIES: dict[str, CapabilitySpec] = {
         task_agent_prompt_module="policy_atlas.runtime.task_agent_prompt",
         steer_points=frozenset(STEER_POINTS),
         lattice=LATTICE_POINTS,
+    ),
+    OPTIONS_SCOPING: CapabilitySpec(
+        key=OPTIONS_SCOPING,
+        plan_model=ScopingPlan,
+        compose=compose_scoping,
+        task_agent_prompt_module="policy_atlas.runtime.task_agent_scoping_prompt",
+        steer_points=SCOPING_STEER_POINTS,
+        # The gate is registered here as *data* — the point exists on the
+        # scoping chain and nowhere else (A2), so an Evidence search walk can
+        # never resolve it. Its options, card, unattended recording and
+        # end-walk disposition are phase 5.2.
+        lattice={BASELINE_CONFIRM: PausePoint("after_component", "synthesise")},
     ),
 }
 

@@ -34,6 +34,10 @@ from policy_atlas.runtime.chat_backend import ChatBackend, StubChatBackend
 from policy_atlas.runtime.chat_backend_openai import OpenAIChatBackend
 from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.task_agent import StubTaskAgentBackend, TaskAgentBackend
+from policy_atlas.runtime.task_agent_scoping import (
+    ScopingTaskAgentBackend,
+    resolve_scoping_task_agent_backend,
+)
 
 log = structlog.get_logger()
 
@@ -150,6 +154,19 @@ def get_task_agent_backend() -> TaskAgentBackend:
     return StubTaskAgentBackend()
 
 
+def get_scoping_task_agent_backend() -> ScopingTaskAgentBackend:
+    """Build the options-scoping Task Agent backend, on the same switch.
+
+    Returns:
+        The live OpenAI scoping Task Agent (Langfuse-traced) when
+        `PA_BACKEND_MODE` resolves live, else the deterministic stub. Tests
+        override this dependency with a scripted backend.
+    """
+    return resolve_scoping_task_agent_backend(
+        live=_live(), langfuse_client=tracing.get_langfuse() if _live() else None
+    )
+
+
 def get_runner_backends() -> RunnerBackends:
     """Build the runner backend bundle, key-driven exactly like `agent`.
 
@@ -215,6 +232,7 @@ __all__ = [
     "get_grounding_judge_backend",
     "get_agent_backend",
     "get_task_agent_backend",
+    "get_scoping_task_agent_backend",
     "get_runner_backends",
     "get_settings",
 ]

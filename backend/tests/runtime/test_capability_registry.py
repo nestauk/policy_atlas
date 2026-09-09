@@ -63,11 +63,12 @@ def test_the_evidence_search_entry_resolves_to_what_the_es_code_already_used() -
     assert spec.steer_points == frozenset(STEER_POINTS)
 
 
-def test_the_registry_holds_only_evidence_search_in_this_phase() -> None:
-    # Phase 3 adds ``options_scoping`` with ``ScopingPlan``. Until it does, a
-    # scoping task has no plan model, and this asserts the chassis is honest
-    # about that rather than quietly composing an Evidence search chain.
-    assert set(registry.CAPABILITIES) == {"evidence_search"}
+def test_the_registry_holds_the_two_capabilities_this_build_knows() -> None:
+    # Phase 2 built the chassis with Evidence search alone; phase 3.2 added
+    # ``options_scoping`` with ``ScopingPlan``. A third capability is a third
+    # entry, and until it exists a task carrying its key must fail closed
+    # rather than quietly composing an Evidence search chain.
+    assert set(registry.CAPABILITIES) == {"evidence_search", "options_scoping"}
 
 
 def test_validate_plan_returns_the_capability_s_model() -> None:
@@ -86,8 +87,8 @@ def test_compose_plan_matches_the_direct_composer() -> None:
 @pytest.mark.parametrize(
     "call",
     [
-        lambda: registry.spec_for("options_scoping"),
-        lambda: registry.validate_plan("options_scoping", _plan_payload()),
+        lambda: registry.spec_for("options_appraisal"),
+        lambda: registry.validate_plan("options_appraisal", _plan_payload()),
         lambda: registry.lattice_for("theory_of_change"),
         lambda: registry.steer_points_for(""),
     ],

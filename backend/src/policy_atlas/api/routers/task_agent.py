@@ -20,6 +20,7 @@ from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
+    ConfirmBaselineIn,
     Page,
     PageMeta,
     PartProposalOut,
@@ -27,17 +28,25 @@ from policy_atlas.api.contract import (
     PlanOut,
     PlanPatchIn,
     PlanStep,
+    ScopingPlanDraft,
     TaskAgentTranscriptTurnOut,
     TaskAgentTurnCreate,
     TaskAgentTurnOut,
 )
-from policy_atlas.api.deps import get_current_user, get_engine, get_task_agent_backend
+from policy_atlas.api.deps import (
+    get_current_user,
+    get_engine,
+    get_scoping_task_agent_backend,
+    get_task_agent_backend,
+)
 from policy_atlas.api.routers._access import accessible_task
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
 from policy_atlas.core.schema import (
+    artefact,
     capability_run,
     conversation,
     task_agent_transcript,
+    task_link,
     task_plan,
 )
 from policy_atlas.evidence_search.sourcing.country_filters import (
@@ -51,6 +60,7 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
 from policy_atlas.runtime.agent import build_plan, persist_approved_plan
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
+    OPTIONS_SCOPING,
     capability_of_task,
     compose_plan,
     expect_task_plan,
@@ -60,8 +70,20 @@ from policy_atlas.runtime.conversation_lifecycle import (
     ensure_active_task_agent_conversation,
     seed_draft_from_executed_plan,
 )
+from policy_atlas.runtime.inherit import linked_context
+from policy_atlas.runtime.scoping_plan import (
+    SCOPING_STEPS,
+    BaselineConfirmed,
+    ScopingPlan,
+    build_scoping_plan,
+)
 from policy_atlas.runtime.task_agent import TaskAgentBackend
 from policy_atlas.runtime.task_agent_prompt import PlanDraftWire
+from policy_atlas.runtime.task_agent_scoping import (
+    NO_BASELINE_STATE,
+    ScopingTaskAgentBackend,
+)
+from policy_atlas.runtime.task_agent_scoping_prompt import ScopingPlanDraftWire
 from policy_atlas.runtime.task_plan import (
     TaskPlan,
     _enabled_components,
@@ -185,6 +207,148 @@ def _draft_from_plan(plan: TaskPlan) -> PlanDraft:
     return PlanDraft.model_validate(values)
 
 
+# --- Options scoping (task 044 phase 3.2) ----------------------------------
+
+
+def _scoping_draft_from_wire(draft: Any, *, ready: bool) -> ScopingPlanDraft:
+    """Project the scoping Task Agent's loose draft into the API shape.
+
+    Fields the model has not filled stay absent; the three steps and the time
+    band are code-owned, so they are supplied here exactly as
+    ``build_scoping_plan`` supplies them to the plan. A draft field the closed
+    API vocabulary rejects (an origin tag the model invented, say) drops out of
+    the projection rather than 500ing the turn — the draft is not ready yet,
+    which is the honest reading.
+    """
+    values = draft.model_dump(exclude_none=True)
+    values["steps"] = [step.model_dump() for step in SCOPING_STEPS]
+    values["ready"] = ready
+    try:
+        return ScopingPlanDraft.model_validate(values)
+    except ValidationError:
+        log.warning("task_agent_scoping_draft_degraded", reason="invalid_wire_field")
+        return ScopingPlanDraft(
+            question=values.get("question"),
+            steps=[PlanStep.model_validate(step.model_dump()) for step in SCOPING_STEPS],
+            ready=False,
+        )
+
+
+def _scoping_draft_from_plan(plan: ScopingPlan) -> ScopingPlanDraft:
+    """Project a validated scoping plan into the API's approved draft shape."""
+    values = plan.model_dump(mode="json")
+    values.pop("source_turn_index", None)
+    values["ready"] = True
+    return ScopingPlanDraft.model_validate(values)
+
+
+def _linked_task_ids(conn: Connection, task_id: uuid.UUID) -> list[uuid.UUID]:
+    """Return the source tasks this scoping task starts from, in link order."""
+    rows = conn.execute(
+        select(task_link.c.source_task_id)
+        .where(task_link.c.target_task_id == task_id)
+        .order_by(task_link.c.created_at.asc())
+    ).scalars().all()
+    return [uuid.UUID(str(value)) for value in rows]
+
+
+def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
+    """Return the code-authored baseline-state line for the scoping prompt.
+
+    The prompt reads this as data and changes what it says about an edit (an
+    edit before any baseline exists is a plan change; after one, it may have
+    changed what the baseline was built from). It is a *sentence*, never a
+    flag, because the prompt fences it as data alongside the transcript.
+    """
+    version = conn.execute(
+        select(capability_run.c.plan_version)
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability == OPTIONS_SCOPING)
+        .where(capability_run.c.status == "succeeded")
+        .order_by(capability_run.c.started_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if version is None:
+        return NO_BASELINE_STATE
+    return f"a baseline exists, built from plan version {int(version)}"
+
+
+def _load_approved_scoping_plan(
+    conn: Connection, task_id: uuid.UUID
+) -> tuple[ScopingPlan, RowMapping]:
+    """Return the current approved scoping plan and its row.
+
+    Raises:
+        HTTPException: 404 when the task has no approved plan yet.
+    """
+    row = conn.execute(
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    plan = validate_plan(OPTIONS_SCOPING, row["payload"])
+    assert isinstance(plan, ScopingPlan)
+    return plan, row
+
+
+def _scoping_plan_out(conn: Connection, task_id: uuid.UUID) -> PlanOut:
+    """Return the scoping task's plan as ``GET /plan`` shows it.
+
+    Approved rows win; before one exists the latest completed turn's own
+    projection stands in, exactly as the Evidence search path does.
+    """
+    row = conn.execute(
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).mappings().one_or_none()
+    if row is not None:
+        plan = validate_plan(OPTIONS_SCOPING, row["payload"])
+        assert isinstance(plan, ScopingPlan)
+        return PlanOut(
+            scoping=_scoping_draft_from_plan(plan),
+            capability=OPTIONS_SCOPING,
+            version=row["version"],
+            status=row["status"],
+        )
+    latest = conn.execute(
+        select(task_agent_transcript.c.response)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .order_by(task_agent_transcript.c.turn_index.desc())
+        .limit(1)
+    ).mappings().one_or_none()
+    if latest is None or latest["response"] is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    response = TaskAgentTurnOut.model_validate(latest["response"])
+    if response.scoping_plan is None:
+        raise HTTPException(status_code=404, detail="resource not found")
+    return PlanOut(
+        scoping=response.scoping_plan,
+        capability=OPTIONS_SCOPING,
+        version=0,
+        status="draft",
+    )
+
+
+def _apply_scoping_patch(plan: ScopingPlan, patch: Any) -> ScopingPlan:
+    """Merge a typed scoping patch onto an approved plan and re-validate."""
+    data = plan.model_dump(mode="json")
+    supplied = patch.model_dump(mode="json", exclude_unset=True)
+    for field, value in supplied.items():
+        if value is not None:
+            data[field] = value
+    validated = validate_plan(OPTIONS_SCOPING, data)
+    assert isinstance(validated, ScopingPlan)
+    return validated
+
+
 def _response_from_row(row: RowMapping) -> TaskAgentTurnOut:
     """Return a completed turn's stored projected response without recomputing it."""
     response = row["response"]
@@ -193,11 +357,25 @@ def _response_from_row(row: RowMapping) -> TaskAgentTurnOut:
     return TaskAgentTurnOut.model_validate(response)
 
 
-def _validated_part(raw_part: object) -> PartProposalOut | None:
+#: Part ids each capability's Task Agent may propose. Closed per capability:
+#: a scoping card keyed 'thoroughness' would render an Evidence search control
+#: on a plan that has no such dial.
+_PART_IDS: dict[str, frozenset[str]] = {
+    EVIDENCE_SEARCH: frozenset({"question", "scope", "thoroughness"}),
+    OPTIONS_SCOPING: frozenset({"question", "settings", "constraints", "depth"}),
+}
+
+
+def _validated_part(
+    raw_part: object, *, scoping: bool = False
+) -> PartProposalOut | None:
     """Validate one task_agent part proposal, degrading malformed cards to prose.
 
     Args:
         raw_part: The optional runtime wire proposal returned by the task_agent.
+        scoping: Whether the turn belongs to an options-scoping task, which has
+            its own part vocabulary and — for 'depth' — no primary option
+            (OS ruling 25: neither depth is a recommendation).
 
     Returns:
         A standalone API proposal when it meets the card rules, else ``None``.
@@ -212,13 +390,15 @@ def _validated_part(raw_part: object) -> PartProposalOut | None:
     except ValidationError:
         log.warning("task_agent_part_dropped", reason="invalid_shape")
         return None
-    if part.id not in {"question", "scope", "thoroughness"}:
+    capability = OPTIONS_SCOPING if scoping else EVIDENCE_SEARCH
+    if part.id not in _PART_IDS[capability]:
         log.warning("task_agent_part_dropped", reason="invalid_part_id")
         return None
     if not 2 <= len(part.options) <= 4:
         log.warning("task_agent_part_dropped", reason="invalid_option_count")
         return None
-    if sum(option.primary for option in part.options) != 1:
+    expected_primaries = 0 if (scoping and part.id == "depth") else 1
+    if sum(option.primary for option in part.options) != expected_primaries:
         log.warning("task_agent_part_dropped", reason="invalid_primary_count")
         return None
     # The confirm-marker grammar the client derives ✓-state from admits only
@@ -296,9 +476,10 @@ def _task_agent_inputs(
     return turns, previous_draft
 
 
-def _transcript_out(row: RowMapping) -> TaskAgentTranscriptTurnOut:
+def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurnOut:
     """Project one durable transcript row into its honest read representation."""
     return TaskAgentTranscriptTurnOut(
+        capability=capability,
         turn_index=row["turn_index"],
         conversation_id=row["conversation_id"],
         client_turn_id=row["client_turn_id"],
@@ -407,8 +588,19 @@ def create_task_agent_turn(
     user: Annotated[AuthenticatedUser, Depends(get_current_user)],
     engine: Annotated[Engine, Depends(get_engine)],
     task_agent: Annotated[TaskAgentBackend, Depends(get_task_agent_backend)],
+    scoping_agent: Annotated[
+        ScopingTaskAgentBackend, Depends(get_scoping_task_agent_backend)
+    ],
 ) -> TaskAgentTurnOut:
-    """Advance one task's durable task_agent conversation once per client turn id."""
+    """Advance one task's durable task_agent conversation once per client turn id.
+
+    Two capabilities share this route, and everything durable about it — the
+    phase-one reservation, the idempotency key, the run fences, the transaction
+    that joins the turn to the plan it approved — is shared with them. What the
+    capability picks is which Task Agent is called, which plan model validates
+    what it returns, and which of the two draft projections the turn carries
+    back (task 044, C9).
+    """
     lock = _turn_lock(task_id)
     if not lock.acquire(blocking=False):
         raise ApiConflict("task_agent_turn_in_progress", "a Task Agent turn is already running")
@@ -436,11 +628,27 @@ def create_task_agent_turn(
             ).scalar_one()
             if conversation_id is None:
                 raise RuntimeError("task_agent transcript turn has no conversation")
+            capability = capability_of_task(conn, task_id)
             turns, previous_draft = _task_agent_inputs(conn, task_id, conversation_id)
+            scoping = capability == OPTIONS_SCOPING
+            contexts = linked_context(conn, task_id) if scoping else []
+            linked_ids = _linked_task_ids(conn, task_id) if scoping else []
+            baseline_state = _baseline_state(conn, task_id) if scoping else NO_BASELINE_STATE
         turns.append({"role": "user", "text": payload.message})
         try:
-            turn = task_agent.plan_turn(
-                turns, previous_draft, session_id=task_id, conversation_id=conversation_id
+            turn = (
+                scoping_agent.scope_turn(
+                    turns,
+                    previous_draft,
+                    linked_context=contexts,
+                    baseline_state=baseline_state,
+                    session_id=task_id,
+                    conversation_id=conversation_id,
+                )
+                if scoping
+                else task_agent.plan_turn(
+                    turns, previous_draft, session_id=task_id, conversation_id=conversation_id
+                )
             )
         except Exception:
             with engine.begin() as conn:
@@ -454,23 +662,49 @@ def create_task_agent_turn(
             raise
 
         ready = turn.ready
-        approved: TaskPlan | None = None
+        approved: TaskPlan | ScopingPlan | None = None
         if ready:
             try:
-                approved = build_plan(turn.plan_draft)
-            except ValidationError:
+                approved = (
+                    build_scoping_plan(
+                        cast(ScopingPlanDraftWire, turn.plan_draft),
+                        linked_task_ids=linked_ids,
+                    )
+                    if scoping
+                    else build_plan(cast(PlanDraftWire, turn.plan_draft))
+                )
+            except (ValidationError, ValueError):
                 ready = False
-        draft = _draft_from_plan(approved) if approved is not None else _draft_from_wire(
-            turn.plan_draft, ready=ready
-        )
-        part = _validated_part(turn.part)
-        result = TaskAgentTurnOut(
-            reply=turn.reply,
-            plan=draft,
-            suggestions=turn.suggested_answers or [],
-            part=part,
-            conversation_id=conversation_id,
-        )
+        part = _validated_part(turn.part, scoping=scoping)
+        if scoping:
+            scoping_draft = (
+                _scoping_draft_from_plan(cast(ScopingPlan, approved))
+                if approved is not None
+                else _scoping_draft_from_wire(turn.plan_draft, ready=ready)
+            )
+            result = TaskAgentTurnOut(
+                reply=turn.reply,
+                plan=None,
+                scoping_plan=scoping_draft,
+                capability=OPTIONS_SCOPING,
+                suggestions=turn.suggested_answers or [],
+                part=part,
+                conversation_id=conversation_id,
+            )
+        else:
+            draft = (
+                _draft_from_plan(cast(TaskPlan, approved))
+                if approved is not None
+                else _draft_from_wire(cast(PlanDraftWire, turn.plan_draft), ready=ready)
+            )
+            result = TaskAgentTurnOut(
+                reply=turn.reply,
+                plan=draft,
+                capability=EVIDENCE_SEARCH,
+                suggestions=turn.suggested_answers or [],
+                part=part,
+                conversation_id=conversation_id,
+            )
         phase_two_values = {
             "reply": turn.reply,
             "task_agent_state": turn.plan_draft.model_dump(mode="json"),
@@ -588,8 +822,9 @@ def list_task_agent_turns(
             .offset((page - 1) * page_size)
             .limit(page_size)
         ).mappings().all()
+        capability = capability_of_task(conn, task_id)
     return Page(
-        data=[_transcript_out(row) for row in rows],
+        data=[_transcript_out(row, capability) for row in rows],
         pagination=PageMeta(page=page, page_size=page_size, total_items=total_items),
     )
 
@@ -611,6 +846,8 @@ def get_plan(
         )
         if access.is_owner:
             _expire_stale_pending_turns(conn, task_id)
+        if capability_of_task(conn, task_id) == OPTIONS_SCOPING:
+            return _scoping_plan_out(conn, task_id)
         row = conn.execute(
             select(task_plan)
             .where(task_plan.c.task_id == task_id)
@@ -641,16 +878,19 @@ def get_plan(
             if draft_row is None or draft_row["response"] is None:
                 raise HTTPException(status_code=404, detail="resource not found")
             response = TaskAgentTurnOut.model_validate(draft_row["response"])
-            return PlanOut(plan=response.plan, version=0, status="draft")
+            return PlanOut(
+                plan=response.plan, capability=EVIDENCE_SEARCH, version=0, status="draft"
+            )
         return PlanOut(
             plan=_draft_from_plan(approved_plan),
+            capability=EVIDENCE_SEARCH,
             version=row["version"],
             status=row["status"],
         )
     if draft_row is None or draft_row["response"] is None:
         raise HTTPException(status_code=404, detail="resource not found")
     response = TaskAgentTurnOut.model_validate(draft_row["response"])
-    return PlanOut(plan=response.plan, version=0, status="draft")
+    return PlanOut(plan=response.plan, capability=EVIDENCE_SEARCH, version=0, status="draft")
 
 
 _DISCRETIONARY_ORDER = (
@@ -860,6 +1100,8 @@ def _load_editable_plan(
     if latest_completed is None or latest_completed["response"] is None:
         raise HTTPException(status_code=404, detail="resource not found")
     response = TaskAgentTurnOut.model_validate(latest_completed["response"])
+    if response.plan is None:
+        raise HTTPException(status_code=422, detail="plan is not ready to edit")
     if conversation_id is None:
         conversation_id = latest_completed["conversation_id"]
     try:
@@ -893,6 +1135,25 @@ def patch_plan(
                 "run_active",
                 "a run is in progress; finish or stop it, then edit the plan",
             )
+        capability = capability_of_task(conn, task_id)
+        es_fields = payload.model_fields_set - {"scoping"}
+        if capability == OPTIONS_SCOPING:
+            if es_fields:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        f"{sorted(es_fields)} are Evidence search plan fields; "
+                        "edit an options-scoping plan through 'scoping'"
+                    ),
+                )
+            if payload.scoping is None:
+                raise HTTPException(status_code=422, detail="scoping edits are required")
+            return _patch_scoping_plan(conn, task_id, payload.scoping)
+        if payload.scoping is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="'scoping' edits an options-scoping plan, not an Evidence search one",
+            )
         current, conversation_id = _load_editable_plan(conn, task_id)
         try:
             patched = _apply_plan_patch(current, payload)
@@ -924,6 +1185,125 @@ def patch_plan(
         ).mappings().one()
     return PlanOut(
         plan=_draft_from_plan(patched),
+        capability=EVIDENCE_SEARCH,
         version=row["version"],
         status=row["status"],
     )
+
+
+def _persist_new_scoping_version(
+    conn: Connection, task_id: uuid.UUID, plan: ScopingPlan
+) -> PlanOut:
+    """Write one new approved scoping plan version and return it.
+
+    The version is minted through ``persist_approved_plan``, which for a
+    scoping plan inserts a **new** scope row carrying ``purpose='baseline'``
+    and the new ``plan_id`` (C3) — never a copy of the previous version's
+    scope id, so "which plan version was this baseline built from" keeps one
+    answer per version.
+    """
+    conversation_id = conn.execute(
+        select(task_plan.c.conversation_id)
+        .where(task_plan.c.task_id == task_id)
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    latest_turn = conn.execute(
+        select(func.max(task_agent_transcript.c.turn_index))
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.status == "completed")
+    ).scalar_one()
+    if latest_turn is not None:
+        plan.source_turn_index = int(latest_turn)
+    if conversation_id is None:
+        conversation_id = ensure_active_task_agent_conversation(
+            conn, task_id=task_id, now=_now()
+        )
+    persist_approved_plan(
+        conn, task_id=task_id, plan=plan, conversation_id=conversation_id
+    )
+    row = conn.execute(
+        select(task_plan)
+        .where(task_plan.c.task_id == task_id)
+        .where(task_plan.c.status == "approved")
+        .order_by(task_plan.c.version.desc())
+        .limit(1)
+    ).mappings().one()
+    return PlanOut(
+        scoping=_scoping_draft_from_plan(plan),
+        capability=OPTIONS_SCOPING,
+        version=row["version"],
+        status=row["status"],
+    )
+
+
+def _patch_scoping_plan(conn: Connection, task_id: uuid.UUID, patch: Any) -> PlanOut:
+    """Apply typed scoping edits and persist a new approved version."""
+    current, _row = _load_approved_scoping_plan(conn, task_id)
+    try:
+        patched = _apply_scoping_patch(current, patch)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _persist_new_scoping_version(conn, task_id, patched)
+
+
+@router.post("/{task_id}/plan/confirm-baseline", response_model=PlanOut)
+def confirm_baseline(
+    task_id: uuid.UUID,
+    payload: ConfirmBaselineIn,
+    user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    engine: Annotated[Engine, Depends(get_engine)],
+) -> PlanOut:
+    """Record that a plan version was confirmed against its baseline.
+
+    "Confirm plan and build longlist" cannot be a steering event: by the time
+    the user presses it the walk has ended, and a steering event needs a
+    ``capability_run`` to hang on (S4, X5). So the confirmation is
+    **plan-scoped** — a new approved plan version carrying
+    ``baseline_confirmed`` — which History already renders and which task 2's
+    longlist walk will read as its opening decision.
+
+    Idempotent by construction: confirming the same ``(artefact_id,
+    plan_version)`` pair that the current version already records returns that
+    version unchanged rather than minting an identical one, so a double-tap
+    does not fill the plan's history with duplicates.
+    """
+    with engine.begin() as conn:
+        accessible_task(conn, task_id=task_id, user_id=user.user_id, write=True)
+        if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
+            raise HTTPException(
+                status_code=422,
+                detail="confirm-baseline applies to options-scoping tasks only",
+            )
+        active = conn.execute(
+            select(capability_run.c.status)
+            .where(capability_run.c.task_id == task_id)
+            .where(capability_run.c.status.in_(("running", "paused")))
+            .limit(1)
+        ).scalar_one_or_none()
+        if active is not None:
+            raise ApiConflict(
+                "run_active",
+                "a run is in progress; finish or stop it, then confirm the plan",
+            )
+        current, row = _load_approved_scoping_plan(conn, task_id)
+        is_baseline_artefact = conn.execute(
+            select(artefact.c.artefact_id)
+            .where(artefact.c.artefact_id == payload.artefact_id)
+            .where(artefact.c.task_id == task_id)
+            .limit(1)
+        ).scalar_one_or_none()
+        if is_baseline_artefact is None:
+            raise HTTPException(status_code=404, detail="resource not found")
+        record = BaselineConfirmed(
+            artefact_id=payload.artefact_id, plan_version=payload.plan_version
+        )
+        if current.baseline_confirmed == record:
+            return PlanOut(
+                scoping=_scoping_draft_from_plan(current),
+                capability=OPTIONS_SCOPING,
+                version=row["version"],
+                status=row["status"],
+            )
+        confirmed = current.model_copy(update={"baseline_confirmed": record})
+        return _persist_new_scoping_version(conn, task_id, confirmed)

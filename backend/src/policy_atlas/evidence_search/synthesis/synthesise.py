@@ -5429,6 +5429,11 @@ def synthesise_scope(
 
     proposal_normalisations: list[str] = []
     if directive.sections is not None:
+        # TODO(task 044 phase 4.2): baseline mode. ``directive.template`` is
+        # parsed and accepted from phase 3.2 but changes nothing here yet — the
+        # scoping chain's supplied eight sections take this existing path, and
+        # the baseline preamble, the bounded proposer, the per-section turn cap
+        # and the three ES-only passes arrive with 4.2.
         sections = _sections_from_directive(directive.sections)
         section_source = "scope_context"
     else:

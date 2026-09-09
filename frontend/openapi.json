@@ -256,6 +256,26 @@
         "title": "AuthorshipOut",
         "type": "object"
       },
+      "BaselineConfirmedOut": {
+        "description": "The record that a plan version was confirmed against a baseline.\n\nArgs:\n    artefact_id: The baseline artefact the user read.\n    plan_version: The plan version they confirmed.",
+        "properties": {
+          "artefact_id": {
+            "format": "uuid",
+            "title": "Artefact Id",
+            "type": "string"
+          },
+          "plan_version": {
+            "title": "Plan Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artefact_id",
+          "plan_version"
+        ],
+        "title": "BaselineConfirmedOut",
+        "type": "object"
+      },
       "BlockOut": {
         "description": "One prose block within an artefact section.\n\nArgs:\n    block_id: The block's identity.\n    prose: The block's final persisted prose.\n    claims: Span-anchored claim annotations over `prose`.\n    gaps: Deprecated legacy coverage gaps. New structured gaps are carried\n        by `ClaimOut.gap`; this field remains empty for new artefacts.",
         "properties": {
@@ -1165,6 +1185,28 @@
           "turn"
         ],
         "title": "CompletedEvent",
+        "type": "object"
+      },
+      "ConfirmBaselineIn": {
+        "additionalProperties": false,
+        "description": "Inbound body for `POST /api/v1/tasks/{id}/plan/confirm-baseline`.\n\nArgs:\n    artefact_id: The baseline artefact the user read.\n    plan_version: The plan version they are confirming.",
+        "properties": {
+          "artefact_id": {
+            "format": "uuid",
+            "title": "Artefact Id",
+            "type": "string"
+          },
+          "plan_version": {
+            "minimum": 1.0,
+            "title": "Plan Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artefact_id",
+          "plan_version"
+        ],
+        "title": "ConfirmBaselineIn",
         "type": "object"
       },
       "ConversationCreate": {
@@ -3747,10 +3789,32 @@
         "type": "object"
       },
       "PlanOut": {
-        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current plan (draft or approved).\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
+        "description": "Response body for `GET`/`PATCH /api/v1/tasks/{id}/plan`.\n\nArgs:\n    plan: The current Evidence search plan, or null on a scoping task.\n    scoping: The current options-scoping plan, or null on an Evidence\n        search task.\n    capability: Which of the two the task is, so a reader never has to\n        infer it from which field is null.\n    version: Plan row version.\n    status: Plan status (e.g. `draft`, `approved`).",
         "properties": {
+          "capability": {
+            "default": "evidence_search",
+            "title": "Capability",
+            "type": "string"
+          },
           "plan": {
-            "$ref": "#/components/schemas/PlanDraft"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scoping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopingPlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "title": "Status",
@@ -3762,7 +3826,6 @@
           }
         },
         "required": [
-          "plan",
           "version",
           "status"
         ],
@@ -3771,7 +3834,7 @@
       },
       "PlanPatchIn": {
         "additionalProperties": false,
-        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.",
+        "description": "Inbound body for `PATCH /api/v1/tasks/{id}/plan`.\n\nOmitted fields stay as they are. An empty string on a date or geography\nfield clears that constraint. The merged result must still be a valid\nexecutable plan.\n\nArgs:\n    question: Replacement evidence question.\n    backend_scope: Search backend scope.\n    search_effort: Acquisition effort rung.\n    analysis_depth: Analysis component and budget rung.\n    steering_mode: Check-in cadence for the run.\n    screening_criteria: Replacement inclusion/exclusion criteria.\n    published_after: Lower publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    published_before: Upper publication-date bound (`YYYY-MM-DD`), or\n        empty to clear.\n    geography: Country, ISO code, or pinned group label, or empty to\n        clear geography filters.\n    scoping: Options-scoping edits. Mutually exclusive with every field\n        above: an Evidence search field on a scoping task, or `scoping` on\n        an Evidence search task, is a 422.",
         "properties": {
           "analysis_depth": {
             "anyOf": [
@@ -3849,6 +3912,16 @@
               }
             ],
             "title": "Question"
+          },
+          "scoping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopingPlanPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "screening_criteria": {
             "anyOf": [
@@ -4402,6 +4475,480 @@
           }
         },
         "title": "ScopeConstraintsDraft",
+        "type": "object"
+      },
+      "ScopingConstraintOut": {
+        "description": "One typed constraint or preference on a scoping plan.\n\nArgs:\n    text: The user's ask.\n    kind: What the constraint is about.\n    origin: Where it came from.\n    checked_at: When it bites; fixed by `kind`.\n    country_group: Source-origin restriction, when there is one.\n    published_after: ISO date floor, when there is one.\n    published_before: ISO date ceiling, when there is one.\n    languages: Language names. Stored and shown as not yet applied at\n        retrieval \u2014 the search grammar has no language filter.",
+        "properties": {
+          "checked_at": {
+            "enum": [
+              "longlist",
+              "assessment",
+              "retrieval"
+            ],
+            "title": "Checked At",
+            "type": "string"
+          },
+          "country_group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CountryGroupDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "requirement",
+              "preference",
+              "evidence_restriction"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "languages": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Languages"
+          },
+          "origin": {
+            "enum": [
+              "from_your_question",
+              "assumed",
+              "your_call"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "published_after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published After"
+          },
+          "published_before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published Before"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "kind",
+          "origin",
+          "checked_at"
+        ],
+        "title": "ScopingConstraintOut",
+        "type": "object"
+      },
+      "ScopingPlanDraft": {
+        "description": "Draft or approved options-scoping plan, as surfaced to the client.\n\nMirrors the runtime `ScopingPlan` field-by-field. Every field except\n`steps`/`ready` may be `None`/absent while drafting.\n\nArgs:\n    title: Short user-visible name for the task.\n    question: The user's ask.\n    intended_change: What we are trying to change.\n    target_unit: Who or what should change.\n    where: The jurisdiction the policy would apply to.\n    outcomes: The outcomes evidence is read against.\n    depth: The scoping depth the user chose.\n    constraints: Typed constraints and preferences.\n    your_context: The user's own situation, verbatim.\n    entry_branch: `explore` is the only branch in this release.\n    linked_task_ids: The tasks this plan starts from.\n    steering_mode: Check-in cadence for the run.\n    steer_point_defaults: Standing instructions.\n    assumptions: Every guess the plan is making.\n    steps: The three display steps, in order.\n    time_band: The coarse compute band for the baseline.\n    baseline_confirmed: The confirm-baseline record, once written.\n    ready: Whether the draft has validated into an executable plan.",
+        "properties": {
+          "assumptions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assumptions"
+          },
+          "baseline_confirmed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BaselineConfirmedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "constraints": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScopingConstraintOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constraints"
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rapid",
+                  "standard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
+          "entry_branch": {
+            "anyOf": [
+              {
+                "const": "explore",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Branch"
+          },
+          "intended_change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "linked_task_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Linked Task Ids"
+          },
+          "outcomes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TaggedOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcomes"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "steer_point_defaults": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScopingSteerPointDefaultOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steer Point Defaults"
+          },
+          "steering_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "frequent",
+                  "moderate",
+                  "minimal",
+                  "unattended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steering Mode"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "target_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Band"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "where": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "your_context": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/YourContextOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Your Context"
+          }
+        },
+        "title": "ScopingPlanDraft",
+        "type": "object"
+      },
+      "ScopingPlanPatch": {
+        "additionalProperties": false,
+        "description": "Typed replace-field edits for a scoping plan.\n\nOmitted fields stay as they are; a supplied field replaces its counterpart\noutright. The merged result must still be a valid executable scoping plan.\n\nArgs:\n    intended_change: Replacement intended change.\n    target_unit: Replacement target unit.\n    where: Replacement jurisdiction.\n    outcomes: Replacement outcome list.\n    depth: Replacement depth.\n    constraints: Replacement constraint list.\n    your_context: Replacement Your context list.\n    steering_mode: Replacement check-in cadence.\n    steer_point_defaults: Replacement standing instructions.\n    assumptions: Replacement assumptions.",
+        "properties": {
+          "assumptions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assumptions"
+          },
+          "constraints": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScopingConstraintOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Constraints"
+          },
+          "depth": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rapid",
+                  "standard"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depth"
+          },
+          "intended_change": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outcomes": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TaggedOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcomes"
+          },
+          "steer_point_defaults": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ScopingSteerPointDefaultOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steer Point Defaults"
+          },
+          "steering_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "frequent",
+                  "moderate",
+                  "minimal",
+                  "unattended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steering Mode"
+          },
+          "target_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "where": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "your_context": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/YourContextOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Your Context"
+          }
+        },
+        "title": "ScopingPlanPatch",
+        "type": "object"
+      },
+      "ScopingSteerPointDefaultOut": {
+        "description": "One standing instruction on a scoping plan.\n\nArgs:\n    steer_point: The check-in point the rule covers.\n    action: `proceed_flag` or `stop`.",
+        "properties": {
+          "action": {
+            "enum": [
+              "proceed_flag",
+              "stop"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "steer_point": {
+            "title": "Steer Point",
+            "type": "string"
+          }
+        },
+        "required": [
+          "steer_point",
+          "action"
+        ],
+        "title": "ScopingSteerPointDefaultOut",
         "type": "object"
       },
       "SectionOut": {
@@ -5064,9 +5611,44 @@
         "title": "StageStartedFrame",
         "type": "object"
       },
-      "TaskAgentTranscriptTurnOut": {
-        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+      "TaggedOut": {
+        "description": "One scoping plan field with the origin tag the user sees.\n\nArgs:\n    text: The field's content, in plain words.\n    origin: Where it came from.",
         "properties": {
+          "origin": {
+            "enum": [
+              "from_your_question",
+              "assumed",
+              "your_call"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "origin"
+        ],
+        "title": "TaggedOut",
+        "type": "object"
+      },
+      "TaskAgentTranscriptTurnOut": {
+        "description": "One durable task_agent-transcript turn shown in chronological order.\n\nArgs:\n    turn_index: Monotonic per-task conversation coordinate.\n    conversation_id: Owning task_agent conversation, absent only on legacy rows.\n    client_turn_id: The caller's idempotency key for this turn \u2014 returned\n        so a reloaded client can retry its own incomplete latest turn.\n    user_message: Submitted user message.\n    reply: Task Agent reply, absent until a pending turn completes.\n    suggestions: Task Agent quick-reply suggestions, if the turn completed.\n    part: Structured sequential-task_agent proposal, absent for legacy turns.\n    capability: The owning task's capability, absent on legacy turns.\n    status: Durable execution state for this turn.\n    created_at: Receipt timestamp, retained as display metadata.\n    completed_at: Terminal timestamp, absent while still pending.",
+        "properties": {
+          "capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
           "client_turn_id": {
             "format": "uuid",
             "title": "Client Turn Id",
@@ -5183,8 +5765,19 @@
         "type": "object"
       },
       "TaskAgentTurnOut": {
-        "description": "Response body for one task_agent turn.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.",
+        "description": "Response body for one task_agent turn.\n\nArgs:\n    reply: The task_agent's conversational reply for this turn.\n    plan: The full current draft plan.\n    suggestions: The task_agent's suggested answers to its clarifying\n        question, rendered as tappable quick replies. Empty when none.\n    part: Structured sequential-task_agent proposal, when this turn carries one.\n    conversation_id: Task Agent conversation that produced this turn.\n    capability: The owning task's capability, when known. Absent on turns\n        stored before task 044.\n    scoping_plan: The full current scoping draft, on an options-scoping\n        turn. `plan` is null for those turns, and this is null for\n        Evidence search turns.",
         "properties": {
+          "capability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
           "conversation_id": {
             "anyOf": [
               {
@@ -5208,11 +5801,28 @@
             ]
           },
           "plan": {
-            "$ref": "#/components/schemas/PlanDraft"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "reply": {
             "title": "Reply",
             "type": "string"
+          },
+          "scoping_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScopingPlanDraft"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "suggestions": {
             "items": {
@@ -5223,8 +5833,7 @@
           }
         },
         "required": [
-          "reply",
-          "plan"
+          "reply"
         ],
         "title": "TaskAgentTurnOut",
         "type": "object"
@@ -5944,6 +6553,39 @@
           "created_at"
         ],
         "title": "WaitlistSignupOut",
+        "type": "object"
+      },
+      "YourContextOut": {
+        "description": "One entry of the user's own context, verbatim.\n\nArgs:\n    text: The user's words, exactly as written.\n    type: Something true now, or something they plan or promise.\n    turn_index: The Task Agent turn the entry came from.\n    test_as_condition: Whether they asked for it to be tested.",
+        "properties": {
+          "test_as_condition": {
+            "default": false,
+            "title": "Test As Condition",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_index": {
+            "title": "Turn Index",
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "present_fact",
+              "commitment"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "type",
+          "turn_index"
+        ],
+        "title": "YourContextOut",
         "type": "object"
       }
     },
@@ -8364,6 +9006,65 @@
         ]
       }
     },
+    "/api/v1/tasks/{task_id}/plan/confirm-baseline": {
+      "post": {
+        "description": "Record that a plan version was confirmed against its baseline.\n\n\"Confirm plan and build longlist\" cannot be a steering event: by the time\nthe user presses it the walk has ended, and a steering event needs a\n``capability_run`` to hang on (S4, X5). So the confirmation is\n**plan-scoped** \u2014 a new approved plan version carrying\n``baseline_confirmed`` \u2014 which History already renders and which task 2's\nlonglist walk will read as its opening decision.\n\nIdempotent by construction: confirming the same ``(artefact_id,\nplan_version)`` pair that the current version already records returns that\nversion unchanged rather than minting an identical one, so a double-tap\ndoes not fill the plan's history with duplicates.",
+        "operationId": "confirm_baseline_api_v1_tasks__task_id__plan_confirm_baseline_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmBaselineIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Confirm Baseline",
+        "tags": [
+          "task_agent"
+        ]
+      }
+    },
     "/api/v1/tasks/{task_id}/runs": {
       "get": {
         "description": "List a task's walks from newest to oldest (paginated \u2014 runs accumulate).",
@@ -8683,7 +9384,7 @@
         ]
       },
       "post": {
-        "description": "Advance one task's durable task_agent conversation once per client turn id.",
+        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).",
         "operationId": "create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post",
         "parameters": [
           {

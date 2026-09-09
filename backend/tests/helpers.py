@@ -420,6 +420,14 @@ def delete_task_data(conn: Connection, task_id: uuid.UUID) -> None:
     conn.execute(delete(task_agent_transcript).where(
         task_agent_transcript.c.task_id == task_id
     ))
+    # The two tables point at each other (task 044): plan.evidence_scope_id one
+    # way, evidence_scope.plan_id the other. Break the second edge first, or
+    # deleting the plan trips fk_scope_plan_task.
+    conn.execute(
+        evidence_scope.update()
+        .where(evidence_scope.c.task_id == task_id)
+        .values(plan_id=None)
+    )
     # task_plan before evidence_scope (fk_plan_scope_task) and
     # before conversation (task_plan.conversation_id FKs onto it).
     conn.execute(delete(task_plan).where(
