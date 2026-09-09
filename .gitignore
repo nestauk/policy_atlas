@@ -55,6 +55,8 @@ docs/tasks/*/evidence/
 .cursor/hooks.json
 .github/hooks/
 .impeccable/
+PRODUCT.md
+DESIGN.md
 
 # Task 038 sweep state (per checkout, not a review artefact)
 scripts/.rename_038_state.json

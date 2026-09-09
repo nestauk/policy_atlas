@@ -2472,3 +2472,30 @@ precede the chunk index to improve retrieval diversity — is its own Evidence s
 options-scoping build. Interim: options scoping's task 2 groups by DOI where present at the point
 of counting, no schema or ingestion change. Source: `docs/tasks/035-options-scoping/checks/`
 (check 2 C2-5 and its *After review* section).
+
+## Frontend design consistency (impeccable document audit, 2026-09-09)
+
+Found while writing the local `DESIGN.md` from the built frontend. The frontend was
+AI-coded; these read as drift, not decisions (owner agreed 2026-09-09). One low-tier
+sweep, well under a day; after it lands, re-run `/impeccable document`. The Zosia
+Display usage question (page titles in Averta, error headings in Zosia) is **not**
+deferred here — the owner ruled the font is fine for now.
+
+- **Button sizes and the green tone live outside the Button component.** "New task"
+  (`views/listPageChrome.ts` `listNewButtonClass`), the New Task submit and "Start
+  search" (`views/workspace/planStart.ts` `START_SEARCH_CLASS`) each hand-build a larger
+  size (Body text, 24px × 14px) as class strings, and Start search overrides the colour the
+  same way. Hover colours are hard-coded hexes in three places (`#0000d6`, `#147a6c`,
+  `#f0f0f3`). Seam: a `size="lg"` variant and a green `tone` on `ui/brand/Button.tsx`;
+  delete the three class strings.
+- **Eyebrow labels drift.** `PaneHeading` is Extrabold; plan and check-in eyebrows
+  (`PartCard`, `CheckInBundle`, `CheckInCard`) are Bold; the conversation list uses
+  Caption size. Six files hard-code `tracking-[0.06em]` although the `--tracking-label`
+  token (`tracking-label`) exists for it. Seam: one Label component or class.
+- **The report sheet carries the only neutral shadow.** `ArtefactView` uses Tailwind
+  `shadow-sm` (grey) plus `ring-1 ring-line`; every other surface uses the navy-tinted
+  card shadow. Swap to the Card shadow or drop the shadow and keep the ring.
+- **Check-in cards use two colours for one state.** `CheckInCard` has a 2px Orange left
+  rule, a Yellow "Waiting on your input" chip and the Yellow glow; Orange means *paused*
+  on `StatusDot`. If "waiting on you" is one state it should be one colour — owner call
+  on which.
