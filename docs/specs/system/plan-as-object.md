@@ -66,6 +66,16 @@ may be refined as implementation lands.
   it a factor row of its own, its evidence cell reading "not addressed by the evidence" when the
   evidence does not name it, its context cell carrying the entry under its own type. How the
   evidence's own blockers are found, quote-vetted and judged necessary is task 3's, not the plan's.
+- **Several intent records per plan** *(owner ruling on OS decision-sheet row C4, 2026-09-09)*. An
+  intent record (`evidence_scope` in the code) is the row a compiled plan creates to hold the
+  question a run is answering, plus its settings; every result row points at one. A plan may
+  compile to **more than one**: options scoping runs a baseline record (the problem and its trend
+  in the plan's Where), a longlist record (interventions for the plan's outcomes), one per
+  user-minted variant (its specified design as intent, OS ruling 15) and one per thin option's
+  targeted acquire, all in one task. A document has one row per task however many intent records
+  it was screened under, so counts of documents per option never double-count, and an option's
+  membership points at the document row, not at any one screening verdict. Each intent record
+  carries the plan version that created it.
 - **Source / evidence policy** — the evidentiary standard (see below).
 
 ## Thoroughness as a relative nudge, not an absolute level
