@@ -1059,12 +1059,14 @@ export function SourceDossier({
       <SheetContent
         title={scrub(byId ? (dossier.data?.title ?? source?.title ?? "Source") : sourceRef)}
       >
-        {evidence.isPending && (
+        {/* isLoading, not isPending: while the title→id lookup has not
+         *  resolved, the dossier query is disabled and pending forever —
+         *  isPending would render a stuck (and duplicate) loading line. */}
+        {((!byId && evidence.isPending) || dossier.isLoading) && (
           <p role="status" className="animate-pulse text-body text-grey">
             Loading the dossier…
           </p>
         )}
-        {dossier.isPending && <p role="status" className="animate-pulse text-body text-grey">Loading the dossier…</p>}
         {dossier.isError && <p role="alert" className="text-body text-navy">This source dossier couldn't be loaded.</p>}
         {dossier.data && <SourceDossierBody source={dossier.data} findings={findings.data?.data} findingsPending={findings.isPending} />}
         {!byId && evidence.data !== undefined && source === undefined && (
@@ -1254,7 +1256,9 @@ function MostRelevantSources({
   onOpenDossier,
 }: {
   sources: TopSource[];
-  onOpenDossier: (title: string) => void;
+  /* Opens by source id: the citation-time title snapshot can drift from the
+   * evidence row's title in deployed data, so a title-keyed lookup misses. */
+  onOpenDossier: (sourceId: string) => void;
 }) {
   useScrollWhenNavigated("sources");
   if (sources.length === 0) return null;
@@ -1267,7 +1271,7 @@ function MostRelevantSources({
           <li key={source.sourceId} className="border border-line p-4">
             <button
               type="button"
-              onClick={() => onOpenDossier(source.title)}
+              onClick={() => onOpenDossier(source.sourceId)}
               className={`cursor-pointer text-left ${REPORT_BODY_CLASS} font-bold hover:underline`}
             >
               {scrub(source.title)}

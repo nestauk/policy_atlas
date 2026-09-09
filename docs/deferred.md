@@ -1886,6 +1886,15 @@ first-class vocabulary. What follows is what it deliberately left out.
   and theme members). The sibling display bug — full-text-grounded citations showing
   locator URLs — was the envelope/text-snapshot authority split, fixed at the read
   model (envelope is the sole bibliographic authority; references keyed by document).
+  **Narrowed at 043 (2026-09-09):** the title-keyed path bit in deployment — "Most
+  relevant sources" opened dossiers by the synthesis-time title snapshot, which can
+  drift from the evidence row's title (and the lookup scans only one 200-item evidence
+  page), so the dossier showed a stuck loading line plus "isn't in the evidence list
+  yet". 043 moved that section to the id path. **Still open:** the References list
+  stays title-keyed because `ReferenceOut` carries no `source_id` on the wire; the same
+  drift can miss there. Closing it means adding `source_id` to `ReferenceOut` at the
+  read model — a small backend + `make openapi-sync` slice
+  (`docs/tasks/043-dossier-hotfix/contract.md`).
 - **Post-re-auth return-to renders the landing route** (026 live check, 2026-07-28) —
   the OIDC sign-in callback restores the stashed path via `history.replaceState`, which
   react-router never observes: after any auth round-trip the URL may show the deep link
