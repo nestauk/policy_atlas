@@ -203,8 +203,11 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   against the option's specified design. *Effect- and cost-shaped* constraints ("low cost", "at
   least moderate evidence") are checked after assessment; the plan says so; until then each
   option carries a labelled **reasoned guess** that is a flag and a user-requested sort only
-  (see [trust.md](trust.md)). *Evidence-scope* constraints ("OECD evidence only") act on
-  retrieval and screening and **can never exclude a known option**; an option whose only example
+  (see [trust.md](trust.md)). *Evidence restrictions* ("OECD evidence only"; "evidence-scope
+  constraints" in the frozen rulings) are the Evidence search's search-directive filters —
+  country group, years, languages — applied at retrieval (owner ruling on decision-sheet row C1,
+  2026-09-09; the Sources statement says they filter by where a source was published, not where a
+  study was done) and **can never exclude a known option**; an option whose only example
   is out of scope stays, marked "no in-scope evidence" (an evidence-scope constraint can prevent
   an option from ever being discovered, so the breadth claim is bounded by the authorised scope,
   ruling 36). The agent asks when a sentence is ambiguous between the kinds. Screen findings
