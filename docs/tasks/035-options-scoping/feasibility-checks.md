@@ -1,5 +1,10 @@
 # Options scoping — feasibility checks before any contract
 
+*Task number.* 035 was reserved for this capability before the task split and before task 038
+renamed the vocabulary; the number is a reservation id, not a landing order (owner, 2026-09-09).
+The documents here use the post-038 words ("Evidence search", "task", "project"). The five build
+tasks take fresh numbers at contract time.
+
 Source: concept ruling 42 (`docs/specs/sources/options-scoping/options-scoping-concept.md`), which
 adopted the third review pass's six checks in its order. A check order is an order for resolving
 uncertainty, not a build order (ruling 28). Each section: the question, the smallest informative
