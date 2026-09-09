@@ -124,6 +124,16 @@ tool-governance level instead (see [security/egress — not yet drafted]; arch �
   substrate computed **once per unique key**; reference-counted GC; reference edges
   task-private (no cross-task enumeration). **Uploaded snapshots stay per-task, never
   shared.** Sharpens a cross-tenant boundary flag → carry to security/egress (arch §11). ⚠️
+- **Inherited documents (owner ruling on decision-sheet row A7, 2026-09-09; closes the 🟡 in OS
+  components § 0).** An inherited document is an acquired one; `origin` is untouched and no
+  inheritance column is added. A document row created by an `inherit` run is inherited; its
+  source task is whichever linked task holds the same snapshot, resolved through `task_link`, so a
+  document inherited from several linked tasks needs no special case. "Inherited versus added" on
+  Sources is a query over the creating run. Classification and appraisal for inherited documents
+  are **read from the linked task's pinned run**; classifier and rubric versions travel with the
+  rows as they already do and are not surfaced to the user. A re-run in the receiving task is a
+  plan setting or a user action, after which the receiving task's own rows take over for those
+  documents. Re-screening against the receiving plan is mandatory (OS ruling 22).
 - **Origin drives classification richness & default priority, not appraisal** — an uploaded
   SR is appraised the same as an acquired one; priority is handled by **scoping** (soft prior),
   not a hidden re-weight. Uploaded docs get an **inferred `function`** (never user-entered;

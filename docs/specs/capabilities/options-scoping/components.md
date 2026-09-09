@@ -109,9 +109,11 @@ Evidence search direction (from a scoping task, the child full run's normal case
   requirements a finding satisfies for the specified option and the same source snapshot, fills
   or labels the rest, and reconciles profile, version and coverage before counting (ruling 35).
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are
-  re-screened (🟡 proposal: they re-pass classify/appraise when the rubric or classifier version
-  differs — not yet ruled; the shared cache-validity rules decide); inherited rows take the
-  fait-accompli path like any suggestion. Acquired source snapshots cross with the Link. Uploaded
+  re-screened; their classification and appraisal are **read from the linked task's pinned run**
+  through `task_link` and shown as inherited, never copied, and a re-run in the scoping task is a
+  plan setting or a user action (owner ruling 2026-09-09 on decision-sheet rows A6 and A7, closing
+  the earlier 🟡; [data-model.md § Links between tasks](../../system/data-model.md)); inherited
+  rows take the fait-accompli path like any suggestion. Acquired source snapshots cross with the Link. Uploaded
   snapshots (task-private in the data model; no upload feature exists yet) do **not** cross
   automatically — the inherit contract of the day uploads ship decides the mechanism (ruling 43).
   ✅ The run acquires beyond the inherited set; the
