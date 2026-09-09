@@ -61,7 +61,11 @@ may be refined as implementation lands.
   plan; a child task reads them through the Link as input (OS ruling 41). **Attribution is by user
   id** through the turn's conversation, never a literal "you": every user-originated label ("stated
   by you", "planned by you", "added by you") is rendered from the id — "you" when it is the
-  viewer, the person's name otherwise.
+  viewer, the person's name otherwise. *(Owner ruling on OS decision-sheet row E13, 2026-09-09.)*
+  An entry may be flagged **"test this as a condition"**: the transferability working then gives
+  it a factor row of its own, its evidence cell reading "not addressed by the evidence" when the
+  evidence does not name it, its context cell carrying the entry under its own type. How the
+  evidence's own blockers are found, quote-vetted and judged necessary is task 3's, not the plan's.
 - **Source / evidence policy** — the evidentiary standard (see below).
 
 ## Thoroughness as a relative nudge, not an absolute level
