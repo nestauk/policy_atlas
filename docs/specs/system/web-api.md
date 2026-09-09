@@ -163,6 +163,25 @@ Splash-page **Request access** intake. Public — no bearer token.
   the creator's `org_id` (NULL for an unenrolled creator) and
   `visibility='private'` (the column default — new work is unshared until
   its owner shares it; owner amendment 2026-08-26).
+  Task 044: the body also takes `capability` (`evidence_search` default |
+  `options_scoping`, written once and never changed), `project_ids[]` and
+  `from_task_ids[]`, applied in **one transaction** (C10): the same-project
+  rule is checked when a link is written (409 `link_project_mismatch`), the
+  pinned source walk must be `succeeded | degraded` (409
+  `link_source_unfinished`), and a failed request leaves no task row.
+  `TaskOut` carries `capability` and `links[]` (`source_task_id`,
+  `source_task_name`, `source_capability_run_id`, `flagged` — true when the
+  two tasks no longer share a project; a link is never deleted).
+- `POST /api/v1/tasks/{id}/plan/confirm-baseline` `{artefact_id,
+  plan_version}` → `PlanOut` (task 044; Options scoping only, 422 on an
+  Evidence search task). Writes `baseline_confirmed {artefact_id,
+  plan_version}` into the scoping plan as a new approved version through
+  the ordinary plan-edit path; idempotent on the same pair (200, no new
+  version); 409 `run_active` while any walk is running or paused; 404 if the
+  artefact is not a baseline of this task. The plan-scoped record "Confirm
+  plan and build longlist" writes after a plan change without a rebuild (a
+  steering event needs a walk); task 2 replaces it with the longlist walk's
+  opening decision.
 - `GET /api/v1/tasks/{id}` → task (read grade, or the public leg —
   § Auth boundary). A public-leg read returns the **redacted shape**:
   `access = "public"`, `is_owner = false`, `owner_display = null`,
@@ -295,10 +314,33 @@ is wanted (`docs/deferred.md` § Task lifecycle IA).
   `task_agent_turn_in_progress`; reading after ten minutes terminally marks the
   pending row `failed`. The process-local per-task turn lock remains a
   belt-and-braces concurrency guard under the one-instance posture.
-  A turn while the task's walk is running or parked → 409 `run_active`:
-  steering is the sanctioned mid-run plan channel, and the fence guarantees
-  the latest-approved plan is always the active walk's own lineage
-  (review adjudication, 2026-07-21).
+  A turn while the task's walk is **running** → 409 `run_active`. While the
+  walk is **paused**, an Evidence search task still refuses the turn (409
+  `run_active`: steering is its sanctioned mid-run plan channel), but an
+  **Options scoping** task admits it *(owner ruling 2026-09-09, task 044
+  decision D9: the gate is answered in the Task Agent chat; "routing hangs
+  on the turn, not on the conversation kind")*: the turn is sorted by the
+  gate sort (`gate_sort_v1`) into **question** — answered read-only from the
+  paused walk's pinned scope through the shared answer core and rendered
+  with citations (`kind: "answer"`, `answer: {...}`); the walk stays paused
+  — or **decision** — one of the pending check-in's offered options,
+  recorded through the same check-in response transaction as the card
+  (`kind: "decision"`, bound to the `capability_run_id`, the `check_in_id`
+  and the plan version; the second of a chat and a card answer is 409
+  `already_answered`); an instruction is the decision "Change the plan"
+  carrying the user's text, which ends the walk `aborted`, keeps the plan
+  `approved`, and continues the same transcript row as an ordinary planning
+  turn minting a new plan version (one row, two commits). An unsortable
+  turn is asked back (`kind: "reply"`); a decision is never inferred from a
+  question. The **approving branch** of a turn and `PATCH /plan` stay 409
+  `run_active` while a walk is running **or paused**: no plan version lands
+  under a live walk, so the fence still guarantees the latest-approved plan
+  is the active walk's own lineage (review adjudication, 2026-07-21).
+  `TaskAgentTurnOut` / `TaskAgentTranscriptTurnOut` carry the optional
+  additive fields `kind` (`reply | answer | decision`), `answer` (the chat's
+  citation payload) and `decision` (`option_id`, `label`, `check_in_id`,
+  `capability_run_id`, `plan_version`); older rows carry none and read as
+  `reply`.
   The draft `plan` mirrors `TaskPlan` field-by-field with every
   field optional while drafting + `steps[]` + `ready`. Planner context
   rehydrates from completed rows in `turn_index` order (each contributes the
@@ -491,6 +533,17 @@ archived conversations are the same 404.
     in the same transaction, so SSE/replay see the terminal transition.
   A confirm token lost to restart/eviction → 409 `confirm_expired`
   (recompile to proceed).
+  Check-in kind `baseline_confirm` (task 044; Options scoping only — the
+  gate after the baseline, on the scoping lattice only): the render quotes
+  the baseline's key assumption and the plan's Settings; `options[]` are
+  `confirm_plan` ("Confirm plan and build longlist" → the walk finishes
+  `succeeded`; the decision payload records `plan_version` and the baseline
+  `artefact_id`) and `change_plan` ("Change the plan" → response `abort`
+  with `action: "change_plan"`: the walk ends `aborted`, the plan stays
+  `approved` and editable). In unattended mode the point does not pause:
+  the runner records `decided_by: standing_default` and flags it for the
+  end-of-run review. A decision may also arrive as a Task Agent turn
+  (§ Task Agent turns); both land in the same transaction.
   The answer and its `continuation.requested` event commit in one
   transaction; the parked run's **boundary continuation walk** dispatches
   after commit (answers are always accepted; execution may queue at the
