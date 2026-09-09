@@ -66,11 +66,16 @@ fail-closed. Breadth and depth are independent — a targeted question compiles 
   task's **user context** and **evidence-scope constraint** as inputs — so a transferability cap set
   by unstated context persists (scoping ruling 41) and documents set aside under the scope stay set
   aside; the option's **mentioning documents** with their classify and appraise results and
-  abstract profiles, queued into the pool flagged *inherited* and **re-screened** against this plan
-  (whose intent is narrower than the scoping plan's); and the **light findings** the scoping
+  abstract profiles — the input is a `task_link` row and the rules are the data model's
+  ([§ Links between tasks](../../system/data-model.md), owner rulings on decision-sheet rows A6
+  and A7, 2026-09-09): the child **reads across the link and copies nothing**; the documents get
+  the child's own document rows and are **re-screened** against this plan (whose intent is
+  narrower than the scoping plan's); their classification and appraisal are read from the scoping
+  task's pinned run; links are many-to-many — and the **light findings** the scoping
   ⟨assess⟩ extracted for the option, reused **at finding grain**: `extract` skips only the
   requirements a light finding satisfies for the same source snapshot and profile version, and
-  fills the rest with the full profile (the mirror of scoping ruling 35). The scoping-pass profile
+  fills the rest with the full profile (the mirror of scoping ruling 35; how the findings cross
+  the link is decided with decision-sheet row A4). The scoping-pass profile
   becomes the prior version of the one document this task's report is (scoping ruling 47), in
   History.
 - ✅ Nothing inherited is trusted because it was found before: inherited documents are re-screened;

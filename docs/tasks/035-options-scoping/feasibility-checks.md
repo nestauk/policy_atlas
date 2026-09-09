@@ -1,9 +1,17 @@
-# Options scoping — spikes before any contract
+# Options scoping — feasibility checks before any contract
+
+*Task number.* 035 was reserved for this capability before the task split and before task 038
+renamed the vocabulary; the number is a reservation id, not a landing order (owner, 2026-09-09).
+The documents here use the post-038 words ("Evidence search", "task", "project"). The five build
+tasks take fresh numbers at contract time.
 
 Source: concept ruling 42 (`docs/specs/sources/options-scoping/options-scoping-concept.md`), which
-adopted the third review pass's six spikes in its order. A spike order is an order for resolving
+adopted the third review pass's six checks in its order. A check order is an order for resolving
 uncertainty, not a build order (ruling 28). Each section: the question, the smallest informative
 method, who does it, what it depends on, and the result that would change the design.
+
+**Word.** Ruling 42 and the review pack call these *spikes*. The team's word is **feasibility check**: a
+small, time-boxed investigation that tests one design claim before a contract is signed. Same thing.
 
 ## 6 — Contract trace (first: needs nothing)
 
@@ -27,7 +35,7 @@ method, who does it, what it depends on, and the result that would change the de
   and light profiles over it and trace every proposed row and confidence statement back to the exact
   finding and source set.
 - **Who.** Agent assembles and runs; owner or an analyst checks the verdicts (about an hour).
-- **Depends on.** Spike 6 for the field lists; the light and abstract extraction profiles drafted.
+- **Depends on.** Check 6 for the field lists; the light and abstract extraction profiles drafted.
 - **Changes the design if.** Independence cannot be resolved → suppress study tallies, count
   documents. Source tiers do not sustain claim confidence → keep the source-quality profile and the
   assessed judgement as two separate things (already ruled 33; this tests it). Inheritance misses
@@ -44,7 +52,7 @@ method, who does it, what it depends on, and the result that would change the de
   labels; watch the proposal. Ask a domain expert whether the selected comparisons change for a
   substantive reason.
 - **Who.** Agent against real corpora; expert judgement on meaningfulness.
-- **Depends on.** Spike 6; the abstract extraction profile.
+- **Depends on.** Check 6; the abstract extraction profile.
 - **Changes the design if.** Options cannot be recovered reliably from abstracts → targeted full-text
   reading of reviews before minting (ruling 31 anticipates this). Lever assignment drives unstable
   places → stop using one-primary-lever quotas as the selection instrument.
@@ -58,7 +66,7 @@ method, who does it, what it depends on, and the result that would change the de
   vs a current observation. Run each through the transferability working and inspect whether the cap
   moves for the right reason.
 - **Who.** Agent drafts the pairs and runs them; owner judges.
-- **Depends on.** A transferability prompt and the column-grounded block (from spike 3's profile
+- **Depends on.** A transferability prompt and the column-grounded block (from check 3's profile
   work).
 - **Changes the design if.** Verdicts strengthen on containment or assurances alone → keep conditions
   visible and the verdict Unknown / conditional. Even corrected conditions cannot be judged reliably →
@@ -74,7 +82,7 @@ method, who does it, what it depends on, and the result that would change the de
   verification, waiting at gates — not extraction alone. Inspect omitted contrary evidence under
   tightening caps.
 - **Who.** Agent, on a prototype of ⟨assess⟩.
-- **Depends on.** Spike 3; a working select strategy and light profile.
+- **Depends on.** Check 3; a working select strategy and light profile.
 - **Changes the design if.** A smaller cap changes the conclusion or drops the counter-case → change
   the read-set strategy and the promised result. The spine dominates latency → shrinking extraction
   does not solve rapid. Performance works only on inherited evidence → define that narrower rapid
@@ -92,19 +100,45 @@ method, who does it, what it depends on, and the result that would change the de
 - **Who.** The owner's team with pilot users. Not agent work.
 - **Depends on.** Nothing technical; needs people and asks. Should land before any contract is
   signed.
+- **Owner decision (2026-09-08).** Live asks are not feasible at this stage; the deadline is tight.
+  Check 1 is **deferred to the user testing planned after the capability is built**, where ruling
+  27's four behavioural tests become the testing protocol. Consequence accepted: this is the one
+  check that can change the shape, so the parts it can change — the shortlist ceremony, the
+  similar-plus-challenger comparison, the handoff — are built so they are cheap to change after
+  testing, and no contract treats them as final.
 - **Changes the design if.** The shortlist ceremony adds no useful judgement → make selection
   subordinate to the report (the hybrid of ruling 32 already leans this way). Similar-plus-challenger
   comparisons omit the question the senior needs → change the comparison principle. Recipients lose
   qualifications → change the handoff before expanding output detail.
 
+## Results (2026-09-08 to 2026-09-09)
+
+Five of the six checks ran on 2026-09-08 and were reviewed twice by an independent Codex pass;
+their corrections and extra runs sit in each report's *After review* section. Everything is on one
+branch (`checks/035-feasibility`, PR #72). The runners are in
+`scripts/feasibility_checks/options_scoping/`; raw results carry staging document text and stay
+outside the repository. The spec changes the checks proposed are the rows of
+`checks/decision-sheet.md`; the owner decided the sixteen rows task 1 depends on, one at a time,
+on 2026-09-09, and the specs were edited to each ruling (see `docs/specs/log.md`). The other rows
+are decided in the task that owns them (table at the top of the sheet).
+
+| check | report | outcome in one line |
+|---|---|---|
+| 6 contract trace | `checks/check-6-contract-trace.md` | the components compose; six shared invariants were missing from the system contracts, now decided as sheet rows A6, A7, C1, C3, C4 and A4 |
+| 2 attribution | `checks/check-2-evidence-attribution.md` | mention and support are distinguishable through the mention's role; independence resolves only for own-data papers with a name or registration; inherited findings satisfy only part of the light profile; an unstated design feature must hold support back |
+| 3 option grain | `checks/check-3-option-grain.md` | mentions give class-grain options and findings give named designs, on equal inputs; seats are stable except where a lever type has only thin unevaluated options; no-document entrants survive as their own options |
+| 4 local conditions | `checks/check-4-local-condition.md` | the four context kinds are distinguished; the working is two steps; factor extraction drifts and needs pinning; the fill over-reads adjacent context; chat-to-context promotion works |
+| 5 reading budget | `checks/check-5-reading-budget.md` | writing, not reading, is where the time goes (a fresh rapid search: 11.3 minutes, 59 percent writing); a reading cap of 3 loses contrary evidence; no small cap, design targets not cut-offs |
+| 1 advice and commissioning | — | **deferred by the owner to post-build user testing**; ruling 27's four tests become the protocol |
+
 ## Order
 
 6 → (2 ∥ 3) → 4 → 5, with 1 running whenever live asks are available and landing before contracts.
 
-## After the spikes — the intended task split (owner, 2026-09-08)
+## After the feasibility checks — the intended task split (owner, 2026-09-08)
 
 The concept and spec carry no build order (ruling 28); this is the working intention for the
-contracts, recorded here because it is a task-planning decision, not a product one. Spike results
+contracts, recorded here because it is a task-planning decision, not a product one. Check results
 can change it.
 
 **Branching.** One feature branch, `feat/options-scoping`, until the capability is ready for users.
@@ -123,7 +157,7 @@ split; 036–038 are taken).
    scoping direction for the plan and the document pool, with inherited-versus-added accounting; the
    ⟨baseline⟩ composition and template with "what is contested"; the pause-and-confirm gate; the
    Baseline view. No option entity yet: there are no options to store. Ends with a scoping task that
-   has a confirmed plan and a baseline. Gated on spike 6.
+   has a confirmed plan and a baseline. Gated on check 6.
 2. **Longlist.** The abstract extraction profile; `longlist`, which **mints the option entity** as
    declared in `data-model.md` (stable task-scoped id, versioned specified design, primary and
    secondary lever type, ambition tag, theme, variant-of and part-of relations, included and excluded
@@ -131,13 +165,13 @@ split; 036–038 are taken).
    "from your evidence search"); the part of `inherit` that turns a linked report's interventions into
    suggestions; `constrain`; the list view and the option card with its source-quality profile. The
    Result at this stage is the longlist (ruling 50). The first demoable milestone and the riskiest
-   task. Gated on spike 3 (and 2).
+   task. Gated on check 3 (and 2).
 3. **Shortlist and assessment.** `shortlist` with its reasons and gap messages; the grid and
    shortlist views; add, remove and exclude from the view and the chat; the "Assess these N" gate;
    the scoping `select` strategy; the light extraction profile; the profile template; the
    transferability working block (new column-grounded block kind); the assessed report; the
    comparison view; post-assessment constraint checks. Extends the option entity with the shortlist
-   membership record and the assessed cells. The largest task. Gated on spikes 4 and 5.
+   membership record and the assessed cells. The largest task. Gated on checks 4 and 5.
 4. **Sense-check, Sources and export.** The sense-check entry branch (short plan, light baseline
    still paused, neighbours at metadata depth, the named option alone through the gate, questions to
    put to the department; the standard variant with similar neighbours plus one challenger); depth as
@@ -149,7 +183,7 @@ split; 036–038 are taken).
    one document in two homes (ruling 47); History. Extends the option entity with the child-task link.
    Kept separate because it is the only task that changes the live Evidence search (a prompt-bearing
    template and a declared boundary widening, which want their own ADR). It can wait for a later round
-   if the live-ask spike shows people stopping at the assessed report.
+   if the live-ask check shows people stopping at the assessed report.
 
 **Alongside.** The eval slice of ruling 27 (four behavioural tests on live asks; recall floor) runs
 next to the tasks, not inside one.

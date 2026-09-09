@@ -128,7 +128,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   support; abstracts are quotable anywhere; a document with no obtainable full text supports
   abstract-level claims and is labelled so. "Scoping pass" = screened on titles and abstracts,
   full text read for the documents cited, document set not confirmed.
-- 🟡 **Assessment shape to spike** (concept open question 2, owner 2026-09-07). The countable
+- 🟡 **Assessment shape to check** (concept open question 2, owner 2026-09-07). The countable
   cells (direction per study, magnitude with its comparator and period, study design, setting)
   come from a **light per-document extraction** — a small field set, not the EB's full schema —
   run as a parallel fan-out over the capped set so latency is close to one document's, not the
@@ -138,7 +138,7 @@ Status legend: ✅ settled · 🟡 leaning · ❓ open · ⏸ deferred.
   is the latency lever; the **read set under the cap is chosen by the EB's `select` with a scoping
   strategy so that distinct implementations, the required outcomes and the counter-case
   survive**, omissions are represented, and a budget-limited result may be explicitly incomplete
-  (rulings 38, 43); the spike measures **whole-run** time to a usable result, not extraction alone.
+  (rulings 38, 43); the check measures **whole-run** time to a usable result, not extraction alone.
   Mentions and the abstract-level fields come from `extract`'s abstract profile over every
   screened-in document; the screen is unchanged (ruling 43). ❓ How "one vote per independent study" detects
   several papers on one trial is open (a trial or registration identifier in the light
@@ -168,7 +168,18 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   change · **who or what should change** (the target unit — people, firms, places,
   organisations, systems; PICO's "population" is the special case) · where · outcomes · depth ·
   constraints, each tagged *from your question* / *assumed* / *your call*. Presented exactly like
-  the EB search plan (ruling 1; see § Product surface). Non-linear: the user revises the plan
+  the EB search plan (ruling 1; see § Product surface). *(Owner ruling 2026-09-09, with
+  decision-sheet row D3.)* **Where** is the jurisdiction the policy would apply to — country, UK
+  nation, region or local authority — and **defaults to the United Kingdom**; the user narrows or
+  changes it, and the agent asks when the question implies a nation or place. **Setting** is where
+  the **target unit** experiences the intervention — the delivery point or channel: schools,
+  workplaces, primary care, an employer's payroll, the planning system — generalised from the
+  finding field's people-centric wording as target unit was from population. It is **not a
+  mandatory slot**: a user with a preference states it as a scope-shaped constraint (ruling 12),
+  which the planning conversation offers and which is checked against the specified design;
+  without one the longlist spans settings and shows setting as a facet. Where and setting are
+  never conflated. The UK default is a candidate for the Evidence search's planning chat, not
+  applied there in this ruling. Non-linear: the user revises the plan
   after seeing evidence and re-runs apply **deltas, not restarts** (concept § Shape 1; ❓ delta
   granularity and working-set versioning are open question 7).
 - ✅ **Baseline, and it pauses** (rulings 2, 24). Confirming the plan builds the baseline only. The
@@ -192,7 +203,7 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   and a specified design, never to a document (ruling 36); packages and ingredients are linked
   part of and shown together. ❓ Minting mechanics — clustering, overlap and dedup,
   target longlist size — are open question 4; 🟡 clustering at option grain is unproven and is
-  spiked before the longlist contract (ruling 31).
+  checked before the longlist contract (ruling 31).
 - ✅ **Screening is a pipeline stage, not a user step** (ruling 4). Screens run on longlist
   metadata as options complete. Hard screens = the user's session constraints of the
   scope-shaped kind plus three defaults (relevant to stated outcomes, distinct, within scope).
@@ -203,8 +214,11 @@ plan ──confirm──▶ baseline ══PAUSE: confirm plan against baseline�
   against the option's specified design. *Effect- and cost-shaped* constraints ("low cost", "at
   least moderate evidence") are checked after assessment; the plan says so; until then each
   option carries a labelled **reasoned guess** that is a flag and a user-requested sort only
-  (see [trust.md](trust.md)). *Evidence-scope* constraints ("OECD evidence only") act on
-  retrieval and screening and **can never exclude a known option**; an option whose only example
+  (see [trust.md](trust.md)). *Evidence restrictions* ("OECD evidence only"; "evidence-scope
+  constraints" in the frozen rulings) are the Evidence search's search-directive filters —
+  country group, years, languages — applied at retrieval (owner ruling on decision-sheet row C1,
+  2026-09-09; the Sources statement says they filter by where a source was published, not where a
+  study was done) and **can never exclude a known option**; an option whose only example
   is out of scope stays, marked "no in-scope evidence" (an evidence-scope constraint can prevent
   an option from ever being discovered, so the breadth claim is bounded by the authorised scope,
   ruling 36). The agent asks when a sentence is ambiguous between the kinds. Screen findings
@@ -450,20 +464,20 @@ contracts:
 - **Screening-reason quality**; **transferability-judgment calibration** (the transferability
   cell is a first-class eval axis); **effect-cell fidelity** against the studies;
   **guess-versus-evidence agreement** for the reasoned guesses (ruling 12).
-- ✅ **Spikes before any contract, in order** (ruling 42): 1 advice and commissioning on live asks ·
+- ✅ **Feasibility checks before any contract, in order** (ruling 42, which calls them spikes): 1 advice and commissioning on live asks ·
   2 evidence attribution and confidence · 3 option-grain construction and selection stability ·
   4 local-condition adjudication · 5 balanced reading within a real budget · 6 a
   specification-level contract trace of one inherited question and one edited variant. Each names
   the question it answers and the result that would change the design (`pass3-answer.md` § 5 in
   the review pack).
 - ✅ This spec carries **no build-order guidance** (ruling 28): slicing into tasks is a
-  contract-time decision and the initial build is expected to be several tasks. A spike order is
+  contract-time decision and the initial build is expected to be several tasks. A check order is
   not a build order.
 
 ## Open decisions and deferred seams
 
 ❓ Open (carried from concept § Open questions, updated by the rulings): 2 mini-search cost
-envelope and the light-extraction-plus-reading shape to spike (reading rule settled, ruling 16;
+envelope and the light-extraction-plus-reading shape to check (reading rule settled, ruling 16;
 read-set discipline stated, ruling 38; study-independence detection open) · 3 rapid latency budget · 4 option-minting mechanics · 5 taxonomy storage (curated asset 🟡 vs prompt-internal)
 · 6 baseline generation and grey-literature sourcing · 7 iteration mechanics and versioning ·
 8 the entry point from the product's front door (the rest of the product surface is settled) ·
