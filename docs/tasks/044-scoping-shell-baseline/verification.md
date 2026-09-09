@@ -236,7 +236,46 @@ byte-for-byte; `DecisionOut` → `TurnDecisionOut` (name collision with the
 decision-log model); two chat tests' monkeypatch targets moved with the lifted
 code; the core still traces as `component="chat_v1"` (5.4 may relabel).
 
-_(Phase 5.4/5.5, the Phase 5 full gate and Phase 7 rows are appended as each closes.)_
+### Phase 5.4 — the turn at a pause — commit 5c6335d1; 5.5 — the thread — commit 1ba6350d; copy pass 3ea1053e; 5.6 spec revision ab4e1ada (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| 5.4 `make verify-fast` | pass | 2797 passed; mypy 335 files clean; ruff clean; 18 new tests incl. the barrier race and the replay / partial-failure / retry trio |
+| 5.4 `make prompt-guard` / `make openapi-sync` + `drift-check` | pass | 16 unchanged; the only generated delta is a route docstring |
+| 5.5 `make frontend-verify` | pass | 715 tests / 82 files |
+| 5.5 `cd frontend && pnpm e2e` | pass | 15/15 (gate card + cited answer; Change the plan → decision → Rebuild / Confirm) |
+| copy pass `make frontend-verify` | pass | 715 / 82 |
+
+**Dispatch at the gate (5.4):** question → answer core, walk stays paused,
+the decision offered back after every answer (the sort has no "mixed" flag,
+so every answer at the gate offers it; never applied); decision → the
+check-in response transaction (confirm resumes the walk to `succeeded`;
+change_plan ends it `aborted`, plan stays `approved`); change_plan with text →
+one row, two commits; the loser of a chat-versus-card race keeps a durable
+turn saying the check-in was already answered (HTTP 200, `decision = null` —
+the durable decision is the other surface's); unsure → asked back with the
+two options. **Deviations:** `POST /runs` stopped narrowing to the ES plan
+(a scoping rebuild could not start otherwise); `_task_agent_inputs` accepts a
+null `task_agent_state` (a gate turn moves no draft). **5.5:** the plan
+document is read-only only while a walk is *active* for a scoping task (the
+ES rule — any run — stays), which the e2e showed was needed for
+rebuild-or-confirm to be reachable at all; `already_answered` keeps the
+existing copy and joins `stale_turn` on the Refresh affordance; the gate's
+two thread items are placed by time among turn-ordered items (a pause and
+the turns a paused walk accepts genuinely interleave).
+
+**Gate-sort latency:** not measurable on the stub path; the live check times
+it from the Langfuse span `agent:gate_sort` (usage event
+`agent.gate_sort.usage`, label `agent-gate-sort`).
+
+### Phase 5 boundary — full gate at 5c6335d1 (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make verify` (full) | pass | backend 2797 passed (8:25); typecheck, lint, build green; infra 46; audit-paths, prompt-guard, font-guard, drift-check green; frontend 715 tests / 82 files |
+| `cd frontend && pnpm e2e` | pass | 15/15 |
+
+_(Phase 7 rows are appended as each closes.)_
 
 ## Checks beyond the build
 
