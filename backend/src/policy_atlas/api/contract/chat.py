@@ -102,8 +102,37 @@ class ChatTurnCreate(BaseModel):
     client_turn_id: uuid.UUID
 
 
-class ChatTurnOut(BaseModel):
-    """Durable public projection of one chat turn."""
+class AnswerPayloadOut(BaseModel):
+    """The cited half of one grounded answer, shared by every turn that has one.
+
+    These are the citation fields ``ChatTurnOut`` has always carried, named
+    once so a Task Agent turn that answers from the evidence (task 044) can
+    carry the same shape instead of a second, drifting copy. Every field keeps
+    its chat default, so a turn with no answer serialises exactly as before.
+
+    Args:
+        claims: Structured claims backing the prose.
+        citations: Resolved citations, each with its read-time source facts.
+        enrichment: Downstream enrichment status for those citations.
+        warning_not_evidence_checked: Whether the evidence check could not run.
+        handoff: The handoff hint, when the answer held no evidence.
+        stopped_before_evidence_check: Whether the answer was stopped early.
+    """
+
+    claims: list[dict[str, Any]] = Field(default_factory=list)
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+    enrichment: dict[str, Any] | None = None
+    warning_not_evidence_checked: bool = False
+    handoff: Literal["evidence_not_held"] | None = None
+    stopped_before_evidence_check: bool = False
+
+
+class ChatTurnOut(AnswerPayloadOut):
+    """Durable public projection of one chat turn.
+
+    Carries its answer's citation fields inline (from ``AnswerPayloadOut``),
+    exactly as it always has — the extraction is a refactor, not a wire change.
+    """
 
     id: uuid.UUID
     conversation_id: uuid.UUID
@@ -114,12 +143,6 @@ class ChatTurnOut(BaseModel):
     status: Literal["pending", "completed", "failed", "cancelled"]
     created_at: datetime
     completed_at: datetime | None
-    claims: list[dict[str, Any]] = Field(default_factory=list)
-    citations: list[dict[str, Any]] = Field(default_factory=list)
-    enrichment: dict[str, Any] | None = None
-    warning_not_evidence_checked: bool = False
-    handoff: Literal["evidence_not_held"] | None = None
-    stopped_before_evidence_check: bool = False
 
 
 class ProgressEvent(BaseModel):

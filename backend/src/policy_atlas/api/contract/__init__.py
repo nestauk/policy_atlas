@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .chat import (
     CHAT_MESSAGE_MAX,
+    AnswerPayloadOut,
     CancelledEvent,
     CancelTurnOut,
     ChatStreamEvent,
@@ -149,7 +150,9 @@ from .task_agent import (
     SteeringMode,
     TaskAgentTranscriptTurnOut,
     TaskAgentTurnCreate,
+    TaskAgentTurnKind,
     TaskAgentTurnOut,
+    TurnDecisionOut,
     YourContextOut,
     YourContextType,
 )
@@ -204,6 +207,7 @@ __all__ = [
     "CancelTurnOut",
     "ChatStreamEvent",
     "ChatTurnCreate",
+    "AnswerPayloadOut",
     "ChatTurnOut",
     "ChunkContextOut",
     "CitedInOut",
@@ -282,7 +286,9 @@ __all__ = [
     "PlanUpdatedFrame",
     "TaskAgentTranscriptTurnOut",
     "TaskAgentTurnCreate",
+    "TaskAgentTurnKind",
     "TaskAgentTurnOut",
+    "TurnDecisionOut",
     "ProjectCreate",
     "ProjectOut",
     "ProjectUpdate",

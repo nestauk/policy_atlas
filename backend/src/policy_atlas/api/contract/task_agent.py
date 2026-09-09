@@ -21,6 +21,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .chat import AnswerPayloadOut
+
 #: Search backend scope. Mirrors `task_plan.BackendScope`.
 TASK_AGENT_MESSAGE_MAX = 10_000
 
@@ -75,6 +77,11 @@ PlanStageKey = Literal[
 #: Country-group membership provenance. Mirrors
 #: `task_plan.CountryGroupAuthorship`.
 CountryGroupAuthorship = Literal["pinned-table", "planner-proposed", "user-amended"]
+
+#: What one Task Agent turn is. A `reply` plans; an `answer` answers from the
+#: paused walk's evidence; a `decision` records the option a gate turn chose.
+#: Absent on turns stored before task 044, which are all replies.
+TaskAgentTurnKind = Literal["reply", "answer", "decision"]
 
 
 class CountryGroupDraft(BaseModel):
@@ -447,8 +454,32 @@ class PartProposalOut(BaseModel):
     options: list[PartOptionOut]
 
 
+class TurnDecisionOut(BaseModel):
+    """The recorded decision a gate turn resolved a paused walk with.
+
+    Args:
+        option_id: The check-in option the user chose.
+        label: That option's user-visible label, as offered.
+        check_in_id: The check-in the decision answered.
+        capability_run_id: The walk the check-in belongs to.
+        plan_version: The plan version the decision was taken against.
+    """
+
+    option_id: str
+    label: str
+    check_in_id: uuid.UUID
+    capability_run_id: uuid.UUID
+    plan_version: int
+
+
 class TaskAgentTurnOut(BaseModel):
     """Response body for one task_agent turn.
+
+    A turn is one of three things, named by ``kind``: a planning ``reply``, a
+    grounded ``answer`` from the paused walk's evidence, or a recorded
+    ``decision`` at a gate. The three are additive optional fields rather than
+    a discriminated union, so every existing reader keeps working and a turn
+    stored before task 044 stays valid with ``kind`` absent.
 
     Args:
         reply: The task_agent's conversational reply for this turn.
@@ -462,6 +493,10 @@ class TaskAgentTurnOut(BaseModel):
         scoping_plan: The full current scoping draft, on an options-scoping
             turn. `plan` is null for those turns, and this is null for
             Evidence search turns.
+        kind: What this turn is. Absent on turns stored before task 044,
+            which are all replies.
+        answer: The cited answer, on an `answer` turn.
+        decision: The recorded gate decision, on a `decision` turn.
     """
 
     reply: str
@@ -471,6 +506,9 @@ class TaskAgentTurnOut(BaseModel):
     conversation_id: uuid.UUID | None = None
     capability: str | None = None
     scoping_plan: ScopingPlanDraft | None = None
+    kind: TaskAgentTurnKind | None = None
+    answer: AnswerPayloadOut | None = None
+    decision: TurnDecisionOut | None = None
 
 
 class TaskAgentTranscriptTurnOut(BaseModel):
@@ -489,6 +527,10 @@ class TaskAgentTranscriptTurnOut(BaseModel):
         status: Durable execution state for this turn.
         created_at: Receipt timestamp, retained as display metadata.
         completed_at: Terminal timestamp, absent while still pending.
+        kind: What this turn is. Absent on turns stored before task 044,
+            which are all replies.
+        answer: The cited answer, on an `answer` turn.
+        decision: The recorded gate decision, on a `decision` turn.
     """
 
     turn_index: int
@@ -502,6 +544,9 @@ class TaskAgentTranscriptTurnOut(BaseModel):
     status: Literal["pending", "completed", "failed"]
     created_at: datetime
     completed_at: datetime | None
+    kind: TaskAgentTurnKind | None = None
+    answer: AnswerPayloadOut | None = None
+    decision: TurnDecisionOut | None = None
 
 
 class PlanOut(BaseModel):

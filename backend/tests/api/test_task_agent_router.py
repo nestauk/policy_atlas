@@ -699,6 +699,11 @@ def test_failed_turn_retries_in_place_and_stale_rules_are_honest(
                 "status": "failed",
                 "created_at": listed.json()["data"][0]["created_at"],
                 "completed_at": listed.json()["data"][0]["completed_at"],
+                # Task 044's additive turn projection: a planning turn carries
+                # none of the three, and says so rather than omitting them.
+                "kind": None,
+                "answer": None,
+                "decision": None,
             }
         ]
         retried = client.post(

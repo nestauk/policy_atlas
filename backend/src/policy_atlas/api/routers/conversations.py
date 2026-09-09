@@ -17,13 +17,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
+from policy_atlas.api.answer_core import apply_appraisal_labels
 from policy_atlas.api.app import ApiCapacity, ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.chat_enrichment import enrich_chat_turn
 from policy_atlas.api.chat_turns import (
     ChatTurnResult,
     _phase_one_turn,
-    apply_appraisal_labels,
     run_chat_turn,
 )
 from policy_atlas.api.contract import (

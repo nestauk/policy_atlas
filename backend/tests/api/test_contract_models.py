@@ -16,6 +16,7 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from policy_atlas.api.contract import (
     PAGE_SIZE_MAX,
     AbortResponse,
+    AnswerPayloadOut,
     CheckInResponse,
     FreeTextConfirmResponse,
     FreeTextResponse,
@@ -25,9 +26,11 @@ from policy_atlas.api.contract import (
     ProjectUpdate,
     RunCreate,
     SseFrame,
+    TaskAgentTurnOut,
     TaskCreate,
     TaskOut,
     TaskUpdate,
+    TurnDecisionOut,
 )
 from policy_atlas.api.contract.sse import (
     ArtefactSectionCompletedFrame,
@@ -428,3 +431,61 @@ def test_sse_frame_unknown_type_rejected() -> None:
     """An unknown `type` discriminator fails validation."""
     with pytest.raises(ValidationError):
         _adapter().validate_python({"type": "not_a_real_frame", "occurred_at": _now().isoformat()})
+
+
+# --- Task 044: the additive turn projection --------------------------------
+#
+# A Task Agent turn is one of three things, named by `kind`, carried as
+# optional fields rather than a discriminated union (plan P4). These pin both
+# halves of that promise: a stored pre-044 response still re-validates, and a
+# stored answer/decision turn round-trips through the same model.
+
+
+def test_task_agent_turn_out_keeps_pre_044_responses_valid() -> None:
+    """A stored response with no kind, answer or decision still re-validates."""
+    turn = TaskAgentTurnOut.model_validate({"reply": "Here is the plan.", "suggestions": []})
+    assert turn.kind is None
+    assert turn.answer is None
+    assert turn.decision is None
+
+
+def test_task_agent_turn_out_round_trips_an_answer_turn() -> None:
+    """A stored answer turn re-validates with its citations intact."""
+    stored = TaskAgentTurnOut(
+        reply="The baseline says so [1].",
+        kind="answer",
+        answer=AnswerPayloadOut(
+            claims=[{"text": "The baseline says so", "citation_indexes": [1]}],
+            citations=[{"n": 1, "id": "c1", "kind": "chunk", "source_title": "A document"}],
+            enrichment={"status": "pending"},
+        ),
+    ).model_dump(mode="json")
+
+    turn = TaskAgentTurnOut.model_validate(stored)
+    assert turn.kind == "answer"
+    assert turn.answer is not None
+    assert turn.answer.citations[0]["source_title"] == "A document"
+    assert turn.decision is None
+
+
+def test_task_agent_turn_out_round_trips_a_decision_turn() -> None:
+    """A stored gate decision re-validates bound to its check-in and walk."""
+    check_in_id, capability_run_id = uuid.uuid4(), uuid.uuid4()
+    stored = TaskAgentTurnOut(
+        reply="Recorded.",
+        kind="decision",
+        decision=TurnDecisionOut(
+            option_id="confirm",
+            label="Confirm the baseline",
+            check_in_id=check_in_id,
+            capability_run_id=capability_run_id,
+            plan_version=3,
+        ),
+    ).model_dump(mode="json")
+
+    turn = TaskAgentTurnOut.model_validate(stored)
+    assert turn.kind == "decision"
+    assert turn.decision is not None
+    assert turn.decision.check_in_id == check_in_id
+    assert turn.decision.capability_run_id == capability_run_id
+    assert turn.decision.plan_version == 3
