@@ -169,7 +169,51 @@ acquisition backend — the only honest signal; no literature-kind column
 exists) and the restrictions from the approved plan row, since the scope
 context carries only target unit, where and outcomes.
 
-_(Phase 4.3/4.4, Phase 5 … Phase 7 rows are appended as each phase closes.)_
+### Phase 4.3 — Result view — commit 7fbc3778 (2026-09-09)
+
+| Command | Result | Notes |
+|---|---:|---|
+| `make frontend-verify` | pass | 696 tests / 82 files |
+| `cd frontend && pnpm e2e` | pass | 13/13 (new leg: Result shows the band, the depth label and Sources, no Executive summary) |
+| `make openapi-sync` + `make drift-check` | pass | `ArtefactOut.template`, `.depth_label` additive |
+
+### Phase 4.4 — feasibility check 7, writing mode (2026-09-09; nothing ships)
+
+Script: `scripts/feasibility_checks/options_scoping/run_check_7_writing_mode.py`
+(035 pattern; runs the product's own `synthesise_scope` in baseline mode
+against dev-database screened scopes, every run rolled back). Corpora: the
+035 NEET scope (59 screened-in / 53 appraised) and the thinnest screened
+scope on the machine (36 / 27, social media and young people's mental health;
+a substitution — no thinner 035 corpus was loaded). The parallel arm is a
+naive fan-out of seven one-section runs with empty ledgers joined in the
+ruled order; the extras proposer was stubbed off in both modes so the
+comparison holds to the seven required sections. Numbers read back from
+`check7/<corpus>/{sequential,parallel,compare}.json`:
+
+| | NEET sequential | NEET parallel | thin sequential | thin parallel |
+|---|---:|---:|---:|---:|
+| wall clock, writing (s) | 183.0 | 62.7 | 139.9 | 32.2 |
+| slowest section (s) | 36.4 | 62.6 | 26.7 | 32.1 |
+| generation calls | 28 | 28 | 29 | 23 |
+| tokens (total) | 273,250 | 296,180 | 228,246 | 182,013 |
+| claims minted | 71 | 49 | 48 | 48 |
+| repeated 8-word clauses | 20 | 29 | 56 | 19 |
+| repeated figures | 6 | 8 | 0 | 1 |
+
+**Lead reading.** Parallel writing is about three times faster on wall
+clock (two minutes saved on the NEET baseline) at the same call count. The
+consistency reading is mixed, not one-sided: on the rich corpus the parallel
+arm repeats more clauses across sections and mints fewer claims (the Key
+assumption section fell from 6 claims to 2); on the thin corpus it repeats
+less. Both modes restate figures across sections; neither is free of
+repetition, so the ledger is not what prevents it. **Sequential stays the
+shipped mode** (owner ruling C6; the durability contract's "never fan out
+the conclusion"). The two-minute saving is recorded here as the case the
+owner would weigh in a future revision of that contract; a real parallel
+mode would need a durable join and the extras proposer decided once, not
+per arm. The bound (a concurrent ledger) did not fire.
+
+_(Phase 5 … Phase 7 rows are appended as each phase closes.)_
 
 ## Checks beyond the build
 
@@ -308,6 +352,11 @@ _(step 7)_
     plan payloads) went through the 044 sweep and surfaced only as an enum
     change in the OpenAPI diff. Review every changed quoted literal in the
     sweep diff against the migration's rewrite list before the gate.
+  - Writing the synthesis directive onto the shared `evidence_scope` row
+    before a run takes a Postgres row lock that serialises concurrent
+    synthesise runs perfectly (check 7's first parallel run summed its arms:
+    328 s); `synthesise_scope` reads the directive from its context, not the
+    row.
   - The slice revision's downgrade refusal (A5) turns every migration
     round-trip test red behind any test that commits an `options_scoping`
     task and leaves it; shared-Postgres suites need the scoping fixtures
