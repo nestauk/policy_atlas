@@ -2351,6 +2351,8 @@ deliberately left, each with its reason:
 
 ## Document identity across snapshots (deferred 2026-09-09; owner ruling on OS decision-sheet row A8)
 
+Tracked as issue #75.
+
 One document fetched from two backends, or in two versions, is two content-addressed snapshots and
 counts twice in coverage, selection and inherited counts (the options-scoping feasibility checks
 found one Cochrane review as five snapshots; run 6 spent cap places on copies). A corpus-level
