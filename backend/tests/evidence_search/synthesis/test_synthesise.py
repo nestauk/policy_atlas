@@ -3663,6 +3663,8 @@ def test_case_studies_present_composition(conn: Connection) -> None:
         assert card.get("prose", "").strip() != ""
         assert isinstance(card.get("claim_ids"), list)
         assert len(card["claim_ids"]) >= 1, "each card stores its claim ids"
+    claim_ids = [claim_id for card in cards for claim_id in card["claim_ids"]]
+    assert len(claim_ids) == len(set(claim_ids)), "claim ids must be unique across cards"
 
     assert row.counts.get("case_studies") == {"present": True}
     provenance = row.synthesis_provenance

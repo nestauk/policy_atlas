@@ -248,15 +248,18 @@ export function scopeChips(constraints?: ScopeConstraints | null): string[] {
   if (constraints.published_after) chips.push(`Published after ${yearOf(constraints.published_after)}`);
   if (constraints.published_before) chips.push(`Published before ${yearOf(constraints.published_before)}`);
   const group = constraints.country_group;
-  const geography = group
-    ? group.label + (group.countries?.length ? ` (${group.countries.join(", ")})` : "")
-    : [
-        ...new Set(
-          [constraints.publisher_country, ...(constraints.author_affiliation_countries ?? [])].filter(
-            (value): value is string => typeof value === "string" && value.length > 0,
-          ),
-        ),
-      ].join(", ");
+  const geography =
+    constraints.publisher_source === "apo"
+      ? "APO"
+      : group
+        ? group.label + (group.countries?.length ? ` (${group.countries.join(", ")})` : "")
+        : [
+            ...new Set(
+              [constraints.publisher_country, ...(constraints.author_affiliation_countries ?? [])].filter(
+                (value): value is string => typeof value === "string" && value.length > 0,
+              ),
+            ),
+          ].join(", ");
   if (geography) chips.push(`Geography: ${geography}`);
   return chips;
 }

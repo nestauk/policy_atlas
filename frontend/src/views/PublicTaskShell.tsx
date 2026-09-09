@@ -6,7 +6,7 @@ import { useAuth } from "../auth";
 import { AUTH_RETURN_TO_KEY } from "../auth/OidcAuthProvider";
 import { scrub } from "../lib/scrub";
 import { Button } from "../ui/brand/Button";
-import { LifecycleBar } from "../ui/brand/LifecycleBar";
+import { LifecycleBar, LifecycleBottomBar } from "../ui/brand/LifecycleBar";
 import { NavBar, NavHomeLink } from "../ui/brand/Nav";
 import { COPY, TASK } from "../lib/vocabulary";
 import { ErrorBoundary } from "../ui/feedback/ErrorBoundary";
@@ -87,7 +87,9 @@ export function PublicTaskShell() {
                     {scrub(task.data.name)}
                   </span>
                 </div>
-                <LifecycleBar hint={COPY.lockedHint} items={publicLifecycleTabs(base)} />
+                <div className="max-md:hidden">
+                  <LifecycleBar hint={COPY.lockedHint} items={publicLifecycleTabs(base)} />
+                </div>
               </NavBar>
               <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable] [&>*]:shrink-0">
                 <ErrorBoundary key={location.pathname}>
@@ -95,6 +97,7 @@ export function PublicTaskShell() {
                 </ErrorBoundary>
                 <AppFooter />
               </div>
+              <LifecycleBottomBar hint={COPY.lockedHint} items={publicLifecycleTabs(base)} />
             </div>
           </RunStreamProvider>
         </PublicViewProvider>

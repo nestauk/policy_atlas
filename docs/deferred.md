@@ -2348,6 +2348,82 @@ deliberately left, each with its reason:
   exists, so V9's `session_id = task id` covers the API path only (planning turn, run
   start, steering continuation, chat turn). Restructure if CLI traces ever need to group
   with a Task (038 review stack, Codex).
+- **APO test mod (039) removal path** — `publisher_source: "apo"` is a test-mod
+  constraint (Overton `source=apo`; OpenAlex dropped via the pre-existing
+  `grey_lit_only`). Optional and additive everywhere. On removal: delete the
+  field (`task_plan.py`, `ScopeConstraintsDraft`, `PlanDraftWire`), the
+  geography-token branch in `_geography_constraints`, the two fold-list
+  entries (`agent.py build_plan`, `_draft_from_wire`) plus the
+  `_draft_from_wire` publisher_source normaliser, the Overton allowlist
+  keys — both the wire key (`search_live.py` `_OVERTON_ALLOWED_WIRE_KEYS`)
+  and the filter key + wire mapping + value allowlist in `search_loop.py`
+  (`_OVERTON_FILTER_KEYS`, `overton_wire_params`, `_validate_overton_block`) —
+  the `task_plan.py` mutual-exclusion clause and grey_lit_only guard, the
+  `_drop_scope_incompatible_geo` clearing line (`planning.py`), the
+  `_render_scope_constraints` branch (`agent.py`, CLI render), the
+  `scopeChips` label, and the `planner_v11` APO prompt rule (a version bump +
+  hash re-pin) — and either tolerate or re-save stored plans that carry the
+  field, or old approved plan rows fail validation. Planning chat teaches APO
+  since `planner_v11` (task 039).
+- **Plan overlay seams (039 review stack)** — (1) mid-year scope dates
+  (reachable via planner/chat/API) display as bare years in the plan
+  document, and the dirty-only prune treats a re-entered equal year as a
+  no-op, so the day component can be neither seen nor reset from the UI;
+  compare against the stored ISO value (or display the full date) if this
+  ever bites. (2) `planOverlay.ts` enumerates the overlay keys in three
+  places (`mergeOverlayChanges`'s `set()` calls, `overlayToPlanPatch`'s
+  guards, `serverDisplayedValue`'s switch) — a new plan field must be added
+  to all three or it prunes on save but leaks through the start-time PATCH;
+  consolidate if a fourth list appears. (3) The screening cap mirror
+  (`SCREENING_CRITERION_MAX`/`SCREEN_INTENT_MAX`/`SCREENING_CRITERIA_LIST_MAX`)
+  duplicates backend constants with no cross-language pin test — a backend
+  cap change drifts silently until the backend rejects what the client
+  accepted.
+
+## Mobile layout (task 040 seams)
+
+- **List pages, splash and the Sources sub-tab strip got no dedicated mobile
+  pass** (contract § Out of scope) — only what D1/D2/D7 chrome and amendments
+  A1–A3/A5 touched. "All sources" still clips slightly at 390px.
+- **768px exactly (iPad portrait)**: the task bar title + five tabs were
+  already tight before 040 (pre-existing; visible in the slice's
+  `result-768-top.png`).
+- **Expanded chat panel on mobile is hidden, not redesigned** — below md the
+  rail/panel carry `max-md:hidden` with no stand-in (A6); the bottom bar's
+  Agent tab is the way in. A real mobile chat layout is a future slice. A
+  `?chat=` deep link opened on a phone shows no panel (param stays in the URL,
+  no visible effect).
+- **Popover-as-listbox is hand-rolled in three places** (`FilterSelect` in
+  SourcesView, `ProjectPicker` in NewTaskView, the pickers in
+  workspace/PlanDocument) with drifting details; only FilterSelect has the
+  keyboard model (040 review fix). The seam is a shared `ui/` listbox
+  component — fixing an a11y detail once instead of three times. FilterSelect
+  also lacks the native `<select>`'s type-ahead.
+- **Bottom bar cosmetics**: the last tab ("History") sits flush against the
+  390px viewport edge on first paint — scrollable as D2 requires, but reads
+  clipped (040 review, declined as cosmetic).
+- **iOS Safari hardware pass**: `env(safe-area-inset-bottom)` padding on the
+  bottom bar is verified only in Chromium device emulation.
+- **Flaky backend test (not a 040 seam, logged here as backlog)**:
+  `tests/api/test_admin_leg.py::test_administrator_reads_a_null_organisation_row_and_an_ownerless_one`
+  failed once on a polluted baseline, passed on isolated rerun and at both
+  full `make verify` runs of step 6/7 — watch for recurrence.
+
+## Citation authors (task 042 seams)
+
+- **Overton snapshot backfill**: author names are retained at acquisition only
+  from task 042 onward (`_OVERTON_RETAIN_KEYS` gained `authors`). Existing
+  Overton snapshots are immutable and show the publishing organisation as a
+  corporate author instead. Backfill = re-acquisition; do it only if readers
+  ask for named authors on old policy documents.
+- **`TopSource.authors` stays unfed**: the "Most relevant sources" cards have
+  an authors slot in the UI, but citations don't carry authorships on the
+  wire. Feed it by joining the reference list's authorships by source, if the
+  cards ever need bylines.
+- **Institutions in the reference list**: the report reference list shows
+  names only (042 D4); institutions render in the citation sheet and the
+  dossier. Add them to references only if readers ask — the list is dense
+  already.
 
 ## Document identity across snapshots (deferred 2026-09-09; owner ruling on OS decision-sheet row A8)
 
@@ -2360,4 +2436,4 @@ found one Cochrane review as five snapshots; run 6 spent cap places on copies). 
 precede the chunk index to improve retrieval diversity — is its own Evidence search slice after the
 options-scoping build. Interim: options scoping's task 2 groups by DOI where present at the point
 of counting, no schema or ingestion change. Source: `docs/tasks/035-options-scoping/checks/`
-(check 2 C2-5; extra-runs.md § 1, § 4).
+(check 2 C2-5 and its *After review* section).

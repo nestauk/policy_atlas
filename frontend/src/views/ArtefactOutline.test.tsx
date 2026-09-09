@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,9 @@ describe("sectionSummary", () => {
 });
 
 describe("SectionDisclosure", () => {
+  // The heading row and the mobile trailing button both carry aria-expanded
+  // (040 review) — heading queries pin on the title in the accessible name.
+  const headingName = /What the evidence shows/;
   const section = {
     title: "What the evidence shows",
     role: "standard" as const,
@@ -46,11 +49,29 @@ describe("SectionDisclosure", () => {
         <p>Full cited prose.</p>
       </SectionDisclosure>,
     );
-    const toggle = screen.getByRole("button", { expanded: false });
+    const toggle = screen.getByRole("button", { name: headingName, expanded: false });
     expect(screen.getByText("The takeaway.")).toBeInTheDocument();
     expect(screen.queryByText("Full cited prose.")).toBeNull();
     await user.click(toggle);
-    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
+    expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
+  });
+
+  it("collapsed sections show both the heading-row label and a mobile trailing Expand button", async () => {
+    const user = userEvent.setup();
+    render(
+      <SectionDisclosure id="s5" section={section} collapsible defaultOpen={false}>
+        <p>Full cited prose.</p>
+      </SectionDisclosure>,
+    );
+    const toggle = screen.getByRole("button", { name: headingName, expanded: false });
+    expect(within(toggle).getByText("Expand +")).toBeInTheDocument();
+
+    const trailing = screen.getByRole("button", { name: "Expand +" });
+    expect(trailing).toHaveAttribute("aria-expanded", "false");
+    await user.click(trailing);
+    expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Collapse −" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
   });
 
@@ -119,10 +140,10 @@ describe("SectionDisclosure", () => {
     );
     expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { expanded: true }));
+    await user.click(screen.getByRole("button", { name: headingName, expanded: true }));
     expect(screen.queryByRole("button", { name: /raised uptake/ })).toBeNull();
 
-    await user.click(screen.getByRole("button", { expanded: false }));
+    await user.click(screen.getByRole("button", { name: headingName, expanded: false }));
     expect(screen.getByRole("button", { name: /raised uptake/ })).toBeInTheDocument();
   });
 
@@ -143,7 +164,7 @@ describe("SectionDisclosure", () => {
     expect(screen.queryByText("Full cited prose.")).toBeNull();
     await user.click(screen.getByRole("link", { name: section.title }));
     expect(screen.getByText("Full cited prose.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { expanded: true })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: headingName, expanded: true })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: section.title })).toHaveAttribute(
       "aria-current",
       "location",

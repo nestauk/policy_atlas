@@ -102,11 +102,14 @@ class ScopeConstraintsDraft(BaseModel):
         author_affiliation_countries: Optional OpenAlex author-affiliation
             country filter (2-letter alpha codes).
         country_group: Optional named group applied to both search backends.
+        publisher_source: Optional Overton source-collection filter; the only
+            supported value is `apo` (Australian Policy Online).
     """
 
     published_after: str | None = None
     published_before: str | None = None
     publisher_country: str | None = None
+    publisher_source: Literal["apo"] | None = None
     author_affiliation_countries: list[str] | None = None
     country_group: CountryGroupDraft | None = None
 
