@@ -9571,7 +9571,7 @@
         ]
       },
       "post": {
-        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).",
+        "description": "Advance one task's durable task_agent conversation once per client turn id.\n\nTwo capabilities share this route, and everything durable about it \u2014 the\nphase-one reservation, the idempotency key, the run fences, the transaction\nthat joins the turn to the plan it approved \u2014 is shared with them. What the\ncapability picks is which Task Agent is called, which plan model validates\nwhat it returns, and which of the two draft projections the turn carries\nback (task 044, C9).\n\nA turn that arrives while an options-scoping walk is paused on its baseline\ngate is admitted, sorted, and dispatched to an answer or a decision before\nany planner call (task 044, S5). One shape crosses back into the ordinary\npath: \"change the plan\" carrying an instruction commits the decision and\nthen continues, on the *same* reserved row, as an ordinary planning turn.",
         "operationId": "create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post",
         "parameters": [
           {

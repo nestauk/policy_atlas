@@ -29,7 +29,7 @@ from policy_atlas.api.routers._common import run_out
 from policy_atlas.api.run_io import ParkIO
 from policy_atlas.api.settings import Settings
 from policy_atlas.core.schema import capability_run, task_agent_transcript, task_plan
-from policy_atlas.runtime.capability_registry import expect_task_plan, validate_plan
+from policy_atlas.runtime.capability_registry import validate_plan
 from policy_atlas.runtime.runner import RunnerBackends, run_plan
 
 log = structlog.get_logger()
@@ -73,8 +73,10 @@ def _dispatch_run(
             evidence_scope_id=plan_row["evidence_scope_id"],  # type: ignore[arg-type]
             # The task row's capability, read on the request path and carried
             # here rather than re-queried: it decides which model reads the
-            # payload (C9).
-            plan=expect_task_plan(validate_plan(capability, plan_row["payload"])),
+            # payload (C9). Whatever that model is, the runner takes it —
+            # narrowing to the Evidence search plan here made a scoping walk
+            # impossible to start (task 044).
+            plan=validate_plan(capability, plan_row["payload"]),
             plan_id=plan_row["plan_id"],  # type: ignore[arg-type]
             plan_version=plan_row["version"],  # type: ignore[arg-type]
             plan_row_id=plan_row["plan_id"],  # type: ignore[arg-type]
@@ -157,9 +159,9 @@ def create_run(
             ).mappings().one_or_none()
             if plan_row is None:
                 raise HTTPException(status_code=400, detail="no approved plan")
-            approved_plan = expect_task_plan(
-                validate_plan(access.row["capability"], plan_row["payload"])
-            )
+            # Only ``source_turn_index`` is read here, and both plan models
+            # carry it; the staleness rule is capability-neutral.
+            approved_plan = validate_plan(access.row["capability"], plan_row["payload"])
             latest_completed_turn = conn.execute(
                 select(func.max(task_agent_transcript.c.turn_index))
                 .where(task_agent_transcript.c.task_id == task_id)

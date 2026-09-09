@@ -130,7 +130,7 @@ def list_check_ins(
     )
 
 
-def _execute_claimed(
+def execute_claimed(
     engine: Engine,
     *,
     task_id: uuid.UUID,
@@ -138,7 +138,18 @@ def _execute_claimed(
     backends: RunnerBackends,
     agent: AgentBackend,
 ) -> None:
-    """Execute one already-claimed continuation on the walk executor."""
+    """Execute one already-claimed continuation on the walk executor.
+
+    Shared with the Task Agent turn route (task 044): a decision taken in words
+    at the baseline gate resumes the walk exactly as the card does.
+
+    Args:
+        engine: Database engine.
+        task_id: Task owning the walk.
+        capability_run_id: The claimed walk to execute.
+        backends: Runner backend bundle.
+        agent: Steering-router/watch backend for the resumed walk.
+    """
     try:
         continuation.execute_continuation(
             engine,
@@ -225,7 +236,7 @@ def respond_to_check_in(
         )
         if claim is not None:
             executor.submit(
-                _execute_claimed,
+                execute_claimed,
                 engine,
                 task_id=claim.task_id,
                 capability_run_id=claim.capability_run_id,

@@ -6,6 +6,8 @@ import json
 import re
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, cast
 
@@ -15,11 +17,13 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 
+from policy_atlas.api import continuation, gate_turns
 from policy_atlas.api.app import ApiConflict
 from policy_atlas.api.auth import AuthenticatedUser
 from policy_atlas.api.contract import (
     PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
+    AnswerPayloadOut,
     ConfirmBaselineIn,
     Page,
     PageMeta,
@@ -32,15 +36,25 @@ from policy_atlas.api.contract import (
     TaskAgentTranscriptTurnOut,
     TaskAgentTurnCreate,
     TaskAgentTurnOut,
+    TurnDecisionOut,
 )
 from policy_atlas.api.deps import (
+    get_agent_backend,
+    get_chat_backend,
+    get_chat_embedding_backend,
     get_current_user,
     get_engine,
+    get_executor,
+    get_runner_backends,
     get_scoping_task_agent_backend,
     get_task_agent_backend,
 )
+from policy_atlas.api.gate_turns import PausedGate, read_paused_gate
 from policy_atlas.api.routers._access import accessible_task
+from policy_atlas.api.routers.check_ins import execute_claimed
 from policy_atlas.api.stage_vocabulary import STAGE_BY_REGISTRY, STAGE_PRESENTATION
+from policy_atlas.core import tracing
+from policy_atlas.core.embeddings import EmbeddingBackend
 from policy_atlas.core.schema import (
     artefact,
     capability_run,
@@ -58,6 +72,7 @@ from policy_atlas.evidence_search.sourcing.country_filters import (
     validate_iso_alpha2,
 )
 from policy_atlas.runtime.agent import build_plan, persist_approved_plan
+from policy_atlas.runtime.agent_backend import AgentBackend
 from policy_atlas.runtime.capability_registry import (
     EVIDENCE_SEARCH,
     OPTIONS_SCOPING,
@@ -66,11 +81,13 @@ from policy_atlas.runtime.capability_registry import (
     expect_task_plan,
     validate_plan,
 )
+from policy_atlas.runtime.chat_backend import ChatBackend
 from policy_atlas.runtime.conversation_lifecycle import (
     ensure_active_task_agent_conversation,
     seed_draft_from_executed_plan,
 )
 from policy_atlas.runtime.inherit import linked_context
+from policy_atlas.runtime.runner import RunnerBackends
 from policy_atlas.runtime.scoping_plan import (
     SCOPING_STEPS,
     BaselineConfirmed,
@@ -259,7 +276,23 @@ def _baseline_state(conn: Connection, task_id: uuid.UUID) -> str:
     edit before any baseline exists is a plan change; after one, it may have
     changed what the baseline was built from). It is a *sentence*, never a
     flag, because the prompt fences it as data alongside the transcript.
+
+    A walk paused on the gate says so, so the Task Agent never proposes
+    starting a run that is already under way (task 044, S5).
     """
+    paused_version = conn.execute(
+        select(capability_run.c.plan_version)
+        .where(capability_run.c.task_id == task_id)
+        .where(capability_run.c.capability == OPTIONS_SCOPING)
+        .where(capability_run.c.status == "paused")
+        .order_by(capability_run.c.started_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    if paused_version is not None:
+        return (
+            "paused on the baseline, which was built from plan version "
+            f"{int(paused_version)}"
+        )
     version = conn.execute(
         select(capability_run.c.plan_version)
         .where(capability_run.c.task_id == task_id)
@@ -438,13 +471,18 @@ def _task_agent_inputs(
     for row in rows:
         reply = row["reply"]
         task_agent_state = row["task_agent_state"]
-        if reply is None or task_agent_state is None:
+        if reply is None:
             raise RuntimeError("completed task_agent transcript row is incomplete")
         turns.extend((
             {"role": "user", "text": row["user_message"]},
             {"role": "planner", "text": reply},
         ))
-        previous_draft = cast("dict[str, object]", task_agent_state)
+        # A gate turn — an answer, an ask-back, a recorded decision — is part
+        # of the conversation but carries no plan draft (task 044), so it adds
+        # its exchange and leaves the draft where the last planning turn left
+        # it. Only a row missing its *reply* is incomplete.
+        if task_agent_state is not None:
+            previous_draft = cast("dict[str, object]", task_agent_state)
     if turns:
         return turns, previous_draft
 
@@ -477,7 +515,14 @@ def _task_agent_inputs(
 
 
 def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurnOut:
-    """Project one durable transcript row into its honest read representation."""
+    """Project one durable transcript row into its honest read representation.
+
+    A completed turn's ``kind``, ``answer`` and ``decision`` are read back off
+    the response it stored, so a reloaded thread renders an answer with its
+    citations and a decision as a decision — not as a bare reply (task 044).
+    """
+    stored = row["response"] if isinstance(row["response"], dict) else {}
+    projected = TaskAgentTurnOut.model_validate(stored) if stored else None
     return TaskAgentTranscriptTurnOut(
         capability=capability,
         turn_index=row["turn_index"],
@@ -490,6 +535,47 @@ def _transcript_out(row: RowMapping, capability: str) -> TaskAgentTranscriptTurn
         status=row["status"],
         created_at=row["created_at"],
         completed_at=row["completed_at"],
+        kind=projected.kind if projected is not None else None,
+        answer=projected.answer if projected is not None else None,
+        decision=projected.decision if projected is not None else None,
+    )
+
+
+@dataclass(frozen=True)
+class _Reserved:
+    """A durably reserved transcript row and the pause it arrived at.
+
+    Args:
+        transcript_id: The reserved (or retried) transcript row.
+        gate: The baseline gate this turn must be sorted against, when the
+            task's scoping walk is paused on one; ``None`` for an ordinary
+            planning turn.
+    """
+
+    transcript_id: uuid.UUID
+    gate: PausedGate | None
+
+
+def _paused_gate(
+    conn: Connection, *, task_id: uuid.UUID, active: RowMapping
+) -> PausedGate | None:
+    """Return the gate an admitted turn is sorted against, or ``None``.
+
+    A turn is admitted at a pause only when every part of the affordance is
+    there: an options-scoping task (an Evidence search pause refuses turns, as
+    it always has), a *paused* walk, and an undecided pause offering options.
+    Anything else keeps the ``run_active`` refusal — the fence narrows for one
+    known shape, it does not open (A6).
+    """
+    if active["status"] != "paused":
+        return None
+    if capability_of_task(conn, task_id) != OPTIONS_SCOPING:
+        return None
+    return read_paused_gate(
+        conn,
+        task_id=task_id,
+        capability_run_id=active["capability_run_id"],
+        plan_version=int(active["plan_version"]),
     )
 
 
@@ -499,7 +585,7 @@ def _phase_one_turn(
     task_id: uuid.UUID,
     user_id: str,
     payload: TaskAgentTurnCreate,
-) -> TaskAgentTurnOut | uuid.UUID:
+) -> TaskAgentTurnOut | _Reserved:
     """Authenticate, fence, and either replay or durably reserve one turn."""
     # The row lock serialises phase one across processes: without it, two
     # processes can both read "no pending turn" / the same max turn_index and
@@ -522,12 +608,20 @@ def _phase_one_turn(
             return _response_from_row(existing)
 
     active = conn.execute(
-        select(capability_run.c.status)
+        select(
+            capability_run.c.capability_run_id,
+            capability_run.c.status,
+            capability_run.c.plan_version,
+        )
         .where(capability_run.c.task_id == task_id)
         .where(capability_run.c.status.in_(("running", "paused")))
         .limit(1)
-    ).scalar_one_or_none()
-    if active is not None:
+    ).mappings().one_or_none()
+    # The Task Agent chat is open at the baseline gate (D9): a turn taken while
+    # a scoping walk is *paused* is admitted and sorted. A running walk, and
+    # every other capability's pause, keep the refusal they always had.
+    gate = _paused_gate(conn, task_id=task_id, active=active) if active is not None else None
+    if active is not None and gate is None:
         raise ApiConflict(
             "run_active",
             "finish or stop the current run before replanning; "
@@ -543,7 +637,7 @@ def _phase_one_turn(
         ).scalar_one()
         if latest_id != existing["id"]:
             raise ApiConflict("stale_turn", "only the latest Task Agent turn may be retried")
-        return cast(uuid.UUID, existing["id"])
+        return _Reserved(cast(uuid.UUID, existing["id"]), gate)
 
     pending = conn.execute(
         select(task_agent_transcript.c.id)
@@ -578,7 +672,244 @@ def _phase_one_turn(
             completed_at=None,
         )
     )
-    return transcript_id
+    return _Reserved(transcript_id, gate)
+
+
+@dataclass(frozen=True)
+class _ContinuedTurn:
+    """A gate decision whose turn is only half over.
+
+    Args:
+        carried_text: The user's instruction, which the planner half of this
+            same row now answers.
+        decision: The decision already committed, carried into the row's final
+            projection so one turn reports both halves.
+    """
+
+    carried_text: str
+    decision: TurnDecisionOut
+
+
+def _answer_window(
+    conn: Connection, task_id: uuid.UUID, conversation_id: uuid.UUID
+) -> list[tuple[str, str]]:
+    """Return this conversation's completed exchanges for the answer's memory."""
+    rows = conn.execute(
+        select(task_agent_transcript.c.user_message, task_agent_transcript.c.reply)
+        .where(task_agent_transcript.c.task_id == task_id)
+        .where(task_agent_transcript.c.conversation_id == conversation_id)
+        .where(task_agent_transcript.c.status == "completed")
+        .order_by(task_agent_transcript.c.turn_index.asc())
+    ).all()
+    return [(row[0], row[1]) for row in rows if row[1] is not None]
+
+
+def _fail_turn(engine: Engine, *, task_id: uuid.UUID, transcript_id: uuid.UUID) -> None:
+    """Terminally fail one open transcript row (retryable while it is latest)."""
+    with engine.begin() as conn:
+        conn.execute(
+            update(task_agent_transcript)
+            .where(task_agent_transcript.c.id == transcript_id)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status.in_(("pending", "failed")))
+            .values(status="failed", completed_at=_now())
+        )
+
+
+def _complete_gate_turn(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    transcript_id: uuid.UUID,
+    result: TaskAgentTurnOut,
+) -> None:
+    """Commit one gate turn's durable projection.
+
+    ``task_agent_state`` stays null: a gate turn carries no plan draft, and
+    :func:`_task_agent_inputs` reads that as "this exchange happened, but it
+    did not move the draft" — the planner still sees the conversation.
+    """
+    with engine.begin() as conn:
+        completed = conn.execute(
+            update(task_agent_transcript)
+            .where(task_agent_transcript.c.id == transcript_id)
+            .where(task_agent_transcript.c.task_id == task_id)
+            .where(task_agent_transcript.c.status.in_(("pending", "failed")))
+            .values(
+                reply=result.reply,
+                response=result.model_dump(mode="json"),
+                suggestions=result.suggestions,
+                status="completed",
+                completed_at=_now(),
+            )
+        )
+        if completed.rowcount != 1:
+            raise RuntimeError("task_agent transcript turn was not open at its gate commit")
+
+
+def _dispatch_gate_turn(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    transcript_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    gate: PausedGate,
+    utterance: str,
+    user_id: str,
+    agent: AgentBackend,
+    chat_backend: ChatBackend,
+    embedding_backend: EmbeddingBackend,
+    executor: ThreadPoolExecutor,
+    runner_backends: RunnerBackends,
+) -> TaskAgentTurnOut | _ContinuedTurn:
+    """Sort one turn taken at the gate and carry out what it turned out to be.
+
+    Args:
+        engine: Database engine.
+        task_id: Task owning the paused walk.
+        transcript_id: The reserved transcript row this turn completes.
+        conversation_id: The owning Task Agent conversation.
+        gate: The pause the turn arrived at.
+        utterance: The user's verbatim turn text (what the row stores).
+        user_id: Authenticated actor for the decision record.
+        agent: Backend carrying the gate sort.
+        chat_backend: Chat writer seam for an answer.
+        embedding_backend: Retrieval embedder seam for an answer.
+        executor: Walk executor, for a decision that resumes the walk.
+        runner_backends: Runner bundle for that resumed walk.
+
+    Returns:
+        The completed turn, or the instruction the planning half of this same
+        row now answers.
+
+    Raises:
+        Exception: Anything the sort's dispatch raises, with the row failed
+            first so the caller may retry it.
+    """
+    try:
+        sort = gate_turns.sort_turn(
+            agent, utterance=utterance, gate=gate, session_id=task_id
+        )
+        if sort.kind == "question":
+            with engine.connect() as conn:
+                window = _answer_window(conn, task_id, conversation_id)
+            answer = gate_turns.answer_at_gate(
+                engine,
+                task_id=task_id,
+                gate=gate,
+                question=utterance,
+                window=window,
+                chat_backend=chat_backend,
+                embedding_backend=embedding_backend,
+                langfuse_client=tracing.get_langfuse(),
+                trace_run_id=transcript_id,
+                conversation_id=conversation_id,
+            )
+            result = TaskAgentTurnOut(
+                reply=answer.prose,
+                kind="answer",
+                answer=AnswerPayloadOut.model_validate(answer.payload.as_payload()),
+                capability=OPTIONS_SCOPING,
+                # The decision stays the user's to take, on a turn that asked
+                # and decided at once as much as on any other.
+                suggestions=gate.option_labels,
+                conversation_id=conversation_id,
+            )
+            _complete_gate_turn(
+                engine, task_id=task_id, transcript_id=transcript_id, result=result
+            )
+            return result
+
+        if sort.kind == "decision":
+            option_id = cast(str, sort.option_id)
+            outcome = gate_turns.commit_decision(
+                engine,
+                task_id=task_id,
+                gate=gate,
+                option_id=option_id,
+                carried_text=sort.carried_text,
+                actor=user_id,
+            )
+            decision = TurnDecisionOut(
+                option_id=option_id,
+                label=cast(str, gate.label_for(option_id)),
+                check_in_id=gate.check_in_id,
+                capability_run_id=gate.capability_run_id,
+                plan_version=gate.plan_version,
+            )
+            if outcome.carried_text is not None:
+                return _ContinuedTurn(carried_text=outcome.carried_text, decision=decision)
+            result = TaskAgentTurnOut(
+                reply=outcome.reply,
+                kind="decision",
+                # A turn that lost the race records no decision of its own: the
+                # durable one is the other surface's, and this turn may have
+                # asked for the other option.
+                decision=decision if outcome.recorded else None,
+                capability=OPTIONS_SCOPING,
+                conversation_id=conversation_id,
+            )
+            _complete_gate_turn(
+                engine, task_id=task_id, transcript_id=transcript_id, result=result
+            )
+            if outcome.continue_walk is not None:
+                _resume_walk(
+                    engine,
+                    task_id=task_id,
+                    capability_run_id=outcome.continue_walk,
+                    executor=executor,
+                    runner_backends=runner_backends,
+                    agent=agent,
+                )
+            return result
+
+        result = TaskAgentTurnOut(
+            reply=gate_turns.ASK_BACK_REPLY,
+            kind="reply",
+            capability=OPTIONS_SCOPING,
+            suggestions=gate.option_labels,
+            conversation_id=conversation_id,
+        )
+        _complete_gate_turn(
+            engine, task_id=task_id, transcript_id=transcript_id, result=result
+        )
+        return result
+    except Exception:
+        # A failure after the decision commit leaves the decision durable and
+        # the row failed; the retry re-runs only the half that is still owed,
+        # because the fence then sees no active walk (X6).
+        _fail_turn(engine, task_id=task_id, transcript_id=transcript_id)
+        raise
+
+
+def _resume_walk(
+    engine: Engine,
+    *,
+    task_id: uuid.UUID,
+    capability_run_id: uuid.UUID,
+    executor: ThreadPoolExecutor,
+    runner_backends: RunnerBackends,
+    agent: AgentBackend,
+) -> None:
+    """Claim and dispatch the walk a gate decision asked to continue.
+
+    The same claim-then-execute the card route runs (``check_ins``): a decision
+    taken in words must move the walk exactly as the same decision taken on the
+    card does, or a confirmed walk would sit paused forever.
+    """
+    claim = continuation.claim_continuation(
+        engine, task_id=task_id, capability_run_id=capability_run_id
+    )
+    if claim is None:
+        return
+    executor.submit(
+        execute_claimed,
+        engine,
+        task_id=claim.task_id,
+        capability_run_id=claim.capability_run_id,
+        backends=runner_backends,
+        agent=agent,
+    )
 
 
 @router.post("/{task_id}/task-agent-turns", response_model=TaskAgentTurnOut)
@@ -591,6 +922,11 @@ def create_task_agent_turn(
     scoping_agent: Annotated[
         ScopingTaskAgentBackend, Depends(get_scoping_task_agent_backend)
     ],
+    agent: Annotated[AgentBackend, Depends(get_agent_backend)],
+    chat_backend: Annotated[ChatBackend, Depends(get_chat_backend)],
+    embedding_backend: Annotated[EmbeddingBackend, Depends(get_chat_embedding_backend)],
+    executor: Annotated[ThreadPoolExecutor, Depends(get_executor)],
+    runner_backends: Annotated[RunnerBackends, Depends(get_runner_backends)],
 ) -> TaskAgentTurnOut:
     """Advance one task's durable task_agent conversation once per client turn id.
 
@@ -600,6 +936,12 @@ def create_task_agent_turn(
     capability picks is which Task Agent is called, which plan model validates
     what it returns, and which of the two draft projections the turn carries
     back (task 044, C9).
+
+    A turn that arrives while an options-scoping walk is paused on its baseline
+    gate is admitted, sorted, and dispatched to an answer or a decision before
+    any planner call (task 044, S5). One shape crosses back into the ordinary
+    path: "change the plan" carrying an instruction commits the decision and
+    then continues, on the *same* reserved row, as an ordinary planning turn.
     """
     lock = _turn_lock(task_id)
     if not lock.acquire(blocking=False):
@@ -619,22 +961,50 @@ def create_task_agent_turn(
             )
         if isinstance(phase_one, TaskAgentTurnOut):
             return phase_one
+        transcript_id = phase_one.transcript_id
 
         with engine.connect() as conn:
             conversation_id = conn.execute(
                 select(task_agent_transcript.c.conversation_id).where(
-                    task_agent_transcript.c.id == phase_one
+                    task_agent_transcript.c.id == transcript_id
                 )
             ).scalar_one()
-            if conversation_id is None:
-                raise RuntimeError("task_agent transcript turn has no conversation")
+        if conversation_id is None:
+            raise RuntimeError("task_agent transcript turn has no conversation")
+
+        planner_message = payload.message
+        carried_decision: TurnDecisionOut | None = None
+        if phase_one.gate is not None:
+            sorted_turn = _dispatch_gate_turn(
+                engine,
+                task_id=task_id,
+                transcript_id=transcript_id,
+                conversation_id=conversation_id,
+                gate=phase_one.gate,
+                utterance=payload.message,
+                user_id=user.user_id,
+                agent=agent,
+                chat_backend=chat_backend,
+                embedding_backend=embedding_backend,
+                executor=executor,
+                runner_backends=runner_backends,
+            )
+            if isinstance(sorted_turn, TaskAgentTurnOut):
+                return sorted_turn
+            # "Change the plan" with an instruction: the decision is already
+            # durable, the walk has ended, and this same row now continues as
+            # an ordinary planning turn on the user's own words (X6).
+            planner_message = sorted_turn.carried_text
+            carried_decision = sorted_turn.decision
+
+        with engine.connect() as conn:
             capability = capability_of_task(conn, task_id)
             turns, previous_draft = _task_agent_inputs(conn, task_id, conversation_id)
             scoping = capability == OPTIONS_SCOPING
             contexts = linked_context(conn, task_id) if scoping else []
             linked_ids = _linked_task_ids(conn, task_id) if scoping else []
             baseline_state = _baseline_state(conn, task_id) if scoping else NO_BASELINE_STATE
-        turns.append({"role": "user", "text": payload.message})
+        turns.append({"role": "user", "text": planner_message})
         try:
             turn = (
                 scoping_agent.scope_turn(
@@ -654,7 +1024,7 @@ def create_task_agent_turn(
             with engine.begin() as conn:
                 conn.execute(
                     update(task_agent_transcript)
-                    .where(task_agent_transcript.c.id == phase_one)
+                    .where(task_agent_transcript.c.id == transcript_id)
                     .where(task_agent_transcript.c.task_id == task_id)
                     .where(task_agent_transcript.c.status.in_(("pending", "failed")))
                     .values(status="failed", completed_at=_now())
@@ -690,6 +1060,10 @@ def create_task_agent_turn(
                 suggestions=turn.suggested_answers or [],
                 part=part,
                 conversation_id=conversation_id,
+                # One turn, two halves: the decision that ended the walk and
+                # the planning reply that followed it are both this row's (X6).
+                kind="decision" if carried_decision is not None else None,
+                decision=carried_decision,
             )
         else:
             draft = (
@@ -739,14 +1113,14 @@ def create_task_agent_turn(
             if run_started_meanwhile:
                 conn.execute(
                     update(task_agent_transcript)
-                    .where(task_agent_transcript.c.id == phase_one)
+                    .where(task_agent_transcript.c.id == transcript_id)
                     .where(task_agent_transcript.c.status.in_(("pending", "failed")))
                     .values(status="failed", completed_at=_now())
                 )
             else:
                 completed = conn.execute(
                     update(task_agent_transcript)
-                    .where(task_agent_transcript.c.id == phase_one)
+                    .where(task_agent_transcript.c.id == transcript_id)
                     .where(task_agent_transcript.c.task_id == task_id)
                     # A fresh turn completes from "pending"; a retried latest turn
                     # re-runs in place from "failed" (retry rules, plan pin 2).
@@ -758,7 +1132,7 @@ def create_task_agent_turn(
                 if approved is not None:
                     turn_index = conn.execute(
                         select(task_agent_transcript.c.turn_index).where(
-                            task_agent_transcript.c.id == phase_one
+                            task_agent_transcript.c.id == transcript_id
                         )
                     ).scalar_one()
                     approved.source_turn_index = int(turn_index)

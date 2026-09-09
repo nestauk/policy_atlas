@@ -269,6 +269,9 @@ def test_hook_degrades_to_floor_on_backend_error() -> None:
         def decide(self, *a: Any, **k: Any) -> Any:
             raise RuntimeError("boom")
 
+        def sort_gate_turn(self, *a: Any, **k: Any) -> Any:
+            raise RuntimeError("boom")
+
     outcome = build_watch_discretion_hook(_Raises())(_ctx())
     assert outcome == _DiscretionOutcome(
         interpreted_action="proceed", rule=runner_module.UNCONFIGURED_DEFAULT_RULE
@@ -330,6 +333,10 @@ class _SteerPointAgent:
         if payload.get("steer_point") == self._at:
             return self._decide
         return WatchDecisionWire(action="proceed", reasoning="nothing to change here")
+
+    def sort_gate_turn(self, *args: Any, **kwargs: Any) -> Any:
+        """Not a gate walk: the seam is satisfied, never exercised here."""
+        raise NotImplementedError("watch-moment stub")
 
 
 class _CapturingIO:
@@ -964,6 +971,9 @@ def test_backend_error_degrades_to_deterministic_floor(engine: Engine) -> None:
             raise RuntimeError("boom")
 
         def decide(self, *a: Any, **k: Any) -> Any:
+            raise RuntimeError("boom")
+
+        def sort_gate_turn(self, *a: Any, **k: Any) -> Any:
             raise RuntimeError("boom")
 
     task_id: uuid.UUID | None = None

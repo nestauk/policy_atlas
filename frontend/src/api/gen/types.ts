@@ -944,6 +944,12 @@ export interface paths {
          *     capability picks is which Task Agent is called, which plan model validates
          *     what it returns, and which of the two draft projections the turn carries
          *     back (task 044, C9).
+         *
+         *     A turn that arrives while an options-scoping walk is paused on its baseline
+         *     gate is admitted, sorted, and dispatched to an answer or a decision before
+         *     any planner call (task 044, S5). One shape crosses back into the ordinary
+         *     path: "change the plan" carrying an instruction commits the decision and
+         *     then continues, on the *same* reserved row, as an ordinary planning turn.
          */
         post: operations["create_task_agent_turn_api_v1_tasks__task_id__task_agent_turns_post"];
         delete?: never;

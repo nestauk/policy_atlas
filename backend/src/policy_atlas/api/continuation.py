@@ -739,6 +739,48 @@ def _pending_pause(
     )
 
 
+def pending_pause_for_walk(
+    conn: Connection, *, task_id: uuid.UUID, capability_run_id: uuid.UUID
+) -> tuple[uuid.UUID, dict[str, Any]] | None:
+    """Return one walk's latest still-undecided pause, if it has one.
+
+    :func:`_pending_pause` answers "may this named check-in be answered"; this
+    answers "which check-in is this walk waiting on" — what a Task Agent turn
+    taken at a pause needs before it can sort the turn (task 044, S5). The
+    undecided rule is the same one, read off the same durable events.
+
+    Args:
+        conn: Open read connection.
+        task_id: Task owning the walk.
+        capability_run_id: The parked walk.
+
+    Returns:
+        ``(check_in_id, pause_payload)``, or ``None`` when the walk has no
+        pause or its latest pause already carries a decision.
+    """
+    rows = events.read(conn, task_id)
+    pauses = [
+        row
+        for row in rows
+        if row["event_type"] == "steering.pause"
+        and _payload_uuid(row["payload"], "capability_run_id") == capability_run_id
+    ]
+    if not pauses:
+        return None
+    pause_row = pauses[-1]
+    if any(
+        row["event_type"] == steering_events.STEERING_DECISION
+        and row["sequence"] > pause_row["sequence"]
+        and _payload_uuid(row["payload"], "capability_run_id") == capability_run_id
+        for row in rows
+    ):
+        return None
+    payload = pause_row["payload"]
+    if not isinstance(payload, dict):
+        return None
+    return pause_row["event_id"], payload
+
+
 def _persist_intent(
     conn: Connection,
     *,
