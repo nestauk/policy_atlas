@@ -9,12 +9,16 @@ by the lead in Phase 1.1). This plan cites them and adds nothing to scope.
 > **Status:** drafted 2026-09-09 · lead. **Plan-stage adversarial review
 > (fallback lane, `deep-reasoner`, read-only) ran 2026-09-09** on the first
 > draft: 18 findings (3 blockers), verdict "material change needed", all 18
-> folded (§ Plan-review folds P1–P18). A Codex lane on the same brief is
-> pending; its findings will be appended. **Two folds change the contract's
-> wording and need the owner at the plan gate:** P1 (two migration revisions,
-> one per phase, where the contract says one) and P9 (a `web-api.md`
-> revision for the Task Agent turn at a pause). **Plan approved (before
-> implementation):** _pending · owner_.
+> folded (§ Plan-review folds P1–P18). **The Codex lane ran the same brief
+> on the first draft:** 16 findings (5 blockers), verdict "material change
+> needed"; seven restate P-findings, the rest are folded (§ Plan-review
+> folds X1–X16). **Two folds change the contract's wording and need the owner
+> at the plan gate:** P1/X1 (two migration revisions, one per phase, where
+> the contract says one) and P9 (a `web-api.md` revision for the Task Agent
+> turn at a pause). **Plan approved (before implementation):** _pending ·
+> owner_. **ADR 0037 is drafted in this design phase, after plan approval
+> and before any build phase** (X15; the task-cycle's step 4); Phase 7 only
+> adds evidence and the sign-off date.
 
 Executor marks per AGENTS.md § Agent-side model routing; every `lead` mark
 carries its reason. **Owner ruling 2026-09-04 (038) stands:** judgment-bearing
@@ -48,7 +52,14 @@ prompt module), `steer_points` (the lattice names valid for its plans) and
 `lattice_for(capability)`. The **ten** `TaskPlan.model_validate` sites go
 through it (P13a): `runtime/agent.py:653`, `continuation_state.py:153`,
 `steering.py:1611`, `api/routers/runs.py:73,156`, `api/routers/sse.py:534`,
-`api/routers/planning.py:281,617,804,832`. `steering.pause_points`,
+`api/routers/planning.py:281,617,804,832`; and the **seven direct `compose()`
+readers** go through `compose_plan` (X13): `api/continuation.py:1231-1232`,
+`continuation_state.py:154`, `steering.py:1594,1615`, `runner.py:664,3155`,
+`api/routers/planning.py:161`. A test asserts no capability-dependent module
+imports `TaskPlan.model_validate` or `compose` directly. Phase 2 installs the
+registry with the ES entry only (a chassis); the scoping entry and the
+reverse-validation tests land in Phase 3.2 when `ScopingPlan` exists (X3).
+`steering.pause_points`,
 `lattice_name_for` and `lattice_policy` take the capability's lattice, so
 `baseline_confirm` never names an ES boundary. `SteerPointDefault`'s
 validator checks against the capability's `steer_points`.
@@ -61,7 +72,7 @@ S2. **Scoping plan and chain.** `runtime/scoping_plan.py`: `ScopingPlan`
 standard`; `constraints[].kind ∈ requirement | preference |
 evidence_restriction`; `your_context[]` with `turn_index`; `steering_mode`
 default `moderate`; `steer_point_defaults` validated against the scoping
-steer points; `baseline_confirmed: {artefact_version_id, plan_version} |
+steer points; `baseline_confirmed: {artefact_id, plan_version} |
 None` — S4) and `compose_scoping(plan) -> ComposedChain` producing exactly
 `acquire → screen_abstract → classify → appraise → ingest_full_text →
 synthesise`. Directive deltas: acquire carries the evidence restriction as
@@ -76,7 +87,13 @@ eight supplied specs], "section_budget": 2}}` — **one new directive key**,
 `section_budget` meaning "proposals allowed" in template mode (P14).
 `synthesis_tools._DIRECTIVE_KEYS` is fail-closed and gains `template`.
 `COMPONENT_REGISTRY`, `compile`, `build_graph` and `_run_synthesise` need no
-change.
+change. **Who writes the intent record's new fields** (X7): the scoping
+branch of `persist_approved_plan` (`runtime/agent.py:855-917` inserts the
+scope, then the plan) updates the scope with `purpose="baseline"` and the new
+`plan_id` in the same transaction; a rebuild after a plan change inserts a
+**new** scope row for the new plan version (the plan row's
+`evidence_scope_id` is one-to-one) and `POST /runs` opens the walk on it.
+Tests: first plan, amended plan, rebuild.
 
 S3. **Baseline mode in synthesise** (A7, C7). The supplied-sections path at
 `synthesise_scope` (`:5431`, `directive.sections is not None`) already
@@ -97,24 +114,31 @@ as gap claims, which the template instructs and which
 baseline's claim set is `{chunk, reasoning, gap}` by substrate absence —
 nothing to code. The roll-up's provenance gains `depth_label: "scoping
 pass"`. Sequential writing (C6). Section progress events already stream
-(`ProgressEmitter` `artefact.section_started` / `section_completed`), so
-"shown as they finish" is the skeleton carrying the eight titles — Phase 4
-takes it if the Result view already renders progress events; otherwise it
-stays deferred.
+(`ProgressEmitter` `artefact.section_started` / `section_completed`), but
+`emit_skeleton` (`runtime/progress.py:38-62`) **unconditionally prepends a
+"Key findings" entry** (X8); in baseline mode the skeleton is built from the
+actual section list with no ES-only entries, and a test pins the eight-plus-
+proposed order in the SSE stream and the Result view. "Shown as they finish"
+then costs nothing further — Phase 4 takes it.
 
 S4. **The gate** (A2, A9, A13, C1, C3, C5, P8, P13c). `baseline_confirm =
 PausePoint("after_component", "synthesise")` in the **scoping** lattice only;
 policy `always` in frequent, moderate and minimal. The after-boundary loop
 already visits the last step (`runner.py:1211`, then `_finish_run`), so no
 runner loop change. Options at the pause (`_pause_options_and_bundle`,
-`runner.py:1931`): `confirm_plan` (response `continue` → the walk finishes
-`succeeded`; the decision payload records `plan_version` and the baseline
-artefact version) and `change_plan` (a **new end-walk disposition**: like
-`_persist_abort` (`continuation.py:816`) it writes the decision, sets
+`runner.py:1931`), with **option ids distinct from durable response values**
+(X10 — the only valid responses are `continue | adjust | abort |
+mode_change`, `steering_events.py:47-50`): option `confirm_plan` → response
+`continue` (the walk finishes `succeeded`; the decision payload records
+`plan_version` and the baseline `artefact_id` — the schema and read model
+carry an artefact id, not a version, X5); option `change_plan` → response
+`abort` with payload `action: "change_plan"`, a **new end-walk disposition**:
+like `_persist_abort` (`continuation.py:816`) it writes the decision, sets
 `capability_run.status = "aborted"` and `run.finished{status: aborted}`, but
 it **does not** flip the plan to `abandoned` — the plan stays `approved` and
 editable, because `_load_editable_plan` (`planning.py:812`) reads only
-`approved` rows). The card render is deterministic: the baseline's
+`approved` rows. History shows the walk as aborted by the user's choice to
+change the plan. The card render is deterministic: the baseline's
 key-assumption block prose and the plan's Settings; `api/checkin_read.py`
 gains the `baseline_confirm` branch and `api/stage_vocabulary.py` the name
 (P11). **Unattended:** `_resolve_unattended_boundary` writes the decision
@@ -129,11 +153,12 @@ change** the plan document offers two start actions: `Rebuild baseline`
 `plan.evidence_scope_id` point at the new version) and `Confirm plan and
 build longlist`. The latter cannot be a steering event — `emit_standalone`
 raises without a `run_id` and `base_payload` requires a `capability_run_id`
-(P8) — so it is a **plan-scoped record**: a new route `POST
+(P8, X5) — so it is a **plan-scoped record**: a new route `POST
 /tasks/{id}/plan/confirm-baseline` writes `baseline_confirmed =
-{artefact_version_id, plan_version}` into the scoping plan as a new approved
-version through the ordinary plan-edit path, visible in History as a plan
-version. Task 2 replaces this with the longlist walk, whose opening decision
+{artefact_id, plan_version}` into the scoping plan as a new approved version
+through the ordinary plan-edit path (one transaction; idempotent on the same
+pair; 409 `run_active` while a walk is running or paused), visible in History
+as a plan version. Task 2 replaces this with the longlist walk, whose opening decision
 records the same pair on the new walk. The Task Agent states whether the
 change touched the baseline's inputs (a deterministic diff of the six input
 fields between plan versions, rendered in the reply).
@@ -150,10 +175,15 @@ paused walk's pinned scope. `decision` → `answer_check_in` in the same
 request, bound to `capability_run_id`, `check_in_id` and `plan_version`,
 under the task lock (the existing `_pending_pause` latest-pause check gives
 409 `already_answered` to the loser of a race); `change_plan` with
-`carried_text` ends the walk and then applies the text as a follow-on
-ordinary Task Agent turn **with a server-minted `client_turn_id`** derived
-deterministically from the gate turn's id (P18b), so the follow-on is
-idempotent too. A question that also carries a decision is answered, and the
+`carried_text` is **one transcript turn, two commits** (X6, replacing the
+follow-on-turn idea): the reserved row (its caller-minted `client_turn_id`)
+first commits the end-walk decision in the check-in transaction, then
+continues as an ordinary planning turn on the same row (the LLM call outside
+any transaction, as today, then the reply commit). Replay of a completed row
+returns its stored projection; a failure after the decision commit leaves
+the decision durable and the row `failed`, and a retry with the same
+`client_turn_id` re-runs only the planning half because the walk is already
+ended. Tests: replay, partial failure, retry. A question that also carries a decision is answered, and the
 reply offers the decision as an option to click — never applied. The
 approving branch (fence 2, `:531-535`) and `patch_plan` (fence 3,
 `:862-875`) keep `("running", "paused")`; since a sorted paused turn never
@@ -278,8 +308,10 @@ Full `make verify` on the branch. Never build on a red base.
 ## Phase 1 — Task Agent rename and EB → ES sweep (deliverable 2) — one green commit, own review
 
 1.1 **Manifest and rule table — `lead`.** Reason: the rule table is the
-seam; a wrong rule is a silent rename. Check `rename-manifest.md` against
-`scripts/schema_manifest.py` output; confirm the manifest's open items (the
+seam; a wrong rule is a silent rename. Check `rename-manifest.md`'s schema
+section against the live metadata (`scripts/schema_manifest.py` refuses any
+post-038 checkout — X2 — so the check is a one-off inline iteration over
+`schema.metadata`, not that script); confirm the manifest's open items (the
 `tat` infix; the two router/contract module renames; the kept prompt
 interior and role literal; the two "EB handoff" citations kept); write the
 043 rule table and literal list; decide every unmapped `--scan` hit.
@@ -305,11 +337,15 @@ default is unchanged so an old-only deploy behaves as before);
 value did not change; `make openapi-sync` for the path rename. Done when
 full `make verify` and `pnpm e2e` are green.
 
-1.4 **EB → ES docs sweep — `fast-worker`.** `rename_043.py --docs` over the
-manifest's file list; hand-check every skipped quotation; `make
-okf-validate`. Done when a repository grep for whole-word `EB` outside the
-excluded paths returns only the quotations and the two citations listed in
-the manifest.
+1.4 **Docs sweep — `fast-worker`, quotations adjudicated by `lead`.**
+`rename_043.py --docs` over the manifest's file list for **both** renames:
+the Task Agent tokens in `docs/knowledge/**` content, `web-api.md` and
+`infra/DEPLOYMENT.md` (filenames of knowledge concepts never change), and
+EB → ES; `make okf-validate`. The fast-worker runs the deterministic sweep
+and the greps; the lead reads every skipped quotation and citation and
+decides each (X14: attribution is judgment). Done when a repository grep for
+the old Task Agent tokens and whole-word `EB` outside the excluded paths
+returns only the kept items listed in the manifest.
 
 Gate: **full `make verify`** + `pnpm e2e`. Commit. **Review pass:** the
 `code-review` skill at medium on this commit's diff, findings adjudicated by
@@ -317,15 +353,16 @@ the lead, before Phase 2 starts.
 
 ## Phase 2 — Task kind, links, registry, slice revision (deliverables 1, 4 backend, 10) — `deep-reasoner`
 
-Brief (S1, S7, S10): the slice revision; `capability_registry.py` and the
-ten validate sites; `_open_capability_run` from the task row;
+Brief (S1, S7, S10): the slice revision; `capability_registry.py` as a
+chassis with the ES entry, routing the ten validate sites and the seven
+compose sites through it (X3, X13 — the scoping entry arrives in 3.2);
+`_open_capability_run` from the task row;
 `TaskCreate`/`TaskOut` (`capability`, `project_ids`, `from_task_ids`);
 `assign_projects` extraction; `task_link` writes, read model and flag;
 `lib/capabilities.ts` key rename and `NewTaskView` capability switch;
 `useCreateTask` two requests. Tests: migration round-trip with the downgrade
-refusal; registry routing (an ES plan rejects a scoping payload and the
-reverse; an ES plan rejects a `baseline_confirm` standing default); ES
-steering tests unchanged; `task_link` rules (S7) and the ADR 0033-style
+refusal; registry routing for ES (every reader resolves through the
+registry; the no-direct-import test); ES steering tests unchanged; `task_link` rules (S7) and the ADR 0033-style
 no-access test; create atomicity (a failed link leaves no task row). Done
 when full `make verify` is green and `make drift-check` after
 `openapi-sync` is green (additive diff).
@@ -349,10 +386,14 @@ sentence. Re-pin. A stub backend for tests.
 acquisition-target key if needed (S2); the planning router's capability
 branch (prompt selection through the registry, validation through the
 registry, `capability` on plan read/patch bodies); the
-`confirm-baseline` route and `baseline_confirmed` field (S4). Tests per
-contract § Acceptance checks (validation, compile, evidence-restriction
-landing, language stored-not-applied). Done on `make verify-fast` +
-`prompt-guard` + `drift-check`.
+`confirm-baseline` route and `baseline_confirmed` field (S4); the scoping
+registry entry (X3) and the intent-record writes in the scoping
+`persist_approved_plan` branch (X7). Tests per contract § Acceptance checks
+(validation, compile, evidence-restriction landing, language
+stored-not-applied) plus: an ES plan rejects a scoping payload and the
+reverse; an ES plan rejects a `baseline_confirm` standing default; first
+plan, amended plan and rebuild each leave the right `purpose` and `plan_id`.
+Done on `make verify-fast` + `prompt-guard` + `drift-check`.
 
 3.3 **Inherit context — `fast-worker`.** Exact spec S8; unit tests for the
 markdown build (citation markers gone, references gone, one block per link,
@@ -362,7 +403,8 @@ byte-stable across two calls).
 Scoping sections in `PlanDocument` (structure mirrors the ES document, D5
 words, the constraints table, Your context, two start actions after a
 change), New task form (question + Starts from, same-project ES tasks),
-tasks list label. Reason for the `lead` pass: the plan document is a
+the tasks list label and the **task header** (X12: the workspace header's
+capability word, with a rendering test). Reason for the `lead` pass: the plan document is a
 taste-bearing surface; the fast-worker lands the structure, the lead
 adjusts copy and spacing only. Tests per contract.
 
@@ -385,11 +427,20 @@ required always present at both depths; ≤2 proposals after "what is
 contested"; the three passes do not run; claim set `{chunk, reasoning, gap}`;
 a section with no support is gap claims.
 
-4.3 **Result view (deliverable 9) — `fast-worker`, then `lead` polish.** The
+4.3 **Result view (deliverable 9) — `deep-reasoner`, then `lead` polish**
+(X16: live-progress presentation is state logic, not transcription). The
 band ("the situation these options would change"), the run state, the "built
-from plan version N" mark, the `scoping pass` label; if the Result already
-renders section progress events, the eight titles appear as the skeleton
-(S3). Sources, Share and History untouched. Tests.
+from plan version N" mark, the `scoping pass` label; the skeleton built from
+the actual section list with the eight-plus-proposed order pinned in SSE and
+the view (S3, X8). Sources, Share and History untouched. Tests.
+
+4.4 **Feasibility check 7, writing mode (C6) — `deep-reasoner` script, `lead`
+adjudication.** Before this phase closes (X9: the comparison precedes
+finalising the baseline; plan-as-object § Thoroughness). The script (S12,
+bounded) and its two runs; the lead reads the two baselines side by side,
+records numbers and the consistency reading in `verification.md`, and
+adjudicates: sequential stays the shipped mode unless the owner, shown the
+reading, revises the durability contract. Nothing from the check ships.
 
 Gate: `make verify-fast` + `make prompt-guard` + `make frontend-verify`.
 Commit.
@@ -418,18 +469,20 @@ refuses a paused walk; the OpenAPI diff is additive.
 5.4 **Turn route at a pause — `deep-reasoner`.** S5: fence (1) narrowed for
 sorted turns while paused; sort → answer core or `answer_check_in` (bound to
 run, check-in and plan version); `change_plan` with carried text → end walk
-→ follow-on turn with the server-minted id; mixed and unsure handling.
-Tests: the contract's gate-turns list (the folded bullet; the earlier
+→ the same row continues as a planning turn (X6); mixed and unsure
+handling. Tests: the contract's gate-turns list, the replay / partial-failure
+/ retry trio (X6) (the folded bullet; the earlier
 "through the steering path, keeps the walk paused" wording is superseded —
 P12, folded in the contract), the barrier test racing a chat decision
 against the card endpoint (exactly one durable decision), fence 2 driven by
 the meanwhile race (P16), `patch_plan` still 409 while paused.
 
-5.5 **Thread rendering — `fast-worker`, then `lead` polish.** `store/thread.ts`
-item variants; `DurableTurn` branches for answer-with-citations and
-decision; `CheckInCard` moved into thread order for the gate; the two start
-actions after a change. Reason for the `lead` pass: the thread is the
-product's primary chat surface (owner ruling 2026-09-05). Tests per contract.
+5.5 **Thread rendering — `deep-reasoner`, then `lead` polish** (X16). `store/
+thread.ts` item variants and their chronological ordering with decisions and
+the gate card; `DurableTurn` branches for answer-with-citations and decision;
+`CheckInCard` moved into thread order for the gate; the two start actions
+after a change. Named ordering tests. Reason for the `lead` pass: the thread
+is the product's primary chat surface (owner ruling 2026-09-05).
 
 5.6 **Spec revision — `lead` (inline).** `web-api.md` § Planning turns and
 § Check-ins: a sorted, non-approving Task Agent turn is admitted while a
@@ -439,15 +492,9 @@ words is not delegable.
 
 Gate: **full `make verify`** + `pnpm e2e`. Commit.
 
-## Phase 6 — Feasibility check 7, writing mode (C6) — `deep-reasoner` script, `lead` reading
+## Phase 6 — (merged into Phase 4.4 by X9; number kept so the rubric's phase references hold)
 
-Runs once Phase 4 exists and **before Phase 5 closes** (P17). The script
-(S12) and its two runs; the lead reads the two baselines side by side and
-records numbers and the consistency reading in `verification.md`. Nothing
-ships. Reason for the `lead` reading: it is the qualitative judgement the
-owner asked for.
-
-## Phase 7 — Live check, evidence, ADR, step-6 exit — `lead`
+## Phase 7 — Live check, evidence, ADR evidence, step-6 exit — `lead`
 
 Reason: browser-driving the pinned live check, writing the evidence and the
 ADR are adjudication-adjacent.
@@ -459,7 +506,9 @@ ADR are adjudication-adjacent.
    the prompt-hash diff (three new, one path moved, hash unchanged); the
    three baselines' qualitative note; check 7's record; review-lane
    dispositions; deferred deltas; known gaps.
-3. ADR 0037 (S11), Accepted with sign-off date.
+3. ADR 0037 (S11, drafted at step 4 of the design phase): add the evidence
+   links and the measured numbers; the owner's sign-off date is already on it
+   (X15).
 4. `docs/deferred.md` and `docs/specs/log.md` (P15): the EB → ES sweep
    line; the `web-api.md` revision line; the language-filter gap; and the
    contract's deferred list confirmed present — per-field turn provenance
@@ -494,6 +543,27 @@ conversation with `task-cycle-review`.
 | P16 | The approving-branch-while-paused test was unreachable | test drives the meanwhile race |
 | P17 | Phase 6 unbounded and late | bound stated; runs before Phase 5 closes |
 | P18 | Deliverable 9 had no phase; the follow-on turn needs a `client_turn_id`; spec changes already applied not said | Phase 4 header; server-minted id; note under Verify gates |
+
+### Codex lane (on the first draft, `051548ce`)
+
+| # | Finding | Fold |
+|---|---|---|
+| X1 | Two migrations violate the one-migration gate; `downgrade -1` reverses only one | = P1; owner at the plan gate; rollback names two steps |
+| X2 | Manifest absent; `schema_manifest.py` refuses post-038 checkouts | manifest committed `ce93df5a`; Phase 1.1 checks against live metadata inline |
+| X3 | Phase 2 cannot register scoping before Phase 3 creates it | Phase 2 = registry chassis with ES; scoping entry and reverse tests in 3.2 |
+| X4 | Byte-identical prompt file vs interior renames | = P2 |
+| X5 | Run-less confirm has no durability model; artefact id, not version | = P8 with `artefact_id`; route semantics stated |
+| X6 | Follow-on turn has no retry or partial-failure contract | one transcript turn, two commits; replay / partial-failure / retry tests |
+| X7 | No phase writes `purpose` / `plan_id` | S2 and 3.2: the scoping `persist_approved_plan` branch; rebuild inserts a new scope |
+| X8 | `emit_skeleton` always prepends "Key findings" | S3 and 4.3: skeleton from the actual list; order test |
+| X9 | The feasibility check ran after the baseline was final | Phase 4.4, before Phase 4 closes, with lead adjudication |
+| X10 | `change_plan` / `confirm` are not valid response values | option ids vs responses: `continue` / `abort` + `action` |
+| X11 | Gates omit prompt-guard, drift-check, openapi-sync, e2e | = P7 plus `openapi-sync` in 1.3 and e2e in Phase 3 |
+| X12 | Task header has no phase | 3.4 |
+| X13 | Ten validate sites; seven direct `compose()` readers | S1 table; no-direct-import test |
+| X14 | Knowledge content omitted from the Task Agent rename; quotation checks given to fast-worker | 1.4 covers both renames in docs; lead adjudicates quotations |
+| X15 | ADR written after the seams it governs | ADR 0037 drafted at step 4, before Phase 0 |
+| X16 | Thread and Result work routed as mechanical | 4.3 and 5.5 → deep-reasoner + lead polish |
 
 ## Out-of-plan reminders
 
