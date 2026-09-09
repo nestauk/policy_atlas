@@ -95,6 +95,44 @@ _(filled per phase; flagged deviations listed here as they arise)_
    category is ordinary English. The pane's aria label "Planning conversation"
    became "Task Agent conversation".
 
+6. **The frontend URL token `?chat=planning` became `?chat=task_agent` with
+   no alias** (review finding on `conversationState.ts`): a tab opened before
+   the deploy that still carries `?chat=planning` shows "This chat couldn't be
+   opened." until the user clicks the Task Agent. The token is transient view
+   state, not a durable link, and the 038 rule (no redirect, no fallback code)
+   applies to it as to the route. Recorded as a deliberate break.
+
+### Phase 1 review pass (`/code-review medium` on e4128528, 2026-09-09)
+
+Eight findings, none against the schema change (the reviewer confirmed the
+revision, its round-trip and the hand-edited historical tests). Dispositions:
+
+| # | Finding | Disposition |
+|---|---|---|
+| 1 | `?chat=planning` URL token renamed with no alias | recorded (deviation 6) |
+| 2 | Backend wire-visible strings still said `task_agent` (422 details on the conversations router, the `run_active`/`stale_turn` details, the stub replies) | **fixed** by hand → "Task Agent" |
+| 3 | Sweep + disclosed hand edits do not reproduce the commit | **fixed in the tool** (phrase rules for string/comment spans, `TaskAgent` → `Task Agent` joiner, `ruff --fix` post-step); the residual hand-edit list is recorded below |
+| 4 | Two regex edges (unanchored role-union protector; `[Pp]lanning turn` without the hyphen lookbehind) | **fixed in the tool** |
+| 5 | Kept `"planner"` role literal protected only for `:` / `=` / `==` shapes | **fixed in the tool**; engine test added |
+| 6 | Ordinary English swept: `planning delays` (a fixture), `fan-out planning` (a docstring) | **fixed** by hand; contexts added to the tool |
+| 7 | Migration docstring claimed a `pg_constraint` pre-check that did not exist | **fixed**: the check is implemented (upgrade and downgrade), with a test |
+| 8 | Engine extraction changed the 038 tool's scan headings, refusal text and `is_dir` sentinel | **fixed**: carried as table fields with the 038 values |
+
+### Phase 4.1 — the template-keyed section writer (2026-09-09, lead)
+
+`synthesis_backend.py`'s `SECTION_SYSTEM_PROMPT` is now `SECTION_REPORT_PREAMBLE
++ SECTION_CORE`; `SECTION_PREAMBLES` maps `report` and `baseline`;
+`_section_system_prompt(seed)` selects by the seed's `template` and fails
+closed on an unknown one. The Evidence search assembly is byte-identical to
+`synthesise_section_v10` before the split: sha256 `87126525…9a42` without and
+`e38e6c1e…17fb` with the priority block, pinned by
+`test_section_prompt_templates.py`. **Fact found while re-pinning:**
+`scripts/prompt_hash_guard.py` pins files whose *name* contains "prompt", so
+`synthesis_backend.py`'s inline section prompt was never hash-pinned; the
+contract's "re-pinned once as a words-only diff" therefore has nothing to
+re-pin, and the byte-identity test is the pin. Recorded as a knowledge
+candidate and a deferred item (add the inline-prompt modules to the guard).
+
 ### Owner rulings taken during the build
 
 - **2026-09-09 — the section writer's prompt becomes template-keyed** ("For
@@ -135,6 +173,9 @@ _(step 7)_
     plan payloads) went through the 044 sweep and surfaced only as an enum
     change in the OpenAPI diff. Review every changed quoted literal in the
     sweep diff against the migration's rewrite list before the gate.
+  - `scripts/prompt_hash_guard.py` pins by filename (`*prompt*`), so the two
+    inline prompt carriers (`synthesis_backend.py`, `finding_vetter.py`) are
+    outside the guard; a prompt edit there is invisible to `make prompt-guard`.
   - Hash-pinned prompt modules must be excluded from any identifier sweep
     whole, not just their string literals: a docstring rename is a hash
     change (rubric "every other hash unchanged").
